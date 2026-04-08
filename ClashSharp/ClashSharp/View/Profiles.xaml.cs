@@ -1,31 +1,30 @@
-using Microsoft.UI.Xaml;
+/*
+ * Profiles Page
+ * Stub page for subscription profile management
+ *
+ * @author: WaterRun
+ * @file: View/Profiles.xaml.cs
+ * @date: 2026-04-08
+ */
+
+using ClashSharp.Service;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
+namespace ClashSharp.View;
 
-namespace ClashSharp.View
+/// <summary>Stub page for managing subscription configuration profiles.</summary>
+/// <remarks>
+/// Invariants: None at this stage.
+/// Thread safety: Must be accessed from the UI thread only.
+/// Side effects: None.
+/// </remarks>
+public sealed partial class Profiles : Page
 {
-    /// <summary>
-    /// An empty window that can be used on its own or navigated to within a Frame.
-    /// </summary>
-    public sealed partial class Profiles : Window
+    /// <summary>Initializes the profiles page and applies localized text.</summary>
+    public Profiles()
     {
-        public Profiles()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
+        PageTitleText.Text = LocalizationService.Instance.GetString("Nav.Profiles");
+        StubText.Text = LocalizationService.Instance.GetString("Page.Stub");
     }
 }
