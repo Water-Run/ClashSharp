@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ClashSharp (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "ClashSharp (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
