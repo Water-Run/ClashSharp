@@ -1,9 +1,11 @@
 [Bb]in/
 [Oo]bj/
+[Dd]ebug/
+[Rr]elease/
 x64/
 x86/
-ARM/
-ARM64/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
 AppPackages/
 TestResults/
 artifacts/
@@ -13,6 +15,7 @@ artifacts/
 *.user
 *.userosscache
 *.sln.docstates
+*.rsuser
 *.VC.db
 *.VC.VC.opendb
 *.opendb
@@ -33,12 +36,31 @@ _ReSharper*/
 *.nupkg
 *.snupkg
 packages/
-**/packages/
+**/packages/*
+!**/packages/build/
+!**/packages/repositories.config
 
 *.log
 *.tmp
+*.temp
 
 *.pfx
 *.p12
 *.pvk
 *.snk
+
+Installer/.venv/
+Installer/.venv*/
+Installer/venv/
+Installer/__pycache__/
+Installer/**/*.py[cod]
+Installer/*.spec
+Installer/build/
+Installer/dist/
+
+Installer/.mypy_cache/
+Installer/.pytest_cache/
+Installer/.ruff_cache/
+
+Installer/payload/*
+!Installer/payload/.gitkeep

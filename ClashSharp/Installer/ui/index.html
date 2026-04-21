@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClashSharp Installer</title>
+    <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+    <div class="shell">
+        <aside class="hero">
+            <img class="logo" src="../Logo.png" alt="ClashSharp Logo" />
+            <div class="hero-text">
+                <div class="eyebrow">INSTALLER</div>
+                <h1>ClashSharp</h1>
+                <p>安装 ClashSharp 到你的 Windows 11 设备。</p>
+            </div>
+        </aside>
+
+        <main class="panel">
+            <section class="card">
+                <h2>安装位置</h2>
+                <p class="muted">保持结构简单，先使用可编辑路径输入框。</p>
+
+                <label class="label" for="installDir">目标目录</label>
+                <input id="installDir" class="input" type="text" />
+
+                <div class="actions">
+                    <button id="installBtn" class="button primary">开始安装</button>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="status-row">
+                    <span class="status-title">当前状态</span>
+                    <span id="percentText" class="status-value">0%</span>
+                </div>
+
+                <div class="progress">
+                    <div id="progressBar" class="progress-bar"></div>
+                </div>
+
+                <div id="statusText" class="log">等待开始</div>
+            </section>
+        </main>
+    </div>
+
+    <script src="./app.js"></script>
+</body>
+
+</html>

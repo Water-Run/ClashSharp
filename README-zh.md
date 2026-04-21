@@ -1,10 +1,9 @@
 # `Clash#`  
 
-`Clash#`是一个使用WinUI3开发的, 原生的, 多内核的Windows代理工具, 并集成了部分Windows专属功能.  
-`Clash#`发布在[微软商店](), 使用`AGPL`协议开源于[GitHub]().  
+[English](./README.md)  
 
-## 核心特点  
+![Clash# Logo](./Logo.png)
 
-- `WinUI3`开发, 契合Windows 11的原生设计  
-- 可切换的多内核选择: `Mihomo`和`singbox`  
-- Windows专用的特别功能, 比如微软商店代理, WSL代理注入, 异常关闭确保手动代理清除等功能  
+`Clash#`是一个现代化的, Windows原生基于[mihomo](https://github.com/MetaCubeX/mihomo)代理客户端.  
+从[GitHub Release](https://github.com/Water-Run/ClashSharp/releases)下载, 解压后运行`Installer.exe`进行安装.  
+`Clash#`需要`Windows 11`才能运行. 在[GitHub](https://github.com/Water-Run/ClashSharp)上以`AGPL 3.0`协议开放源代码.  
