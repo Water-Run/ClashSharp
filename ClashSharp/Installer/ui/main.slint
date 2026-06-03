@@ -1,0 +1,94 @@
+import { Button, LineEdit, ProgressIndicator } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "ClashSharp Installer";
+    icon: @image-url("../Logo.png");
+    preferred-width: 640px;
+    preferred-height: 480px;
+    min-width: 640px;
+    min-height: 480px;
+    max-width: 640px;
+    max-height: 480px;
+
+    in-out property <string> install-dir;
+    in-out property <bool> installing: false;
+    in-out property <float> progress: 0.0;
+    in-out property <string> status-text: "Ready";
+
+    callback install();
+    callback browse();
+    callback exit-app();
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+
+        Text {
+            text: "ClashSharp Installer";
+            font-size: 24px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        VerticalLayout {
+            spacing: 8px;
+
+            Text {
+                text: "Install Directory";
+                font-size: 13px;
+                font-weight: 500;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                LineEdit {
+                    text <=> root.install-dir;
+                    enabled: !root.installing;
+                    horizontal-stretch: 1;
+                }
+
+                Button {
+                    text: "Browse...";
+                    enabled: !root.installing;
+                    clicked => { root.browse(); }
+                }
+            }
+        }
+
+        ProgressIndicator {
+            indeterminate: false;
+            progress: root.progress;
+        }
+
+        Text {
+            text <=> root.status-text;
+            font-size: 12px;
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: end;
+
+            if !root.installing : HorizontalLayout {
+                spacing: 12px;
+
+                Button {
+                    text: "Exit";
+                    clicked => { root.exit-app(); }
+                }
+
+                Button {
+                    text: "Install";
+                    primary: true;
+                    clicked => { root.install(); }
+                }
+            }
+
+            if root.installing : Text {
+                text: "Installing...";
+                font-size: 13px;
+            }
+        }
+    }
+}

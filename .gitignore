@@ -49,18 +49,6 @@ packages/
 *.pvk
 *.snk
 
-Installer/.venv/
-Installer/.venv*/
-Installer/venv/
-Installer/__pycache__/
-Installer/**/*.py[cod]
-Installer/*.spec
-Installer/build/
-Installer/dist/
-
-Installer/.mypy_cache/
-Installer/.pytest_cache/
-Installer/.ruff_cache/
-
+Installer/target/
 Installer/payload/*
 !Installer/payload/.gitkeep
