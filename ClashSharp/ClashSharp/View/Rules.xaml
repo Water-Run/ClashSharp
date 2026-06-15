@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page
-    x:Class="ClashSharp.View.Connections"
+    x:Class="ClashSharp.View.Rules"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -15,7 +15,7 @@
             </StackPanel>
 
             <ListView>
-                <ListViewItem Content="进程、目标、规则、节点、上传和下载速率将在此处展示。" />
+                <ListViewItem Content="规则集、规则命中统计、DIRECT / REJECT / PROXY 路径将在此处展示。" />
             </ListView>
         </StackPanel>
     </Grid>

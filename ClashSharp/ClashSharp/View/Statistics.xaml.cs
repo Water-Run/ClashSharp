@@ -4,7 +4,7 @@
  *
  * @author: WaterRun
  * @file: View/Statistics.xaml.cs
- * @date: 2026-04-08
+ * @date: 2026-06-15
  */
 
 using ClashSharp.Service;
@@ -25,6 +25,6 @@ public sealed partial class Statistics : Page
     {
         InitializeComponent();
         PageTitleText.Text = LocalizationService.Instance.GetString("Nav.Statistics");
-        StubText.Text = LocalizationService.Instance.GetString("Page.Stub");
+        DescriptionText.Text = LocalizationService.Instance.GetString("Page.Statistics.Description");
     }
 }

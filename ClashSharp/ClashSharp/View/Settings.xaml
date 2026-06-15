@@ -7,10 +7,114 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="36">
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-            <TextBlock x:Name="PageTitleText" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center" />
-            <TextBlock x:Name="StubText" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+    <ScrollViewer Padding="32">
+        <StackPanel Spacing="18">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+
+            <TextBlock Text="语言" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="界面语言" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock Text="后续使用资源文件支持主流语言。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ComboBox Grid.Column="1" MinWidth="180" SelectedIndex="0">
+                    <ComboBoxItem Content="简体中文" />
+                    <ComboBoxItem Content="English" />
+                </ComboBox>
+            </Grid>
+
+            <TextBlock Text="代理" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="透明代理" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock Text="启用 TUN 模式；失败时默认回退到系统代理。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ToggleSwitch x:Name="TransparentProxyToggle" Grid.Column="1" IsOn="False" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TransparentProxyToggle_Toggled" />
+            </Grid>
+
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="混合端口" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock Text="系统代理和终端代理使用的本地 HTTP/SOCKS 入口。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <NumberBox x:Name="MixedPortBox" Grid.Column="1" Width="140" Minimum="1" Maximum="65535" SpinButtonPlacementMode="Compact" ValueChanged="MixedPortBox_ValueChanged" />
+            </Grid>
+
+            <TextBlock Text="Windows 原生" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="WSL、终端和 Microsoft Store 网络修正" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock Text="每项单独诊断、单独应用，并提供可撤销动作。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Grid>
+
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="启动时检查代理残留" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock Text="如果 Windows 代理仍指向 Clash# 本地端口，则按异常恢复策略处理。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ToggleSwitch x:Name="CheckStaleProxyToggle" Grid.Column="1" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="CheckStaleProxyToggle_Toggled" />
+            </Grid>
+
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="退出时还原系统代理" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock Text="关闭 Clash# 时停止核心并关闭 Windows 系统代理。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ToggleSwitch x:Name="RestoreProxyOnExitToggle" Grid.Column="1" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="RestoreProxyOnExitToggle_Toggled" />
+            </Grid>
+
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="异常恢复策略" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock Text="用于解决其它代理软件或 Clash# 异常关闭后残留系统代理的问题。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ComboBox x:Name="ProxyRecoveryModeBox" Grid.Column="1" MinWidth="180" SelectionChanged="ProxyRecoveryModeBox_SelectionChanged">
+                    <ComboBoxItem Content="不处理" />
+                    <ComboBoxItem Content="恢复为代理开启" />
+                    <ComboBoxItem Content="恢复为代理关闭" />
+                </ComboBox>
+            </Grid>
+
+            <TextBlock Text="中国大陆" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="适用于中国大陆的文本和旗帜替换" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock Text="默认开启；敏感词过滤仅影响界面显示，不影响复制、搜索和导出。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ToggleSwitch x:Name="MainlandChinaDisplayToggle" Grid.Column="1" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="MainlandChinaDisplayToggle_Toggled" />
+            </Grid>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </Page>
