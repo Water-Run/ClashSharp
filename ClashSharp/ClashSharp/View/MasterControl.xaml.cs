@@ -33,10 +33,32 @@ public sealed partial class MasterControl : Page
     public MasterControl()
     {
         InitializeComponent();
-        PageTitleText.Text = LocalizationService.Instance.GetString("Nav.MasterControl");
-        DescriptionText.Text = LocalizationService.Instance.GetString("Page.MasterControl.Description");
+        RefreshLocalizedText();
         UpdateModeButtons();
         Loaded += OnLoaded;
+    }
+
+    /// <summary>Refreshes localized text owned by this page.</summary>
+    private void RefreshLocalizedText()
+    {
+        LocalizationService localization = LocalizationService.Instance;
+
+        PageTitleText.Text = localization.GetString("Nav.MasterControl");
+        DescriptionText.Text = localization.GetString("Page.MasterControl.Description");
+        StatusControlTitleText.Text = localization.GetString("Master.StatusControl.Title");
+        StatusControlDescriptionText.Text = localization.GetString("Master.StatusControl.Description");
+        DisabledModeTitleText.Text = localization.GetString("Master.Mode.Disabled.Title");
+        DisabledModeDescriptionText.Text = localization.GetString("Master.Mode.Disabled.Description");
+        StandbyModeTitleText.Text = localization.GetString("Master.Mode.Standby.Title");
+        StandbyModeDescriptionText.Text = localization.GetString("Master.Mode.Standby.Description");
+        RuleTakeoverModeTitleText.Text = localization.GetString("Master.Mode.RuleTakeover.Title");
+        RuleTakeoverModeDescriptionText.Text = localization.GetString("Master.Mode.RuleTakeover.Description");
+        FullTakeoverModeTitleText.Text = localization.GetString("Master.Mode.FullTakeover.Title");
+        FullTakeoverModeDescriptionText.Text = localization.GetString("Master.Mode.FullTakeover.Description");
+        CoreStatusTitleText.Text = localization.GetString("Master.Status.Core");
+        SystemProxyTitleText.Text = localization.GetString("Master.Status.SystemProxy");
+        TransparentProxyTitleText.Text = localization.GetString("Master.Status.TransparentProxy");
+        CoreConfigurationTitleText.Text = localization.GetString("Master.Status.CoreConfiguration");
     }
 
     /// <summary>Handles page loading by probing the bundled mihomo core version for the status summary.</summary>
@@ -48,14 +70,18 @@ public sealed partial class MasterControl : Page
         {
             ClashSharpMode configurationMode = _selectedMode == ClashSharpMode.Disabled ? ClashSharpMode.Standby : _selectedMode;
             CoreConfigurationState configurationState = CoreConfigurationService.Instance.EnsureConfiguration(configurationMode);
-            CoreConfigurationText.Text = configurationState.Exists ? configurationState.ConfigPath : "配置不可用";
+            CoreConfigurationText.Text = configurationState.Exists
+                ? configurationState.ConfigPath
+                : LocalizationService.Instance.GetString("Master.Status.ConfigurationUnavailable");
 
             string versionText = await MihomoCoreService.Instance.GetVersionTextAsync(CancellationToken.None);
-            CoreStatusText.Text = $"就绪 · {versionText}";
+            CoreStatusText.Text = string.Format(
+                LocalizationService.Instance.GetString("Master.Status.CoreReady.Format"),
+                versionText);
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException)
         {
-            CoreStatusText.Text = "核心不可用";
+            CoreStatusText.Text = LocalizationService.Instance.GetString("Master.Status.CoreUnavailable");
         }
 
         RefreshProxyStatus();
@@ -102,16 +128,24 @@ public sealed partial class MasterControl : Page
             NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyMode(mode);
             _selectedMode = mode;
             AppSettingsService.Instance.CurrentMode = mode;
-            CoreStatusText.Text = result.CoreRunning ? "运行中" : "未运行";
-            SystemProxyStatusText.Text = result.SystemProxyEnabled ? "开启" : "关闭";
-            TransparentProxyStatusText.Text = AppSettingsService.Instance.TransparentProxyEnabled ? "已在设置中启用" : "关闭";
+            CoreStatusText.Text = result.CoreRunning
+                ? LocalizationService.Instance.GetString("Master.Status.Running")
+                : LocalizationService.Instance.GetString("Master.Status.NotRunning");
+            SystemProxyStatusText.Text = result.SystemProxyEnabled
+                ? LocalizationService.Instance.GetString("Master.Status.On")
+                : LocalizationService.Instance.GetString("Master.Status.Off");
+            TransparentProxyStatusText.Text = result.TransparentProxyEnabled
+                ? LocalizationService.Instance.GetString("Master.Status.Running")
+                : AppSettingsService.Instance.TransparentProxyEnabled
+                    ? LocalizationService.Instance.GetString("Master.Status.Fallback")
+                    : LocalizationService.Instance.GetString("Master.Status.Off");
             LogStorageService.Instance.AppendLog("Info", "MasterControl", result.Message, null);
             UpdateModeButtons();
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
             _selectedMode = ClashSharpMode.Faulted;
-            CoreStatusText.Text = "核心启动失败";
+            CoreStatusText.Text = LocalizationService.Instance.GetString("Master.Status.CoreStartFailed");
             LogStorageService.Instance.AppendLog("Error", "MasterControl", "Failed to apply selected Clash# mode.", exception.Message);
             UpdateModeButtons();
         }
@@ -132,13 +166,17 @@ public sealed partial class MasterControl : Page
         try
         {
             WindowsProxyState proxyState = WindowsProxyService.Instance.GetCurrentState();
-            SystemProxyStatusText.Text = proxyState.IsEnabled ? "开启" : "关闭";
+            SystemProxyStatusText.Text = proxyState.IsEnabled
+                ? LocalizationService.Instance.GetString("Master.Status.On")
+                : LocalizationService.Instance.GetString("Master.Status.Off");
         }
         catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
         {
-            SystemProxyStatusText.Text = "不可用";
+            SystemProxyStatusText.Text = LocalizationService.Instance.GetString("Master.Status.Unavailable");
         }
 
-        TransparentProxyStatusText.Text = AppSettingsService.Instance.TransparentProxyEnabled ? "已在设置中启用" : "关闭";
+        TransparentProxyStatusText.Text = AppSettingsService.Instance.TransparentProxyEnabled
+            ? LocalizationService.Instance.GetString("Master.Status.Standby")
+            : LocalizationService.Instance.GetString("Master.Status.Off");
     }
 }

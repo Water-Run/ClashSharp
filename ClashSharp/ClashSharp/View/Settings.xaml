@@ -7,111 +7,244 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="32">
+    <ScrollViewer Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
                 <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <TextBlock Text="语言" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+            <TextBlock x:Name="LanguageSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="界面语言" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock Text="后续使用资源文件支持主流语言。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="LanguageTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="LanguageDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
-                <ComboBox Grid.Column="1" MinWidth="180" SelectedIndex="0">
+                <ComboBox x:Name="LanguageBox" Grid.Column="1" MinWidth="180" SelectionChanged="LanguageBox_SelectionChanged">
                     <ComboBoxItem Content="简体中文" />
+                    <ComboBoxItem Content="繁體中文" />
                     <ComboBoxItem Content="English" />
+                    <ComboBoxItem Content="Русский" />
+                    <ComboBoxItem Content="Français" />
+                    <ComboBoxItem Content="Deutsch" />
                 </ComboBox>
             </Grid>
 
-            <TextBlock Text="代理" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+            <TextBlock x:Name="ProxySectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="透明代理" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock Text="启用 TUN 模式；失败时默认回退到系统代理。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="TransparentProxyTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="TransparentProxyDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
                 <ToggleSwitch x:Name="TransparentProxyToggle" Grid.Column="1" IsOn="False" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TransparentProxyToggle_Toggled" />
             </Grid>
 
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="混合端口" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock Text="系统代理和终端代理使用的本地 HTTP/SOCKS 入口。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="TunFallbackTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="TunFallbackDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ToggleSwitch x:Name="TunFallbackToggle" Grid.Column="1" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TunFallbackToggle_Toggled" />
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="MixedPortTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="MixedPortDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
                 <NumberBox x:Name="MixedPortBox" Grid.Column="1" Width="140" Minimum="1" Maximum="65535" SpinButtonPlacementMode="Compact" ValueChanged="MixedPortBox_ValueChanged" />
             </Grid>
 
-            <TextBlock Text="Windows 原生" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="WSL、终端和 Microsoft Store 网络修正" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock Text="每项单独诊断、单独应用，并提供可撤销动作。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-            </Grid>
-
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="启动时检查代理残留" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock Text="如果 Windows 代理仍指向 Clash# 本地端口，则按异常恢复策略处理。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="ConnectionSamplingTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="ConnectionSamplingDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <ToggleSwitch x:Name="ConnectionSamplingToggle" Grid.Column="1" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="ConnectionSamplingToggle_Toggled" />
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="SamplingIntervalTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="SamplingIntervalDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <NumberBox x:Name="ConnectionSamplingIntervalBox" Grid.Column="1" Width="140" Minimum="5" Maximum="3600" SpinButtonPlacementMode="Compact" ValueChanged="ConnectionSamplingIntervalBox_ValueChanged" />
+            </Grid>
+
+            <TextBlock x:Name="WindowsNativeSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="WindowsNativeTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="WindowsNativeDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="68">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock x:Name="WslDiagnosticTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="WslDiagnosticStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <Button Grid.Column="1" Margin="12,0,0,0" Tag="Wsl:Diagnose" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                        <TextBlock x:Name="DiagnoseWslText" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="2" Margin="8,0,0,0" Tag="Wsl:Apply" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE73E;" FontSize="14" />
+                        <TextBlock x:Name="ApplyWslText" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="3" Margin="8,0,0,0" Tag="Wsl:Reset" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        <TextBlock x:Name="ResetWslText" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="68">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock x:Name="TerminalDiagnosticTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="TerminalDiagnosticStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <Button Grid.Column="1" Margin="12,0,0,0" Tag="Terminal:Diagnose" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE756;" FontSize="14" />
+                        <TextBlock x:Name="DiagnoseTerminalText" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="2" Margin="8,0,0,0" Tag="Terminal:Apply" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE73E;" FontSize="14" />
+                        <TextBlock x:Name="ApplyTerminalText" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="3" Margin="8,0,0,0" Tag="Terminal:Reset" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        <TextBlock x:Name="ResetTerminalText" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="68">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock x:Name="StoreDiagnosticTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="StoreDiagnosticStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <Button Grid.Column="1" Margin="12,0,0,0" Tag="MicrosoftStore:Diagnose" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                        <TextBlock x:Name="DiagnoseStoreText" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="2" Margin="8,0,0,0" Tag="MicrosoftStore:Apply" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE73E;" FontSize="14" />
+                        <TextBlock x:Name="ApplyStoreText" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="3" Margin="8,0,0,0" Tag="MicrosoftStore:Reset" Click="WindowsDiagnosticButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        <TextBlock x:Name="ResetStoreText" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="CheckStaleProxyTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="CheckStaleProxyDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
                 <ToggleSwitch x:Name="CheckStaleProxyToggle" Grid.Column="1" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="CheckStaleProxyToggle_Toggled" />
             </Grid>
 
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="退出时还原系统代理" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock Text="关闭 Clash# 时停止核心并关闭 Windows 系统代理。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="RestoreProxyOnExitTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="RestoreProxyOnExitDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
                 <ToggleSwitch x:Name="RestoreProxyOnExitToggle" Grid.Column="1" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="RestoreProxyOnExitToggle_Toggled" />
             </Grid>
 
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="异常恢复策略" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock Text="用于解决其它代理软件或 Clash# 异常关闭后残留系统代理的问题。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="ProxyRecoveryModeTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="ProxyRecoveryModeDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
                 <ComboBox x:Name="ProxyRecoveryModeBox" Grid.Column="1" MinWidth="180" SelectionChanged="ProxyRecoveryModeBox_SelectionChanged">
-                    <ComboBoxItem Content="不处理" />
-                    <ComboBoxItem Content="恢复为代理开启" />
-                    <ComboBoxItem Content="恢复为代理关闭" />
+                    <ComboBoxItem x:Name="ProxyRecoveryIgnoreItem" />
+                    <ComboBoxItem x:Name="ProxyRecoveryEnableItem" />
+                    <ComboBoxItem x:Name="ProxyRecoveryDisableItem" />
                 </ComboBox>
             </Grid>
 
-            <TextBlock Text="中国大陆" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16" MinHeight="60">
+            <TextBlock x:Name="MainlandChinaSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="适用于中国大陆的文本和旗帜替换" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock Text="默认开启；敏感词过滤仅影响界面显示，不影响复制、搜索和导出。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="MainlandChinaDisplayTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="MainlandChinaDisplayDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
                 <ToggleSwitch x:Name="MainlandChinaDisplayToggle" Grid.Column="1" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="MainlandChinaDisplayToggle_Toggled" />
             </Grid>

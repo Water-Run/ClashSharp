@@ -16,7 +16,7 @@ namespace ClashSharp.Service;
 
 /// <summary>Applies Clash# master takeover modes to the local core process and Windows system proxy.</summary>
 /// <remarks>
-/// Invariants: Disabled and standby modes leave Windows system proxy disabled; rule and full takeover modes enable it.
+/// Invariants: Disabled and standby modes leave Windows system proxy disabled; rule and full takeover modes prefer TUN when enabled and otherwise enable system proxy.
 /// Thread safety: Public mode application is serialized through a private lock.
 /// Side effects: Starts or stops mihomo and mutates Windows system proxy state.
 /// </remarks>
@@ -49,10 +49,25 @@ public sealed class NetworkTakeoverService
             {
                 ClashSharpMode.Disabled => ApplyDisabledMode(),
                 ClashSharpMode.Standby => ApplyStandbyMode(),
-                ClashSharpMode.RuleTakeover => ApplySystemProxyTakeoverMode(mode, "Rule takeover is active through Windows system proxy."),
-                ClashSharpMode.FullTakeover => ApplySystemProxyTakeoverMode(mode, "Full takeover is active through Windows system proxy."),
+                ClashSharpMode.RuleTakeover => ApplyTakeoverMode(mode),
+                ClashSharpMode.FullTakeover => ApplyTakeoverMode(mode),
                 _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported Clash# runtime mode."),
             };
+        }
+    }
+
+    /// <summary>Restores a system-proxy takeover after stale Clash# proxy state is detected on startup.</summary>
+    /// <returns>The resulting system-proxy takeover state.</returns>
+    /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
+    /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
+    /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
+    public NetworkTakeoverResult ApplyStartupSystemProxyRecovery()
+    {
+        lock (_syncLock)
+        {
+            return ApplySystemProxyTakeoverMode(
+                ClashSharpMode.RuleTakeover,
+                "Clash# core and Windows system proxy were restored after stale proxy detection.");
         }
     }
 
@@ -62,7 +77,7 @@ public sealed class NetworkTakeoverService
     {
         MihomoCoreService.Instance.Stop();
         WindowsProxyService.Instance.DisableProxy();
-        return new NetworkTakeoverResult(ClashSharpMode.Disabled, false, false, "Clash# is disabled and Windows system proxy is off.");
+        return new NetworkTakeoverResult(ClashSharpMode.Disabled, false, false, false, "Clash# is disabled and Windows system proxy is off.");
     }
 
     /// <summary>Applies standby mode by starting the core and disabling Windows proxy.</summary>
@@ -72,37 +87,88 @@ public sealed class NetworkTakeoverService
     /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
     private static NetworkTakeoverResult ApplyStandbyMode()
     {
-        RestartCore(ClashSharpMode.Standby);
+        RestartCore(ClashSharpMode.Standby, transparentProxyEnabled: false);
         WindowsProxyService.Instance.DisableProxy();
-        return new NetworkTakeoverResult(ClashSharpMode.Standby, true, false, "Clash# core is running in standby with Windows system proxy off.");
+        return new NetworkTakeoverResult(ClashSharpMode.Standby, true, false, false, "Clash# core is running in standby with Windows system proxy off.");
+    }
+
+    /// <summary>Applies a takeover mode through TUN when enabled, falling back to Windows system proxy when configured.</summary>
+    /// <param name="mode">Takeover mode that should route traffic through mihomo.</param>
+    /// <returns>The resulting takeover state.</returns>
+    /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
+    /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
+    /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
+    private static NetworkTakeoverResult ApplyTakeoverMode(ClashSharpMode mode)
+    {
+        if (!AppSettingsService.Instance.TransparentProxyEnabled)
+        {
+            return ApplySystemProxyTakeoverMode(mode, BuildSystemProxyMessage(mode));
+        }
+
+        try
+        {
+            RestartCore(mode, transparentProxyEnabled: true);
+            WindowsProxyService.Instance.DisableProxy();
+            return new NetworkTakeoverResult(mode, true, false, true, BuildTransparentProxyMessage(mode));
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
+        {
+            if (!AppSettingsService.Instance.FallbackToSystemProxyWhenTunFails)
+            {
+                throw;
+            }
+
+            LogStorageService.Instance.AppendLog("Warning", "NetworkTakeover", "TUN takeover failed; falling back to Windows system proxy.", exception.Message);
+            return ApplySystemProxyTakeoverMode(mode, BuildFallbackMessage(mode));
+        }
     }
 
     /// <summary>Applies a takeover mode by starting the core and enabling Windows proxy.</summary>
     /// <param name="mode">Takeover mode that should enable Windows proxy.</param>
     /// <param name="message">Human-readable outcome message. Must not be null.</param>
     /// <returns>The resulting takeover state.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="message"/> is null.</exception>
-    /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
-    /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
-    /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
     private static NetworkTakeoverResult ApplySystemProxyTakeoverMode(ClashSharpMode mode, string message)
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        RestartCore(mode);
+        RestartCore(mode, transparentProxyEnabled: false);
         int mixedPort = AppSettingsService.Instance.MixedPort;
         string proxyServer = ProxyRecoveryService.Instance.BuildLoopbackProxyServer(mixedPort);
         WindowsProxyService.Instance.EnableProxy(proxyServer);
-        return new NetworkTakeoverResult(mode, true, true, message);
+        return new NetworkTakeoverResult(mode, true, true, false, message);
     }
 
     /// <summary>Ensures the managed core configuration matches <paramref name="mode"/> and restarts the core process.</summary>
     /// <param name="mode">Master takeover mode whose equivalent core mode should be active.</param>
     /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
     /// <exception cref="InvalidOperationException">The core process cannot be started.</exception>
-    private static void RestartCore(ClashSharpMode mode)
+    private static void RestartCore(ClashSharpMode mode, bool transparentProxyEnabled)
     {
-        CoreConfigurationState configurationState = CoreConfigurationService.Instance.EnsureConfiguration(mode);
+        CoreConfigurationState configurationState = CoreConfigurationService.Instance.EnsureConfiguration(mode, transparentProxyEnabled);
         MihomoCoreService.Instance.Restart(configurationState);
+    }
+
+    /// <summary>Builds user-facing message for system-proxy takeover.</summary>
+    private static string BuildSystemProxyMessage(ClashSharpMode mode)
+    {
+        return mode == ClashSharpMode.FullTakeover
+            ? "Full takeover is active through Windows system proxy."
+            : "Rule takeover is active through Windows system proxy.";
+    }
+
+    /// <summary>Builds user-facing message for transparent-proxy takeover.</summary>
+    private static string BuildTransparentProxyMessage(ClashSharpMode mode)
+    {
+        return mode == ClashSharpMode.FullTakeover
+            ? "Full takeover is active through TUN transparent proxy."
+            : "Rule takeover is active through TUN transparent proxy.";
+    }
+
+    /// <summary>Builds user-facing message for fallback from TUN to system proxy.</summary>
+    private static string BuildFallbackMessage(ClashSharpMode mode)
+    {
+        return mode == ClashSharpMode.FullTakeover
+            ? "TUN failed; full takeover is active through Windows system proxy."
+            : "TUN failed; rule takeover is active through Windows system proxy.";
     }
 }

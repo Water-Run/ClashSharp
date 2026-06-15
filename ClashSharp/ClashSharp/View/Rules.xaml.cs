@@ -1,6 +1,6 @@
 /*
  * Rules Page
- * Provides the rule-provider and rule-hit inspection surface for ClashSharp takeover decisions
+ * Provides the rule-provider and rule-hit inspection surface for Clash# takeover decisions
  *
  * @author: WaterRun
  * @file: View/Rules.xaml.cs
@@ -12,11 +12,11 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClashSharp.View;
 
-/// <summary>Page reserved for rule-provider state, rule hit statistics, and route decisions.</summary>
+/// <summary>Page for rule-provider state, rule hit statistics, and route decisions.</summary>
 /// <remarks>
-/// Invariants: The page currently exposes static shell text only.
+/// Invariants: Visible text and active profile rule rows are loaded during construction.
 /// Thread safety: Must be accessed from the UI thread only.
-/// Side effects: Reads localized strings during construction.
+/// Side effects: Reads localized strings and active profile rule metadata during construction.
 /// </remarks>
 public sealed partial class Rules : Page
 {
@@ -26,5 +26,6 @@ public sealed partial class Rules : Page
         InitializeComponent();
         PageTitleText.Text = LocalizationService.Instance.GetString("Nav.Rules");
         DescriptionText.Text = LocalizationService.Instance.GetString("Page.Rules.Description");
+        RulesList.ItemsSource = RuleCatalogService.Instance.GetRules();
     }
 }

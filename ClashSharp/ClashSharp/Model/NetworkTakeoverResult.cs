@@ -13,6 +13,7 @@ namespace ClashSharp.Model;
 /// <param name="Mode">The takeover mode that was applied.</param>
 /// <param name="CoreRunning">True when the mihomo core is expected to be running after application.</param>
 /// <param name="SystemProxyEnabled">True when Windows system proxy is expected to be enabled after application.</param>
+/// <param name="TransparentProxyEnabled">True when TUN transparent proxy mode is expected to be active after application.</param>
 /// <param name="Message">Human-readable outcome text; never null.</param>
 /// <remarks>
 /// Invariants: <paramref name="Message"/> is never null.
@@ -23,4 +24,5 @@ public readonly record struct NetworkTakeoverResult(
     ClashSharpMode Mode,
     bool CoreRunning,
     bool SystemProxyEnabled,
+    bool TransparentProxyEnabled,
     string Message);

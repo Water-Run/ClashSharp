@@ -10,6 +10,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -162,11 +163,25 @@ public sealed class MihomoCoreService
                 StartInfo = startInfo,
                 EnableRaisingEvents = true,
             };
+            StringBuilder startupOutput = new();
+            process.OutputDataReceived += (_, args) => AppendStartupLine(startupOutput, args.Data);
+            process.ErrorDataReceived += (_, args) => AppendStartupLine(startupOutput, args.Data);
 
             if (!process.Start())
             {
                 process.Dispose();
                 throw new InvalidOperationException("Unable to start the bundled mihomo core.");
+            }
+
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            if (process.WaitForExit(1200))
+            {
+                string detail = startupOutput.ToString().Trim();
+                process.Dispose();
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(detail)
+                    ? "The bundled mihomo core exited during startup."
+                    : $"The bundled mihomo core exited during startup: {detail}");
             }
 
             _process = process;
@@ -218,5 +233,20 @@ public sealed class MihomoCoreService
         }
 
         process.Kill(entireProcessTree: true);
+    }
+
+    /// <summary>Appends one captured startup output line to a bounded buffer.</summary>
+    /// <param name="builder">Startup output buffer. Must not be null.</param>
+    /// <param name="line">Captured line; may be null at stream end.</param>
+    private static void AppendStartupLine(StringBuilder builder, string? line)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        if (string.IsNullOrWhiteSpace(line) || builder.Length > 4096)
+        {
+            return;
+        }
+
+        builder.AppendLine(line);
     }
 }

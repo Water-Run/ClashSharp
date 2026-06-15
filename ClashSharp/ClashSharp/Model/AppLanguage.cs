@@ -1,6 +1,6 @@
 ﻿/*
  * Application Language Enumeration
- * Defines all display languages supported by the ClashSharp user interface
+ * Defines all display languages supported by the Clash# user interface
  *
  * @author: WaterRun
  * @file: Model/AppLanguage.cs

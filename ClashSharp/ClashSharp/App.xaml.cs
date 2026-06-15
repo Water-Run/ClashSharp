@@ -1,6 +1,6 @@
 ﻿/*
  * Application Entry Point
- * Bootstraps the ClashSharp proxy management application, creates the main window, and manages its lifetime
+ * Bootstraps the Clash# proxy management application, creates the main window, and manages its lifetime
  *
  * @author: WaterRun
  * @file: App.xaml.cs
@@ -40,9 +40,11 @@ public partial class App : Application
     /// <param name="args">Launch activation details provided by the platform. Not null.</param>
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        LocalizationService.Instance.CurrentLanguage = AppSettingsService.Instance.DisplayLanguage;
         ApplyStartupProxyRecovery();
         _mainWindow = new MainWindow();
         _mainWindow.Activate();
+        ConnectionSamplingService.Instance.StartIfEnabled();
     }
 
     /// <summary>Applies startup stale proxy recovery before creating the main window.</summary>

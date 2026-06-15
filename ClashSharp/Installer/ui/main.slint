@@ -1,92 +1,130 @@
-import { Button, LineEdit, ProgressIndicator } from "std-widgets.slint";
+import { Button, ProgressIndicator } from "std-widgets.slint";
 
 export component MainWindow inherits Window {
     title: "Clash# Installer";
     icon: @image-url("../Logo.png");
     preferred-width: 640px;
-    preferred-height: 480px;
+    preferred-height: 420px;
     min-width: 640px;
-    min-height: 480px;
+    min-height: 420px;
     max-width: 640px;
-    max-height: 480px;
+    max-height: 420px;
 
-    in-out property <string> install-dir;
-    in-out property <bool> installing: false;
+    in-out property <bool> busy: false;
+    in-out property <bool> installed: false;
+    in-out property <bool> supported: true;
     in-out property <float> progress: 0.0;
     in-out property <string> status-text: "Ready";
+    in-out property <string> mode-text: "Install mode";
 
     callback install();
-    callback browse();
+    callback repair();
+    callback uninstall();
+    callback refresh-state();
     callback exit-app();
 
     VerticalLayout {
         padding: 24px;
-        spacing: 16px;
+        spacing: 18px;
 
-        Text {
-            text: "Clash# Installer";
-            font-size: 24px;
-            font-weight: 700;
-            horizontal-alignment: center;
-        }
+        HorizontalLayout {
+            spacing: 12px;
 
-        VerticalLayout {
-            spacing: 8px;
-
-            Text {
-                text: "Install Directory";
-                font-size: 13px;
-                font-weight: 500;
+            Image {
+                source: @image-url("../Logo.png");
+                width: 48px;
+                height: 48px;
             }
 
-            HorizontalLayout {
-                spacing: 8px;
+            VerticalLayout {
+                spacing: 4px;
 
-                LineEdit {
-                    text <=> root.install-dir;
-                    enabled: !root.installing;
-                    horizontal-stretch: 1;
+                Text {
+                    text: "Clash#";
+                    font-size: 26px;
+                    font-weight: 700;
                 }
 
-                Button {
-                    text: "Browse...";
-                    enabled: !root.installing;
-                    clicked => { root.browse(); }
+                Text {
+                    text: root.mode-text;
+                    font-size: 13px;
+                    color: #5f5f5f;
                 }
+            }
+        }
+
+        Rectangle {
+            border-width: 1px;
+            border-color: #d7d7d7;
+            border-radius: 4px;
+            background: #fafafa;
+            height: 96px;
+
+            Text {
+                text <=> root.status-text;
+                font-size: 13px;
+                color: root.supported ? #202020 : #a4262c;
+                wrap: word-wrap;
+                vertical-alignment: center;
+                horizontal-alignment: left;
+                x: 16px;
+                y: 12px;
+                width: parent.width - 32px;
+                height: parent.height - 24px;
             }
         }
 
         ProgressIndicator {
-            indeterminate: false;
+            indeterminate: root.busy;
             progress: root.progress;
         }
 
-        Text {
-            text <=> root.status-text;
-            font-size: 12px;
+        if !root.supported : Text {
+            text: "Clash# requires Windows 11 x64.";
+            color: #a4262c;
+            font-size: 13px;
         }
 
         VerticalLayout {
             horizontal-stretch: 1;
             alignment: end;
 
-            if !root.installing : HorizontalLayout {
+            if !root.busy : HorizontalLayout {
                 spacing: 12px;
+
+                Button {
+                    text: "Refresh";
+                    clicked => { root.refresh-state(); }
+                }
 
                 Button {
                     text: "Exit";
                     clicked => { root.exit-app(); }
                 }
 
-                Button {
+                if root.installed : Button {
+                    text: "Uninstall";
+                    enabled: root.supported;
+                    clicked => { root.uninstall(); }
+                }
+
+                if root.installed : Button {
+                    text: "Repair";
+                    primary: true;
+                    enabled: root.supported;
+                    clicked => { root.repair(); }
+                }
+
+                if !root.installed : Button {
                     text: "Install";
                     primary: true;
+                    enabled: root.supported;
                     clicked => { root.install(); }
                 }
             }
 
-            if root.installing : Text {
-                text: "Installing...";
+            if root.busy : Text {
+                text: "Working...";
                 font-size: 13px;
             }
         }

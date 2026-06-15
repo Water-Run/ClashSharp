@@ -71,6 +71,7 @@ public sealed partial class MainWindow : Window
         appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
         appWindow.Title = "Clash#";
+        SetTitleBar(AppTitleBar);
     }
 
     /// <summary>Subclasses the native window procedure to enforce minimum window dimensions.</summary>
@@ -91,7 +92,7 @@ public sealed partial class MainWindow : Window
         NavProxiesItem.Content = loc.GetString("Nav.Proxies");
         NavProxyNodesItem.Content = loc.GetString("Nav.ProxyNodes");
         NavProfilesItem.Content = loc.GetString("Nav.Profiles");
-        NavConnectionsItem.Content = loc.GetString("Nav.Connections");
+        NavLinksItem.Content = loc.GetString("Nav.Links");
         NavRulesItem.Content = loc.GetString("Nav.Rules");
         NavStatisticsItem.Content = loc.GetString("Nav.Statistics");
         NavLogsItem.Content = loc.GetString("Nav.Logs");
@@ -131,7 +132,7 @@ public sealed partial class MainWindow : Window
             "MasterControl" => typeof(View.MasterControl),
             "ProxyNodes" => typeof(View.Proxies),
             "Profiles" => typeof(View.Profiles),
-            "Connections" => typeof(View.Connections),
+            "Links" => typeof(View.Links),
             "Rules" => typeof(View.Rules),
             "Statistics" => typeof(View.Statistics),
             "Logs" => typeof(View.Logs),
@@ -168,6 +169,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
+            ConnectionSamplingService.Instance.Stop();
             MihomoCoreService.Instance.Stop();
 
             if (AppSettingsService.Instance.RestoreProxyOnExit)

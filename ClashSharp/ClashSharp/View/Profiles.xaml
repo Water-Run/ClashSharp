@@ -7,19 +7,63 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="32">
+    <Grid Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
                 <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16">
+            <CommandBar DefaultLabelPosition="Right" Background="Transparent">
+                <AppBarButton x:Name="ImportProfileButton" Click="ImportProfileButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE8E5;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="ValidateProfileButton" Click="ValidateProfileButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE73E;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="SetActiveProfileButton" Click="SetActiveProfileButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE73E;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+            </CommandBar>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="订阅与配置" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock Text="后续接入订阅更新、配置校验、失败回滚和当前配置切换。" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="CurrentProfileTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="ActiveProfileText" Style="{ThemeResource BodyTextBlockStyle}" />
                 </StackPanel>
             </Grid>
+
+            <ListView x:Name="ProfilesList" SelectionMode="Single">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Padding="4,10" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="190" />
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="{Binding SourceNameDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{Binding NodeCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="3" Text="{Binding RuleCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="4" Text="{Binding UpdatedAt}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
         </StackPanel>
     </Grid>
 </Page>

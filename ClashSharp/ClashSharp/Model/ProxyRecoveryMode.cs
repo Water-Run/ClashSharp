@@ -20,7 +20,7 @@ public enum ProxyRecoveryMode
     /// <summary>Leave the detected Windows proxy state unchanged during startup recovery.</summary>
     DoNothing = 0,
 
-    /// <summary>Restore Windows proxy settings to the ClashSharp-enabled state during startup recovery.</summary>
+    /// <summary>Restore Windows proxy settings to the Clash#-enabled state during startup recovery.</summary>
     EnableProxy = 1,
 
     /// <summary>Disable Windows proxy settings during startup recovery.</summary>

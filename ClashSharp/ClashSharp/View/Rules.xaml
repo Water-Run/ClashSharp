@@ -7,15 +7,33 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="32">
+    <Grid Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
                 <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <ListView>
-                <ListViewItem Content="规则集、规则命中统计、DIRECT / REJECT / PROXY 路径将在此处展示。" />
+            <ListView x:Name="RulesList">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Padding="4,10" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="90" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Grid.Column="1" Text="{Binding RuleType}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="2" Text="{Binding PayloadDisplay}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="3" Text="{Binding Action}" />
+                            <TextBlock Grid.Column="4" Text="{Binding HitCount}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
             </ListView>
         </StackPanel>
     </Grid>

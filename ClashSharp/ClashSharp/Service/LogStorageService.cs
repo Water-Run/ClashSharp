@@ -13,13 +13,12 @@ using System.Globalization;
 using System.IO;
 using ClashSharp.Model;
 using Microsoft.Data.Sqlite;
-using Windows.Storage;
 
 namespace ClashSharp.Service;
 
 /// <summary>Summarizes the current SQLite log storage footprint and record counts.</summary>
 /// <param name="DatabasePath">Absolute path to the SQLite database file; never null.</param>
-/// <param name="DatabaseSizeBytes">Current database file size in bytes; zero when the file does not exist.</param>
+/// <param name="DatabaseSizeBytes">Current SQLite footprint in bytes, including WAL sidecar files when present.</param>
 /// <param name="LogCount">Total count of log records currently stored.</param>
 /// <param name="ConnectionCount">Total count of connection records currently stored.</param>
 /// <remarks>
@@ -32,6 +31,30 @@ public readonly record struct LogStorageSummary(
     long DatabaseSizeBytes,
     long LogCount,
     long ConnectionCount);
+
+/// <summary>Summarizes long-term traffic and aggregation records stored in SQLite.</summary>
+/// <param name="TotalUploadBytes">Total uploaded bytes estimated from connection records.</param>
+/// <param name="TotalDownloadBytes">Total downloaded bytes estimated from connection records.</param>
+/// <param name="ConnectionCount">Total connection record count.</param>
+/// <param name="SnapshotCount">Total traffic snapshot count.</param>
+/// <param name="ProfileCount">Number of profile traffic aggregation rows.</param>
+/// <param name="NodeCount">Number of node traffic aggregation rows.</param>
+/// <param name="NodeHealthCount">Number of node health rows.</param>
+/// <param name="RuleCount">Number of rule hit aggregation rows.</param>
+/// <remarks>
+/// Invariants: Count and byte values are non-negative and reflect the database state at query time.
+/// Thread safety: Immutable value type and inherently thread-safe after construction.
+/// Side effects: None.
+/// </remarks>
+public readonly record struct TrafficStatisticsSummary(
+    long TotalUploadBytes,
+    long TotalDownloadBytes,
+    long ConnectionCount,
+    long SnapshotCount,
+    long ProfileCount,
+    long NodeCount,
+    long NodeHealthCount,
+    long RuleCount);
 
 /// <summary>Provides SQLite-backed persistence for logs, connection history, and traffic statistics.</summary>
 /// <remarks>
@@ -57,7 +80,7 @@ public sealed class LogStorageService
     /// <summary>Initializes the storage service and computes the database path.</summary>
     private LogStorageService()
     {
-        string dataDirectory = ResolveDataDirectory();
+        string dataDirectory = AppDataPathService.ResolveLocalDataDirectory();
         Directory.CreateDirectory(dataDirectory);
         _databasePath = Path.Combine(dataDirectory, "ClashSharpLogs.sqlite3");
     }
@@ -77,9 +100,339 @@ public sealed class LogStorageService
             using SqliteConnection connection = OpenConnection();
             long logCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM Logs;");
             long connectionCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM Connections;");
-            long databaseSize = File.Exists(_databasePath) ? new FileInfo(_databasePath).Length : 0;
+            long databaseSize = CalculateStorageFootprintBytes(_databasePath);
 
             return new LogStorageSummary(_databasePath, databaseSize, logCount, connectionCount);
+        }
+    }
+
+    /// <summary>Returns long-term traffic statistics and aggregation row counts from SQLite.</summary>
+    /// <returns>A <see cref="TrafficStatisticsSummary"/> snapshot for the current database state.</returns>
+    public TrafficStatisticsSummary GetTrafficStatisticsSummary()
+    {
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            long totalUploadBytes = ExecuteScalarLong(connection, "SELECT COALESCE(SUM(UploadBytes), 0) FROM Connections;");
+            long totalDownloadBytes = ExecuteScalarLong(connection, "SELECT COALESCE(SUM(DownloadBytes), 0) FROM Connections;");
+            long connectionCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM Connections;");
+            long snapshotCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM TrafficSnapshots;");
+            long profileCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM ProfileTrafficStats;");
+            long nodeCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM NodeTrafficStats;");
+            long nodeHealthCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM NodeHealthStats;");
+            long ruleCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM RuleHitStats;");
+
+            return new TrafficStatisticsSummary(
+                totalUploadBytes,
+                totalDownloadBytes,
+                connectionCount,
+                snapshotCount,
+                profileCount,
+                nodeCount,
+                nodeHealthCount,
+                ruleCount);
+        }
+    }
+
+    /// <summary>Returns traffic aggregation rows grouped by profile.</summary>
+    /// <param name="limit">Maximum number of rows to return; must be greater than zero.</param>
+    /// <returns>Profile traffic rows ordered by total traffic descending.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
+    public IReadOnlyList<TrafficStatisticRow> GetProfileTrafficRows(int limit)
+    {
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
+        }
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT ProfileId, UploadBytes, DownloadBytes, ConnectionCount, UpdatedAtUnixTime
+                FROM ProfileTrafficStats
+                ORDER BY (UploadBytes + DownloadBytes) DESC, UpdatedAtUnixTime DESC
+                LIMIT $limit;
+                """;
+            command.Parameters.AddWithValue("$limit", limit);
+            return ReadTrafficStatisticRows(command);
+        }
+    }
+
+    /// <summary>Returns traffic aggregation rows grouped by day.</summary>
+    /// <param name="limit">Maximum number of rows to return; must be greater than zero.</param>
+    /// <returns>Daily traffic rows ordered from newest to oldest.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
+    public IReadOnlyList<TrafficStatisticRow> GetDailyTrafficRows(int limit)
+    {
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
+        }
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT
+                    strftime('%Y-%m-%d', CreatedAtUnixTime, 'unixepoch', 'localtime') AS DayLabel,
+                    COALESCE(SUM(UploadBytes), 0) AS UploadBytes,
+                    COALESCE(SUM(DownloadBytes), 0) AS DownloadBytes,
+                    COUNT(*) AS SampleCount,
+                    MAX(CreatedAtUnixTime) AS UpdatedAtUnixTime
+                FROM TrafficSnapshots
+                GROUP BY DayLabel
+                ORDER BY UpdatedAtUnixTime DESC
+                LIMIT $limit;
+                """;
+            command.Parameters.AddWithValue("$limit", limit);
+            return ReadTrafficStatisticRows(command);
+        }
+    }
+
+    /// <summary>Returns traffic aggregation rows grouped by proxy node.</summary>
+    /// <param name="limit">Maximum number of rows to return; must be greater than zero.</param>
+    /// <returns>Node traffic rows ordered by total traffic descending.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
+    public IReadOnlyList<TrafficStatisticRow> GetNodeTrafficRows(int limit)
+    {
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
+        }
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT NodeName, UploadBytes, DownloadBytes, 0 AS SampleCount, UpdatedAtUnixTime
+                FROM NodeTrafficStats
+                ORDER BY (UploadBytes + DownloadBytes) DESC, UpdatedAtUnixTime DESC
+                LIMIT $limit;
+                """;
+            command.Parameters.AddWithValue("$limit", limit);
+            return ReadTrafficStatisticRows(command);
+        }
+    }
+
+    /// <summary>Upserts one node latency measurement into SQLite.</summary>
+    /// <param name="nodeName">Node name. Must not be null or whitespace.</param>
+    /// <param name="regionCode">Node region code. Must not be null.</param>
+    /// <param name="latencyMilliseconds">Measured latency in milliseconds; null when the probe failed or was unavailable.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="nodeName"/> or <paramref name="regionCode"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="nodeName"/> is whitespace.</exception>
+    public void UpsertNodeHealth(string nodeName, string regionCode, int? latencyMilliseconds)
+    {
+        ArgumentNullException.ThrowIfNull(nodeName);
+        ArgumentNullException.ThrowIfNull(regionCode);
+
+        if (string.IsNullOrWhiteSpace(nodeName))
+        {
+            throw new ArgumentException("Node name must not be whitespace.", nameof(nodeName));
+        }
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            long updatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            using SqliteConnection connection = OpenConnection();
+            ExecuteNonQuery(
+                connection,
+                null,
+                """
+                INSERT INTO NodeHealthStats (NodeName, RegionCode, LatencyMilliseconds, UpdatedAtUnixTime)
+                VALUES ($nodeName, $regionCode, $latency, $updatedAt)
+                ON CONFLICT(NodeName) DO UPDATE SET
+                    RegionCode = excluded.RegionCode,
+                    LatencyMilliseconds = excluded.LatencyMilliseconds,
+                    UpdatedAtUnixTime = excluded.UpdatedAtUnixTime;
+                """,
+                ("$nodeName", nodeName),
+                ("$regionCode", regionCode),
+                ("$latency", latencyMilliseconds.HasValue ? latencyMilliseconds.Value : DBNull.Value),
+                ("$updatedAt", updatedAt));
+
+            ExecuteNonQuery(
+                connection,
+                null,
+                """
+                INSERT INTO NodeTrafficStats (NodeName, RegionCode, UploadBytes, DownloadBytes, UpdatedAtUnixTime)
+                VALUES ($nodeName, $regionCode, 0, 0, $updatedAt)
+                ON CONFLICT(NodeName) DO UPDATE SET
+                    RegionCode = excluded.RegionCode,
+                    UpdatedAtUnixTime = excluded.UpdatedAtUnixTime;
+                """,
+                ("$nodeName", nodeName),
+                ("$regionCode", regionCode),
+                ("$updatedAt", updatedAt));
+        }
+    }
+
+    /// <summary>Ensures rule hit rows exist for the provided rules without changing existing counts.</summary>
+    /// <param name="rules">Rule rows to register. Must not be null.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rules"/> is null.</exception>
+    public void EnsureRuleHitRows(IEnumerable<RulePreview> rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            long updatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            using SqliteConnection connection = OpenConnection();
+            foreach (RulePreview rule in rules)
+            {
+                string ruleName = BuildRuleName(rule);
+                if (string.IsNullOrWhiteSpace(ruleName))
+                {
+                    continue;
+                }
+
+                ExecuteNonQuery(
+                    connection,
+                    null,
+                    """
+                    INSERT INTO RuleHitStats (RuleName, HitCount, UpdatedAtUnixTime)
+                    VALUES ($ruleName, 0, $updatedAt)
+                    ON CONFLICT(RuleName) DO NOTHING;
+                    """,
+                    ("$ruleName", ruleName),
+                    ("$updatedAt", updatedAt));
+            }
+        }
+    }
+
+    /// <summary>Increments one rule hit counter.</summary>
+    /// <param name="ruleName">Rule key such as "DOMAIN-SUFFIX,example.com,PROXY". Must not be null or whitespace.</param>
+    /// <param name="increment">Positive hit increment.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="ruleName"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="ruleName"/> is whitespace.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="increment"/> is less than or equal to zero.</exception>
+    public void IncrementRuleHit(string ruleName, long increment = 1)
+    {
+        ArgumentNullException.ThrowIfNull(ruleName);
+
+        if (string.IsNullOrWhiteSpace(ruleName))
+        {
+            throw new ArgumentException("Rule name must not be whitespace.", nameof(ruleName));
+        }
+
+        if (increment <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(increment), "Increment must be greater than zero.");
+        }
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            long updatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            using SqliteConnection connection = OpenConnection();
+            ExecuteNonQuery(
+                connection,
+                null,
+                """
+                INSERT INTO RuleHitStats (RuleName, HitCount, UpdatedAtUnixTime)
+                VALUES ($ruleName, $increment, $updatedAt)
+                ON CONFLICT(RuleName) DO UPDATE SET
+                    HitCount = RuleHitStats.HitCount + excluded.HitCount,
+                    UpdatedAtUnixTime = excluded.UpdatedAtUnixTime;
+                """,
+                ("$ruleName", ruleName.Trim()),
+                ("$increment", increment),
+                ("$updatedAt", updatedAt));
+        }
+    }
+
+    /// <summary>Appends active mihomo connection rows and updates traffic aggregation tables.</summary>
+    /// <param name="connections">Active connection rows to persist. Must not be null.</param>
+    /// <returns>Number of connection rows inserted.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="connections"/> is null.</exception>
+    public int AppendConnectionSnapshot(IEnumerable<ActiveConnection> connections)
+    {
+        ArgumentNullException.ThrowIfNull(connections);
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            long createdAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            long totalUploadBytes = 0;
+            long totalDownloadBytes = 0;
+            int insertedCount = 0;
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            foreach (ActiveConnection activeConnection in connections)
+            {
+                totalUploadBytes += activeConnection.UploadBytes;
+                totalDownloadBytes += activeConnection.DownloadBytes;
+                insertedCount += ExecuteNonQuery(
+                    connection,
+                    transaction,
+                    """
+                    INSERT INTO Connections (CreatedAtUnixTime, ProcessName, Host, RuleName, ProxyName, UploadBytes, DownloadBytes)
+                    VALUES ($createdAt, $processName, $host, $ruleName, $proxyName, $uploadBytes, $downloadBytes);
+                    """,
+                    ("$createdAt", createdAt),
+                    ("$processName", activeConnection.ProcessName),
+                    ("$host", activeConnection.Host),
+                    ("$ruleName", activeConnection.RawRuleDisplay),
+                    ("$proxyName", activeConnection.ProxyName),
+                    ("$uploadBytes", activeConnection.UploadBytes),
+                    ("$downloadBytes", activeConnection.DownloadBytes));
+
+                UpsertNodeTraffic(connection, transaction, activeConnection.ProxyName, activeConnection.UploadBytes, activeConnection.DownloadBytes, createdAt);
+                UpsertRuleHit(connection, transaction, activeConnection.RawRuleDisplay, 1, createdAt);
+            }
+
+            ExecuteNonQuery(
+                connection,
+                transaction,
+                "INSERT INTO TrafficSnapshots (CreatedAtUnixTime, UploadBytes, DownloadBytes) VALUES ($createdAt, $uploadBytes, $downloadBytes);",
+                ("$createdAt", createdAt),
+                ("$uploadBytes", totalUploadBytes),
+                ("$downloadBytes", totalDownloadBytes));
+            UpsertProfileTraffic(connection, transaction, AppSettingsService.Instance.ActiveProfileId, totalUploadBytes, totalDownloadBytes, insertedCount, createdAt);
+            transaction.Commit();
+
+            return insertedCount;
+        }
+    }
+
+    /// <summary>Returns all stored rule hit counts keyed by rule name.</summary>
+    /// <returns>Dictionary of rule hit counts.</returns>
+    public IReadOnlyDictionary<string, long> GetRuleHitCounts()
+    {
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT RuleName, HitCount FROM RuleHitStats;";
+
+            Dictionary<string, long> hitCounts = new(StringComparer.Ordinal);
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                hitCounts[reader.GetString(0)] = reader.GetInt64(1);
+            }
+
+            return hitCounts;
         }
     }
 
@@ -180,6 +533,7 @@ public sealed class LogStorageService
             ExecuteNonQuery(connection, transaction, "DELETE FROM Connections WHERE CreatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             ExecuteNonQuery(connection, transaction, "DELETE FROM TrafficSnapshots WHERE CreatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             ExecuteNonQuery(connection, transaction, "DELETE FROM RuleHitStats WHERE UpdatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
+            ExecuteNonQuery(connection, transaction, "DELETE FROM NodeHealthStats WHERE UpdatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             transaction.Commit();
             Vacuum(connection);
         }
@@ -201,7 +555,7 @@ public sealed class LogStorageService
 
             using SqliteConnection connection = OpenConnection();
 
-            while (File.Exists(_databasePath) && new FileInfo(_databasePath).Length > targetSizeBytes)
+            while (CalculateStorageFootprintBytes(_databasePath) > targetSizeBytes)
             {
                 long deleted = DeleteOldestBatch(connection, "Logs", "CreatedAtUnixTime")
                     + DeleteOldestBatch(connection, "Connections", "CreatedAtUnixTime")
@@ -255,6 +609,7 @@ public sealed class LogStorageService
             ExecuteNonQuery(connection, transaction, "DELETE FROM TrafficSnapshots;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM ProfileTrafficStats;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM NodeTrafficStats;");
+            ExecuteNonQuery(connection, transaction, "DELETE FROM NodeHealthStats;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM RuleHitStats;");
             transaction.Commit();
             Vacuum(connection);
@@ -276,8 +631,10 @@ public sealed class LogStorageService
         ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS Connections (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, ProcessName TEXT NULL, Host TEXT NOT NULL, RuleName TEXT NULL, ProxyName TEXT NULL, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0);");
         ExecuteNonQuery(connection, null, "CREATE INDEX IF NOT EXISTS IX_Connections_CreatedAtUnixTime ON Connections (CreatedAtUnixTime);");
         ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS TrafficSnapshots (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, UploadBytes INTEGER NOT NULL, DownloadBytes INTEGER NOT NULL);");
-        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS ProfileTrafficStats (ProfileId TEXT PRIMARY KEY, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
+        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS ProfileTrafficStats (ProfileId TEXT PRIMARY KEY, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0, ConnectionCount INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
+        EnsureColumn(connection, "ProfileTrafficStats", "ConnectionCount", "INTEGER NOT NULL DEFAULT 0");
         ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS NodeTrafficStats (NodeName TEXT PRIMARY KEY, RegionCode TEXT NULL, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
+        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS NodeHealthStats (NodeName TEXT PRIMARY KEY, RegionCode TEXT NULL, LatencyMilliseconds INTEGER NULL, UpdatedAtUnixTime INTEGER NOT NULL);");
         ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS RuleHitStats (RuleName TEXT PRIMARY KEY, HitCount INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
 
         _isInitialized = true;
@@ -339,6 +696,54 @@ public sealed class LogStorageService
         return result is null || result == DBNull.Value ? 0 : Convert.ToInt64(result, CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Reads traffic statistic rows from a command returning label, upload, download, sample count, and update time columns.</summary>
+    /// <param name="command">Prepared command to execute. Must not be null.</param>
+    /// <returns>Read-only traffic statistic rows.</returns>
+    private static IReadOnlyList<TrafficStatisticRow> ReadTrafficStatisticRows(SqliteCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        List<TrafficStatisticRow> rows = [];
+        using SqliteDataReader reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            rows.Add(new TrafficStatisticRow(
+                reader.IsDBNull(0) ? string.Empty : reader.GetString(0),
+                reader.IsDBNull(1) ? 0 : reader.GetInt64(1),
+                reader.IsDBNull(2) ? 0 : reader.GetInt64(2),
+                reader.IsDBNull(3) ? 0 : reader.GetInt64(3),
+                DateTimeOffset.FromUnixTimeSeconds(reader.IsDBNull(4) ? 0 : reader.GetInt64(4))));
+        }
+
+        return rows;
+    }
+
+    /// <summary>Ensures an existing SQLite table contains a column added by newer schema versions.</summary>
+    /// <param name="connection">Open SQLite connection. Must not be null.</param>
+    /// <param name="tableName">Trusted internal table name. Must not be null.</param>
+    /// <param name="columnName">Trusted internal column name. Must not be null.</param>
+    /// <param name="definition">Trusted internal column definition. Must not be null.</param>
+    private static void EnsureColumn(SqliteConnection connection, string tableName, string columnName, string definition)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(tableName);
+        ArgumentNullException.ThrowIfNull(columnName);
+        ArgumentNullException.ThrowIfNull(definition);
+
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({tableName});";
+        using SqliteDataReader reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(1), columnName))
+            {
+                return;
+            }
+        }
+
+        ExecuteNonQuery(connection, null, $"ALTER TABLE {tableName} ADD COLUMN {columnName} {definition};");
+    }
+
     /// <summary>Deletes a bounded batch of oldest records from <paramref name="tableName"/>.</summary>
     /// <param name="connection">Open SQLite connection. Must not be null.</param>
     /// <param name="tableName">Trusted internal table name. Must not be null.</param>
@@ -361,22 +766,163 @@ public sealed class LogStorageService
     private static void Vacuum(SqliteConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
+        ExecuteNonQuery(connection, null, "PRAGMA wal_checkpoint(TRUNCATE);");
         ExecuteNonQuery(connection, null, "VACUUM;");
+        ExecuteNonQuery(connection, null, "PRAGMA wal_checkpoint(TRUNCATE);");
     }
 
-    /// <summary>Resolves the directory used for local application records.</summary>
-    /// <returns>Absolute directory path for local application data; never null.</returns>
-    private static string ResolveDataDirectory()
+    /// <summary>Calculates the SQLite storage footprint including WAL and shared-memory sidecar files.</summary>
+    /// <param name="databasePath">Main SQLite database path. Must not be null.</param>
+    /// <returns>Total byte count for the main database and known sidecar files.</returns>
+    private static long CalculateStorageFootprintBytes(string databasePath)
     {
-        try
+        ArgumentNullException.ThrowIfNull(databasePath);
+
+        long totalBytes = 0;
+        foreach (string path in EnumerateDatabaseStoragePaths(databasePath))
         {
-            return ApplicationData.Current.LocalFolder.Path;
+            if (File.Exists(path))
+            {
+                totalBytes += new FileInfo(path).Length;
+            }
         }
-        catch (InvalidOperationException)
-        {
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ClashSharp");
-        }
+
+        return totalBytes;
     }
+
+    /// <summary>Enumerates the main SQLite database path and WAL-mode sidecar paths.</summary>
+    /// <param name="databasePath">Main SQLite database path. Must not be null.</param>
+    /// <returns>Known storage paths for this database.</returns>
+    private static IEnumerable<string> EnumerateDatabaseStoragePaths(string databasePath)
+    {
+        ArgumentNullException.ThrowIfNull(databasePath);
+
+        yield return databasePath;
+        yield return databasePath + "-wal";
+        yield return databasePath + "-shm";
+    }
+
+    /// <summary>Upserts node traffic counters inside an existing transaction.</summary>
+    /// <param name="connection">Open SQLite connection. Must not be null.</param>
+    /// <param name="transaction">Active SQLite transaction. Must not be null.</param>
+    /// <param name="nodeName">Node name. Must not be null.</param>
+    /// <param name="uploadBytes">Uploaded bytes to add.</param>
+    /// <param name="downloadBytes">Downloaded bytes to add.</param>
+    /// <param name="updatedAt">Updated timestamp in Unix seconds.</param>
+    private static void UpsertNodeTraffic(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string nodeName,
+        long uploadBytes,
+        long downloadBytes,
+        long updatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(transaction);
+        ArgumentNullException.ThrowIfNull(nodeName);
+
+        string normalizedNodeName = string.IsNullOrWhiteSpace(nodeName) ? "DIRECT" : nodeName.Trim();
+        ExecuteNonQuery(
+            connection,
+            transaction,
+            """
+            INSERT INTO NodeTrafficStats (NodeName, RegionCode, UploadBytes, DownloadBytes, UpdatedAtUnixTime)
+            VALUES ($nodeName, NULL, $uploadBytes, $downloadBytes, $updatedAt)
+            ON CONFLICT(NodeName) DO UPDATE SET
+                UploadBytes = NodeTrafficStats.UploadBytes + excluded.UploadBytes,
+                DownloadBytes = NodeTrafficStats.DownloadBytes + excluded.DownloadBytes,
+                UpdatedAtUnixTime = excluded.UpdatedAtUnixTime;
+            """,
+            ("$nodeName", normalizedNodeName),
+            ("$uploadBytes", Math.Max(0, uploadBytes)),
+            ("$downloadBytes", Math.Max(0, downloadBytes)),
+            ("$updatedAt", updatedAt));
+    }
+
+    /// <summary>Upserts profile traffic counters inside an existing transaction.</summary>
+    /// <param name="connection">Open SQLite connection. Must not be null.</param>
+    /// <param name="transaction">Active SQLite transaction. Must not be null.</param>
+    /// <param name="profileId">Profile identifier. Must not be null.</param>
+    /// <param name="uploadBytes">Uploaded bytes to add.</param>
+    /// <param name="downloadBytes">Downloaded bytes to add.</param>
+    /// <param name="connectionCount">Connection count to add.</param>
+    /// <param name="updatedAt">Updated timestamp in Unix seconds.</param>
+    private static void UpsertProfileTraffic(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string profileId,
+        long uploadBytes,
+        long downloadBytes,
+        long connectionCount,
+        long updatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(transaction);
+        ArgumentNullException.ThrowIfNull(profileId);
+
+        string normalizedProfileId = string.IsNullOrWhiteSpace(profileId) ? ProfileCatalogIds.BuiltInDirect : profileId.Trim();
+        ExecuteNonQuery(
+            connection,
+            transaction,
+            """
+            INSERT INTO ProfileTrafficStats (ProfileId, UploadBytes, DownloadBytes, ConnectionCount, UpdatedAtUnixTime)
+            VALUES ($profileId, $uploadBytes, $downloadBytes, $connectionCount, $updatedAt)
+            ON CONFLICT(ProfileId) DO UPDATE SET
+                UploadBytes = ProfileTrafficStats.UploadBytes + excluded.UploadBytes,
+                DownloadBytes = ProfileTrafficStats.DownloadBytes + excluded.DownloadBytes,
+                ConnectionCount = ProfileTrafficStats.ConnectionCount + excluded.ConnectionCount,
+                UpdatedAtUnixTime = excluded.UpdatedAtUnixTime;
+            """,
+            ("$profileId", normalizedProfileId),
+            ("$uploadBytes", Math.Max(0, uploadBytes)),
+            ("$downloadBytes", Math.Max(0, downloadBytes)),
+            ("$connectionCount", Math.Max(0, connectionCount)),
+            ("$updatedAt", updatedAt));
+    }
+
+    /// <summary>Upserts rule hit counters inside an existing transaction.</summary>
+    /// <param name="connection">Open SQLite connection. Must not be null.</param>
+    /// <param name="transaction">Active SQLite transaction. Must not be null.</param>
+    /// <param name="ruleName">Rule key. Must not be null.</param>
+    /// <param name="increment">Hit increment.</param>
+    /// <param name="updatedAt">Updated timestamp in Unix seconds.</param>
+    private static void UpsertRuleHit(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string ruleName,
+        long increment,
+        long updatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(transaction);
+        ArgumentNullException.ThrowIfNull(ruleName);
+
+        if (string.IsNullOrWhiteSpace(ruleName))
+        {
+            return;
+        }
+
+        ExecuteNonQuery(
+            connection,
+            transaction,
+            """
+            INSERT INTO RuleHitStats (RuleName, HitCount, UpdatedAtUnixTime)
+            VALUES ($ruleName, $increment, $updatedAt)
+            ON CONFLICT(RuleName) DO UPDATE SET
+                HitCount = RuleHitStats.HitCount + excluded.HitCount,
+                UpdatedAtUnixTime = excluded.UpdatedAtUnixTime;
+            """,
+            ("$ruleName", ruleName.Trim()),
+            ("$increment", Math.Max(1, increment)),
+            ("$updatedAt", updatedAt));
+    }
+
+    /// <summary>Builds the stable rule name used by SQLite rule-hit counters.</summary>
+    /// <param name="rule">Rule row to convert.</param>
+    /// <returns>Stable rule name.</returns>
+    private static string BuildRuleName(RulePreview rule)
+    {
+        return $"{rule.RuleType},{rule.Payload},{rule.Action}";
+    }
+
 }

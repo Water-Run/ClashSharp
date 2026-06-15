@@ -41,11 +41,20 @@ public sealed class AppSettingsService
     /// <summary>Storage key for the currently selected master takeover mode.</summary>
     private const string KeyCurrentMode = "CurrentMode";
 
+    /// <summary>Storage key for the currently active configuration profile.</summary>
+    private const string KeyActiveProfileId = "ActiveProfileId";
+
     /// <summary>Storage key for the transparent proxy switch.</summary>
     private const string KeyTransparentProxyEnabled = "TransparentProxyEnabled";
 
     /// <summary>Storage key for the local mixed proxy port.</summary>
     private const string KeyMixedPort = "MixedPort";
+
+    /// <summary>Storage key for background connection sampling.</summary>
+    private const string KeyConnectionSamplingEnabled = "ConnectionSamplingEnabled";
+
+    /// <summary>Storage key for background connection sampling interval in seconds.</summary>
+    private const string KeyConnectionSamplingIntervalSeconds = "ConnectionSamplingIntervalSeconds";
 
     /// <summary>Storage key for the automatic fallback from TUN to system proxy.</summary>
     private const string KeyFallbackToSystemProxyWhenTunFails = "FallbackToSystemProxyWhenTunFails";
@@ -84,11 +93,19 @@ public sealed class AppSettingsService
         set => SetEnum(KeyCurrentMode, value);
     }
 
+    /// <summary>Gets or sets the active configuration profile identifier.</summary>
+    /// <value>Stable profile identifier; defaults to the built-in direct profile.</value>
+    public string ActiveProfileId
+    {
+        get => GetString(KeyActiveProfileId, ProfileCatalogIds.BuiltInDirect);
+        set => SetString(KeyActiveProfileId, value);
+    }
+
     /// <summary>Gets or sets whether transparent proxy mode is enabled.</summary>
-    /// <value>True when TUN-based transparent proxy should be used; defaults to false.</value>
+    /// <value>True when TUN-based transparent proxy should be used; defaults to true.</value>
     public bool TransparentProxyEnabled
     {
-        get => GetBoolean(KeyTransparentProxyEnabled, false);
+        get => GetBoolean(KeyTransparentProxyEnabled, true);
         set => SetBoolean(KeyTransparentProxyEnabled, value);
     }
 
@@ -106,6 +123,31 @@ public sealed class AppSettingsService
             }
 
             SetInt32(KeyMixedPort, value);
+        }
+    }
+
+    /// <summary>Gets or sets whether active connections are periodically sampled into SQLite.</summary>
+    /// <value>True when background connection sampling is enabled; defaults to true.</value>
+    public bool ConnectionSamplingEnabled
+    {
+        get => GetBoolean(KeyConnectionSamplingEnabled, true);
+        set => SetBoolean(KeyConnectionSamplingEnabled, value);
+    }
+
+    /// <summary>Gets or sets the background connection sampling interval in seconds.</summary>
+    /// <value>Interval in the inclusive range [5, 3600]; defaults to 30.</value>
+    /// <exception cref="ArgumentOutOfRangeException">Assigned value is outside the valid interval range.</exception>
+    public int ConnectionSamplingIntervalSeconds
+    {
+        get => GetInt32(KeyConnectionSamplingIntervalSeconds, 30);
+        set
+        {
+            if (value is < 5 or > 3600)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), "Sampling interval must be in the range [5, 3600] seconds.");
+            }
+
+            SetInt32(KeyConnectionSamplingIntervalSeconds, value);
         }
     }
 
@@ -200,6 +242,37 @@ public sealed class AppSettingsService
     private void SetInt32(string key, int value)
     {
         ArgumentNullException.ThrowIfNull(key);
+
+        lock (_syncLock)
+        {
+            SetValue(key, value);
+        }
+    }
+
+    /// <summary>Reads a string setting from storage or returns <paramref name="defaultValue"/>.</summary>
+    /// <param name="key">Storage key. Must not be null.</param>
+    /// <param name="defaultValue">Default value used when no valid stored value exists. Must not be null.</param>
+    /// <returns>The stored string value or <paramref name="defaultValue"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="defaultValue"/> is null.</exception>
+    private string GetString(string key, string defaultValue)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(defaultValue);
+
+        lock (_syncLock)
+        {
+            return GetValue(key) is string value ? value : defaultValue;
+        }
+    }
+
+    /// <summary>Writes a string setting to storage.</summary>
+    /// <param name="key">Storage key. Must not be null.</param>
+    /// <param name="value">String value to persist. Must not be null.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="value"/> is null.</exception>
+    private void SetString(string key, string value)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(value);
 
         lock (_syncLock)
         {

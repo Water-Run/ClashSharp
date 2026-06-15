@@ -9,7 +9,7 @@
 
 namespace ClashSharp.Model;
 
-/// <summary>Enumerates the primary network takeover modes exposed by ClashSharp.</summary>
+/// <summary>Enumerates the primary network takeover modes exposed by Clash#.</summary>
 /// <remarks>
 /// Invariants: Each value maps to one visible master-control state.
 /// Thread safety: Enum values are immutable and inherently thread-safe.
@@ -17,7 +17,7 @@ namespace ClashSharp.Model;
 /// </remarks>
 public enum ClashSharpMode
 {
-    /// <summary>ClashSharp is not running and does not take over Windows networking.</summary>
+    /// <summary>Clash# is not running and does not take over Windows networking.</summary>
     Disabled = 0,
 
     /// <summary>The core is running but defaults traffic to direct routing.</summary>

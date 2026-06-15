@@ -7,7 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="32">
+    <ScrollViewer Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
@@ -20,25 +20,122 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16">
-                    <StackPanel>
-                        <TextBlock Text="总统计" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock Text="按时间长期保存" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid Style="{StaticResource ClashCardGridStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="TotalStatisticsTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="TotalTrafficText" Style="{ThemeResource BodyTextBlockStyle}" />
+                        <TextBlock x:Name="ConnectionCountText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </Grid>
-                <Grid Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16">
-                    <StackPanel>
-                        <TextBlock Text="配置统计" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock Text="按配置聚合流量" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid Grid.Column="1" Style="{StaticResource ClashCardGridStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="ProfileStatisticsTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="ProfileStatisticText" Style="{ThemeResource BodyTextBlockStyle}" />
+                        <TextBlock x:Name="SnapshotStatisticText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </Grid>
-                <Grid Grid.Column="2" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="16">
-                    <StackPanel>
-                        <TextBlock Text="节点统计" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock Text="按节点聚合流量" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid Grid.Column="2" Style="{StaticResource ClashCardGridStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="NodeStatisticsTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="NodeStatisticText" Style="{ThemeResource BodyTextBlockStyle}" />
+                        <TextBlock x:Name="RuleStatisticText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </Grid>
             </Grid>
+
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Style="{StaticResource ClashCardGridStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock x:Name="ByProfileTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <ListView x:Name="ProfileTrafficList" MaxHeight="320" SelectionMode="None">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="2,6" ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding TotalDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding SampleCountDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Column="1" Style="{StaticResource ClashCardGridStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock x:Name="ByDateTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <ListView x:Name="DailyTrafficList" MaxHeight="320" SelectionMode="None">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="2,6" ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Label}" />
+                                            <TextBlock Text="{Binding TotalDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding SampleCountDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Column="2" Style="{StaticResource ClashCardGridStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock x:Name="ByNodeTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <ListView x:Name="NodeTrafficList" MaxHeight="320" SelectionMode="None">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="2,6" ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding TotalDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding UpdatedAtDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="4" VerticalAlignment="Center">
+                    <TextBlock x:Name="LogsShortcutTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="LogsShortcutDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <Button x:Name="OpenLogsButton" Grid.Column="1" Click="OpenLogsButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE8A5;" FontSize="14" />
+                        <TextBlock x:Name="OpenLogsButtonText" />
+                    </StackPanel>
+                </Button>
+            </Grid>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </Page>

@@ -55,3 +55,10 @@ Installer/payload/*
 ClashSharp/Installer/payload/*
 !Installer/payload/.gitkeep
 !ClashSharp/Installer/payload/.gitkeep
+
+Installer/signing/*
+ClashSharp/Installer/signing/*
+!Installer/signing/.gitkeep
+!ClashSharp/Installer/signing/.gitkeep
+
+Docs/DevelopmentStatusAndRoadmap.md

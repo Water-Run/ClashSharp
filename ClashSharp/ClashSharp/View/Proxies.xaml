@@ -7,10 +7,49 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="36">
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-            <TextBlock x:Name="PageTitleText" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center" />
-            <TextBlock x:Name="StubText" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+    <Grid Padding="{StaticResource ClashPagePadding}">
+        <StackPanel Spacing="18">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+
+            <CommandBar DefaultLabelPosition="Right" Background="Transparent">
+                <AppBarButton x:Name="RefreshNodesButton" Click="RefreshNodesButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE72C;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="TestLatencyButton" Click="TestLatencyButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE9D9;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+            </CommandBar>
+
+            <ListView x:Name="ProxyNodesList">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Padding="4,8" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="100" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="28" Height="20" CornerRadius="2" Background="{ThemeResource ControlFillColorDefaultBrush}">
+                                    <Image Source="{Binding Region.FlagAssetPath}" Stretch="UniformToFill" />
+                                </Border>
+                                <TextBlock Text="{Binding Region.DisplayName}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding NameDisplay}" />
+                            <TextBlock Grid.Column="2" Text="{Binding Protocol}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="3" Text="{Binding LatencyMilliseconds}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
         </StackPanel>
     </Grid>
 </Page>

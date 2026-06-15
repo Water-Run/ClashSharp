@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <None Remove="View\Connections.xaml" />
+    <None Remove="View\Links.xaml" />
     <None Remove="View\MasterControl.xaml" />
     <None Remove="View\Profiles.xaml" />
     <None Remove="View\Proxies.xaml" />
@@ -39,6 +40,7 @@
     <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <Content Include="Assets\Flags\*.png" />
     <Content Include="Binaries\mihomo.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -60,6 +62,9 @@
 
   <ItemGroup>
     <Page Update="View\Connections.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Update="View\Links.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Update="View\MasterControl.xaml">

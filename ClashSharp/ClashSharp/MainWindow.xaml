@@ -56,9 +56,9 @@
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
 
-                        <NavigationViewItem x:Name="NavConnectionsItem" Tag="Connections">
+                        <NavigationViewItem x:Name="NavLinksItem" Tag="Links">
                             <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE839;" />
+                                <FontIcon Glyph="&#xE71B;" />
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
 
@@ -93,5 +93,13 @@
 
             <Frame x:Name="ContentFrame" />
         </NavigationView>
+
+        <Grid
+            x:Name="AppTitleBar"
+            Height="32"
+            Margin="304,0,140,0"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            Background="Transparent" />
     </Grid>
 </Window>

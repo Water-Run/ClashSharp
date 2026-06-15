@@ -8,6 +8,8 @@
  */
 
 using System;
+using System.ComponentModel;
+using System.IO;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -16,7 +18,7 @@ namespace ClashSharp.Service;
 /// <remarks>
 /// Invariants: Recovery actions only run when stale proxy detection matches the configured mixed port.
 /// Thread safety: Stateless service and safe for concurrent calls.
-/// Side effects: Recovery may mutate Windows system proxy settings through <see cref="WindowsProxyService"/>.
+/// Side effects: Recovery may start the core process or mutate Windows system proxy settings.
 /// </remarks>
 public sealed class ProxyRecoveryService
 {
@@ -69,13 +71,32 @@ public sealed class ProxyRecoveryService
         switch (settings.ProxyRecoveryMode)
         {
             case ProxyRecoveryMode.EnableProxy:
-                WindowsProxyService.Instance.EnableProxy(BuildLoopbackProxyServer(settings.MixedPort));
-                return new ProxyRecoveryResult(true, "Windows proxy was restored to the Clash# proxy endpoint.");
+                return ApplyStartupEnableProxyRecovery();
             case ProxyRecoveryMode.DisableProxy:
                 WindowsProxyService.Instance.DisableProxy();
                 return new ProxyRecoveryResult(true, "Windows proxy was disabled because stale Clash# proxy state was detected.");
             default:
                 return new ProxyRecoveryResult(false, "Stale Clash# proxy state was detected, but recovery policy is set to do nothing.");
+        }
+    }
+
+    /// <summary>Restores the core and Windows proxy to an enabled state, disabling stale proxy if restoration fails.</summary>
+    /// <returns>The successful recovery result.</returns>
+    /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
+    /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
+    /// <exception cref="Win32Exception">Windows rejects a proxy change notification.</exception>
+    /// <exception cref="UnauthorizedAccessException">Windows proxy settings cannot be changed by the current user.</exception>
+    private static ProxyRecoveryResult ApplyStartupEnableProxyRecovery()
+    {
+        try
+        {
+            NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyStartupSystemProxyRecovery();
+            return new ProxyRecoveryResult(true, result.Message);
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
+        {
+            WindowsProxyService.Instance.DisableProxy();
+            throw;
         }
     }
 
