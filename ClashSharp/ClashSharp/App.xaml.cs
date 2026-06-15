@@ -4,9 +4,13 @@
  *
  * @author: WaterRun
  * @file: App.xaml.cs
- * @date: 2026-04-08
+ * @date: 2026-06-15
  */
 
+using System;
+using System.ComponentModel;
+using ClashSharp.Model;
+using ClashSharp.Service;
 using Microsoft.UI.Xaml;
 
 namespace ClashSharp;
@@ -36,7 +40,28 @@ public partial class App : Application
     /// <param name="args">Launch activation details provided by the platform. Not null.</param>
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        ApplyStartupProxyRecovery();
         _mainWindow = new MainWindow();
         _mainWindow.Activate();
+    }
+
+    /// <summary>Applies startup stale proxy recovery before creating the main window.</summary>
+    /// <remarks>
+    /// Recovery is best-effort: failures are persisted to the SQLite log store and do not prevent UI startup.
+    /// </remarks>
+    private static void ApplyStartupProxyRecovery()
+    {
+        try
+        {
+            ProxyRecoveryResult result = ProxyRecoveryService.Instance.ApplyStartupRecoveryIfNeeded();
+            if (result.WasApplied)
+            {
+                LogStorageService.Instance.AppendLog("Info", "ProxyRecovery", result.Message, null);
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
+        {
+            LogStorageService.Instance.AppendLog("Warning", "ProxyRecovery", "Startup proxy recovery failed.", exception.Message);
+        }
     }
 }
