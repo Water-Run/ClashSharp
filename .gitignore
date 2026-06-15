@@ -50,5 +50,8 @@ packages/
 *.snk
 
 Installer/target/
+ClashSharp/Installer/target/
 Installer/payload/*
+ClashSharp/Installer/payload/*
 !Installer/payload/.gitkeep
+!ClashSharp/Installer/payload/.gitkeep

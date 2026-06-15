@@ -1,10 +1,10 @@
 /*
  * Main Application Window
- * Hosts the NavigationView shell, enforces minimum window dimensions, and coordinates localization updates
+ * Hosts the native WinUI navigation shell, enforces minimum window dimensions, and coordinates localization updates
  *
  * @author: WaterRun
  * @file: MainWindow.xaml.cs
- * @date: 2026-04-08
+ * @date: 2026-06-15
  */
 
 using System;
@@ -56,6 +56,7 @@ public sealed partial class MainWindow : Window
 
         LocalizationService.Instance.LanguageChanged += OnLanguageChanged;
         NavView.SelectedItem = NavMasterControlItem;
+        NavigateToTag("MasterControl");
 
         Closed += OnWindowClosed;
     }
@@ -69,7 +70,7 @@ public sealed partial class MainWindow : Window
         appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-        appWindow.Title = "ClashSharp";
+        appWindow.Title = "Clash#";
     }
 
     /// <summary>Subclasses the native window procedure to enforce minimum window dimensions.</summary>
@@ -88,8 +89,12 @@ public sealed partial class MainWindow : Window
 
         NavMasterControlItem.Content = loc.GetString("Nav.MasterControl");
         NavProxiesItem.Content = loc.GetString("Nav.Proxies");
+        NavProxyNodesItem.Content = loc.GetString("Nav.ProxyNodes");
         NavProfilesItem.Content = loc.GetString("Nav.Profiles");
+        NavConnectionsItem.Content = loc.GetString("Nav.Connections");
+        NavRulesItem.Content = loc.GetString("Nav.Rules");
         NavStatisticsItem.Content = loc.GetString("Nav.Statistics");
+        NavLogsItem.Content = loc.GetString("Nav.Logs");
         NavSettingsItem.Content = loc.GetString("Nav.Settings");
     }
 
@@ -111,12 +116,25 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        NavigateToTag(tag);
+    }
+
+    /// <summary>Navigates the content frame to the page represented by <paramref name="tag"/>.</summary>
+    /// <param name="tag">Navigation item tag. Must not be null.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tag"/> is null.</exception>
+    private void NavigateToTag(string tag)
+    {
+        ArgumentNullException.ThrowIfNull(tag);
+
         Type? pageType = tag switch
         {
             "MasterControl" => typeof(View.MasterControl),
-            "Proxies" => typeof(View.Proxies),
+            "ProxyNodes" => typeof(View.Proxies),
             "Profiles" => typeof(View.Profiles),
+            "Connections" => typeof(View.Connections),
+            "Rules" => typeof(View.Rules),
             "Statistics" => typeof(View.Statistics),
+            "Logs" => typeof(View.Logs),
             "Settings" => typeof(View.Settings),
             _ => null,
         };
@@ -133,6 +151,7 @@ public sealed partial class MainWindow : Window
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         LocalizationService.Instance.LanguageChanged -= OnLanguageChanged;
+        ShutdownRuntimeServices();
 
         if (_hWnd != 0 && _oldWndProc != 0)
         {
@@ -142,6 +161,24 @@ public sealed partial class MainWindow : Window
 
         _wndProcDelegate = null;
         _hWnd = 0;
+    }
+
+    /// <summary>Stops owned runtime services and restores Windows proxy state when configured.</summary>
+    private static void ShutdownRuntimeServices()
+    {
+        try
+        {
+            MihomoCoreService.Instance.Stop();
+
+            if (AppSettingsService.Instance.RestoreProxyOnExit)
+            {
+                WindowsProxyService.Instance.DisableProxy();
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        {
+            LogStorageService.Instance.AppendLog("Warning", "Shutdown", "Runtime shutdown cleanup failed.", exception.Message);
+        }
     }
 
     /// <summary>Custom window procedure that enforces minimum window size by handling WM_GETMINMAXINFO.</summary>

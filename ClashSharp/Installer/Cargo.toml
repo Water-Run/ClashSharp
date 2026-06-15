@@ -2,7 +2,7 @@
 name = "clashsharp-installer"
 version = "1.0.0"
 edition = "2024"
-description = "ClashSharp Native Windows Installer"
+description = "Clash# Native Windows Installer"
 
 [[bin]]
 name = "ClashSharp-Installer"

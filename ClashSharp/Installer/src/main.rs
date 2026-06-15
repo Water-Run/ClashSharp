@@ -9,7 +9,7 @@ slint::include_modules!();
 fn default_install_dir() -> PathBuf {
     let program_files =
         std::env::var("ProgramFiles").unwrap_or_else(|_| String::from("C:\\Program Files"));
-    PathBuf::from(program_files).join("ClashSharp")
+    PathBuf::from(program_files).join("Clash#")
 }
 
 fn collect_payload_entries(payload_dir: &Path) -> Vec<PathBuf> {

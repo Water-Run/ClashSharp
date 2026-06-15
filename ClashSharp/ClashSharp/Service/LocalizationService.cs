@@ -4,7 +4,7 @@
  *
  * @author: WaterRun
  * @file: Service/LocalizationService.cs
- * @date: 2026-04-08
+ * @date: 2026-06-15
  */
 
 using System;
@@ -109,31 +109,64 @@ public sealed class LocalizationService
             {
                 ["Nav.MasterControl"] = "主控",
                 ["Nav.Proxies"] = "代理",
+                ["Nav.ProxyNodes"] = "节点",
                 ["Nav.Profiles"] = "配置",
                 ["Nav.Connections"] = "连接",
+                ["Nav.Rules"] = "规则",
                 ["Nav.Statistics"] = "统计数据",
+                ["Nav.Logs"] = "日志",
                 ["Nav.Settings"] = "设置",
                 ["Page.Stub"] = "开发中…",
+                ["Page.MasterControl.Description"] = "控制 Clash# 的接管状态、核心运行和当前代理入口。",
+                ["Page.ProxyNodes.Description"] = "查看节点、地区、延迟和当前策略组选择。",
+                ["Page.Profiles.Description"] = "管理订阅、配置校验、自动更新和回滚。",
+                ["Page.Connections.Description"] = "监视当前连接、进程、规则命中和代理路径。",
+                ["Page.Rules.Description"] = "查看规则集、匹配结果和接管策略。",
+                ["Page.Statistics.Description"] = "查看总量、配置、节点和时间维度的长期统计。",
+                ["Page.Logs.Description"] = "查看 SQLite 日志、占用空间和清理入口。",
+                ["Page.Settings.Description"] = "配置语言、透明代理、Windows 原生修复和中国大陆显示策略。",
             }),
             [AppLanguage.TraditionalChinese] = new(new Dictionary<string, string>
             {
                 ["Nav.MasterControl"] = "主控",
                 ["Nav.Proxies"] = "代理",
+                ["Nav.ProxyNodes"] = "節點",
                 ["Nav.Profiles"] = "設定檔",
                 ["Nav.Connections"] = "連線",
+                ["Nav.Rules"] = "規則",
                 ["Nav.Statistics"] = "統計資料",
+                ["Nav.Logs"] = "日誌",
                 ["Nav.Settings"] = "設定",
                 ["Page.Stub"] = "開發中…",
+                ["Page.MasterControl.Description"] = "控制 Clash# 的接管狀態、核心執行和目前代理入口。",
+                ["Page.ProxyNodes.Description"] = "檢視節點、地區、延遲和目前策略組選擇。",
+                ["Page.Profiles.Description"] = "管理訂閱、設定檔校驗、自動更新和回復。",
+                ["Page.Connections.Description"] = "監視目前連線、處理程序、規則命中和代理路徑。",
+                ["Page.Rules.Description"] = "檢視規則集、匹配結果和接管策略。",
+                ["Page.Statistics.Description"] = "檢視總量、設定檔、節點和時間維度的長期統計。",
+                ["Page.Logs.Description"] = "檢視 SQLite 日誌、占用空間和清理入口。",
+                ["Page.Settings.Description"] = "設定語言、透明代理、Windows 原生修復和中國大陸顯示策略。",
             }),
             [AppLanguage.English] = new(new Dictionary<string, string>
             {
                 ["Nav.MasterControl"] = "Master Control",
                 ["Nav.Proxies"] = "Proxies",
+                ["Nav.ProxyNodes"] = "Nodes",
                 ["Nav.Profiles"] = "Profiles",
                 ["Nav.Connections"] = "Connections",
+                ["Nav.Rules"] = "Rules",
                 ["Nav.Statistics"] = "Statistics",
+                ["Nav.Logs"] = "Logs",
                 ["Nav.Settings"] = "Settings",
                 ["Page.Stub"] = "Under development…",
+                ["Page.MasterControl.Description"] = "Control Clash# takeover state, core runtime, and current proxy entry.",
+                ["Page.ProxyNodes.Description"] = "Review nodes, regions, latency, and active proxy group choices.",
+                ["Page.Profiles.Description"] = "Manage subscriptions, configuration validation, automatic updates, and rollback.",
+                ["Page.Connections.Description"] = "Monitor active connections, processes, rule hits, and proxy routes.",
+                ["Page.Rules.Description"] = "Inspect rule providers, match results, and takeover policy.",
+                ["Page.Statistics.Description"] = "Review long-term totals by profile, node, and time range.",
+                ["Page.Logs.Description"] = "Review SQLite logs, storage usage, and cleanup actions.",
+                ["Page.Settings.Description"] = "Configure language, transparent proxy, native Windows repair, and mainland China display policy.",
             }),
             [AppLanguage.Russian] = new(new Dictionary<string, string>
             {

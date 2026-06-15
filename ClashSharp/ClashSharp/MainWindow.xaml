@@ -7,10 +7,10 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="ClashSharp">
+    Title="Clash#">
 
     <Window.SystemBackdrop>
-        <MicaBackdrop />
+        <DesktopAcrylicBackdrop />
     </Window.SystemBackdrop>
 
     <Grid>
@@ -23,6 +23,13 @@
             OpenPaneLength="260"
             SelectionChanged="OnNavigationSelectionChanged">
 
+            <NavigationView.PaneHeader>
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="12,8,12,8">
+                    <Image Source="ms-appx:///Assets/Logo.png" Width="28" Height="28" Stretch="Uniform" />
+                    <TextBlock Text="Clash#" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                </StackPanel>
+            </NavigationView.PaneHeader>
+
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="NavMasterControlItem" Tag="MasterControl">
                     <NavigationViewItem.Icon>
@@ -32,26 +39,51 @@
 
                 <NavigationViewItemSeparator />
 
-                <NavigationViewItem x:Name="NavProxiesItem" Tag="Proxies">
+                <NavigationViewItem x:Name="NavProxiesItem" Tag="ProxyNodes" IsExpanded="True">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE968;" />
                     </NavigationViewItem.Icon>
-                </NavigationViewItem>
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="NavProxyNodesItem" Tag="ProxyNodes">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE8D4;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
 
-                <NavigationViewItem x:Name="NavProfilesItem" Tag="Profiles">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8F1;" />
-                    </NavigationViewItem.Icon>
+                        <NavigationViewItem x:Name="NavProfilesItem" Tag="Profiles">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE8F1;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+
+                        <NavigationViewItem x:Name="NavConnectionsItem" Tag="Connections">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE839;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+
+                        <NavigationViewItem x:Name="NavRulesItem" Tag="Rules">
+                            <NavigationViewItem.Icon>
+                                <FontIcon Glyph="&#xE9D9;" />
+                            </NavigationViewItem.Icon>
+                        </NavigationViewItem>
+                    </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
 
                 <NavigationViewItem x:Name="NavStatisticsItem" Tag="Statistics">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE9D9;" />
+                        <FontIcon Glyph="&#xE9D2;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <NavigationView.FooterMenuItems>
+                <NavigationViewItem x:Name="NavLogsItem" Tag="Logs">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
                 <NavigationViewItem x:Name="NavSettingsItem" Tag="Settings">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
