@@ -91,14 +91,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="ViewModel\" />
-    <Folder Include="Components\" />
-    <Folder Include="Utils\" />
-    <Folder Include="Strings\" />
-    <Folder Include="Themes\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Update="Themes\Generic.xaml">
       <Generator>MSBuild:Compile</Generator>
     </None>

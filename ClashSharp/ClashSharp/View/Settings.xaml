@@ -3,6 +3,7 @@
     x:Class="ClashSharp.View.Settings"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:components="using:ClashSharp.Components"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -15,85 +16,49 @@
             </StackPanel>
 
             <TextBlock x:Name="LanguageSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="LanguageTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="LanguageDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <ComboBox x:Name="LanguageBox" Grid.Column="1" MinWidth="180" SelectionChanged="LanguageBox_SelectionChanged">
-                    <ComboBoxItem Content="简体中文" />
-                    <ComboBoxItem Content="繁體中文" />
-                    <ComboBoxItem Content="English" />
-                    <ComboBoxItem Content="Русский" />
-                    <ComboBoxItem Content="Français" />
-                    <ComboBoxItem Content="Deutsch" />
-                </ComboBox>
-            </Grid>
+            <components:SettingRow x:Name="LanguageRow">
+                <components:SettingRow.ActionContent>
+                    <ComboBox x:Name="LanguageBox" MinWidth="180" SelectionChanged="LanguageBox_SelectionChanged">
+                        <ComboBoxItem Content="简体中文" />
+                        <ComboBoxItem Content="繁體中文" />
+                        <ComboBoxItem Content="English" />
+                        <ComboBoxItem Content="Русский" />
+                        <ComboBoxItem Content="Français" />
+                        <ComboBoxItem Content="Deutsch" />
+                    </ComboBox>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
             <TextBlock x:Name="ProxySectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="TransparentProxyTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="TransparentProxyDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <ToggleSwitch x:Name="TransparentProxyToggle" Grid.Column="1" IsOn="False" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TransparentProxyToggle_Toggled" />
-            </Grid>
+            <components:SettingRow x:Name="TransparentProxyRow">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="TransparentProxyToggle" IsOn="False" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TransparentProxyToggle_Toggled" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="TunFallbackTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="TunFallbackDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <ToggleSwitch x:Name="TunFallbackToggle" Grid.Column="1" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TunFallbackToggle_Toggled" />
-            </Grid>
+            <components:SettingRow x:Name="TunFallbackRow">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="TunFallbackToggle" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TunFallbackToggle_Toggled" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="MixedPortTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="MixedPortDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <NumberBox x:Name="MixedPortBox" Grid.Column="1" Width="140" Minimum="1" Maximum="65535" SpinButtonPlacementMode="Compact" ValueChanged="MixedPortBox_ValueChanged" />
-            </Grid>
+            <components:SettingRow x:Name="MixedPortRow">
+                <components:SettingRow.ActionContent>
+                    <NumberBox x:Name="MixedPortBox" Width="140" Minimum="1" Maximum="65535" SpinButtonPlacementMode="Compact" ValueChanged="MixedPortBox_ValueChanged" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="ConnectionSamplingTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="ConnectionSamplingDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <ToggleSwitch x:Name="ConnectionSamplingToggle" Grid.Column="1" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="ConnectionSamplingToggle_Toggled" />
-            </Grid>
+            <components:SettingRow x:Name="ConnectionSamplingRow">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="ConnectionSamplingToggle" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="ConnectionSamplingToggle_Toggled" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="SamplingIntervalTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="SamplingIntervalDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <NumberBox x:Name="ConnectionSamplingIntervalBox" Grid.Column="1" Width="140" Minimum="5" Maximum="3600" SpinButtonPlacementMode="Compact" ValueChanged="ConnectionSamplingIntervalBox_ValueChanged" />
-            </Grid>
+            <components:SettingRow x:Name="SamplingIntervalRow">
+                <components:SettingRow.ActionContent>
+                    <NumberBox x:Name="ConnectionSamplingIntervalBox" Width="140" Minimum="5" Maximum="3600" SpinButtonPlacementMode="Compact" ValueChanged="ConnectionSamplingIntervalBox_ValueChanged" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
             <TextBlock x:Name="WindowsNativeSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
@@ -196,58 +161,34 @@
                 </Button>
             </Grid>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="CheckStaleProxyTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="CheckStaleProxyDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <ToggleSwitch x:Name="CheckStaleProxyToggle" Grid.Column="1" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="CheckStaleProxyToggle_Toggled" />
-            </Grid>
+            <components:SettingRow x:Name="CheckStaleProxyRow">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="CheckStaleProxyToggle" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="CheckStaleProxyToggle_Toggled" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="RestoreProxyOnExitTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="RestoreProxyOnExitDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <ToggleSwitch x:Name="RestoreProxyOnExitToggle" Grid.Column="1" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="RestoreProxyOnExitToggle_Toggled" />
-            </Grid>
+            <components:SettingRow x:Name="RestoreProxyOnExitRow">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="RestoreProxyOnExitToggle" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="RestoreProxyOnExitToggle_Toggled" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="ProxyRecoveryModeTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="ProxyRecoveryModeDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <ComboBox x:Name="ProxyRecoveryModeBox" Grid.Column="1" MinWidth="180" SelectionChanged="ProxyRecoveryModeBox_SelectionChanged">
-                    <ComboBoxItem x:Name="ProxyRecoveryIgnoreItem" />
-                    <ComboBoxItem x:Name="ProxyRecoveryEnableItem" />
-                    <ComboBoxItem x:Name="ProxyRecoveryDisableItem" />
-                </ComboBox>
-            </Grid>
+            <components:SettingRow x:Name="ProxyRecoveryModeRow">
+                <components:SettingRow.ActionContent>
+                    <ComboBox x:Name="ProxyRecoveryModeBox" MinWidth="180" SelectionChanged="ProxyRecoveryModeBox_SelectionChanged">
+                        <ComboBoxItem x:Name="ProxyRecoveryIgnoreItem" />
+                        <ComboBoxItem x:Name="ProxyRecoveryEnableItem" />
+                        <ComboBoxItem x:Name="ProxyRecoveryDisableItem" />
+                    </ComboBox>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
 
             <TextBlock x:Name="MainlandChinaSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="MainlandChinaDisplayTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="MainlandChinaDisplayDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-                <ToggleSwitch x:Name="MainlandChinaDisplayToggle" Grid.Column="1" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="MainlandChinaDisplayToggle_Toggled" />
-            </Grid>
+            <components:SettingRow x:Name="MainlandChinaDisplayRow">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="MainlandChinaDisplayToggle" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="MainlandChinaDisplayToggle_Toggled" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
         </StackPanel>
     </ScrollViewer>
 </Page>

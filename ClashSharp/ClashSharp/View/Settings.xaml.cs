@@ -4,14 +4,14 @@
  *
  * @author: WaterRun
  * @file: View/Settings.xaml.cs
- * @date: 2026-06-15
+ * @date: 2026-06-17
  */
 
 using System;
 using System.Threading;
-using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -25,14 +25,11 @@ namespace ClashSharp.View;
 /// </remarks>
 public sealed partial class Settings : Page
 {
-    /// <summary>Command names encoded in diagnostic button tags.</summary>
-    private const string DiagnosticActionDiagnose = "Diagnose";
+    /// <summary>Owns settings state transitions and persistence.</summary>
+    private readonly SettingsViewModel _viewModel;
 
-    /// <summary>Command names encoded in diagnostic button tags.</summary>
-    private const string DiagnosticActionApply = "Apply";
-
-    /// <summary>Command names encoded in diagnostic button tags.</summary>
-    private const string DiagnosticActionReset = "Reset";
+    /// <summary>Owns Windows-native diagnostics command routing.</summary>
+    private readonly SettingsDiagnosticsViewModel _diagnosticsViewModel;
 
     /// <summary>Suppresses setting writes while persisted values are being loaded into controls.</summary>
     private bool _isLoadingSettings;
@@ -40,6 +37,13 @@ public sealed partial class Settings : Page
     /// <summary>Initializes the settings page and applies localized text.</summary>
     public Settings()
     {
+        _viewModel = new(
+            new AppSettingsStore(AppSettingsService.Instance),
+            language => LocalizationService.Instance.CurrentLanguage = language,
+            ConnectionSamplingService.Instance.RestartFromSettings);
+        _diagnosticsViewModel = new(
+            new WindowsDiagnosticsClient(WindowsNetworkDiagnosticService.Instance),
+            new DiagnosticsLog(LogStorageService.Instance));
         InitializeComponent();
         RefreshLocalizedText();
         LoadSettings();
@@ -49,17 +53,17 @@ public sealed partial class Settings : Page
     private void LoadSettings()
     {
         _isLoadingSettings = true;
-        AppSettingsService settings = AppSettingsService.Instance;
-        LanguageBox.SelectedIndex = (int)settings.DisplayLanguage;
-        TransparentProxyToggle.IsOn = settings.TransparentProxyEnabled;
-        TunFallbackToggle.IsOn = settings.FallbackToSystemProxyWhenTunFails;
-        MixedPortBox.Value = settings.MixedPort;
-        ConnectionSamplingToggle.IsOn = settings.ConnectionSamplingEnabled;
-        ConnectionSamplingIntervalBox.Value = settings.ConnectionSamplingIntervalSeconds;
-        CheckStaleProxyToggle.IsOn = settings.CheckStaleProxyOnStartup;
-        RestoreProxyOnExitToggle.IsOn = settings.RestoreProxyOnExit;
-        ProxyRecoveryModeBox.SelectedIndex = (int)settings.ProxyRecoveryMode;
-        MainlandChinaDisplayToggle.IsOn = settings.MainlandChinaDisplayEnabled;
+        _viewModel.Load();
+        LanguageBox.SelectedIndex = _viewModel.DisplayLanguageIndex;
+        TransparentProxyToggle.IsOn = _viewModel.TransparentProxyEnabled;
+        TunFallbackToggle.IsOn = _viewModel.FallbackToSystemProxyWhenTunFails;
+        MixedPortBox.Value = _viewModel.MixedPort;
+        ConnectionSamplingToggle.IsOn = _viewModel.ConnectionSamplingEnabled;
+        ConnectionSamplingIntervalBox.Value = _viewModel.ConnectionSamplingIntervalSeconds;
+        CheckStaleProxyToggle.IsOn = _viewModel.CheckStaleProxyOnStartup;
+        RestoreProxyOnExitToggle.IsOn = _viewModel.RestoreProxyOnExit;
+        ProxyRecoveryModeBox.SelectedIndex = _viewModel.ProxyRecoveryModeIndex;
+        MainlandChinaDisplayToggle.IsOn = _viewModel.MainlandChinaDisplayEnabled;
         _isLoadingSettings = false;
     }
 
@@ -73,10 +77,10 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppLanguage language = (AppLanguage)LanguageBox.SelectedIndex;
-        AppSettingsService.Instance.DisplayLanguage = language;
-        LocalizationService.Instance.CurrentLanguage = language;
-        RefreshLocalizedText();
+        if (_viewModel.SetDisplayLanguageIndex(LanguageBox.SelectedIndex))
+        {
+            RefreshLocalizedText();
+        }
     }
 
     /// <summary>Refreshes localized text owned by this page.</summary>
@@ -87,19 +91,19 @@ public sealed partial class Settings : Page
         PageTitleText.Text = localization.GetString("Nav.Settings");
         DescriptionText.Text = localization.GetString("Page.Settings.Description");
         LanguageSectionTitleText.Text = localization.GetString("Settings.Section.Language");
-        LanguageTitleText.Text = localization.GetString("Settings.Language.Title");
-        LanguageDescriptionText.Text = localization.GetString("Settings.Language.Description");
+        LanguageRow.Title = localization.GetString("Settings.Language.Title");
+        LanguageRow.Description = localization.GetString("Settings.Language.Description");
         ProxySectionTitleText.Text = localization.GetString("Settings.Section.Proxy");
-        TransparentProxyTitleText.Text = localization.GetString("Settings.TransparentProxy.Title");
-        TransparentProxyDescriptionText.Text = localization.GetString("Settings.TransparentProxy.Description");
-        TunFallbackTitleText.Text = localization.GetString("Settings.TunFallback.Title");
-        TunFallbackDescriptionText.Text = localization.GetString("Settings.TunFallback.Description");
-        MixedPortTitleText.Text = localization.GetString("Settings.MixedPort.Title");
-        MixedPortDescriptionText.Text = localization.GetString("Settings.MixedPort.Description");
-        ConnectionSamplingTitleText.Text = localization.GetString("Settings.ConnectionSampling.Title");
-        ConnectionSamplingDescriptionText.Text = localization.GetString("Settings.ConnectionSampling.Description");
-        SamplingIntervalTitleText.Text = localization.GetString("Settings.SamplingInterval.Title");
-        SamplingIntervalDescriptionText.Text = localization.GetString("Settings.SamplingInterval.Description");
+        TransparentProxyRow.Title = localization.GetString("Settings.TransparentProxy.Title");
+        TransparentProxyRow.Description = localization.GetString("Settings.TransparentProxy.Description");
+        TunFallbackRow.Title = localization.GetString("Settings.TunFallback.Title");
+        TunFallbackRow.Description = localization.GetString("Settings.TunFallback.Description");
+        MixedPortRow.Title = localization.GetString("Settings.MixedPort.Title");
+        MixedPortRow.Description = localization.GetString("Settings.MixedPort.Description");
+        ConnectionSamplingRow.Title = localization.GetString("Settings.ConnectionSampling.Title");
+        ConnectionSamplingRow.Description = localization.GetString("Settings.ConnectionSampling.Description");
+        SamplingIntervalRow.Title = localization.GetString("Settings.SamplingInterval.Title");
+        SamplingIntervalRow.Description = localization.GetString("Settings.SamplingInterval.Description");
         WindowsNativeSectionTitleText.Text = localization.GetString("Settings.Section.WindowsNative");
         WindowsNativeTitleText.Text = localization.GetString("Settings.WindowsNative.Title");
         WindowsNativeDescriptionText.Text = localization.GetString("Settings.WindowsNative.Description");
@@ -118,18 +122,18 @@ public sealed partial class Settings : Page
         WslDiagnosticStatusText.Text = localization.GetString("Diagnostic.NotRun");
         TerminalDiagnosticStatusText.Text = localization.GetString("Diagnostic.NotRun");
         StoreDiagnosticStatusText.Text = localization.GetString("Diagnostic.NotRun");
-        CheckStaleProxyTitleText.Text = localization.GetString("Settings.CheckStaleProxy.Title");
-        CheckStaleProxyDescriptionText.Text = localization.GetString("Settings.CheckStaleProxy.Description");
-        RestoreProxyOnExitTitleText.Text = localization.GetString("Settings.RestoreProxyOnExit.Title");
-        RestoreProxyOnExitDescriptionText.Text = localization.GetString("Settings.RestoreProxyOnExit.Description");
-        ProxyRecoveryModeTitleText.Text = localization.GetString("Settings.ProxyRecoveryMode.Title");
-        ProxyRecoveryModeDescriptionText.Text = localization.GetString("Settings.ProxyRecoveryMode.Description");
+        CheckStaleProxyRow.Title = localization.GetString("Settings.CheckStaleProxy.Title");
+        CheckStaleProxyRow.Description = localization.GetString("Settings.CheckStaleProxy.Description");
+        RestoreProxyOnExitRow.Title = localization.GetString("Settings.RestoreProxyOnExit.Title");
+        RestoreProxyOnExitRow.Description = localization.GetString("Settings.RestoreProxyOnExit.Description");
+        ProxyRecoveryModeRow.Title = localization.GetString("Settings.ProxyRecoveryMode.Title");
+        ProxyRecoveryModeRow.Description = localization.GetString("Settings.ProxyRecoveryMode.Description");
         ProxyRecoveryIgnoreItem.Content = localization.GetString("Settings.ProxyRecoveryMode.Ignore");
         ProxyRecoveryEnableItem.Content = localization.GetString("Settings.ProxyRecoveryMode.Enable");
         ProxyRecoveryDisableItem.Content = localization.GetString("Settings.ProxyRecoveryMode.Disable");
         MainlandChinaSectionTitleText.Text = localization.GetString("Settings.Section.MainlandChina");
-        MainlandChinaDisplayTitleText.Text = localization.GetString("Settings.MainlandChinaDisplay.Title");
-        MainlandChinaDisplayDescriptionText.Text = localization.GetString("Settings.MainlandChinaDisplay.Description");
+        MainlandChinaDisplayRow.Title = localization.GetString("Settings.MainlandChinaDisplay.Title");
+        MainlandChinaDisplayRow.Description = localization.GetString("Settings.MainlandChinaDisplay.Description");
     }
 
     /// <summary>Persists the transparent proxy setting when the switch changes.</summary>
@@ -142,7 +146,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppSettingsService.Instance.TransparentProxyEnabled = TransparentProxyToggle.IsOn;
+        _viewModel.SetTransparentProxyEnabled(TransparentProxyToggle.IsOn);
     }
 
     /// <summary>Persists the automatic TUN fallback setting when the switch changes.</summary>
@@ -155,7 +159,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppSettingsService.Instance.FallbackToSystemProxyWhenTunFails = TunFallbackToggle.IsOn;
+        _viewModel.SetFallbackToSystemProxyWhenTunFails(TunFallbackToggle.IsOn);
     }
 
     /// <summary>Persists the mixed proxy port when the numeric input changes to a valid value.</summary>
@@ -168,11 +172,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        int port = (int)Math.Round(args.NewValue);
-        if (port is >= 1 and <= 65535)
-        {
-            AppSettingsService.Instance.MixedPort = port;
-        }
+        _viewModel.SetMixedPort(args.NewValue);
     }
 
     /// <summary>Persists the background connection sampling setting when the switch changes.</summary>
@@ -185,8 +185,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppSettingsService.Instance.ConnectionSamplingEnabled = ConnectionSamplingToggle.IsOn;
-        ConnectionSamplingService.Instance.RestartFromSettings();
+        _viewModel.SetConnectionSamplingEnabled(ConnectionSamplingToggle.IsOn);
     }
 
     /// <summary>Persists the background connection sampling interval when the numeric input changes to a valid value.</summary>
@@ -199,12 +198,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        int intervalSeconds = (int)Math.Round(args.NewValue);
-        if (intervalSeconds is >= 5 and <= 3600)
-        {
-            AppSettingsService.Instance.ConnectionSamplingIntervalSeconds = intervalSeconds;
-            ConnectionSamplingService.Instance.RestartFromSettings();
-        }
+        _viewModel.SetConnectionSamplingIntervalSeconds(args.NewValue);
     }
 
     /// <summary>Persists the startup stale-proxy check setting when the switch changes.</summary>
@@ -217,7 +211,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppSettingsService.Instance.CheckStaleProxyOnStartup = CheckStaleProxyToggle.IsOn;
+        _viewModel.SetCheckStaleProxyOnStartup(CheckStaleProxyToggle.IsOn);
     }
 
     /// <summary>Persists the shutdown proxy restoration setting when the switch changes.</summary>
@@ -230,7 +224,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppSettingsService.Instance.RestoreProxyOnExit = RestoreProxyOnExitToggle.IsOn;
+        _viewModel.SetRestoreProxyOnExit(RestoreProxyOnExitToggle.IsOn);
     }
 
     /// <summary>Persists the startup proxy recovery mode when the selection changes.</summary>
@@ -243,7 +237,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppSettingsService.Instance.ProxyRecoveryMode = (ProxyRecoveryMode)ProxyRecoveryModeBox.SelectedIndex;
+        _viewModel.SetProxyRecoveryModeIndex(ProxyRecoveryModeBox.SelectedIndex);
     }
 
     /// <summary>Persists the mainland China display setting when the switch changes.</summary>
@@ -256,7 +250,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppSettingsService.Instance.MainlandChinaDisplayEnabled = MainlandChinaDisplayToggle.IsOn;
+        _viewModel.SetMainlandChinaDisplayEnabled(MainlandChinaDisplayToggle.IsOn);
     }
 
     /// <summary>Dispatches Windows-native diagnostic buttons by target and action encoded in the button tag.</summary>
@@ -264,75 +258,12 @@ public sealed partial class Settings : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void WindowsDiagnosticButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!TryReadDiagnosticCommand(sender, out WindowsDiagnosticTarget target, out string action))
+        string? commandTag = sender is Button { Tag: string tag } ? tag : null;
+        SettingsDiagnosticStatus? status = await _diagnosticsViewModel.ExecuteCommandAsync(commandTag, CancellationToken.None);
+        if (status is SettingsDiagnosticStatus value)
         {
-            LogStorageService.Instance.AppendLog("Warning", "WindowsDiagnostics", "Unsupported diagnostic command.", null);
-            return;
+            SetDiagnosticStatus(value.Target, value.Message);
         }
-
-        switch (action)
-        {
-            case DiagnosticActionDiagnose:
-                await RunWindowsDiagnosticAsync(target, apply: false);
-                break;
-            case DiagnosticActionApply:
-                await RunWindowsDiagnosticAsync(target, apply: true);
-                break;
-            case DiagnosticActionReset:
-                await ResetWindowsDiagnosticAsync(target);
-                break;
-            default:
-                SetDiagnosticStatus(target, "不支持的操作");
-                LogStorageService.Instance.AppendLog("Warning", "WindowsDiagnostics", "Unsupported diagnostic action.", action);
-                break;
-        }
-    }
-
-    /// <summary>Runs or applies one Windows-native network diagnostic and updates the visible status.</summary>
-    /// <param name="target">Diagnostic target.</param>
-    /// <param name="apply">True to apply repair settings before reporting the target status.</param>
-    private async Task RunWindowsDiagnosticAsync(WindowsDiagnosticTarget target, bool apply)
-    {
-        try
-        {
-            WindowsDiagnosticResult result = apply
-                ? await WindowsNetworkDiagnosticService.Instance.ApplyAsync(target, CancellationToken.None)
-                : await WindowsNetworkDiagnosticService.Instance.DiagnoseAsync(target, CancellationToken.None);
-
-            SetDiagnosticStatus(result);
-            LogStorageService.Instance.AppendLog("Info", "WindowsDiagnostics", result.Message, result.Detail);
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or OperationCanceledException or UnauthorizedAccessException)
-        {
-            string message = apply ? "应用失败" : "诊断失败";
-            SetDiagnosticStatus(target, message);
-            LogStorageService.Instance.AppendLog("Warning", "WindowsDiagnostics", message, exception.Message);
-        }
-    }
-
-    /// <summary>Resets one Windows-native network diagnostic target and updates the visible status.</summary>
-    /// <param name="target">Diagnostic target.</param>
-    private async Task ResetWindowsDiagnosticAsync(WindowsDiagnosticTarget target)
-    {
-        try
-        {
-            WindowsDiagnosticResult result = await WindowsNetworkDiagnosticService.Instance.ResetAsync(target, CancellationToken.None);
-            SetDiagnosticStatus(result);
-            LogStorageService.Instance.AppendLog("Info", "WindowsDiagnostics", result.Message, result.Detail);
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or OperationCanceledException or UnauthorizedAccessException)
-        {
-            string message = "还原失败";
-            SetDiagnosticStatus(target, message);
-            LogStorageService.Instance.AppendLog("Warning", "WindowsDiagnostics", message, exception.Message);
-        }
-    }
-
-    /// <summary>Updates the visible status text for one diagnostic result.</summary>
-    /// <param name="result">Diagnostic result to display.</param>
-    private void SetDiagnosticStatus(WindowsDiagnosticResult result)
-    {
-        SetDiagnosticStatus(result.Target, result.Message);
     }
 
     /// <summary>Updates the visible status text for one diagnostic target.</summary>
@@ -359,56 +290,4 @@ public sealed partial class Settings : Page
         }
     }
 
-    /// <summary>Reads the diagnostic target and action from a button tag.</summary>
-    /// <param name="sender">Event sender expected to be a button. May be null.</param>
-    /// <param name="target">Parsed diagnostic target.</param>
-    /// <param name="action">Parsed diagnostic action; never null on success.</param>
-    /// <returns>True when the sender tag contains a supported target and action.</returns>
-    private static bool TryReadDiagnosticCommand(object sender, out WindowsDiagnosticTarget target, out string action)
-    {
-        target = default;
-        action = string.Empty;
-
-        if (sender is not Button { Tag: string tag })
-        {
-            return false;
-        }
-
-        string[] parts = tag.Split(':', 2, StringSplitOptions.TrimEntries);
-        if (parts.Length != 2)
-        {
-            return false;
-        }
-
-        action = parts[1];
-        return TryParseDiagnosticTarget(parts[0], out target)
-            && (StringComparer.Ordinal.Equals(action, DiagnosticActionDiagnose)
-                || StringComparer.Ordinal.Equals(action, DiagnosticActionApply)
-                || StringComparer.Ordinal.Equals(action, DiagnosticActionReset));
-    }
-
-    /// <summary>Parses a diagnostic target name from XAML button metadata.</summary>
-    /// <param name="value">Target name. Must not be null.</param>
-    /// <param name="target">Parsed diagnostic target.</param>
-    /// <returns>True when <paramref name="value"/> maps to a known diagnostic target.</returns>
-    private static bool TryParseDiagnosticTarget(string value, out WindowsDiagnosticTarget target)
-    {
-        ArgumentNullException.ThrowIfNull(value);
-
-        switch (value)
-        {
-            case nameof(WindowsDiagnosticTarget.Wsl):
-                target = WindowsDiagnosticTarget.Wsl;
-                return true;
-            case nameof(WindowsDiagnosticTarget.Terminal):
-                target = WindowsDiagnosticTarget.Terminal;
-                return true;
-            case nameof(WindowsDiagnosticTarget.MicrosoftStore):
-                target = WindowsDiagnosticTarget.MicrosoftStore;
-                return true;
-            default:
-                target = WindowsDiagnosticTarget.Wsl;
-                return false;
-        }
-    }
 }

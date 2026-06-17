@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <Platforms>x64</Platforms>
+    <LangVersion>14</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ClashSharp\Model\AppLanguage.cs" Link="Model\AppLanguage.cs" />
+    <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />
+    <Compile Include="..\ClashSharp\Model\ProxyRecoveryMode.cs" Link="Model\ProxyRecoveryMode.cs" />
+    <Compile Include="..\ClashSharp\Model\ProxyNode.cs" Link="Model\ProxyNode.cs" />
+    <Compile Include="..\ClashSharp\Model\RegionMetadata.cs" Link="Model\RegionMetadata.cs" />
+    <Compile Include="..\ClashSharp\Model\RulePreview.cs" Link="Model\RulePreview.cs" />
+    <Compile Include="..\ClashSharp\Model\WindowsDiagnosticResult.cs" Link="Model\WindowsDiagnosticResult.cs" />
+    <Compile Include="..\ClashSharp\Model\WindowsDiagnosticTarget.cs" Link="Model\WindowsDiagnosticTarget.cs" />
+    <Compile Include="..\ClashSharp\Service\AppSettingsService.cs" Link="Service\AppSettingsService.cs" />
+    <Compile Include="..\ClashSharp\Service\LogStorageFootprint.cs" Link="Service\LogStorageFootprint.cs" />
+    <Compile Include="..\ClashSharp\Service\LogStorageMaintenance.cs" Link="Service\LogStorageMaintenance.cs" />
+    <Compile Include="..\ClashSharp\Service\LogStorageSchema.cs" Link="Service\LogStorageSchema.cs" />
+    <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoProfilePreviewParser.cs" Link="Service\MihomoProfilePreviewParser.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoProfileShapeValidator.cs" Link="Service\MihomoProfileShapeValidator.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoRuntimeConfigurationBuilder.cs" Link="Service\MihomoRuntimeConfigurationBuilder.cs" />
+    <Compile Include="..\ClashSharp\Service\ProfileCatalogIds.cs" Link="Service\ProfileCatalogIds.cs" />
+    <Compile Include="..\ClashSharp\Strings\LocalizationResources.cs" Link="Strings\LocalizationResources.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticsViewModel.cs" Link="ViewModel\SettingsDiagnosticsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.cs" Link="ViewModel\SettingsViewModel.cs" />
+  </ItemGroup>
+
+</Project>

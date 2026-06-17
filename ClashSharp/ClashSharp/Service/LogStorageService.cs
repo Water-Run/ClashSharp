@@ -100,7 +100,7 @@ public sealed class LogStorageService
             using SqliteConnection connection = OpenConnection();
             long logCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM Logs;");
             long connectionCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM Connections;");
-            long databaseSize = CalculateStorageFootprintBytes(_databasePath);
+            long databaseSize = LogStorageFootprint.CalculateBytes(_databasePath);
 
             return new LogStorageSummary(_databasePath, databaseSize, logCount, connectionCount);
         }
@@ -535,7 +535,7 @@ public sealed class LogStorageService
             ExecuteNonQuery(connection, transaction, "DELETE FROM RuleHitStats WHERE UpdatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             ExecuteNonQuery(connection, transaction, "DELETE FROM NodeHealthStats WHERE UpdatedAtUnixTime < $cutoff;", ("$cutoff", cutoffUnixTime));
             transaction.Commit();
-            Vacuum(connection);
+            LogStorageMaintenance.Vacuum(connection);
         }
     }
 
@@ -555,18 +555,18 @@ public sealed class LogStorageService
 
             using SqliteConnection connection = OpenConnection();
 
-            while (CalculateStorageFootprintBytes(_databasePath) > targetSizeBytes)
+            while (LogStorageFootprint.CalculateBytes(_databasePath) > targetSizeBytes)
             {
-                long deleted = DeleteOldestBatch(connection, "Logs", "CreatedAtUnixTime")
-                    + DeleteOldestBatch(connection, "Connections", "CreatedAtUnixTime")
-                    + DeleteOldestBatch(connection, "TrafficSnapshots", "CreatedAtUnixTime");
+                long deleted = LogStorageMaintenance.DeleteOldestBatch(connection, "Logs", "CreatedAtUnixTime")
+                    + LogStorageMaintenance.DeleteOldestBatch(connection, "Connections", "CreatedAtUnixTime")
+                    + LogStorageMaintenance.DeleteOldestBatch(connection, "TrafficSnapshots", "CreatedAtUnixTime");
 
                 if (deleted == 0)
                 {
                     break;
                 }
 
-                Vacuum(connection);
+                LogStorageMaintenance.Vacuum(connection);
             }
         }
     }
@@ -591,7 +591,7 @@ public sealed class LogStorageService
                 null,
                 "DELETE FROM Logs WHERE Id NOT IN (SELECT Id FROM Logs ORDER BY CreatedAtUnixTime DESC, Id DESC LIMIT $count);",
                 ("$count", maxLogCount));
-            Vacuum(connection);
+            LogStorageMaintenance.Vacuum(connection);
         }
     }
 
@@ -612,7 +612,7 @@ public sealed class LogStorageService
             ExecuteNonQuery(connection, transaction, "DELETE FROM NodeHealthStats;");
             ExecuteNonQuery(connection, transaction, "DELETE FROM RuleHitStats;");
             transaction.Commit();
-            Vacuum(connection);
+            LogStorageMaintenance.Vacuum(connection);
         }
     }
 
@@ -625,18 +625,7 @@ public sealed class LogStorageService
         }
 
         using SqliteConnection connection = OpenConnection();
-        ExecuteNonQuery(connection, null, "PRAGMA journal_mode=WAL;");
-        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS Logs (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, Level TEXT NOT NULL, Source TEXT NOT NULL, Message TEXT NOT NULL, Detail TEXT NULL);");
-        ExecuteNonQuery(connection, null, "CREATE INDEX IF NOT EXISTS IX_Logs_CreatedAtUnixTime ON Logs (CreatedAtUnixTime);");
-        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS Connections (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, ProcessName TEXT NULL, Host TEXT NOT NULL, RuleName TEXT NULL, ProxyName TEXT NULL, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0);");
-        ExecuteNonQuery(connection, null, "CREATE INDEX IF NOT EXISTS IX_Connections_CreatedAtUnixTime ON Connections (CreatedAtUnixTime);");
-        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS TrafficSnapshots (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, UploadBytes INTEGER NOT NULL, DownloadBytes INTEGER NOT NULL);");
-        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS ProfileTrafficStats (ProfileId TEXT PRIMARY KEY, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0, ConnectionCount INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
-        EnsureColumn(connection, "ProfileTrafficStats", "ConnectionCount", "INTEGER NOT NULL DEFAULT 0");
-        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS NodeTrafficStats (NodeName TEXT PRIMARY KEY, RegionCode TEXT NULL, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
-        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS NodeHealthStats (NodeName TEXT PRIMARY KEY, RegionCode TEXT NULL, LatencyMilliseconds INTEGER NULL, UpdatedAtUnixTime INTEGER NOT NULL);");
-        ExecuteNonQuery(connection, null, "CREATE TABLE IF NOT EXISTS RuleHitStats (RuleName TEXT PRIMARY KEY, HitCount INTEGER NOT NULL DEFAULT 0, UpdatedAtUnixTime INTEGER NOT NULL);");
-
+        LogStorageSchema.EnsureCreated(connection);
         _isInitialized = true;
     }
 
@@ -716,90 +705,6 @@ public sealed class LogStorageService
         }
 
         return rows;
-    }
-
-    /// <summary>Ensures an existing SQLite table contains a column added by newer schema versions.</summary>
-    /// <param name="connection">Open SQLite connection. Must not be null.</param>
-    /// <param name="tableName">Trusted internal table name. Must not be null.</param>
-    /// <param name="columnName">Trusted internal column name. Must not be null.</param>
-    /// <param name="definition">Trusted internal column definition. Must not be null.</param>
-    private static void EnsureColumn(SqliteConnection connection, string tableName, string columnName, string definition)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-        ArgumentNullException.ThrowIfNull(tableName);
-        ArgumentNullException.ThrowIfNull(columnName);
-        ArgumentNullException.ThrowIfNull(definition);
-
-        using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = $"PRAGMA table_info({tableName});";
-        using SqliteDataReader reader = command.ExecuteReader();
-        while (reader.Read())
-        {
-            if (StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(1), columnName))
-            {
-                return;
-            }
-        }
-
-        ExecuteNonQuery(connection, null, $"ALTER TABLE {tableName} ADD COLUMN {columnName} {definition};");
-    }
-
-    /// <summary>Deletes a bounded batch of oldest records from <paramref name="tableName"/>.</summary>
-    /// <param name="connection">Open SQLite connection. Must not be null.</param>
-    /// <param name="tableName">Trusted internal table name. Must not be null.</param>
-    /// <param name="orderColumn">Trusted internal order column name. Must not be null.</param>
-    /// <returns>The number of rows deleted.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="connection"/>, <paramref name="tableName"/>, or <paramref name="orderColumn"/> is null.</exception>
-    private static int DeleteOldestBatch(SqliteConnection connection, string tableName, string orderColumn)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-        ArgumentNullException.ThrowIfNull(tableName);
-        ArgumentNullException.ThrowIfNull(orderColumn);
-
-        string sql = $"DELETE FROM {tableName} WHERE Id IN (SELECT Id FROM {tableName} ORDER BY {orderColumn} ASC, Id ASC LIMIT 5000);";
-        return ExecuteNonQuery(connection, null, sql);
-    }
-
-    /// <summary>Compacts the SQLite database file after destructive cleanup operations.</summary>
-    /// <param name="connection">Open SQLite connection. Must not be null.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="connection"/> is null.</exception>
-    private static void Vacuum(SqliteConnection connection)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-        ExecuteNonQuery(connection, null, "PRAGMA wal_checkpoint(TRUNCATE);");
-        ExecuteNonQuery(connection, null, "VACUUM;");
-        ExecuteNonQuery(connection, null, "PRAGMA wal_checkpoint(TRUNCATE);");
-    }
-
-    /// <summary>Calculates the SQLite storage footprint including WAL and shared-memory sidecar files.</summary>
-    /// <param name="databasePath">Main SQLite database path. Must not be null.</param>
-    /// <returns>Total byte count for the main database and known sidecar files.</returns>
-    private static long CalculateStorageFootprintBytes(string databasePath)
-    {
-        ArgumentNullException.ThrowIfNull(databasePath);
-
-        long totalBytes = 0;
-        foreach (string path in EnumerateDatabaseStoragePaths(databasePath))
-        {
-            if (File.Exists(path))
-            {
-                totalBytes += new FileInfo(path).Length;
-            }
-        }
-
-        return totalBytes;
-    }
-
-    /// <summary>Enumerates the main SQLite database path and WAL-mode sidecar paths.</summary>
-    /// <param name="databasePath">Main SQLite database path. Must not be null.</param>
-    /// <returns>Known storage paths for this database.</returns>
-    private static IEnumerable<string> EnumerateDatabaseStoragePaths(string databasePath)
-    {
-        ArgumentNullException.ThrowIfNull(databasePath);
-
-        yield return databasePath;
-        yield return databasePath + "-wal";
-        yield return databasePath + "-shm";
     }
 
     /// <summary>Upserts node traffic counters inside an existing transaction.</summary>
