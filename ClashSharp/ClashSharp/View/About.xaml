@@ -13,8 +13,8 @@
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="18" MaxWidth="760" HorizontalAlignment="Left">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
             </StackPanel>
 
             <Grid Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="16">
@@ -26,7 +26,7 @@
                 <Image Source="ms-appx:///Assets/Logo.png" Width="72" Height="72" Stretch="Uniform" />
                 <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                     <TextBlock Text="Clash#" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                    <TextBlock x:Name="AppDescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="AppDescriptionText" Text="{Binding AppDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
 
@@ -39,13 +39,13 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="AuthorTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="AuthorValueText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="AuthorTitleText" Text="{Binding AuthorTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="AuthorValueText" Text="{Binding AuthorValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Spacing="4">
-                    <TextBlock x:Name="OpenSourceTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="OpenSourceDescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="OpenSourceTitleText" Text="{Binding OpenSourceTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="OpenSourceDescriptionText" Text="{Binding OpenSourceDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
 
                 <Grid Grid.Row="2" ColumnSpacing="12">
@@ -54,13 +54,13 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="GitHubTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock x:Name="GitHubDescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="GitHubTitleText" Text="{Binding GitHubTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="GitHubDescriptionText" Text="{Binding GitHubDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button x:Name="GitHubButton" Grid.Column="1" Click="GitHubButton_Click">
+                    <Button x:Name="GitHubButton" Grid.Column="1" Command="{Binding OpenGitHubCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE774;" FontSize="14" />
-                            <TextBlock x:Name="GitHubButtonText" />
+                            <TextBlock x:Name="GitHubButtonText" Text="{Binding GitHubButtonText}" />
                         </StackPanel>
                     </Button>
                 </Grid>
@@ -71,14 +71,14 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="MihomoTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock x:Name="MihomoDescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <TextBlock x:Name="MihomoStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="MihomoTitleText" Text="{Binding MihomoTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="MihomoDescriptionText" Text="{Binding MihomoDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="MihomoStatusText" Text="{Binding MihomoStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
-                    <Button x:Name="MihomoButton" Grid.Column="1" Click="MihomoButton_Click">
+                    <Button x:Name="MihomoButton" Grid.Column="1" Command="{Binding OpenMihomoCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE8A7;" FontSize="14" />
-                            <TextBlock x:Name="MihomoButtonText" />
+                            <TextBlock x:Name="MihomoButtonText" Text="{Binding MihomoButtonText}" />
                         </StackPanel>
                     </Button>
                 </Grid>

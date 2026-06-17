@@ -19,8 +19,8 @@
                 </Grid.ColumnDefinitions>
                 <Image Source="ms-appx:///Assets/Logo.png" Width="44" Height="44" Stretch="Uniform" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-                    <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                    <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
             </Grid>
 
@@ -31,8 +31,8 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="StatusControlTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="StatusControlDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="StatusControlTitleText" Text="{Binding StatusControlTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="StatusControlDescriptionText" Text="{Binding StatusControlDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
 
                 <Grid Grid.Row="1" ColumnSpacing="10" RowSpacing="10">
@@ -45,7 +45,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <ToggleButton x:Name="DisabledModeButton" MinHeight="92" HorizontalContentAlignment="Stretch" IsChecked="True" Click="DisabledModeButton_Click">
+                    <ToggleButton x:Name="DisabledModeButton" MinHeight="92" HorizontalContentAlignment="Stretch" IsChecked="{Binding IsDisabledModeSelected, Mode=OneWay}" Command="{Binding DisabledModeCommand}">
                         <Grid Padding="6" ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -53,13 +53,13 @@
                             </Grid.ColumnDefinitions>
                             <FontIcon Glyph="&#xE711;" FontSize="20" Width="28" VerticalAlignment="Top" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Spacing="4">
-                                <TextBlock x:Name="DisabledModeTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="DisabledModeDescriptionText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="DisabledModeTitleText" Text="{Binding DisabledModeTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="DisabledModeDescriptionText" Text="{Binding DisabledModeDescriptionText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                         </Grid>
                     </ToggleButton>
 
-                    <ToggleButton x:Name="StandbyModeButton" Grid.Column="1" MinHeight="92" HorizontalContentAlignment="Stretch" Click="StandbyModeButton_Click">
+                    <ToggleButton x:Name="StandbyModeButton" Grid.Column="1" MinHeight="92" HorizontalContentAlignment="Stretch" IsChecked="{Binding IsStandbyModeSelected, Mode=OneWay}" Command="{Binding StandbyModeCommand}">
                         <Grid Padding="6" ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -67,13 +67,13 @@
                             </Grid.ColumnDefinitions>
                             <FontIcon Glyph="&#xE774;" FontSize="20" Width="28" VerticalAlignment="Top" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Spacing="4">
-                                <TextBlock x:Name="StandbyModeTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="StandbyModeDescriptionText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="StandbyModeTitleText" Text="{Binding StandbyModeTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="StandbyModeDescriptionText" Text="{Binding StandbyModeDescriptionText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                         </Grid>
                     </ToggleButton>
 
-                    <ToggleButton x:Name="RuleTakeoverModeButton" Grid.Row="1" MinHeight="92" HorizontalContentAlignment="Stretch" Click="RuleTakeoverModeButton_Click">
+                    <ToggleButton x:Name="RuleTakeoverModeButton" Grid.Row="1" MinHeight="92" HorizontalContentAlignment="Stretch" IsChecked="{Binding IsRuleTakeoverModeSelected, Mode=OneWay}" Command="{Binding RuleTakeoverModeCommand}">
                         <Grid Padding="6" ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -81,13 +81,13 @@
                             </Grid.ColumnDefinitions>
                             <FontIcon Glyph="&#xE9D9;" FontSize="20" Width="28" VerticalAlignment="Top" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Spacing="4">
-                                <TextBlock x:Name="RuleTakeoverModeTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="RuleTakeoverModeDescriptionText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="RuleTakeoverModeTitleText" Text="{Binding RuleTakeoverModeTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="RuleTakeoverModeDescriptionText" Text="{Binding RuleTakeoverModeDescriptionText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                         </Grid>
                     </ToggleButton>
 
-                    <ToggleButton x:Name="FullTakeoverModeButton" Grid.Row="1" Grid.Column="1" MinHeight="92" HorizontalContentAlignment="Stretch" Click="FullTakeoverModeButton_Click">
+                    <ToggleButton x:Name="FullTakeoverModeButton" Grid.Row="1" Grid.Column="1" MinHeight="92" HorizontalContentAlignment="Stretch" IsChecked="{Binding IsFullTakeoverModeSelected, Mode=OneWay}" Command="{Binding FullTakeoverModeCommand}">
                         <Grid Padding="6" ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -95,8 +95,8 @@
                             </Grid.ColumnDefinitions>
                             <FontIcon Glyph="&#xE968;" FontSize="20" Width="28" VerticalAlignment="Top" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Spacing="4">
-                                <TextBlock x:Name="FullTakeoverModeTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                                <TextBlock x:Name="FullTakeoverModeDescriptionText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock x:Name="FullTakeoverModeTitleText" Text="{Binding FullTakeoverModeTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="FullTakeoverModeDescriptionText" Text="{Binding FullTakeoverModeDescriptionText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                         </Grid>
                     </ToggleButton>
@@ -112,22 +112,22 @@
 
                 <Grid Style="{StaticResource ClashCardGridStyle}">
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="CoreStatusTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock x:Name="CoreStatusText" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <TextBlock x:Name="CoreStatusTitleText" Text="{Binding CoreStatusTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="CoreStatusText" Text="{Binding CoreStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" />
                     </StackPanel>
                 </Grid>
 
                 <Grid Grid.Column="1" Style="{StaticResource ClashCardGridStyle}">
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="SystemProxyTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock x:Name="SystemProxyStatusText" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <TextBlock x:Name="SystemProxyTitleText" Text="{Binding SystemProxyTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="SystemProxyStatusText" Text="{Binding SystemProxyStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" />
                     </StackPanel>
                 </Grid>
 
                 <Grid Grid.Column="2" Style="{StaticResource ClashCardGridStyle}">
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="TransparentProxyTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                        <TextBlock x:Name="TransparentProxyStatusText" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <TextBlock x:Name="TransparentProxyTitleText" Text="{Binding TransparentProxyTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="TransparentProxyStatusText" Text="{Binding TransparentProxyStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" />
                     </StackPanel>
                 </Grid>
             </Grid>

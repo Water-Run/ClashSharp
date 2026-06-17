@@ -14,14 +14,14 @@
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <TextBlock x:Name="LanguageSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-            <components:SettingRow x:Name="LanguageRow">
+            <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+            <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="LanguageBox" MinWidth="180" SelectionChanged="LanguageBox_SelectionChanged">
+                    <ComboBox x:Name="LanguageBox" MinWidth="180" SelectedIndex="{Binding DisplayLanguageIndex, Mode=TwoWay}">
                         <ComboBoxItem Content="简体中文" />
                         <ComboBoxItem Content="繁體中文" />
                         <ComboBoxItem Content="English" />
@@ -32,52 +32,52 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <TextBlock x:Name="ProxySectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <components:SettingRow x:Name="TransparentProxyRow">
+            <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TransparentProxyToggle" IsOn="False" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TransparentProxyToggle_Toggled" />
+                    <ToggleSwitch x:Name="TransparentProxyToggle" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="TunFallbackRow">
+            <components:SettingRow x:Name="TunFallbackRow" Title="{Binding TunFallbackTitleText}" Description="{Binding TunFallbackDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TunFallbackToggle" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TunFallbackToggle_Toggled" />
+                    <ToggleSwitch x:Name="TunFallbackToggle" IsOn="{Binding FallbackToSystemProxyWhenTunFails, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="MixedPortRow">
+            <components:SettingRow x:Name="MixedPortRow" Title="{Binding MixedPortTitleText}" Description="{Binding MixedPortDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <NumberBox x:Name="MixedPortBox" Width="140" Minimum="1" Maximum="65535" SpinButtonPlacementMode="Compact" ValueChanged="MixedPortBox_ValueChanged" />
+                    <NumberBox x:Name="MixedPortBox" Width="140" Minimum="1" Maximum="65535" Value="{Binding MixedPortValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="96">
                 <StackPanel Spacing="6">
-                    <TextBlock x:Name="ProxyInformationTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="ProxyInformationDescriptionText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock x:Name="ProxyLocalEntryText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
-                    <TextBlock x:Name="ProxyCoreConfigurationText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
-                    <TextBlock x:Name="ProxyCoreBinaryText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    <TextBlock x:Name="ProxyInformationTitleText" Text="{Binding ProxyInformationTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="ProxyInformationDescriptionText" Text="{Binding ProxyInformationDescriptionText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="ProxyLocalEntryText" Text="{Binding ProxyLocalEntryText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    <TextBlock x:Name="ProxyCoreConfigurationText" Text="{Binding ProxyCoreConfigurationText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    <TextBlock x:Name="ProxyCoreBinaryText" Text="{Binding ProxyCoreBinaryText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
                 </StackPanel>
             </Grid>
 
-            <components:SettingRow x:Name="ConnectionSamplingRow">
+            <components:SettingRow x:Name="ConnectionSamplingRow" Title="{Binding ConnectionSamplingTitleText}" Description="{Binding ConnectionSamplingDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="ConnectionSamplingToggle" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="ConnectionSamplingToggle_Toggled" />
+                    <ToggleSwitch x:Name="ConnectionSamplingToggle" IsOn="{Binding ConnectionSamplingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="SamplingIntervalRow">
+            <components:SettingRow x:Name="SamplingIntervalRow" Title="{Binding SamplingIntervalTitleText}" Description="{Binding SamplingIntervalDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <NumberBox x:Name="ConnectionSamplingIntervalBox" Width="140" Minimum="5" Maximum="3600" SpinButtonPlacementMode="Compact" ValueChanged="ConnectionSamplingIntervalBox_ValueChanged" />
+                    <NumberBox x:Name="ConnectionSamplingIntervalBox" Width="140" Minimum="5" Maximum="3600" Value="{Binding ConnectionSamplingIntervalSecondsValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <TextBlock x:Name="WindowsNativeSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <TextBlock x:Name="WindowsNativeSectionTitleText" Text="{Binding WindowsNativeSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <StackPanel Spacing="6">
-                    <TextBlock x:Name="WindowsNativeTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="WindowsNativeDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="WindowsNativeTitleText" Text="{Binding WindowsNativeTitleText}" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="WindowsNativeDescriptionText" Text="{Binding WindowsNativeDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
             </Grid>
 
@@ -89,25 +89,25 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock x:Name="WslDiagnosticTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="WslDiagnosticStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="WslDiagnosticTitleText" Text="{Binding WslDiagnosticTitleText}" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="WslDiagnosticStatusText" Text="{Binding WslDiagnosticStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
-                <Button Grid.Column="1" Margin="12,0,0,0" Tag="Wsl:Diagnose" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="1" Margin="12,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="Wsl:Diagnose">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE9D9;" FontSize="14" />
-                        <TextBlock x:Name="DiagnoseWslText" />
+                        <TextBlock x:Name="DiagnoseWslText" Text="{Binding DiagnoseText}" />
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="2" Margin="8,0,0,0" Tag="Wsl:Apply" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="2" Margin="8,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="Wsl:Apply">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE73E;" FontSize="14" />
-                        <TextBlock x:Name="ApplyWslText" />
+                        <TextBlock x:Name="ApplyWslText" Text="{Binding ApplyText}" />
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="3" Margin="8,0,0,0" Tag="Wsl:Reset" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="3" Margin="8,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="Wsl:Reset">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                        <TextBlock x:Name="ResetWslText" />
+                        <TextBlock x:Name="ResetWslText" Text="{Binding ResetText}" />
                     </StackPanel>
                 </Button>
             </Grid>
@@ -120,25 +120,25 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock x:Name="TerminalDiagnosticTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="TerminalDiagnosticStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="TerminalDiagnosticTitleText" Text="{Binding TerminalDiagnosticTitleText}" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="TerminalDiagnosticStatusText" Text="{Binding TerminalDiagnosticStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
-                <Button Grid.Column="1" Margin="12,0,0,0" Tag="Terminal:Diagnose" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="1" Margin="12,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="Terminal:Diagnose">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE756;" FontSize="14" />
-                        <TextBlock x:Name="DiagnoseTerminalText" />
+                        <TextBlock x:Name="DiagnoseTerminalText" Text="{Binding DiagnoseText}" />
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="2" Margin="8,0,0,0" Tag="Terminal:Apply" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="2" Margin="8,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="Terminal:Apply">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE73E;" FontSize="14" />
-                        <TextBlock x:Name="ApplyTerminalText" />
+                        <TextBlock x:Name="ApplyTerminalText" Text="{Binding ApplyText}" />
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="3" Margin="8,0,0,0" Tag="Terminal:Reset" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="3" Margin="8,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="Terminal:Reset">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                        <TextBlock x:Name="ResetTerminalText" />
+                        <TextBlock x:Name="ResetTerminalText" Text="{Binding ResetText}" />
                     </StackPanel>
                 </Button>
             </Grid>
@@ -151,60 +151,60 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock x:Name="StoreDiagnosticTitleText" Style="{ThemeResource BodyTextBlockStyle}" />
-                    <TextBlock x:Name="StoreDiagnosticStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="StoreDiagnosticTitleText" Text="{Binding StoreDiagnosticTitleText}" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="StoreDiagnosticStatusText" Text="{Binding StoreDiagnosticStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
-                <Button Grid.Column="1" Margin="12,0,0,0" Tag="MicrosoftStore:Diagnose" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="1" Margin="12,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="MicrosoftStore:Diagnose">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE9D9;" FontSize="14" />
-                        <TextBlock x:Name="DiagnoseStoreText" />
+                        <TextBlock x:Name="DiagnoseStoreText" Text="{Binding DiagnoseText}" />
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="2" Margin="8,0,0,0" Tag="MicrosoftStore:Apply" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="2" Margin="8,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="MicrosoftStore:Apply">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE73E;" FontSize="14" />
-                        <TextBlock x:Name="ApplyStoreText" />
+                        <TextBlock x:Name="ApplyStoreText" Text="{Binding ApplyText}" />
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="3" Margin="8,0,0,0" Tag="MicrosoftStore:Reset" Click="WindowsDiagnosticButton_Click">
+                <Button Grid.Column="3" Margin="8,0,0,0" Command="{Binding WindowsDiagnosticCommand}" CommandParameter="MicrosoftStore:Reset">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                        <TextBlock x:Name="ResetStoreText" />
+                        <TextBlock x:Name="ResetStoreText" Text="{Binding ResetText}" />
                     </StackPanel>
                 </Button>
             </Grid>
 
-            <components:SettingRow x:Name="CheckStaleProxyRow">
+            <components:SettingRow x:Name="CheckStaleProxyRow" Title="{Binding CheckStaleProxyTitleText}" Description="{Binding CheckStaleProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="CheckStaleProxyToggle" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="CheckStaleProxyToggle_Toggled" />
+                    <ToggleSwitch x:Name="CheckStaleProxyToggle" IsOn="{Binding CheckStaleProxyOnStartup, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="RestoreProxyOnExitRow">
+            <components:SettingRow x:Name="RestoreProxyOnExitRow" Title="{Binding RestoreProxyOnExitTitleText}" Description="{Binding RestoreProxyOnExitDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="RestoreProxyOnExitToggle" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="RestoreProxyOnExitToggle_Toggled" />
+                    <ToggleSwitch x:Name="RestoreProxyOnExitToggle" IsOn="{Binding RestoreProxyOnExit, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="ProxyRecoveryModeRow">
+            <components:SettingRow x:Name="ProxyRecoveryModeRow" Title="{Binding ProxyRecoveryModeTitleText}" Description="{Binding ProxyRecoveryModeDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="ProxyRecoveryModeBox" MinWidth="180" SelectionChanged="ProxyRecoveryModeBox_SelectionChanged">
-                        <ComboBoxItem x:Name="ProxyRecoveryIgnoreItem" />
-                        <ComboBoxItem x:Name="ProxyRecoveryEnableItem" />
-                        <ComboBoxItem x:Name="ProxyRecoveryDisableItem" />
+                    <ComboBox x:Name="ProxyRecoveryModeBox" MinWidth="180" SelectedIndex="{Binding ProxyRecoveryModeIndex, Mode=TwoWay}">
+                        <ComboBoxItem x:Name="ProxyRecoveryIgnoreItem" Content="{Binding ProxyRecoveryIgnoreText}" />
+                        <ComboBoxItem x:Name="ProxyRecoveryEnableItem" Content="{Binding ProxyRecoveryEnableText}" />
+                        <ComboBoxItem x:Name="ProxyRecoveryDisableItem" Content="{Binding ProxyRecoveryDisableText}" />
                     </ComboBox>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <TextBlock x:Name="MainlandChinaSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <components:SettingRow x:Name="MainlandChinaDisplayRow">
+            <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <components:SettingRow x:Name="MainlandChinaDisplayRow" Title="{Binding MainlandChinaDisplayTitleText}" Description="{Binding MainlandChinaDisplayDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="MainlandChinaFeatureModeBox" MinWidth="260" SelectionChanged="MainlandChinaFeatureModeBox_SelectionChanged">
-                        <ComboBoxItem x:Name="MainlandChinaDisabledItem" />
-                        <ComboBoxItem x:Name="MainlandChinaFlagOnlyItem" />
-                        <ComboBoxItem x:Name="MainlandChinaFlagAndTextItem" />
-                        <ComboBoxItem x:Name="MainlandChinaKeywordFilterItem" />
-                        <ComboBoxItem x:Name="MainlandChinaAllItem" />
+                    <ComboBox x:Name="MainlandChinaFeatureModeBox" MinWidth="260" SelectedIndex="{Binding MainlandChinaFeatureModeIndex, Mode=TwoWay}">
+                        <ComboBoxItem x:Name="MainlandChinaDisabledItem" Content="{Binding MainlandChinaDisabledText}" />
+                        <ComboBoxItem x:Name="MainlandChinaFlagOnlyItem" Content="{Binding MainlandChinaFlagOnlyText}" />
+                        <ComboBoxItem x:Name="MainlandChinaFlagAndTextItem" Content="{Binding MainlandChinaFlagAndTextText}" />
+                        <ComboBoxItem x:Name="MainlandChinaKeywordFilterItem" Content="{Binding MainlandChinaKeywordFilterText}" />
+                        <ComboBoxItem x:Name="MainlandChinaAllItem" Content="{Binding MainlandChinaAllText}" />
                     </ComboBox>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>

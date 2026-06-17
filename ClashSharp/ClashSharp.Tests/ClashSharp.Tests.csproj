@@ -32,18 +32,23 @@
 
   <ItemGroup>
     <Compile Include="..\ClashSharp\Model\AppLanguage.cs" Link="Model\AppLanguage.cs" />
+    <Compile Include="..\ClashSharp\Model\ActiveConnection.cs" Link="Model\ActiveConnection.cs" />
     <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />
     <Compile Include="..\ClashSharp\Model\MainlandChinaFeatureMode.cs" Link="Model\MainlandChinaFeatureMode.cs" />
+    <Compile Include="..\ClashSharp\Model\NetworkTakeoverResult.cs" Link="Model\NetworkTakeoverResult.cs" />
     <Compile Include="..\ClashSharp\Model\ProxyRecoveryMode.cs" Link="Model\ProxyRecoveryMode.cs" />
+    <Compile Include="..\ClashSharp\Model\WindowsProxyState.cs" Link="Model\WindowsProxyState.cs" />
     <Compile Include="..\ClashSharp\Model\ProxyNode.cs" Link="Model\ProxyNode.cs" />
     <Compile Include="..\ClashSharp\Model\RegionMetadata.cs" Link="Model\RegionMetadata.cs" />
     <Compile Include="..\ClashSharp\Model\RulePreview.cs" Link="Model\RulePreview.cs" />
+    <Compile Include="..\ClashSharp\Model\TrafficStatisticRow.cs" Link="Model\TrafficStatisticRow.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsDiagnosticResult.cs" Link="Model\WindowsDiagnosticResult.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsDiagnosticTarget.cs" Link="Model\WindowsDiagnosticTarget.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.cs" Link="Service\AppSettingsService.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageFootprint.cs" Link="Service\LogStorageFootprint.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageMaintenance.cs" Link="Service\LogStorageMaintenance.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageSchema.cs" Link="Service\LogStorageSchema.cs" />
+    <Compile Include="..\ClashSharp\Service\LocalizationService.cs" Link="Service\LocalizationService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfilePreviewParser.cs" Link="Service\MihomoProfilePreviewParser.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileShapeValidator.cs" Link="Service\MihomoProfileShapeValidator.cs" />
@@ -52,6 +57,14 @@
     <Compile Include="..\ClashSharp\Strings\LocalizationResources.cs" Link="Strings\LocalizationResources.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticsViewModel.cs" Link="ViewModel\SettingsDiagnosticsViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.cs" Link="ViewModel\SettingsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ObservableObject.cs" Link="ViewModel\ObservableObject.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\RelayCommand.cs" Link="ViewModel\RelayCommand.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\AsyncRelayCommand.cs" Link="ViewModel\AsyncRelayCommand.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MainWindowViewModel.cs" Link="ViewModel\MainWindowViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterControlViewModel.cs" Link="ViewModel\MasterControlViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ProxiesViewModel.cs" Link="ViewModel\ProxiesViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\DisplayPageViewModels.cs" Link="ViewModel\DisplayPageViewModels.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ConnectionsViewModel.cs" Link="ViewModel\ConnectionsViewModel.cs" />
   </ItemGroup>
 
 </Project>

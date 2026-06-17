@@ -1,31 +1,39 @@
 /*
  * Rules Page
- * Provides the rule-provider and rule-hit inspection surface for Clash# takeover decisions
+ * Hosts the rule inspection view and delegates rule state to its view model
  *
  * @author: WaterRun
  * @file: View/Rules.xaml.cs
- * @date: 2026-06-15
+ * @date: 2026-06-17
  */
 
+#nullable enable
+
 using ClashSharp.Service;
+using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml.Controls;
 
 namespace ClashSharp.View;
 
 /// <summary>Page for rule-provider state, rule hit statistics, and route decisions.</summary>
 /// <remarks>
-/// Invariants: Visible text and active profile rule rows are loaded during construction.
+/// Invariants: The page has a non-null <see cref="RulesViewModel"/> after construction.
 /// Thread safety: Must be accessed from the UI thread only.
-/// Side effects: Reads localized strings and active profile rule metadata during construction.
+/// Side effects: Creates singleton-backed service adapters for the view model.
 /// </remarks>
 public sealed partial class Rules : Page
 {
-    /// <summary>Initializes the rules page and applies localized shell text.</summary>
+    /// <summary>Bindable view model for this page.</summary>
+    private readonly RulesViewModel _viewModel;
+
+    /// <summary>Initializes the rules page and its view model.</summary>
     public Rules()
     {
+        _viewModel = new(
+            new DisplayPageLocalizationAdapter(LocalizationService.Instance),
+            new RuleCatalogAdapter(RuleCatalogService.Instance));
+
         InitializeComponent();
-        PageTitleText.Text = LocalizationService.Instance.GetString("Nav.Rules");
-        DescriptionText.Text = LocalizationService.Instance.GetString("Page.Rules.Description");
-        RulesList.ItemsSource = RuleCatalogService.Instance.GetRules();
+        DataContext = _viewModel;
     }
 }

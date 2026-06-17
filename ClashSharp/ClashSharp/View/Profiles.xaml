@@ -10,22 +10,22 @@
     <Grid Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
             <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton x:Name="ImportProfileButton" Click="ImportProfileButton_Click">
+                <AppBarButton x:Name="ImportProfileButton" Label="{Binding ImportProfileText}" Click="ImportProfileButton_Click">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE8E5;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="ValidateProfileButton" Click="ValidateProfileButton_Click">
+                <AppBarButton x:Name="ValidateProfileButton" Label="{Binding ValidateProfileText}" Command="{Binding ValidateProfileCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE73E;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="SetActiveProfileButton" Click="SetActiveProfileButton_Click">
+                <AppBarButton x:Name="SetActiveProfileButton" Label="{Binding SetActiveProfileText}" Command="{Binding SetActiveProfileCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE73E;" />
                     </AppBarButton.Icon>
@@ -34,12 +34,12 @@
 
             <Grid Style="{StaticResource ClashCardGridStyle}">
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="CurrentProfileTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="ActiveProfileText" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="CurrentProfileTitleText" Text="{Binding CurrentProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="ActiveProfileText" Text="{Binding ActiveProfileText}" Style="{ThemeResource BodyTextBlockStyle}" />
                 </StackPanel>
             </Grid>
 
-            <ListView x:Name="ProfilesList" SelectionMode="Single">
+            <ListView x:Name="ProfilesList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Grid Padding="4,10" ColumnSpacing="12">

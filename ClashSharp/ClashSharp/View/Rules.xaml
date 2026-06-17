@@ -10,11 +10,11 @@
     <Grid Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <ListView x:Name="RulesList">
+            <ListView x:Name="RulesList" ItemsSource="{Binding Rules}">
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Grid Padding="4,10" ColumnSpacing="12">

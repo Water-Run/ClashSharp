@@ -15,8 +15,8 @@
         </Grid.RowDefinitions>
 
         <StackPanel Spacing="4">
-            <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-            <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
 
         <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" Margin="0,18,0,18">
@@ -25,13 +25,13 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="4">
-                <TextBlock x:Name="StorageTitleText" Text="本地记录占用" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                <TextBlock x:Name="StorageUsageText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="StorageTitleText" Text="{Binding StorageTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                <TextBlock x:Name="StorageUsageText" Text="{Binding StorageUsageText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
-            <HyperlinkButton x:Name="CleanupButton" Grid.Column="1" Content="清理" Click="CleanupButton_Click" />
+            <HyperlinkButton x:Name="CleanupButton" Grid.Column="1" Content="{Binding CleanupText}" Click="CleanupButton_Click" />
         </Grid>
 
-        <ListView x:Name="RecentLogsList" Grid.Row="2">
+        <ListView x:Name="RecentLogsList" ItemsSource="{Binding RecentLogs}" Grid.Row="2">
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Grid Padding="4,8" ColumnSpacing="12">

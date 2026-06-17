@@ -10,24 +10,24 @@
     <Grid Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
             <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton x:Name="RefreshNodesButton" Click="RefreshNodesButton_Click">
+                <AppBarButton x:Name="RefreshNodesButton" Label="{Binding RefreshNodesText}" Command="{Binding RefreshNodesCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE72C;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="TestLatencyButton" Click="TestLatencyButton_Click">
+                <AppBarButton x:Name="TestLatencyButton" Label="{Binding TestLatencyText}" Command="{Binding TestLatencyCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
             </CommandBar>
 
-            <ListView x:Name="ProxyNodesList">
+            <ListView x:Name="ProxyNodesList" ItemsSource="{Binding ProxyNodes}">
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Grid Padding="4,8" ColumnSpacing="12">

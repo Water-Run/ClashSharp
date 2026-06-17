@@ -10,26 +10,26 @@
     <Grid Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
             <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton x:Name="RefreshConnectionsButton" Click="RefreshConnectionsButton_Click">
+                <AppBarButton x:Name="RefreshConnectionsButton" Label="{Binding RefreshConnectionsText}" Command="{Binding RefreshConnectionsCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE72C;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="PersistConnectionsButton" Click="PersistConnectionsButton_Click">
+                <AppBarButton x:Name="PersistConnectionsButton" Label="{Binding PersistConnectionsText}" Command="{Binding PersistConnectionsCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE74E;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
             </CommandBar>
 
-            <TextBlock x:Name="ConnectionStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-            <ListView x:Name="ConnectionsList">
+            <ListView x:Name="ConnectionsList" ItemsSource="{Binding Connections}">
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Grid Padding="4,10" ColumnSpacing="12">

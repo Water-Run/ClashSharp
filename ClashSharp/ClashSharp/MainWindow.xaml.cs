@@ -8,8 +8,10 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using ClashSharp.Service;
+using ClashSharp.ViewModel;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -46,15 +48,20 @@ public sealed partial class MainWindow : Window
     /// <summary>Native window handle obtained during initialization.</summary>
     private nint _hWnd;
 
+    /// <summary>Bindable shell view model used by navigation controls.</summary>
+    private readonly MainWindowViewModel _viewModel;
+
     /// <summary>Initializes the main window, applies minimum size constraints, configures the title bar, and sets up navigation.</summary>
     public MainWindow()
     {
+        _viewModel = new MainWindowViewModel(
+            new ShellLocalizationAdapter(LocalizationService.Instance),
+            CreatePageMap());
         InitializeComponent();
+        NavView.DataContext = _viewModel;
         InitializeWindowMinSize();
         InitializeTitleBar();
-        ApplyLocalization();
 
-        LocalizationService.Instance.LanguageChanged += OnLanguageChanged;
         NavView.SelectedItem = NavMasterControlItem;
         NavigateToTag("MasterControl");
 
@@ -83,30 +90,6 @@ public sealed partial class MainWindow : Window
             Marshal.GetFunctionPointerForDelegate(_wndProcDelegate));
     }
 
-    /// <summary>Applies localized strings to all NavigationView items based on the current language.</summary>
-    private void ApplyLocalization()
-    {
-        LocalizationService loc = LocalizationService.Instance;
-
-        NavMasterControlItem.Content = loc.GetString("Nav.MasterControl");
-        NavProxiesItem.Content = loc.GetString("Nav.Proxies");
-        NavProxyNodesItem.Content = loc.GetString("Nav.ProxyNodes");
-        NavProfilesItem.Content = loc.GetString("Nav.Profiles");
-        NavLinksItem.Content = loc.GetString("Nav.Links");
-        NavRulesItem.Content = loc.GetString("Nav.Rules");
-        NavStatisticsItem.Content = loc.GetString("Nav.Statistics");
-        NavAboutItem.Content = loc.GetString("Nav.About");
-        NavSettingsItem.Content = loc.GetString("Nav.Settings");
-    }
-
-    /// <summary>Handles language change notifications by refreshing all NavigationView item labels.</summary>
-    /// <param name="sender">The <see cref="LocalizationService"/> that raised the event. May be null.</param>
-    /// <param name="e">Empty event arguments.</param>
-    private void OnLanguageChanged(object? sender, EventArgs e)
-    {
-        DispatcherQueue.TryEnqueue(ApplyLocalization);
-    }
-
     /// <summary>Handles NavigationView selection changes and navigates the content frame to the corresponding page.</summary>
     /// <param name="sender">The <see cref="NavigationView"/> raising the event. Not null.</param>
     /// <param name="args">Event data containing the newly selected item. Not null.</param>
@@ -127,19 +110,7 @@ public sealed partial class MainWindow : Window
     {
         ArgumentNullException.ThrowIfNull(tag);
 
-        Type? pageType = tag switch
-        {
-            "MasterControl" => typeof(View.MasterControl),
-            "ProxyNodes" => typeof(View.Proxies),
-            "Profiles" => typeof(View.Profiles),
-            "Links" => typeof(View.Links),
-            "Rules" => typeof(View.Rules),
-            "Statistics" => typeof(View.Statistics),
-            "Logs" => typeof(View.Logs),
-            "About" => typeof(View.About),
-            "Settings" => typeof(View.Settings),
-            _ => null,
-        };
+        Type? pageType = _viewModel.ResolvePageType(tag);
 
         if (pageType is not null && ContentFrame.CurrentSourcePageType != pageType)
         {
@@ -152,8 +123,8 @@ public sealed partial class MainWindow : Window
     /// <param name="args">Window close event arguments. Not null.</param>
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        LocalizationService.Instance.LanguageChanged -= OnLanguageChanged;
-        ShutdownRuntimeServices();
+        _viewModel.Dispose();
+        RuntimeShutdownService.Shutdown();
 
         if (_hWnd != 0 && _oldWndProc != 0)
         {
@@ -165,24 +136,24 @@ public sealed partial class MainWindow : Window
         _hWnd = 0;
     }
 
-    /// <summary>Stops owned runtime services and restores Windows proxy state when configured.</summary>
-    private static void ShutdownRuntimeServices()
+    /// <summary>Creates the navigation tag to page-type mapping used by the shell view model.</summary>
+    /// <returns>Immutable navigation page map keyed by NavigationView tag.</returns>
+    private static IReadOnlyDictionary<string, Type> CreatePageMap()
     {
-        try
+        return new Dictionary<string, Type>
         {
-            ConnectionSamplingService.Instance.Stop();
-            MihomoCoreService.Instance.Stop();
-
-            if (AppSettingsService.Instance.RestoreProxyOnExit)
-            {
-                WindowsProxyService.Instance.DisableProxy();
-            }
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
-        {
-            LogStorageService.Instance.AppendLog("Warning", "Shutdown", "Runtime shutdown cleanup failed.", exception.Message);
-        }
+            ["MasterControl"] = typeof(View.MasterControl),
+            ["ProxyNodes"] = typeof(View.Proxies),
+            ["Profiles"] = typeof(View.Profiles),
+            ["Links"] = typeof(View.Links),
+            ["Rules"] = typeof(View.Rules),
+            ["Statistics"] = typeof(View.Statistics),
+            ["Logs"] = typeof(View.Logs),
+            ["About"] = typeof(View.About),
+            ["Settings"] = typeof(View.Settings),
+        };
     }
+
 
     /// <summary>Custom window procedure that enforces minimum window size by handling WM_GETMINMAXINFO.</summary>
     /// <param name="hWnd">Native window handle.</param>

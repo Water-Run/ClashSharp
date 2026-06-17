@@ -31,7 +31,7 @@
             </NavigationView.PaneHeader>
 
             <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="NavMasterControlItem" Tag="MasterControl">
+                <NavigationViewItem x:Name="NavMasterControlItem" Content="{Binding MasterControlText}" Tag="MasterControl">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE80F;" />
                     </NavigationViewItem.Icon>
@@ -39,30 +39,30 @@
 
                 <NavigationViewItemSeparator />
 
-                <NavigationViewItem x:Name="NavProxiesItem" Tag="ProxyNodes" IsExpanded="True">
+                <NavigationViewItem x:Name="NavProxiesItem" Content="{Binding ProxiesText}" Tag="ProxyNodes" IsExpanded="True">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE968;" />
                     </NavigationViewItem.Icon>
                     <NavigationViewItem.MenuItems>
-                        <NavigationViewItem x:Name="NavProxyNodesItem" Tag="ProxyNodes">
+                        <NavigationViewItem x:Name="NavProxyNodesItem" Content="{Binding ProxyNodesText}" Tag="ProxyNodes">
                             <NavigationViewItem.Icon>
                                 <FontIcon Glyph="&#xE8D4;" />
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
 
-                        <NavigationViewItem x:Name="NavProfilesItem" Tag="Profiles">
+                        <NavigationViewItem x:Name="NavProfilesItem" Content="{Binding ProfilesText}" Tag="Profiles">
                             <NavigationViewItem.Icon>
                                 <FontIcon Glyph="&#xE8F1;" />
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
 
-                        <NavigationViewItem x:Name="NavLinksItem" Tag="Links">
+                        <NavigationViewItem x:Name="NavLinksItem" Content="{Binding LinksText}" Tag="Links">
                             <NavigationViewItem.Icon>
                                 <FontIcon Glyph="&#xE71B;" />
                             </NavigationViewItem.Icon>
                         </NavigationViewItem>
 
-                        <NavigationViewItem x:Name="NavRulesItem" Tag="Rules">
+                        <NavigationViewItem x:Name="NavRulesItem" Content="{Binding RulesText}" Tag="Rules">
                             <NavigationViewItem.Icon>
                                 <FontIcon Glyph="&#xE9D9;" />
                             </NavigationViewItem.Icon>
@@ -70,7 +70,7 @@
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
 
-                <NavigationViewItem x:Name="NavStatisticsItem" Tag="Statistics">
+                <NavigationViewItem x:Name="NavStatisticsItem" Content="{Binding StatisticsText}" Tag="Statistics">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D2;" />
                     </NavigationViewItem.Icon>
@@ -78,13 +78,13 @@
             </NavigationView.MenuItems>
 
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Name="NavAboutItem" Tag="About">
+                <NavigationViewItem x:Name="NavAboutItem" Content="{Binding AboutText}" Tag="About">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem x:Name="NavSettingsItem" Tag="Settings">
+                <NavigationViewItem x:Name="NavSettingsItem" Content="{Binding SettingsText}" Tag="Settings">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>

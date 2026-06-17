@@ -68,6 +68,22 @@ public sealed class SettingsViewModelTests
         Assert.Equal(AppLanguage.German, notifiedLanguage);
     }
 
+    /// <summary>Verifies bindable switch setters persist values and raise property change notifications.</summary>
+    [Fact]
+    public void TransparentProxyEnabled_Setter_PersistsAndRaisesPropertyChanged()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = true };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        List<string?> changedProperties = [];
+        viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        viewModel.TransparentProxyEnabled = false;
+
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.Contains(nameof(SettingsViewModel.TransparentProxyEnabled), changedProperties);
+    }
+
     /// <summary>Verifies invalid language indexes are ignored.</summary>
     [Theory]
     [InlineData(-1)]
@@ -100,6 +116,20 @@ public sealed class SettingsViewModelTests
         Assert.Equal(expectedResult, changed);
         Assert.Equal(expectedPort, store.MixedPort);
         Assert.Equal(expectedPort, viewModel.MixedPort);
+    }
+
+    /// <summary>Verifies bindable number-box port values reuse existing validation and rounding rules.</summary>
+    [Fact]
+    public void MixedPortValue_Setter_PersistsValidRoundedPort()
+    {
+        FakeSettingsStore store = new() { MixedPort = 10000 };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+
+        viewModel.MixedPortValue = 7891.5d;
+
+        Assert.Equal(7892, store.MixedPort);
+        Assert.Equal(7892, viewModel.MixedPort);
+        Assert.Equal(7892d, viewModel.MixedPortValue);
     }
 
     /// <summary>Verifies sampling changes restart the sampling service after persistence.</summary>

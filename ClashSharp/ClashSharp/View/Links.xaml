@@ -10,29 +10,29 @@
     <Grid Padding="{StaticResource ClashPagePadding}">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
             <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton x:Name="AddLinkButton" Click="AddLinkButton_Click">
+                <AppBarButton x:Name="AddLinkButton" Label="{Binding AddLinkText}" Click="AddLinkButton_Click">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE710;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="CheckLinksButton" Click="CheckLinksButton_Click">
+                <AppBarButton x:Name="CheckLinksButton" Label="{Binding CheckLinksText}" Command="{Binding CheckLinkCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE73E;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="UpdateLinksButton" Click="UpdateLinksButton_Click">
+                <AppBarButton x:Name="UpdateLinksButton" Label="{Binding UpdateLinksText}" Command="{Binding UpdateLinkCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE72C;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
             </CommandBar>
 
-            <ListView x:Name="SubscriptionLinksList" SelectionMode="Single">
+            <ListView x:Name="SubscriptionLinksList" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single">
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Grid Padding="4,10" ColumnSpacing="12">
