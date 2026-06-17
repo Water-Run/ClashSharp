@@ -537,6 +537,18 @@ internal sealed class AboutViewModel : ObservableObject
     /// <value>Localized mihomo button text.</value>
     public string MihomoButtonText => _localization.GetString("About.OpenMihomo");
 
+    /// <summary>Gets the local proxy information title text.</summary>
+    /// <value>Localized proxy information title.</value>
+    public string ProxyInformationTitleText => _localization.GetString("About.ProxyInformation.Title");
+
+    /// <summary>Gets the local proxy information description text.</summary>
+    /// <value>Localized proxy information description.</value>
+    public string ProxyInformationDescriptionText => _localization.GetString("About.ProxyInformation.Description");
+
+    /// <summary>Gets the proxy information button text.</summary>
+    /// <value>Localized proxy information button text.</value>
+    public string ProxyInformationButtonText => _localization.GetString("About.ProxyInformation.Open");
+
     /// <summary>Gets bundled mihomo status text.</summary>
     /// <value>Status text; never null.</value>
     public string MihomoStatusText

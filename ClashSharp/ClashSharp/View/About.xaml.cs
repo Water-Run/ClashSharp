@@ -9,10 +9,12 @@
 
 #nullable enable
 
+using System;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace ClashSharp.View;
 
@@ -46,5 +48,60 @@ public sealed partial class About : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _viewModel.LoadCommand.Execute(null);
+    }
+
+    /// <summary>Opens local proxy and core path information in a dialog.</summary>
+    private async void OpenProxyInformationButton_Click(object sender, RoutedEventArgs e)
+    {
+        ContentDialog dialog = new()
+        {
+            Title = _viewModel.ProxyInformationTitleText,
+            Content = BuildProxyInformationPanel(),
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            XamlRoot = XamlRoot,
+        };
+
+        await dialog.ShowAsync();
+    }
+
+    /// <summary>Builds the proxy information dialog content.</summary>
+    private StackPanel BuildProxyInformationPanel()
+    {
+        SettingsProxyInformation information = SettingsProxyInformationAdapter.CreateSnapshot();
+        int mixedPort = AppSettingsService.Instance.MixedPort;
+        string coreBinaryText = information.IsCoreBinaryAvailable
+            ? information.CoreBinaryPath
+            : LocalizationService.Instance.GetString("Settings.ProxyInformation.CoreBinary.Missing");
+
+        StackPanel panel = new()
+        {
+            Spacing = 10,
+            MinWidth = 360,
+            MaxWidth = 640,
+        };
+
+        AddInformationText(panel, string.Format(
+            LocalizationService.Instance.GetString("Settings.ProxyInformation.LocalEntry.Format"),
+            mixedPort));
+        AddInformationText(panel, string.Format(
+            LocalizationService.Instance.GetString("Settings.ProxyInformation.CoreConfig.Format"),
+            information.ConfigPath));
+        AddInformationText(panel, string.Format(
+            LocalizationService.Instance.GetString("Settings.ProxyInformation.CoreBinary.Format"),
+            coreBinaryText));
+
+        return panel;
+    }
+
+    /// <summary>Adds one wrapped information line to a panel.</summary>
+    private static void AddInformationText(StackPanel panel, string text)
+    {
+        panel.Children.Add(new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+        });
     }
 }

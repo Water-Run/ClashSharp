@@ -15,7 +15,12 @@
         </Grid.RowDefinitions>
 
         <StackPanel Spacing="4">
-            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="BackButton" Click="BackButton_Click">
+                    <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                </Button>
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" VerticalAlignment="Center" />
+            </StackPanel>
             <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
 

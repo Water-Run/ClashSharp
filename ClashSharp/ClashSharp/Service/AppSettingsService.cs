@@ -38,6 +38,12 @@ public sealed class AppSettingsService
     /// <summary>Storage key for the selected display language.</summary>
     private const string KeyDisplayLanguage = "DisplayLanguage";
 
+    /// <summary>Storage key for the selected display style.</summary>
+    private const string KeyAppThemeMode = "AppThemeMode";
+
+    /// <summary>Storage key for launching Clash# when the user signs in.</summary>
+    private const string KeyLaunchAtStartupEnabled = "LaunchAtStartupEnabled";
+
     /// <summary>Storage key for the currently selected master takeover mode.</summary>
     private const string KeyCurrentMode = "CurrentMode";
 
@@ -56,14 +62,17 @@ public sealed class AppSettingsService
     /// <summary>Storage key for background connection sampling interval in seconds.</summary>
     private const string KeyConnectionSamplingIntervalSeconds = "ConnectionSamplingIntervalSeconds";
 
-    /// <summary>Storage key for the automatic fallback from TUN to system proxy.</summary>
-    private const string KeyFallbackToSystemProxyWhenTunFails = "FallbackToSystemProxyWhenTunFails";
-
     /// <summary>Storage key for restoring Windows proxy state when Clash# exits normally.</summary>
     private const string KeyRestoreProxyOnExit = "RestoreProxyOnExit";
 
     /// <summary>Storage key for detecting stale Windows proxy state during application startup.</summary>
     private const string KeyCheckStaleProxyOnStartup = "CheckStaleProxyOnStartup";
+
+    /// <summary>Storage key for startup conflict detection.</summary>
+    private const string KeyStartupConflictCheckEnabled = "StartupConflictCheckEnabled";
+
+    /// <summary>Storage key for startup proxy behavior.</summary>
+    private const string KeyStartupBehaviorMode = "StartupBehaviorMode";
 
     /// <summary>Storage key for stale proxy recovery behavior after abnormal exits or restarts.</summary>
     private const string KeyProxyRecoveryMode = "ProxyRecoveryMode";
@@ -81,21 +90,24 @@ public sealed class AppSettingsService
     private const string KeyConnectionTestUrl = "ConnectionTestUrl";
 
     /// <summary>Default proxy connection-test URL.</summary>
-    private const string DefaultConnectionTestUrl = "https://goole.com";
+    private const string DefaultConnectionTestUrl = "https://www.google.com/generate_204";
 
     /// <summary>Settings keys owned by this service.</summary>
     private static readonly string[] KnownKeys =
     [
         KeyDisplayLanguage,
+        KeyAppThemeMode,
+        KeyLaunchAtStartupEnabled,
         KeyCurrentMode,
         KeyActiveProfileId,
         KeyTransparentProxyEnabled,
         KeyMixedPort,
         KeyConnectionSamplingEnabled,
         KeyConnectionSamplingIntervalSeconds,
-        KeyFallbackToSystemProxyWhenTunFails,
         KeyRestoreProxyOnExit,
         KeyCheckStaleProxyOnStartup,
+        KeyStartupConflictCheckEnabled,
+        KeyStartupBehaviorMode,
         KeyProxyRecoveryMode,
         KeyMainlandChinaDisplayEnabled,
         KeyMainlandChinaFeatureMode,
@@ -110,11 +122,27 @@ public sealed class AppSettingsService
     }
 
     /// <summary>Gets or sets the user-selected display language.</summary>
-    /// <value>Selected <see cref="AppLanguage"/> value; defaults to <see cref="AppLanguage.SimplifiedChinese"/>.</value>
+    /// <value>Selected <see cref="AppLanguage"/> value; defaults to <see cref="AppLanguage.AutoDetect"/>.</value>
     public AppLanguage DisplayLanguage
     {
-        get => GetEnum(KeyDisplayLanguage, AppLanguage.SimplifiedChinese);
+        get => GetEnum(KeyDisplayLanguage, AppLanguage.AutoDetect);
         set => SetEnum(KeyDisplayLanguage, value);
+    }
+
+    /// <summary>Gets or sets the selected application display style.</summary>
+    /// <value>Selected <see cref="AppThemeMode"/> value; defaults to <see cref="AppThemeMode.FollowSystem"/>.</value>
+    public AppThemeMode AppThemeMode
+    {
+        get => GetEnum(KeyAppThemeMode, AppThemeMode.FollowSystem);
+        set => SetEnum(KeyAppThemeMode, value);
+    }
+
+    /// <summary>Gets or sets whether Clash# should launch when the user signs in.</summary>
+    /// <value>True when launch-at-startup is requested; defaults to false.</value>
+    public bool LaunchAtStartupEnabled
+    {
+        get => GetBoolean(KeyLaunchAtStartupEnabled, false);
+        set => SetBoolean(KeyLaunchAtStartupEnabled, value);
     }
 
     /// <summary>Gets or sets the currently selected master takeover mode.</summary>
@@ -183,14 +211,6 @@ public sealed class AppSettingsService
         }
     }
 
-    /// <summary>Gets or sets whether TUN startup failures automatically fall back to system proxy mode.</summary>
-    /// <value>True when fallback is enabled; defaults to true.</value>
-    public bool FallbackToSystemProxyWhenTunFails
-    {
-        get => GetBoolean(KeyFallbackToSystemProxyWhenTunFails, true);
-        set => SetBoolean(KeyFallbackToSystemProxyWhenTunFails, value);
-    }
-
     /// <summary>Gets or sets whether Clash# restores Windows proxy state during normal exit.</summary>
     /// <value>True when proxy state is restored during normal exit; defaults to true.</value>
     public bool RestoreProxyOnExit
@@ -205,6 +225,22 @@ public sealed class AppSettingsService
     {
         get => GetBoolean(KeyCheckStaleProxyOnStartup, true);
         set => SetBoolean(KeyCheckStaleProxyOnStartup, value);
+    }
+
+    /// <summary>Gets or sets whether Clash# checks for startup conflicts before applying proxy mode.</summary>
+    /// <value>True when startup conflict detection is enabled; defaults to true.</value>
+    public bool StartupConflictCheckEnabled
+    {
+        get => GetBoolean(KeyStartupConflictCheckEnabled, true);
+        set => SetBoolean(KeyStartupConflictCheckEnabled, value);
+    }
+
+    /// <summary>Gets or sets the proxy behavior applied when Clash# starts.</summary>
+    /// <value>Selected <see cref="StartupBehaviorMode"/> value; defaults to <see cref="StartupBehaviorMode.LastSetting"/>.</value>
+    public StartupBehaviorMode StartupBehaviorMode
+    {
+        get => GetEnum(KeyStartupBehaviorMode, StartupBehaviorMode.LastSetting);
+        set => SetEnum(KeyStartupBehaviorMode, value);
     }
 
     /// <summary>Gets or sets the recovery action applied to stale proxy state after abnormal exits.</summary>
@@ -262,7 +298,7 @@ public sealed class AppSettingsService
     }
 
     /// <summary>Gets or sets the URL used for proxy connection tests.</summary>
-    /// <value>Absolute HTTP/HTTPS URL; defaults to https://goole.com.</value>
+    /// <value>Absolute HTTP/HTTPS URL; defaults to https://www.google.com/generate_204.</value>
     public string ConnectionTestUrl
     {
         get => GetString(KeyConnectionTestUrl, DefaultConnectionTestUrl);

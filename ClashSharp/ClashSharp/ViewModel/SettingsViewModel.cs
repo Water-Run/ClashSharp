@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -25,15 +26,21 @@ internal interface ISettingsStore
 {
     AppLanguage DisplayLanguage { get; set; }
 
-    bool TransparentProxyEnabled { get; set; }
+    AppThemeMode AppThemeMode { get; set; }
 
-    bool FallbackToSystemProxyWhenTunFails { get; set; }
+    bool LaunchAtStartupEnabled { get; set; }
+
+    bool TransparentProxyEnabled { get; set; }
 
     int MixedPort { get; set; }
 
     bool ConnectionSamplingEnabled { get; set; }
 
     int ConnectionSamplingIntervalSeconds { get; set; }
+
+    bool StartupConflictCheckEnabled { get; set; }
+
+    StartupBehaviorMode StartupBehaviorMode { get; set; }
 
     bool CheckStaleProxyOnStartup { get; set; }
 
@@ -87,10 +94,16 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.TransparentProxyEnabled = value;
     }
 
-    public bool FallbackToSystemProxyWhenTunFails
+    public AppThemeMode AppThemeMode
     {
-        get => _settings.FallbackToSystemProxyWhenTunFails;
-        set => _settings.FallbackToSystemProxyWhenTunFails = value;
+        get => _settings.AppThemeMode;
+        set => _settings.AppThemeMode = value;
+    }
+
+    public bool LaunchAtStartupEnabled
+    {
+        get => _settings.LaunchAtStartupEnabled;
+        set => _settings.LaunchAtStartupEnabled = value;
     }
 
     public int MixedPort
@@ -109,6 +122,18 @@ internal sealed class AppSettingsStore : ISettingsStore
     {
         get => _settings.ConnectionSamplingIntervalSeconds;
         set => _settings.ConnectionSamplingIntervalSeconds = value;
+    }
+
+    public bool StartupConflictCheckEnabled
+    {
+        get => _settings.StartupConflictCheckEnabled;
+        set => _settings.StartupConflictCheckEnabled = value;
+    }
+
+    public StartupBehaviorMode StartupBehaviorMode
+    {
+        get => _settings.StartupBehaviorMode;
+        set => _settings.StartupBehaviorMode = value;
     }
 
     public bool CheckStaleProxyOnStartup
@@ -162,6 +187,12 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Callback invoked when the display language changes.</summary>
     private readonly Action<AppLanguage> _applyLanguage;
 
+    /// <summary>Callback invoked when the display style changes.</summary>
+    private readonly Action<AppThemeMode> _applyTheme;
+
+    /// <summary>Callback invoked when launch-at-startup changes.</summary>
+    private readonly Action<bool> _applyLaunchAtStartup;
+
     /// <summary>Callback invoked when background connection sampling settings change.</summary>
     private readonly Action _restartConnectionSampling;
 
@@ -182,7 +213,17 @@ internal sealed class SettingsViewModel : ObservableObject
         ISettingsStore settings,
         Action<AppLanguage> applyLanguage,
         Action restartConnectionSampling)
-        : this(settings, applyLanguage, restartConnectionSampling, key => key)
+        : this(settings, applyLanguage, _ => { }, restartConnectionSampling, _ => { }, key => key, () => new SettingsProxyInformation(string.Empty, false, string.Empty))
+    {
+    }
+
+    /// <summary>Initializes a new settings view model with language and theme callbacks.</summary>
+    public SettingsViewModel(
+        ISettingsStore settings,
+        Action<AppLanguage> applyLanguage,
+        Action<AppThemeMode> applyTheme,
+        Action restartConnectionSampling)
+        : this(settings, applyLanguage, applyTheme, restartConnectionSampling, _ => { }, key => key, () => new SettingsProxyInformation(string.Empty, false, string.Empty))
     {
     }
 
@@ -196,7 +237,18 @@ internal sealed class SettingsViewModel : ObservableObject
         Action<AppLanguage> applyLanguage,
         Action restartConnectionSampling,
         Func<string, string> getString)
-        : this(settings, applyLanguage, restartConnectionSampling, getString, () => new SettingsProxyInformation(string.Empty, false, string.Empty))
+        : this(settings, applyLanguage, _ => { }, restartConnectionSampling, _ => { }, getString, () => new SettingsProxyInformation(string.Empty, false, string.Empty))
+    {
+    }
+
+    /// <summary>Initializes a new settings view model with launch-at-startup callback.</summary>
+    public SettingsViewModel(
+        ISettingsStore settings,
+        Action<AppLanguage> applyLanguage,
+        Action<AppThemeMode> applyTheme,
+        Action restartConnectionSampling,
+        Action<bool> applyLaunchAtStartup)
+        : this(settings, applyLanguage, applyTheme, restartConnectionSampling, applyLaunchAtStartup, key => key, () => new SettingsProxyInformation(string.Empty, false, string.Empty))
     {
     }
 
@@ -213,9 +265,25 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<string, string> getString,
         Func<SettingsProxyInformation> getProxyInformation,
         SettingsDiagnosticsViewModel? diagnosticsViewModel = null)
+        : this(settings, applyLanguage, _ => { }, restartConnectionSampling, _ => { }, getString, getProxyInformation, diagnosticsViewModel)
+    {
+    }
+
+    /// <summary>Initializes a new settings view model with localization, theme, startup, and proxy information providers.</summary>
+    public SettingsViewModel(
+        ISettingsStore settings,
+        Action<AppLanguage> applyLanguage,
+        Action<AppThemeMode> applyTheme,
+        Action restartConnectionSampling,
+        Action<bool> applyLaunchAtStartup,
+        Func<string, string> getString,
+        Func<SettingsProxyInformation> getProxyInformation,
+        SettingsDiagnosticsViewModel? diagnosticsViewModel = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
+        _applyTheme = applyTheme ?? throw new ArgumentNullException(nameof(applyTheme));
+        _applyLaunchAtStartup = applyLaunchAtStartup ?? throw new ArgumentNullException(nameof(applyLaunchAtStartup));
         _restartConnectionSampling = restartConnectionSampling ?? throw new ArgumentNullException(nameof(restartConnectionSampling));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _getProxyInformation = getProxyInformation ?? throw new ArgumentNullException(nameof(getProxyInformation));
@@ -235,15 +303,43 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string LanguageDescriptionText => _getString("Settings.Language.Description");
 
+    public IReadOnlyList<string> DisplayLanguageOptions =>
+    [
+        _getString("Settings.Language.AutoDetect"),
+        "简体中文",
+        "繁體中文",
+        "English",
+        "Русский",
+        "Français",
+        "Deutsch",
+    ];
+
+    public string AppThemeModeTitleText => _getString("Settings.AppTheme.Title");
+
+    public string AppThemeModeDescriptionText => _getString("Settings.AppTheme.Description");
+
+    public string AppThemeFollowSystemText => _getString("Settings.AppTheme.FollowSystem");
+
+    public string AppThemeLightText => _getString("Settings.AppTheme.Light");
+
+    public string AppThemeDarkText => _getString("Settings.AppTheme.Dark");
+
+    public IReadOnlyList<string> AppThemeModeOptions =>
+    [
+        AppThemeFollowSystemText,
+        AppThemeLightText,
+        AppThemeDarkText,
+    ];
+
+    public string LaunchAtStartupTitleText => _getString("Settings.LaunchAtStartup.Title");
+
+    public string LaunchAtStartupDescriptionText => _getString("Settings.LaunchAtStartup.Description");
+
     public string ProxySectionTitleText => _getString("Settings.Section.Proxy");
 
     public string TransparentProxyTitleText => _getString("Settings.TransparentProxy.Title");
 
     public string TransparentProxyDescriptionText => _getString("Settings.TransparentProxy.Description");
-
-    public string TunFallbackTitleText => _getString("Settings.TunFallback.Title");
-
-    public string TunFallbackDescriptionText => _getString("Settings.TunFallback.Description");
 
     public string MixedPortTitleText => _getString("Settings.MixedPort.Title");
 
@@ -283,6 +379,27 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string SamplingIntervalDescriptionText => _getString("Settings.SamplingInterval.Description");
 
+    public string StartupConflictCheckTitleText => _getString("Settings.StartupConflictCheck.Title");
+
+    public string StartupConflictCheckDescriptionText => _getString("Settings.StartupConflictCheck.Description");
+
+    public string StartupBehaviorModeTitleText => _getString("Settings.StartupBehavior.Title");
+
+    public string StartupBehaviorModeDescriptionText => _getString("Settings.StartupBehavior.Description");
+
+    public string StartupBehaviorLastSettingText => _getString("Settings.StartupBehavior.LastSetting");
+
+    public string StartupBehaviorStartRuleProxyText => _getString("Settings.StartupBehavior.StartRuleProxy");
+
+    public string StartupBehaviorDisableProxyText => _getString("Settings.StartupBehavior.DisableProxy");
+
+    public IReadOnlyList<string> StartupBehaviorModeOptions =>
+    [
+        StartupBehaviorLastSettingText,
+        StartupBehaviorStartRuleProxyText,
+        StartupBehaviorDisableProxyText,
+    ];
+
     public string WindowsNativeSectionTitleText => _getString("Settings.Section.WindowsNative");
 
     public string WindowsNativeTitleText => _getString("Settings.WindowsNative.Title");
@@ -290,6 +407,8 @@ internal sealed class SettingsViewModel : ObservableObject
     public string WindowsNativeDescriptionText => _getString("Settings.WindowsNative.Description");
 
     public string OpenText => _getString("Command.Open");
+
+    public string TestText => _getString("Command.Test");
 
     public string WslDiagnosticTitleText => _getString("Settings.Wsl.Title");
 
@@ -343,6 +462,13 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string ProxyRecoveryDisableText => _getString("Settings.ProxyRecoveryMode.Disable");
 
+    public IReadOnlyList<string> ProxyRecoveryModeOptions =>
+    [
+        ProxyRecoveryIgnoreText,
+        ProxyRecoveryEnableText,
+        ProxyRecoveryDisableText,
+    ];
+
     public string MainlandChinaSectionTitleText => _getString("Settings.Section.MainlandChina");
 
     public string MainlandChinaDisplayTitleText => _getString("Settings.MainlandChinaDisplay.Title");
@@ -358,6 +484,14 @@ internal sealed class SettingsViewModel : ObservableObject
     public string MainlandChinaKeywordFilterText => _getString("Settings.MainlandChinaFeature.KeywordFilter");
 
     public string MainlandChinaAllText => _getString("Settings.MainlandChinaFeature.All");
+
+    public IReadOnlyList<string> MainlandChinaFeatureModeOptions =>
+    [
+        MainlandChinaDisabledText,
+        MainlandChinaFlagOnlyText,
+        MainlandChinaFlagAndTextText,
+        MainlandChinaKeywordFilterText,
+    ];
 
     public string MainlandChinaUrlBlockingTitleText => _getString("Settings.MainlandChinaUrlBlocking.Title");
 
@@ -376,11 +510,14 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="DisplayLanguage"/>.</summary>
     private AppLanguage _displayLanguage;
 
+    /// <summary>Backing field for <see cref="AppThemeMode"/>.</summary>
+    private AppThemeMode _appThemeMode;
+
+    /// <summary>Backing field for <see cref="LaunchAtStartupEnabled"/>.</summary>
+    private bool _launchAtStartupEnabled;
+
     /// <summary>Backing field for <see cref="TransparentProxyEnabled"/>.</summary>
     private bool _transparentProxyEnabled;
-
-    /// <summary>Backing field for <see cref="FallbackToSystemProxyWhenTunFails"/>.</summary>
-    private bool _fallbackToSystemProxyWhenTunFails;
 
     /// <summary>Backing field for <see cref="MixedPort"/>.</summary>
     private int _mixedPort;
@@ -390,6 +527,12 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="ConnectionSamplingIntervalSeconds"/>.</summary>
     private int _connectionSamplingIntervalSeconds;
+
+    /// <summary>Backing field for <see cref="StartupConflictCheckEnabled"/>.</summary>
+    private bool _startupConflictCheckEnabled;
+
+    /// <summary>Backing field for <see cref="StartupBehaviorMode"/>.</summary>
+    private StartupBehaviorMode _startupBehaviorMode;
 
     /// <summary>Backing field for <see cref="CheckStaleProxyOnStartup"/>.</summary>
     private bool _checkStaleProxyOnStartup;
@@ -443,20 +586,38 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public int DisplayLanguageIndex
     {
-        get => (int)DisplayLanguage;
+        get => DisplayLanguage == AppLanguage.AutoDetect ? 0 : (int)DisplayLanguage + 1;
         set => SetDisplayLanguageIndex(value);
+    }
+
+    public AppThemeMode AppThemeMode
+    {
+        get => _appThemeMode;
+        private set
+        {
+            if (SetProperty(ref _appThemeMode, value))
+            {
+                OnPropertyChanged(nameof(AppThemeModeIndex));
+            }
+        }
+    }
+
+    public int AppThemeModeIndex
+    {
+        get => (int)AppThemeMode;
+        set => SetAppThemeModeIndex(value);
+    }
+
+    public bool LaunchAtStartupEnabled
+    {
+        get => _launchAtStartupEnabled;
+        set => SetLaunchAtStartupEnabled(value);
     }
 
     public bool TransparentProxyEnabled
     {
         get => _transparentProxyEnabled;
         set => SetTransparentProxyEnabled(value);
-    }
-
-    public bool FallbackToSystemProxyWhenTunFails
-    {
-        get => _fallbackToSystemProxyWhenTunFails;
-        set => SetFallbackToSystemProxyWhenTunFails(value);
     }
 
     public int MixedPort
@@ -493,6 +654,30 @@ internal sealed class SettingsViewModel : ObservableObject
                 OnPropertyChanged(nameof(ConnectionSamplingIntervalSecondsValue));
             }
         }
+    }
+
+    public bool StartupConflictCheckEnabled
+    {
+        get => _startupConflictCheckEnabled;
+        set => SetStartupConflictCheckEnabled(value);
+    }
+
+    public StartupBehaviorMode StartupBehaviorMode
+    {
+        get => _startupBehaviorMode;
+        private set
+        {
+            if (SetProperty(ref _startupBehaviorMode, value))
+            {
+                OnPropertyChanged(nameof(StartupBehaviorModeIndex));
+            }
+        }
+    }
+
+    public int StartupBehaviorModeIndex
+    {
+        get => (int)StartupBehaviorMode;
+        set => SetStartupBehaviorModeIndex(value);
     }
 
     public double ConnectionSamplingIntervalSecondsValue
@@ -565,11 +750,14 @@ internal sealed class SettingsViewModel : ObservableObject
     public void Load()
     {
         DisplayLanguage = _settings.DisplayLanguage;
+        AppThemeMode = _settings.AppThemeMode;
+        SetProperty(ref _launchAtStartupEnabled, _settings.LaunchAtStartupEnabled, nameof(LaunchAtStartupEnabled));
         SetProperty(ref _transparentProxyEnabled, _settings.TransparentProxyEnabled, nameof(TransparentProxyEnabled));
-        SetProperty(ref _fallbackToSystemProxyWhenTunFails, _settings.FallbackToSystemProxyWhenTunFails, nameof(FallbackToSystemProxyWhenTunFails));
         MixedPort = _settings.MixedPort;
         SetProperty(ref _connectionSamplingEnabled, _settings.ConnectionSamplingEnabled, nameof(ConnectionSamplingEnabled));
         ConnectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
+        SetProperty(ref _startupConflictCheckEnabled, _settings.StartupConflictCheckEnabled, nameof(StartupConflictCheckEnabled));
+        StartupBehaviorMode = _settings.StartupBehaviorMode;
         SetProperty(ref _checkStaleProxyOnStartup, _settings.CheckStaleProxyOnStartup, nameof(CheckStaleProxyOnStartup));
         SetProperty(ref _restoreProxyOnExit, _settings.RestoreProxyOnExit, nameof(RestoreProxyOnExit));
         ProxyRecoveryMode = _settings.ProxyRecoveryMode;
@@ -584,18 +772,49 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <returns>True when the language was valid and persisted; otherwise false.</returns>
     public bool SetDisplayLanguageIndex(int index)
     {
-        if (!Enum.IsDefined((AppLanguage)index))
+        AppLanguage language;
+        if (index == 0)
         {
-            return false;
+            language = AppLanguage.AutoDetect;
+        }
+        else
+        {
+            int languageValue = index - 1;
+            if (!Enum.IsDefined((AppLanguage)languageValue))
+            {
+                return false;
+            }
+
+            language = (AppLanguage)languageValue;
+            if (language == AppLanguage.AutoDetect)
+            {
+                return false;
+            }
         }
 
-        AppLanguage language = (AppLanguage)index;
         _settings.DisplayLanguage = language;
         DisplayLanguage = language;
         _applyLanguage(language);
         RaiseLocalizedTextChanges();
         RefreshProxyInformation();
         ResetDiagnosticStatusText();
+        return true;
+    }
+
+    /// <summary>Persists an app theme selected by combo box index.</summary>
+    /// <param name="index">Theme enum index.</param>
+    /// <returns>True when the theme was valid and persisted; otherwise false.</returns>
+    public bool SetAppThemeModeIndex(int index)
+    {
+        if (!Enum.IsDefined((AppThemeMode)index))
+        {
+            return false;
+        }
+
+        AppThemeMode mode = (AppThemeMode)index;
+        _settings.AppThemeMode = mode;
+        AppThemeMode = mode;
+        _applyTheme(mode);
         return true;
     }
 
@@ -609,11 +828,18 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(LanguageSectionTitleText),
             nameof(LanguageTitleText),
             nameof(LanguageDescriptionText),
+            nameof(DisplayLanguageOptions),
+            nameof(AppThemeModeTitleText),
+            nameof(AppThemeModeDescriptionText),
+            nameof(AppThemeFollowSystemText),
+            nameof(AppThemeLightText),
+            nameof(AppThemeDarkText),
+            nameof(AppThemeModeOptions),
+            nameof(LaunchAtStartupTitleText),
+            nameof(LaunchAtStartupDescriptionText),
             nameof(ProxySectionTitleText),
             nameof(TransparentProxyTitleText),
             nameof(TransparentProxyDescriptionText),
-            nameof(TunFallbackTitleText),
-            nameof(TunFallbackDescriptionText),
             nameof(MixedPortTitleText),
             nameof(MixedPortDescriptionText),
             nameof(ConnectionTestUrlTitleText),
@@ -627,10 +853,19 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(ConnectionSamplingDescriptionText),
             nameof(SamplingIntervalTitleText),
             nameof(SamplingIntervalDescriptionText),
+            nameof(StartupConflictCheckTitleText),
+            nameof(StartupConflictCheckDescriptionText),
+            nameof(StartupBehaviorModeTitleText),
+            nameof(StartupBehaviorModeDescriptionText),
+            nameof(StartupBehaviorLastSettingText),
+            nameof(StartupBehaviorStartRuleProxyText),
+            nameof(StartupBehaviorDisableProxyText),
+            nameof(StartupBehaviorModeOptions),
             nameof(WindowsNativeSectionTitleText),
             nameof(WindowsNativeTitleText),
             nameof(WindowsNativeDescriptionText),
             nameof(OpenText),
+            nameof(TestText),
             nameof(WslDiagnosticTitleText),
             nameof(TerminalDiagnosticTitleText),
             nameof(StoreDiagnosticTitleText),
@@ -651,6 +886,7 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(ProxyRecoveryIgnoreText),
             nameof(ProxyRecoveryEnableText),
             nameof(ProxyRecoveryDisableText),
+            nameof(ProxyRecoveryModeOptions),
             nameof(MainlandChinaSectionTitleText),
             nameof(MainlandChinaDisplayTitleText),
             nameof(MainlandChinaDisplayDescriptionText),
@@ -659,6 +895,7 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(MainlandChinaFlagAndTextText),
             nameof(MainlandChinaKeywordFilterText),
             nameof(MainlandChinaAllText),
+            nameof(MainlandChinaFeatureModeOptions),
             nameof(MainlandChinaUrlBlockingTitleText),
             nameof(MainlandChinaUrlBlockingDescriptionText),
             nameof(DataSectionTitleText),
@@ -682,12 +919,13 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _transparentProxyEnabled, isEnabled, nameof(TransparentProxyEnabled));
     }
 
-    /// <summary>Persists the TUN fallback switch.</summary>
+    /// <summary>Persists the launch-at-startup switch and requests system registration sync.</summary>
     /// <param name="isEnabled">Switch value.</param>
-    public void SetFallbackToSystemProxyWhenTunFails(bool isEnabled)
+    public void SetLaunchAtStartupEnabled(bool isEnabled)
     {
-        _settings.FallbackToSystemProxyWhenTunFails = isEnabled;
-        SetProperty(ref _fallbackToSystemProxyWhenTunFails, isEnabled, nameof(FallbackToSystemProxyWhenTunFails));
+        _settings.LaunchAtStartupEnabled = isEnabled;
+        SetProperty(ref _launchAtStartupEnabled, isEnabled, nameof(LaunchAtStartupEnabled));
+        _applyLaunchAtStartup(isEnabled);
     }
 
     /// <summary>Persists a mixed proxy port from number-box input.</summary>
@@ -815,6 +1053,30 @@ internal sealed class SettingsViewModel : ObservableObject
         _settings.ConnectionSamplingIntervalSeconds = intervalSeconds;
         ConnectionSamplingIntervalSeconds = intervalSeconds;
         _restartConnectionSampling();
+        return true;
+    }
+
+    /// <summary>Persists the startup conflict check switch.</summary>
+    /// <param name="isEnabled">Switch value.</param>
+    public void SetStartupConflictCheckEnabled(bool isEnabled)
+    {
+        _settings.StartupConflictCheckEnabled = isEnabled;
+        SetProperty(ref _startupConflictCheckEnabled, isEnabled, nameof(StartupConflictCheckEnabled));
+    }
+
+    /// <summary>Persists a startup behavior mode selected by combo box index.</summary>
+    /// <param name="index">Startup behavior enum index.</param>
+    /// <returns>True when the index was valid and persisted; otherwise false.</returns>
+    public bool SetStartupBehaviorModeIndex(int index)
+    {
+        if (!Enum.IsDefined((StartupBehaviorMode)index))
+        {
+            return false;
+        }
+
+        StartupBehaviorMode mode = (StartupBehaviorMode)index;
+        _settings.StartupBehaviorMode = mode;
+        StartupBehaviorMode = mode;
         return true;
     }
 

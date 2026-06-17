@@ -34,6 +34,18 @@ public sealed partial class Logs : Page
         DataContext = _viewModel;
     }
 
+    /// <summary>Navigates back to the previous page, falling back to statistics.</summary>
+    private void BackButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (Frame.CanGoBack)
+        {
+            Frame.GoBack();
+            return;
+        }
+
+        Frame.Navigate(typeof(Statistics));
+    }
+
     /// <summary>Handles cleanup entry clicks by showing available cleanup modes and their parameters.</summary>
     /// <param name="sender">The clicked cleanup command source. Not null.</param>
     /// <param name="e">Routed event arguments. Not null.</param>

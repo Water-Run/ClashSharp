@@ -8,6 +8,8 @@
  */
 
 using System;
+using System.Net.Http;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -37,7 +39,9 @@ public sealed partial class Settings : Page
         _viewModel = new(
             new AppSettingsStore(AppSettingsService.Instance),
             language => LocalizationService.Instance.CurrentLanguage = language,
+            AppThemeService.Apply,
             ConnectionSamplingService.Instance.RestartFromSettings,
+            isEnabled => _ = StartupLaunchService.Instance.SetEnabledAsync(isEnabled),
             LocalizationService.Instance.GetString,
             SettingsProxyInformationAdapter.CreateSnapshot,
             diagnosticsViewModel);
@@ -63,6 +67,50 @@ public sealed partial class Settings : Page
         }
     }
 
+    /// <summary>Runs a connection test against the configured test URL.</summary>
+    private async void ConnectionTestButton_Click(object sender, RoutedEventArgs e)
+    {
+        ConnectionTestUrlBox_LostFocus(ConnectionTestUrlBox, e);
+        ConnectionTestButton.IsEnabled = false;
+        try
+        {
+            using HttpClient client = new()
+            {
+                Timeout = TimeSpan.FromSeconds(8),
+            };
+            using HttpResponseMessage response = await client.GetAsync(new Uri(_viewModel.ConnectionTestUrl));
+            string message = string.Format(
+                LocalizationService.Instance.GetString("Settings.ConnectionTest.Succeeded.Format"),
+                (int)response.StatusCode);
+            await ShowConnectionTestResultAsync(message);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
+        {
+            string message = string.Format(
+                LocalizationService.Instance.GetString("Settings.ConnectionTest.Failed.Format"),
+                exception.Message);
+            await ShowConnectionTestResultAsync(message);
+        }
+        finally
+        {
+            ConnectionTestButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Shows the connection test result.</summary>
+    private async Task ShowConnectionTestResultAsync(string message)
+    {
+        ContentDialog dialog = new()
+        {
+            Title = _viewModel.ConnectionTestUrlTitleText,
+            Content = message,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            XamlRoot = XamlRoot,
+        };
+
+        await dialog.ShowAsync();
+    }
+
     /// <summary>Opens the Windows-native network repair dialog.</summary>
     /// <param name="sender">Clicked button. Not null.</param>
     /// <param name="e">Routed event arguments. Not null.</param>
@@ -81,19 +129,27 @@ public sealed partial class Settings : Page
 
     /// <summary>Builds the network repair dialog content.</summary>
     /// <returns>Dialog content panel.</returns>
-    private StackPanel BuildNetworkRepairPanel()
+    private ScrollViewer BuildNetworkRepairPanel()
     {
         StackPanel panel = new()
         {
             Spacing = 8,
-            MinWidth = 560,
+            MinWidth = 360,
+            MaxWidth = 640,
         };
 
         AddDiagnosticRow(panel, _viewModel.WslDiagnosticTitleText, nameof(SettingsViewModel.WslDiagnosticStatusText), "Wsl");
         AddDiagnosticRow(panel, _viewModel.TerminalDiagnosticTitleText, nameof(SettingsViewModel.TerminalDiagnosticStatusText), "Terminal");
         AddDiagnosticRow(panel, _viewModel.StoreDiagnosticTitleText, nameof(SettingsViewModel.StoreDiagnosticStatusText), "MicrosoftStore");
 
-        return panel;
+        return new ScrollViewer
+        {
+            Content = panel,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = Math.Max(240, XamlRoot.Size.Height - 220),
+            Padding = new Thickness(0, 0, 12, 0),
+        };
     }
 
     /// <summary>Adds one diagnostic target row to the dialog panel.</summary>
@@ -107,12 +163,10 @@ public sealed partial class Settings : Page
         {
             Style = (Style)Application.Current.Resources["ClashCardGridStyle"],
             MinHeight = 68,
-            ColumnSpacing = 8,
+            RowSpacing = 8,
         };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         StackPanel textPanel = new()
         {
@@ -134,15 +188,23 @@ public sealed partial class Settings : Page
         textPanel.Children.Add(statusText);
         row.Children.Add(textPanel);
 
-        AddDiagnosticButton(row, 1, "\uE9D9", _viewModel.DiagnoseText, $"{targetTag}:Diagnose");
-        AddDiagnosticButton(row, 2, "\uE73E", _viewModel.ApplyText, $"{targetTag}:Apply");
-        AddDiagnosticButton(row, 3, "\uE72C", _viewModel.ResetText, $"{targetTag}:Reset");
+        StackPanel buttonPanel = new()
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        Grid.SetRow(buttonPanel, 1);
+        AddDiagnosticButton(buttonPanel, "\uE9D9", _viewModel.DiagnoseText, $"{targetTag}:Diagnose");
+        AddDiagnosticButton(buttonPanel, "\uE73E", _viewModel.ApplyText, $"{targetTag}:Apply");
+        AddDiagnosticButton(buttonPanel, "\uE72C", _viewModel.ResetText, $"{targetTag}:Reset");
+        row.Children.Add(buttonPanel);
 
         panel.Children.Add(row);
     }
 
     /// <summary>Adds one command button to a diagnostic row.</summary>
-    private void AddDiagnosticButton(Grid row, int column, string glyph, string text, string commandParameter)
+    private void AddDiagnosticButton(StackPanel panel, string glyph, string text, string commandParameter)
     {
         Button button = new()
         {
@@ -150,7 +212,6 @@ public sealed partial class Settings : Page
             CommandParameter = commandParameter,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(button, column);
 
         StackPanel content = new()
         {
@@ -161,7 +222,7 @@ public sealed partial class Settings : Page
         content.Children.Add(new TextBlock { Text = text });
         button.Content = content;
 
-        row.Children.Add(button);
+        panel.Children.Add(button);
     }
 
     /// <summary>Shows a one-step confirmation and restores all settings to defaults.</summary>
@@ -184,7 +245,7 @@ public sealed partial class Settings : Page
 
         AppDataMaintenanceService.ResetAllSettings();
         LocalizationService.Instance.CurrentLanguage = AppSettingsService.Instance.DisplayLanguage;
-        _viewModel.SetDisplayLanguageIndex((int)AppSettingsService.Instance.DisplayLanguage);
+        _viewModel.SetDisplayLanguageIndex(ToLanguageIndex(AppSettingsService.Instance.DisplayLanguage));
         _viewModel.Load();
         ConnectionTestUrlBox.Text = _viewModel.ConnectionTestUrl;
     }
@@ -224,9 +285,15 @@ public sealed partial class Settings : Page
 
         AppDataMaintenanceService.ClearAllData();
         LocalizationService.Instance.CurrentLanguage = AppSettingsService.Instance.DisplayLanguage;
-        _viewModel.SetDisplayLanguageIndex((int)AppSettingsService.Instance.DisplayLanguage);
+        _viewModel.SetDisplayLanguageIndex(ToLanguageIndex(AppSettingsService.Instance.DisplayLanguage));
         _viewModel.Load();
         ConnectionTestUrlBox.Text = _viewModel.ConnectionTestUrl;
+    }
+
+    /// <summary>Maps language settings to the settings combo-box index.</summary>
+    private static int ToLanguageIndex(AppLanguage language)
+    {
+        return language == AppLanguage.AutoDetect ? 0 : (int)language + 1;
     }
 
 }

@@ -10,10 +10,10 @@
 
     <ScrollViewer
         x:Name="SettingsScrollViewer"
-        Padding="32,32,20,32"
+        Padding="24,24,24,24"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="18" MaxWidth="920" HorizontalAlignment="Stretch">
+        <StackPanel Spacing="2" HorizontalAlignment="Stretch">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
                 <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -22,27 +22,26 @@
             <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
             <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="LanguageBox" MinWidth="180" SelectedIndex="{Binding DisplayLanguageIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="简体中文" />
-                        <ComboBoxItem Content="繁體中文" />
-                        <ComboBoxItem Content="English" />
-                        <ComboBoxItem Content="Русский" />
-                        <ComboBoxItem Content="Français" />
-                        <ComboBoxItem Content="Deutsch" />
-                    </ComboBox>
+                    <ComboBox x:Name="LanguageBox" Width="180" ItemsSource="{Binding DisplayLanguageOptions}" SelectedIndex="{Binding DisplayLanguageIndex, Mode=TwoWay}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="AppThemeModeRow" Title="{Binding AppThemeModeTitleText}" Description="{Binding AppThemeModeDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ComboBox x:Name="AppThemeModeBox" Width="180" ItemsSource="{Binding AppThemeModeOptions}" SelectedIndex="{Binding AppThemeModeIndex, Mode=TwoWay}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="LaunchAtStartupRow" Title="{Binding LaunchAtStartupTitleText}" Description="{Binding LaunchAtStartupDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="LaunchAtStartupToggle" MinWidth="0" IsOn="{Binding LaunchAtStartupEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TransparentProxyToggle" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </components:SettingRow.ActionContent>
-            </components:SettingRow>
-
-            <components:SettingRow x:Name="TunFallbackRow" Title="{Binding TunFallbackTitleText}" Description="{Binding TunFallbackDescriptionText}">
-                <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TunFallbackToggle" IsOn="{Binding FallbackToSystemProxyWhenTunFails, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -54,29 +53,39 @@
 
             <components:SettingRow x:Name="ConnectionTestUrlRow" Title="{Binding ConnectionTestUrlTitleText}" Description="{Binding ConnectionTestUrlDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <TextBox x:Name="ConnectionTestUrlBox" MinWidth="260" Text="{Binding ConnectionTestUrl, Mode=OneWay}" LostFocus="ConnectionTestUrlBox_LostFocus" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox x:Name="ConnectionTestUrlBox" Width="260" Text="{Binding ConnectionTestUrl, Mode=OneWay}" LostFocus="ConnectionTestUrlBox_LostFocus" />
+                        <Button x:Name="ConnectionTestButton" Click="ConnectionTestButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                                <TextBlock Text="{Binding TestText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="96">
-                <StackPanel Spacing="6">
-                    <TextBlock x:Name="ProxyInformationTitleText" Text="{Binding ProxyInformationTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="ProxyInformationDescriptionText" Text="{Binding ProxyInformationDescriptionText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock x:Name="ProxyLocalEntryText" Text="{Binding ProxyLocalEntryText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
-                    <TextBlock x:Name="ProxyCoreConfigurationText" Text="{Binding ProxyCoreConfigurationText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
-                    <TextBlock x:Name="ProxyCoreBinaryText" Text="{Binding ProxyCoreBinaryText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
-                </StackPanel>
-            </Grid>
-
             <components:SettingRow x:Name="ConnectionSamplingRow" Title="{Binding ConnectionSamplingTitleText}" Description="{Binding ConnectionSamplingDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="ConnectionSamplingToggle" IsOn="{Binding ConnectionSamplingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="ConnectionSamplingToggle" MinWidth="0" IsOn="{Binding ConnectionSamplingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="SamplingIntervalRow" Title="{Binding SamplingIntervalTitleText}" Description="{Binding SamplingIntervalDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <NumberBox x:Name="ConnectionSamplingIntervalBox" Width="140" Minimum="5" Maximum="3600" Value="{Binding ConnectionSamplingIntervalSecondsValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="StartupConflictCheckRow" Title="{Binding StartupConflictCheckTitleText}" Description="{Binding StartupConflictCheckDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="StartupConflictCheckToggle" MinWidth="0" IsOn="{Binding StartupConflictCheckEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="StartupBehaviorModeRow" Title="{Binding StartupBehaviorModeTitleText}" Description="{Binding StartupBehaviorModeDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ComboBox x:Name="StartupBehaviorModeBox" Width="180" ItemsSource="{Binding StartupBehaviorModeOptions}" SelectedIndex="{Binding StartupBehaviorModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -90,7 +99,7 @@
                     <TextBlock x:Name="WindowsNativeTitleText" Text="{Binding WindowsNativeTitleText}" Style="{ThemeResource BodyTextBlockStyle}" />
                     <TextBlock x:Name="WindowsNativeDescriptionText" Text="{Binding WindowsNativeDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
-                <Button Grid.Column="1" Margin="12,0,0,0" Click="OpenNetworkRepairButton_Click">
+                <Button Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Click="OpenNetworkRepairButton_Click">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE8A7;" FontSize="14" />
                         <TextBlock x:Name="OpenNetworkRepairText" Text="{Binding OpenText}" />
@@ -100,64 +109,45 @@
 
             <components:SettingRow x:Name="CheckStaleProxyRow" Title="{Binding CheckStaleProxyTitleText}" Description="{Binding CheckStaleProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="CheckStaleProxyToggle" IsOn="{Binding CheckStaleProxyOnStartup, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="CheckStaleProxyToggle" MinWidth="0" IsOn="{Binding CheckStaleProxyOnStartup, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="RestoreProxyOnExitRow" Title="{Binding RestoreProxyOnExitTitleText}" Description="{Binding RestoreProxyOnExitDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="RestoreProxyOnExitToggle" IsOn="{Binding RestoreProxyOnExit, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="RestoreProxyOnExitToggle" MinWidth="0" IsOn="{Binding RestoreProxyOnExit, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="ProxyRecoveryModeRow" Title="{Binding ProxyRecoveryModeTitleText}" Description="{Binding ProxyRecoveryModeDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="ProxyRecoveryModeBox" MinWidth="180" SelectedIndex="{Binding ProxyRecoveryModeIndex, Mode=TwoWay}">
-                        <ComboBoxItem x:Name="ProxyRecoveryIgnoreItem" Content="{Binding ProxyRecoveryIgnoreText}" />
-                        <ComboBoxItem x:Name="ProxyRecoveryEnableItem" Content="{Binding ProxyRecoveryEnableText}" />
-                        <ComboBoxItem x:Name="ProxyRecoveryDisableItem" Content="{Binding ProxyRecoveryDisableText}" />
-                    </ComboBox>
+                    <ComboBox x:Name="ProxyRecoveryModeBox" Width="180" ItemsSource="{Binding ProxyRecoveryModeOptions}" SelectedIndex="{Binding ProxyRecoveryModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="MainlandChinaDisplayRow" Title="{Binding MainlandChinaDisplayTitleText}" Description="{Binding MainlandChinaDisplayDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="MainlandChinaFeatureModeBox" MinWidth="280" SelectedIndex="{Binding MainlandChinaFeatureModeIndex, Mode=TwoWay}">
-                        <ComboBoxItem x:Name="MainlandChinaDisabledItem" Content="{Binding MainlandChinaDisabledText}" />
-                        <ComboBoxItem x:Name="MainlandChinaFlagOnlyItem" Content="{Binding MainlandChinaFlagOnlyText}" />
-                        <ComboBoxItem x:Name="MainlandChinaFlagAndTextItem" Content="{Binding MainlandChinaFlagAndTextText}" />
-                        <ComboBoxItem x:Name="MainlandChinaKeywordFilterItem" Content="{Binding MainlandChinaKeywordFilterText}" />
-                    </ComboBox>
+                    <ComboBox x:Name="MainlandChinaFeatureModeBox" Width="280" ItemsSource="{Binding MainlandChinaFeatureModeOptions}" SelectedIndex="{Binding MainlandChinaFeatureModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="MainlandChinaUrlBlockingRow" Title="{Binding MainlandChinaUrlBlockingTitleText}" Description="{Binding MainlandChinaUrlBlockingDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="MainlandChinaUrlBlockingToggle" IsOn="{Binding MainlandChinaUrlBlockingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="MainlandChinaUrlBlockingToggle" MinWidth="0" IsOn="{Binding MainlandChinaUrlBlockingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="ResetAllSettingsRow" Title="{Binding ResetAllSettingsTitleText}" Description="{Binding ResetAllSettingsDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <Button x:Name="ResetAllSettingsButton" Click="ResetAllSettingsButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                            <TextBlock Text="{Binding ResetText}" />
-                        </StackPanel>
-                    </Button>
+                    <HyperlinkButton x:Name="ResetAllSettingsLink" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Center" Content="{Binding ResetText}" Click="ResetAllSettingsButton_Click" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="ClearAllDataRow" Title="{Binding ClearAllDataTitleText}" Description="{Binding ClearAllDataDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <Button x:Name="ClearAllDataButton" Click="ClearAllDataButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                            <TextBlock Text="{Binding CleanupText}" />
-                        </StackPanel>
-                    </Button>
+                    <HyperlinkButton x:Name="ClearAllDataLink" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Center" Content="{Binding CleanupText}" Click="ClearAllDataButton_Click" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
         </StackPanel>

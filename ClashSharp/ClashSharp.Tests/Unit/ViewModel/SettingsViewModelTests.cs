@@ -22,11 +22,14 @@ public sealed class SettingsViewModelTests
         FakeSettingsStore store = new()
         {
             DisplayLanguage = AppLanguage.French,
+            AppThemeMode = AppThemeMode.Dark,
+            LaunchAtStartupEnabled = true,
             TransparentProxyEnabled = false,
-            FallbackToSystemProxyWhenTunFails = false,
             MixedPort = 10990,
             ConnectionSamplingEnabled = false,
             ConnectionSamplingIntervalSeconds = 45,
+            StartupConflictCheckEnabled = false,
+            StartupBehaviorMode = StartupBehaviorMode.DisableProxy,
             CheckStaleProxyOnStartup = false,
             RestoreProxyOnExit = false,
             ProxyRecoveryMode = ProxyRecoveryMode.EnableProxy,
@@ -40,12 +43,17 @@ public sealed class SettingsViewModelTests
         viewModel.Load();
 
         Assert.Equal(AppLanguage.French, viewModel.DisplayLanguage);
-        Assert.Equal((int)AppLanguage.French, viewModel.DisplayLanguageIndex);
+        Assert.Equal((int)AppLanguage.French + 1, viewModel.DisplayLanguageIndex);
+        Assert.Equal(AppThemeMode.Dark, viewModel.AppThemeMode);
+        Assert.Equal((int)AppThemeMode.Dark, viewModel.AppThemeModeIndex);
+        Assert.True(viewModel.LaunchAtStartupEnabled);
         Assert.False(viewModel.TransparentProxyEnabled);
-        Assert.False(viewModel.FallbackToSystemProxyWhenTunFails);
         Assert.Equal(10990, viewModel.MixedPort);
         Assert.False(viewModel.ConnectionSamplingEnabled);
         Assert.Equal(45, viewModel.ConnectionSamplingIntervalSeconds);
+        Assert.False(viewModel.StartupConflictCheckEnabled);
+        Assert.Equal(StartupBehaviorMode.DisableProxy, viewModel.StartupBehaviorMode);
+        Assert.Equal((int)StartupBehaviorMode.DisableProxy, viewModel.StartupBehaviorModeIndex);
         Assert.False(viewModel.CheckStaleProxyOnStartup);
         Assert.False(viewModel.RestoreProxyOnExit);
         Assert.Equal(ProxyRecoveryMode.EnableProxy, viewModel.ProxyRecoveryMode);
@@ -64,12 +72,29 @@ public sealed class SettingsViewModelTests
         AppLanguage? notifiedLanguage = null;
         SettingsViewModel viewModel = new(store, language => notifiedLanguage = language, () => { });
 
-        bool changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.German);
+        bool changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.German + 1);
 
         Assert.True(changed);
         Assert.Equal(AppLanguage.German, store.DisplayLanguage);
         Assert.Equal(AppLanguage.German, viewModel.DisplayLanguage);
         Assert.Equal(AppLanguage.German, notifiedLanguage);
+    }
+
+    /// <summary>Verifies the first language option stores automatic detection.</summary>
+    [Fact]
+    public void SetDisplayLanguageIndex_Zero_PersistsAutoDetect()
+    {
+        FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
+        AppLanguage? notifiedLanguage = null;
+        SettingsViewModel viewModel = new(store, language => notifiedLanguage = language, () => { });
+
+        bool changed = viewModel.SetDisplayLanguageIndex(0);
+
+        Assert.True(changed);
+        Assert.Equal(AppLanguage.AutoDetect, store.DisplayLanguage);
+        Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
+        Assert.Equal(0, viewModel.DisplayLanguageIndex);
+        Assert.Equal(AppLanguage.AutoDetect, notifiedLanguage);
     }
 
     /// <summary>Verifies bindable switch setters persist values and raise property change notifications.</summary>
@@ -86,6 +111,37 @@ public sealed class SettingsViewModelTests
         Assert.False(store.TransparentProxyEnabled);
         Assert.False(viewModel.TransparentProxyEnabled);
         Assert.Contains(nameof(SettingsViewModel.TransparentProxyEnabled), changedProperties);
+    }
+
+    /// <summary>Verifies app theme selection persists and notifies the shell theme controller.</summary>
+    [Fact]
+    public void SetAppThemeModeIndex_ValidIndex_PersistsAndAppliesTheme()
+    {
+        FakeSettingsStore store = new();
+        AppThemeMode? appliedTheme = null;
+        SettingsViewModel viewModel = new(store, _ => { }, theme => appliedTheme = theme, () => { });
+
+        bool changed = viewModel.SetAppThemeModeIndex((int)AppThemeMode.Dark);
+
+        Assert.True(changed);
+        Assert.Equal(AppThemeMode.Dark, store.AppThemeMode);
+        Assert.Equal(AppThemeMode.Dark, viewModel.AppThemeMode);
+        Assert.Equal(AppThemeMode.Dark, appliedTheme);
+    }
+
+    /// <summary>Verifies launch-at-startup switch persists and invokes the system sync callback.</summary>
+    [Fact]
+    public void LaunchAtStartupEnabled_Setter_PersistsAndAppliesStartupRegistration()
+    {
+        FakeSettingsStore store = new() { LaunchAtStartupEnabled = false };
+        bool? appliedValue = null;
+        SettingsViewModel viewModel = new(store, _ => { }, _ => { }, () => { }, launch => appliedValue = launch);
+
+        viewModel.LaunchAtStartupEnabled = true;
+
+        Assert.True(store.LaunchAtStartupEnabled);
+        Assert.True(viewModel.LaunchAtStartupEnabled);
+        Assert.True(appliedValue);
     }
 
     /// <summary>Verifies invalid language indexes are ignored.</summary>
@@ -153,6 +209,63 @@ public sealed class SettingsViewModelTests
         Assert.Equal(2, restartCount);
     }
 
+    /// <summary>Verifies startup behavior selection persists only valid enum indexes.</summary>
+    [Theory]
+    [InlineData((int)StartupBehaviorMode.LastSetting, StartupBehaviorMode.LastSetting, true)]
+    [InlineData((int)StartupBehaviorMode.StartRuleProxy, StartupBehaviorMode.StartRuleProxy, true)]
+    [InlineData((int)StartupBehaviorMode.DisableProxy, StartupBehaviorMode.DisableProxy, true)]
+    [InlineData(-1, StartupBehaviorMode.LastSetting, false)]
+    [InlineData(100, StartupBehaviorMode.LastSetting, false)]
+    public void SetStartupBehaviorModeIndex_ValidatesAndPersists(
+        int index,
+        StartupBehaviorMode expectedMode,
+        bool expectedResult)
+    {
+        FakeSettingsStore store = new() { StartupBehaviorMode = StartupBehaviorMode.LastSetting };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+
+        bool changed = viewModel.SetStartupBehaviorModeIndex(index);
+
+        Assert.Equal(expectedResult, changed);
+        Assert.Equal(expectedMode, store.StartupBehaviorMode);
+        Assert.Equal(expectedMode, viewModel.StartupBehaviorMode);
+        Assert.Equal((int)expectedMode, viewModel.StartupBehaviorModeIndex);
+    }
+
+    /// <summary>Verifies the startup conflict check switch persists independently.</summary>
+    [Fact]
+    public void StartupConflictCheckEnabled_Setter_PersistsAndRaisesPropertyChanged()
+    {
+        FakeSettingsStore store = new() { StartupConflictCheckEnabled = true };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        List<string?> changedProperties = [];
+        viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        viewModel.StartupConflictCheckEnabled = false;
+
+        Assert.False(store.StartupConflictCheckEnabled);
+        Assert.False(viewModel.StartupConflictCheckEnabled);
+        Assert.Contains(nameof(SettingsViewModel.StartupConflictCheckEnabled), changedProperties);
+    }
+
+    /// <summary>Verifies bindable option lists expose non-empty defaults without relying on ComboBoxItem binding.</summary>
+    [Fact]
+    public void OptionLists_ExposeNonEmptyText()
+    {
+        SettingsViewModel viewModel = new(new FakeSettingsStore(), _ => { }, () => { }, key => key);
+
+        Assert.Equal(7, viewModel.DisplayLanguageOptions.Count);
+        Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
+        Assert.Equal(3, viewModel.AppThemeModeOptions.Count);
+        Assert.All(viewModel.AppThemeModeOptions, Assert.NotEmpty);
+        Assert.Equal(3, viewModel.ProxyRecoveryModeOptions.Count);
+        Assert.All(viewModel.ProxyRecoveryModeOptions, Assert.NotEmpty);
+        Assert.Equal(4, viewModel.MainlandChinaFeatureModeOptions.Count);
+        Assert.All(viewModel.MainlandChinaFeatureModeOptions, Assert.NotEmpty);
+        Assert.Equal(3, viewModel.StartupBehaviorModeOptions.Count);
+        Assert.All(viewModel.StartupBehaviorModeOptions, Assert.NotEmpty);
+    }
+
     /// <summary>Verifies mainland China feature mode selection persists only valid enum indexes.</summary>
     [Theory]
     [InlineData((int)MainlandChinaFeatureMode.Disabled, MainlandChinaFeatureMode.Disabled, true)]
@@ -200,7 +313,7 @@ public sealed class SettingsViewModelTests
     [Fact]
     public void SetConnectionTestUrl_PersistsNonEmptyUrl()
     {
-        FakeSettingsStore store = new() { ConnectionTestUrl = "https://goole.com" };
+        FakeSettingsStore store = new() { ConnectionTestUrl = "https://www.google.com/generate_204" };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
         bool changed = viewModel.SetConnectionTestUrl(" example.com/generate_204 ");
@@ -212,17 +325,23 @@ public sealed class SettingsViewModelTests
 
     private sealed class FakeSettingsStore : ISettingsStore
     {
-        public AppLanguage DisplayLanguage { get; set; } = AppLanguage.SimplifiedChinese;
+        public AppLanguage DisplayLanguage { get; set; } = AppLanguage.AutoDetect;
+
+        public AppThemeMode AppThemeMode { get; set; } = AppThemeMode.FollowSystem;
+
+        public bool LaunchAtStartupEnabled { get; set; }
 
         public bool TransparentProxyEnabled { get; set; } = true;
-
-        public bool FallbackToSystemProxyWhenTunFails { get; set; } = true;
 
         public int MixedPort { get; set; } = 10000;
 
         public bool ConnectionSamplingEnabled { get; set; } = true;
 
         public int ConnectionSamplingIntervalSeconds { get; set; } = 30;
+
+        public bool StartupConflictCheckEnabled { get; set; } = true;
+
+        public StartupBehaviorMode StartupBehaviorMode { get; set; } = StartupBehaviorMode.LastSetting;
 
         public bool CheckStaleProxyOnStartup { get; set; } = true;
 
@@ -234,6 +353,6 @@ public sealed class SettingsViewModelTests
 
         public bool MainlandChinaUrlBlockingEnabled { get; set; }
 
-        public string ConnectionTestUrl { get; set; } = "https://goole.com";
+        public string ConnectionTestUrl { get; set; } = "https://www.google.com/generate_204";
     }
 }

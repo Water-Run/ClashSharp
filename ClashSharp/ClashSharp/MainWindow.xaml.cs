@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -58,6 +59,9 @@ public sealed partial class MainWindow : Window
     /// <summary>True after the user confirms a proxy-active close prompt.</summary>
     private bool _isCloseConfirmed;
 
+    /// <summary>True after startup conflict checks and startup behavior have been scheduled.</summary>
+    private bool _startupFlowStarted;
+
     /// <summary>Initializes the main window, applies minimum size constraints, configures the title bar, and sets up navigation.</summary>
     public MainWindow()
     {
@@ -65,6 +69,7 @@ public sealed partial class MainWindow : Window
             new ShellLocalizationAdapter(LocalizationService.Instance),
             CreatePageMap());
         InitializeComponent();
+        AppThemeService.Apply((FrameworkElement)Content, AppSettingsService.Instance.AppThemeMode);
         NavView.DataContext = _viewModel;
         InitializeWindowMinSize();
         InitializeTitleBar();
@@ -73,6 +78,7 @@ public sealed partial class MainWindow : Window
         NavigateToTag("MasterControl");
 
         Closed += OnWindowClosed;
+        ContentFrame.Loaded += OnContentFrameLoaded;
     }
 
     /// <summary>Configures the custom title bar with transparent caption buttons.</summary>
@@ -131,6 +137,8 @@ public sealed partial class MainWindow : Window
     /// <param name="args">Window close event arguments. Not null.</param>
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        ContentFrame.Loaded -= OnContentFrameLoaded;
+
         if (_appWindow is not null)
         {
             _appWindow.Closing -= OnAppWindowClosing;
@@ -148,6 +156,171 @@ public sealed partial class MainWindow : Window
 
         _wndProcDelegate = null;
         _hWnd = 0;
+    }
+
+    /// <summary>Runs startup checks once after the content frame has entered the XAML tree.</summary>
+    private async void OnContentFrameLoaded(object sender, RoutedEventArgs args)
+    {
+        if (_startupFlowStarted)
+        {
+            return;
+        }
+
+        _startupFlowStarted = true;
+        ContentFrame.Loaded -= OnContentFrameLoaded;
+        await RunStartupFlowAsync();
+    }
+
+    /// <summary>Shows startup conflicts and applies the configured startup proxy behavior.</summary>
+    private async Task RunStartupFlowAsync()
+    {
+        AppSettingsService settings = AppSettingsService.Instance;
+        if (settings.StartupConflictCheckEnabled)
+        {
+            IReadOnlyList<StartupConflictIssue> issues = StartupConflictDetectionService.Instance.CheckConflicts(settings.MixedPort);
+            if (issues.Count > 0)
+            {
+                await ShowStartupConflictDialogAsync(issues);
+            }
+        }
+
+        ClashSharpMode startupMode = StartupBehaviorService.ResolveStartupMode(settings.StartupBehaviorMode, settings.CurrentMode);
+        try
+        {
+            NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyMode(startupMode);
+            settings.CurrentMode = result.Mode;
+            LogStorageService.Instance.AppendLog("Info", "Startup", result.Message, null);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.IO.FileNotFoundException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            LogStorageService.Instance.AppendLog("Warning", "Startup", "Startup proxy behavior failed.", exception.Message);
+        }
+    }
+
+    /// <summary>Shows detected startup conflicts in a repairable dialog.</summary>
+    private async Task ShowStartupConflictDialogAsync(IReadOnlyList<StartupConflictIssue> issues)
+    {
+        XamlRoot? xamlRoot = ContentFrame.XamlRoot;
+        if (xamlRoot is null)
+        {
+            LogStorageService.Instance.AppendLog("Warning", "Startup", "Startup conflict dialog skipped because ContentFrame has no XamlRoot.", null);
+            return;
+        }
+
+        ContentDialog dialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("StartupConflict.Dialog.Title"),
+            Content = BuildStartupConflictPanel(issues),
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            XamlRoot = xamlRoot,
+        };
+
+        await dialog.ShowAsync();
+    }
+
+    /// <summary>Builds the startup conflict dialog content.</summary>
+    private static ScrollViewer BuildStartupConflictPanel(IReadOnlyList<StartupConflictIssue> issues)
+    {
+        StackPanel panel = new()
+        {
+            Spacing = 8,
+            MinWidth = 420,
+            MaxWidth = 680,
+        };
+
+        foreach (StartupConflictIssue issue in issues)
+        {
+            panel.Children.Add(BuildStartupConflictRow(issue));
+        }
+
+        return new ScrollViewer
+        {
+            Content = panel,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = 420,
+            Padding = new Thickness(0, 0, 12, 0),
+        };
+    }
+
+    /// <summary>Builds one startup conflict row.</summary>
+    private static Grid BuildStartupConflictRow(StartupConflictIssue issue)
+    {
+        Grid row = new()
+        {
+            Style = (Style)Application.Current.Resources["ClashCardGridStyle"],
+            ColumnSpacing = 12,
+        };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        StackPanel textPanel = new()
+        {
+            Spacing = 3,
+        };
+        textPanel.Children.Add(new TextBlock
+        {
+            Text = issue.Title,
+            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+            TextWrapping = TextWrapping.Wrap,
+        });
+        textPanel.Children.Add(new TextBlock
+        {
+            Text = issue.Description,
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            TextWrapping = TextWrapping.Wrap,
+        });
+        row.Children.Add(textPanel);
+
+        ProgressRing progressRing = new()
+        {
+            Width = 18,
+            Height = 18,
+            IsActive = false,
+            Visibility = Visibility.Collapsed,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(progressRing, 2);
+        row.Children.Add(progressRing);
+
+        TextBlock statusText = new()
+        {
+            Text = LocalizationService.Instance.GetString("StartupConflict.Status.Ready"),
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(statusText, 3);
+        row.Children.Add(statusText);
+
+        HyperlinkButton repairButton = new()
+        {
+            Content = issue.RepairText,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        repairButton.Click += async (_, _) =>
+        {
+            repairButton.IsEnabled = false;
+            progressRing.Visibility = Visibility.Visible;
+            progressRing.IsActive = true;
+            statusText.Text = LocalizationService.Instance.GetString("StartupConflict.Status.Fixing");
+
+            StartupConflictRepairResult result = await issue.RepairAsync(default);
+            progressRing.IsActive = false;
+            progressRing.Visibility = Visibility.Collapsed;
+            statusText.Text = result.Succeeded
+                ? LocalizationService.Instance.GetString("StartupConflict.Status.Succeeded")
+                : LocalizationService.Instance.GetString("StartupConflict.Status.Failed");
+            ToolTipService.SetToolTip(statusText, result.Message);
+        };
+        Grid.SetColumn(repairButton, 1);
+        row.Children.Add(repairButton);
+
+        return row;
     }
 
     /// <summary>Prompts when closing while proxy takeover is active.</summary>

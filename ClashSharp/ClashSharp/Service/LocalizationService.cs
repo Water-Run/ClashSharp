@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using ClashSharp.Strings;
 using ClashSharp.Model;
 
@@ -28,13 +29,13 @@ public sealed class LocalizationService
     public static LocalizationService Instance { get; } = new();
 
     /// <summary>Backing field for the currently active display language.</summary>
-    private AppLanguage _currentLanguage = AppLanguage.SimplifiedChinese;
+    private AppLanguage _currentLanguage = AppLanguage.AutoDetect;
 
     /// <summary>Immutable lookup table mapping each language to its resource dictionary.</summary>
     private static readonly ReadOnlyDictionary<AppLanguage, ReadOnlyDictionary<string, string>> Translations = LocalizationResources.Translations;
 
     /// <summary>Gets or sets the active display language for the application.</summary>
-    /// <value>The currently selected <see cref="AppLanguage"/>. Defaults to <see cref="AppLanguage.SimplifiedChinese"/>.</value>
+    /// <value>The currently selected <see cref="AppLanguage"/>. Defaults to <see cref="AppLanguage.AutoDetect"/>.</value>
     public AppLanguage CurrentLanguage
     {
         get => _currentLanguage;
@@ -70,7 +71,8 @@ public sealed class LocalizationService
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        if (Translations.TryGetValue(_currentLanguage, out ReadOnlyDictionary<string, string>? languageMap)
+        AppLanguage effectiveLanguage = ResolveEffectiveLanguage(_currentLanguage);
+        if (Translations.TryGetValue(effectiveLanguage, out ReadOnlyDictionary<string, string>? languageMap)
             && languageMap.TryGetValue(key, out string? value))
         {
             return value;
@@ -91,6 +93,7 @@ public sealed class LocalizationService
     {
         return
         [
+            (AppLanguage.AutoDetect, "自动检测"),
             (AppLanguage.SimplifiedChinese, "简体中文"),
             (AppLanguage.TraditionalChinese, "繁體中文"),
             (AppLanguage.English, "English"),
@@ -98,5 +101,39 @@ public sealed class LocalizationService
             (AppLanguage.French, "Français"),
             (AppLanguage.German, "Deutsch"),
         ];
+    }
+
+    /// <summary>Resolves automatic language detection to a supported resource language.</summary>
+    /// <param name="language">Configured language value.</param>
+    /// <returns>A supported concrete language.</returns>
+    public static AppLanguage ResolveEffectiveLanguage(AppLanguage language)
+    {
+        if (language != AppLanguage.AutoDetect)
+        {
+            return language;
+        }
+
+        CultureInfo culture = CultureInfo.CurrentUICulture;
+        string cultureName = culture.Name;
+        string twoLetterName = culture.TwoLetterISOLanguageName;
+
+        if (twoLetterName.Equals("zh", StringComparison.OrdinalIgnoreCase))
+        {
+            return cultureName.Contains("Hant", StringComparison.OrdinalIgnoreCase)
+                || cultureName.EndsWith("-TW", StringComparison.OrdinalIgnoreCase)
+                || cultureName.EndsWith("-HK", StringComparison.OrdinalIgnoreCase)
+                || cultureName.EndsWith("-MO", StringComparison.OrdinalIgnoreCase)
+                ? AppLanguage.TraditionalChinese
+                : AppLanguage.SimplifiedChinese;
+        }
+
+        return twoLetterName.ToLowerInvariant() switch
+        {
+            "en" => AppLanguage.English,
+            "ru" => AppLanguage.Russian,
+            "fr" => AppLanguage.French,
+            "de" => AppLanguage.German,
+            _ => AppLanguage.SimplifiedChinese,
+        };
     }
 }

@@ -17,6 +17,9 @@ namespace ClashSharp.Model;
 /// </remarks>
 public enum AppLanguage
 {
+    /// <summary>Automatically follows the operating-system UI language when supported.</summary>
+    AutoDetect = -1,
+
     /// <summary>Simplified Chinese (zh-Hans).</summary>
     SimplifiedChinese = 0,
 
