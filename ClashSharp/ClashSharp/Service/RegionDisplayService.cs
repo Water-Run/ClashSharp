@@ -69,16 +69,22 @@ public sealed class RegionDisplayService
             normalizedCode = "UN";
         }
 
-        if (AppSettingsService.Instance.MainlandChinaDisplayEnabled
-            && MainlandChinaOverrides.TryGetValue(normalizedCode, out (string Name, string FlagAssetKey) mainlandOverride))
-        {
-            return new RegionMetadata(normalizedCode, mainlandOverride.Name, mainlandOverride.FlagAssetKey);
-        }
-
         string displayName = DefaultRegionNames.TryGetValue(normalizedCode, out string? knownName)
             ? knownName
             : normalizedCode;
+        string flagAssetKey = normalizedCode;
+        MainlandChinaFeatureMode featureMode = AppSettingsService.Instance.MainlandChinaFeatureMode;
 
-        return new RegionMetadata(normalizedCode, displayName, normalizedCode);
+        if (featureMode >= MainlandChinaFeatureMode.FlagReplacementOnly
+            && MainlandChinaOverrides.TryGetValue(normalizedCode, out (string Name, string FlagAssetKey) mainlandOverride))
+        {
+            flagAssetKey = mainlandOverride.FlagAssetKey;
+            if (featureMode >= MainlandChinaFeatureMode.FlagReplacementAndTextCompletion)
+            {
+                displayName = mainlandOverride.Name;
+            }
+        }
+
+        return new RegionMetadata(normalizedCode, displayName, flagAssetKey);
     }
 }

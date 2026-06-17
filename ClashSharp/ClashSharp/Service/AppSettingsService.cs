@@ -71,6 +71,9 @@ public sealed class AppSettingsService
     /// <summary>Storage key for mainland China display text and flag replacement.</summary>
     private const string KeyMainlandChinaDisplayEnabled = "MainlandChinaDisplayEnabled";
 
+    /// <summary>Storage key for mainland China feature mode.</summary>
+    private const string KeyMainlandChinaFeatureMode = "MainlandChinaFeatureMode";
+
     /// <summary>Initializes the settings service and resolves the preferred storage container.</summary>
     private AppSettingsService()
     {
@@ -110,11 +113,11 @@ public sealed class AppSettingsService
     }
 
     /// <summary>Gets or sets the local mixed HTTP and SOCKS proxy port.</summary>
-    /// <value>TCP port in the inclusive range [1, 65535]; defaults to 7890.</value>
+    /// <value>TCP port in the inclusive range [1, 65535]; defaults to 10000.</value>
     /// <exception cref="ArgumentOutOfRangeException">Assigned value is outside the valid TCP port range.</exception>
     public int MixedPort
     {
-        get => GetInt32(KeyMixedPort, 7890);
+        get => GetInt32(KeyMixedPort, 10000);
         set
         {
             if (value is < 1 or > 65535)
@@ -183,12 +186,33 @@ public sealed class AppSettingsService
         set => SetEnum(KeyProxyRecoveryMode, value);
     }
 
+    /// <summary>Gets or sets the mainland China specific display feature level.</summary>
+    /// <value>Selected feature level; defaults to flag replacement, text completion, and keyword filtering.</value>
+    public MainlandChinaFeatureMode MainlandChinaFeatureMode
+    {
+        get
+        {
+            MainlandChinaFeatureMode defaultMode = GetBoolean(KeyMainlandChinaDisplayEnabled, true)
+                ? MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter
+                : MainlandChinaFeatureMode.Disabled;
+            return GetEnum(KeyMainlandChinaFeatureMode, defaultMode);
+        }
+
+        set
+        {
+            SetEnum(KeyMainlandChinaFeatureMode, value);
+            SetBoolean(KeyMainlandChinaDisplayEnabled, value != MainlandChinaFeatureMode.Disabled);
+        }
+    }
+
     /// <summary>Gets or sets whether mainland China display replacement is enabled.</summary>
-    /// <value>True when regional text and flag display replacement is enabled; defaults to true.</value>
+    /// <value>True when any mainland China feature mode is enabled; defaults to true.</value>
     public bool MainlandChinaDisplayEnabled
     {
-        get => GetBoolean(KeyMainlandChinaDisplayEnabled, true);
-        set => SetBoolean(KeyMainlandChinaDisplayEnabled, value);
+        get => MainlandChinaFeatureMode != MainlandChinaFeatureMode.Disabled;
+        set => MainlandChinaFeatureMode = value
+            ? MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter
+            : MainlandChinaFeatureMode.Disabled;
     }
 
     /// <summary>Reads a boolean setting from storage or returns <paramref name="defaultValue"/>.</summary>

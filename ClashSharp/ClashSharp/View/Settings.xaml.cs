@@ -63,8 +63,9 @@ public sealed partial class Settings : Page
         CheckStaleProxyToggle.IsOn = _viewModel.CheckStaleProxyOnStartup;
         RestoreProxyOnExitToggle.IsOn = _viewModel.RestoreProxyOnExit;
         ProxyRecoveryModeBox.SelectedIndex = _viewModel.ProxyRecoveryModeIndex;
-        MainlandChinaDisplayToggle.IsOn = _viewModel.MainlandChinaDisplayEnabled;
+        MainlandChinaFeatureModeBox.SelectedIndex = _viewModel.MainlandChinaFeatureModeIndex;
         _isLoadingSettings = false;
+        RefreshProxyInformation();
     }
 
     /// <summary>Persists the display language when the selection changes and notifies the application shell.</summary>
@@ -100,6 +101,8 @@ public sealed partial class Settings : Page
         TunFallbackRow.Description = localization.GetString("Settings.TunFallback.Description");
         MixedPortRow.Title = localization.GetString("Settings.MixedPort.Title");
         MixedPortRow.Description = localization.GetString("Settings.MixedPort.Description");
+        ProxyInformationTitleText.Text = localization.GetString("Settings.ProxyInformation.Title");
+        ProxyInformationDescriptionText.Text = localization.GetString("Settings.ProxyInformation.Description");
         ConnectionSamplingRow.Title = localization.GetString("Settings.ConnectionSampling.Title");
         ConnectionSamplingRow.Description = localization.GetString("Settings.ConnectionSampling.Description");
         SamplingIntervalRow.Title = localization.GetString("Settings.SamplingInterval.Title");
@@ -134,6 +137,12 @@ public sealed partial class Settings : Page
         MainlandChinaSectionTitleText.Text = localization.GetString("Settings.Section.MainlandChina");
         MainlandChinaDisplayRow.Title = localization.GetString("Settings.MainlandChinaDisplay.Title");
         MainlandChinaDisplayRow.Description = localization.GetString("Settings.MainlandChinaDisplay.Description");
+        MainlandChinaDisabledItem.Content = localization.GetString("Settings.MainlandChinaFeature.Disabled");
+        MainlandChinaFlagOnlyItem.Content = localization.GetString("Settings.MainlandChinaFeature.FlagOnly");
+        MainlandChinaFlagAndTextItem.Content = localization.GetString("Settings.MainlandChinaFeature.FlagAndText");
+        MainlandChinaKeywordFilterItem.Content = localization.GetString("Settings.MainlandChinaFeature.KeywordFilter");
+        MainlandChinaAllItem.Content = localization.GetString("Settings.MainlandChinaFeature.All");
+        RefreshProxyInformation();
     }
 
     /// <summary>Persists the transparent proxy setting when the switch changes.</summary>
@@ -172,7 +181,10 @@ public sealed partial class Settings : Page
             return;
         }
 
-        _viewModel.SetMixedPort(args.NewValue);
+        if (_viewModel.SetMixedPort(args.NewValue))
+        {
+            RefreshProxyInformation();
+        }
     }
 
     /// <summary>Persists the background connection sampling setting when the switch changes.</summary>
@@ -240,17 +252,37 @@ public sealed partial class Settings : Page
         _viewModel.SetProxyRecoveryModeIndex(ProxyRecoveryModeBox.SelectedIndex);
     }
 
-    /// <summary>Persists the mainland China display setting when the switch changes.</summary>
-    /// <param name="sender">The mainland China display switch. Not null.</param>
-    /// <param name="e">Routed event arguments. Not null.</param>
-    private void MainlandChinaDisplayToggle_Toggled(object sender, RoutedEventArgs e)
+    /// <summary>Persists the mainland China feature mode when the selection changes.</summary>
+    /// <param name="sender">The mainland China mode selector. Not null.</param>
+    /// <param name="e">Selection change arguments. Not null.</param>
+    private void MainlandChinaFeatureModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_isLoadingSettings)
+        if (_isLoadingSettings || MainlandChinaFeatureModeBox.SelectedIndex < 0)
         {
             return;
         }
 
-        _viewModel.SetMainlandChinaDisplayEnabled(MainlandChinaDisplayToggle.IsOn);
+        _viewModel.SetMainlandChinaFeatureModeIndex(MainlandChinaFeatureModeBox.SelectedIndex);
+    }
+
+    /// <summary>Refreshes immutable proxy and core path information shown in the proxy settings section.</summary>
+    private void RefreshProxyInformation()
+    {
+        LocalizationService localization = LocalizationService.Instance;
+        CoreConfigurationState configurationState = CoreConfigurationService.Instance.GetState();
+        string coreBinaryText = MihomoCoreService.Instance.IsBinaryAvailable
+            ? MihomoCoreService.Instance.BinaryPath
+            : localization.GetString("Settings.ProxyInformation.CoreBinary.Missing");
+
+        ProxyLocalEntryText.Text = string.Format(
+            localization.GetString("Settings.ProxyInformation.LocalEntry.Format"),
+            _viewModel.MixedPort);
+        ProxyCoreConfigurationText.Text = string.Format(
+            localization.GetString("Settings.ProxyInformation.CoreConfig.Format"),
+            configurationState.ConfigPath);
+        ProxyCoreBinaryText.Text = string.Format(
+            localization.GetString("Settings.ProxyInformation.CoreBinary.Format"),
+            coreBinaryText);
     }
 
     /// <summary>Dispatches Windows-native diagnostic buttons by target and action encoded in the button tag.</summary>

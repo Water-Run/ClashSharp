@@ -7,7 +7,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="{StaticResource ClashPagePadding}">
+    <ScrollViewer
+        Padding="{StaticResource ClashPagePadding}"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="18">
             <Grid ColumnSpacing="14">
                 <Grid.ColumnDefinitions>
@@ -127,13 +130,6 @@
                         <TextBlock x:Name="TransparentProxyStatusText" Style="{ThemeResource SubtitleTextBlockStyle}" />
                     </StackPanel>
                 </Grid>
-            </Grid>
-
-            <Grid Style="{StaticResource ClashCardGridStyle}">
-                <StackPanel Spacing="4">
-                    <TextBlock x:Name="CoreConfigurationTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="CoreConfigurationText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
             </Grid>
         </StackPanel>
     </ScrollViewer>

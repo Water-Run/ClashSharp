@@ -58,7 +58,6 @@ public sealed partial class MasterControl : Page
         CoreStatusTitleText.Text = localization.GetString("Master.Status.Core");
         SystemProxyTitleText.Text = localization.GetString("Master.Status.SystemProxy");
         TransparentProxyTitleText.Text = localization.GetString("Master.Status.TransparentProxy");
-        CoreConfigurationTitleText.Text = localization.GetString("Master.Status.CoreConfiguration");
     }
 
     /// <summary>Handles page loading by probing the bundled mihomo core version for the status summary.</summary>
@@ -68,12 +67,6 @@ public sealed partial class MasterControl : Page
     {
         try
         {
-            ClashSharpMode configurationMode = _selectedMode == ClashSharpMode.Disabled ? ClashSharpMode.Standby : _selectedMode;
-            CoreConfigurationState configurationState = CoreConfigurationService.Instance.EnsureConfiguration(configurationMode);
-            CoreConfigurationText.Text = configurationState.Exists
-                ? configurationState.ConfigPath
-                : LocalizationService.Instance.GetString("Master.Status.ConfigurationUnavailable");
-
             string versionText = await MihomoCoreService.Instance.GetVersionTextAsync(CancellationToken.None);
             CoreStatusText.Text = string.Format(
                 LocalizationService.Instance.GetString("Master.Status.CoreReady.Format"),

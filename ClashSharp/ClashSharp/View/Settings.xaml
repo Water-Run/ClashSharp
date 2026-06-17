@@ -8,7 +8,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="{StaticResource ClashPagePadding}">
+    <ScrollViewer
+        Padding="{StaticResource ClashPagePadding}"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
@@ -47,6 +50,16 @@
                     <NumberBox x:Name="MixedPortBox" Width="140" Minimum="1" Maximum="65535" SpinButtonPlacementMode="Compact" ValueChanged="MixedPortBox_ValueChanged" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="96">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="ProxyInformationTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="ProxyInformationDescriptionText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="ProxyLocalEntryText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    <TextBlock x:Name="ProxyCoreConfigurationText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    <TextBlock x:Name="ProxyCoreBinaryText" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" />
+                </StackPanel>
+            </Grid>
 
             <components:SettingRow x:Name="ConnectionSamplingRow">
                 <components:SettingRow.ActionContent>
@@ -186,7 +199,13 @@
             <TextBlock x:Name="MainlandChinaSectionTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="MainlandChinaDisplayRow">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="MainlandChinaDisplayToggle" IsOn="True" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="MainlandChinaDisplayToggle_Toggled" />
+                    <ComboBox x:Name="MainlandChinaFeatureModeBox" MinWidth="260" SelectionChanged="MainlandChinaFeatureModeBox_SelectionChanged">
+                        <ComboBoxItem x:Name="MainlandChinaDisabledItem" />
+                        <ComboBoxItem x:Name="MainlandChinaFlagOnlyItem" />
+                        <ComboBoxItem x:Name="MainlandChinaFlagAndTextItem" />
+                        <ComboBoxItem x:Name="MainlandChinaKeywordFilterItem" />
+                        <ComboBoxItem x:Name="MainlandChinaAllItem" />
+                    </ComboBox>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
         </StackPanel>

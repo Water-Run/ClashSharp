@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ClashSharp.View.About"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer
+        Padding="{StaticResource ClashPagePadding}"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="18" MaxWidth="760" HorizontalAlignment="Left">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Image Source="ms-appx:///Assets/Logo.png" Width="72" Height="72" Stretch="Uniform" />
+                <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="Clash#" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <TextBlock x:Name="AppDescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="AuthorTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="AuthorValueText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Spacing="4">
+                    <TextBlock x:Name="OpenSourceTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="OpenSourceDescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Grid Grid.Row="2" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="GitHubTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="GitHubDescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button x:Name="GitHubButton" Grid.Column="1" Click="GitHubButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE774;" FontSize="14" />
+                            <TextBlock x:Name="GitHubButtonText" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <Grid Grid.Row="3" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="MihomoTitleText" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="MihomoDescriptionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="MihomoStatusText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button x:Name="MihomoButton" Grid.Column="1" Click="MihomoButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8A7;" FontSize="14" />
+                            <TextBlock x:Name="MihomoButtonText" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

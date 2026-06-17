@@ -39,7 +39,7 @@ internal interface ISettingsStore
 
     ProxyRecoveryMode ProxyRecoveryMode { get; set; }
 
-    bool MainlandChinaDisplayEnabled { get; set; }
+    MainlandChinaFeatureMode MainlandChinaFeatureMode { get; set; }
 }
 
 /// <summary>Adapts <see cref="AppSettingsService"/> to the settings view model storage contract.</summary>
@@ -109,10 +109,10 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.ProxyRecoveryMode = value;
     }
 
-    public bool MainlandChinaDisplayEnabled
+    public MainlandChinaFeatureMode MainlandChinaFeatureMode
     {
-        get => _settings.MainlandChinaDisplayEnabled;
-        set => _settings.MainlandChinaDisplayEnabled = value;
+        get => _settings.MainlandChinaFeatureMode;
+        set => _settings.MainlandChinaFeatureMode = value;
     }
 }
 
@@ -170,7 +170,9 @@ internal sealed class SettingsViewModel
 
     public int ProxyRecoveryModeIndex => (int)ProxyRecoveryMode;
 
-    public bool MainlandChinaDisplayEnabled { get; private set; }
+    public MainlandChinaFeatureMode MainlandChinaFeatureMode { get; private set; }
+
+    public int MainlandChinaFeatureModeIndex => (int)MainlandChinaFeatureMode;
 
     /// <summary>Loads the latest persisted settings into the view model properties.</summary>
     public void Load()
@@ -184,7 +186,7 @@ internal sealed class SettingsViewModel
         CheckStaleProxyOnStartup = _settings.CheckStaleProxyOnStartup;
         RestoreProxyOnExit = _settings.RestoreProxyOnExit;
         ProxyRecoveryMode = _settings.ProxyRecoveryMode;
-        MainlandChinaDisplayEnabled = _settings.MainlandChinaDisplayEnabled;
+        MainlandChinaFeatureMode = _settings.MainlandChinaFeatureMode;
     }
 
     /// <summary>Persists a display language selected by combo box index.</summary>
@@ -304,11 +306,19 @@ internal sealed class SettingsViewModel
         return true;
     }
 
-    /// <summary>Persists the mainland China display switch.</summary>
-    /// <param name="isEnabled">Switch value.</param>
-    public void SetMainlandChinaDisplayEnabled(bool isEnabled)
+    /// <summary>Persists a mainland China feature mode selected by combo box index.</summary>
+    /// <param name="index">Feature mode enum index.</param>
+    /// <returns>True when the index was valid and persisted; otherwise false.</returns>
+    public bool SetMainlandChinaFeatureModeIndex(int index)
     {
-        _settings.MainlandChinaDisplayEnabled = isEnabled;
-        MainlandChinaDisplayEnabled = isEnabled;
+        if (!Enum.IsDefined((MainlandChinaFeatureMode)index))
+        {
+            return false;
+        }
+
+        MainlandChinaFeatureMode mode = (MainlandChinaFeatureMode)index;
+        _settings.MainlandChinaFeatureMode = mode;
+        MainlandChinaFeatureMode = mode;
+        return true;
     }
 }

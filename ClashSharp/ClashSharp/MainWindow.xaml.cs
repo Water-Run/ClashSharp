@@ -95,7 +95,7 @@ public sealed partial class MainWindow : Window
         NavLinksItem.Content = loc.GetString("Nav.Links");
         NavRulesItem.Content = loc.GetString("Nav.Rules");
         NavStatisticsItem.Content = loc.GetString("Nav.Statistics");
-        NavLogsItem.Content = loc.GetString("Nav.Logs");
+        NavAboutItem.Content = loc.GetString("Nav.About");
         NavSettingsItem.Content = loc.GetString("Nav.Settings");
     }
 
@@ -136,6 +136,7 @@ public sealed partial class MainWindow : Window
             "Rules" => typeof(View.Rules),
             "Statistics" => typeof(View.Statistics),
             "Logs" => typeof(View.Logs),
+            "About" => typeof(View.About),
             "Settings" => typeof(View.Settings),
             _ => null,
         };

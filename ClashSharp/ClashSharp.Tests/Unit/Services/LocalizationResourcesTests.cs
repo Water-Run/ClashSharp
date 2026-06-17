@@ -57,8 +57,14 @@ public sealed class LocalizationResourcesTests
     [Theory]
     [InlineData("Nav.MasterControl")]
     [InlineData("Nav.Settings")]
+    [InlineData("Nav.About")]
+    [InlineData("Page.About.Description")]
+    [InlineData("About.GitHub.Title")]
+    [InlineData("About.Mihomo.Title")]
     [InlineData("Command.Refresh")]
     [InlineData("Settings.MainlandChinaDisplay.Description")]
+    [InlineData("Settings.MainlandChinaFeature.All")]
+    [InlineData("Settings.ProxyInformation.CoreConfig.Format")]
     public void Translations_EnglishFallback_ContainsRequiredCoreKeys(string key)
     {
         Assert.True(

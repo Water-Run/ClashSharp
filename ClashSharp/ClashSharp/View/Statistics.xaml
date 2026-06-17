@@ -7,7 +7,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="{StaticResource ClashPagePadding}">
+    <ScrollViewer
+        Padding="{StaticResource ClashPagePadding}"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="PageTitleText" Style="{ThemeResource TitleTextBlockStyle}" />

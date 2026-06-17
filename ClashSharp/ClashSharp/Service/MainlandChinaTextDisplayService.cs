@@ -8,6 +8,9 @@
  */
 
 using System;
+using System.Collections.Frozen;
+using System.Collections.Generic;
+using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
@@ -23,7 +26,17 @@ public sealed class MainlandChinaTextDisplayService
     /// <value>A non-null <see cref="MainlandChinaTextDisplayService"/> instance.</value>
     public static MainlandChinaTextDisplayService Instance { get; } = new();
 
-    /// <summary>Sensitive UI terms replaced when mainland China display is enabled.</summary>
+    /// <summary>Region terms completed when mainland China text completion is enabled.</summary>
+    private static readonly FrozenDictionary<string, string> TextCompletions = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["香港"] = "中国香港",
+        ["澳門"] = "中國澳門",
+        ["澳门"] = "中国澳门",
+        ["台灣"] = "中國台灣",
+        ["台湾"] = "中国台湾",
+    }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>Sensitive UI terms replaced when keyword filtering is enabled.</summary>
     private static readonly string[] SensitiveTerms =
     [
         "习近平",
@@ -32,6 +45,22 @@ public sealed class MainlandChinaTextDisplayService
         "六四",
         "天安门",
         "天安門",
+        "品葱",
+        "品蔥",
+        "大纪元",
+        "大紀元",
+    ];
+
+    /// <summary>Sensitive URL fragments masked when URL blacklist mode is enabled.</summary>
+    private static readonly string[] SensitiveUrlFragments =
+    [
+        "pincong.rocks",
+        "pincong.org",
+        "pincong.icu",
+        "epochtimes.com",
+        "dajiyuan.com",
+        "大纪元",
+        "大紀元",
     ];
 
     /// <summary>Initializes the display service.</summary>
@@ -39,7 +68,7 @@ public sealed class MainlandChinaTextDisplayService
     {
     }
 
-    /// <summary>Applies UI-only replacement to <paramref name="text"/> when enabled.</summary>
+    /// <summary>Applies UI-only replacement to <paramref name="text"/> for the configured mainland China feature mode.</summary>
     /// <param name="text">Input display text. Must not be null.</param>
     /// <returns>Display text with sensitive terms replaced when the policy is enabled.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="text"/> is null.</exception>
@@ -47,17 +76,62 @@ public sealed class MainlandChinaTextDisplayService
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        if (!AppSettingsService.Instance.MainlandChinaDisplayEnabled)
+        MainlandChinaFeatureMode featureMode = AppSettingsService.Instance.MainlandChinaFeatureMode;
+        if (featureMode == MainlandChinaFeatureMode.Disabled)
         {
             return text;
         }
 
-        string filteredText = text;
-        foreach (string term in SensitiveTerms)
+        if (featureMode >= MainlandChinaFeatureMode.AllIncludingUrlBlacklist && ContainsSensitiveUrl(text))
         {
-            filteredText = filteredText.Replace(term, "***", StringComparison.OrdinalIgnoreCase);
+            return "***";
         }
 
-        return filteredText;
+        string displayText = text;
+        if (featureMode >= MainlandChinaFeatureMode.FlagReplacementAndTextCompletion)
+        {
+            displayText = ApplyTextCompletions(displayText);
+        }
+
+        if (featureMode >= MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter)
+        {
+            foreach (string term in SensitiveTerms)
+            {
+                displayText = displayText.Replace(term, "***", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        return displayText;
+    }
+
+    /// <summary>Determines whether text contains a blacklisted sensitive URL fragment.</summary>
+    /// <param name="text">Display text to inspect. Must not be null.</param>
+    /// <returns>True when a blacklisted URL fragment is present; otherwise false.</returns>
+    private static bool ContainsSensitiveUrl(string text)
+    {
+        foreach (string fragment in SensitiveUrlFragments)
+        {
+            if (text.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Completes regional text without duplicating an existing China prefix.</summary>
+    /// <param name="text">Display text to update. Must not be null.</param>
+    /// <returns>Display text with regional names completed where needed.</returns>
+    private static string ApplyTextCompletions(string text)
+    {
+        string displayText = text;
+        foreach ((string term, string replacement) in TextCompletions)
+        {
+            displayText = displayText.Replace(replacement, term, StringComparison.Ordinal);
+            displayText = displayText.Replace(term, replacement, StringComparison.Ordinal);
+        }
+
+        return displayText;
     }
 }

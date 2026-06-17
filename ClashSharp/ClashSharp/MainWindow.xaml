@@ -10,7 +10,7 @@
     Title="Clash#">
 
     <Window.SystemBackdrop>
-        <DesktopAcrylicBackdrop />
+        <MicaBackdrop />
     </Window.SystemBackdrop>
 
     <Grid>
@@ -78,9 +78,9 @@
             </NavigationView.MenuItems>
 
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Name="NavLogsItem" Tag="Logs">
+                <NavigationViewItem x:Name="NavAboutItem" Tag="About">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8A5;" />
+                        <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
@@ -97,7 +97,7 @@
         <Grid
             x:Name="AppTitleBar"
             Height="32"
-            Margin="304,0,140,0"
+            Margin="304,0,138,0"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Top"
             Background="Transparent" />

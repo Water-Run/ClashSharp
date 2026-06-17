@@ -30,7 +30,7 @@ public sealed class SettingsViewModelTests
             CheckStaleProxyOnStartup = false,
             RestoreProxyOnExit = false,
             ProxyRecoveryMode = ProxyRecoveryMode.EnableProxy,
-            MainlandChinaDisplayEnabled = false,
+            MainlandChinaFeatureMode = MainlandChinaFeatureMode.AllIncludingUrlBlacklist,
         };
 
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
@@ -48,7 +48,8 @@ public sealed class SettingsViewModelTests
         Assert.False(viewModel.RestoreProxyOnExit);
         Assert.Equal(ProxyRecoveryMode.EnableProxy, viewModel.ProxyRecoveryMode);
         Assert.Equal((int)ProxyRecoveryMode.EnableProxy, viewModel.ProxyRecoveryModeIndex);
-        Assert.False(viewModel.MainlandChinaDisplayEnabled);
+        Assert.Equal(MainlandChinaFeatureMode.AllIncludingUrlBlacklist, viewModel.MainlandChinaFeatureMode);
+        Assert.Equal((int)MainlandChinaFeatureMode.AllIncludingUrlBlacklist, viewModel.MainlandChinaFeatureModeIndex);
     }
 
     /// <summary>Verifies language selection persists and notifies the shell language controller.</summary>
@@ -84,14 +85,14 @@ public sealed class SettingsViewModelTests
 
     /// <summary>Verifies mixed port input is rounded and persisted only inside the TCP port range.</summary>
     [Theory]
-    [InlineData(double.NaN, 7890, false)]
-    [InlineData(0d, 7890, false)]
-    [InlineData(65536d, 7890, false)]
+    [InlineData(double.NaN, 10000, false)]
+    [InlineData(0d, 10000, false)]
+    [InlineData(65536d, 10000, false)]
     [InlineData(7891.49d, 7891, true)]
     [InlineData(7891.50d, 7892, true)]
     public void SetMixedPort_ValidatesAndRoundsInput(double input, int expectedPort, bool expectedResult)
     {
-        FakeSettingsStore store = new() { MixedPort = 7890 };
+        FakeSettingsStore store = new() { MixedPort = 10000 };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
         bool changed = viewModel.SetMixedPort(input);
@@ -118,6 +119,31 @@ public sealed class SettingsViewModelTests
         Assert.Equal(2, restartCount);
     }
 
+    /// <summary>Verifies mainland China feature mode selection persists only valid enum indexes.</summary>
+    [Theory]
+    [InlineData((int)MainlandChinaFeatureMode.Disabled, MainlandChinaFeatureMode.Disabled, true)]
+    [InlineData((int)MainlandChinaFeatureMode.AllIncludingUrlBlacklist, MainlandChinaFeatureMode.AllIncludingUrlBlacklist, true)]
+    [InlineData(-1, MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter, false)]
+    [InlineData(100, MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter, false)]
+    public void SetMainlandChinaFeatureModeIndex_ValidatesAndPersists(
+        int index,
+        MainlandChinaFeatureMode expectedMode,
+        bool expectedResult)
+    {
+        FakeSettingsStore store = new()
+        {
+            MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter,
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+
+        bool changed = viewModel.SetMainlandChinaFeatureModeIndex(index);
+
+        Assert.Equal(expectedResult, changed);
+        Assert.Equal(expectedMode, store.MainlandChinaFeatureMode);
+        Assert.Equal(expectedMode, viewModel.MainlandChinaFeatureMode);
+        Assert.Equal((int)expectedMode, viewModel.MainlandChinaFeatureModeIndex);
+    }
+
     private sealed class FakeSettingsStore : ISettingsStore
     {
         public AppLanguage DisplayLanguage { get; set; } = AppLanguage.SimplifiedChinese;
@@ -126,7 +152,7 @@ public sealed class SettingsViewModelTests
 
         public bool FallbackToSystemProxyWhenTunFails { get; set; } = true;
 
-        public int MixedPort { get; set; } = 7890;
+        public int MixedPort { get; set; } = 10000;
 
         public bool ConnectionSamplingEnabled { get; set; } = true;
 
@@ -138,6 +164,6 @@ public sealed class SettingsViewModelTests
 
         public ProxyRecoveryMode ProxyRecoveryMode { get; set; } = ProxyRecoveryMode.DisableProxy;
 
-        public bool MainlandChinaDisplayEnabled { get; set; } = true;
+        public MainlandChinaFeatureMode MainlandChinaFeatureMode { get; set; } = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
     }
 }

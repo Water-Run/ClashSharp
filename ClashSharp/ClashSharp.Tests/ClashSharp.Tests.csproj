@@ -23,8 +23,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="..\ClashSharp\App.xaml" Link="App.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ClashSharp\MainWindow.xaml" Link="MainWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ClashSharp\View\MasterControl.xaml" Link="View\MasterControl.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ClashSharp\View\Settings.xaml" Link="View\Settings.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ClashSharp\View\Statistics.xaml" Link="View\Statistics.xaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\ClashSharp\Model\AppLanguage.cs" Link="Model\AppLanguage.cs" />
     <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />
+    <Compile Include="..\ClashSharp\Model\MainlandChinaFeatureMode.cs" Link="Model\MainlandChinaFeatureMode.cs" />
     <Compile Include="..\ClashSharp\Model\ProxyRecoveryMode.cs" Link="Model\ProxyRecoveryMode.cs" />
     <Compile Include="..\ClashSharp\Model\ProxyNode.cs" Link="Model\ProxyNode.cs" />
     <Compile Include="..\ClashSharp\Model\RegionMetadata.cs" Link="Model\RegionMetadata.cs" />
