@@ -11,7 +11,6 @@ path = "src/main.rs"
 [dependencies]
 slint = "1"
 i-slint-backend-winit = "1"
-rfd = "0"
 
 [build-dependencies]
 slint-build = "1"

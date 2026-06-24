@@ -7,21 +7,42 @@ $mihomoBinary = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo.exe"
 $mihomoUpdateScript = Join-Path $repoRoot "Tools\Update-Mihomo.ps1"
 $payloadDir = Join-Path $installerRoot "payload"
 $signingDir = Join-Path $installerRoot "signing"
-$certificateSubject = "CN=linzh"
+$certificateSubject = if ([string]::IsNullOrWhiteSpace($env:CLASHSHARP_CERTIFICATE_SUBJECT)) {
+    "CN=ClashSharp Development"
+} else {
+    $env:CLASHSHARP_CERTIFICATE_SUBJECT
+}
 $certificatePfxPath = Join-Path $signingDir "ClashSharp_TemporaryKey.pfx"
 $certificateCerPath = Join-Path $signingDir "ClashSharp_TemporaryKey.cer"
-$certificatePasswordText = "ClashSharpTemporaryPassword!"
+$certificatePasswordText = $env:CLASHSHARP_CERTIFICATE_PASSWORD
+$mihomoVersion = if ([string]::IsNullOrWhiteSpace($env:CLASHSHARP_MIHOMO_VERSION)) {
+    "latest"
+} else {
+    $env:CLASHSHARP_MIHOMO_VERSION
+}
+$mihomoExpectedSha256 = $env:CLASHSHARP_MIHOMO_SHA256
 
 Set-Location $repoRoot
 
 if (-not (Test-Path $mihomoBinary)) {
-    & $mihomoUpdateScript
+    & $mihomoUpdateScript -Version $mihomoVersion -ExpectedSha256 $mihomoExpectedSha256
 } else {
+    if (-not [string]::IsNullOrWhiteSpace($mihomoExpectedSha256)) {
+        $actualMihomoSha256 = (Get-FileHash -LiteralPath $mihomoBinary -Algorithm SHA256).Hash
+        if (-not $actualMihomoSha256.Equals($mihomoExpectedSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Bundled mihomo binary hash mismatch. Expected $mihomoExpectedSha256 but got $actualMihomoSha256."
+        }
+    }
+
     & $mihomoBinary -v
 }
 
 New-Item -ItemType Directory -Force -Path $signingDir | Out-Null
 if (-not (Test-Path $certificatePfxPath) -or -not (Test-Path $certificateCerPath)) {
+    if ([string]::IsNullOrWhiteSpace($certificatePasswordText)) {
+        $certificatePasswordText = [Convert]::ToBase64String([Guid]::NewGuid().ToByteArray())
+    }
+
     $certificatePassword = ConvertTo-SecureString $certificatePasswordText -AsPlainText -Force
     $certificate = New-SelfSignedCertificate `
         -Type Custom `
@@ -41,6 +62,10 @@ $signingCertificate = Get-ChildItem -Path Cert:\CurrentUser\My |
     Select-Object -First 1
 
 if ($null -eq $signingCertificate -and (Test-Path $certificatePfxPath)) {
+    if ([string]::IsNullOrWhiteSpace($certificatePasswordText)) {
+        throw "Set CLASHSHARP_CERTIFICATE_PASSWORD to import the existing signing PFX, or remove Installer\signing to generate a new development certificate."
+    }
+
     $certificatePassword = ConvertTo-SecureString $certificatePasswordText -AsPlainText -Force
     Import-PfxCertificate -FilePath $certificatePfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $certificatePassword | Out-Null
     $signingCertificate = Get-ChildItem -Path Cert:\CurrentUser\My |

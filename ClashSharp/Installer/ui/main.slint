@@ -1,132 +1,596 @@
-import { Button, ProgressIndicator } from "std-widgets.slint";
+global Palette {
+    in-out property <color> accent: #118a3b;
+    in-out property <color> accent-hover: #149945;
+    in-out property <color> accent-pressed: #0b632b;
+    in-out property <color> accent-border: #0f7433;
+    in-out property <color> accent-border-hover: #16aa4c;
+    in-out property <color> danger: #c42b1c;
+    in-out property <color> dark-background: #000000;
+    in-out property <color> dark-surface: #050505;
+    in-out property <color> dark-control: #0d0d0d;
+    in-out property <color> dark-control-hover: #1a1a1a;
+    in-out property <color> dark-control-pressed: #030303;
+    in-out property <color> dark-border: #3d3d3d;
+    in-out property <color> dark-border-hover: #5c5c5c;
+    in-out property <color> dark-text: #ffffff;
+    in-out property <color> dark-text-muted: #d0d0d0;
+    in-out property <color> light-background: #ffffff;
+    in-out property <color> light-control: #f7f7f7;
+    in-out property <color> light-control-hover: #eeeeee;
+    in-out property <color> light-control-pressed: #dfdfdf;
+    in-out property <color> light-secondary-control: #f3f3f3;
+    in-out property <color> light-secondary-control-hover: #e9e9e9;
+    in-out property <color> light-progress-track: #e5e5e5;
+    in-out property <color> light-menu-hover: #eef5f0;
+    in-out property <color> light-border: #c8c8c8;
+    in-out property <color> light-border-hover: #b8b8b8;
+    in-out property <color> light-text: #202020;
+    in-out property <color> light-icon-text: #242424;
+    in-out property <color> light-text-muted: #5f5f5f;
+    in-out property <color> light-text-subtle: #666666;
+    in-out property <color> light-dialog-text: #424242;
+}
+
+component ThemeMenuItem inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> selected;
+    in property <bool> dark;
+    callback clicked();
+    width: 124px;
+    height: 24px;
+    background: root.selected ? Palette.accent : (item-touch.has-hover ? (root.dark ? Palette.dark-control-hover : Palette.light-menu-hover) : #00000000);
+
+    animate background { duration: 90ms; easing: ease-out; }
+
+    Image {
+        source: root.icon;
+        x: 9px;
+        y: 4px;
+        width: 16px;
+        height: 16px;
+        colorize: root.selected ? Palette.dark-text : (root.dark ? Palette.dark-text : Palette.light-icon-text);
+    }
+
+    Text {
+        text: root.label;
+        x: 32px;
+        width: parent.width - 38px;
+        height: parent.height;
+        font-size: 11px;
+        color: root.selected ? Palette.dark-text : (root.dark ? Palette.dark-text : Palette.light-icon-text);
+        vertical-alignment: center;
+    }
+
+    item-touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+component LanguageMenuItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    in property <bool> dark;
+    callback clicked();
+    width: 142px;
+    height: 24px;
+    background: root.selected ? Palette.accent : (item-touch.has-hover ? (root.dark ? Palette.dark-control-hover : Palette.light-menu-hover) : #00000000);
+
+    animate background { duration: 90ms; easing: ease-out; }
+
+    Text {
+        text: root.label;
+        x: 10px;
+        width: parent.width - 20px;
+        height: parent.height;
+        font-size: 11px;
+        color: root.selected ? Palette.dark-text : (root.dark ? Palette.dark-text : Palette.light-icon-text);
+        vertical-alignment: center;
+    }
+
+    item-touch := TouchArea { clicked => { root.clicked(); } }
+}
 
 export component MainWindow inherits Window {
-    title: "Clash# Installer";
+    title: root.window-title;
     icon: @image-url("../Logo.png");
-    preferred-width: 640px;
-    preferred-height: 420px;
-    min-width: 640px;
-    min-height: 420px;
-    max-width: 640px;
-    max-height: 420px;
+    preferred-width: 288px;
+    preferred-height: 432px;
+    min-width: 288px;
+    min-height: 432px;
+    max-width: 288px;
+    max-height: 432px;
+    background: root.effective-theme == 1 ? Palette.dark-background : Palette.light-background;
 
+    in-out property <int> phase: 0;
+    in-out property <int> language-index: 0;
+    in-out property <int> theme-index: 0;
+    in-out property <int> effective-theme: 0;
     in-out property <bool> busy: false;
     in-out property <bool> installed: false;
     in-out property <bool> supported: true;
+    in-out property <bool> show-details: false;
+    in-out property <bool> show-theme-menu: false;
+    in-out property <bool> show-language-menu: false;
     in-out property <float> progress: 0.0;
-    in-out property <string> status-text: "Ready";
-    in-out property <string> mode-text: "Install mode";
+    in-out property <float> intro-progress: 0.0;
+
+    property <length> theme-menu-height: root.show-theme-menu ? 72px : 0px;
+    property <length> language-menu-height: root.show-language-menu ? 168px : 0px;
+    property <float> theme-menu-opacity: root.show-theme-menu ? 1.0 : 0.0;
+    property <float> language-menu-opacity: root.show-language-menu ? 1.0 : 0.0;
+
+    in-out property <string> window-title: "Clash# Installer";
+    in-out property <string> product-title: "Clash#";
+    in-out property <string> product-subtitle: "Windows-native Clash proxy client";
+    in-out property <string> state-title: "Checking this device";
+    in-out property <string> state-message: "";
+    in-out property <string> details-title: "Current Environment";
+    in-out property <string> details-text: "";
+    in-out property <string> install-text: "Install";
+    in-out property <string> repair-text: "Repair";
+    in-out property <string> uninstall-text: "Uninstall";
+    in-out property <string> refresh-text: "Refresh";
+    in-out property <string> close-text: "Close";
+    in-out property <string> language-short-text: "EN";
+    in-out property <string> admin-hint-text: "Certificate installation may require administrator confirmation";
+    in-out property <string> language-auto-text: "Auto detect";
+    in-out property <string> theme-follow-system-text: "Follow system";
+    in-out property <string> theme-light-text: "Light";
+    in-out property <string> theme-dark-text: "Dark";
 
     callback install();
     callback repair();
     callback uninstall();
     callback refresh-state();
-    callback exit-app();
+    callback set-language(int);
+    callback set-theme(int);
+    callback open-details();
+    callback hide-details();
+    callback open-github();
 
-    VerticalLayout {
-        padding: 24px;
-        spacing: 18px;
+    animate intro-progress { duration: 260ms; easing: ease-out; }
+    animate progress { duration: 180ms; easing: ease-out; }
+    animate theme-menu-height, theme-menu-opacity, language-menu-height, language-menu-opacity { duration: 120ms; easing: ease-out; }
 
-        HorizontalLayout {
-            spacing: 12px;
+    Timer {
+        interval: 80ms;
+        running: root.intro-progress < 1.0;
+        triggered => {
+            root.intro-progress = 1.0;
+        }
+    }
 
-            Image {
-                source: @image-url("../Logo.png");
-                width: 48px;
-                height: 48px;
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: root.effective-theme == 1 ? Palette.dark-background : Palette.light-background;
+        border-width: 0px;
+        border-color: transparent;
+    }
+
+    // Theme selector.
+    Rectangle {
+        x: 10px;
+        y: 10px;
+        width: 32px;
+        height: 24px;
+        background: theme-touch.has-hover ? (root.effective-theme == 1 ? Palette.dark-control-hover : Palette.light-control-hover) : (root.effective-theme == 1 ? Palette.dark-control : Palette.light-control);
+        border-width: 1px;
+        border-color: root.show-theme-menu ? Palette.accent : (root.effective-theme == 1 ? Palette.dark-border : Palette.light-border);
+
+        animate background, border-color { duration: 90ms; easing: ease-out; }
+
+        if root.theme-index == 0 : Image {
+            source: @image-url("../FluentDesktop.svg");
+            x: 8px;
+            y: 4px;
+            width: 16px;
+            height: 16px;
+            colorize: root.effective-theme == 1 ? Palette.dark-text : Palette.light-icon-text;
+        }
+
+        if root.theme-index == 1 : Image {
+            source: @image-url("../FluentSun.svg");
+            x: 8px;
+            y: 4px;
+            width: 16px;
+            height: 16px;
+            colorize: root.effective-theme == 1 ? Palette.dark-text : Palette.light-icon-text;
+        }
+
+        if root.theme-index == 2 : Image {
+            source: @image-url("../FluentMoon.svg");
+            x: 8px;
+            y: 4px;
+            width: 16px;
+            height: 16px;
+            colorize: root.effective-theme == 1 ? Palette.dark-text : Palette.light-icon-text;
+        }
+
+        theme-touch := TouchArea {
+            clicked => {
+                root.show-theme-menu = !root.show-theme-menu;
+                root.show-language-menu = false;
             }
+        }
+    }
 
-            VerticalLayout {
-                spacing: 4px;
+    Rectangle {
+        x: 132px;
+        y: 10px;
+        width: 24px;
+        height: 24px;
+        background: #00000000;
+        border-width: 0px;
+        border-color: transparent;
 
-                Text {
-                    text: "Clash#";
-                    font-size: 26px;
-                    font-weight: 700;
-                }
+        Image {
+            source: @image-url("../FluentInfo.svg");
+            x: 4px;
+            y: 4px;
+            width: 16px;
+            height: 16px;
+            opacity: info-touch.has-hover ? 0.82 : 0.48;
+            colorize: root.effective-theme == 1 ? Palette.dark-text : Palette.light-icon-text;
 
-                Text {
-                    text: root.mode-text;
-                    font-size: 13px;
-                    color: #5f5f5f;
-                }
+            animate opacity { duration: 90ms; easing: ease-out; }
+        }
+
+        info-touch := TouchArea { clicked => { root.open-details(); } }
+    }
+
+    Rectangle {
+        x: 246px;
+        y: 10px;
+        width: 32px;
+        height: 24px;
+        background: language-touch.has-hover ? (root.effective-theme == 1 ? Palette.dark-control-hover : Palette.light-control-hover) : (root.effective-theme == 1 ? Palette.dark-control : Palette.light-control);
+        border-width: 1px;
+        border-color: root.show-language-menu ? Palette.accent : (root.effective-theme == 1 ? Palette.dark-border : Palette.light-border);
+
+        animate background, border-color { duration: 90ms; easing: ease-out; }
+
+        Text {
+            text: root.language-short-text;
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            font-size: 12px;
+            color: root.effective-theme == 1 ? Palette.dark-text : Palette.light-icon-text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        language-touch := TouchArea {
+            clicked => {
+                root.show-language-menu = !root.show-language-menu;
+                root.show-theme-menu = false;
             }
+        }
+    }
+
+    Rectangle {
+        x: 0;
+        y: 58px + (1.0 - root.intro-progress) * 8px;
+        width: parent.width;
+        height: 292px;
+        opacity: root.intro-progress;
+
+        Image {
+            source: @image-url("../LogoInstaller.png");
+            x: 98px;
+            y: 0;
+            width: 92px;
+            height: 92px;
+            image-fit: contain;
+        }
+
+        Text {
+            text: root.product-title;
+            x: 24px;
+            y: 112px;
+            width: 240px;
+            height: 26px;
+            font-size: 20px;
+            font-weight: 700;
+            color: root.effective-theme == 1 ? Palette.dark-text : Palette.light-text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.product-subtitle;
+            x: 24px;
+            y: 142px;
+            width: 240px;
+            height: 20px;
+            font-size: 11px;
+            color: root.effective-theme == 1 ? Palette.dark-text-muted : Palette.light-text-muted;
+            horizontal-alignment: center;
+            vertical-alignment: center;
         }
 
         Rectangle {
+            x: 132px;
+            y: 172px;
+            width: 24px;
+            height: 24px;
+            background: github-touch.has-hover ? (root.effective-theme == 1 ? Palette.dark-control-hover : Palette.light-control-hover) : (root.effective-theme == 1 ? Palette.dark-control : Palette.light-control);
             border-width: 1px;
-            border-color: #d7d7d7;
-            border-radius: 4px;
-            background: #fafafa;
-            height: 96px;
+            border-color: root.effective-theme == 1 ? Palette.dark-border : Palette.light-border;
+
+            animate background, border-color { duration: 90ms; easing: ease-out; }
+
+            if root.effective-theme == 1 : Image {
+                source: @image-url("../GitHubLight.svg");
+                x: 5px;
+                y: 5px;
+                width: 14px;
+                height: 14px;
+            }
+
+            if root.effective-theme != 1 : Image {
+                source: @image-url("../GitHubDark.svg");
+                x: 5px;
+                y: 5px;
+                width: 14px;
+                height: 14px;
+            }
+
+            github-touch := TouchArea { clicked => { root.open-github(); } }
+        }
+
+        Text {
+            text: root.state-title;
+            x: 14px;
+            y: 214px;
+            width: 260px;
+            height: 50px;
+            font-size: 18px;
+            font-weight: 700;
+            color: root.phase == 1 || root.phase == 5 ? Palette.danger : (root.effective-theme == 1 ? Palette.dark-text : Palette.light-text);
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.state-message;
+            x: 28px;
+            y: 264px;
+            width: 232px;
+            height: 28px;
+            font-size: 11px;
+            color: root.effective-theme == 1 ? Palette.dark-text-muted : Palette.light-text-muted;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    if root.busy : Rectangle {
+        x: 34px;
+        y: 358px;
+        width: 220px;
+        height: 4px;
+        background: root.effective-theme == 1 ? Palette.dark-control : Palette.light-progress-track;
+
+        Rectangle {
+            width: parent.width * root.progress;
+            height: parent.height;
+            background: Palette.accent;
+        }
+    }
+
+    if !root.busy && root.phase == 2 && !root.installed : Text {
+        text: root.admin-hint-text;
+        x: 34px;
+        y: 350px;
+        width: 220px;
+        height: 22px;
+        font-size: 10px;
+        color: root.effective-theme == 1 ? Palette.dark-text-muted : Palette.light-text-subtle;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+
+    if !root.busy && root.supported && !root.installed && root.phase != 0 && root.phase != 1 && root.phase != 5 : Rectangle {
+        x: 34px;
+        y: 386px;
+        width: 220px;
+        height: 28px;
+        background: install-touch.pressed ? Palette.accent-pressed : (install-touch.has-hover ? Palette.accent-hover : Palette.accent);
+        border-width: 1px;
+        border-color: install-touch.has-hover ? Palette.accent-border-hover : Palette.accent-border;
+
+        animate background, border-color { duration: 90ms; easing: ease-out; }
+
+        Text {
+            text: root.install-text;
+            color: Palette.dark-text;
+            font-size: 13px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: parent.width;
+            height: parent.height;
+        }
+
+        install-touch := TouchArea { clicked => { root.install(); } }
+    }
+
+    if !root.busy && root.supported && root.installed && root.phase != 0 && root.phase != 1 && root.phase != 5 : Rectangle {
+        x: 34px;
+        y: 356px;
+        width: 220px;
+        height: 28px;
+        background: repair-touch.pressed ? Palette.accent-pressed : (repair-touch.has-hover ? Palette.accent-hover : Palette.accent);
+        border-width: 1px;
+        border-color: repair-touch.has-hover ? Palette.accent-border-hover : Palette.accent-border;
+
+        animate background, border-color { duration: 90ms; easing: ease-out; }
+
+        Text {
+            text: root.repair-text;
+            color: Palette.dark-text;
+            font-size: 13px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: parent.width;
+            height: parent.height;
+        }
+
+        repair-touch := TouchArea { clicked => { root.repair(); } }
+    }
+
+    if !root.busy && root.supported && root.installed && root.phase != 0 && root.phase != 1 && root.phase != 5 : Rectangle {
+        x: 34px;
+        y: 392px;
+        width: 220px;
+        height: 26px;
+        background: uninstall-touch.pressed ? (root.effective-theme == 1 ? Palette.dark-control-pressed : Palette.light-control-pressed) : (uninstall-touch.has-hover ? (root.effective-theme == 1 ? Palette.dark-control-hover : Palette.light-secondary-control-hover) : (root.effective-theme == 1 ? Palette.dark-control : Palette.light-secondary-control));
+        border-width: 1px;
+        border-color: uninstall-touch.has-hover ? (root.effective-theme == 1 ? Palette.dark-border-hover : Palette.light-border-hover) : (root.effective-theme == 1 ? Palette.dark-border : Palette.light-border);
+
+        animate background, border-color { duration: 90ms; easing: ease-out; }
+
+        Text {
+            text: root.uninstall-text;
+            color: root.effective-theme == 1 ? Palette.dark-text : Palette.light-text;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: parent.width;
+            height: parent.height;
+        }
+
+        uninstall-touch := TouchArea { clicked => { root.uninstall(); } }
+    }
+
+    if !root.busy && (root.phase == 1 || root.phase == 5) : Rectangle {
+        x: 34px;
+        y: 386px;
+        width: 220px;
+        height: 28px;
+        background: refresh-touch.pressed ? Palette.accent-pressed : (refresh-touch.has-hover ? Palette.accent-hover : Palette.accent);
+        border-width: 1px;
+        border-color: refresh-touch.has-hover ? Palette.accent-border-hover : Palette.accent-border;
+
+        animate background, border-color { duration: 90ms; easing: ease-out; }
+
+        Text {
+            text: root.refresh-text;
+            color: Palette.dark-text;
+            font-size: 13px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: parent.width;
+            height: parent.height;
+        }
+
+        refresh-touch := TouchArea { clicked => { root.refresh-state(); } }
+    }
+
+    Rectangle {
+        x: 10px;
+        y: 38px;
+        width: 124px;
+        height: root.theme-menu-height;
+        opacity: root.theme-menu-opacity;
+        clip: true;
+        background: root.effective-theme == 1 ? Palette.dark-surface : Palette.light-background;
+        border-width: root.show-theme-menu ? 1px : 0px;
+        border-color: Palette.accent;
+
+        ThemeMenuItem { y: 0px; icon: @image-url("../FluentDesktop.svg"); label: root.theme-follow-system-text; selected: root.theme-index == 0; dark: root.effective-theme == 1; clicked => { root.show-theme-menu = false; root.set-theme(0); } }
+        ThemeMenuItem { y: 24px; icon: @image-url("../FluentMoon.svg"); label: root.theme-dark-text; selected: root.theme-index == 2; dark: root.effective-theme == 1; clicked => { root.show-theme-menu = false; root.set-theme(2); } }
+        ThemeMenuItem { y: 48px; icon: @image-url("../FluentSun.svg"); label: root.theme-light-text; selected: root.theme-index == 1; dark: root.effective-theme == 1; clicked => { root.show-theme-menu = false; root.set-theme(1); } }
+    }
+
+    Rectangle {
+        x: 136px;
+        y: 38px;
+        width: 142px;
+        height: root.language-menu-height;
+        opacity: root.language-menu-opacity;
+        clip: true;
+        background: root.effective-theme == 1 ? Palette.dark-surface : Palette.light-background;
+        border-width: root.show-language-menu ? 1px : 0px;
+        border-color: Palette.accent;
+
+        LanguageMenuItem { y: 0px; label: root.language-auto-text; selected: root.language-index == 0; dark: root.effective-theme == 1; clicked => { root.show-language-menu = false; root.set-language(0); } }
+        LanguageMenuItem { y: 24px; label: "简体中文"; selected: root.language-index == 1; dark: root.effective-theme == 1; clicked => { root.show-language-menu = false; root.set-language(1); } }
+        LanguageMenuItem { y: 48px; label: "繁體中文"; selected: root.language-index == 2; dark: root.effective-theme == 1; clicked => { root.show-language-menu = false; root.set-language(2); } }
+        LanguageMenuItem { y: 72px; label: "English"; selected: root.language-index == 3; dark: root.effective-theme == 1; clicked => { root.show-language-menu = false; root.set-language(3); } }
+        LanguageMenuItem { y: 96px; label: "Русский"; selected: root.language-index == 4; dark: root.effective-theme == 1; clicked => { root.show-language-menu = false; root.set-language(4); } }
+        LanguageMenuItem { y: 120px; label: "Français"; selected: root.language-index == 5; dark: root.effective-theme == 1; clicked => { root.show-language-menu = false; root.set-language(5); } }
+        LanguageMenuItem { y: 144px; label: "Deutsch"; selected: root.language-index == 6; dark: root.effective-theme == 1; clicked => { root.show-language-menu = false; root.set-language(6); } }
+    }
+
+    if root.show-details : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: root.effective-theme == 1 ? Palette.dark-background : Palette.light-background;
+        opacity: 0.92;
+        TouchArea { clicked => { root.hide-details(); } }
+    }
+
+    if root.show-details : Rectangle {
+        x: 18px;
+        y: 66px;
+        width: 252px;
+        height: 304px;
+        background: root.effective-theme == 1 ? Palette.dark-surface : Palette.light-background;
+        border-width: 1px;
+        border-color: Palette.accent;
+
+        Text {
+            text: root.details-title;
+            x: 16px;
+            y: 14px;
+            width: parent.width - 32px;
+            height: 24px;
+            font-size: 16px;
+            font-weight: 600;
+            color: root.effective-theme == 1 ? Palette.dark-text : Palette.light-text;
+        }
+
+        Text {
+            text: root.details-text;
+            x: 16px;
+            y: 46px;
+            width: parent.width - 32px;
+            height: 214px;
+            font-size: 11px;
+            color: root.effective-theme == 1 ? Palette.dark-text-muted : Palette.light-dialog-text;
+            wrap: word-wrap;
+        }
+
+        Rectangle {
+            x: parent.width - 84px;
+            y: parent.height - 38px;
+            width: 68px;
+            height: 24px;
+            background: close-touch.pressed ? Palette.accent-pressed : (close-touch.has-hover ? Palette.accent-hover : Palette.accent);
+            border-width: 1px;
+            border-color: close-touch.has-hover ? Palette.accent-border-hover : Palette.accent-border;
+
+            animate background, border-color { duration: 90ms; easing: ease-out; }
 
             Text {
-                text <=> root.status-text;
-                font-size: 13px;
-                color: root.supported ? #202020 : #a4262c;
-                wrap: word-wrap;
+                text: root.close-text;
+                color: Palette.dark-text;
+                font-size: 12px;
+                horizontal-alignment: center;
                 vertical-alignment: center;
-                horizontal-alignment: left;
-                x: 16px;
-                y: 12px;
-                width: parent.width - 32px;
-                height: parent.height - 24px;
-            }
-        }
-
-        ProgressIndicator {
-            indeterminate: root.busy;
-            progress: root.progress;
-        }
-
-        if !root.supported : Text {
-            text: "Clash# requires Windows 11 x64.";
-            color: #a4262c;
-            font-size: 13px;
-        }
-
-        VerticalLayout {
-            horizontal-stretch: 1;
-            alignment: end;
-
-            if !root.busy : HorizontalLayout {
-                spacing: 12px;
-
-                Button {
-                    text: "Refresh";
-                    clicked => { root.refresh-state(); }
-                }
-
-                Button {
-                    text: "Exit";
-                    clicked => { root.exit-app(); }
-                }
-
-                if root.installed : Button {
-                    text: "Uninstall";
-                    enabled: root.supported;
-                    clicked => { root.uninstall(); }
-                }
-
-                if root.installed : Button {
-                    text: "Repair";
-                    primary: true;
-                    enabled: root.supported;
-                    clicked => { root.repair(); }
-                }
-
-                if !root.installed : Button {
-                    text: "Install";
-                    primary: true;
-                    enabled: root.supported;
-                    clicked => { root.install(); }
-                }
+                width: parent.width;
+                height: parent.height;
             }
 
-            if root.busy : Text {
-                text: "Working...";
-                font-size: 13px;
-            }
+            close-touch := TouchArea { clicked => { root.hide-details(); } }
         }
     }
 }
