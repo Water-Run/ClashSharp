@@ -65,6 +65,15 @@ public sealed class LocalizationResourcesTests
     [InlineData("Settings.MainlandChinaDisplay.Description")]
     [InlineData("Settings.MainlandChinaFeature.All")]
     [InlineData("Settings.ProxyInformation.CoreConfig.Format")]
+    [InlineData("Settings.Section.Startup")]
+    [InlineData("Settings.AppAccentColor.Title")]
+    [InlineData("Settings.AppAccentColor.FollowSystem")]
+    [InlineData("Settings.AppAccentColor.Custom")]
+    [InlineData("Settings.AppAccentColor.Pick")]
+    [InlineData("Settings.CheckStartupConflicts.Title")]
+    [InlineData("Settings.StartupGuide.Title")]
+    [InlineData("MihomoService.Status.NotDeployed")]
+    [InlineData("MihomoService.Status.DeployedRunning")]
     public void Translations_EnglishFallback_ContainsRequiredCoreKeys(string key)
     {
         Assert.True(

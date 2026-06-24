@@ -1,0 +1,18 @@
+Bundled component: mihomo core
+Bundled binary: Binaries/mihomo.exe
+Bundled version: Mihomo Meta v1.19.27 windows amd64 with go1.26.4
+Bundled binary SHA256: 842FA17493A82C97148E76E3C523F5058E3CF386FBA611CAB86B6681E75F2F77
+
+Upstream project: MetaCubeX/mihomo
+Upstream release: https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.27
+Upstream documentation: https://wiki.metacubex.one/
+
+License: GPL-3.0. See mihomo-LICENSE.txt in this directory.
+
+Source availability: the upstream release page publishes the corresponding release,
+source archive links, and source-related assets such as vendor.tar.gz and
+toolchain.tar.gz. Clash# redistributes the unmodified Windows amd64 mihomo core
+as a bundled runtime dependency.
+
+Trademark/naming note: Clash# is not affiliated with MetaCubeX and does not use
+"mihomo" in the application name.

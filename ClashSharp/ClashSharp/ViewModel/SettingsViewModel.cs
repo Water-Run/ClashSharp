@@ -4,7 +4,7 @@
  *
  * @author: WaterRun
  * @file: ViewModel/SettingsViewModel.cs
- * @date: 2026-06-17
+ * @date: 2026-06-24
  */
 
 using System;
@@ -28,6 +28,10 @@ internal interface ISettingsStore
 
     AppThemeMode AppThemeMode { get; set; }
 
+    AppAccentColorMode AppAccentColorMode { get; set; }
+
+    string AppAccentColorValue { get; set; }
+
     bool LaunchAtStartupEnabled { get; set; }
 
     bool TransparentProxyEnabled { get; set; }
@@ -41,6 +45,8 @@ internal interface ISettingsStore
     bool StartupConflictCheckEnabled { get; set; }
 
     StartupBehaviorMode StartupBehaviorMode { get; set; }
+
+    bool ShowStartupGuideOnStartup { get; set; }
 
     bool CheckStaleProxyOnStartup { get; set; }
 
@@ -99,7 +105,7 @@ internal sealed class AlwaysAvailableMihomoServiceController : IMihomoServiceCon
 
     public MihomoServiceStatus GetStatus()
     {
-        return new MihomoServiceStatus(true, false, "Mihomo service is available.");
+        return new MihomoServiceStatus(true, false, LocalizationService.Instance.GetString("MihomoService.Status.Deployed"));
     }
 
     public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
@@ -109,7 +115,7 @@ internal sealed class AlwaysAvailableMihomoServiceController : IMihomoServiceCon
 
     public Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
     {
-        return Task.FromResult(new MihomoServiceStatus(false, false, "Mihomo service is not deployed."));
+        return Task.FromResult(new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.NotDeployed")));
     }
 }
 
@@ -142,6 +148,18 @@ internal sealed class AppSettingsStore : ISettingsStore
     {
         get => _settings.AppThemeMode;
         set => _settings.AppThemeMode = value;
+    }
+
+    public AppAccentColorMode AppAccentColorMode
+    {
+        get => _settings.AppAccentColorMode;
+        set => _settings.AppAccentColorMode = value;
+    }
+
+    public string AppAccentColorValue
+    {
+        get => _settings.AppAccentColorValue;
+        set => _settings.AppAccentColorValue = value;
     }
 
     public bool LaunchAtStartupEnabled
@@ -178,6 +196,12 @@ internal sealed class AppSettingsStore : ISettingsStore
     {
         get => _settings.StartupBehaviorMode;
         set => _settings.StartupBehaviorMode = value;
+    }
+
+    public bool ShowStartupGuideOnStartup
+    {
+        get => _settings.ShowStartupGuideOnStartup;
+        set => _settings.ShowStartupGuideOnStartup = value;
     }
 
     public bool CheckStaleProxyOnStartup
@@ -233,6 +257,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Callback invoked when the display style changes.</summary>
     private readonly Action<AppThemeMode> _applyTheme;
+
+    /// <summary>Callback invoked when the application accent color changes.</summary>
+    private readonly Action<AppAccentColorMode, string> _applyAccentColor;
 
     /// <summary>Callback invoked when launch-at-startup changes.</summary>
     private readonly Action<bool> _applyLaunchAtStartup;
@@ -336,11 +363,13 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<string, string> getString,
         Func<SettingsProxyInformation> getProxyInformation,
         SettingsDiagnosticsViewModel? diagnosticsViewModel = null,
-        IMihomoServiceController? mihomoServiceController = null)
+        IMihomoServiceController? mihomoServiceController = null,
+        Action<AppAccentColorMode, string>? applyAccentColor = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
         _applyTheme = applyTheme ?? throw new ArgumentNullException(nameof(applyTheme));
+        _applyAccentColor = applyAccentColor ?? ((_, _) => { });
         _applyLaunchAtStartup = applyLaunchAtStartup ?? throw new ArgumentNullException(nameof(applyLaunchAtStartup));
         _restartConnectionSampling = restartConnectionSampling ?? throw new ArgumentNullException(nameof(restartConnectionSampling));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
@@ -392,9 +421,35 @@ internal sealed class SettingsViewModel : ObservableObject
         AppThemeDarkText,
     ];
 
+    public string AppAccentColorTitleText => _getString("Settings.AppAccentColor.Title");
+
+    public string AppAccentColorDescriptionText => _getString("Settings.AppAccentColor.Description");
+
+    public string AppAccentColorFollowSystemText => _getString("Settings.AppAccentColor.FollowSystem");
+
+    public string AppAccentColorCustomText => _getString("Settings.AppAccentColor.Custom");
+
+    public string AppAccentColorPickText => _getString("Settings.AppAccentColor.Pick");
+
+    public IReadOnlyList<string> AppAccentColorModeOptions =>
+    [
+        AppAccentColorFollowSystemText,
+        AppAccentColorCustomText,
+    ];
+
     public string LaunchAtStartupTitleText => _getString("Settings.LaunchAtStartup.Title");
 
     public string LaunchAtStartupDescriptionText => _getString("Settings.LaunchAtStartup.Description");
+
+    public string StartupSectionTitleText => _getString("Settings.Section.Startup");
+
+    public string CheckStartupConflictsTitleText => _getString("Settings.CheckStartupConflicts.Title");
+
+    public string CheckStartupConflictsDescriptionText => _getString("Settings.CheckStartupConflicts.Description");
+
+    public string StartupGuideTitleText => _getString("Settings.StartupGuide.Title");
+
+    public string StartupGuideDescriptionText => _getString("Settings.StartupGuide.Description");
 
     public string ProxySectionTitleText => _getString("Settings.Section.Proxy");
 
@@ -478,6 +533,8 @@ internal sealed class SettingsViewModel : ObservableObject
     public string WindowsNativeDescriptionText => _getString("Settings.WindowsNative.Description");
 
     public string OpenText => _getString("Command.Open");
+
+    public string CheckText => _getString("Command.Check");
 
     public string TestText => _getString("Command.Test");
 
@@ -584,6 +641,12 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="AppThemeMode"/>.</summary>
     private AppThemeMode _appThemeMode;
 
+    /// <summary>Backing field for <see cref="AppAccentColorMode"/>.</summary>
+    private AppAccentColorMode _appAccentColorMode;
+
+    /// <summary>Backing field for <see cref="AppAccentColorValue"/>.</summary>
+    private string _appAccentColorValue = string.Empty;
+
     /// <summary>Backing field for <see cref="LaunchAtStartupEnabled"/>.</summary>
     private bool _launchAtStartupEnabled;
 
@@ -610,6 +673,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="StartupBehaviorMode"/>.</summary>
     private StartupBehaviorMode _startupBehaviorMode;
+
+    /// <summary>Backing field for <see cref="ShowStartupGuideOnStartup"/>.</summary>
+    private bool _showStartupGuideOnStartup;
 
     /// <summary>Backing field for <see cref="CheckStaleProxyOnStartup"/>.</summary>
     private bool _checkStaleProxyOnStartup;
@@ -688,6 +754,33 @@ internal sealed class SettingsViewModel : ObservableObject
         get => (int)AppThemeMode;
         set => SetAppThemeModeIndex(value);
     }
+
+    public AppAccentColorMode AppAccentColorMode
+    {
+        get => _appAccentColorMode;
+        private set
+        {
+            if (SetProperty(ref _appAccentColorMode, value))
+            {
+                OnPropertyChanged(nameof(AppAccentColorModeIndex));
+                OnPropertyChanged(nameof(IsCustomAccentColorSelected));
+            }
+        }
+    }
+
+    public int AppAccentColorModeIndex
+    {
+        get => (int)AppAccentColorMode;
+        set => SetAppAccentColorModeIndex(value);
+    }
+
+    public string AppAccentColorValue
+    {
+        get => _appAccentColorValue;
+        private set => SetProperty(ref _appAccentColorValue, value);
+    }
+
+    public bool IsCustomAccentColorSelected => AppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom;
 
     public bool LaunchAtStartupEnabled
     {
@@ -769,6 +862,12 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetStartupBehaviorModeIndex(value);
     }
 
+    public bool ShowStartupGuideOnStartup
+    {
+        get => _showStartupGuideOnStartup;
+        set => SetShowStartupGuideOnStartup(value);
+    }
+
     public double ConnectionSamplingIntervalSecondsValue
     {
         get => ConnectionSamplingIntervalSeconds;
@@ -840,6 +939,8 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         DisplayLanguage = _settings.DisplayLanguage;
         AppThemeMode = _settings.AppThemeMode;
+        AppAccentColorMode = _settings.AppAccentColorMode;
+        AppAccentColorValue = _settings.AppAccentColorValue;
         SetProperty(ref _launchAtStartupEnabled, _settings.LaunchAtStartupEnabled, nameof(LaunchAtStartupEnabled));
         RefreshMihomoServiceStatus();
         bool transparentProxyEnabled = _settings.TransparentProxyEnabled && CanToggleTransparentProxy;
@@ -854,6 +955,7 @@ internal sealed class SettingsViewModel : ObservableObject
         ConnectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
         SetProperty(ref _startupConflictCheckEnabled, _settings.StartupConflictCheckEnabled, nameof(StartupConflictCheckEnabled));
         StartupBehaviorMode = _settings.StartupBehaviorMode;
+        SetProperty(ref _showStartupGuideOnStartup, _settings.ShowStartupGuideOnStartup, nameof(ShowStartupGuideOnStartup));
         SetProperty(ref _checkStaleProxyOnStartup, _settings.CheckStaleProxyOnStartup, nameof(CheckStaleProxyOnStartup));
         SetProperty(ref _restoreProxyOnExit, _settings.RestoreProxyOnExit, nameof(RestoreProxyOnExit));
         ProxyRecoveryMode = _settings.ProxyRecoveryMode;
@@ -914,6 +1016,50 @@ internal sealed class SettingsViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>Persists an app accent color behavior selected by combo box index.</summary>
+    /// <param name="index">Accent color mode enum index.</param>
+    /// <returns>True when the mode was valid and persisted; otherwise false.</returns>
+    public bool SetAppAccentColorModeIndex(int index)
+    {
+        if (!Enum.IsDefined((AppAccentColorMode)index))
+        {
+            return false;
+        }
+
+        AppAccentColorMode mode = (AppAccentColorMode)index;
+        _settings.AppAccentColorMode = mode;
+        AppAccentColorMode = mode;
+        _applyAccentColor(mode, AppAccentColorValue);
+        return true;
+    }
+
+    /// <summary>Persists a custom accent color value.</summary>
+    /// <param name="value">Hex color value.</param>
+    /// <returns>True when the color was valid and persisted; otherwise false.</returns>
+    public bool SetAppAccentColorValue(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        try
+        {
+            _settings.AppAccentColorValue = value;
+            AppAccentColorValue = _settings.AppAccentColorValue;
+            if (AppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom)
+            {
+                _applyAccentColor(ClashSharp.Model.AppAccentColorMode.Custom, AppAccentColorValue);
+            }
+
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Raises property changes for all localized bindable text properties.</summary>
     private void RaiseLocalizedTextChanges()
     {
@@ -931,8 +1077,19 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(AppThemeLightText),
             nameof(AppThemeDarkText),
             nameof(AppThemeModeOptions),
+            nameof(AppAccentColorTitleText),
+            nameof(AppAccentColorDescriptionText),
+            nameof(AppAccentColorFollowSystemText),
+            nameof(AppAccentColorCustomText),
+            nameof(AppAccentColorPickText),
+            nameof(AppAccentColorModeOptions),
             nameof(LaunchAtStartupTitleText),
             nameof(LaunchAtStartupDescriptionText),
+            nameof(StartupSectionTitleText),
+            nameof(CheckStartupConflictsTitleText),
+            nameof(CheckStartupConflictsDescriptionText),
+            nameof(StartupGuideTitleText),
+            nameof(StartupGuideDescriptionText),
             nameof(ProxySectionTitleText),
             nameof(TransparentProxySectionTitleText),
             nameof(TransparentProxyTitleText),
@@ -967,6 +1124,7 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(WindowsNativeTitleText),
             nameof(WindowsNativeDescriptionText),
             nameof(OpenText),
+            nameof(CheckText),
             nameof(TestText),
             nameof(WslDiagnosticTitleText),
             nameof(TerminalDiagnosticTitleText),
@@ -1224,6 +1382,14 @@ internal sealed class SettingsViewModel : ObservableObject
         _settings.StartupBehaviorMode = mode;
         StartupBehaviorMode = mode;
         return true;
+    }
+
+    /// <summary>Persists whether the startup guide is shown during application startup.</summary>
+    /// <param name="isEnabled">Switch value.</param>
+    public void SetShowStartupGuideOnStartup(bool isEnabled)
+    {
+        _settings.ShowStartupGuideOnStartup = isEnabled;
+        SetProperty(ref _showStartupGuideOnStartup, isEnabled, nameof(ShowStartupGuideOnStartup));
     }
 
     /// <summary>Persists the stale proxy startup check switch.</summary>

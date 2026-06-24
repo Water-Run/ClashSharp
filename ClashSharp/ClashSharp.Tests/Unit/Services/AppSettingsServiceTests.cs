@@ -60,6 +60,15 @@ public sealed class AppSettingsServiceTests
         Assert.True(AppSettingsService.Instance.StartupConflictCheckEnabled);
     }
 
+    /// <summary>Verifies the startup guide prompt is enabled for first-run onboarding by default.</summary>
+    [Fact]
+    public void ShowStartupGuideOnStartup_DefaultsToTrue()
+    {
+        ResetSettings();
+
+        Assert.True(ReadShowStartupGuideOnStartup());
+    }
+
     /// <summary>Verifies the app follows the system display style by default.</summary>
     [Fact]
     public void AppThemeMode_DefaultsToFollowSystem()
@@ -67,6 +76,24 @@ public sealed class AppSettingsServiceTests
         ResetSettings();
 
         Assert.Equal(AppThemeMode.FollowSystem, AppSettingsService.Instance.AppThemeMode);
+    }
+
+    /// <summary>Verifies the app follows the Windows accent color by default.</summary>
+    [Fact]
+    public void AppAccentColorMode_DefaultsToFollowSystem()
+    {
+        ResetSettings();
+
+        Assert.Equal("FollowSystem", ReadAppAccentColorModeName());
+    }
+
+    /// <summary>Verifies the custom accent color has a valid picker seed even when system accent is active.</summary>
+    [Fact]
+    public void AppAccentColorValue_DefaultsToWindowsBlue()
+    {
+        ResetSettings();
+
+        Assert.Equal("#FF0078D4", ReadAppAccentColorValue());
     }
 
     /// <summary>Verifies launch-at-startup is opt-in.</summary>
@@ -96,9 +123,12 @@ public sealed class AppSettingsServiceTests
         AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled = true;
         AppSettingsService.Instance.DisplayLanguage = AppLanguage.German;
         AppSettingsService.Instance.AppThemeMode = AppThemeMode.Dark;
+        WriteAppAccentColorMode("Custom");
+        WriteAppAccentColorValue("#FF2D7D9A");
         AppSettingsService.Instance.LaunchAtStartupEnabled = true;
         AppSettingsService.Instance.StartupBehaviorMode = StartupBehaviorMode.StartRuleProxy;
         AppSettingsService.Instance.StartupConflictCheckEnabled = false;
+        WriteShowStartupGuideOnStartup(false);
 
         AppSettingsService.Instance.ResetAllSettings();
 
@@ -107,14 +137,74 @@ public sealed class AppSettingsServiceTests
         Assert.False(AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled);
         Assert.Equal(AppLanguage.AutoDetect, AppSettingsService.Instance.DisplayLanguage);
         Assert.Equal(AppThemeMode.FollowSystem, AppSettingsService.Instance.AppThemeMode);
+        Assert.Equal("FollowSystem", ReadAppAccentColorModeName());
+        Assert.Equal("#FF0078D4", ReadAppAccentColorValue());
         Assert.False(AppSettingsService.Instance.LaunchAtStartupEnabled);
         Assert.Equal(StartupBehaviorMode.LastSetting, AppSettingsService.Instance.StartupBehaviorMode);
         Assert.True(AppSettingsService.Instance.StartupConflictCheckEnabled);
+        Assert.True(ReadShowStartupGuideOnStartup());
     }
 
     /// <summary>Restores process-wide application settings before a default-value assertion.</summary>
     private static void ResetSettings()
     {
         AppSettingsService.Instance.ResetAllSettings();
+    }
+
+    /// <summary>Reads the startup guide setting by name so the red test can describe the new contract before implementation.</summary>
+    /// <returns>The stored startup guide setting value.</returns>
+    private static bool ReadShowStartupGuideOnStartup()
+    {
+        System.Reflection.PropertyInfo? property = typeof(AppSettingsService).GetProperty("ShowStartupGuideOnStartup");
+        Assert.NotNull(property);
+        return Assert.IsType<bool>(property.GetValue(AppSettingsService.Instance));
+    }
+
+    /// <summary>Writes the startup guide setting by name so reset behavior can be specified before implementation.</summary>
+    /// <param name="value">Value to write.</param>
+    private static void WriteShowStartupGuideOnStartup(bool value)
+    {
+        System.Reflection.PropertyInfo? property = typeof(AppSettingsService).GetProperty("ShowStartupGuideOnStartup");
+        Assert.NotNull(property);
+        property.SetValue(AppSettingsService.Instance, value);
+    }
+
+    /// <summary>Reads the accent color mode by name so the red test can describe the new contract before implementation.</summary>
+    /// <returns>The enum value name.</returns>
+    private static string ReadAppAccentColorModeName()
+    {
+        System.Reflection.PropertyInfo? property = typeof(AppSettingsService).GetProperty("AppAccentColorMode");
+        Assert.NotNull(property);
+        object? value = property.GetValue(AppSettingsService.Instance);
+        Assert.NotNull(value);
+        return value.ToString() ?? string.Empty;
+    }
+
+    /// <summary>Writes the accent color mode by name through the future enum property.</summary>
+    /// <param name="name">Enum value name.</param>
+    private static void WriteAppAccentColorMode(string name)
+    {
+        System.Reflection.PropertyInfo? property = typeof(AppSettingsService).GetProperty("AppAccentColorMode");
+        Assert.NotNull(property);
+        object value = Enum.Parse(property.PropertyType, name);
+        property.SetValue(AppSettingsService.Instance, value);
+    }
+
+    /// <summary>Reads the custom accent color value through reflection.</summary>
+    /// <returns>The persisted ARGB hex color.</returns>
+    private static string ReadAppAccentColorValue()
+    {
+        System.Reflection.PropertyInfo? property = typeof(AppSettingsService).GetProperty("AppAccentColorValue");
+        Assert.NotNull(property);
+        return Assert.IsType<string>(property.GetValue(AppSettingsService.Instance));
+    }
+
+    /// <summary>Writes the custom accent color value through reflection.</summary>
+    /// <param name="value">ARGB hex color string.</param>
+    private static void WriteAppAccentColorValue(string value)
+    {
+        System.Reflection.PropertyInfo? property = typeof(AppSettingsService).GetProperty("AppAccentColorValue");
+        Assert.NotNull(property);
+        property.SetValue(AppSettingsService.Instance, value);
     }
 }

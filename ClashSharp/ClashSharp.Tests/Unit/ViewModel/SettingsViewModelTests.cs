@@ -23,6 +23,8 @@ public sealed class SettingsViewModelTests
         {
             DisplayLanguage = AppLanguage.French,
             AppThemeMode = AppThemeMode.Dark,
+            AppAccentColorMode = AppAccentColorMode.Custom,
+            AppAccentColorValue = "#FF2D7D9A",
             LaunchAtStartupEnabled = true,
             TransparentProxyEnabled = false,
             MixedPort = 10990,
@@ -46,6 +48,10 @@ public sealed class SettingsViewModelTests
         Assert.Equal((int)AppLanguage.French + 1, viewModel.DisplayLanguageIndex);
         Assert.Equal(AppThemeMode.Dark, viewModel.AppThemeMode);
         Assert.Equal((int)AppThemeMode.Dark, viewModel.AppThemeModeIndex);
+        Assert.Equal(AppAccentColorMode.Custom, viewModel.AppAccentColorMode);
+        Assert.Equal((int)AppAccentColorMode.Custom, viewModel.AppAccentColorModeIndex);
+        Assert.Equal("#FF2D7D9A", viewModel.AppAccentColorValue);
+        Assert.True(viewModel.IsCustomAccentColorSelected);
         Assert.True(viewModel.LaunchAtStartupEnabled);
         Assert.False(viewModel.TransparentProxyEnabled);
         Assert.Equal(10990, viewModel.MixedPort);
@@ -315,12 +321,64 @@ public sealed class SettingsViewModelTests
         Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
         Assert.Equal(3, viewModel.AppThemeModeOptions.Count);
         Assert.All(viewModel.AppThemeModeOptions, Assert.NotEmpty);
+        Assert.Equal(2, ReadProperty<IReadOnlyList<string>>(viewModel, "AppAccentColorModeOptions").Count);
+        Assert.All(ReadProperty<IReadOnlyList<string>>(viewModel, "AppAccentColorModeOptions"), Assert.NotEmpty);
         Assert.Equal(3, viewModel.ProxyRecoveryModeOptions.Count);
         Assert.All(viewModel.ProxyRecoveryModeOptions, Assert.NotEmpty);
         Assert.Equal(4, viewModel.MainlandChinaFeatureModeOptions.Count);
         Assert.All(viewModel.MainlandChinaFeatureModeOptions, Assert.NotEmpty);
         Assert.Equal(3, viewModel.StartupBehaviorModeOptions.Count);
         Assert.All(viewModel.StartupBehaviorModeOptions, Assert.NotEmpty);
+    }
+
+    /// <summary>Verifies startup settings expose a dedicated section, manual conflict check text, and guide toggle state.</summary>
+    [Fact]
+    public void StartupSettings_ExposeSectionConflictCheckAndGuideBindings()
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+
+        Assert.Equal("Settings.Section.Startup", ReadProperty<string>(viewModel, "StartupSectionTitleText"));
+        Assert.Equal("Settings.CheckStartupConflicts.Title", ReadProperty<string>(viewModel, "CheckStartupConflictsTitleText"));
+        Assert.Equal("Settings.CheckStartupConflicts.Description", ReadProperty<string>(viewModel, "CheckStartupConflictsDescriptionText"));
+        Assert.Equal("Settings.StartupGuide.Title", ReadProperty<string>(viewModel, "StartupGuideTitleText"));
+        Assert.Equal("Settings.StartupGuide.Description", ReadProperty<string>(viewModel, "StartupGuideDescriptionText"));
+        Assert.True(ReadProperty<bool>(viewModel, "ShowStartupGuideOnStartup"));
+    }
+
+    /// <summary>Verifies theme color settings expose system/custom options and a custom color seed.</summary>
+    [Fact]
+    public void AccentColorSettings_ExposeSystemAndCustomColorBindings()
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+
+        Assert.Equal("Settings.AppAccentColor.Title", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
+        Assert.Equal("Settings.AppAccentColor.Description", ReadProperty<string>(viewModel, "AppAccentColorDescriptionText"));
+        Assert.Equal("Settings.AppAccentColor.FollowSystem", ReadProperty<string>(viewModel, "AppAccentColorFollowSystemText"));
+        Assert.Equal("Settings.AppAccentColor.Custom", ReadProperty<string>(viewModel, "AppAccentColorCustomText"));
+        Assert.Equal(0, ReadProperty<int>(viewModel, "AppAccentColorModeIndex"));
+        Assert.Equal("#FF0078D4", ReadProperty<string>(viewModel, "AppAccentColorValue"));
+        Assert.False(ReadProperty<bool>(viewModel, "IsCustomAccentColorSelected"));
+    }
+
+    /// <summary>Verifies custom accent color mode and value are persisted through explicit ViewModel methods.</summary>
+    [Fact]
+    public void AccentColorSettings_PersistCustomModeAndColor()
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+
+        bool modeChanged = InvokeMethod<bool>(viewModel, "SetAppAccentColorModeIndex", 1);
+        bool colorChanged = InvokeMethod<bool>(viewModel, "SetAppAccentColorValue", "#FF2D7D9A");
+
+        Assert.True(modeChanged);
+        Assert.True(colorChanged);
+        Assert.Equal("Custom", store.AppAccentColorMode.ToString());
+        Assert.Equal("#FF2D7D9A", store.AppAccentColorValue);
+        Assert.True(ReadProperty<bool>(viewModel, "IsCustomAccentColorSelected"));
+        Assert.Equal(1, ReadProperty<int>(viewModel, "AppAccentColorModeIndex"));
+        Assert.Equal("#FF2D7D9A", ReadProperty<string>(viewModel, "AppAccentColorValue"));
     }
 
     /// <summary>Verifies mainland China feature mode selection persists only valid enum indexes.</summary>
@@ -386,6 +444,10 @@ public sealed class SettingsViewModelTests
 
         public AppThemeMode AppThemeMode { get; set; } = AppThemeMode.FollowSystem;
 
+        public AppAccentColorMode AppAccentColorMode { get; set; } = AppAccentColorMode.FollowSystem;
+
+        public string AppAccentColorValue { get; set; } = "#FF0078D4";
+
         public bool LaunchAtStartupEnabled { get; set; }
 
         public bool TransparentProxyEnabled { get; set; } = true;
@@ -400,6 +462,8 @@ public sealed class SettingsViewModelTests
 
         public StartupBehaviorMode StartupBehaviorMode { get; set; } = StartupBehaviorMode.LastSetting;
 
+        public bool ShowStartupGuideOnStartup { get; set; } = true;
+
         public bool CheckStaleProxyOnStartup { get; set; } = true;
 
         public bool RestoreProxyOnExit { get; set; } = true;
@@ -411,6 +475,31 @@ public sealed class SettingsViewModelTests
         public bool MainlandChinaUrlBlockingEnabled { get; set; }
 
         public string ConnectionTestUrl { get; set; } = "https://www.google.com/generate_204";
+    }
+
+    /// <summary>Reads a view model property by name so the red test can specify a new binding contract before implementation.</summary>
+    /// <param name="viewModel">Settings view model under test.</param>
+    /// <param name="propertyName">Property name to read.</param>
+    /// <typeparam name="T">Expected property value type.</typeparam>
+    /// <returns>The typed property value.</returns>
+    private static T ReadProperty<T>(SettingsViewModel viewModel, string propertyName)
+    {
+        System.Reflection.PropertyInfo? property = typeof(SettingsViewModel).GetProperty(propertyName);
+        Assert.NotNull(property);
+        return Assert.IsAssignableFrom<T>(property.GetValue(viewModel));
+    }
+
+    /// <summary>Invokes a view model method by name so red tests can describe new methods before implementation.</summary>
+    /// <param name="viewModel">Settings view model under test.</param>
+    /// <param name="methodName">Method name to invoke.</param>
+    /// <param name="argument">Single method argument.</param>
+    /// <typeparam name="T">Expected return value type.</typeparam>
+    /// <returns>The typed method result.</returns>
+    private static T InvokeMethod<T>(SettingsViewModel viewModel, string methodName, object argument)
+    {
+        System.Reflection.MethodInfo? method = typeof(SettingsViewModel).GetMethod(methodName);
+        Assert.NotNull(method);
+        return Assert.IsType<T>(method.Invoke(viewModel, [argument]));
     }
 
     /// <summary>Fake mihomo service controller for transparent proxy settings tests.</summary>

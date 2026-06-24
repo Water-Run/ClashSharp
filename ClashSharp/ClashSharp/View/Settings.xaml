@@ -13,7 +13,7 @@
         Padding="24,18,18,24"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="6" HorizontalAlignment="Stretch">
+        <StackPanel x:Name="SettingsContentPanel" Spacing="6" HorizontalAlignment="Stretch">
             <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
             <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                 <components:SettingRow.ActionContent>
@@ -27,9 +27,50 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
+            <components:SettingRow x:Name="AppAccentColorRow" Title="{Binding AppAccentColorTitleText}" Description="{Binding AppAccentColorDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox x:Name="AppAccentColorModeBox" Width="150" ItemsSource="{Binding AppAccentColorModeOptions}" SelectedIndex="{Binding AppAccentColorModeIndex, Mode=TwoWay}" />
+                        <Button x:Name="AppAccentColorPickerButton" Width="40" MinWidth="40" Padding="0" Click="AppAccentColorPickerButton_Click" AutomationProperties.Name="{Binding AppAccentColorPickText}" ToolTipService.ToolTip="{Binding AppAccentColorPickText}">
+                            <FontIcon Glyph="&#xE790;" FontSize="14" />
+                        </Button>
+                    </StackPanel>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="LaunchAtStartupRow" Title="{Binding LaunchAtStartupTitleText}" Description="{Binding LaunchAtStartupDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <ToggleSwitch x:Name="LaunchAtStartupToggle" MinWidth="0" IsOn="{Binding LaunchAtStartupEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="CheckStartupConflictsRow" Title="{Binding CheckStartupConflictsTitleText}" Description="{Binding CheckStartupConflictsDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <Button x:Name="CheckStartupConflictsButton" Click="CheckStartupConflictsButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                            <TextBlock Text="{Binding CheckText}" />
+                        </StackPanel>
+                    </Button>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="StartupConflictCheckRow" Title="{Binding StartupConflictCheckTitleText}" Description="{Binding StartupConflictCheckDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="StartupConflictCheckToggle" MinWidth="0" IsOn="{Binding StartupConflictCheckEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="ShowStartupGuideRow" Title="{Binding StartupGuideTitleText}" Description="{Binding StartupGuideDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="ShowStartupGuideToggle" MinWidth="0" IsOn="{Binding ShowStartupGuideOnStartup, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="StartupBehaviorModeRow" Title="{Binding StartupBehaviorModeTitleText}" Description="{Binding StartupBehaviorModeDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ComboBox x:Name="StartupBehaviorModeBox" Width="180" ItemsSource="{Binding StartupBehaviorModeOptions}" SelectedIndex="{Binding StartupBehaviorModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -90,18 +131,6 @@
             <components:SettingRow x:Name="SamplingIntervalRow" Title="{Binding SamplingIntervalTitleText}" Description="{Binding SamplingIntervalDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <NumberBox x:Name="ConnectionSamplingIntervalBox" Width="140" Minimum="5" Maximum="3600" Value="{Binding ConnectionSamplingIntervalSecondsValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />
-                </components:SettingRow.ActionContent>
-            </components:SettingRow>
-
-            <components:SettingRow x:Name="StartupConflictCheckRow" Title="{Binding StartupConflictCheckTitleText}" Description="{Binding StartupConflictCheckDescriptionText}">
-                <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="StartupConflictCheckToggle" MinWidth="0" IsOn="{Binding StartupConflictCheckEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </components:SettingRow.ActionContent>
-            </components:SettingRow>
-
-            <components:SettingRow x:Name="StartupBehaviorModeRow" Title="{Binding StartupBehaviorModeTitleText}" Description="{Binding StartupBehaviorModeDescriptionText}">
-                <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="StartupBehaviorModeBox" Width="180" ItemsSource="{Binding StartupBehaviorModeOptions}" SelectedIndex="{Binding StartupBehaviorModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 

@@ -9,10 +9,58 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $binaryDirectory = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries"
 $binaryPath = Join-Path $binaryDirectory "mihomo.exe"
+$licensePath = Join-Path $binaryDirectory "mihomo-LICENSE.txt"
+$noticePath = Join-Path $binaryDirectory "mihomo-NOTICE.txt"
 $workDirectory = Join-Path $repoRoot "ClashSharp\.download\mihomo"
 
+function Ensure-MihomoDistributionFiles {
+    param(
+        [string]$VersionText,
+        [string]$AssetName = "existing bundled binary",
+        [string]$AssetUrl = "",
+        [string]$ReleaseUrl = "https://github.com/MetaCubeX/mihomo/releases"
+    )
+
+    if (-not (Test-Path $licensePath)) {
+        Invoke-WebRequest -Uri "https://www.gnu.org/licenses/gpl-3.0.txt" -OutFile $licensePath -UseBasicParsing
+    }
+
+    $binarySha256 = if (Test-Path $binaryPath) {
+        (Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash
+    } else {
+        "unknown"
+    }
+
+    $notice = @"
+Bundled component: mihomo core
+Bundled binary: Binaries/mihomo.exe
+Bundled version: $VersionText
+Bundled binary SHA256: $binarySha256
+
+Upstream project: MetaCubeX/mihomo
+Upstream release: $ReleaseUrl
+Upstream asset: $AssetName
+Upstream asset URL: $AssetUrl
+Upstream documentation: https://wiki.metacubex.one/
+
+License: GPL-3.0. See mihomo-LICENSE.txt in this directory.
+
+Source availability: the upstream release page publishes the corresponding release,
+source archive links, and source-related assets such as vendor.tar.gz and
+toolchain.tar.gz. Clash# redistributes the unmodified Windows amd64 mihomo core
+as a bundled runtime dependency.
+
+Trademark/naming note: Clash# is not affiliated with MetaCubeX and does not use
+"mihomo" in the application name.
+"@
+
+    Set-Content -LiteralPath $noticePath -Value $notice -Encoding UTF8
+}
+
 if ((Test-Path $binaryPath) -and -not $Force) {
-    & $binaryPath -v
+    $versionText = (& $binaryPath -v | Select-Object -First 1)
+    Ensure-MihomoDistributionFiles -VersionText $versionText
+    Write-Output $versionText
     exit 0
 }
 
@@ -71,4 +119,10 @@ if ($null -eq $downloadedBinary) {
 }
 
 Copy-Item -LiteralPath $downloadedBinary.FullName -Destination $binaryPath -Force
-& $binaryPath -v
+$versionText = (& $binaryPath -v | Select-Object -First 1)
+Ensure-MihomoDistributionFiles `
+    -VersionText $versionText `
+    -AssetName $asset.name `
+    -AssetUrl $asset.browser_download_url `
+    -ReleaseUrl $release.html_url
+Write-Output $versionText

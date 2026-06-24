@@ -47,14 +47,16 @@ public sealed class MihomoServiceManager
         ProcessResult result = RunSc("query", ServiceName);
         if (result.ExitCode != 0)
         {
-            return new MihomoServiceStatus(false, false, "Mihomo service is not deployed.");
+            return new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.NotDeployed"));
         }
 
         bool isRunning = result.Output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
         return new MihomoServiceStatus(
             true,
             isRunning,
-            isRunning ? "Mihomo service is deployed and running." : "Mihomo service is deployed.");
+            isRunning
+                ? LocalizationService.Instance.GetString("MihomoService.Status.DeployedRunning")
+                : LocalizationService.Instance.GetString("MihomoService.Status.Deployed"));
     }
 
     /// <summary>Deploys the Windows service when a service host is available.</summary>
@@ -71,7 +73,7 @@ public sealed class MihomoServiceManager
         string? serviceHostPath = ResolveServiceHostPath();
         if (serviceHostPath is null)
         {
-            return new MihomoServiceStatus(false, false, "Mihomo service host is missing.");
+            return new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.HostMissing"));
         }
 
         string mihomoPath = MihomoCoreService.Instance.BinaryPath;
@@ -97,7 +99,7 @@ public sealed class MihomoServiceManager
 
         if (createResult.ExitCode != 0)
         {
-            return new MihomoServiceStatus(false, false, "Mihomo service deployment failed.");
+            return new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.DeploymentFailed"));
         }
 
         return GetStatus();
@@ -117,8 +119,8 @@ public sealed class MihomoServiceManager
         await RunScElevatedAsync(cancellationToken, "stop", ServiceName).ConfigureAwait(false);
         ProcessResult deleteResult = await RunScElevatedAsync(cancellationToken, "delete", ServiceName).ConfigureAwait(false);
         return deleteResult.ExitCode == 0
-            ? new MihomoServiceStatus(false, false, "Mihomo service was removed.")
-            : new MihomoServiceStatus(true, current.IsRunning, "Mihomo service removal failed.");
+            ? new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.Removed"))
+            : new MihomoServiceStatus(true, current.IsRunning, LocalizationService.Instance.GetString("MihomoService.Status.RemovalFailed"));
     }
 
     /// <summary>Attempts to locate the bundled service host.</summary>

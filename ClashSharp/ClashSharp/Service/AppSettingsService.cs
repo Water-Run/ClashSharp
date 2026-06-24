@@ -4,7 +4,7 @@
  *
  * @author: WaterRun
  * @file: Service/AppSettingsService.cs
- * @date: 2026-06-15
+ * @date: 2026-06-24
  */
 
 using System;
@@ -41,6 +41,12 @@ public sealed class AppSettingsService
     /// <summary>Storage key for the selected display style.</summary>
     private const string KeyAppThemeMode = "AppThemeMode";
 
+    /// <summary>Storage key for the selected application accent color behavior.</summary>
+    private const string KeyAppAccentColorMode = "AppAccentColorMode";
+
+    /// <summary>Storage key for the custom application accent color.</summary>
+    private const string KeyAppAccentColorValue = "AppAccentColorValue";
+
     /// <summary>Storage key for launching Clash# when the user signs in.</summary>
     private const string KeyLaunchAtStartupEnabled = "LaunchAtStartupEnabled";
 
@@ -74,6 +80,9 @@ public sealed class AppSettingsService
     /// <summary>Storage key for startup proxy behavior.</summary>
     private const string KeyStartupBehaviorMode = "StartupBehaviorMode";
 
+    /// <summary>Storage key for showing the startup guide during application startup.</summary>
+    private const string KeyShowStartupGuideOnStartup = "ShowStartupGuideOnStartup";
+
     /// <summary>Storage key for stale proxy recovery behavior after abnormal exits or restarts.</summary>
     private const string KeyProxyRecoveryMode = "ProxyRecoveryMode";
 
@@ -92,11 +101,16 @@ public sealed class AppSettingsService
     /// <summary>Default proxy connection-test URL.</summary>
     private const string DefaultConnectionTestUrl = "https://www.google.com/generate_204";
 
+    /// <summary>Default custom accent color used as the picker seed.</summary>
+    private const string DefaultAppAccentColorValue = "#FF0078D4";
+
     /// <summary>Settings keys owned by this service.</summary>
     private static readonly string[] KnownKeys =
     [
         KeyDisplayLanguage,
         KeyAppThemeMode,
+        KeyAppAccentColorMode,
+        KeyAppAccentColorValue,
         KeyLaunchAtStartupEnabled,
         KeyCurrentMode,
         KeyActiveProfileId,
@@ -108,6 +122,7 @@ public sealed class AppSettingsService
         KeyCheckStaleProxyOnStartup,
         KeyStartupConflictCheckEnabled,
         KeyStartupBehaviorMode,
+        KeyShowStartupGuideOnStartup,
         KeyProxyRecoveryMode,
         KeyMainlandChinaDisplayEnabled,
         KeyMainlandChinaFeatureMode,
@@ -135,6 +150,23 @@ public sealed class AppSettingsService
     {
         get => GetEnum(KeyAppThemeMode, AppThemeMode.FollowSystem);
         set => SetEnum(KeyAppThemeMode, value);
+    }
+
+    /// <summary>Gets or sets the selected application accent color behavior.</summary>
+    /// <value>Selected <see cref="AppAccentColorMode"/> value; defaults to <see cref="AppAccentColorMode.FollowSystem"/>.</value>
+    public AppAccentColorMode AppAccentColorMode
+    {
+        get => GetEnum(KeyAppAccentColorMode, AppAccentColorMode.FollowSystem);
+        set => SetEnum(KeyAppAccentColorMode, value);
+    }
+
+    /// <summary>Gets or sets the custom application accent color in ARGB hex format.</summary>
+    /// <value>Custom color as #AARRGGBB; defaults to Windows blue.</value>
+    /// <exception cref="ArgumentException">Assigned value is not a 6- or 8-digit hex color.</exception>
+    public string AppAccentColorValue
+    {
+        get => GetString(KeyAppAccentColorValue, DefaultAppAccentColorValue);
+        set => SetString(KeyAppAccentColorValue, NormalizeAccentColorValue(value));
     }
 
     /// <summary>Gets or sets whether Clash# should launch when the user signs in.</summary>
@@ -241,6 +273,14 @@ public sealed class AppSettingsService
     {
         get => GetEnum(KeyStartupBehaviorMode, StartupBehaviorMode.LastSetting);
         set => SetEnum(KeyStartupBehaviorMode, value);
+    }
+
+    /// <summary>Gets or sets whether Clash# should show the startup guide during application startup.</summary>
+    /// <value>True when the startup guide should be shown; defaults to true.</value>
+    public bool ShowStartupGuideOnStartup
+    {
+        get => GetBoolean(KeyShowStartupGuideOnStartup, true);
+        set => SetBoolean(KeyShowStartupGuideOnStartup, value);
     }
 
     /// <summary>Gets or sets the recovery action applied to stale proxy state after abnormal exits.</summary>
@@ -529,6 +569,53 @@ public sealed class AppSettingsService
         }
 
         return uri.ToString().TrimEnd('/');
+    }
+
+    /// <summary>Normalizes a user-selected accent color to #AARRGGBB.</summary>
+    /// <param name="value">Hex color value. Must not be null.</param>
+    /// <returns>Normalized ARGB hex color.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="value"/> is not a 6- or 8-digit hex color.</exception>
+    private static string NormalizeAccentColorValue(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        string normalized = value.Trim();
+        if (normalized.StartsWith('#'))
+        {
+            normalized = normalized[1..];
+        }
+
+        if (normalized.Length == 6)
+        {
+            normalized = $"FF{normalized}";
+        }
+
+        if (normalized.Length != 8 || !IsHexColorValue(normalized))
+        {
+            throw new ArgumentException("Accent color must be a 6- or 8-digit hexadecimal value.", nameof(value));
+        }
+
+        return $"#{normalized.ToUpperInvariant()}";
+    }
+
+    /// <summary>Returns whether <paramref name="value"/> contains only ASCII hexadecimal digits.</summary>
+    /// <param name="value">Color text without leading #. Must not be null.</param>
+    /// <returns>True when every character is hexadecimal.</returns>
+    private static bool IsHexColorValue(string value)
+    {
+        foreach (char character in value)
+        {
+            bool isHexDigit = character is >= '0' and <= '9'
+                or >= 'a' and <= 'f'
+                or >= 'A' and <= 'F';
+            if (!isHexDigit)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Attempts to resolve the Windows application local settings container.</summary>

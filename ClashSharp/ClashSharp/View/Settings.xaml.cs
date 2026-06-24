@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -45,7 +46,8 @@ public sealed partial class Settings : Page
             LocalizationService.Instance.GetString,
             SettingsProxyInformationAdapter.CreateSnapshot,
             diagnosticsViewModel,
-            new MihomoServiceControllerAdapter(MihomoServiceManager.Instance));
+            new MihomoServiceControllerAdapter(MihomoServiceManager.Instance),
+            AppThemeService.ApplyAccentColor);
         InitializeComponent();
         DataContext = _viewModel;
         LoadSettings();
@@ -55,6 +57,15 @@ public sealed partial class Settings : Page
     private void LoadSettings()
     {
         _viewModel.Load();
+    }
+
+    /// <summary>Returns the window-level XAML root so dialogs center in the visible window.</summary>
+    /// <returns>Window root when available; otherwise the page root.</returns>
+    private XamlRoot GetDialogXamlRoot()
+    {
+        return App.MainWindow?.Content is FrameworkElement root && root.XamlRoot is not null
+            ? root.XamlRoot
+            : XamlRoot;
     }
 
     /// <summary>Persists the connection test URL when the input loses focus.</summary>
@@ -106,7 +117,7 @@ public sealed partial class Settings : Page
             Title = _viewModel.ConnectionTestUrlTitleText,
             Content = message,
             CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
-            XamlRoot = XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
 
         await dialog.ShowAsync();
@@ -122,10 +133,60 @@ public sealed partial class Settings : Page
             Title = _viewModel.WindowsNativeTitleText,
             Content = BuildNetworkRepairPanel(),
             CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
-            XamlRoot = XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
 
         await dialog.ShowAsync();
+    }
+
+    /// <summary>Opens the application accent color picker and persists the selected color.</summary>
+    /// <param name="sender">Clicked button. Not null.</param>
+    /// <param name="e">Routed event arguments. Not null.</param>
+    private async void AppAccentColorPickerButton_Click(object sender, RoutedEventArgs e)
+    {
+        ColorPicker picker = new()
+        {
+            Color = AppThemeService.ParseAccentColorOrDefault(_viewModel.AppAccentColorValue),
+            IsAlphaEnabled = false,
+            Width = 320,
+            MaxWidth = 320,
+        };
+
+        ScrollViewer pickerScrollViewer = new()
+        {
+            Content = picker,
+            MaxHeight = 180,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+
+        ContentDialog dialog = new()
+        {
+            Title = _viewModel.AppAccentColorTitleText,
+            Content = pickerScrollViewer,
+            MaxWidth = 420,
+            PrimaryButtonText = _viewModel.AppAccentColorPickText,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        _viewModel.SetAppAccentColorModeIndex((int)AppAccentColorMode.Custom);
+        _viewModel.SetAppAccentColorValue(AppThemeService.FormatAccentColor(picker.Color));
+    }
+
+    /// <summary>Runs startup conflict detection immediately and shows the shared result dialog.</summary>
+    /// <param name="sender">Clicked button. Not null.</param>
+    /// <param name="e">Routed event arguments. Not null.</param>
+    private async void CheckStartupConflictsButton_Click(object sender, RoutedEventArgs e)
+    {
+        IReadOnlyList<StartupConflictIssue> issues = StartupConflictDetectionService.Instance.CheckConflicts(_viewModel.MixedPort);
+        await StartupConflictDialogPresenter.ShowAsync(GetDialogXamlRoot(), issues);
     }
 
     /// <summary>Builds the network repair dialog content.</summary>
@@ -236,7 +297,7 @@ public sealed partial class Settings : Page
             PrimaryButtonText = _viewModel.ResetText,
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
 
         if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
@@ -261,7 +322,7 @@ public sealed partial class Settings : Page
             PrimaryButtonText = _viewModel.CleanupText,
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
 
         if (await firstDialog.ShowAsync() is not ContentDialogResult.Primary)
@@ -276,7 +337,7 @@ public sealed partial class Settings : Page
             PrimaryButtonText = _viewModel.CleanupText,
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
 
         if (await secondDialog.ShowAsync() is not ContentDialogResult.Primary)

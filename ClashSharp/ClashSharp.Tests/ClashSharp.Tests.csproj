@@ -34,6 +34,7 @@
   <ItemGroup>
     <Compile Include="..\ClashSharp\Model\AppLanguage.cs" Link="Model\AppLanguage.cs" />
     <Compile Include="..\ClashSharp\Model\AppThemeMode.cs" Link="Model\AppThemeMode.cs" />
+    <Compile Include="..\ClashSharp\Model\AppAccentColorMode.cs" Link="Model\AppAccentColorMode.cs" />
     <Compile Include="..\ClashSharp\Model\ActiveConnection.cs" Link="Model\ActiveConnection.cs" />
     <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />
     <Compile Include="..\ClashSharp\Model\MainlandChinaFeatureMode.cs" Link="Model\MainlandChinaFeatureMode.cs" />

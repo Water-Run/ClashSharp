@@ -13,6 +13,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.View;
 using ClashSharp.ViewModel;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -73,6 +74,9 @@ public sealed partial class MainWindow : Window
             CreatePageMap());
         InitializeComponent();
         AppThemeService.Apply((FrameworkElement)Content, AppSettingsService.Instance.AppThemeMode);
+        AppThemeService.ApplyAccentColor(
+            AppSettingsService.Instance.AppAccentColorMode,
+            AppSettingsService.Instance.AppAccentColorValue);
         NavView.DataContext = _viewModel;
         InitializeWindowMinSize();
         InitializeTitleBar();
@@ -132,6 +136,14 @@ public sealed partial class MainWindow : Window
         }
 
         NavigateToTag(tag);
+    }
+
+    /// <summary>Toggles the navigation pane when the shell title bar pane button is requested.</summary>
+    /// <param name="sender">Title bar that raised the request. Not null.</param>
+    /// <param name="args">Event payload supplied by WinUI. Not null.</param>
+    private void AppTitleBar_PaneToggleRequested(TitleBar sender, object args)
+    {
+        NavView.IsPaneOpen = !NavView.IsPaneOpen;
     }
 
     /// <summary>Navigates the content frame to the page represented by <paramref name="tag"/>.</summary>
@@ -234,120 +246,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        ContentDialog dialog = new()
-        {
-            Title = LocalizationService.Instance.GetString("StartupConflict.Dialog.Title"),
-            Content = BuildStartupConflictPanel(issues),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
-            XamlRoot = xamlRoot,
-        };
-
-        await dialog.ShowAsync();
-    }
-
-    /// <summary>Builds the startup conflict dialog content.</summary>
-    private static ScrollViewer BuildStartupConflictPanel(IReadOnlyList<StartupConflictIssue> issues)
-    {
-        StackPanel panel = new()
-        {
-            Spacing = 8,
-            MinWidth = 420,
-            MaxWidth = 680,
-        };
-
-        foreach (StartupConflictIssue issue in issues)
-        {
-            panel.Children.Add(BuildStartupConflictRow(issue));
-        }
-
-        return new ScrollViewer
-        {
-            Content = panel,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = 420,
-            Padding = new Thickness(0, 0, 12, 0),
-        };
-    }
-
-    /// <summary>Builds one startup conflict row.</summary>
-    private static Grid BuildStartupConflictRow(StartupConflictIssue issue)
-    {
-        Grid row = new()
-        {
-            Style = (Style)Application.Current.Resources["ClashCardGridStyle"],
-            ColumnSpacing = 12,
-        };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        StackPanel textPanel = new()
-        {
-            Spacing = 3,
-        };
-        textPanel.Children.Add(new TextBlock
-        {
-            Text = issue.Title,
-            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
-            TextWrapping = TextWrapping.Wrap,
-        });
-        textPanel.Children.Add(new TextBlock
-        {
-            Text = issue.Description,
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            TextWrapping = TextWrapping.Wrap,
-        });
-        row.Children.Add(textPanel);
-
-        ProgressRing progressRing = new()
-        {
-            Width = 18,
-            Height = 18,
-            IsActive = false,
-            Visibility = Visibility.Collapsed,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Grid.SetColumn(progressRing, 2);
-        row.Children.Add(progressRing);
-
-        TextBlock statusText = new()
-        {
-            Text = LocalizationService.Instance.GetString("StartupConflict.Status.Ready"),
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Grid.SetColumn(statusText, 3);
-        row.Children.Add(statusText);
-
-        HyperlinkButton repairButton = new()
-        {
-            Content = issue.RepairText,
-            Padding = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        repairButton.Click += async (_, _) =>
-        {
-            repairButton.IsEnabled = false;
-            progressRing.Visibility = Visibility.Visible;
-            progressRing.IsActive = true;
-            statusText.Text = LocalizationService.Instance.GetString("StartupConflict.Status.Fixing");
-
-            StartupConflictRepairResult result = await issue.RepairAsync(default);
-            progressRing.IsActive = false;
-            progressRing.Visibility = Visibility.Collapsed;
-            statusText.Text = result.Succeeded
-                ? LocalizationService.Instance.GetString("StartupConflict.Status.Succeeded")
-                : LocalizationService.Instance.GetString("StartupConflict.Status.Failed");
-            ToolTipService.SetToolTip(statusText, result.Message);
-        };
-        Grid.SetColumn(repairButton, 1);
-        row.Children.Add(repairButton);
-
-        return row;
+        await StartupConflictDialogPresenter.ShowAsync(xamlRoot, issues);
     }
 
     /// <summary>Prompts when closing while proxy takeover is active.</summary>

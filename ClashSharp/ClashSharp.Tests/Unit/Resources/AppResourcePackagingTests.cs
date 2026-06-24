@@ -40,15 +40,20 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("DesktopAcrylicBackdrop", mainWindowXaml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the custom drag region leaves the same caption-button spacing as the reference app.</summary>
+    /// <summary>Verifies the shell uses the WinUI TitleBar control above NavigationView instead of fixed caption margins.</summary>
     [Fact]
-    public void MainWindowXaml_TitleBarReservesCaptionButtonSpace()
+    public void MainWindowXaml_UsesTitleBarAboveNavigationView()
     {
         string mainWindowXamlPath = Path.Combine(AppContext.BaseDirectory, "MainWindow.xaml");
 
         string mainWindowXaml = File.ReadAllText(mainWindowXamlPath);
 
-        Assert.Contains("Margin=\"304,0,138,0\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("<TitleBar", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AppTitleBar\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("PaneToggleRequested=\"AppTitleBar_PaneToggleRequested\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Row=\"1\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("IsPaneToggleButtonVisible=\"False\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Margin=\"304,0,138,0\"", mainWindowXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies logs are only reachable from statistics and not duplicated in the footer navigation.</summary>
@@ -124,9 +129,31 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ItemsSource=\"{Binding DisplayLanguageOptions}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"AppThemeModeBox\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding AppThemeModeOptions}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AppAccentColorRow\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AppAccentColorModeBox\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding AppAccentColorModeOptions}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AppAccentColorPickerButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"AppAccentColorPickerButton_Click\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding ProxyRecoveryModeOptions}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding StartupBehaviorModeOptions}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Content=\"{Binding ProxyRecoveryIgnoreText}\"", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies theme color settings stay with display settings before startup settings begin.</summary>
+    [Fact]
+    public void SettingsXaml_PlacesAccentColorWithDisplaySettings()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+
+        int appThemeIndex = settingsXaml.IndexOf("x:Name=\"AppThemeModeRow\"", StringComparison.Ordinal);
+        int accentColorIndex = settingsXaml.IndexOf("x:Name=\"AppAccentColorRow\"", StringComparison.Ordinal);
+        int startupSectionIndex = settingsXaml.IndexOf("x:Name=\"StartupSectionTitleText\"", StringComparison.Ordinal);
+
+        Assert.True(appThemeIndex >= 0, "Display style row is missing.");
+        Assert.True(accentColorIndex > appThemeIndex, "Accent color row must follow display style.");
+        Assert.True(startupSectionIndex > accentColorIndex, "Startup section must follow display settings.");
     }
 
     /// <summary>Verifies proxy startup controls include conflict checks, startup behavior, and no TUN fallback switch.</summary>
@@ -137,11 +164,67 @@ public sealed class AppResourcePackagingTests
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
 
+        int startupSectionIndex = settingsXaml.IndexOf("x:Name=\"StartupSectionTitleText\"", StringComparison.Ordinal);
+        int launchIndex = settingsXaml.IndexOf("x:Name=\"LaunchAtStartupRow\"", StringComparison.Ordinal);
+        int manualConflictIndex = settingsXaml.IndexOf("x:Name=\"CheckStartupConflictsRow\"", StringComparison.Ordinal);
+        int autoConflictIndex = settingsXaml.IndexOf("x:Name=\"StartupConflictCheckRow\"", StringComparison.Ordinal);
+        int guideIndex = settingsXaml.IndexOf("x:Name=\"ShowStartupGuideRow\"", StringComparison.Ordinal);
+        int behaviorIndex = settingsXaml.IndexOf("x:Name=\"StartupBehaviorModeRow\"", StringComparison.Ordinal);
+        int transparentProxyIndex = settingsXaml.IndexOf("x:Name=\"TransparentProxySectionTitleText\"", StringComparison.Ordinal);
+
+        Assert.True(startupSectionIndex >= 0, "Startup settings section is missing.");
+        Assert.True(launchIndex > startupSectionIndex, "Launch-at-startup row must be under the startup section.");
+        Assert.True(manualConflictIndex > launchIndex, "Manual conflict check row must follow launch-at-startup.");
+        Assert.True(autoConflictIndex > manualConflictIndex, "Automatic startup conflict setting must follow manual conflict check.");
+        Assert.True(guideIndex > autoConflictIndex, "Startup guide setting must follow conflict check settings.");
+        Assert.True(behaviorIndex > guideIndex, "Startup behavior mode must stay with startup settings.");
+        Assert.True(transparentProxyIndex > behaviorIndex, "Transparent proxy settings must follow the startup section.");
         Assert.Contains("x:Name=\"StartupConflictCheckToggle\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"CheckStartupConflictsButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ShowStartupGuideToggle\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"StartupBehaviorModeBox\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LaunchAtStartupToggle\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("TunFallbackRow", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("FallbackToSystemProxyWhenTunFails", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the startup guide has a reusable dialog component reserved for future guide content.</summary>
+    [Fact]
+    public void StartupGuideDialog_ComponentExists()
+    {
+        string dialogXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "StartupGuideDialog.xaml");
+        string dialogCodePath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "StartupGuideDialog.xaml.cs");
+
+        string dialogXaml = File.ReadAllText(dialogXamlPath);
+        string dialogCode = File.ReadAllText(dialogCodePath);
+
+        Assert.Contains("x:Class=\"ClashSharp.Components.StartupGuideDialog\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("public sealed partial class StartupGuideDialog : ContentDialog", dialogCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the bundled mihomo binary is accompanied by redistributable license and source metadata.</summary>
+    [Fact]
+    public void MihomoBinary_IncludesLicenseAndSourceNotice()
+    {
+        string binaryDirectory = FindSourceDirectory("ClashSharp", "ClashSharp", "Binaries");
+        string licensePath = Path.Combine(binaryDirectory, "mihomo-LICENSE.txt");
+        string noticePath = Path.Combine(binaryDirectory, "mihomo-NOTICE.txt");
+        string projectPath = FindSourceFile("ClashSharp", "ClashSharp", "ClashSharp.csproj");
+
+        Assert.True(File.Exists(Path.Combine(binaryDirectory, "mihomo.exe")), "Bundled mihomo.exe is missing.");
+        Assert.True(File.Exists(licensePath), "Bundled mihomo license file is missing.");
+        Assert.True(File.Exists(noticePath), "Bundled mihomo notice file is missing.");
+
+        string licenseText = File.ReadAllText(licensePath);
+        string noticeText = File.ReadAllText(noticePath);
+        string projectXml = File.ReadAllText(projectPath);
+
+        Assert.Contains("GNU GENERAL PUBLIC LICENSE", licenseText, StringComparison.Ordinal);
+        Assert.Contains("MetaCubeX/mihomo", noticeText, StringComparison.Ordinal);
+        Assert.Contains("v1.19.27", noticeText, StringComparison.Ordinal);
+        Assert.Contains("SHA256", noticeText, StringComparison.Ordinal);
+        Assert.Contains("Binaries\\mihomo-LICENSE.txt", projectXml, StringComparison.Ordinal);
+        Assert.Contains("Binaries\\mihomo-NOTICE.txt", projectXml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings page uses the compact RunOnce-style scrolling and row spacing.</summary>
@@ -153,11 +236,40 @@ public sealed class AppResourcePackagingTests
         string settingsXaml = File.ReadAllText(settingsXamlPath);
 
         Assert.Contains("Padding=\"24,18,18,24\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("<StackPanel Spacing=\"6\" HorizontalAlignment=\"Stretch\">", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("<StackPanel x:Name=\"SettingsContentPanel\" Spacing=\"6\" HorizontalAlignment=\"Stretch\">", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"PageTitleText\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DescriptionText\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Padding=\"32,32,20,32\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("StackPanel Spacing=\"18\"", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings rows are hosted by a stretching grid so row action controls remain visible.</summary>
+    [Fact]
+    public void SettingsXaml_UsesStretchingContentHostForRows()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+
+        Assert.Contains("<StackPanel x:Name=\"SettingsContentPanel\" Spacing=\"6\" HorizontalAlignment=\"Stretch\">", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Width=\"{Binding ViewportWidth, ElementName=SettingsScrollViewer}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Margin=\"0,0,360,0\"", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies reusable settings rows keep compact right-aligned actions without depending on page clipping.</summary>
+    [Fact]
+    public void SettingRowXaml_UsesCompactRightAlignedActionColumn()
+    {
+        string settingRowXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "SettingRow.xaml");
+
+        string settingRowXaml = File.ReadAllText(settingRowXamlPath);
+
+        Assert.Contains("<ColumnDefinition Width=\"*\" />", settingRowXaml, StringComparison.Ordinal);
+        Assert.Contains("<ColumnDefinition Width=\"Auto\" />", settingRowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ActionContentPresenter\"", settingRowXaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment=\"Right\"", settingRowXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Column=\"1\"", settingRowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<StackPanel Spacing=\"10\">", settingRowXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the master control page starts with a centered brand mark instead of a page title block.</summary>
@@ -306,6 +418,26 @@ public sealed class AppResourcePackagingTests
         }
 
         throw new FileNotFoundException("Source file was not found.", Path.Combine(segments));
+    }
+
+    /// <summary>Finds a source directory by walking upward from the test output directory.</summary>
+    /// <param name="segments">Path segments relative to a repository root candidate.</param>
+    /// <returns>Existing source directory path.</returns>
+    private static string FindSourceDirectory(params string[] segments)
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            string candidate = Path.Combine([directory.FullName, .. segments]);
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException(Path.Combine(segments));
     }
 
     /// <summary>Verifies long content pages opt into vertical scrolling without horizontal overflow bars.</summary>

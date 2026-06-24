@@ -14,11 +14,23 @@
     </Window.SystemBackdrop>
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="AppTitleBar"
+            Title="Clash#"
+            IsPaneToggleButtonVisible="True"
+            PaneToggleRequested="AppTitleBar_PaneToggleRequested" />
+
         <NavigationView
             x:Name="NavView"
+            Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
-            IsPaneToggleButtonVisible="True"
+            IsPaneToggleButtonVisible="False"
             PaneDisplayMode="Auto"
             OpenPaneLength="260"
             SelectionChanged="OnNavigationSelectionChanged">
@@ -96,13 +108,5 @@
 
             <Frame x:Name="ContentFrame" />
         </NavigationView>
-
-        <Grid
-            x:Name="AppTitleBar"
-            Height="32"
-            Margin="304,0,138,0"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Top"
-            Background="Transparent" />
     </Grid>
 </Window>
