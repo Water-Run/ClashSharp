@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -66,6 +67,7 @@
     <Compile Include="..\ClashSharp\ViewModel\RelayCommand.cs" Link="ViewModel\RelayCommand.cs" />
     <Compile Include="..\ClashSharp\ViewModel\AsyncRelayCommand.cs" Link="ViewModel\AsyncRelayCommand.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MainWindowViewModel.cs" Link="ViewModel\MainWindowViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\CoreVersionDisplayFormatter.cs" Link="ViewModel\CoreVersionDisplayFormatter.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterControlViewModel.cs" Link="ViewModel\MasterControlViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ProxiesViewModel.cs" Link="ViewModel\ProxiesViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\DisplayPageViewModels.cs" Link="ViewModel\DisplayPageViewModels.cs" />

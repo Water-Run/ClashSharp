@@ -62,3 +62,10 @@ ClashSharp/Installer/signing/*
 !ClashSharp/Installer/signing/.gitkeep
 
 Docs/DevelopmentStatusAndRoadmap.md
+Docs/superpowers/
+docs/superpowers/
+.codex/
+.claude/
+CLAUDE.md
+GEMINI.md
+AGENTS.md

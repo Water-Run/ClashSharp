@@ -33,14 +33,14 @@ public sealed class MasterControlViewModelTests
     [Fact]
     public async Task LoadAsync_WhenServicesSucceed_UpdatesStatusText()
     {
-        FakeMasterCore core = new() { VersionText = "mihomo 1.2.3" };
+        FakeMasterCore core = new() { VersionText = "Mihomo Meta v1.19.11 windows amd64 with go1.24.4" };
         FakeMasterWindowsProxy proxy = new() { CurrentState = new WindowsProxyState(true, "127.0.0.1:7890") };
         FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
         MasterControlViewModel viewModel = CreateViewModel(core, proxy, settings);
 
         await viewModel.LoadAsync(CancellationToken.None);
 
-        Assert.Equal("Core ready: mihomo 1.2.3", viewModel.CoreStatusText);
+        Assert.Equal("Core ready: v1.19.11", viewModel.CoreStatusText);
         Assert.Equal("On", viewModel.SystemProxyStatusText);
         Assert.Equal("Standby", viewModel.TransparentProxyStatusText);
     }

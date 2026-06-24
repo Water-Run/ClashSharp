@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Application Entry Point
  * Bootstraps the Clash# proxy management application, creates the main window, and manages its lifetime
  *

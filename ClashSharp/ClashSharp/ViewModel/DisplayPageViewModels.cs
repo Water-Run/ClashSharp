@@ -4,7 +4,7 @@
  *
  * @author: WaterRun
  * @file: ViewModel/DisplayPageViewModels.cs
- * @date: 2026-06-17
+ * @date: 2026-06-24
  */
 
 #nullable enable
@@ -489,6 +489,18 @@ internal sealed class AboutViewModel : ObservableObject
     /// <value>Application package or assembly version.</value>
     public string VersionText => GetVersionText();
 
+    /// <summary>Gets the version label text.</summary>
+    /// <value>Localized version field label.</value>
+    public string VersionLabelText => _localization.GetString("About.Version.Title");
+
+    /// <summary>Gets the runtime title text.</summary>
+    /// <value>Localized runtime field label.</value>
+    public string RuntimeTitleText => _localization.GetString("About.Runtime.Title");
+
+    /// <summary>Gets the runtime value text.</summary>
+    /// <value>Runtime stack summary for this application.</value>
+    public string RuntimeValueText => ".NET 10 / WinUI 3";
+
     /// <summary>Gets the author title text.</summary>
     /// <value>Localized author title.</value>
     public string AuthorTitleText => _localization.GetString("About.Author.Title");
@@ -512,6 +524,14 @@ internal sealed class AboutViewModel : ObservableObject
     /// <summary>Gets the protocol value text.</summary>
     /// <value>Localized protocol value.</value>
     public string ProtocolValueText => _localization.GetString("About.Protocol.Value");
+
+    /// <summary>Gets the license title text.</summary>
+    /// <value>Localized license field label.</value>
+    public string LicenseTitleText => _localization.GetString("About.License.Title");
+
+    /// <summary>Gets the license value text.</summary>
+    /// <value>Localized license value.</value>
+    public string LicenseValueText => _localization.GetString("About.Protocol.Value");
 
     /// <summary>Gets the GitHub title text.</summary>
     /// <value>Localized GitHub title.</value>
@@ -580,7 +600,7 @@ internal sealed class AboutViewModel : ObservableObject
     {
         try
         {
-            string versionText = await _core.GetVersionTextAsync(cancellationToken);
+            string versionText = CoreVersionDisplayFormatter.Format(await _core.GetVersionTextAsync(cancellationToken));
             MihomoStatusText = string.Format(_localization.GetString("About.Mihomo.Available.Format"), versionText);
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or OperationCanceledException)

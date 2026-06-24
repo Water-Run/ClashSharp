@@ -19,6 +19,8 @@ public sealed class AppSettingsServiceTests
     [Fact]
     public void MixedPort_DefaultsTo10000()
     {
+        ResetSettings();
+
         Assert.Equal(10000, AppSettingsService.Instance.MixedPort);
     }
 
@@ -26,6 +28,8 @@ public sealed class AppSettingsServiceTests
     [Fact]
     public void ConnectionTestUrl_DefaultsToGoogleGenerate204()
     {
+        ResetSettings();
+
         Assert.Equal("https://www.google.com/generate_204", AppSettingsService.Instance.ConnectionTestUrl);
     }
 
@@ -33,6 +37,8 @@ public sealed class AppSettingsServiceTests
     [Fact]
     public void DisplayLanguage_DefaultsToAutoDetect()
     {
+        ResetSettings();
+
         Assert.Equal(AppLanguage.AutoDetect, AppSettingsService.Instance.DisplayLanguage);
     }
 
@@ -40,6 +46,8 @@ public sealed class AppSettingsServiceTests
     [Fact]
     public void StartupBehaviorMode_DefaultsToLastSetting()
     {
+        ResetSettings();
+
         Assert.Equal(StartupBehaviorMode.LastSetting, AppSettingsService.Instance.StartupBehaviorMode);
     }
 
@@ -47,6 +55,8 @@ public sealed class AppSettingsServiceTests
     [Fact]
     public void StartupConflictCheckEnabled_DefaultsToTrue()
     {
+        ResetSettings();
+
         Assert.True(AppSettingsService.Instance.StartupConflictCheckEnabled);
     }
 
@@ -54,6 +64,8 @@ public sealed class AppSettingsServiceTests
     [Fact]
     public void AppThemeMode_DefaultsToFollowSystem()
     {
+        ResetSettings();
+
         Assert.Equal(AppThemeMode.FollowSystem, AppSettingsService.Instance.AppThemeMode);
     }
 
@@ -61,6 +73,8 @@ public sealed class AppSettingsServiceTests
     [Fact]
     public void LaunchAtStartupEnabled_DefaultsToFalse()
     {
+        ResetSettings();
+
         Assert.False(AppSettingsService.Instance.LaunchAtStartupEnabled);
     }
 
@@ -68,6 +82,8 @@ public sealed class AppSettingsServiceTests
     [Fact]
     public void MainlandChinaUrlBlockingEnabled_DefaultsToFalse()
     {
+        ResetSettings();
+
         Assert.False(AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled);
     }
 
@@ -94,5 +110,11 @@ public sealed class AppSettingsServiceTests
         Assert.False(AppSettingsService.Instance.LaunchAtStartupEnabled);
         Assert.Equal(StartupBehaviorMode.LastSetting, AppSettingsService.Instance.StartupBehaviorMode);
         Assert.True(AppSettingsService.Instance.StartupConflictCheckEnabled);
+    }
+
+    /// <summary>Restores process-wide application settings before a default-value assertion.</summary>
+    private static void ResetSettings()
+    {
+        AppSettingsService.Instance.ResetAllSettings();
     }
 }

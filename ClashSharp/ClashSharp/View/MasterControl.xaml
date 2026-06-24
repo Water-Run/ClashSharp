@@ -8,21 +8,11 @@
     mc:Ignorable="d">
 
     <ScrollViewer
-        Padding="{StaticResource ClashPagePadding}"
+        Padding="24,18,18,24"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="18">
-            <Grid ColumnSpacing="14">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Image Source="ms-appx:///Assets/Logo.png" Width="44" Height="44" Stretch="Uniform" VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                    <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-            </Grid>
+        <StackPanel Spacing="14">
+            <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Logo.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
 
             <Grid Style="{StaticResource ClashCardGridStyle}" Padding="18" RowSpacing="14">
                 <Grid.RowDefinitions>

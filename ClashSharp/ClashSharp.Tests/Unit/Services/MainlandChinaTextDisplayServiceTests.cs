@@ -64,9 +64,11 @@ public sealed class MainlandChinaTextDisplayServiceTests
     public void Apply_KeywordFilter_MasksSensitiveWebsiteNames()
     {
         MainlandChinaFeatureMode originalMode = AppSettingsService.Instance.MainlandChinaFeatureMode;
+        bool originalUrlBlocking = AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled;
         try
         {
             AppSettingsService.Instance.MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
+            AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled = true;
 
             string displayText = MainlandChinaTextDisplayService.Instance.Apply("品葱 大纪元");
 
@@ -75,6 +77,7 @@ public sealed class MainlandChinaTextDisplayServiceTests
         finally
         {
             AppSettingsService.Instance.MainlandChinaFeatureMode = originalMode;
+            AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled = originalUrlBlocking;
         }
     }
 }

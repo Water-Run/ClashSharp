@@ -10,15 +10,10 @@
 
     <ScrollViewer
         x:Name="SettingsScrollViewer"
-        Padding="24,24,24,24"
+        Padding="24,18,18,24"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="2" HorizontalAlignment="Stretch">
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-
+        <StackPanel Spacing="6" HorizontalAlignment="Stretch">
             <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
             <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                 <components:SettingRow.ActionContent>

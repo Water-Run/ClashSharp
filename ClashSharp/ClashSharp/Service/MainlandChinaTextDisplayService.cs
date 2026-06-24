@@ -59,8 +59,6 @@ public sealed class MainlandChinaTextDisplayService
         "pincong.icu",
         "epochtimes.com",
         "dajiyuan.com",
-        "大纪元",
-        "大紀元",
     ];
 
     /// <summary>Initializes the display service.</summary>

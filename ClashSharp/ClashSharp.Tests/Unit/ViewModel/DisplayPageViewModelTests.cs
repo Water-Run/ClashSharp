@@ -66,13 +66,25 @@ public sealed class DisplayPageViewModelTests
     [Fact]
     public async Task AboutViewModel_LoadAsync_WhenCoreAvailable_FormatsVersionStatus()
     {
-        FakeAboutCore core = new() { VersionText = "mihomo 1.2.3" };
+        FakeAboutCore core = new() { VersionText = "Mihomo Meta v1.19.11 windows amd64 with go1.24.4" };
         AboutViewModel viewModel = new(new FakeDisplayLocalization(), core, new FakeUriLauncher());
 
         await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal("About", viewModel.PageTitleText);
-        Assert.Equal("mihomo available: mihomo 1.2.3", viewModel.MihomoStatusText);
+        Assert.Equal("mihomo available: v1.19.11", viewModel.MihomoStatusText);
+    }
+
+    /// <summary>Verifies core version output is reduced to the stable semantic version token when possible.</summary>
+    [Theory]
+    [InlineData("Mihomo Meta v1.19.11 windows amd64 with go1.24.4", "v1.19.11")]
+    [InlineData("mihomo 1.18.10", "1.18.10")]
+    [InlineData("custom core build", "custom core build")]
+    public void CoreVersionDisplayFormatter_Format_ExtractsStableVersionText(string rawText, string expectedText)
+    {
+        string formattedText = CoreVersionDisplayFormatter.Format(rawText);
+
+        Assert.Equal(expectedText, formattedText);
     }
 
     /// <summary>Verifies about view model launch commands call the URL launcher.</summary>
@@ -131,6 +143,9 @@ public sealed class DisplayPageViewModelTests
                 "About.Mihomo.Title" => "mihomo",
                 "About.Mihomo.Description" => "Core",
                 "About.OpenMihomo" => "Open mihomo",
+                "About.Version.Title" => "Version",
+                "About.Runtime.Title" => "Runtime",
+                "About.License.Title" => "License",
                 "About.Mihomo.Loading" => "Loading",
                 "About.Mihomo.Available.Format" => "mihomo available: {0}",
                 "About.Mihomo.Unavailable" => "Unavailable",

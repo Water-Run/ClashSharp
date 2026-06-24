@@ -341,7 +341,7 @@ internal sealed class MasterControlViewModel : ObservableObject
     {
         try
         {
-            string versionText = await _core.GetVersionTextAsync(cancellationToken);
+            string versionText = CoreVersionDisplayFormatter.Format(await _core.GetVersionTextAsync(cancellationToken));
             CoreStatusText = string.Format(
                 _localization.GetString("Master.Status.CoreReady.Format"),
                 versionText);

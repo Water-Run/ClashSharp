@@ -1,6 +1,7 @@
 param(
     [switch]$Force,
-    [string]$Version = "latest"
+    [string]$Version = "latest",
+    [string]$ExpectedSha256 = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,6 +53,13 @@ Remove-Item -LiteralPath $extractDirectory -Recurse -Force -ErrorAction Silently
 New-Item -ItemType Directory -Force -Path $extractDirectory | Out-Null
 
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath -UseBasicParsing
+if (-not [string]::IsNullOrWhiteSpace($ExpectedSha256)) {
+    $actualSha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+    if (-not $actualSha256.Equals($ExpectedSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Downloaded mihomo archive hash mismatch. Expected $ExpectedSha256 but got $actualSha256."
+    }
+}
+
 Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDirectory -Force
 
 $downloadedBinary = Get-ChildItem -Path $extractDirectory -Recurse -File |

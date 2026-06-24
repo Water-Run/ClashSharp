@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Application Language Enumeration
  * Defines all display languages supported by the Clash# user interface
  *

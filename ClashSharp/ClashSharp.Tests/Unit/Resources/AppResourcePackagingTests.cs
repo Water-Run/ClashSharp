@@ -152,10 +152,41 @@ public sealed class AppResourcePackagingTests
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
 
-        Assert.Contains("Padding=\"24,24,24,24\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("<StackPanel Spacing=\"2\" HorizontalAlignment=\"Stretch\">", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"24,18,18,24\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("<StackPanel Spacing=\"6\" HorizontalAlignment=\"Stretch\">", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"PageTitleText\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"DescriptionText\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Padding=\"32,32,20,32\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("StackPanel Spacing=\"18\"", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the master control page starts with a centered brand mark instead of a page title block.</summary>
+    [Fact]
+    public void MasterControlXaml_UsesCenteredLogoWithoutPageIntro()
+    {
+        string masterControlXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "MasterControl.xaml");
+
+        string masterControlXaml = File.ReadAllText(masterControlXamlPath);
+
+        Assert.Contains("x:Name=\"HeaderLogo\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment=\"Center\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"PageTitleText\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"DescriptionText\"", masterControlXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the about page uses a centered, bounded layout with complete app identity fields.</summary>
+    [Fact]
+    public void AboutXaml_UsesCenteredCompleteIdentityLayout()
+    {
+        string aboutXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "About.xaml");
+
+        string aboutXaml = File.ReadAllText(aboutXamlPath);
+
+        Assert.Contains("HorizontalAlignment=\"Center\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth=\"720\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"LicenseTitleText\"", aboutXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings action controls use bounded widths rather than unbounded minimum widths.</summary>
@@ -290,5 +321,6 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", xaml, StringComparison.Ordinal);
         Assert.Contains("HorizontalScrollBarVisibility=\"Disabled\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"24,18,18,24\"", xaml, StringComparison.Ordinal);
     }
 }
