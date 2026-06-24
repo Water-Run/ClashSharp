@@ -26,6 +26,8 @@ public sealed class ConnectionsViewModelTests
         Assert.Equal("Description", viewModel.DescriptionText);
         Assert.Equal("Refresh", viewModel.RefreshConnectionsText);
         Assert.Equal("Persist", viewModel.PersistConnectionsText);
+        Assert.Equal("Close all", viewModel.CloseAllConnectionsText);
+        Assert.Equal("Close", viewModel.CloseConnectionText);
         Assert.Equal("Not refreshed", viewModel.ConnectionStatusText);
     }
 
@@ -72,6 +74,36 @@ public sealed class ConnectionsViewModelTests
         Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Detail == "2 rows.");
     }
 
+    /// <summary>Verifies closing one connection calls mihomo and refreshes the visible list.</summary>
+    [Fact]
+    public async Task CloseConnectionAsync_WhenSuccessful_ClosesConnectionAndRefreshes()
+    {
+        FakeConnectionClient client = new();
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(new FakeConnectionsLocalization(), client, log);
+
+        await viewModel.CloseConnectionAsync(client.Connections[0], CancellationToken.None);
+
+        Assert.Equal("1", client.ClosedConnectionId);
+        Assert.Equal(1, client.RefreshCount);
+        Assert.Equal("Closed", viewModel.ConnectionStatusText);
+        Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Message == "Active connection closed.");
+    }
+
+    /// <summary>Verifies closing all connections calls mihomo and refreshes the visible list.</summary>
+    [Fact]
+    public async Task CloseAllConnectionsAsync_WhenSuccessful_ClosesAllConnectionsAndRefreshes()
+    {
+        FakeConnectionClient client = new();
+        ConnectionsViewModel viewModel = new(new FakeConnectionsLocalization(), client, new FakeConnectionLog());
+
+        await viewModel.CloseAllConnectionsAsync(CancellationToken.None);
+
+        Assert.True(client.CloseAllCalled);
+        Assert.Equal(1, client.RefreshCount);
+        Assert.Equal("Closed all", viewModel.ConnectionStatusText);
+    }
+
     /// <summary>Fake localization provider for connection tests.</summary>
     private sealed class FakeConnectionsLocalization : IConnectionsLocalization
     {
@@ -86,10 +118,14 @@ public sealed class ConnectionsViewModelTests
                 "Page.Connections.Description" => "Description",
                 "Command.Refresh" => "Refresh",
                 "Command.PersistSnapshot" => "Persist",
+                "Command.CloseAll" => "Close all",
+                "Command.Close" => "Close",
                 "Connections.Status.NotRefreshed" => "Not refreshed",
                 "Connections.Status.Active.Format" => "{0} active",
                 "Connections.Status.Unavailable" => "Unavailable",
                 "Connections.Status.Persisted.Format" => "Persisted {0}",
+                "Connections.Status.Closed" => "Closed",
+                "Connections.Status.ClosedAll" => "Closed all",
                 _ => key,
             };
         }
@@ -110,14 +146,46 @@ public sealed class ConnectionsViewModelTests
         /// <value>Exception thrown when non-null.</value>
         public Exception? ExceptionToThrow { get; set; }
 
+        /// <summary>Gets the number of refresh calls.</summary>
+        /// <value>Refresh call count.</value>
+        public int RefreshCount { get; private set; }
+
+        /// <summary>Gets the last closed connection id.</summary>
+        /// <value>Closed connection id, or null when none was closed.</value>
+        public string? ClosedConnectionId { get; private set; }
+
+        /// <summary>Gets whether close-all was called.</summary>
+        /// <value>True when close-all was called.</value>
+        public bool CloseAllCalled { get; private set; }
+
         /// <summary>Gets fake active connections.</summary>
         /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
         /// <returns>Configured active connections.</returns>
         public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
         {
+            RefreshCount++;
             return ExceptionToThrow is null
                 ? Task.FromResult(Connections)
                 : Task.FromException<IReadOnlyList<ActiveConnection>>(ExceptionToThrow);
+        }
+
+        /// <summary>Closes one fake connection.</summary>
+        /// <param name="connectionId">Connection id. Must not be null.</param>
+        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
+        /// <returns>Completed task.</returns>
+        public Task CloseConnectionAsync(string connectionId, CancellationToken cancellationToken)
+        {
+            ClosedConnectionId = connectionId;
+            return Task.CompletedTask;
+        }
+
+        /// <summary>Closes all fake connections.</summary>
+        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
+        /// <returns>Completed task.</returns>
+        public Task CloseAllConnectionsAsync(CancellationToken cancellationToken)
+        {
+            CloseAllCalled = true;
+            return Task.CompletedTask;
         }
     }
 

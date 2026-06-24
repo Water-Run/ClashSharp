@@ -9,4 +9,7 @@
     <Platform Project="x64" />
     <Deploy />
   </Project>
+  <Project Path="ClashSharp.MihomoService/ClashSharp.MihomoService.csproj">
+    <Platform Project="x64" />
+  </Project>
 </Solution>

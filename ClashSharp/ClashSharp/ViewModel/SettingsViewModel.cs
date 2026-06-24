@@ -69,6 +69,50 @@ internal readonly record struct SettingsProxyInformation(
     bool IsCoreBinaryAvailable,
     string CoreBinaryPath);
 
+/// <summary>Mihomo service control contract required by transparent proxy settings.</summary>
+internal interface IMihomoServiceController
+{
+    /// <summary>Gets current service status.</summary>
+    /// <returns>Current service status.</returns>
+    MihomoServiceStatus GetStatus();
+
+    /// <summary>Deploys the mihomo Windows service.</summary>
+    /// <param name="cancellationToken">Cancels deployment wait when requested.</param>
+    /// <returns>Updated service status.</returns>
+    Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken);
+
+    /// <summary>Uninstalls the mihomo Windows service.</summary>
+    /// <param name="cancellationToken">Cancels uninstall wait when requested.</param>
+    /// <returns>Updated service status.</returns>
+    Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>Default test-friendly service controller used by legacy constructors.</summary>
+internal sealed class AlwaysAvailableMihomoServiceController : IMihomoServiceController
+{
+    /// <summary>Shared controller instance.</summary>
+    public static AlwaysAvailableMihomoServiceController Instance { get; } = new();
+
+    private AlwaysAvailableMihomoServiceController()
+    {
+    }
+
+    public MihomoServiceStatus GetStatus()
+    {
+        return new MihomoServiceStatus(true, false, "Mihomo service is available.");
+    }
+
+    public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult(GetStatus());
+    }
+
+    public Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult(new MihomoServiceStatus(false, false, "Mihomo service is not deployed."));
+    }
+}
+
 /// <summary>Adapts <see cref="AppSettingsService"/> to the settings view model storage contract.</summary>
 internal sealed class AppSettingsStore : ISettingsStore
 {
@@ -205,6 +249,9 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Diagnostics command router used by Windows-native diagnostic buttons.</summary>
     private readonly SettingsDiagnosticsViewModel? _diagnosticsViewModel;
 
+    /// <summary>Mihomo service controller used by transparent proxy settings.</summary>
+    private readonly IMihomoServiceController _mihomoServiceController;
+
     /// <summary>Initializes a new settings view model.</summary>
     /// <param name="settings">Settings store. Must not be null.</param>
     /// <param name="applyLanguage">Callback used to update the active UI language. Must not be null.</param>
@@ -224,6 +271,16 @@ internal sealed class SettingsViewModel : ObservableObject
         Action<AppThemeMode> applyTheme,
         Action restartConnectionSampling)
         : this(settings, applyLanguage, applyTheme, restartConnectionSampling, _ => { }, key => key, () => new SettingsProxyInformation(string.Empty, false, string.Empty))
+    {
+    }
+
+    /// <summary>Initializes a new settings view model with an explicit mihomo service controller.</summary>
+    public SettingsViewModel(
+        ISettingsStore settings,
+        Action<AppLanguage> applyLanguage,
+        Action restartConnectionSampling,
+        IMihomoServiceController mihomoServiceController)
+        : this(settings, applyLanguage, _ => { }, restartConnectionSampling, _ => { }, key => key, () => new SettingsProxyInformation(string.Empty, false, string.Empty), null, mihomoServiceController)
     {
     }
 
@@ -278,7 +335,8 @@ internal sealed class SettingsViewModel : ObservableObject
         Action<bool> applyLaunchAtStartup,
         Func<string, string> getString,
         Func<SettingsProxyInformation> getProxyInformation,
-        SettingsDiagnosticsViewModel? diagnosticsViewModel = null)
+        SettingsDiagnosticsViewModel? diagnosticsViewModel = null,
+        IMihomoServiceController? mihomoServiceController = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
@@ -288,7 +346,10 @@ internal sealed class SettingsViewModel : ObservableObject
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _getProxyInformation = getProxyInformation ?? throw new ArgumentNullException(nameof(getProxyInformation));
         _diagnosticsViewModel = diagnosticsViewModel;
+        _mihomoServiceController = mihomoServiceController ?? AlwaysAvailableMihomoServiceController.Instance;
         WindowsDiagnosticCommand = new AsyncRelayCommand(ExecuteWindowsDiagnosticCommandAsync);
+        DeployMihomoServiceCommand = new AsyncRelayCommand(DeployMihomoServiceAsync);
+        UninstallMihomoServiceCommand = new AsyncRelayCommand(UninstallMihomoServiceAsync);
         Load();
         ResetDiagnosticStatusText();
     }
@@ -337,9 +398,19 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string ProxySectionTitleText => _getString("Settings.Section.Proxy");
 
+    public string TransparentProxySectionTitleText => _getString("Settings.Section.TransparentProxy");
+
     public string TransparentProxyTitleText => _getString("Settings.TransparentProxy.Title");
 
     public string TransparentProxyDescriptionText => _getString("Settings.TransparentProxy.Description");
+
+    public string TransparentProxyServiceTitleText => _getString("Settings.TransparentProxy.Service.Title");
+
+    public string TransparentProxyServiceDescriptionText => _getString("Settings.TransparentProxy.Service.Description");
+
+    public string DeployMihomoServiceText => _getString("Command.Deploy");
+
+    public string UninstallMihomoServiceText => _getString("Command.Uninstall");
 
     public string MixedPortTitleText => _getString("Settings.MixedPort.Title");
 
@@ -519,6 +590,12 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="TransparentProxyEnabled"/>.</summary>
     private bool _transparentProxyEnabled;
 
+    /// <summary>Backing field for <see cref="MihomoServiceStatusText"/>.</summary>
+    private string _mihomoServiceStatusText = string.Empty;
+
+    /// <summary>Latest mihomo service status snapshot.</summary>
+    private MihomoServiceStatus _mihomoServiceStatus;
+
     /// <summary>Backing field for <see cref="MixedPort"/>.</summary>
     private int _mixedPort;
 
@@ -572,6 +649,10 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public AsyncRelayCommand WindowsDiagnosticCommand { get; }
 
+    public AsyncRelayCommand DeployMihomoServiceCommand { get; }
+
+    public AsyncRelayCommand UninstallMihomoServiceCommand { get; }
+
     public AppLanguage DisplayLanguage
     {
         get => _displayLanguage;
@@ -618,6 +699,14 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         get => _transparentProxyEnabled;
         set => SetTransparentProxyEnabled(value);
+    }
+
+    public bool CanToggleTransparentProxy => _mihomoServiceStatus.IsInstalled;
+
+    public string MihomoServiceStatusText
+    {
+        get => _mihomoServiceStatusText;
+        private set => SetProperty(ref _mihomoServiceStatusText, value);
     }
 
     public int MixedPort
@@ -752,7 +841,14 @@ internal sealed class SettingsViewModel : ObservableObject
         DisplayLanguage = _settings.DisplayLanguage;
         AppThemeMode = _settings.AppThemeMode;
         SetProperty(ref _launchAtStartupEnabled, _settings.LaunchAtStartupEnabled, nameof(LaunchAtStartupEnabled));
-        SetProperty(ref _transparentProxyEnabled, _settings.TransparentProxyEnabled, nameof(TransparentProxyEnabled));
+        RefreshMihomoServiceStatus();
+        bool transparentProxyEnabled = _settings.TransparentProxyEnabled && CanToggleTransparentProxy;
+        if (_settings.TransparentProxyEnabled && !transparentProxyEnabled)
+        {
+            _settings.TransparentProxyEnabled = false;
+        }
+
+        SetProperty(ref _transparentProxyEnabled, transparentProxyEnabled, nameof(TransparentProxyEnabled));
         MixedPort = _settings.MixedPort;
         SetProperty(ref _connectionSamplingEnabled, _settings.ConnectionSamplingEnabled, nameof(ConnectionSamplingEnabled));
         ConnectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
@@ -838,8 +934,14 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(LaunchAtStartupTitleText),
             nameof(LaunchAtStartupDescriptionText),
             nameof(ProxySectionTitleText),
+            nameof(TransparentProxySectionTitleText),
             nameof(TransparentProxyTitleText),
             nameof(TransparentProxyDescriptionText),
+            nameof(TransparentProxyServiceTitleText),
+            nameof(TransparentProxyServiceDescriptionText),
+            nameof(DeployMihomoServiceText),
+            nameof(UninstallMihomoServiceText),
+            nameof(MihomoServiceStatusText),
             nameof(MixedPortTitleText),
             nameof(MixedPortDescriptionText),
             nameof(ConnectionTestUrlTitleText),
@@ -915,8 +1017,52 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <param name="isEnabled">Switch value.</param>
     public void SetTransparentProxyEnabled(bool isEnabled)
     {
+        if (isEnabled && !CanToggleTransparentProxy)
+        {
+            _settings.TransparentProxyEnabled = false;
+            SetProperty(ref _transparentProxyEnabled, false, nameof(TransparentProxyEnabled));
+            return;
+        }
+
         _settings.TransparentProxyEnabled = isEnabled;
         SetProperty(ref _transparentProxyEnabled, isEnabled, nameof(TransparentProxyEnabled));
+    }
+
+    /// <summary>Deploys the mihomo Windows service and refreshes transparent proxy availability.</summary>
+    /// <param name="cancellationToken">Cancels deployment wait when requested.</param>
+    /// <returns>A task that completes after service status is refreshed.</returns>
+    public async Task DeployMihomoServiceAsync(CancellationToken cancellationToken)
+    {
+        SetMihomoServiceStatus(await _mihomoServiceController.DeployAsync(cancellationToken));
+    }
+
+    /// <summary>Uninstalls the mihomo Windows service and disables transparent proxy.</summary>
+    /// <param name="cancellationToken">Cancels uninstall wait when requested.</param>
+    /// <returns>A task that completes after service status is refreshed.</returns>
+    public async Task UninstallMihomoServiceAsync(CancellationToken cancellationToken)
+    {
+        SetMihomoServiceStatus(await _mihomoServiceController.UninstallAsync(cancellationToken));
+        if (!CanToggleTransparentProxy)
+        {
+            SetTransparentProxyEnabled(false);
+        }
+    }
+
+    /// <summary>Refreshes the cached mihomo service status.</summary>
+    private void RefreshMihomoServiceStatus()
+    {
+        SetMihomoServiceStatus(_mihomoServiceController.GetStatus());
+    }
+
+    /// <summary>Sets the cached mihomo service status and dependent bindable values.</summary>
+    /// <param name="status">New service status.</param>
+    private void SetMihomoServiceStatus(MihomoServiceStatus status)
+    {
+        _mihomoServiceStatus = status;
+        MihomoServiceStatusText = status.Message;
+        OnPropertyChanged(nameof(CanToggleTransparentProxy));
+        DeployMihomoServiceCommand?.NotifyCanExecuteChanged();
+        UninstallMihomoServiceCommand?.NotifyCanExecuteChanged();
     }
 
     /// <summary>Persists the launch-at-startup switch and requests system registration sync.</summary>

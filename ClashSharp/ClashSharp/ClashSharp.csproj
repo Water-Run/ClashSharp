@@ -58,11 +58,24 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1721" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
   </ItemGroup>
+
+  <Target Name="CopyMihomoServiceHost" AfterTargets="Build" Condition="'$(DesignTimeBuild)'!='true'">
+    <ItemGroup>
+      <MihomoServiceHostFiles Include="..\ClashSharp.MihomoService\bin\$(Platform)\$(Configuration)\$(TargetFramework)\win-x64\*.*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(MihomoServiceHostFiles)"
+      DestinationFiles="@(MihomoServiceHostFiles->'$(OutDir)Binaries\Service\%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+      Condition="'@(MihomoServiceHostFiles)'!=''" />
+  </Target>
 
   <ItemGroup>
     <Page Update="View\Connections.xaml">

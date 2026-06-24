@@ -33,13 +33,34 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <TextBlock x:Name="TransparentProxySectionTitleText" Text="{Binding TransparentProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsEnabled="{Binding CanToggleTransparentProxy}" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
+            <components:SettingRow x:Name="TransparentProxyServiceRow" Title="{Binding TransparentProxyServiceTitleText}" Description="{Binding TransparentProxyServiceDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding MihomoServiceStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" TextWrapping="NoWrap" />
+                        <Button x:Name="DeployMihomoServiceButton" Command="{Binding DeployMihomoServiceCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE898;" FontSize="14" />
+                                <TextBlock Text="{Binding DeployMihomoServiceText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="UninstallMihomoServiceButton" Command="{Binding UninstallMihomoServiceCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                <TextBlock Text="{Binding UninstallMihomoServiceText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="MixedPortRow" Title="{Binding MixedPortTitleText}" Description="{Binding MixedPortDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <NumberBox x:Name="MixedPortBox" Width="140" Minimum="1" Maximum="65535" Value="{Binding MixedPortValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />

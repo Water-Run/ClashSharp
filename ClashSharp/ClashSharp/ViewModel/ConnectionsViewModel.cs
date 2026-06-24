@@ -50,6 +50,17 @@ internal interface IActiveConnectionClient
     /// Completion semantics: Does not persist returned rows.
     /// </remarks>
     Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Closes one active connection.</summary>
+    /// <param name="connectionId">Connection id. Must not be null or empty.</param>
+    /// <param name="cancellationToken">Cancels the local API request when requested.</param>
+    /// <returns>A task that completes after the connection is closed.</returns>
+    Task CloseConnectionAsync(string connectionId, CancellationToken cancellationToken);
+
+    /// <summary>Closes all active connections.</summary>
+    /// <param name="cancellationToken">Cancels the local API request when requested.</param>
+    /// <returns>A task that completes after mihomo closes all connections.</returns>
+    Task CloseAllConnectionsAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Connection logging contract used by <see cref="ConnectionsViewModel"/>.</summary>
@@ -113,6 +124,8 @@ internal sealed class ConnectionsViewModel : ObservableObject
         ConnectionStatusText = _localization.GetString("Connections.Status.NotRefreshed");
         RefreshConnectionsCommand = new AsyncRelayCommand(RefreshConnectionsAsync);
         PersistConnectionsCommand = new AsyncRelayCommand(PersistConnectionsAsync);
+        CloseConnectionCommand = new AsyncRelayCommand(CloseConnectionCommandAsync);
+        CloseAllConnectionsCommand = new AsyncRelayCommand(CloseAllConnectionsAsync);
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -130,6 +143,14 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <summary>Gets the persist snapshot command label.</summary>
     /// <value>Localized command label.</value>
     public string PersistConnectionsText => _localization.GetString("Command.PersistSnapshot");
+
+    /// <summary>Gets the close-all command label.</summary>
+    /// <value>Localized command label.</value>
+    public string CloseAllConnectionsText => _localization.GetString("Command.CloseAll");
+
+    /// <summary>Gets the close-one command label.</summary>
+    /// <value>Localized command label.</value>
+    public string CloseConnectionText => _localization.GetString("Command.Close");
 
     /// <summary>Gets active connection rows.</summary>
     /// <value>Active connection rows; never null.</value>
@@ -154,6 +175,14 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <summary>Gets the command that persists a refreshed connection snapshot.</summary>
     /// <value>Asynchronous persistence command.</value>
     public AsyncRelayCommand PersistConnectionsCommand { get; }
+
+    /// <summary>Gets the command that closes one active connection.</summary>
+    /// <value>Asynchronous close-one command.</value>
+    public AsyncRelayCommand CloseConnectionCommand { get; }
+
+    /// <summary>Gets the command that closes all active connections.</summary>
+    /// <value>Asynchronous close-all command.</value>
+    public AsyncRelayCommand CloseAllConnectionsCommand { get; }
 
     /// <summary>Refreshes active connections from the local core API.</summary>
     /// <param name="cancellationToken">Cancels the refresh when requested.</param>
@@ -193,5 +222,52 @@ internal sealed class ConnectionsViewModel : ObservableObject
         int insertedCount = _log.AppendConnectionSnapshot(connections);
         ConnectionStatusText = string.Format(_localization.GetString("Connections.Status.Persisted.Format"), insertedCount);
         _log.Append("Info", "Connections", "Active connection snapshot persisted.", $"{insertedCount:N0} rows.");
+    }
+
+    /// <summary>Closes one active connection and refreshes the visible list.</summary>
+    /// <param name="connection">Connection to close.</param>
+    /// <param name="cancellationToken">Cancels the close or refresh request.</param>
+    /// <returns>A task that completes after close and refresh finish.</returns>
+    public async Task CloseConnectionAsync(ActiveConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _connectionClient.CloseConnectionAsync(connection.Id, cancellationToken);
+            await RefreshConnectionsAsync(cancellationToken);
+            ConnectionStatusText = _localization.GetString("Connections.Status.Closed");
+            _log.Append("Info", "Connections", "Active connection closed.", connection.Id);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException or ArgumentException)
+        {
+            ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
+            _log.Append("Warning", "Connections", "Active connection close failed.", exception.Message);
+        }
+    }
+
+    /// <summary>Closes all active connections and refreshes the visible list.</summary>
+    /// <param name="cancellationToken">Cancels the close or refresh request.</param>
+    /// <returns>A task that completes after close and refresh finish.</returns>
+    public async Task CloseAllConnectionsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _connectionClient.CloseAllConnectionsAsync(cancellationToken);
+            await RefreshConnectionsAsync(cancellationToken);
+            ConnectionStatusText = _localization.GetString("Connections.Status.ClosedAll");
+            _log.Append("Info", "Connections", "All active connections closed.", null);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException or ArgumentException)
+        {
+            ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
+            _log.Append("Warning", "Connections", "Active connection close-all failed.", exception.Message);
+        }
+    }
+
+    /// <summary>Closes one active connection from a command parameter.</summary>
+    private Task CloseConnectionCommandAsync(object? parameter, CancellationToken cancellationToken)
+    {
+        return parameter is ActiveConnection connection
+            ? CloseConnectionAsync(connection, cancellationToken)
+            : Task.CompletedTask;
     }
 }

@@ -26,6 +26,8 @@ public sealed class ProxiesViewModelTests
         Assert.Equal("Proxy nodes", viewModel.PageTitleText);
         Assert.Equal("Refresh", viewModel.RefreshNodesText);
         Assert.Equal("Test latency", viewModel.TestLatencyText);
+        Assert.Equal("Strategy groups", viewModel.ProxyGroupsSectionTitleText);
+        Assert.Equal("Resources", viewModel.ProviderResourcesSectionTitleText);
         Assert.Equal(catalog.Nodes, viewModel.ProxyNodes);
     }
 
@@ -83,6 +85,65 @@ public sealed class ProxiesViewModelTests
         Assert.Contains(log.Entries, entry => entry.Level == "Warning" && entry.Detail == "probe failed");
     }
 
+    /// <summary>Verifies runtime refresh loads strategy groups and provider resources.</summary>
+    [Fact]
+    public async Task RefreshRuntimeAsync_LoadsProxyGroupsAndProviders()
+    {
+        FakeProxyRuntimeController runtime = new();
+        ProxiesViewModel viewModel = new(
+            new FakeProxiesLocalization(),
+            new FakeProxyCatalog(),
+            new FakeProxyLatency(),
+            runtime,
+            new FakeProxiesLog());
+
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+
+        Assert.Equal(runtime.ProxyGroups, viewModel.ProxyGroups);
+        Assert.Equal(runtime.ProviderResources, viewModel.ProviderResources);
+        Assert.Equal("Runtime refreshed", viewModel.RuntimeStatusText);
+    }
+
+    /// <summary>Verifies selecting a strategy group node writes through the runtime controller and refreshes groups.</summary>
+    [Fact]
+    public async Task SelectProxyAsync_UpdatesRuntimeSelectionAndRefreshes()
+    {
+        FakeProxyRuntimeController runtime = new();
+        ProxiesViewModel viewModel = new(
+            new FakeProxiesLocalization(),
+            new FakeProxyCatalog(),
+            new FakeProxyLatency(),
+            runtime,
+            new FakeProxiesLog());
+        MihomoProxyGroup group = runtime.ProxyGroups[0];
+
+        await viewModel.SelectProxyAsync(group, "Node B", CancellationToken.None);
+
+        Assert.Equal(("Proxy", "Node B"), runtime.LastSelection);
+        Assert.Equal(1, runtime.RefreshCount);
+        Assert.Equal("Selection applied", viewModel.RuntimeStatusText);
+    }
+
+    /// <summary>Verifies provider update writes through the runtime controller and refreshes resources.</summary>
+    [Fact]
+    public async Task UpdateProviderAsync_UpdatesProviderAndRefreshes()
+    {
+        FakeProxyRuntimeController runtime = new();
+        ProxiesViewModel viewModel = new(
+            new FakeProxiesLocalization(),
+            new FakeProxyCatalog(),
+            new FakeProxyLatency(),
+            runtime,
+            new FakeProxiesLog());
+        MihomoProviderResource provider = runtime.ProviderResources[0];
+
+        await viewModel.UpdateProviderAsync(provider, CancellationToken.None);
+
+        Assert.Equal(provider, runtime.LastUpdatedProvider);
+        Assert.Equal(1, runtime.RefreshCount);
+        Assert.Equal("Provider updated", viewModel.RuntimeStatusText);
+    }
+
     /// <summary>Fake localization provider for proxies tests.</summary>
     private sealed class FakeProxiesLocalization : IProxiesLocalization
     {
@@ -97,6 +158,13 @@ public sealed class ProxiesViewModelTests
                 "Page.ProxyNodes.Description" => "Description",
                 "Command.Refresh" => "Refresh",
                 "Command.TestLatency" => "Test latency",
+                "ProxyNodes.Section.StrategyGroups" => "Strategy groups",
+                "ProxyNodes.Section.Resources" => "Resources",
+                "ProxyNodes.Status.RuntimeNotRefreshed" => "Runtime not refreshed",
+                "ProxyNodes.Status.RuntimeRefreshed" => "Runtime refreshed",
+                "ProxyNodes.Status.SelectionApplied" => "Selection applied",
+                "ProxyNodes.Status.ProviderUpdated" => "Provider updated",
+                "ProxyNodes.Status.RuntimeUnavailable" => "Runtime unavailable",
                 _ => key,
             };
         }
@@ -140,6 +208,75 @@ public sealed class ProxiesViewModelTests
             return ExceptionToThrow is null
                 ? Task.FromResult(TestedNodes ?? nodes)
                 : Task.FromException<IReadOnlyList<ProxyNode>>(ExceptionToThrow);
+        }
+    }
+
+    /// <summary>Fake runtime controller for strategy groups and providers.</summary>
+    private sealed class FakeProxyRuntimeController : IProxyRuntimeController
+    {
+        /// <summary>Gets fake strategy groups.</summary>
+        /// <value>Configured fake strategy groups.</value>
+        public IReadOnlyList<MihomoProxyGroup> ProxyGroups { get; } =
+        [
+            new("Proxy", "Selector", "Node A", ["Node A", "Node B", "DIRECT"]),
+        ];
+
+        /// <summary>Gets fake provider resources.</summary>
+        /// <value>Configured fake provider resources.</value>
+        public IReadOnlyList<MihomoProviderResource> ProviderResources { get; } =
+        [
+            new("sub", MihomoProviderKind.Proxy, "HTTP", string.Empty, 2, DateTimeOffset.UnixEpoch),
+            new("reject", MihomoProviderKind.Rule, string.Empty, "domain", 123, DateTimeOffset.UnixEpoch),
+        ];
+
+        /// <summary>Gets last selected group and proxy.</summary>
+        /// <value>Last selection tuple.</value>
+        public (string GroupName, string ProxyName)? LastSelection { get; private set; }
+
+        /// <summary>Gets last updated provider.</summary>
+        /// <value>Last updated provider.</value>
+        public MihomoProviderResource? LastUpdatedProvider { get; private set; }
+
+        /// <summary>Gets refresh call count.</summary>
+        /// <value>Refresh call count.</value>
+        public int RefreshCount { get; private set; }
+
+        /// <summary>Gets fake strategy groups.</summary>
+        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
+        /// <returns>Configured groups.</returns>
+        public Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken)
+        {
+            RefreshCount++;
+            return Task.FromResult(ProxyGroups);
+        }
+
+        /// <summary>Gets fake provider resources.</summary>
+        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
+        /// <returns>Configured resources.</returns>
+        public Task<IReadOnlyList<MihomoProviderResource>> GetProviderResourcesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(ProviderResources);
+        }
+
+        /// <summary>Captures one fake strategy group selection.</summary>
+        /// <param name="groupName">Group name. Must not be null.</param>
+        /// <param name="proxyName">Proxy name. Must not be null.</param>
+        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
+        /// <returns>Completed task.</returns>
+        public Task SelectProxyAsync(string groupName, string proxyName, CancellationToken cancellationToken)
+        {
+            LastSelection = (groupName, proxyName);
+            return Task.CompletedTask;
+        }
+
+        /// <summary>Captures one fake provider update.</summary>
+        /// <param name="provider">Provider to update.</param>
+        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
+        /// <returns>Completed task.</returns>
+        public Task UpdateProviderAsync(MihomoProviderResource provider, CancellationToken cancellationToken)
+        {
+            LastUpdatedProvider = provider;
+            return Task.CompletedTask;
         }
     }
 

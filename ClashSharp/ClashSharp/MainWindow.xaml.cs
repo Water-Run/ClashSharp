@@ -56,6 +56,9 @@ public sealed partial class MainWindow : Window
     /// <summary>Current app window used for close interception.</summary>
     private AppWindow? _appWindow;
 
+    /// <summary>Native system tray integration.</summary>
+    private SystemTrayService? _trayService;
+
     /// <summary>True after the user confirms a proxy-active close prompt.</summary>
     private bool _isCloseConfirmed;
 
@@ -76,6 +79,7 @@ public sealed partial class MainWindow : Window
 
         NavView.SelectedItem = NavMasterControlItem;
         NavigateToTag("MasterControl");
+        InitializeTray();
 
         Closed += OnWindowClosed;
         ContentFrame.Loaded += OnContentFrameLoaded;
@@ -102,6 +106,19 @@ public sealed partial class MainWindow : Window
         _wndProcDelegate = new WndProcDelegate(WindowProc);
         _oldWndProc = SetWindowLong(_hWnd, GwlpWndproc,
             Marshal.GetFunctionPointerForDelegate(_wndProcDelegate));
+    }
+
+    /// <summary>Initializes the native system tray icon and menu.</summary>
+    private void InitializeTray()
+    {
+        _trayService = new SystemTrayService(
+            _hWnd,
+            BuildTrayMenuState,
+            () => DispatcherQueue.TryEnqueue(() => NavigateFromTray("MasterControl", NavMasterControlItem)),
+            () => DispatcherQueue.TryEnqueue(() => NavigateFromTray("Settings", NavSettingsItem)),
+            () => DispatcherQueue.TryEnqueue(RequestSafeExitFromTray),
+            mode => DispatcherQueue.TryEnqueue(() => ApplyModeFromTray(mode)),
+            isEnabled => DispatcherQueue.TryEnqueue(() => SetTransparentProxyFromTray(isEnabled)));
     }
 
     /// <summary>Handles NavigationView selection changes and navigates the content frame to the corresponding page.</summary>
@@ -132,12 +149,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>Navigates from tray callbacks and brings the window forward.</summary>
+    private void NavigateFromTray(string tag, NavigationViewItem item)
+    {
+        NavView.SelectedItem = item;
+        NavigateToTag(tag);
+        Activate();
+    }
+
     /// <summary>Restores the original window procedure and releases native resources on window close.</summary>
     /// <param name="sender">The window being closed. Not null.</param>
     /// <param name="args">Window close event arguments. Not null.</param>
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         ContentFrame.Loaded -= OnContentFrameLoaded;
+        _trayService?.Dispose();
+        _trayService = null;
 
         if (_appWindow is not null)
         {
@@ -359,6 +386,57 @@ public sealed partial class MainWindow : Window
         return currentMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
     }
 
+    /// <summary>Builds current tray menu state.</summary>
+    private static TrayMenuState BuildTrayMenuState()
+    {
+        MihomoServiceStatus serviceStatus = MihomoServiceManager.Instance.GetStatus();
+        return TrayMenuStateBuilder.Build(
+            AppSettingsService.Instance.CurrentMode,
+            AppSettingsService.Instance.TransparentProxyEnabled,
+            serviceStatus.IsInstalled);
+    }
+
+    /// <summary>Applies a mode requested from the tray menu.</summary>
+    private void ApplyModeFromTray(ClashSharpMode mode)
+    {
+        try
+        {
+            NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyMode(mode);
+            AppSettingsService.Instance.CurrentMode = result.Mode;
+            LogStorageService.Instance.AppendLog("Info", "Tray", result.Message, null);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.IO.FileNotFoundException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            LogStorageService.Instance.AppendLog("Error", "Tray", "Tray mode change failed.", exception.Message);
+        }
+        finally
+        {
+            _trayService?.RefreshMenu();
+        }
+    }
+
+    /// <summary>Sets transparent proxy preference from the tray menu.</summary>
+    private void SetTransparentProxyFromTray(bool isEnabled)
+    {
+        MihomoServiceStatus serviceStatus = MihomoServiceManager.Instance.GetStatus();
+        if (isEnabled && !serviceStatus.IsInstalled)
+        {
+            AppSettingsService.Instance.TransparentProxyEnabled = false;
+            _trayService?.RefreshMenu();
+            return;
+        }
+
+        AppSettingsService.Instance.TransparentProxyEnabled = isEnabled;
+        _trayService?.RefreshMenu();
+    }
+
+    /// <summary>Requests safe exit from the tray without showing the close confirmation prompt.</summary>
+    private void RequestSafeExitFromTray()
+    {
+        _isCloseConfirmed = true;
+        Close();
+    }
+
     /// <summary>Creates the navigation tag to page-type mapping used by the shell view model.</summary>
     /// <returns>Immutable navigation page map keyed by NavigationView tag.</returns>
     private static IReadOnlyDictionary<string, Type> CreatePageMap()
@@ -386,6 +464,11 @@ public sealed partial class MainWindow : Window
     /// <returns>The result of message processing.</returns>
     private nint WindowProc(nint hWnd, uint uMsg, nint wParam, nint lParam)
     {
+        if (_trayService?.TryHandleWindowMessage(uMsg, wParam, lParam) == true)
+        {
+            return 0;
+        }
+
         if (uMsg == WmGetminmaxinfo)
         {
             uint dpi = GetDpiForWindow(hWnd);

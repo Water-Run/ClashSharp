@@ -25,6 +25,11 @@
                         <FontIcon Glyph="&#xE74E;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
+                <AppBarButton x:Name="CloseAllConnectionsButton" Label="{Binding CloseAllConnectionsText}" Command="{Binding CloseAllConnectionsCommand}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE711;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
             </CommandBar>
 
             <TextBlock x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -40,6 +45,7 @@
                                 <ColumnDefinition Width="140" />
                                 <ColumnDefinition Width="90" />
                                 <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="72" />
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Text="{Binding ProcessNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
@@ -48,6 +54,14 @@
                             <TextBlock Grid.Column="3" Text="{Binding ProxyNameDisplay}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="4" Text="{Binding UploadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <TextBlock Grid.Column="5" Text="{Binding DownloadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Button
+                                Grid.Column="6"
+                                Padding="8,4"
+                                HorizontalAlignment="Right"
+                                Command="{Binding DataContext.CloseConnectionCommand, ElementName=ConnectionsList}"
+                                CommandParameter="{Binding}">
+                                <FontIcon Glyph="&#xE711;" FontSize="14" />
+                            </Button>
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>

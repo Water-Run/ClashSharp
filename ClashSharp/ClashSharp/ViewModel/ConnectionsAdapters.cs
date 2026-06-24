@@ -77,6 +77,23 @@ internal sealed class ActiveConnectionClientAdapter : IActiveConnectionClient
     {
         return _connections.GetActiveConnectionsAsync(cancellationToken);
     }
+
+    /// <summary>Closes one active connection.</summary>
+    /// <param name="connectionId">Connection id. Must not be null or empty.</param>
+    /// <param name="cancellationToken">Cancels the local API request when requested.</param>
+    /// <returns>A task that completes after the connection is closed.</returns>
+    public Task CloseConnectionAsync(string connectionId, CancellationToken cancellationToken)
+    {
+        return _connections.CloseConnectionAsync(connectionId, cancellationToken);
+    }
+
+    /// <summary>Closes all active connections.</summary>
+    /// <param name="cancellationToken">Cancels the local API request when requested.</param>
+    /// <returns>A task that completes after mihomo closes all connections.</returns>
+    public Task CloseAllConnectionsAsync(CancellationToken cancellationToken)
+    {
+        return _connections.CloseAllConnectionsAsync(cancellationToken);
+    }
 }
 
 /// <summary>Adapts <see cref="LogStorageService"/> to connection logging.</summary>

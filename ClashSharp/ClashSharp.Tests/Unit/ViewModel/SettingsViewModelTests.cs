@@ -113,6 +113,63 @@ public sealed class SettingsViewModelTests
         Assert.Contains(nameof(SettingsViewModel.TransparentProxyEnabled), changedProperties);
     }
 
+    /// <summary>Verifies transparent proxy cannot be enabled until the mihomo service is deployed.</summary>
+    [Fact]
+    public void TransparentProxyEnabled_Setter_WhenMihomoServiceMissing_DoesNotEnable()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = false };
+        FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"));
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+
+        viewModel.TransparentProxyEnabled = true;
+
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
+        Assert.Equal("Not installed", viewModel.MihomoServiceStatusText);
+    }
+
+    /// <summary>Verifies deploying the mihomo service refreshes status and allows transparent proxy toggling.</summary>
+    [Fact]
+    public async Task DeployMihomoServiceAsync_WhenSuccessful_AllowsTransparentProxy()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = false };
+        FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"))
+        {
+            DeployResult = new MihomoServiceStatus(true, true, "Installed"),
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+
+        await viewModel.DeployMihomoServiceAsync(CancellationToken.None);
+        viewModel.TransparentProxyEnabled = true;
+
+        Assert.True(service.DeployCalled);
+        Assert.True(viewModel.CanToggleTransparentProxy);
+        Assert.Equal("Installed", viewModel.MihomoServiceStatusText);
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
+    }
+
+    /// <summary>Verifies uninstalling the mihomo service disables the transparent proxy preference.</summary>
+    [Fact]
+    public async Task UninstallMihomoServiceAsync_DisablesTransparentProxyPreference()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = true };
+        FakeMihomoServiceController service = new(new MihomoServiceStatus(true, true, "Installed"))
+        {
+            UninstallResult = new MihomoServiceStatus(false, false, "Removed"),
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+
+        await viewModel.UninstallMihomoServiceAsync(CancellationToken.None);
+
+        Assert.True(service.UninstallCalled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.Equal("Removed", viewModel.MihomoServiceStatusText);
+    }
+
     /// <summary>Verifies app theme selection persists and notifies the shell theme controller.</summary>
     [Fact]
     public void SetAppThemeModeIndex_ValidIndex_PersistsAndAppliesTheme()
@@ -354,5 +411,65 @@ public sealed class SettingsViewModelTests
         public bool MainlandChinaUrlBlockingEnabled { get; set; }
 
         public string ConnectionTestUrl { get; set; } = "https://www.google.com/generate_204";
+    }
+
+    /// <summary>Fake mihomo service controller for transparent proxy settings tests.</summary>
+    private sealed class FakeMihomoServiceController : IMihomoServiceController
+    {
+        /// <summary>Initializes a fake controller with a starting status.</summary>
+        /// <param name="status">Initial service status.</param>
+        public FakeMihomoServiceController(MihomoServiceStatus status)
+        {
+            CurrentStatus = status;
+            DeployResult = status;
+            UninstallResult = status;
+        }
+
+        /// <summary>Gets or sets current service status.</summary>
+        /// <value>Current fake status.</value>
+        public MihomoServiceStatus CurrentStatus { get; set; }
+
+        /// <summary>Gets or sets deploy result.</summary>
+        /// <value>Result returned by deploy.</value>
+        public MihomoServiceStatus DeployResult { get; set; }
+
+        /// <summary>Gets or sets uninstall result.</summary>
+        /// <value>Result returned by uninstall.</value>
+        public MihomoServiceStatus UninstallResult { get; set; }
+
+        /// <summary>Gets whether deploy was called.</summary>
+        /// <value>True when deploy was called.</value>
+        public bool DeployCalled { get; private set; }
+
+        /// <summary>Gets whether uninstall was called.</summary>
+        /// <value>True when uninstall was called.</value>
+        public bool UninstallCalled { get; private set; }
+
+        /// <summary>Gets current fake service status.</summary>
+        /// <returns>Current fake status.</returns>
+        public MihomoServiceStatus GetStatus()
+        {
+            return CurrentStatus;
+        }
+
+        /// <summary>Deploys the fake service.</summary>
+        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
+        /// <returns>Configured deploy result.</returns>
+        public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
+        {
+            DeployCalled = true;
+            CurrentStatus = DeployResult;
+            return Task.FromResult(CurrentStatus);
+        }
+
+        /// <summary>Uninstalls the fake service.</summary>
+        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
+        /// <returns>Configured uninstall result.</returns>
+        public Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
+        {
+            UninstallCalled = true;
+            CurrentStatus = UninstallResult;
+            return Task.FromResult(CurrentStatus);
+        }
     }
 }

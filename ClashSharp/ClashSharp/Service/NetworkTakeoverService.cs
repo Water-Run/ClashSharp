@@ -105,6 +105,13 @@ public sealed class NetworkTakeoverService
             return ApplySystemProxyTakeoverMode(mode, BuildSystemProxyMessage(mode));
         }
 
+        MihomoServiceStatus serviceStatus = MihomoServiceManager.Instance.GetStatus();
+        if (!serviceStatus.IsInstalled)
+        {
+            AppSettingsService.Instance.TransparentProxyEnabled = false;
+            return ApplySystemProxyTakeoverMode(mode, BuildTransparentProxyServiceMissingMessage(mode));
+        }
+
         RestartCore(mode, transparentProxyEnabled: true);
         WindowsProxyService.Instance.DisableProxy();
         return new NetworkTakeoverResult(mode, true, false, true, BuildTransparentProxyMessage(mode));
@@ -149,6 +156,14 @@ public sealed class NetworkTakeoverService
         return mode == ClashSharpMode.FullTakeover
             ? "Full takeover is active through TUN transparent proxy."
             : "Rule takeover is active through TUN transparent proxy.";
+    }
+
+    /// <summary>Builds user-facing message when transparent proxy is unavailable because the service is missing.</summary>
+    private static string BuildTransparentProxyServiceMissingMessage(ClashSharpMode mode)
+    {
+        return mode == ClashSharpMode.FullTakeover
+            ? "Mihomo service is not deployed; full takeover is active through Windows system proxy."
+            : "Mihomo service is not deployed; rule takeover is active through Windows system proxy.";
     }
 
 }

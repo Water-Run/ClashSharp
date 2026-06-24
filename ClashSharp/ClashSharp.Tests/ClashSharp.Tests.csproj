@@ -41,6 +41,10 @@
     <Compile Include="..\ClashSharp\Model\ProxyRecoveryMode.cs" Link="Model\ProxyRecoveryMode.cs" />
     <Compile Include="..\ClashSharp\Model\StartupBehaviorMode.cs" Link="Model\StartupBehaviorMode.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsProxyState.cs" Link="Model\WindowsProxyState.cs" />
+    <Compile Include="..\ClashSharp\Model\MihomoProviderKind.cs" Link="Model\MihomoProviderKind.cs" />
+    <Compile Include="..\ClashSharp\Model\MihomoProxyGroup.cs" Link="Model\MihomoProxyGroup.cs" />
+    <Compile Include="..\ClashSharp\Model\MihomoProviderResource.cs" Link="Model\MihomoProviderResource.cs" />
+    <Compile Include="..\ClashSharp\Model\MihomoServiceStatus.cs" Link="Model\MihomoServiceStatus.cs" />
     <Compile Include="..\ClashSharp\Model\ProxyNode.cs" Link="Model\ProxyNode.cs" />
     <Compile Include="..\ClashSharp\Model\RegionMetadata.cs" Link="Model\RegionMetadata.cs" />
     <Compile Include="..\ClashSharp\Model\RulePreview.cs" Link="Model\RulePreview.cs" />
@@ -55,10 +59,12 @@
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfilePreviewParser.cs" Link="Service\MihomoProfilePreviewParser.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileShapeValidator.cs" Link="Service\MihomoProfileShapeValidator.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoControllerClient.cs" Link="Service\MihomoControllerClient.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoRuntimeConfigurationBuilder.cs" Link="Service\MihomoRuntimeConfigurationBuilder.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogIds.cs" Link="Service\ProfileCatalogIds.cs" />
     <Compile Include="..\ClashSharp\Service\StartupBehaviorService.cs" Link="Service\StartupBehaviorService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionService.cs" Link="Service\StartupConflictDetectionService.cs" />
+    <Compile Include="..\ClashSharp\Service\TrayMenuStateBuilder.cs" Link="Service\TrayMenuStateBuilder.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsProxyService.cs" Link="Service\WindowsProxyService.cs" />
     <Compile Include="..\ClashSharp\Strings\LocalizationResources.cs" Link="Strings\LocalizationResources.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticsViewModel.cs" Link="ViewModel\SettingsDiagnosticsViewModel.cs" />

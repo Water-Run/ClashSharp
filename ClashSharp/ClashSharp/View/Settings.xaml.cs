@@ -44,7 +44,8 @@ public sealed partial class Settings : Page
             isEnabled => _ = StartupLaunchService.Instance.SetEnabledAsync(isEnabled),
             LocalizationService.Instance.GetString,
             SettingsProxyInformationAdapter.CreateSnapshot,
-            diagnosticsViewModel);
+            diagnosticsViewModel,
+            new MihomoServiceControllerAdapter(MihomoServiceManager.Instance));
         InitializeComponent();
         DataContext = _viewModel;
         LoadSettings();
