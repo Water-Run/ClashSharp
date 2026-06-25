@@ -69,6 +69,12 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
+            <components:SettingRow x:Name="NotificationLevelRow" Title="{Binding NotificationTitleText}" Description="{Binding NotificationDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ComboBox x:Name="NotificationLevelBox" Width="180" ItemsSource="{Binding NotificationLevelOptions}" SelectedIndex="{Binding NotificationLevelIndex, Mode=TwoWay}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
             <HyperlinkButton x:Name="ResetBasicSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetBasicSettingsButton_Click" />
 
             <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
@@ -259,7 +265,7 @@
             <HyperlinkButton x:Name="ResetMainlandChinaSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetMainlandChinaSettingsButton_Click" />
 
             <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <components:SettingRow x:Name="DataPackageRow" Title="{Binding DataPackageTitleText}" Description="{Binding DataPackageDescriptionText}">
+            <components:SettingRow x:Name="DataPackageRow" Title="{Binding BackupRestoreTitleText}" Description="{Binding BackupRestoreDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Button x:Name="ExportDataPackageButton" Click="ExportDataPackageButton_Click">
@@ -272,12 +278,6 @@
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE8B5;" FontSize="14" />
                                 <TextBlock Text="{Binding ImportText}" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="BackupDataPackageButton" Click="BackupDataPackageButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE777;" FontSize="14" />
-                                <TextBlock Text="{Binding BackupText}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

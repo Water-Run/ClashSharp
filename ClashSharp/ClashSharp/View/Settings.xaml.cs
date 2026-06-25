@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -34,7 +35,7 @@ namespace ClashSharp.View;
 /// </remarks>
 public sealed partial class Settings : Page
 {
-    private sealed record DataPackageScopeOption(ClashDataPackageScope Scope, string Title, string Description, string Glyph);
+    private sealed record DataPackageScopeOption(DataPackageExportScope Scope, string Title, string Description, string Glyph);
 
     /// <summary>Owns settings state transitions and persistence.</summary>
     private readonly SettingsViewModel _viewModel;
@@ -63,7 +64,8 @@ public sealed partial class Settings : Page
             resetAllSettings: AppDataMaintenanceService.ResetAllSettings,
             clearAllData: AppDataMaintenanceService.ClearAllData,
             checkStartupConflicts: StartupConflictDetectionService.Instance.CheckConflicts,
-            isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending);
+            isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending,
+            notifyConnectionTestTimeout: NotificationService.Instance.NotifyConnectionTestTimeout);
         InitializeComponent();
         DataContext = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -390,8 +392,8 @@ public sealed partial class Settings : Page
     /// <summary>Exports a Clash# XML data package with the selected scope.</summary>
     private async void ExportDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
-        ClashDataPackageScope? scope = await SelectDataPackageExportScopeAsync();
-        if (scope is ClashDataPackageScope selectedScope)
+        DataPackageExportScope? scope = await SelectDataPackageExportScopeAsync();
+        if (scope is DataPackageExportScope selectedScope)
         {
             await PickAndExportDataPackageAsync(selectedScope);
         }
@@ -408,7 +410,8 @@ public sealed partial class Settings : Page
         picker.FileTypeFilter.Add(".xml");
 
         StorageFile? file = await picker.PickSingleFileAsync();
-        if (file is null || !await ConfirmDataImportAsync(ReadPackageScope(file.Path)))
+        ClashDataPackageScope? scope = ReadPackageScope(file?.Path ?? string.Empty);
+        if (file is null || !IsImportableDataPackageScope(scope) || !await ConfirmDataImportAsync(scope))
         {
             return;
         }
@@ -417,14 +420,8 @@ public sealed partial class Settings : Page
         ApplyImportedSettings();
     }
 
-    /// <summary>Exports a full backup package.</summary>
-    private async void BackupDataPackageButton_Click(object sender, RoutedEventArgs e)
-    {
-        await PickAndExportDataPackageAsync(ClashDataPackageScope.All);
-    }
-
     /// <summary>Prompts for the package export scope immediately before saving.</summary>
-    private async Task<ClashDataPackageScope?> SelectDataPackageExportScopeAsync()
+    private async Task<DataPackageExportScope?> SelectDataPackageExportScopeAsync()
     {
         StackPanel optionPanel = new()
         {
@@ -440,7 +437,7 @@ public sealed partial class Settings : Page
                 Metadata = _viewModel.DataExportTitleText,
                 Description = option.Description,
                 Glyph = option.Glyph,
-                IsChecked = option.Scope == ClashDataPackageScope.Settings,
+                IsChecked = option.Scope == DataPackageExportScope.Settings,
                 Tag = option.Scope,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
@@ -480,13 +477,13 @@ public sealed partial class Settings : Page
 
         foreach (DialogOptionRow row in rows)
         {
-            if (row.IsChecked == true && row.Tag is ClashDataPackageScope scope)
+            if (row.IsChecked == true && row.Tag is DataPackageExportScope scope)
             {
                 return scope;
             }
         }
 
-        return ClashDataPackageScope.Settings;
+        return DataPackageExportScope.Settings;
     }
 
     private IReadOnlyList<DataPackageScopeOption> BuildDataPackageScopeOptions()
@@ -494,19 +491,24 @@ public sealed partial class Settings : Page
         return
         [
             new(
-                ClashDataPackageScope.Settings,
+                DataPackageExportScope.Settings,
                 _viewModel.DataPackageScopeSettingsText,
                 LocalizationService.Instance.GetString("Settings.DataPackage.Scope.Settings.Description"),
                 "\uE713"),
             new(
-                ClashDataPackageScope.SettingsAndProxyConfiguration,
+                DataPackageExportScope.SettingsAndProxyConfiguration,
                 _viewModel.DataPackageScopeSettingsAndProxyConfigurationText,
                 LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration.Description"),
                 "\uE968"),
             new(
-                ClashDataPackageScope.All,
-                _viewModel.DataPackageScopeAllText,
-                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.All.Description"),
+                DataPackageExportScope.SystemLogs,
+                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogs"),
+                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogs.Description"),
+                "\uE8A5"),
+            new(
+                DataPackageExportScope.SystemLogSqlite,
+                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogSqlite"),
+                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogSqlite.Description"),
                 "\uE777"),
         ];
     }
@@ -520,7 +522,7 @@ public sealed partial class Settings : Page
     }
 
     /// <summary>Shows a save picker and exports the selected data package scope.</summary>
-    private async Task PickAndExportDataPackageAsync(ClashDataPackageScope scope)
+    private async Task PickAndExportDataPackageAsync(DataPackageExportScope scope)
     {
         FileSavePicker picker = new()
         {
@@ -528,7 +530,14 @@ public sealed partial class Settings : Page
             SuggestedFileName = $"ClashSharp-{DateTime.Now:yyyyMMdd-HHmmss}",
         };
         InitializePickerWithWindow(picker);
-        picker.FileTypeChoices.Add("Clash# XML", [".xml"]);
+        if (scope == DataPackageExportScope.SystemLogSqlite)
+        {
+            picker.FileTypeChoices.Add("SQLite", [".sqlite3"]);
+        }
+        else
+        {
+            picker.FileTypeChoices.Add("Clash# XML", [".xml"]);
+        }
 
         StorageFile? file = await picker.PickSaveFileAsync();
         if (file is null)
@@ -536,7 +545,41 @@ public sealed partial class Settings : Page
             return;
         }
 
-        await ClashDataPackageService.Instance.ExportAsync(file.Path, scope, CancellationToken.None);
+        switch (scope)
+        {
+            case DataPackageExportScope.Settings:
+                await ClashDataPackageService.Instance.ExportAsync(file.Path, ClashDataPackageScope.Settings, CancellationToken.None);
+                break;
+            case DataPackageExportScope.SettingsAndProxyConfiguration:
+                await ClashDataPackageService.Instance.ExportAsync(file.Path, ClashDataPackageScope.SettingsAndProxyConfiguration, CancellationToken.None);
+                break;
+            case DataPackageExportScope.SystemLogs:
+                await ExportLogsXmlAsync(file.Path, CancellationToken.None);
+                break;
+            case DataPackageExportScope.SystemLogSqlite:
+                await ExportLogSqliteAsync(file.Path, CancellationToken.None);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unsupported export scope.");
+        }
+    }
+
+    private static async Task ExportLogsXmlAsync(string path, CancellationToken cancellationToken)
+    {
+        await ClashDataPackageService.Instance.ExportLogsAsync(path, LogStorageService.Instance.GetRecentLogs(10000), cancellationToken);
+    }
+
+    private static async Task ExportLogSqliteAsync(string path, CancellationToken cancellationToken)
+    {
+        LogStorageService.Instance.GetStorageSummary();
+        await using FileStream source = File.OpenRead(LogStorageService.Instance.DatabasePath);
+        await using FileStream target = File.Create(path);
+        await source.CopyToAsync(target, cancellationToken);
+    }
+
+    private static bool IsImportableDataPackageScope(ClashDataPackageScope? scope)
+    {
+        return scope is ClashDataPackageScope.Settings or ClashDataPackageScope.SettingsAndProxyConfiguration;
     }
 
     /// <summary>Confirms import overwrite behavior in two steps.</summary>

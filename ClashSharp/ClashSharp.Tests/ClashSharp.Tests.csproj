@@ -38,7 +38,9 @@
     <Compile Include="..\ClashSharp\Model\ActiveConnection.cs" Link="Model\ActiveConnection.cs" />
     <Compile Include="..\ClashSharp\Model\ClashDataPackageScope.cs" Link="Model\ClashDataPackageScope.cs" />
     <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />
+    <Compile Include="..\ClashSharp\Model\ApplicationActionKind.cs" Link="Model\ApplicationActionKind.cs" />
     <Compile Include="..\ClashSharp\Model\MainlandChinaFeatureMode.cs" Link="Model\MainlandChinaFeatureMode.cs" />
+    <Compile Include="..\ClashSharp\Model\NotificationLevel.cs" Link="Model\NotificationLevel.cs" />
     <Compile Include="..\ClashSharp\Model\CoreConfigurationState.cs" Link="Model\CoreConfigurationState.cs" />
     <Compile Include="..\ClashSharp\Model\ConfigurationProfile.cs" Link="Model\ConfigurationProfile.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileImportResult.cs" Link="Model\ProfileImportResult.cs" />
@@ -72,6 +74,7 @@
     <Compile Include="..\ClashSharp\Service\LogStorageSchema.cs" Link="Service\LogStorageSchema.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.cs" Link="Service\LogStorageService.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageServiceFactory.cs" Link="Service\LogStorageServiceFactory.cs" />
+    <Compile Include="..\ClashSharp\Service\IApplicationActionDispatcher.cs" Link="Service\IApplicationActionDispatcher.cs" />
     <Compile Include="..\ClashSharp\Service\LocalizationService.cs" Link="Service\LocalizationService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayServiceFactory.cs" Link="Service\MainlandChinaTextDisplayServiceFactory.cs" />

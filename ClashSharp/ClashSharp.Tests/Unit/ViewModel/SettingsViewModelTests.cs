@@ -576,8 +576,8 @@ public sealed class SettingsViewModelTests
     {
         SettingsViewModel viewModel = new(new FakeSettingsStore(), _ => { }, () => { }, key => key);
 
-        Assert.Equal("Settings.DataPackage.Title", ReadProperty<string>(viewModel, "DataPackageTitleText"));
-        Assert.Equal("Settings.DataPackage.Description", ReadProperty<string>(viewModel, "DataPackageDescriptionText"));
+        Assert.Equal("Settings.BackupRestore.Title", ReadProperty<string>(viewModel, "DataPackageTitleText"));
+        Assert.Equal("Settings.BackupRestore.Description", ReadProperty<string>(viewModel, "DataPackageDescriptionText"));
         Assert.Equal("Settings.DataExport.Title", ReadProperty<string>(viewModel, "DataExportTitleText"));
         Assert.Equal("Settings.DataExport.Description", ReadProperty<string>(viewModel, "DataExportDescriptionText"));
         Assert.Equal("Command.Export", ReadProperty<string>(viewModel, "ExportText"));
@@ -861,6 +861,8 @@ public sealed class SettingsViewModelTests
 
         public bool MainlandChinaUrlBlockingEnabled { get; set; }
 
+        public NotificationLevel NotificationLevel { get; set; } = NotificationLevel.Default;
+
         public string ConnectionTestUrl { get; set; } = "https://www.google.com/generate_204";
 
         public string ConnectionTestProxyUrl1 { get; set; } = "https://www.google.com";
@@ -892,6 +894,7 @@ public sealed class SettingsViewModelTests
                 typeof(Action),
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
                 typeof(Func<AppAccentColorMode, string, bool>),
+                typeof(Action<string>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -918,6 +921,7 @@ public sealed class SettingsViewModelTests
             (Action)(() => { }),
             (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
             null,
+            (Action<string>)(_ => { }),
         ]));
     }
 
@@ -947,6 +951,7 @@ public sealed class SettingsViewModelTests
                 typeof(Action),
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
                 typeof(Func<AppAccentColorMode, string, bool>),
+                typeof(Action<string>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -968,6 +973,7 @@ public sealed class SettingsViewModelTests
             clearAllData,
             (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
             null,
+            (Action<string>)(_ => { }),
         ]));
     }
 
@@ -995,6 +1001,7 @@ public sealed class SettingsViewModelTests
                 typeof(Action),
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
                 typeof(Func<AppAccentColorMode, string, bool>),
+                typeof(Action<string>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -1016,6 +1023,7 @@ public sealed class SettingsViewModelTests
             (Action)(() => { }),
             checkStartupConflicts,
             null,
+            (Action<string>)(_ => { }),
         ]));
     }
 
@@ -1043,6 +1051,7 @@ public sealed class SettingsViewModelTests
                 typeof(Action),
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
                 typeof(Func<AppAccentColorMode, string, bool>),
+                typeof(Action<string>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -1064,6 +1073,7 @@ public sealed class SettingsViewModelTests
             (Action)(() => { }),
             (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
             isAccentColorRestartPending,
+            (Action<string>)(_ => { }),
         ]));
     }
 

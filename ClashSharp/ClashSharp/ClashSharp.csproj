@@ -28,6 +28,7 @@
     <None Remove="View\Rules.xaml" />
     <None Remove="View\Settings.xaml" />
     <None Remove="View\Statistics.xaml" />
+    <None Remove="View\Triggers.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -112,6 +113,9 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Update="View\Statistics.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Update="View\Triggers.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>

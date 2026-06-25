@@ -131,6 +131,7 @@
                 Content="{Binding EditInfoTilesText}"
                 HorizontalAlignment="Left"
                 Padding="0"
+                Margin="8,0,0,0"
                 Click="EditInfoTilesButton_Click" />
 
             <GridView

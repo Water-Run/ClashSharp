@@ -523,6 +523,23 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
     public IReadOnlyList<LogRecord> GetRecentLogs(int limit)
     {
+        return GetRecentLogs(limit, source: null);
+    }
+
+    /// <summary>Returns the newest log records for one source up to <paramref name="limit"/>.</summary>
+    /// <param name="source">Log source to filter by. Must not be null or whitespace.</param>
+    /// <param name="limit">Maximum number of records to return; must be greater than zero.</param>
+    /// <returns>A read-only list of newest log records ordered from newest to oldest.</returns>
+    /// <exception cref="ArgumentException"><paramref name="source"/> is whitespace.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
+    public IReadOnlyList<LogRecord> GetRecentLogs(string source, int limit)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        return GetRecentLogs(limit, source.Trim());
+    }
+
+    private IReadOnlyList<LogRecord> GetRecentLogs(int limit, string? source)
+    {
         if (limit <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
@@ -534,8 +551,14 @@ public sealed partial class LogStorageService
 
             using SqliteConnection connection = OpenConnection();
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "SELECT CreatedAtUnixTime, Level, Source, Message, Detail FROM Logs ORDER BY CreatedAtUnixTime DESC, Id DESC LIMIT $limit;";
+            command.CommandText = string.IsNullOrWhiteSpace(source)
+                ? "SELECT CreatedAtUnixTime, Level, Source, Message, Detail FROM Logs ORDER BY CreatedAtUnixTime DESC, Id DESC LIMIT $limit;"
+                : "SELECT CreatedAtUnixTime, Level, Source, Message, Detail FROM Logs WHERE Source = $source ORDER BY CreatedAtUnixTime DESC, Id DESC LIMIT $limit;";
             command.Parameters.AddWithValue("$limit", limit);
+            if (!string.IsNullOrWhiteSpace(source))
+            {
+                command.Parameters.AddWithValue("$source", source);
+            }
 
             using SqliteDataReader reader = command.ExecuteReader();
             List<LogRecord> records = [];

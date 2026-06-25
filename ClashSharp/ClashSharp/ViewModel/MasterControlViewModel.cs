@@ -87,8 +87,14 @@ internal interface IMasterControlSettings
     /// <value>True when transparent proxy is enabled; otherwise false.</value>
     bool TransparentProxyEnabled { get; set; }
 
-    /// <summary>Gets whether Clash# launches when the user signs in.</summary>
-    bool LaunchAtStartupEnabled { get; }
+    /// <summary>Gets or sets whether Clash# launches when the user signs in.</summary>
+    bool LaunchAtStartupEnabled { get; set; }
+
+    /// <summary>Gets or sets whether background connection sampling is enabled.</summary>
+    bool ConnectionSamplingEnabled { get; set; }
+
+    /// <summary>Gets or sets whether marked URL blocking is enabled.</summary>
+    bool MainlandChinaUrlBlockingEnabled { get; set; }
 
     /// <summary>Gets the active profile identifier.</summary>
     string ActiveProfileId { get; }
@@ -112,6 +118,8 @@ internal enum MasterControlTileAction
     ShowStartupPrompt,
     CheckStartupConflicts,
     RunLatencyTest,
+    ExportConfiguration,
+    ImportConfiguration,
 }
 
 /// <summary>Network takeover contract required by <see cref="MasterControlViewModel"/>.</summary>
@@ -267,6 +275,12 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Tray status provider used for current node and latency details.</summary>
     private readonly IMasterControlTrayStatus _trayStatus;
 
+    /// <summary>Shared application action dispatcher used by functional tiles.</summary>
+    private readonly IApplicationActionDispatcher _actions;
+
+    /// <summary>Callback invoked after a runtime mode is successfully applied.</summary>
+    private readonly Func<ClashSharpMode, Task> _modeApplied;
+
     /// <summary>Backing field for <see cref="SelectedMode"/>.</summary>
     private ClashSharpMode _selectedMode;
 
@@ -306,7 +320,9 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterControlSettings settings,
         IMasterControlTakeover takeover,
         IMasterControlLog log,
-        IMasterControlTrayStatus? trayStatus = null)
+        IMasterControlTrayStatus? trayStatus = null,
+        IApplicationActionDispatcher? actions = null,
+        Func<ClashSharpMode, Task>? modeApplied = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -315,6 +331,8 @@ internal sealed class MasterControlViewModel : ObservableObject
         _takeover = takeover ?? throw new ArgumentNullException(nameof(takeover));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _trayStatus = trayStatus ?? UnavailableMasterControlTrayStatus.Instance;
+        _actions = actions ?? NoMasterControlApplicationActionDispatcher.Instance;
+        _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         _selectedMode = _settings.CurrentMode;
 
         DisabledModeCommand = new AsyncRelayCommand(token => ApplyModeAsync(ClashSharpMode.Disabled, token));
@@ -566,6 +584,7 @@ internal sealed class MasterControlViewModel : ObservableObject
                 : _localization.GetString("Master.Status.Off");
             TransparentProxyStatusText = ResolveTransparentProxyStatus(result.TransparentProxyEnabled);
             _log.Append("Info", "MasterControl", result.Message, null);
+            _ = _modeApplied(result.Mode);
             _isCoreAvailable = true;
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
@@ -615,55 +634,48 @@ internal sealed class MasterControlViewModel : ObservableObject
     private void BuildInfoTiles()
     {
         _infoTiles.Clear();
-        string infoType = _localization.GetString("Master.Tile.Type.Information");
-        string controllableType = _localization.GetString("Master.Tile.Type.Controllable");
-        string actionType = _localization.GetString("Master.Tile.Type.Action");
-        string navigationType = _localization.GetString("Master.Tile.Type.Navigation");
-
-        _infoTiles.Add(new MasterControlInfoTileViewModel("core", _localization.GetString("Master.Tile.Core"), string.Empty, string.Empty, "\uE950", TileDescription("Core"), infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("system-proxy", _localization.GetString("Master.Tile.SystemProxy"), string.Empty, string.Empty, "\uE968", TileDescription("SystemProxy"), infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel(
-            "transparent-proxy",
-            _localization.GetString("Master.Tile.TransparentProxy"),
-            string.Empty,
-            string.Empty,
-            "\uE8A7",
-            TileDescription("TransparentProxy"),
-            controllableType,
-            isToggleVisible: true,
-            isToggleOn: _settings.TransparentProxyEnabled,
-            tileCommand: new RelayCommand(ToggleTransparentProxy)));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("latency", _localization.GetString("Master.Tile.Latency"), string.Empty, string.Empty, "\uEC4A", TileDescription("Latency"), actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.RunLatencyTest))));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-launch", _localization.GetString("Master.Tile.StartupLaunch"), string.Empty, string.Empty, "\uE7C3", TileDescription("StartupLaunch"), infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("active-profile", _localization.GetString("Master.Tile.ActiveProfile"), string.Empty, string.Empty, "\uE8A5", TileDescription("ActiveProfile"), infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("mixed-port", _localization.GetString("Master.Tile.MixedPort"), string.Empty, string.Empty, "\uE839", TileDescription("MixedPort"), infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test", _localization.GetString("Master.Tile.ConnectionTest"), string.Empty, string.Empty, "\uE9D9", TileDescription("ConnectionTest"), navigationType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-proxy-url-1", _localization.GetString("Master.Tile.ConnectionTestProxyUrl1"), string.Empty, string.Empty, "\uE774", TileDescription("ConnectionTestProxyUrl1"), infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-proxy-url-2", _localization.GetString("Master.Tile.ConnectionTestProxyUrl2"), string.Empty, string.Empty, "\uE774", TileDescription("ConnectionTestProxyUrl2"), infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-direct-url", _localization.GetString("Master.Tile.ConnectionTestDirectUrl"), string.Empty, string.Empty, "\uE8A7", TileDescription("ConnectionTestDirectUrl"), infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-prompt", _localization.GetString("Master.Tile.StartupPrompt"), string.Empty, string.Empty, "\uE946", TileDescription("StartupPrompt"), actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.ShowStartupPrompt))));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-conflicts", _localization.GetString("Master.Tile.StartupConflicts"), string.Empty, string.Empty, "\uE9D9", TileDescription("StartupConflicts"), actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.CheckStartupConflicts))));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("backup", _localization.GetString("Master.Tile.Backup"), string.Empty, string.Empty, "\uE777", TileDescription("Backup"), navigationType));
+        foreach (MasterTileDefinition tile in MasterTileCatalog.Create(this))
+        {
+            _infoTiles.Add(new MasterControlInfoTileViewModel(
+                tile.Id,
+                tile.Title,
+                string.Empty,
+                string.Empty,
+                tile.Glyph,
+                tile.Description,
+                tile.TypeText,
+                tile.IsToggleVisible,
+                tile.IsToggleOn,
+                tile.Command));
+        }
     }
 
     private void RefreshTileValues()
     {
         SetTile("core", CoreStatusText, BasicStatusText);
+        SetTile("mihomo-version", CoreStatusText, BasicStatusText);
         SetTile("system-proxy", SystemProxyStatusText, string.Empty);
         SetTile("transparent-proxy", TransparentProxyStatusText, string.Empty, _settings.TransparentProxyEnabled);
         SetTile("latency", LatencySummaryText, CurrentNodeText);
         SetTile("startup-launch", _settings.LaunchAtStartupEnabled
             ? _localization.GetString("Master.Status.StartupLaunchOn")
-            : _localization.GetString("Master.Status.StartupLaunchOff"), string.Empty);
+            : _localization.GetString("Master.Status.StartupLaunchOff"), string.Empty, _settings.LaunchAtStartupEnabled);
+        SetTile("connection-sampling", _settings.ConnectionSamplingEnabled
+            ? _localization.GetString("Master.Status.On")
+            : _localization.GetString("Master.Status.Off"), string.Empty, _settings.ConnectionSamplingEnabled);
+        SetTile("blocked-url", _settings.MainlandChinaUrlBlockingEnabled
+            ? _localization.GetString("Master.Status.On")
+            : _localization.GetString("Master.Status.Off"), string.Empty, _settings.MainlandChinaUrlBlockingEnabled);
         SetTile("active-profile", _settings.ActiveProfileId, string.Empty);
-        SetTile("mixed-port", _settings.MixedPort.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
+        SetTile("port", _settings.MixedPort.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
         SetTile("connection-test", "3", _localization.GetString("Master.Tile.ConnectionTest"));
         SetTile("connection-test-proxy-url-1", CompactUrl(_settings.ConnectionTestProxyUrl1), _settings.ConnectionTestProxyUrl1);
         SetTile("connection-test-proxy-url-2", CompactUrl(_settings.ConnectionTestProxyUrl2), _settings.ConnectionTestProxyUrl2);
         SetTile("connection-test-direct-url", CompactUrl(_settings.ConnectionTestDirectUrl), _settings.ConnectionTestDirectUrl);
         SetTile("startup-prompt", _localization.GetString("Settings.StartupGuide.ShowNow"), string.Empty);
         SetTile("startup-conflicts", _localization.GetString("Settings.CheckStartupConflicts.Now"), string.Empty);
-        SetTile("backup", _localization.GetString("Master.Status.BackupAvailable"), string.Empty);
+        SetTile("export-config", _localization.GetString("Command.Export"), string.Empty);
+        SetTile("import-config", _localization.GetString("Command.Import"), string.Empty);
     }
 
     private string TileDescription(string key)
@@ -693,10 +705,35 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private void ToggleTransparentProxy()
     {
-        _settings.TransparentProxyEnabled = !_settings.TransparentProxyEnabled;
+        bool nextValue = !_settings.TransparentProxyEnabled;
+        _settings.TransparentProxyEnabled = nextValue;
+        _ = _actions.DispatchAsync(ApplicationActionKind.SetTransparentProxy, nextValue.ToString(), CancellationToken.None);
         TransparentProxyStatusText = _settings.TransparentProxyEnabled
             ? _localization.GetString("Master.Status.Standby")
             : _localization.GetString("Master.Status.Off");
+        RefreshTileValues();
+    }
+
+    private void ToggleStartupLaunch()
+    {
+        bool nextValue = !_settings.LaunchAtStartupEnabled;
+        _settings.LaunchAtStartupEnabled = nextValue;
+        _ = _actions.DispatchAsync(ApplicationActionKind.SetLaunchAtStartup, nextValue.ToString(), CancellationToken.None);
+        RefreshTileValues();
+    }
+
+    private void ToggleConnectionSampling()
+    {
+        bool nextValue = !_settings.ConnectionSamplingEnabled;
+        _settings.ConnectionSamplingEnabled = nextValue;
+        _ = _actions.DispatchAsync(ApplicationActionKind.SetConnectionSampling, nextValue.ToString(), CancellationToken.None);
+        RefreshTileValues();
+    }
+
+    private void ToggleUrlBlocking()
+    {
+        bool nextValue = !_settings.MainlandChinaUrlBlockingEnabled;
+        _settings.MainlandChinaUrlBlockingEnabled = nextValue;
         RefreshTileValues();
     }
 
@@ -730,5 +767,78 @@ internal sealed class MasterControlViewModel : ObservableObject
         return _settings.TransparentProxyEnabled
             ? _localization.GetString("Master.Status.Fallback")
             : _localization.GetString("Master.Status.Off");
+    }
+
+    private sealed record MasterTileDefinition(
+        string Id,
+        string Title,
+        string Glyph,
+        string Description,
+        string TypeText,
+        bool IsToggleVisible = false,
+        bool IsToggleOn = false,
+        RelayCommand? Command = null);
+
+    private static class MasterTileCatalog
+    {
+        public static IReadOnlyList<MasterTileDefinition> Create(MasterControlViewModel owner)
+        {
+            string infoType = owner._localization.GetString("Master.Tile.Type.Information");
+            string controllableType = owner._localization.GetString("Master.Tile.Type.Controllable");
+            string actionType = owner._localization.GetString("Master.Tile.Type.Action");
+            string navigationType = owner._localization.GetString("Master.Tile.Type.Navigation");
+
+            return
+            [
+                owner.CreateTile("core", "Core", "\uE950", infoType),
+                owner.CreateTile("mihomo-version", "MihomoVersion", "\uE950", infoType),
+                owner.CreateTile("system-proxy", "SystemProxy", "\uE968", infoType),
+                owner.CreateTile("transparent-proxy", "TransparentProxy", "\uE8A7", controllableType, true, owner._settings.TransparentProxyEnabled, owner.ToggleTransparentProxy),
+                owner.CreateTile("latency", "Latency", "\uEC4A", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.RunLatencyTest)),
+                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, owner.ToggleStartupLaunch),
+                owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, owner.ToggleConnectionSampling),
+                owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, owner.ToggleUrlBlocking),
+                owner.CreateTile("active-profile", "ActiveProfile", "\uE8A5", infoType),
+                owner.CreateTile("port", "Port", "\uE839", infoType),
+                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", navigationType),
+                owner.CreateTile("connection-test-proxy-url-1", "ConnectionTestProxyUrl1", "\uE774", infoType),
+                owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", infoType),
+                owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", infoType),
+                owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ShowStartupPrompt)),
+                owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.CheckStartupConflicts)),
+                owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ExportConfiguration)),
+                owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ImportConfiguration)),
+            ];
+        }
+    }
+
+    private MasterTileDefinition CreateTile(
+        string id,
+        string key,
+        string glyph,
+        string typeText,
+        bool isToggleVisible = false,
+        bool isToggleOn = false,
+        Action? command = null)
+    {
+        return new MasterTileDefinition(
+            id,
+            _localization.GetString($"Master.Tile.{key}"),
+            glyph,
+            TileDescription(key),
+            typeText,
+            isToggleVisible,
+            isToggleOn,
+            command is null ? null : new RelayCommand(command));
+    }
+
+    private sealed class NoMasterControlApplicationActionDispatcher : IApplicationActionDispatcher
+    {
+        public static NoMasterControlApplicationActionDispatcher Instance { get; } = new();
+
+        public Task DispatchAsync(ApplicationActionKind kind, string value, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 }

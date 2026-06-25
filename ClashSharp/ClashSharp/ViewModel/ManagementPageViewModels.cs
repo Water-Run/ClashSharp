@@ -391,6 +391,8 @@ internal sealed class LogsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="RecentLogs"/>.</summary>
     private IReadOnlyList<LogRecord> _recentLogs = [];
 
+    private string? _sourceFilter;
+
     /// <summary>Initializes a logs view model.</summary>
     /// <param name="getString">Localization resolver. Must not be null.</param>
     /// <param name="logStorage">Log storage service. Must not be null.</param>
@@ -404,11 +406,15 @@ internal sealed class LogsViewModel : ObservableObject
 
     /// <summary>Gets the page title text.</summary>
     /// <value>Localized page title.</value>
-    public string PageTitleText => _getString("Nav.Logs");
+    public string PageTitleText => StringComparer.Ordinal.Equals(_sourceFilter, "Trigger")
+        ? _getString("Triggers.Logs.Title")
+        : _getString("Nav.Logs");
 
     /// <summary>Gets the page description text.</summary>
     /// <value>Localized page description.</value>
-    public string DescriptionText => _getString("Page.Logs.Description");
+    public string DescriptionText => StringComparer.Ordinal.Equals(_sourceFilter, "Trigger")
+        ? _getString("Triggers.Logs.Description")
+        : _getString("Page.Logs.Description");
 
     /// <summary>Gets the storage card title.</summary>
     /// <value>Localized card title.</value>
@@ -443,7 +449,17 @@ internal sealed class LogsViewModel : ObservableObject
             FormatByteCount(summary.DatabaseSizeBytes),
             summary.LogCount,
             summary.ConnectionCount);
-        RecentLogs = _logStorage.GetRecentLogs(100);
+        RecentLogs = string.IsNullOrWhiteSpace(_sourceFilter)
+            ? _logStorage.GetRecentLogs(100)
+            : _logStorage.GetRecentLogs(_sourceFilter, 100);
+    }
+
+    public void SetSourceFilter(string? source)
+    {
+        _sourceFilter = string.IsNullOrWhiteSpace(source) ? null : source.Trim();
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        RefreshLogs();
     }
 
     /// <summary>Applies a cleanup mode and refreshes visible log storage state.</summary>

@@ -220,6 +220,10 @@ public sealed partial class MainWindow : Window
     private async Task RunStartupFlowAsync()
     {
         AppSettingsService settings = AppSettingsService.Instance;
+        await TriggerService.Instance.EvaluateAsync(
+            TriggerEvaluationContextFactory.Create(TriggerEventKind.AppEntered),
+            System.Threading.CancellationToken.None);
+
         if (settings.StartupConflictCheckEnabled)
         {
             IReadOnlyList<StartupConflictIssue> issues = StartupConflictDetectionService.Instance.CheckConflicts(settings.MixedPort);
@@ -240,6 +244,13 @@ public sealed partial class MainWindow : Window
             NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyMode(startupMode);
             settings.CurrentMode = result.Mode;
             LogStorageService.Instance.AppendLog("Info", "Startup", result.Message, null);
+            NotificationService.Instance.NotifyProxyModeChanged(result.Mode);
+            if (result.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
+            {
+                await TriggerService.Instance.EvaluateAsync(
+                    TriggerEvaluationContextFactory.Create(TriggerEventKind.ProxyStarted),
+                    System.Threading.CancellationToken.None);
+            }
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.IO.FileNotFoundException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
@@ -328,6 +339,7 @@ public sealed partial class MainWindow : Window
     private void ApplyModeFromTray(ClashSharpMode mode)
     {
         _trayCommandService.ApplyMode(mode);
+        _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
         _trayService?.RefreshMenu();
     }
 
@@ -335,7 +347,19 @@ public sealed partial class MainWindow : Window
     private void SetTransparentProxyFromTray(bool isEnabled)
     {
         _trayCommandService.SetTransparentProxyEnabled(isEnabled);
+        _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
         _trayService?.RefreshMenu();
+    }
+
+    private static async Task NotifyAndTriggerModeAppliedAsync(ClashSharpMode mode)
+    {
+        NotificationService.Instance.NotifyProxyModeChanged(mode);
+        if (mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
+        {
+            await TriggerService.Instance.EvaluateAsync(
+                TriggerEvaluationContextFactory.Create(TriggerEventKind.ProxyStarted),
+                System.Threading.CancellationToken.None);
+        }
     }
 
     /// <summary>Requests safe exit from the tray without showing the close confirmation prompt.</summary>
@@ -356,6 +380,7 @@ public sealed partial class MainWindow : Window
             ["Profiles"] = typeof(View.Profiles),
             ["Links"] = typeof(View.Links),
             ["Rules"] = typeof(View.Rules),
+            ["Triggers"] = typeof(View.Triggers),
             ["Statistics"] = typeof(View.Statistics),
             ["Logs"] = typeof(View.Logs),
             ["About"] = typeof(View.About),

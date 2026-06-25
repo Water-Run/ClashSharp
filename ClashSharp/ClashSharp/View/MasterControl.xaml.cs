@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Components;
@@ -50,7 +51,9 @@ public sealed partial class MasterControl : Page
             new MasterControlSettingsAdapter(AppSettingsService.Instance),
             new MasterControlTakeoverAdapter(NetworkTakeoverService.Instance),
             new MasterControlLogAdapter(LogStorageService.Instance),
-            new MasterControlTrayStatusAdapter(TrayStatusService.Instance));
+            new MasterControlTrayStatusAdapter(TrayStatusService.Instance),
+            ApplicationActionService.Instance,
+            OnModeAppliedAsync);
 
         InitializeComponent();
         DataContext = _viewModel;
@@ -65,6 +68,17 @@ public sealed partial class MasterControl : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _viewModel.LoadCommand.Execute(null);
+    }
+
+    private static async Task OnModeAppliedAsync(ClashSharpMode mode)
+    {
+        NotificationService.Instance.NotifyProxyModeChanged(mode);
+        if (mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
+        {
+            await TriggerService.Instance.EvaluateAsync(
+                TriggerEvaluationContextFactory.Create(TriggerEventKind.ProxyStarted),
+                CancellationToken.None);
+        }
     }
 
     /// <summary>Opens the latency-test dialog and runs a timed progress workflow.</summary>
@@ -86,6 +100,12 @@ public sealed partial class MasterControl : Page
                 break;
             case MasterControlTileAction.RunLatencyTest:
                 await ShowLatencyDialogAsync();
+                break;
+            case MasterControlTileAction.ExportConfiguration:
+                Frame.Navigate(typeof(Settings));
+                break;
+            case MasterControlTileAction.ImportConfiguration:
+                Frame.Navigate(typeof(Settings));
                 break;
         }
     }
@@ -216,18 +236,20 @@ public sealed partial class MasterControl : Page
     /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
     private async Task ShowInfoTilesEditorAsync()
     {
-        TextBox searchBox = new()
+        SearchableOptionList optionList = new()
         {
-            Name = "InfoTileSearchBox",
-            PlaceholderText = _viewModel.SearchInfoTilesPlaceholderText,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
+            SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText,
+            AllowMultiple = true,
+            MaxListHeight = Math.Max(260, XamlRoot.Size.Height - 260),
         };
-
-        StackPanel listPanel = new()
-        {
-            Spacing = 8,
-        };
-        searchBox.TextChanged += (_, _) => FilterInfoTileEditorRows(searchBox.Text, listPanel);
+        optionList.SetOptions(_viewModel.InfoTiles.Select(tile => new SearchableOptionItem(
+            tile.Id,
+            tile.Title,
+            tile.TypeText,
+            tile.Description,
+            tile.Glyph,
+            tile,
+            tile.IsVisible)));
 
         StackPanel panel = new()
         {
@@ -235,19 +257,7 @@ public sealed partial class MasterControl : Page
             MinWidth = 420,
             MaxWidth = 620,
         };
-        panel.Children.Add(searchBox);
-
-        foreach (MasterControlInfoTileViewModel tile in _viewModel.InfoTiles)
-        {
-            listPanel.Children.Add(BuildInfoTileEditorRow(tile));
-        }
-        panel.Children.Add(new ScrollViewer
-        {
-            Content = listPanel,
-            MaxHeight = Math.Max(260, XamlRoot.Size.Height - 260),
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        });
+        panel.Children.Add(optionList);
 
         ContentDialog dialog = new()
         {
@@ -264,45 +274,12 @@ public sealed partial class MasterControl : Page
             return;
         }
 
-        foreach (object child in listPanel.Children)
+        foreach (SearchableOptionItem option in optionList.Options)
         {
-            if (child is DialogOptionRow { Tag: MasterControlInfoTileViewModel tile } optionRow)
+            if (option.Payload is MasterControlInfoTileViewModel tile)
             {
-                tile.IsVisible = optionRow.IsChecked == true;
+                tile.IsVisible = option.IsChecked;
             }
-        }
-    }
-
-    /// <summary>Builds one tile-visibility editor row with icon and localized tile name.</summary>
-    private static DialogOptionRow BuildInfoTileEditorRow(MasterControlInfoTileViewModel tile)
-    {
-        return new DialogOptionRow
-        {
-            Title = tile.Title,
-            Metadata = tile.TypeText,
-            Description = tile.Description,
-            Glyph = tile.Glyph,
-            IsChecked = tile.IsVisible,
-            Tag = tile,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-        };
-    }
-
-    private static void FilterInfoTileEditorRows(string query, StackPanel listPanel)
-    {
-        string normalizedQuery = query.Trim();
-        foreach (object child in listPanel.Children)
-        {
-            if (child is not DialogOptionRow { Tag: MasterControlInfoTileViewModel tile } optionRow)
-            {
-                continue;
-            }
-
-            bool isVisible = normalizedQuery.Length == 0
-                || tile.Title.Contains(normalizedQuery, StringComparison.CurrentCultureIgnoreCase)
-                || tile.TypeText.Contains(normalizedQuery, StringComparison.CurrentCultureIgnoreCase)
-                || tile.Description.Contains(normalizedQuery, StringComparison.CurrentCultureIgnoreCase);
-            optionRow.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 

@@ -82,6 +82,12 @@
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
 
+                <NavigationViewItem x:Name="NavTriggersItem" Content="{Binding TriggersText}" Tag="Triggers">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7C1;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
                 <NavigationViewItem x:Name="NavStatisticsItem" Content="{Binding StatisticsText}" Tag="Statistics">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D2;" />

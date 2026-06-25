@@ -1128,11 +1128,10 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("MaxLines=\"2\"", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ToggleSwitch", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Id == \"edit-tiles\"", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("BuildInfoTileEditorRow", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("Name = \"InfoTileSearchBox\"", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("TextChanged += (_, _) => FilterInfoTileEditorRows", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("new ScrollViewer", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("MaxHeight = Math.Max(260, XamlRoot.Size.Height - 260)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SearchableOptionList", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("MaxListHeight = Math.Max(260, XamlRoot.Size.Height - 260)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SearchableOptionItem", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.ShowStartupPrompt", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.CheckStartupConflicts", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.RunLatencyTest", masterControlCode, StringComparison.Ordinal);
@@ -1215,7 +1214,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ResetConnectionTestUrlsToDefaults", settingsCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies settings opens export scope selection in a dialog instead of pinning a scope dropdown on the page.</summary>
+    /// <summary>Verifies settings opens backup/restore export scope selection in a dialog instead of pinning a scope dropdown on the page.</summary>
     [Fact]
     public void SettingsXaml_ExposesDataPackageImportExportBackup()
     {
@@ -1228,15 +1227,17 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"DataPackageRow\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DataPackageScopeBox\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ItemsSource=\"{Binding DataPackageScopeOptions}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("BackupRestoreTitleText", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("BackupRestoreDescriptionText", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ExportDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ImportDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"BackupDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"BackupDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ExportDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.Contains("SelectDataPackageExportScopeAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("Settings.DataExport.Title", settingsCode, StringComparison.Ordinal);
         Assert.Contains("DataExportDescriptionText", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ImportDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.Contains("Settings.DataImport.Warning.Title", settingsCode, StringComparison.Ordinal);
         Assert.Contains("Settings.DataImport.SecondConfirm.Title", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ReadPackageScope", settingsCode, StringComparison.Ordinal);
@@ -1244,15 +1245,162 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ClashDataPackageService.Instance", settingsCode, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies the data section is backup/restore oriented and does not duplicate export with a backup button.</summary>
+    [Fact]
+    public void SettingsXaml_UsesBackupRestoreWithoutBackupButton()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.Contains("BackupRestoreTitleText", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("BackupRestoreDescriptionText", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("BackupDataPackageButton", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("DataPackageExportScope.SystemLogs", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("DataPackageExportScope.SystemLogSqlite", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ExportLogSqliteAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("IsImportableDataPackageScope", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies trigger navigation sits above statistics and resolves to the triggers page.</summary>
+    [Fact]
+    public void MainWindowXaml_ExposesTriggersAboveStatistics()
+    {
+        string mainWindowXamlPath = Path.Combine(AppContext.BaseDirectory, "MainWindow.xaml");
+        string mainWindowCodePath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
+        string mainWindowViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "MainWindowViewModel.cs");
+
+        string mainWindowXaml = File.ReadAllText(mainWindowXamlPath);
+        string mainWindowCode = File.ReadAllText(mainWindowCodePath);
+        string mainWindowViewModel = File.ReadAllText(mainWindowViewModelPath);
+
+        int triggersIndex = mainWindowXaml.IndexOf("x:Name=\"NavTriggersItem\"", StringComparison.Ordinal);
+        int statisticsIndex = mainWindowXaml.IndexOf("x:Name=\"NavStatisticsItem\"", StringComparison.Ordinal);
+        Assert.True(triggersIndex >= 0, "Triggers navigation item is missing.");
+        Assert.True(statisticsIndex > triggersIndex, "Triggers must appear above statistics.");
+        Assert.Contains("Content=\"{Binding TriggersText}\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("[\"Triggers\"] = typeof(View.Triggers)", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("public string TriggersText", mainWindowViewModel, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies triggers have dedicated model/service/view files and searchable add dialogs.</summary>
+    [Fact]
+    public void TriggerFeature_UsesDedicatedArchitectureAndSearchableOptionList()
+    {
+        string triggerModelPath = FindSourceFile("ClashSharp", "ClashSharp", "Model", "TriggerTask.cs");
+        string triggerServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerService.cs");
+        string triggerViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "TriggersViewModel.cs");
+        string triggerViewPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml");
+        string triggerCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml.cs");
+        string searchableComponentPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "SearchableOptionList.xaml");
+
+        string triggerModel = File.ReadAllText(triggerModelPath);
+        string triggerService = File.ReadAllText(triggerServicePath);
+        string triggerViewModel = File.ReadAllText(triggerViewModelPath);
+        string triggerView = File.ReadAllText(triggerViewPath);
+        string triggerCode = File.ReadAllText(triggerCodePath);
+        string searchableComponent = File.ReadAllText(searchableComponentPath);
+
+        foreach (string expected in new[]
+        {
+            "AppEntered",
+            "ProxyStarted",
+            "NotificationRaised",
+            "TotalTraffic",
+            "TrafficInWindow",
+            "Runtime",
+            "SystemTime",
+            "CloseConnections",
+            "SetTransparentProxy",
+            "SwitchProxyMode",
+            "ExitApplication",
+            "SendNotification",
+        })
+        {
+            Assert.Contains(expected, triggerModel, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("MoveTask", triggerService, StringComparison.Ordinal);
+        Assert.Contains("Evaluate", triggerService, StringComparison.Ordinal);
+        Assert.Contains("TriggerLog", triggerService, StringComparison.Ordinal);
+        Assert.Contains("DialogOptionRow", searchableComponent, StringComparison.Ordinal);
+        Assert.Contains("SearchBox", searchableComponent, StringComparison.Ordinal);
+        Assert.Contains("SearchableOptionList", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("MoveUpCommand", triggerViewModel, StringComparison.Ordinal);
+        Assert.Contains("MoveDownCommand", triggerViewModel, StringComparison.Ordinal);
+        Assert.Contains("TriggersEnabled", triggerView, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies notification settings and a notification service are present.</summary>
+    [Fact]
+    public void Notifications_AreConfiguredThroughSettingsAndService()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+        string settingsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
+        string notificationServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "NotificationService.cs");
+        string appSettingsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.cs");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+        string settingsViewModel = File.ReadAllText(settingsViewModelPath);
+        string notificationService = File.ReadAllText(notificationServicePath);
+        string appSettings = File.ReadAllText(appSettingsPath);
+
+        Assert.Contains("NotificationLevelBox", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("NotificationLevelOptions", settingsViewModel, StringComparison.Ordinal);
+        Assert.Contains("NotificationLevel", appSettings, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.Windows.AppNotifications", notificationService, StringComparison.Ordinal);
+        Assert.Contains("NotifyProxyModeChanged", notificationService, StringComparison.Ordinal);
+        Assert.Contains("NotifyTriggerFired", notificationService, StringComparison.Ordinal);
+        Assert.Contains("NotifyConnectionTestTimeout", notificationService, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies master tiles are catalog-driven and expose action tiles beyond passive information.</summary>
+    [Fact]
+    public void MasterControl_UsesTileCatalogWithSharedActions()
+    {
+        string masterViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "MasterControlViewModel.cs");
+        string actionServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ApplicationActionService.cs");
+
+        string masterViewModel = File.ReadAllText(masterViewModelPath);
+        string actionService = File.ReadAllText(actionServicePath);
+
+        Assert.Contains("MasterTileCatalog", masterViewModel, StringComparison.Ordinal);
+        Assert.Contains("IApplicationActionDispatcher", masterViewModel, StringComparison.Ordinal);
+        foreach (string expectedTile in new[]
+        {
+            "export-config",
+            "import-config",
+            "mihomo-version",
+            "port",
+            "blocked-url",
+            "startup-launch",
+            "transparent-proxy",
+            "connection-sampling",
+        })
+        {
+            Assert.Contains(expectedTile, masterViewModel, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ExportConfiguration", actionService, StringComparison.Ordinal);
+        Assert.Contains("ImportConfiguration", actionService, StringComparison.Ordinal);
+        Assert.Contains("SetLaunchAtStartup", actionService, StringComparison.Ordinal);
+        Assert.Contains("SetTransparentProxy", actionService, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies dialog option rows are componentized for repeated title/description choice UI.</summary>
     [Fact]
-    public void DialogOptionRowComponent_IsUsedBySettingsAndMasterDialogs()
+    public void DialogOptionRowComponent_IsUsedBySettingsAndSearchableDialogs()
     {
         string componentXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "DialogOptionRow.xaml");
+        string searchableComponentXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "SearchableOptionList.xaml");
         string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
         string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
 
         string componentXaml = File.ReadAllText(componentXamlPath);
+        string searchableComponentXaml = File.ReadAllText(searchableComponentXamlPath);
         string settingsCode = File.ReadAllText(settingsCodePath);
         string masterControlCode = File.ReadAllText(masterControlCodePath);
 
@@ -1266,7 +1414,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Grid.Column=\"2\"", componentXaml, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", settingsCode, StringComparison.Ordinal);
         Assert.Contains("SelectionInvoked += (_, _) => SelectDataPackageScopeRow", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("DialogOptionRow", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("DialogOptionRow", searchableComponentXaml, StringComparison.Ordinal);
+        Assert.Contains("SearchableOptionList", masterControlCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies conflict dialogs use general conflict wording and place actions below status text.</summary>

@@ -59,6 +59,8 @@ internal interface ISettingsStore
 
     bool MainlandChinaUrlBlockingEnabled { get; set; }
 
+    NotificationLevel NotificationLevel { get; set; }
+
     string ConnectionTestUrl { get; set; }
 
     string ConnectionTestProxyUrl1 { get; set; }
@@ -244,6 +246,12 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.MainlandChinaUrlBlockingEnabled = value;
     }
 
+    public NotificationLevel NotificationLevel
+    {
+        get => _settings.NotificationLevel;
+        set => _settings.NotificationLevel = value;
+    }
+
     public string ConnectionTestUrl
     {
         get => _settings.ConnectionTestUrl;
@@ -323,6 +331,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Connection-test HTTP probe.</summary>
     private readonly Func<Uri, CancellationToken, Task<int>> _testConnectionAsync;
+
+    /// <summary>Callback invoked when a connection-test target times out.</summary>
+    private readonly Action<string> _notifyConnectionTestTimeout;
 
     /// <summary>Callback that resets persisted settings.</summary>
     private readonly Action _resetAllSettings;
@@ -432,7 +443,8 @@ internal sealed class SettingsViewModel : ObservableObject
         Action? resetAllSettings = null,
         Action? clearAllData = null,
         Func<int, IReadOnlyList<StartupConflictIssue>>? checkStartupConflicts = null,
-        Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending = null)
+        Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending = null,
+        Action<string>? notifyConnectionTestTimeout = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
@@ -442,6 +454,7 @@ internal sealed class SettingsViewModel : ObservableObject
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _getProxyInformation = getProxyInformation ?? throw new ArgumentNullException(nameof(getProxyInformation));
         _testConnectionAsync = testConnectionAsync ?? TestConnectionAsync;
+        _notifyConnectionTestTimeout = notifyConnectionTestTimeout ?? (_ => { });
         _resetAllSettings = resetAllSettings ?? (() => { });
         _clearAllData = clearAllData ?? (() => { });
         _checkStartupConflicts = checkStartupConflicts ?? (_ => []);
@@ -746,11 +759,32 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string MainlandChinaUrlBlockingDescriptionText => _getString("Settings.MainlandChinaUrlBlocking.Description");
 
+    public string NotificationTitleText => _getString("Settings.Notification.Title");
+
+    public string NotificationDescriptionText => _getString("Settings.Notification.Description");
+
+    public string NotificationDefaultText => _getString("Settings.Notification.Default");
+
+    public string NotificationCriticalOnlyText => _getString("Settings.Notification.CriticalOnly");
+
+    public string NotificationMoreText => _getString("Settings.Notification.More");
+
+    public IReadOnlyList<string> NotificationLevelOptions =>
+    [
+        NotificationDefaultText,
+        NotificationCriticalOnlyText,
+        NotificationMoreText,
+    ];
+
     public string DataSectionTitleText => _getString("Settings.Section.Data");
 
-    public string DataPackageTitleText => _getString("Settings.DataPackage.Title");
+    public string DataPackageTitleText => BackupRestoreTitleText;
 
-    public string DataPackageDescriptionText => _getString("Settings.DataPackage.Description");
+    public string DataPackageDescriptionText => BackupRestoreDescriptionText;
+
+    public string BackupRestoreTitleText => _getString("Settings.BackupRestore.Title");
+
+    public string BackupRestoreDescriptionText => _getString("Settings.BackupRestore.Description");
 
     public string DataExportTitleText => _getString("Settings.DataExport.Title");
 
@@ -805,6 +839,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="MihomoServiceStatusText"/>.</summary>
     private string _mihomoServiceStatusText = string.Empty;
+
+    /// <summary>Backing field for <see cref="NotificationLevel"/>.</summary>
+    private NotificationLevel _notificationLevel;
 
     /// <summary>Latest mihomo service status snapshot.</summary>
     private MihomoServiceStatus _mihomoServiceStatus;
@@ -1100,6 +1137,24 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetMainlandChinaUrlBlockingEnabled(value);
     }
 
+    public NotificationLevel NotificationLevel
+    {
+        get => _notificationLevel;
+        private set
+        {
+            if (SetProperty(ref _notificationLevel, value))
+            {
+                OnPropertyChanged(nameof(NotificationLevelIndex));
+            }
+        }
+    }
+
+    public int NotificationLevelIndex
+    {
+        get => (int)NotificationLevel;
+        set => SetNotificationLevelIndex(value);
+    }
+
     public string ConnectionTestUrl
     {
         get => _connectionTestUrl;
@@ -1167,6 +1222,7 @@ internal sealed class SettingsViewModel : ObservableObject
         ProxyRecoveryMode = _settings.ProxyRecoveryMode;
         MainlandChinaFeatureMode = _settings.MainlandChinaFeatureMode;
         SetProperty(ref _mainlandChinaUrlBlockingEnabled, _settings.MainlandChinaUrlBlockingEnabled, nameof(MainlandChinaUrlBlockingEnabled));
+        NotificationLevel = _settings.NotificationLevel;
         ConnectionTestUrl = _settings.ConnectionTestUrl;
         ConnectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
         ConnectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
@@ -1423,9 +1479,17 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(MainlandChinaFeatureModeOptions),
             nameof(MainlandChinaUrlBlockingTitleText),
             nameof(MainlandChinaUrlBlockingDescriptionText),
+            nameof(NotificationTitleText),
+            nameof(NotificationDescriptionText),
+            nameof(NotificationDefaultText),
+            nameof(NotificationCriticalOnlyText),
+            nameof(NotificationMoreText),
+            nameof(NotificationLevelOptions),
             nameof(DataSectionTitleText),
             nameof(DataPackageTitleText),
             nameof(DataPackageDescriptionText),
+            nameof(BackupRestoreTitleText),
+            nameof(BackupRestoreDescriptionText),
             nameof(DataExportTitleText),
             nameof(DataExportDescriptionText),
             nameof(DataPackageScopeSettingsText),
@@ -1740,6 +1804,22 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _mainlandChinaUrlBlockingEnabled, isEnabled, nameof(MainlandChinaUrlBlockingEnabled));
     }
 
+    /// <summary>Persists a notification verbosity selected by combo box index.</summary>
+    /// <param name="index">Notification level enum index.</param>
+    /// <returns>True when the index was valid and persisted; otherwise false.</returns>
+    public bool SetNotificationLevelIndex(int index)
+    {
+        if (!Enum.IsDefined((NotificationLevel)index))
+        {
+            return false;
+        }
+
+        NotificationLevel level = (NotificationLevel)index;
+        _settings.NotificationLevel = level;
+        NotificationLevel = level;
+        return true;
+    }
+
     /// <summary>Persists the proxy connection-test URL.</summary>
     /// <param name="value">User-entered URL.</param>
     /// <returns>True when the value was valid and persisted; otherwise false.</returns>
@@ -1864,7 +1944,12 @@ internal sealed class SettingsViewModel : ObservableObject
                     int statusCode = await _testConnectionAsync(uri, cancellationToken);
                     results.Add($"{label}: {string.Format(_getString("Settings.ConnectionTest.Succeeded.Format"), statusCode)}");
                 }
-                catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
+                catch (TaskCanceledException exception)
+                {
+                    _notifyConnectionTestTimeout(url);
+                    results.Add($"{label}: {string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message)}");
+                }
+                catch (Exception exception) when (exception is HttpRequestException or UriFormatException)
                 {
                     results.Add($"{label}: {string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message)}");
                 }

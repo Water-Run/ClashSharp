@@ -12,6 +12,7 @@ using ClashSharp.Service;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 
 namespace ClashSharp.View;
 
@@ -32,6 +33,12 @@ public sealed partial class Logs : Page
         _viewModel = new(LocalizationService.Instance.GetString, LogStorageService.Instance);
         InitializeComponent();
         DataContext = _viewModel;
+    }
+
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        _viewModel.SetSourceFilter(e.Parameter as string);
     }
 
     /// <summary>Navigates back to the previous page, falling back to statistics.</summary>

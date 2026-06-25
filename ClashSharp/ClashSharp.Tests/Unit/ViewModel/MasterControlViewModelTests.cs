@@ -99,6 +99,8 @@ public sealed class MasterControlViewModelTests
         FakeMasterSettings settings = new()
         {
             LaunchAtStartupEnabled = true,
+            ConnectionSamplingEnabled = true,
+            MainlandChinaUrlBlockingEnabled = true,
             ActiveProfileId = "profile-a",
             TransparentProxyEnabled = true,
             MixedPort = 12000,
@@ -119,8 +121,10 @@ public sealed class MasterControlViewModelTests
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-prompt" && tile.TileCommand is not null);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-conflicts" && tile.TileCommand is not null);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-launch" && tile.Value == "On");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-sampling" && tile.Value == "On");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "blocked-url" && tile.Value == "On");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "active-profile" && tile.Value == "profile-a");
-        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mixed-port" && tile.Value == "12000");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "port" && tile.Value == "12000");
         Assert.All(viewModel.InfoTiles, tile => Assert.False(string.IsNullOrWhiteSpace(tile.Description)));
         Assert.Equal("Search tiles", viewModel.SearchInfoTilesPlaceholderText);
     }
@@ -214,9 +218,12 @@ public sealed class MasterControlViewModelTests
                 "Master.Tile.SystemProxy" => "System proxy",
                 "Master.Tile.TransparentProxy" => "Transparent proxy",
                 "Master.Tile.Latency" => "Latency",
+                "Master.Tile.MihomoVersion" => "Mihomo version",
                 "Master.Tile.StartupLaunch" => "Startup launch",
+                "Master.Tile.ConnectionSampling" => "Connection sampling",
+                "Master.Tile.BlockedUrl" => "Blocked URL",
                 "Master.Tile.ActiveProfile" => "Active profile",
-                "Master.Tile.MixedPort" => "Mixed port",
+                "Master.Tile.Port" => "Port",
                 "Master.Tile.ConnectionTest" => "Connection test",
                 "Master.Tile.ConnectionTestProxyUrl1" => "Test URL 1",
                 "Master.Tile.ConnectionTestProxyUrl2" => "Test URL 2",
@@ -227,7 +234,8 @@ public sealed class MasterControlViewModelTests
                 "Master.Tile.Type.Information" => "Information",
                 "Master.Tile.Type.Action" => "Action",
                 "Master.Tile.Type.Navigation" => "Navigation",
-                "Master.Tile.Backup" => "Backup",
+                "Master.Tile.ExportConfig" => "Export config",
+                "Master.Tile.ImportConfig" => "Import config",
                 "Master.Tile.Visible" => "Visible",
                 "Master.Tile.Edit" => "Edit tiles",
                 "Master.Tile.EditTiles" => "Edit tiles",
@@ -236,16 +244,20 @@ public sealed class MasterControlViewModelTests
                 "Master.Tile.Description.SystemProxy" => "System proxy description",
                 "Master.Tile.Description.TransparentProxy" => "Transparent proxy description",
                 "Master.Tile.Description.Latency" => "Latency description",
+                "Master.Tile.Description.MihomoVersion" => "Mihomo version description",
                 "Master.Tile.Description.StartupLaunch" => "Startup launch description",
+                "Master.Tile.Description.ConnectionSampling" => "Connection sampling description",
+                "Master.Tile.Description.BlockedUrl" => "Blocked URL description",
                 "Master.Tile.Description.ActiveProfile" => "Active profile description",
-                "Master.Tile.Description.MixedPort" => "Mixed port description",
+                "Master.Tile.Description.Port" => "Port description",
                 "Master.Tile.Description.ConnectionTest" => "Connection test description",
                 "Master.Tile.Description.ConnectionTestProxyUrl1" => "Proxy URL 1 description",
                 "Master.Tile.Description.ConnectionTestProxyUrl2" => "Proxy URL 2 description",
                 "Master.Tile.Description.ConnectionTestDirectUrl" => "Direct URL description",
                 "Master.Tile.Description.StartupPrompt" => "Startup prompt description",
                 "Master.Tile.Description.StartupConflicts" => "Startup conflicts description",
-                "Master.Tile.Description.Backup" => "Backup description",
+                "Master.Tile.Description.ExportConfig" => "Export config description",
+                "Master.Tile.Description.ImportConfig" => "Import config description",
                 "Settings.StartupGuide.ShowNow" => "Show now",
                 "Settings.CheckStartupConflicts.Now" => "Check now",
                 "Master.Status.CurrentNodeUnavailable" => "No node",
@@ -318,6 +330,10 @@ public sealed class MasterControlViewModelTests
         public bool TransparentProxyEnabled { get; set; }
 
         public bool LaunchAtStartupEnabled { get; set; }
+
+        public bool ConnectionSamplingEnabled { get; set; } = true;
+
+        public bool MainlandChinaUrlBlockingEnabled { get; set; }
 
         public string ActiveProfileId { get; set; } = "direct";
 

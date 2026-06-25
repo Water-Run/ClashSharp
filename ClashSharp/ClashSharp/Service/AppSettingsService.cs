@@ -95,6 +95,9 @@ public sealed class AppSettingsService
     /// <summary>Storage key for mainland China URL blocking.</summary>
     private const string KeyMainlandChinaUrlBlockingEnabled = "MainlandChinaUrlBlockingEnabled";
 
+    /// <summary>Storage key for Windows system notification verbosity.</summary>
+    private const string KeyNotificationLevel = "NotificationLevel";
+
     /// <summary>Storage key for proxy connection-test URL.</summary>
     private const string KeyConnectionTestUrl = "ConnectionTestUrl";
 
@@ -134,6 +137,7 @@ public sealed class AppSettingsService
         KeyMainlandChinaDisplayEnabled,
         KeyMainlandChinaFeatureMode,
         KeyMainlandChinaUrlBlockingEnabled,
+        KeyNotificationLevel,
         KeyConnectionTestUrl,
         KeyConnectionTestProxyUrl1,
         KeyConnectionTestProxyUrl2,
@@ -381,6 +385,14 @@ public sealed class AppSettingsService
         set => MainlandChinaFeatureMode = value
             ? MainlandChinaFeatureMode.FlagReplacementAndTextCompletion
             : MainlandChinaFeatureMode.Disabled;
+    }
+
+    /// <summary>Gets or sets the Windows system notification verbosity.</summary>
+    /// <value>Notification level; defaults to <see cref="NotificationLevel.Default"/>.</value>
+    public NotificationLevel NotificationLevel
+    {
+        get => GetEnum(KeyNotificationLevel, NotificationLevel.Default);
+        set => SetEnum(KeyNotificationLevel, value);
     }
 
     /// <summary>Removes all persisted settings owned by Clash#, restoring default values on subsequent reads.</summary>

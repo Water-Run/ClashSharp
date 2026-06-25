@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ClashSharp.Components.SearchableOptionList"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:components="using:ClashSharp.Components">
+
+    <StackPanel Spacing="10">
+        <TextBox
+            x:Name="SearchBox"
+            PlaceholderText="{Binding SearchPlaceholder, ElementName=Root}"
+            HorizontalAlignment="Stretch"
+            TextChanged="SearchBox_TextChanged" />
+
+        <ScrollViewer
+            MaxHeight="{Binding MaxListHeight, ElementName=Root}"
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl x:Name="OptionsControl" ItemsSource="{Binding FilteredOptions, ElementName=Root}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <components:DialogOptionRow
+                            Title="{Binding Title}"
+                            Metadata="{Binding Metadata}"
+                            Description="{Binding Description}"
+                            Glyph="{Binding Glyph}"
+                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                            Tag="{Binding}"
+                            Margin="0,0,0,8"
+                            HorizontalAlignment="Stretch"
+                            SelectionInvoked="DialogOptionRow_SelectionInvoked" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </StackPanel>
+</UserControl>

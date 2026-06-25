@@ -140,7 +140,23 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
         set => _settings.TransparentProxyEnabled = value;
     }
 
-    public bool LaunchAtStartupEnabled => _settings.LaunchAtStartupEnabled;
+    public bool LaunchAtStartupEnabled
+    {
+        get => _settings.LaunchAtStartupEnabled;
+        set => _settings.LaunchAtStartupEnabled = value;
+    }
+
+    public bool ConnectionSamplingEnabled
+    {
+        get => _settings.ConnectionSamplingEnabled;
+        set => _settings.ConnectionSamplingEnabled = value;
+    }
+
+    public bool MainlandChinaUrlBlockingEnabled
+    {
+        get => _settings.MainlandChinaUrlBlockingEnabled;
+        set => _settings.MainlandChinaUrlBlockingEnabled = value;
+    }
 
     public string ActiveProfileId => _settings.ActiveProfileId;
 

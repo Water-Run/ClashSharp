@@ -141,6 +141,9 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Backing field for <see cref="StatisticsText"/>.</summary>
     private string _statisticsText = string.Empty;
 
+    /// <summary>Backing field for <see cref="TriggersText"/>.</summary>
+    private string _triggersText = string.Empty;
+
     /// <summary>Backing field for <see cref="AboutText"/>.</summary>
     private string _aboutText = string.Empty;
 
@@ -220,6 +223,14 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _statisticsText, value);
     }
 
+    /// <summary>Gets the triggers navigation label.</summary>
+    /// <value>Localized label text; never null.</value>
+    public string TriggersText
+    {
+        get => _triggersText;
+        private set => SetProperty(ref _triggersText, value);
+    }
+
     /// <summary>Gets the about-page navigation label.</summary>
     /// <value>Localized label text; never null.</value>
     public string AboutText
@@ -262,6 +273,7 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         ProfilesText = _localization.GetString("Nav.Profiles");
         LinksText = _localization.GetString("Nav.Links");
         RulesText = _localization.GetString("Nav.Rules");
+        TriggersText = _localization.GetString("Nav.Triggers");
         StatisticsText = _localization.GetString("Nav.Statistics");
         AboutText = _localization.GetString("Nav.About");
         SettingsText = _restartState.IsRestartPending

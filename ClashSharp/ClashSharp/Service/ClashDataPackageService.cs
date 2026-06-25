@@ -151,6 +151,39 @@ internal sealed partial class ClashDataPackageService
         await File.WriteAllTextAsync(fullPackagePath, document.ToString(SaveOptions.DisableFormatting), cancellationToken);
     }
 
+    /// <summary>Exports system log records to a standalone XML document that is intentionally not importable.</summary>
+    /// <param name="packagePath">Destination XML path. Must not be null or whitespace.</param>
+    /// <param name="logs">Log records to export. Must not be null.</param>
+    /// <param name="cancellationToken">Cancels package writing.</param>
+    /// <returns>A task that completes when logs have been written.</returns>
+    public async Task ExportLogsAsync(string packagePath, IReadOnlyList<LogRecord> logs, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
+        ArgumentNullException.ThrowIfNull(logs);
+
+        string fullPackagePath = Path.GetFullPath(packagePath);
+        string? packageDirectory = Path.GetDirectoryName(fullPackagePath);
+        if (!string.IsNullOrEmpty(packageDirectory))
+        {
+            Directory.CreateDirectory(packageDirectory);
+        }
+
+        XElement root = new(
+            "ClashSharpSystemLogExport",
+            new XAttribute("Format", "ClashSharp.SystemLogs"),
+            new XAttribute("Version", PackageVersion),
+            logs.Select(log => new XElement(
+                "Log",
+                new XAttribute("CreatedAt", log.CreatedAt.ToString("O", CultureInfo.InvariantCulture)),
+                new XAttribute("Level", log.Level),
+                new XAttribute("Source", log.Source),
+                new XElement("Message", log.Message),
+                new XElement("Detail", log.Detail))));
+
+        XDocument document = new(new XDeclaration("1.0", "utf-8", null), root);
+        await File.WriteAllTextAsync(fullPackagePath, document.ToString(SaveOptions.DisableFormatting), cancellationToken);
+    }
+
     /// <summary>Imports settings and file payloads from an XML package.</summary>
     /// <param name="packagePath">Source XML path. Must not be null or whitespace.</param>
     /// <param name="cancellationToken">Cancels file writes.</param>
