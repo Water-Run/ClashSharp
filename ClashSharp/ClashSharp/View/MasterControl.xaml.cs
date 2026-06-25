@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.Components;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -46,7 +47,9 @@ public sealed partial class MasterControl : Page
 
         InitializeComponent();
         DataContext = _viewModel;
+        _viewModel.TileActionRequested += OnTileActionRequested;
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     /// <summary>Starts runtime status loading when the page is loaded.</summary>
@@ -59,6 +62,39 @@ public sealed partial class MasterControl : Page
 
     /// <summary>Opens the latency-test dialog and runs a timed progress workflow.</summary>
     private async void OpenLatencyDialogButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ShowLatencyDialogAsync();
+    }
+
+    /// <summary>Handles functional information-tile actions requested by the view model.</summary>
+    private async void OnTileActionRequested(object? sender, MasterControlTileAction action)
+    {
+        switch (action)
+        {
+            case MasterControlTileAction.EditInfoTiles:
+                await ShowInfoTilesEditorAsync();
+                break;
+            case MasterControlTileAction.ShowStartupPrompt:
+                await ShowStartupPromptDialogAsync();
+                break;
+            case MasterControlTileAction.CheckStartupConflicts:
+                await ShowStartupConflictDialogAsync();
+                break;
+            case MasterControlTileAction.RunLatencyTest:
+                await ShowLatencyDialogAsync();
+                break;
+        }
+    }
+
+    /// <summary>Stops listening to view model events when the page leaves the visual tree.</summary>
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _viewModel.TileActionRequested -= OnTileActionRequested;
+        Unloaded -= OnUnloaded;
+    }
+
+    /// <summary>Opens the latency-test dialog and runs a timed progress workflow.</summary>
+    private async Task ShowLatencyDialogAsync()
     {
         using CancellationTokenSource cancellation = new();
         ProgressBar timeoutBar = new()
@@ -90,6 +126,23 @@ public sealed partial class MasterControl : Page
         };
 
         await dialog.ShowAsync();
+    }
+
+    /// <summary>Shows the startup prompt dialog from a functional tile.</summary>
+    private async Task ShowStartupPromptDialogAsync()
+    {
+        StartupGuideDialog dialog = new()
+        {
+            XamlRoot = XamlRoot,
+        };
+        await dialog.ShowAsync();
+    }
+
+    /// <summary>Runs startup conflict detection and shows the shared result dialog.</summary>
+    private async Task ShowStartupConflictDialogAsync()
+    {
+        IReadOnlyList<StartupConflictIssue> issues = StartupConflictDetectionService.Instance.CheckConflicts(AppSettingsService.Instance.MixedPort);
+        await StartupConflictDialogPresenter.ShowAsync(XamlRoot, issues);
     }
 
     /// <summary>Builds latency-test dialog content using the RunOnce-style progress row and timeout bar.</summary>
@@ -153,6 +206,12 @@ public sealed partial class MasterControl : Page
     /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
     private async void EditInfoTilesButton_Click(object sender, RoutedEventArgs e)
     {
+        await ShowInfoTilesEditorAsync();
+    }
+
+    /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
+    private async Task ShowInfoTilesEditorAsync()
+    {
         StackPanel panel = new()
         {
             Spacing = 8,
@@ -161,12 +220,7 @@ public sealed partial class MasterControl : Page
 
         foreach (MasterControlInfoTileViewModel tile in _viewModel.InfoTiles)
         {
-            panel.Children.Add(new CheckBox
-            {
-                Content = tile.Title,
-                IsChecked = tile.IsVisible,
-                Tag = tile,
-            });
+            panel.Children.Add(BuildInfoTileEditorRow(tile));
         }
 
         ContentDialog dialog = new()
@@ -191,5 +245,45 @@ public sealed partial class MasterControl : Page
                 tile.IsVisible = checkBox.IsChecked == true;
             }
         }
+    }
+
+    /// <summary>Builds one tile-visibility editor row with icon and localized tile name.</summary>
+    private static CheckBox BuildInfoTileEditorRow(MasterControlInfoTileViewModel tile)
+    {
+        StackPanel content = new()
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+        };
+        content.Children.Add(new FontIcon
+        {
+            Glyph = tile.Glyph,
+            FontSize = 16,
+            Width = 20,
+        });
+        StackPanel textPanel = new()
+        {
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        textPanel.Children.Add(new TextBlock
+        {
+            Text = tile.Title,
+        });
+        textPanel.Children.Add(new TextBlock
+        {
+            Text = tile.TypeText,
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+        });
+        content.Children.Add(textPanel);
+
+        return new CheckBox
+        {
+            Content = content,
+            IsChecked = tile.IsVisible,
+            Tag = tile,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
     }
 }

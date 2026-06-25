@@ -9,8 +9,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using ClashSharp.Model;
 using ClashSharp.Components;
 using ClashSharp.Service;
@@ -58,17 +60,44 @@ public sealed partial class Settings : Page
             AppThemeService.ApplyAccentColor,
             resetAllSettings: AppDataMaintenanceService.ResetAllSettings,
             clearAllData: AppDataMaintenanceService.ClearAllData,
-            checkStartupConflicts: StartupConflictDetectionService.Instance.CheckConflicts);
+            checkStartupConflicts: StartupConflictDetectionService.Instance.CheckConflicts,
+            isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending);
         InitializeComponent();
         DataContext = _viewModel;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        Unloaded += OnUnloaded;
         LoadSettings();
         _isLoadingSettings = false;
+        UpdateRestartRequiredState();
     }
 
     /// <summary>Loads persisted settings into visible controls.</summary>
     private void LoadSettings()
     {
         _viewModel.Load();
+        UpdateRestartRequiredState();
+    }
+
+    /// <summary>Updates shell restart-required state when settings requiring restart change.</summary>
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SettingsViewModel.HasRestartRequiredSettings))
+        {
+            UpdateRestartRequiredState();
+        }
+    }
+
+    /// <summary>Publishes the current restart-required settings state to the shell.</summary>
+    private void UpdateRestartRequiredState()
+    {
+        RestartRequiredStateService.Instance.SetRestartPending(_viewModel.HasRestartRequiredSettings);
+    }
+
+    /// <summary>Stops listening to view model notifications when the page leaves the visual tree.</summary>
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        Unloaded -= OnUnloaded;
     }
 
     /// <summary>Returns the window-level XAML root so dialogs center in the visible window.</summary>
@@ -410,7 +439,7 @@ public sealed partial class Settings : Page
         picker.FileTypeFilter.Add(".xml");
 
         StorageFile? file = await picker.PickSingleFileAsync();
-        if (file is null || !await ConfirmDataImportAsync())
+        if (file is null || !await ConfirmDataImportAsync(ReadPackageScope(file.Path)))
         {
             return;
         }
@@ -419,10 +448,10 @@ public sealed partial class Settings : Page
         ApplyImportedSettings();
     }
 
-    /// <summary>Exports a full backup package including logs.</summary>
+    /// <summary>Exports a full backup package while ignoring local logs.</summary>
     private async void BackupDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
-        await PickAndExportDataPackageAsync(ClashDataPackageScope.AllIncludingLogs);
+        await PickAndExportDataPackageAsync(ClashDataPackageScope.All);
     }
 
     /// <summary>Shows a save picker and exports the selected data package scope.</summary>
@@ -446,12 +475,12 @@ public sealed partial class Settings : Page
     }
 
     /// <summary>Confirms import overwrite behavior in two steps.</summary>
-    private async Task<bool> ConfirmDataImportAsync()
+    private async Task<bool> ConfirmDataImportAsync(ClashDataPackageScope? scope)
     {
         ContentDialog firstDialog = new()
         {
             Title = LocalizationService.Instance.GetString("Settings.DataImport.Warning.Title"),
-            Content = LocalizationService.Instance.GetString("Settings.DataImport.Warning.Message"),
+            Content = FormatDataImportWarning(scope),
             PrimaryButtonText = _viewModel.ImportText,
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
@@ -474,6 +503,48 @@ public sealed partial class Settings : Page
         };
 
         return await secondDialog.ShowAsync() is ContentDialogResult.Primary;
+    }
+
+    private static ClashDataPackageScope? ReadPackageScope(string packagePath)
+    {
+        try
+        {
+            string? scopeText = XDocument.Load(packagePath).Root?.Attribute("Scope")?.Value;
+            if (string.Equals(scopeText, "AllIncludingLogs", StringComparison.Ordinal))
+            {
+                return ClashDataPackageScope.All;
+            }
+
+            return Enum.TryParse(scopeText, out ClashDataPackageScope scope)
+                ? scope
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string FormatDataImportWarning(ClashDataPackageScope? scope)
+    {
+        string message = LocalizationService.Instance.GetString("Settings.DataImport.Warning.Message");
+        if (scope is null)
+        {
+            return message;
+        }
+
+        return $"{message}{Environment.NewLine}{string.Format(LocalizationService.Instance.GetString("Settings.DataImport.Warning.Scope.Format"), GetDataPackageScopeText(scope.Value))}";
+    }
+
+    private string GetDataPackageScopeText(ClashDataPackageScope scope)
+    {
+        return scope switch
+        {
+            ClashDataPackageScope.Settings => _viewModel.DataPackageScopeSettingsText,
+            ClashDataPackageScope.SettingsAndProxyConfiguration => _viewModel.DataPackageScopeSettingsAndProxyConfigurationText,
+            ClashDataPackageScope.All => _viewModel.DataPackageScopeAllText,
+            _ => scope.ToString(),
+        };
     }
 
     /// <summary>Re-applies settings that affect running application services after package import.</summary>
@@ -598,20 +669,17 @@ public sealed partial class Settings : Page
         panel.Children.Add(button);
     }
 
-    /// <summary>Shows a one-step confirmation and restores all settings to defaults.</summary>
+    /// <summary>Shows a two-step confirmation and restores all settings to defaults.</summary>
     private async void ResetAllSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        ContentDialog dialog = new()
-        {
-            Title = LocalizationService.Instance.GetString("Settings.ResetAllSettings.Title"),
-            Content = LocalizationService.Instance.GetString("Settings.ResetAllSettings.Confirm"),
-            PrimaryButtonText = _viewModel.ResetText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
+        if (!await ConfirmAsync(
+                LocalizationService.Instance.GetString("Settings.ResetAllSettings.Title"),
+                LocalizationService.Instance.GetString("Settings.ResetAllSettings.Confirm"),
+                _viewModel.ResetText)
+            || !await ConfirmAsync(
+                LocalizationService.Instance.GetString("Settings.ResetAllSettings.SecondConfirm.Title"),
+                LocalizationService.Instance.GetString("Settings.ResetAllSettings.SecondConfirm"),
+                _viewModel.ResetText))
         {
             return;
         }
@@ -619,40 +687,42 @@ public sealed partial class Settings : Page
         _viewModel.ResetAllSettings();
     }
 
-    /// <summary>Shows a two-step confirmation and clears all local application data.</summary>
+    /// <summary>Shows a three-step confirmation and clears all local application data.</summary>
     private async void ClearAllDataButton_Click(object sender, RoutedEventArgs e)
     {
-        ContentDialog firstDialog = new()
-        {
-            Title = LocalizationService.Instance.GetString("Settings.ClearAllData.Title"),
-            Content = LocalizationService.Instance.GetString("Settings.ClearAllData.Confirm"),
-            PrimaryButtonText = _viewModel.CleanupText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        if (await firstDialog.ShowAsync() is not ContentDialogResult.Primary)
-        {
-            return;
-        }
-
-        ContentDialog secondDialog = new()
-        {
-            Title = LocalizationService.Instance.GetString("Settings.ClearAllData.SecondConfirm.Title"),
-            Content = LocalizationService.Instance.GetString("Settings.ClearAllData.SecondConfirm"),
-            PrimaryButtonText = _viewModel.CleanupText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        if (await secondDialog.ShowAsync() is not ContentDialogResult.Primary)
+        if (!await ConfirmAsync(
+                LocalizationService.Instance.GetString("Settings.ClearAllData.Title"),
+                LocalizationService.Instance.GetString("Settings.ClearAllData.Confirm"),
+                _viewModel.CleanupText)
+            || !await ConfirmAsync(
+                LocalizationService.Instance.GetString("Settings.ClearAllData.SecondConfirm.Title"),
+                LocalizationService.Instance.GetString("Settings.ClearAllData.SecondConfirm"),
+                _viewModel.CleanupText)
+            || !await ConfirmAsync(
+                LocalizationService.Instance.GetString("Settings.ClearAllData.FinalConfirm.Title"),
+                LocalizationService.Instance.GetString("Settings.ClearAllData.FinalConfirm"),
+                _viewModel.CleanupText))
         {
             return;
         }
 
         _viewModel.ClearAllData();
+    }
+
+    /// <summary>Shows a destructive-action confirmation dialog.</summary>
+    private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText)
+    {
+        ContentDialog dialog = new()
+        {
+            Title = title,
+            Content = content,
+            PrimaryButtonText = primaryButtonText,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        return await dialog.ShowAsync() is ContentDialogResult.Primary;
     }
 
 }

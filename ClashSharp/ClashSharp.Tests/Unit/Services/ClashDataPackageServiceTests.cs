@@ -67,18 +67,27 @@ public sealed class ClashDataPackageServiceTests
         Assert.DoesNotContain("logs.sqlite3", relativePaths);
     }
 
-    /// <summary>Verifies all-data export includes logs in addition to proxy configuration files.</summary>
+    /// <summary>Verifies all-data export ignores SQLite logs while keeping other local data.</summary>
     [Fact]
-    public async Task ExportAsync_AllIncludingLogsScope_IncludesLogs()
+    public async Task ExportAsync_AllScope_IgnoresLogs()
     {
         using TemporaryDirectory directory = new();
+        await File.WriteAllTextAsync(Path.Combine(directory.Path, "ProfileCatalog.json"), "catalog");
+        await File.WriteAllTextAsync(Path.Combine(directory.Path, "settings.cache"), "cache");
         await File.WriteAllTextAsync(Path.Combine(directory.Path, "logs.sqlite3"), "logs");
+        await File.WriteAllTextAsync(Path.Combine(directory.Path, "logs.sqlite3-wal"), "wal");
+        await File.WriteAllTextAsync(Path.Combine(directory.Path, "logs.sqlite3-shm"), "shm");
         ClashDataPackageService service = new(new FakeClashDataPackageSettings(), directory.Path);
         string packagePath = Path.Combine(directory.Path, "all.clashsharp.xml");
 
-        await service.ExportAsync(packagePath, ClashDataPackageScope.AllIncludingLogs, CancellationToken.None);
+        await service.ExportAsync(packagePath, ClashDataPackageScope.All, CancellationToken.None);
 
-        Assert.Contains("logs.sqlite3", LoadExportedRelativePaths(packagePath));
+        string[] relativePaths = LoadExportedRelativePaths(packagePath);
+        Assert.Contains("ProfileCatalog.json", relativePaths);
+        Assert.Contains("settings.cache", relativePaths);
+        Assert.DoesNotContain("logs.sqlite3", relativePaths);
+        Assert.DoesNotContain("logs.sqlite3-wal", relativePaths);
+        Assert.DoesNotContain("logs.sqlite3-shm", relativePaths);
     }
 
     /// <summary>Verifies import applies settings and restores package files into local data.</summary>
@@ -126,7 +135,7 @@ public sealed class ClashDataPackageServiceTests
             new XElement("ClashSharpDataPackage",
                 new XAttribute("Format", "ClashSharp.XmlDataPackage"),
                 new XAttribute("Version", "1"),
-                new XAttribute("Scope", ClashDataPackageScope.AllIncludingLogs.ToString()),
+                new XAttribute("Scope", ClashDataPackageScope.All.ToString()),
                 new XElement("Settings"),
                 new XElement("Files",
                     new XElement("File",

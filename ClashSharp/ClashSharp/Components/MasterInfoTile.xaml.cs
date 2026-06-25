@@ -10,6 +10,7 @@
 using System.Windows.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace ClashSharp.Components;
 
@@ -52,18 +53,15 @@ public sealed partial class MasterInfoTile : UserControl
         typeof(MasterInfoTile),
         new PropertyMetadata(false));
 
-    public static readonly DependencyProperty ToggleCommandProperty = DependencyProperty.Register(
-        nameof(ToggleCommand),
+    public static readonly DependencyProperty TileCommandProperty = DependencyProperty.Register(
+        nameof(TileCommand),
         typeof(ICommand),
         typeof(MasterInfoTile),
         new PropertyMetadata(null));
 
-    private bool _isLoaded;
-
     public MasterInfoTile()
     {
         InitializeComponent();
-        Loaded += (_, _) => _isLoaded = true;
     }
 
     public string Title
@@ -102,15 +100,15 @@ public sealed partial class MasterInfoTile : UserControl
         set => SetValue(IsToggleOnProperty, value);
     }
 
-    public ICommand? ToggleCommand
+    public ICommand? TileCommand
     {
-        get => (ICommand?)GetValue(ToggleCommandProperty);
-        set => SetValue(ToggleCommandProperty, value);
+        get => (ICommand?)GetValue(TileCommandProperty);
+        set => SetValue(TileCommandProperty, value);
     }
 
-    private void ToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    private void TileRoot_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        if (!_isLoaded || ToggleCommand is not ICommand command || !command.CanExecute(null))
+        if (TileCommand is not ICommand command || !command.CanExecute(null))
         {
             return;
         }

@@ -75,7 +75,8 @@ public sealed partial class MainWindow : Window
     {
         _viewModel = new MainWindowViewModel(
             new ShellLocalizationAdapter(LocalizationService.Instance),
-            CreatePageMap());
+            CreatePageMap(),
+            new ShellRestartStateAdapter(RestartRequiredStateService.Instance));
         _trayCommandService = TrayCommandServiceFactory.CreateDefault();
         AppThemeService.ApplyAccentColor(
             AppSettingsService.Instance.AppAccentColorMode,
@@ -360,6 +361,25 @@ public sealed partial class MainWindow : Window
             ["About"] = typeof(View.About),
             ["Settings"] = typeof(View.Settings),
         };
+    }
+
+    /// <summary>Adapts restart-required settings state to the shell view model.</summary>
+    private sealed class ShellRestartStateAdapter : IShellRestartState
+    {
+        private readonly RestartRequiredStateService _state;
+
+        public ShellRestartStateAdapter(RestartRequiredStateService state)
+        {
+            _state = state ?? throw new ArgumentNullException(nameof(state));
+        }
+
+        public event EventHandler? RestartPendingChanged
+        {
+            add => _state.RestartPendingChanged += value;
+            remove => _state.RestartPendingChanged -= value;
+        }
+
+        public bool IsRestartPending => _state.IsRestartPending;
     }
 
 

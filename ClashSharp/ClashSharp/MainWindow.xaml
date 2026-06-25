@@ -23,7 +23,11 @@
             x:Name="AppTitleBar"
             Title="Clash#"
             IsPaneToggleButtonVisible="True"
-            PaneToggleRequested="AppTitleBar_PaneToggleRequested" />
+            PaneToggleRequested="AppTitleBar_PaneToggleRequested">
+            <TitleBar.IconSource>
+                <BitmapIconSource UriSource="ms-appx:///Assets/Logo.png" />
+            </TitleBar.IconSource>
+        </TitleBar>
 
         <NavigationView
             x:Name="NavView"
@@ -37,13 +41,6 @@
             <NavigationView.Resources>
                 <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0</CornerRadius>
             </NavigationView.Resources>
-
-            <NavigationView.PaneHeader>
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="12,8,12,8">
-                    <Image Source="ms-appx:///Assets/Logo.png" Width="28" Height="28" Stretch="Uniform" />
-                    <TextBlock Text="Clash#" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
-                </StackPanel>
-            </NavigationView.PaneHeader>
 
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="NavMasterControlItem" Content="{Binding MasterControlText}" Tag="MasterControl">

@@ -10,17 +10,30 @@
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
 
-    <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="116" RowSpacing="10">
+    <Grid
+        x:Name="TileRoot"
+        Style="{StaticResource ClashCardGridStyle}"
+        MinHeight="116"
+        RowSpacing="10"
+        Tapped="TileRoot_Tapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <Border
+            x:Name="SelectedOverlay"
+            Grid.RowSpan="2"
+            Margin="-16"
+            CornerRadius="4"
+            Background="{ThemeResource AccentFillColorDefaultBrush}"
+            Opacity="0.14"
+            Visibility="{Binding IsToggleOn, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
         <Grid ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <FontIcon
@@ -34,25 +47,21 @@
                 Style="{ThemeResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextTrimming="CharacterEllipsis" />
-            <ToggleSwitch
-                Grid.Column="2"
-                MinWidth="0"
-                OnContent="{x:Null}"
-                OffContent="{x:Null}"
-                Visibility="{Binding IsToggleVisible, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}"
-                IsOn="{Binding IsToggleOn, ElementName=Root, Mode=TwoWay}"
-                Toggled="ToggleSwitch_Toggled" />
         </Grid>
 
         <StackPanel Grid.Row="1" Spacing="4" VerticalAlignment="Bottom">
             <TextBlock
                 Text="{Binding Value, ElementName=Root}"
                 Style="{ThemeResource SubtitleTextBlockStyle}"
+                TextWrapping="WrapWholeWords"
+                MaxLines="2"
                 TextTrimming="CharacterEllipsis" />
             <TextBlock
                 Text="{Binding Detail, ElementName=Root}"
                 Style="{ThemeResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="WrapWholeWords"
+                MaxLines="2"
                 TextTrimming="CharacterEllipsis" />
         </StackPanel>
     </Grid>

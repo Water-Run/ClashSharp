@@ -68,6 +68,12 @@ internal static class StartupConflictDialogPresenter
             MinWidth = 420,
             MaxWidth = 680,
         };
+        panel.Children.Add(new TextBlock
+        {
+            Text = LocalizationService.Instance.GetString("StartupConflict.Dialog.Introduction"),
+            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+            TextWrapping = TextWrapping.Wrap,
+        });
 
         foreach (StartupConflictIssue issue in issues)
         {
@@ -92,15 +98,14 @@ internal static class StartupConflictDialogPresenter
         Grid row = new()
         {
             Style = (Style)Application.Current.Resources["ClashCardGridStyle"],
-            ColumnSpacing = 12,
+            RowSpacing = 8,
         };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         StackPanel textPanel = new()
         {
+            Orientation = Orientation.Vertical,
             Spacing = 3,
         };
         textPanel.Children.Add(new TextBlock
@@ -116,8 +121,22 @@ internal static class StartupConflictDialogPresenter
             Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
             TextWrapping = TextWrapping.Wrap,
         });
+        TextBlock statusText = new()
+        {
+            Text = LocalizationService.Instance.GetString("StartupConflict.Status.Ready"),
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            TextWrapping = TextWrapping.Wrap,
+        };
+        textPanel.Children.Add(statusText);
         row.Children.Add(textPanel);
 
+        StackPanel actionPanel = new()
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
         ProgressRing progressRing = new()
         {
             Width = 18,
@@ -126,18 +145,7 @@ internal static class StartupConflictDialogPresenter
             Visibility = Visibility.Collapsed,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(progressRing, 2);
-        row.Children.Add(progressRing);
-
-        TextBlock statusText = new()
-        {
-            Text = LocalizationService.Instance.GetString("StartupConflict.Status.Ready"),
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Grid.SetColumn(statusText, 3);
-        row.Children.Add(statusText);
+        actionPanel.Children.Add(progressRing);
 
         HyperlinkButton repairButton = new()
         {
@@ -145,6 +153,7 @@ internal static class StartupConflictDialogPresenter
             Padding = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        actionPanel.Children.Add(repairButton);
         repairButton.Click += async (_, _) =>
         {
             repairButton.IsEnabled = false;
@@ -160,8 +169,8 @@ internal static class StartupConflictDialogPresenter
                 : LocalizationService.Instance.GetString("StartupConflict.Status.Failed");
             ToolTipService.SetToolTip(statusText, result.Message);
         };
-        Grid.SetColumn(repairButton, 1);
-        row.Children.Add(repairButton);
+        Grid.SetRow(actionPanel, 1);
+        row.Children.Add(actionPanel);
 
         return row;
     }

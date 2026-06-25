@@ -5,13 +5,15 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <ToggleButton
+    <RadioButton
+        x:Name="ModeRadioButton"
+        GroupName="MasterControlMode"
         MinHeight="78"
         HorizontalAlignment="Stretch"
         HorizontalContentAlignment="Stretch"
         IsChecked="{Binding IsChecked, ElementName=Root, Mode=OneWay}"
         Command="{Binding Command, ElementName=Root}">
-        <Grid Padding="6" ColumnSpacing="10">
+        <Grid Style="{StaticResource ClashCardGridStyle}" Padding="12" ColumnSpacing="10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -22,17 +24,22 @@
                 FontSize="20"
                 Width="28"
                 VerticalAlignment="Top"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
 
             <StackPanel Grid.Column="1" Spacing="3">
-                <TextBlock Text="{Binding Title, ElementName=Root}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    Text="{Binding Title, ElementName=Root}"
+                    Style="{ThemeResource BodyStrongTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                 <TextBlock
                     Text="{Binding Description, ElementName=Root}"
                     TextWrapping="WrapWholeWords"
                     MaxLines="2"
                     Style="{ThemeResource CaptionTextBlockStyle}"
+                    Opacity="0.78"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </Grid>
-    </ToggleButton>
+    </RadioButton>
 </UserControl>

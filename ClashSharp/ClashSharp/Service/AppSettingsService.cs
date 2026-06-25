@@ -302,13 +302,13 @@ public sealed class AppSettingsService
     }
 
     /// <summary>Gets or sets the mainland China specific display feature level.</summary>
-    /// <value>Selected feature level; defaults to flag replacement, text completion, and keyword filtering.</value>
+    /// <value>Selected feature level; defaults to flag replacement and text completion.</value>
     public MainlandChinaFeatureMode MainlandChinaFeatureMode
     {
         get
         {
             MainlandChinaFeatureMode defaultMode = GetBoolean(KeyMainlandChinaDisplayEnabled, true)
-                ? MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter
+                ? MainlandChinaFeatureMode.FlagReplacementAndTextCompletion
                 : MainlandChinaFeatureMode.Disabled;
             MainlandChinaFeatureMode mode = GetEnum(KeyMainlandChinaFeatureMode, defaultMode);
             return mode == MainlandChinaFeatureMode.AllIncludingUrlBlacklist
@@ -379,7 +379,7 @@ public sealed class AppSettingsService
     {
         get => MainlandChinaFeatureMode != MainlandChinaFeatureMode.Disabled;
         set => MainlandChinaFeatureMode = value
-            ? MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter
+            ? MainlandChinaFeatureMode.FlagReplacementAndTextCompletion
             : MainlandChinaFeatureMode.Disabled;
     }
 

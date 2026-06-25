@@ -50,9 +50,11 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("<TitleBar", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"AppTitleBar\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("ms-appx:///Assets/Logo.png", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("PaneToggleRequested=\"AppTitleBar_PaneToggleRequested\"", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("Grid.Row=\"1\"", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("IsPaneToggleButtonVisible=\"False\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<NavigationView.PaneHeader>", mainWindowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Margin=\"304,0,138,0\"", mainWindowXaml, StringComparison.Ordinal);
     }
 
@@ -133,6 +135,8 @@ public sealed class AppResourcePackagingTests
         Assert.True(versionIndex > appNameIndex, "Version summary must be below the app name.");
         Assert.True(runtimeIndex > versionIndex, "Runtime summary must be below the version.");
         Assert.True(descriptionIndex > runtimeIndex, "App description must be below version and runtime.");
+        Assert.Contains("Text=\"{Binding VersionSummaryText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
     }
@@ -447,9 +451,14 @@ public sealed class AppResourcePackagingTests
             "AccentTextFillColorTertiaryBrush",
             "AccentTextFillColorDisabledBrush",
             "AccentButtonBackground",
+            "AccentButtonBorderBrush",
             "AccentButtonBackgroundPointerOver",
             "AccentButtonBackgroundPressed",
             "AccentButtonForeground",
+            "ToggleSwitchFillOn",
+            "ToggleSwitchStrokeOn",
+            "ToggleButtonBackgroundChecked",
+            "SystemControlHighlightAccentBrush",
         })
         {
             Assert.Contains(resourceKey, serviceCode, StringComparison.Ordinal);
@@ -936,24 +945,48 @@ public sealed class AppResourcePackagingTests
         int behaviorIndex = settingsXaml.IndexOf("x:Name=\"StartupBehaviorModeRow\"", StringComparison.Ordinal);
         int proxySectionIndex = settingsXaml.IndexOf("x:Name=\"ProxySectionTitleText\"", StringComparison.Ordinal);
         int transparentProxyIndex = settingsXaml.IndexOf("x:Name=\"TransparentProxyRow\"", StringComparison.Ordinal);
+        int startupRestoreIndex = settingsXaml.IndexOf("x:Name=\"StartupRestoreFallbackRow\"", StringComparison.Ordinal);
 
         Assert.True(startupSectionIndex >= 0, "Startup settings section is missing.");
         Assert.True(launchIndex > startupSectionIndex, "Launch-at-startup row must be under the startup section.");
-        Assert.True(manualConflictIndex > launchIndex, "Manual conflict check row must follow launch-at-startup.");
-        Assert.True(autoConflictIndex > manualConflictIndex, "Automatic startup conflict setting must follow manual conflict check.");
+        Assert.Equal(-1, manualConflictIndex);
+        Assert.True(autoConflictIndex > launchIndex, "Startup conflict check row must follow launch-at-startup.");
         Assert.True(guideIndex > autoConflictIndex, "Startup guide setting must follow conflict check settings.");
         Assert.True(behaviorIndex > guideIndex, "Startup behavior mode must stay with startup settings.");
         Assert.True(proxySectionIndex > behaviorIndex, "Proxy settings must follow the startup section.");
         Assert.True(transparentProxyIndex > proxySectionIndex, "Transparent proxy rows must be integrated into the proxy section.");
+        Assert.True(startupRestoreIndex > proxySectionIndex, "Startup restore fallback must not remain in the startup section.");
         Assert.DoesNotContain("x:Name=\"TransparentProxySectionTitleText\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"StartupConflictCheckToggle\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"CheckStartupConflictsButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding CheckStartupConflictsNowText}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ShowStartupGuideToggle\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ShowStartupPromptButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"StartupBehaviorModeBox\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LaunchAtStartupToggle\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("TunFallbackRow", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("FallbackToSystemProxyWhenTunFails", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies startup restore fallback is grouped under Windows-native repair settings.</summary>
+    [Fact]
+    public void SettingsXaml_PlacesStartupRestoreFallbackUnderWindowsNative()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+
+        int windowsNativeIndex = settingsXaml.IndexOf("x:Name=\"WindowsNativeSectionTitleText\"", StringComparison.Ordinal);
+        int restoreFallbackIndex = settingsXaml.IndexOf("x:Name=\"StartupRestoreFallbackRow\"", StringComparison.Ordinal);
+        int networkRepairIndex = settingsXaml.IndexOf("x:Name=\"WindowsNativeRepairCard\"", StringComparison.Ordinal);
+        int checkStaleProxyIndex = settingsXaml.IndexOf("x:Name=\"CheckStaleProxyRow\"", StringComparison.Ordinal);
+        int resetWindowsNativeIndex = settingsXaml.IndexOf("x:Name=\"ResetWindowsNativeSettingsLink\"", StringComparison.Ordinal);
+
+        Assert.True(windowsNativeIndex >= 0, "Windows-native section is missing.");
+        Assert.True(restoreFallbackIndex > windowsNativeIndex, "Startup restore fallback must be in the Windows-native section.");
+        Assert.True(networkRepairIndex > restoreFallbackIndex, "Network repair card should follow startup restore fallback.");
+        Assert.True(checkStaleProxyIndex > networkRepairIndex, "Stale proxy checks should remain in the Windows-native section.");
+        Assert.True(resetWindowsNativeIndex > checkStaleProxyIndex, "Windows-native reset link should cover startup restore fallback.");
     }
 
     /// <summary>Verifies the startup guide has a reusable dialog component reserved for future guide content.</summary>
@@ -1040,7 +1073,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("<StackPanel Spacing=\"10\">", settingRowXaml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the master control page starts with a centered brand mark instead of a page title block.</summary>
+    /// <summary>Verifies the master control page keeps the brand mark without the old page title block.</summary>
     [Fact]
     public void MasterControlXaml_UsesCenteredLogoWithoutPageIntro()
     {
@@ -1049,7 +1082,7 @@ public sealed class AppResourcePackagingTests
         string masterControlXaml = File.ReadAllText(masterControlXamlPath);
 
         Assert.Contains("x:Name=\"HeaderLogo\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("HorizontalAlignment=\"Center\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Source=\"ms-appx:///Assets/Logo.png\"", masterControlXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"PageTitleText\"", masterControlXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DescriptionText\"", masterControlXaml, StringComparison.Ordinal);
     }
@@ -1075,13 +1108,45 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("AllowDrop=\"True\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"OpenLatencyDialogButton\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("OpenLatencyDialogButton_Click", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"EditInfoTilesButton\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("EditInfoTilesButton_Click", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("ProgressBar", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("DispatcherTimer", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("x:Class=\"ClashSharp.Components.MasterModeButton\"", modeButtonXaml, StringComparison.Ordinal);
         Assert.Contains("x:Class=\"ClashSharp.Components.MasterInfoTile\"", infoTileXaml, StringComparison.Ordinal);
-        Assert.Contains("ToggleSwitch", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("<RadioButton", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("GroupName=\"MasterControlMode\"", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource ClashCardGridStyle}\"", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", modeButtonXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ToggleButton", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("Tapped=\"TileRoot_Tapped\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SelectedOverlay\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxLines=\"2\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToggleSwitch", infoTileXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"EditInfoTilesButton\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("BuildInfoTileEditorRow", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("FontIcon", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("MasterControlTileAction.EditInfoTiles", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("MasterControlTileAction.ShowStartupPrompt", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("MasterControlTileAction.CheckStartupConflicts", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("MasterControlTileAction.RunLatencyTest", masterControlCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings page exposes a restart-required notice and keeps reset links away from the edge.</summary>
+    [Fact]
+    public void SettingsXaml_ShowsRestartNoticeAndIndentsResetLinks()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+
+        Assert.Contains("x:Name=\"SettingsRestartRequiredNoticeText\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding RestartRequiredNoticeText}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{Binding HasRestartRequiredSettings, Converter={StaticResource BooleanToVisibilityConverter}}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource SystemFillColorCriticalBrush}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment=\"Right\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ResetBasicSettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ResetStartupSettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ResetProxySettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the about page uses a centered, bounded layout with complete app identity fields.</summary>
@@ -1096,6 +1161,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("MaxWidth=\"720\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding VersionSummaryText}\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding RuntimeValueText}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding VersionSummaryText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LicenseTitleText\"", aboutXaml, StringComparison.Ordinal);
@@ -1156,7 +1224,23 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.Contains("Settings.DataImport.Warning.Title", settingsCode, StringComparison.Ordinal);
         Assert.Contains("Settings.DataImport.SecondConfirm.Title", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ReadPackageScope", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("FormatDataImportWarning", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ClashDataPackageService.Instance", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies conflict dialogs use general conflict wording and place actions below status text.</summary>
+    [Fact]
+    public void StartupConflictDialogPresenter_UsesGeneralConflictCopyAndStackedActions()
+    {
+        string presenterPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "StartupConflictDialogPresenter.cs");
+
+        string presenterCode = File.ReadAllText(presenterPath);
+
+        Assert.Contains("StartupConflict.Dialog.Introduction", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("Orientation = Orientation.Vertical", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment = HorizontalAlignment.Right", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("statusText.Text = result.Succeeded", presenterCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies maintenance actions are right-aligned links instead of full-height row buttons.</summary>

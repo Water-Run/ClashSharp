@@ -126,23 +126,9 @@
                 </Grid>
             </Grid>
 
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <Button x:Name="EditInfoTilesButton" HorizontalAlignment="Right" Click="EditInfoTilesButton_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE70F;" FontSize="14" />
-                        <TextBlock Text="{Binding EditInfoTilesText}" />
-                    </StackPanel>
-                </Button>
-
                 <GridView
                     x:Name="InfoTileGrid"
-                    Grid.Row="1"
-                    Margin="0,8,0,0"
+                    Margin="0"
                     ItemsSource="{Binding InfoTiles}"
                     SelectionMode="None"
                     CanReorderItems="True"
@@ -171,11 +157,10 @@
                                 Glyph="{Binding Glyph}"
                                 IsToggleVisible="{Binding IsToggleVisible}"
                                 IsToggleOn="{Binding IsToggleOn, Mode=TwoWay}"
-                                ToggleCommand="{Binding ToggleCommand}" />
+                                TileCommand="{Binding TileCommand}" />
                         </DataTemplate>
                     </GridView.ItemTemplate>
                 </GridView>
-            </Grid>
         </StackPanel>
     </ScrollViewer>
 </Page>

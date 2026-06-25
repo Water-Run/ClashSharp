@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -55,14 +56,28 @@ public sealed class MainlandChinaTextDisplayService
         "大紀元",
     ];
 
-    /// <summary>Sensitive URL fragments masked when URL blacklist mode is enabled.</summary>
-    private static readonly string[] SensitiveUrlFragments =
+    /// <summary>Sensitive URL patterns masked when URL blacklist mode is enabled.</summary>
+    private static readonly string[] SensitiveUrlPatterns =
     [
-        "pincong.rocks",
-        "pincong.org",
-        "pincong.icu",
-        "epochtimes.com",
-        "dajiyuan.com",
+        @"^https?://([^/]+\.)?pincong\.(rocks|org|icu)(/|$)",
+        @"^https?://([^/]+\.)?epochtimes\.(com|cn|de|jp|hk|tw)(/|$)",
+        @"^https?://([^/]+\.)?dajiyuan\.(com|eu)(/|$)",
+        @"^https?://([^/]+\.)?ntdtv\.(com|com\.tw)(/|$)",
+        @"^https?://([^/]+\.)?rfa\.org/mandarin(/|$)",
+        @"^https?://([^/]+\.)?voachinese\.com(/|$)",
+        @"^https?://([^/]+\.)?dw\.com/zh(/|$)",
+        @"^https?://([^/]+\.)?rfi\.fr/cn(/|$)",
+        @"^https?://([^/]+\.)?bbc\.com/zhongwen(/|$)",
+        @"^https?://([^/]+\.)?chinadigitaltimes\.net/chinese(/|$)",
+        @"^https?://([^/]+\.)?minghui\.org(/|$)",
+        @"^https?://([^/]+\.)?secretchina\.com(/|$)",
+        @"^https?://([^/]+\.)?aboluowang\.com(/|$)",
+        @"^https?://([^/]+\.)?bannedbook\.org(/|$)",
+        @"^https?://([^/]+\.)?boxun\.com(/|$)",
+        @"^https?://([^/]+\.)?renminbao\.com(/|$)",
+        @"^https?://([^/]+\.)?chinaaid\.(org|net)(/|$)",
+        @"^https?://([^/]+\.)?soundofhope\.org(/|$)",
+        @"^https?://([^/]+\.)?kannewyork\.com(/|$)",
     ];
 
     /// <summary>Initializes the display service.</summary>
@@ -77,7 +92,7 @@ public sealed class MainlandChinaTextDisplayService
     /// <summary>Gets the user-visible terms and URL fragments covered by the unfriendly-site list.</summary>
     public static IReadOnlyList<string> GetUnfriendlyDisplayList()
     {
-        return [.. SensitiveTerms, .. SensitiveUrlFragments];
+        return SensitiveUrlPatterns;
     }
 
     /// <summary>Applies UI-only replacement to <paramref name="text"/> for the configured mainland China feature mode.</summary>
@@ -121,9 +136,9 @@ public sealed class MainlandChinaTextDisplayService
     /// <returns>True when a blacklisted URL fragment is present; otherwise false.</returns>
     private static bool ContainsSensitiveUrl(string text)
     {
-        foreach (string fragment in SensitiveUrlFragments)
+        foreach (string pattern in SensitiveUrlPatterns)
         {
-            if (text.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+            if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
             {
                 return true;
             }

@@ -18,7 +18,7 @@ Maintainers can run `Tools\Update-Mihomo.ps1` to fetch or refresh the Windows x6
 
 Clash# uses native WinUI 3 controls, Fluent icons, and Windows 11 acrylic surfaces. The application is designed around Windows networking behavior rather than generic cross-platform proxy terminology.
 
-Windows-focused tools include WSL network repair, terminal proxy diagnostics, Microsoft Store network repair, proxy residue cleanup after abnormal exits, system proxy restoration on exit, and transparent proxy fallback when TUN is unavailable.
+Windows-focused tools include WSL network repair, terminal proxy diagnostics, Microsoft Store network repair, proxy residue cleanup after abnormal exits, system proxy restoration on exit, transparent proxy fallback when TUN is unavailable, and a tile-based master control surface for status and common actions.
 
 ## Basic Usage
 

@@ -115,9 +115,11 @@ public sealed class MainlandChinaTextDisplayServiceTests
     {
         IReadOnlyList<string> entries = MainlandChinaTextDisplayService.GetUnfriendlyDisplayList();
 
-        Assert.Contains("品葱", entries);
-        Assert.Contains("大纪元", entries);
-        Assert.Contains("pincong.rocks", entries);
-        Assert.Contains("epochtimes.com", entries);
+        Assert.All(entries, entry => Assert.StartsWith("^https?://", entry, StringComparison.Ordinal));
+        Assert.Contains(entries, entry => entry.Contains("pincong", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(entries, entry => entry.Contains("epochtimes", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(entries, entry => entry.Contains("rfa", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(entries, entry => entry.Contains("voachinese", StringComparison.OrdinalIgnoreCase));
+        Assert.True(entries.Count >= 16);
     }
 }

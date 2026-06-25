@@ -147,6 +147,10 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
     public int MixedPort => _settings.MixedPort;
 
     public string ConnectionTestProxyUrl1 => _settings.ConnectionTestProxyUrl1;
+
+    public string ConnectionTestProxyUrl2 => _settings.ConnectionTestProxyUrl2;
+
+    public string ConnectionTestDirectUrl => _settings.ConnectionTestDirectUrl;
 }
 
 /// <summary>Adapts <see cref="NetworkTakeoverService"/> to master-control mode application.</summary>

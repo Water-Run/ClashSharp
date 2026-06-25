@@ -113,6 +113,23 @@ public sealed class SettingsViewModelTests
         Assert.Equal(AppLanguage.AutoDetect, notifiedLanguage);
     }
 
+    /// <summary>Verifies repeated ComboBox write-back for the current language does not re-enter localization refresh.</summary>
+    [Fact]
+    public void SetDisplayLanguageIndex_CurrentLanguage_DoesNotReapplyLanguage()
+    {
+        FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.German };
+        int applyCount = 0;
+        SettingsViewModel viewModel = new(store, _ => applyCount++, () => { });
+        List<string?> changedProperties = [];
+        viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        bool changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.German + 1);
+
+        Assert.False(changed);
+        Assert.Equal(0, applyCount);
+        Assert.DoesNotContain(nameof(SettingsViewModel.DisplayLanguageOptions), changedProperties);
+    }
+
     /// <summary>Verifies bindable switch setters persist values and raise property change notifications.</summary>
     [Fact]
     public void TransparentProxyEnabled_Setter_PersistsAndRaisesPropertyChanged()
@@ -445,6 +462,29 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Settings.AppAccentColor.Title", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
     }
 
+    /// <summary>Verifies restart markers compare against the currently applied app accent state.</summary>
+    [Fact]
+    public void AccentColorSettings_RestartPendingUsesCurrentAppliedAccentState()
+    {
+        FakeSettingsStore store = new()
+        {
+            AppAccentColorMode = AppAccentColorMode.Custom,
+            AppAccentColorValue = "#FF00AA00",
+        };
+        SettingsViewModel viewModel = CreateAccentRestartViewModel(
+            store,
+            (mode, color) => mode == AppAccentColorMode.Custom
+                && !StringComparer.OrdinalIgnoreCase.Equals(color, "#FF0078D4"));
+
+        Assert.True(ReadProperty<bool>(viewModel, "IsAppAccentColorRestartPending"));
+        Assert.Equal("Settings.AppAccentColor.Title*", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
+
+        InvokeMethod<bool>(viewModel, "SetAppAccentColorModeIndex", (int)AppAccentColorMode.FollowSystem);
+
+        Assert.False(ReadProperty<bool>(viewModel, "IsAppAccentColorRestartPending"));
+        Assert.Equal("Settings.AppAccentColor.Title", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
+    }
+
     /// <summary>Verifies mainland China feature mode selection persists only valid enum indexes.</summary>
     [Theory]
     [InlineData((int)MainlandChinaFeatureMode.Disabled, MainlandChinaFeatureMode.Disabled, true)]
@@ -542,11 +582,32 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Settings.DataPackage.Description", ReadProperty<string>(viewModel, "DataPackageDescriptionText"));
         Assert.Equal("Settings.DataPackage.Scope.Settings", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[0]);
         Assert.Equal("Settings.DataPackage.Scope.SettingsAndProxyConfiguration", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[1]);
-        Assert.Equal("Settings.DataPackage.Scope.AllIncludingLogs", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[2]);
+        Assert.Equal("Settings.DataPackage.Scope.All", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[2]);
         Assert.Equal(0, ReadProperty<int>(viewModel, "DataPackageScopeIndex"));
         Assert.Equal("Command.Export", ReadProperty<string>(viewModel, "ExportText"));
         Assert.Equal("Command.Import", ReadProperty<string>(viewModel, "ImportText"));
         Assert.Equal("Command.Backup", ReadProperty<string>(viewModel, "BackupText"));
+    }
+
+    /// <summary>Verifies known connection-test URLs are summarized with localized names and defaults collapse to one label.</summary>
+    [Fact]
+    public void ConnectionTestUrlSummary_UsesKnownLocalizedNamesAndDefaultLabel()
+    {
+        SettingsViewModel defaultViewModel = new(new FakeSettingsStore(), _ => { }, () => { }, key => key);
+
+        Assert.Equal("Settings.ConnectionTestUrl.Summary.Default", ReadProperty<string>(defaultViewModel, "ConnectionTestUrlSummaryText"));
+
+        FakeSettingsStore store = new()
+        {
+            ConnectionTestProxyUrl1 = "https://www.google.com",
+            ConnectionTestProxyUrl2 = "https://example.test/path",
+            ConnectionTestDirectUrl = "https://www.baidu.com",
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+
+        Assert.Equal(
+            "Settings.ConnectionTestUrl.Provider.Google | Settings.ConnectionTestUrl.Provider.Custom | Settings.ConnectionTestUrl.Provider.Baidu",
+            ReadProperty<string>(viewModel, "ConnectionTestUrlSummaryText"));
     }
 
     /// <summary>Verifies the connection test runs through an injected probe and returns a localized success message.</summary>
@@ -716,7 +777,7 @@ public sealed class SettingsViewModelTests
 
         InvokeMethod<object?>(viewModel, "ResetMainlandChinaSettingsToDefaults", Array.Empty<object>());
 
-        Assert.Equal(MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter, store.MainlandChinaFeatureMode);
+        Assert.Equal(MainlandChinaFeatureMode.FlagReplacementAndTextCompletion, store.MainlandChinaFeatureMode);
         Assert.False(store.MainlandChinaUrlBlockingEnabled);
     }
 
@@ -814,6 +875,7 @@ public sealed class SettingsViewModelTests
                 typeof(Action),
                 typeof(Action),
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
+                typeof(Func<AppAccentColorMode, string, bool>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -839,6 +901,7 @@ public sealed class SettingsViewModelTests
             (Action)(() => { }),
             (Action)(() => { }),
             (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
+            null,
         ]));
     }
 
@@ -867,6 +930,7 @@ public sealed class SettingsViewModelTests
                 typeof(Action),
                 typeof(Action),
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
+                typeof(Func<AppAccentColorMode, string, bool>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -887,6 +951,7 @@ public sealed class SettingsViewModelTests
             resetAllSettings,
             clearAllData,
             (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
+            null,
         ]));
     }
 
@@ -913,6 +978,7 @@ public sealed class SettingsViewModelTests
                 typeof(Action),
                 typeof(Action),
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
+                typeof(Func<AppAccentColorMode, string, bool>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -933,6 +999,55 @@ public sealed class SettingsViewModelTests
             (Action)(() => { }),
             (Action)(() => { }),
             checkStartupConflicts,
+            null,
+        ]));
+    }
+
+    private static SettingsViewModel CreateAccentRestartViewModel(
+        FakeSettingsStore store,
+        Func<AppAccentColorMode, string, bool> isAccentColorRestartPending)
+    {
+        ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types:
+            [
+                typeof(ISettingsStore),
+                typeof(Action<AppLanguage>),
+                typeof(Action<AppThemeMode>),
+                typeof(Action),
+                typeof(Action<bool>),
+                typeof(Func<string, string>),
+                typeof(Func<SettingsProxyInformation>),
+                typeof(SettingsDiagnosticsViewModel),
+                typeof(IMihomoServiceController),
+                typeof(Action<AppAccentColorMode, string>),
+                typeof(Func<Uri, CancellationToken, Task<int>>),
+                typeof(Action),
+                typeof(Action),
+                typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
+                typeof(Func<AppAccentColorMode, string, bool>),
+            ],
+            modifiers: null);
+        Assert.NotNull(constructor);
+
+        return Assert.IsType<SettingsViewModel>(constructor.Invoke(
+        [
+            store,
+            (Action<AppLanguage>)(_ => { }),
+            (Action<AppThemeMode>)(_ => { }),
+            () => { },
+            (Action<bool>)(_ => { }),
+            (Func<string, string>)(key => key),
+            () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            null,
+            null,
+            null,
+            (Func<Uri, CancellationToken, Task<int>>)((_, _) => Task.FromResult(204)),
+            (Action)(() => { }),
+            (Action)(() => { }),
+            (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
+            isAccentColorRestartPending,
         ]));
     }
 

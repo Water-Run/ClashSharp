@@ -38,6 +38,30 @@ internal interface IShellLocalization
     string GetString(string key);
 }
 
+/// <summary>Restart-required state contract used by the shell navigation label.</summary>
+internal interface IShellRestartState
+{
+    /// <summary>Occurs when restart-required state changes.</summary>
+    event EventHandler? RestartPendingChanged;
+
+    /// <summary>Gets whether any current setting requires restarting Clash# to apply.</summary>
+    bool IsRestartPending { get; }
+}
+
+/// <summary>Empty restart state source used by tests and unsupported shells.</summary>
+internal sealed class NoShellRestartState : IShellRestartState
+{
+    public static NoShellRestartState Instance { get; } = new();
+
+    public event EventHandler? RestartPendingChanged
+    {
+        add { }
+        remove { }
+    }
+
+    public bool IsRestartPending => false;
+}
+
 /// <summary>Adapts <see cref="LocalizationService"/> to shell-localization needs.</summary>
 /// <remarks>
 /// Invariants: Wraps a non-null localization service for the adapter lifetime.
@@ -90,6 +114,9 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Localization provider used by navigation labels.</summary>
     private readonly IShellLocalization _localization;
 
+    /// <summary>Restart-required state source used by the settings navigation marker.</summary>
+    private readonly IShellRestartState _restartState;
+
     /// <summary>Navigation tag to page-type mapping.</summary>
     private readonly IReadOnlyDictionary<string, Type> _pageTypes;
 
@@ -124,11 +151,16 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// <param name="localization">Localization provider. Must not be null.</param>
     /// <param name="pageTypes">Navigation tag to page-type mapping. Must not be null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="localization"/> or <paramref name="pageTypes"/> is null.</exception>
-    public MainWindowViewModel(IShellLocalization localization, IReadOnlyDictionary<string, Type> pageTypes)
+    public MainWindowViewModel(
+        IShellLocalization localization,
+        IReadOnlyDictionary<string, Type> pageTypes,
+        IShellRestartState? restartState = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _pageTypes = pageTypes ?? throw new ArgumentNullException(nameof(pageTypes));
+        _restartState = restartState ?? NoShellRestartState.Instance;
         _localization.LanguageChanged += OnLanguageChanged;
+        _restartState.RestartPendingChanged += OnRestartPendingChanged;
         RefreshLocalizedText();
     }
 
@@ -218,6 +250,7 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _localization.LanguageChanged -= OnLanguageChanged;
+        _restartState.RestartPendingChanged -= OnRestartPendingChanged;
     }
 
     /// <summary>Refreshes all localized navigation labels.</summary>
@@ -231,7 +264,9 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         RulesText = _localization.GetString("Nav.Rules");
         StatisticsText = _localization.GetString("Nav.Statistics");
         AboutText = _localization.GetString("Nav.About");
-        SettingsText = _localization.GetString("Nav.Settings");
+        SettingsText = _restartState.IsRestartPending
+            ? $"{_localization.GetString("Nav.Settings")}*"
+            : _localization.GetString("Nav.Settings");
     }
 
     /// <summary>Handles localization changes by refreshing navigation labels.</summary>
@@ -240,5 +275,13 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
         RefreshLocalizedText();
+    }
+
+    /// <summary>Handles restart marker changes by refreshing the settings navigation label.</summary>
+    private void OnRestartPendingChanged(object? sender, EventArgs e)
+    {
+        SettingsText = _restartState.IsRestartPending
+            ? $"{_localization.GetString("Nav.Settings")}*"
+            : _localization.GetString("Nav.Settings");
     }
 }

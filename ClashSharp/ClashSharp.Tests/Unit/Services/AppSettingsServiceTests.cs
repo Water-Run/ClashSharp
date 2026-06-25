@@ -114,6 +114,15 @@ public sealed class AppSettingsServiceTests
         Assert.False(AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled);
     }
 
+    /// <summary>Verifies the built-in mainland China display defaults to flag replacement plus text completion.</summary>
+    [Fact]
+    public void MainlandChinaFeatureMode_DefaultsToFlagReplacementAndTextCompletion()
+    {
+        ResetSettings();
+
+        Assert.Equal(MainlandChinaFeatureMode.FlagReplacementAndTextCompletion, AppSettingsService.Instance.MainlandChinaFeatureMode);
+    }
+
     /// <summary>Verifies reset clears persisted overrides back to their default values.</summary>
     [Fact]
     public void ResetAllSettings_RestoresDefaults()
@@ -135,6 +144,7 @@ public sealed class AppSettingsServiceTests
         Assert.Equal(10000, AppSettingsService.Instance.MixedPort);
         Assert.Equal("https://www.google.com/generate_204", AppSettingsService.Instance.ConnectionTestUrl);
         Assert.False(AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled);
+        Assert.Equal(MainlandChinaFeatureMode.FlagReplacementAndTextCompletion, AppSettingsService.Instance.MainlandChinaFeatureMode);
         Assert.Equal(AppLanguage.AutoDetect, AppSettingsService.Instance.DisplayLanguage);
         Assert.Equal(AppThemeMode.FollowSystem, AppSettingsService.Instance.AppThemeMode);
         Assert.Equal("FollowSystem", ReadAppAccentColorModeName());

@@ -33,6 +33,25 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Settings", viewModel.SettingsText);
     }
 
+    /// <summary>Verifies restart-pending settings add and remove the shell settings marker dynamically.</summary>
+    [Fact]
+    public void RestartPendingChanged_UpdatesSettingsNavigationMarker()
+    {
+        FakeShellLocalization localization = new();
+        FakeShellRestartState restartState = new() { IsRestartPending = true };
+        MainWindowViewModel viewModel = new(localization, CreatePageMap(), restartState);
+        List<string?> changedProperties = [];
+        viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        Assert.Equal("Settings*", viewModel.SettingsText);
+
+        restartState.IsRestartPending = false;
+        restartState.RaiseRestartPendingChanged();
+
+        Assert.Equal("Settings", viewModel.SettingsText);
+        Assert.Contains(nameof(MainWindowViewModel.SettingsText), changedProperties);
+    }
+
     /// <summary>Verifies language change notifications refresh labels and raise property changes.</summary>
     [Fact]
     public void LanguageChanged_RefreshesNavigationLabels()
@@ -116,6 +135,19 @@ public sealed class MainWindowViewModelTests
         public void RaiseLanguageChanged()
         {
             LanguageChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Fake restart-pending state source for shell tests.</summary>
+    private sealed class FakeShellRestartState : IShellRestartState
+    {
+        public event EventHandler? RestartPendingChanged;
+
+        public bool IsRestartPending { get; set; }
+
+        public void RaiseRestartPendingChanged()
+        {
+            RestartPendingChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

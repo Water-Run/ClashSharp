@@ -285,6 +285,18 @@ internal sealed class SettingsViewModel : ObservableObject
     private const string DefaultConnectionTestProxyUrl2 = "https://github.com";
     private const string DefaultConnectionTestDirectUrl = "https://www.baidu.com";
 
+    private static readonly (string ResourceKey, string[] Hosts)[] KnownConnectionTestUrlHosts =
+    [
+        ("Settings.ConnectionTestUrl.Provider.Google", ["google.com"]),
+        ("Settings.ConnectionTestUrl.Provider.GitHub", ["github.com"]),
+        ("Settings.ConnectionTestUrl.Provider.Baidu", ["baidu.com"]),
+        ("Settings.ConnectionTestUrl.Provider.Bilibili", ["bilibili.com", "b23.tv"]),
+        ("Settings.ConnectionTestUrl.Provider.Zhihu", ["zhihu.com"]),
+        ("Settings.ConnectionTestUrl.Provider.YouTube", ["youtube.com", "youtu.be"]),
+        ("Settings.ConnectionTestUrl.Provider.ChatGPT", ["chatgpt.com", "chat.openai.com"]),
+        ("Settings.ConnectionTestUrl.Provider.OpenAI", ["openai.com", "platform.openai.com", "api.openai.com"]),
+    ];
+
     /// <summary>Persistent settings store used by this view model.</summary>
     private readonly ISettingsStore _settings;
 
@@ -318,6 +330,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Startup conflict checker.</summary>
     private readonly Func<int, IReadOnlyList<StartupConflictIssue>> _checkStartupConflicts;
+
+    /// <summary>Compares desired accent color settings against the currently applied app accent state.</summary>
+    private readonly Func<AppAccentColorMode, string, bool> _isAccentColorRestartPending;
 
     /// <summary>Diagnostics command router used by Windows-native diagnostic buttons.</summary>
     private readonly SettingsDiagnosticsViewModel? _diagnosticsViewModel;
@@ -414,7 +429,8 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<Uri, CancellationToken, Task<int>>? testConnectionAsync = null,
         Action? resetAllSettings = null,
         Action? clearAllData = null,
-        Func<int, IReadOnlyList<StartupConflictIssue>>? checkStartupConflicts = null)
+        Func<int, IReadOnlyList<StartupConflictIssue>>? checkStartupConflicts = null,
+        Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
@@ -427,6 +443,7 @@ internal sealed class SettingsViewModel : ObservableObject
         _resetAllSettings = resetAllSettings ?? (() => { });
         _clearAllData = clearAllData ?? (() => { });
         _checkStartupConflicts = checkStartupConflicts ?? (_ => []);
+        _isAccentColorRestartPending = isAccentColorRestartPending ?? IsAccentColorChangedSinceLoad;
         _diagnosticsViewModel = diagnosticsViewModel;
         _mihomoServiceController = mihomoServiceController ?? AlwaysAvailableMihomoServiceController.Instance;
         WindowsDiagnosticCommand = new AsyncRelayCommand(ExecuteWindowsDiagnosticCommandAsync);
@@ -507,6 +524,8 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string CheckStartupConflictsDescriptionText => _getString("Settings.CheckStartupConflicts.Description");
 
+    public string CheckStartupConflictsNowText => _getString("Settings.CheckStartupConflicts.Now");
+
     public string StartupGuideTitleText => _getString("Settings.StartupGuide.Title");
 
     public string StartupGuideDescriptionText => _getString("Settings.StartupGuide.Description");
@@ -555,11 +574,13 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string ConnectionTestDirectUrlTitleText => _getString("Settings.ConnectionTestUrl.Direct");
 
-    public string ConnectionTestUrlSummaryText => string.Join(
-        " | ",
-        ConnectionTestProxyUrl1,
-        ConnectionTestProxyUrl2,
-        ConnectionTestDirectUrl);
+    public string ConnectionTestUrlSummaryText => IsDefaultConnectionTestUrls()
+        ? _getString("Settings.ConnectionTestUrl.Summary.Default")
+        : string.Join(
+            " | ",
+            FormatConnectionTestUrlSummaryPart(ConnectionTestProxyUrl1),
+            FormatConnectionTestUrlSummaryPart(ConnectionTestProxyUrl2),
+            FormatConnectionTestUrlSummaryPart(ConnectionTestDirectUrl));
 
     public bool IsConnectionTestRunning
     {
@@ -729,6 +750,8 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string MainlandChinaUnfriendlyListDescriptionText => _getString("Settings.MainlandChinaUnfriendlyList.Description");
 
+    public string ShowMainlandChinaBlacklistText => _getString("Settings.MainlandChina.ShowBlacklist");
+
     public string DataSectionTitleText => _getString("Settings.Section.Data");
 
     public string DataPackageTitleText => _getString("Settings.DataPackage.Title");
@@ -739,13 +762,13 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string DataPackageScopeSettingsAndProxyConfigurationText => _getString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration");
 
-    public string DataPackageScopeAllIncludingLogsText => _getString("Settings.DataPackage.Scope.AllIncludingLogs");
+    public string DataPackageScopeAllText => _getString("Settings.DataPackage.Scope.All");
 
     public IReadOnlyList<string> DataPackageScopeOptions =>
     [
         DataPackageScopeSettingsText,
         DataPackageScopeSettingsAndProxyConfigurationText,
-        DataPackageScopeAllIncludingLogsText,
+        DataPackageScopeAllText,
     ];
 
     public ClashDataPackageScope SelectedDataPackageScope => (ClashDataPackageScope)DataPackageScopeIndex;
@@ -939,11 +962,11 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public bool IsCustomAccentColorSelected => AppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom;
 
-    public bool IsAppAccentColorRestartPending =>
-        AppAccentColorMode != _loadedAppAccentColorMode
-        || (AppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom
-            && _loadedAppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom
-            && !StringComparer.OrdinalIgnoreCase.Equals(AppAccentColorValue, _loadedAppAccentColorValue));
+    public bool IsAppAccentColorRestartPending => _isAccentColorRestartPending(AppAccentColorMode, AppAccentColorValue);
+
+    public bool HasRestartRequiredSettings => IsAppAccentColorRestartPending;
+
+    public string RestartRequiredNoticeText => _getString("Settings.RestartRequiredNotice");
 
     public bool LaunchAtStartupEnabled
     {
@@ -1207,6 +1230,11 @@ internal sealed class SettingsViewModel : ObservableObject
             }
         }
 
+        if (DisplayLanguage == language && _settings.DisplayLanguage == language)
+        {
+            return false;
+        }
+
         _settings.DisplayLanguage = language;
         DisplayLanguage = language;
         _applyLanguage(language);
@@ -1275,7 +1303,45 @@ internal sealed class SettingsViewModel : ObservableObject
     private void RaiseAppAccentColorRestartStateChanged()
     {
         OnPropertyChanged(nameof(IsAppAccentColorRestartPending));
+        OnPropertyChanged(nameof(HasRestartRequiredSettings));
         OnPropertyChanged(nameof(AppAccentColorTitleText));
+        OnPropertyChanged(nameof(RestartRequiredNoticeText));
+    }
+
+    /// <summary>Compares accent settings against the load-time fallback baseline.</summary>
+    private bool IsAccentColorChangedSinceLoad(AppAccentColorMode mode, string colorValue)
+    {
+        return mode != _loadedAppAccentColorMode
+            || (mode == ClashSharp.Model.AppAccentColorMode.Custom
+                && _loadedAppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom
+                && !StringComparer.OrdinalIgnoreCase.Equals(colorValue, _loadedAppAccentColorValue));
+    }
+
+    /// <summary>Refreshes selector bindings after reset or language changes.</summary>
+    private void RaiseSelectorBindingsChanged()
+    {
+        string[] propertyNames =
+        [
+            nameof(DisplayLanguageOptions),
+            nameof(DisplayLanguageIndex),
+            nameof(AppThemeModeOptions),
+            nameof(AppThemeModeIndex),
+            nameof(AppAccentColorModeOptions),
+            nameof(AppAccentColorModeIndex),
+            nameof(StartupBehaviorModeOptions),
+            nameof(StartupBehaviorModeIndex),
+            nameof(ProxyRecoveryModeOptions),
+            nameof(ProxyRecoveryModeIndex),
+            nameof(MainlandChinaFeatureModeOptions),
+            nameof(MainlandChinaFeatureModeIndex),
+            nameof(DataPackageScopeOptions),
+            nameof(DataPackageScopeIndex),
+        ];
+
+        foreach (string propertyName in propertyNames)
+        {
+            OnPropertyChanged(propertyName);
+        }
     }
 
     /// <summary>Raises property changes for all localized bindable text properties.</summary>
@@ -1306,6 +1372,7 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(StartupSectionTitleText),
             nameof(CheckStartupConflictsTitleText),
             nameof(CheckStartupConflictsDescriptionText),
+            nameof(CheckStartupConflictsNowText),
             nameof(StartupGuideTitleText),
             nameof(StartupGuideDescriptionText),
             nameof(StartupGuideShowNowText),
@@ -1391,12 +1458,13 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(MainlandChinaUrlBlockingDescriptionText),
             nameof(MainlandChinaUnfriendlyListTitleText),
             nameof(MainlandChinaUnfriendlyListDescriptionText),
+            nameof(ShowMainlandChinaBlacklistText),
             nameof(DataSectionTitleText),
             nameof(DataPackageTitleText),
             nameof(DataPackageDescriptionText),
             nameof(DataPackageScopeSettingsText),
             nameof(DataPackageScopeSettingsAndProxyConfigurationText),
-            nameof(DataPackageScopeAllIncludingLogsText),
+            nameof(DataPackageScopeAllText),
             nameof(DataPackageScopeOptions),
             nameof(ResetAllSettingsTitleText),
             nameof(ResetAllSettingsDescriptionText),
@@ -1752,6 +1820,51 @@ internal sealed class SettingsViewModel : ObservableObject
         ConnectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
     }
 
+    private bool IsDefaultConnectionTestUrls()
+    {
+        return IsSameUrl(ConnectionTestProxyUrl1, DefaultConnectionTestProxyUrl1)
+            && IsSameUrl(ConnectionTestProxyUrl2, DefaultConnectionTestProxyUrl2)
+            && IsSameUrl(ConnectionTestDirectUrl, DefaultConnectionTestDirectUrl);
+    }
+
+    private string FormatConnectionTestUrlSummaryPart(string url)
+    {
+        string host = ExtractNormalizedHost(url);
+        foreach ((string resourceKey, string[] hosts) in KnownConnectionTestUrlHosts)
+        {
+            foreach (string knownHost in hosts)
+            {
+                if (host.Equals(knownHost, StringComparison.OrdinalIgnoreCase)
+                    || host.EndsWith($".{knownHost}", StringComparison.OrdinalIgnoreCase))
+                {
+                    return _getString(resourceKey);
+                }
+            }
+        }
+
+        return _getString("Settings.ConnectionTestUrl.Provider.Custom");
+    }
+
+    private static bool IsSameUrl(string left, string right)
+    {
+        return TryNormalizeConnectionTestUrl(left, out string normalizedLeft)
+            && TryNormalizeConnectionTestUrl(right, out string normalizedRight)
+            && StringComparer.OrdinalIgnoreCase.Equals(normalizedLeft, normalizedRight);
+    }
+
+    private static string ExtractNormalizedHost(string value)
+    {
+        if (!TryNormalizeConnectionTestUrl(value, out string normalizedUrl)
+            || !Uri.TryCreate(normalizedUrl, UriKind.Absolute, out Uri? uri))
+        {
+            return string.Empty;
+        }
+
+        return uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+            ? uri.Host[4..]
+            : uri.Host;
+    }
+
     private static bool TryNormalizeConnectionTestUrl(string value, out string normalizedUrl)
     {
         normalizedUrl = string.Empty;
@@ -1831,6 +1944,7 @@ internal sealed class SettingsViewModel : ObservableObject
         AppAccentColorValue = _settings.AppAccentColorValue;
 
         RaiseLocalizedTextChanges();
+        RaiseSelectorBindingsChanged();
         RefreshProxyInformation();
         ResetDiagnosticStatusText();
     }
@@ -1850,6 +1964,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
         _settings.StartupBehaviorMode = StartupBehaviorMode.LastSetting;
         StartupBehaviorMode = StartupBehaviorMode.LastSetting;
+        RaiseSelectorBindingsChanged();
     }
 
     /// <summary>Restores transparent proxy settings to defaults.</summary>
@@ -1893,16 +2008,18 @@ internal sealed class SettingsViewModel : ObservableObject
 
         _settings.ProxyRecoveryMode = ProxyRecoveryMode.DisableProxy;
         ProxyRecoveryMode = ProxyRecoveryMode.DisableProxy;
+        RaiseSelectorBindingsChanged();
     }
 
     /// <summary>Restores mainland China feature settings to defaults.</summary>
     public void ResetMainlandChinaSettingsToDefaults()
     {
-        _settings.MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
-        MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
+        _settings.MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
+        MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
 
         _settings.MainlandChinaUrlBlockingEnabled = false;
         SetProperty(ref _mainlandChinaUrlBlockingEnabled, false, nameof(MainlandChinaUrlBlockingEnabled));
+        RaiseSelectorBindingsChanged();
     }
 
     /// <summary>Resets all persisted settings through the injected maintenance action and reloads the view model.</summary>
@@ -1931,6 +2048,7 @@ internal sealed class SettingsViewModel : ObservableObject
         _applyLanguage(_settings.DisplayLanguage);
         Load();
         RaiseLocalizedTextChanges();
+        RaiseSelectorBindingsChanged();
         ResetDiagnosticStatusText();
     }
 

@@ -103,12 +103,21 @@ public sealed class MasterControlViewModelTests
             TransparentProxyEnabled = true,
             MixedPort = 12000,
             ConnectionTestProxyUrl1 = "https://google.com",
+            ConnectionTestProxyUrl2 = "https://github.com",
+            ConnectionTestDirectUrl = "https://baidu.com",
         };
 
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
 
-        Assert.Equal(9, viewModel.InfoTiles.Count);
+        Assert.True(viewModel.InfoTiles.Count >= 13);
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "edit-tiles" && tile.TileCommand is not null);
+        Assert.Equal("edit-tiles", viewModel.InfoTiles[0].Id);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "transparent-proxy" && tile.IsToggleVisible && tile.IsToggleOn);
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-1" && tile.Value == "google.com");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-2" && tile.Value == "github.com");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-direct-url" && tile.Value == "baidu.com");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-prompt" && tile.TileCommand is not null);
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-conflicts" && tile.TileCommand is not null);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-launch" && tile.Value == "On");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "active-profile" && tile.Value == "profile-a");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mixed-port" && tile.Value == "12000");
@@ -122,11 +131,29 @@ public sealed class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
         MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "transparent-proxy");
 
-        tile.ToggleCommand.Execute(null);
+        tile.TileCommand?.Execute(null);
 
         Assert.False(settings.TransparentProxyEnabled);
         Assert.False(tile.IsToggleOn);
         Assert.Equal("Off", viewModel.TransparentProxyStatusText);
+    }
+
+    /// <summary>Verifies functional tiles request page-level actions without directly owning dialogs.</summary>
+    [Fact]
+    public void FunctionalTileCommands_RequestPageActions()
+    {
+        MasterControlViewModel viewModel = CreateViewModel();
+        List<MasterControlTileAction> actions = [];
+        viewModel.TileActionRequested += (_, action) => actions.Add(action);
+
+        viewModel.InfoTiles.Single(tile => tile.Id == "edit-tiles").TileCommand?.Execute(null);
+        viewModel.InfoTiles.Single(tile => tile.Id == "startup-prompt").TileCommand?.Execute(null);
+        viewModel.InfoTiles.Single(tile => tile.Id == "startup-conflicts").TileCommand?.Execute(null);
+        viewModel.InfoTiles.Single(tile => tile.Id == "latency").TileCommand?.Execute(null);
+
+        Assert.Equal(
+            [MasterControlTileAction.EditInfoTiles, MasterControlTileAction.ShowStartupPrompt, MasterControlTileAction.CheckStartupConflicts, MasterControlTileAction.RunLatencyTest],
+            actions);
     }
 
     /// <summary>Creates a master control view model with fake dependencies.</summary>
@@ -190,9 +217,21 @@ public sealed class MasterControlViewModelTests
                 "Master.Tile.ActiveProfile" => "Active profile",
                 "Master.Tile.MixedPort" => "Mixed port",
                 "Master.Tile.ConnectionTest" => "Connection test",
+                "Master.Tile.ConnectionTestProxyUrl1" => "Test URL 1",
+                "Master.Tile.ConnectionTestProxyUrl2" => "Test URL 2",
+                "Master.Tile.ConnectionTestDirectUrl" => "Direct URL",
+                "Master.Tile.StartupPrompt" => "Startup prompt",
+                "Master.Tile.StartupConflicts" => "Startup conflicts",
+                "Master.Tile.Type.Controllable" => "Controllable",
+                "Master.Tile.Type.Information" => "Information",
+                "Master.Tile.Type.Action" => "Action",
+                "Master.Tile.Type.Navigation" => "Navigation",
                 "Master.Tile.Backup" => "Backup",
                 "Master.Tile.Visible" => "Visible",
                 "Master.Tile.Edit" => "Edit tiles",
+                "Master.Tile.EditTiles" => "Edit tiles",
+                "Settings.StartupGuide.ShowNow" => "Show now",
+                "Settings.CheckStartupConflicts.Now" => "Check now",
                 "Master.Status.CurrentNodeUnavailable" => "No node",
                 "Master.Status.LatencyUnavailable" => "Not tested",
                 "Master.Status.Latency.Format" => "{0} ms",
@@ -269,6 +308,10 @@ public sealed class MasterControlViewModelTests
         public int MixedPort { get; set; } = 10000;
 
         public string ConnectionTestProxyUrl1 { get; set; } = "https://www.google.com";
+
+        public string ConnectionTestProxyUrl2 { get; set; } = "https://github.com";
+
+        public string ConnectionTestDirectUrl { get; set; } = "https://www.baidu.com";
     }
 
     /// <summary>Fake takeover service for master-control tests.</summary>

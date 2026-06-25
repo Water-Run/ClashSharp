@@ -20,6 +20,16 @@
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="SettingsContentPanel" Spacing="6" HorizontalAlignment="Stretch">
+            <TextBlock
+                x:Name="SettingsRestartRequiredNoticeText"
+                Text="{Binding RestartRequiredNoticeText}"
+                Style="{ThemeResource CaptionTextBlockStyle}"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                FontWeight="SemiBold"
+                HorizontalAlignment="Right"
+                TextWrapping="Wrap"
+                Visibility="{Binding HasRestartRequiredSettings, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
             <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
             <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                 <components:SettingRow.ActionContent>
@@ -59,32 +69,7 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="StartupRestoreFallbackRow" Title="{Binding StartupRestoreFallbackTitleText}" Description="{Binding StartupRestoreFallbackDescriptionText}">
-                <components:SettingRow.ActionContent>
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding StartupRestoreFallbackStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" TextWrapping="NoWrap" />
-                        <Button x:Name="RegisterStartupRestoreFallbackButton" Click="RegisterStartupRestoreFallbackButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE8FB;" FontSize="14" />
-                                <TextBlock Text="{Binding RegisterText}" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="DetectStartupRestoreFallbackButton" Click="DetectStartupRestoreFallbackButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE9D9;" FontSize="14" />
-                                <TextBlock Text="{Binding DetectText}" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="UninstallStartupRestoreFallbackButton" Click="UninstallStartupRestoreFallbackButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                                <TextBlock Text="{Binding UninstallMihomoServiceText}" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                </components:SettingRow.ActionContent>
-            </components:SettingRow>
-            <HyperlinkButton x:Name="ResetBasicSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetBasicSettingsButton_Click" />
+            <HyperlinkButton x:Name="ResetBasicSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetBasicSettingsButton_Click" />
 
             <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="LaunchAtStartupRow" Title="{Binding LaunchAtStartupTitleText}" Description="{Binding LaunchAtStartupDescriptionText}">
@@ -93,20 +78,17 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="CheckStartupConflictsRow" Title="{Binding CheckStartupConflictsTitleText}" Description="{Binding CheckStartupConflictsDescriptionText}">
-                <components:SettingRow.ActionContent>
-                    <Button x:Name="CheckStartupConflictsButton" Click="CheckStartupConflictsButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE9D9;" FontSize="14" />
-                            <TextBlock Text="{Binding CheckText}" />
-                        </StackPanel>
-                    </Button>
-                </components:SettingRow.ActionContent>
-            </components:SettingRow>
-
             <components:SettingRow x:Name="StartupConflictCheckRow" Title="{Binding StartupConflictCheckTitleText}" Description="{Binding StartupConflictCheckDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="StartupConflictCheckToggle" MinWidth="0" IsOn="{Binding StartupConflictCheckEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ToggleSwitch x:Name="StartupConflictCheckToggle" MinWidth="0" IsOn="{Binding StartupConflictCheckEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                        <Button x:Name="CheckStartupConflictsButton" Click="CheckStartupConflictsButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                                <TextBlock Text="{Binding CheckStartupConflictsNowText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -129,7 +111,7 @@
                     <ComboBox x:Name="StartupBehaviorModeBox" Width="180" ItemsSource="{Binding StartupBehaviorModeOptions}" SelectedIndex="{Binding StartupBehaviorModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
-            <HyperlinkButton x:Name="ResetStartupSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetStartupSettingsButton_Click" />
+            <HyperlinkButton x:Name="ResetStartupSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetStartupSettingsButton_Click" />
 
             <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
@@ -195,10 +177,36 @@
                     <NumberBox x:Name="ConnectionSamplingIntervalBox" Width="140" Minimum="5" Maximum="3600" Value="{Binding ConnectionSamplingIntervalSecondsValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
-            <HyperlinkButton x:Name="ResetProxySettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetProxySettingsButton_Click" />
+            <HyperlinkButton x:Name="ResetProxySettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetProxySettingsButton_Click" />
 
             <TextBlock x:Name="WindowsNativeSectionTitleText" Text="{Binding WindowsNativeSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
-            <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
+            <components:SettingRow x:Name="StartupRestoreFallbackRow" Title="{Binding StartupRestoreFallbackTitleText}" Description="{Binding StartupRestoreFallbackDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding StartupRestoreFallbackStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" TextWrapping="NoWrap" />
+                        <Button x:Name="RegisterStartupRestoreFallbackButton" Click="RegisterStartupRestoreFallbackButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8FB;" FontSize="14" />
+                                <TextBlock Text="{Binding RegisterText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="DetectStartupRestoreFallbackButton" Click="DetectStartupRestoreFallbackButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                                <TextBlock Text="{Binding DetectText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="UninstallStartupRestoreFallbackButton" Click="UninstallStartupRestoreFallbackButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                <TextBlock Text="{Binding UninstallMihomoServiceText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <Grid x:Name="WindowsNativeRepairCard" Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -232,7 +240,7 @@
                     <ComboBox x:Name="ProxyRecoveryModeBox" Width="180" ItemsSource="{Binding ProxyRecoveryModeOptions}" SelectedIndex="{Binding ProxyRecoveryModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
-            <HyperlinkButton x:Name="ResetWindowsNativeSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetWindowsNativeSettingsButton_Click" />
+            <HyperlinkButton x:Name="ResetWindowsNativeSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetWindowsNativeSettingsButton_Click" />
 
             <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="MainlandChinaDisplayRow" Title="{Binding MainlandChinaDisplayTitleText}" Description="{Binding MainlandChinaDisplayDescriptionText}">
@@ -248,13 +256,13 @@
                         <Button x:Name="ShowMainlandChinaUnfriendlyListButton" Click="ShowMainlandChinaUnfriendlyListButton_Click">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE8FD;" FontSize="14" />
-                                <TextBlock Text="{Binding OpenText}" />
+                                <TextBlock Text="{Binding ShowMainlandChinaBlacklistText}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
-            <HyperlinkButton x:Name="ResetMainlandChinaSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetMainlandChinaSettingsButton_Click" />
+            <HyperlinkButton x:Name="ResetMainlandChinaSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetMainlandChinaSettingsButton_Click" />
 
             <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="DataPackageRow" Title="{Binding DataPackageTitleText}" Description="{Binding DataPackageDescriptionText}">

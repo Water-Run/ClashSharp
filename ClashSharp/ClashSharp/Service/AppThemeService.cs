@@ -19,6 +19,12 @@ namespace ClashSharp.Service;
 /// <summary>Applies the configured app display style to the active window.</summary>
 internal static class AppThemeService
 {
+    private const string DefaultAccentColorValue = "#FF0078D4";
+
+    private static AppAccentColorMode _appliedAccentColorMode = AppAccentColorMode.FollowSystem;
+
+    private static string _appliedAccentColorValue = DefaultAccentColorValue;
+
     /// <summary>Application resource keys overridden for custom accent colors.</summary>
     private static readonly string[] AccentColorResourceKeys =
     [
@@ -46,10 +52,35 @@ internal static class AppThemeService
         "AccentButtonBackgroundPointerOver",
         "AccentButtonBackgroundPressed",
         "AccentButtonBackgroundDisabled",
+        "AccentButtonBorderBrush",
+        "AccentButtonBorderBrushPointerOver",
+        "AccentButtonBorderBrushPressed",
+        "AccentButtonBorderBrushDisabled",
         "AccentButtonForeground",
         "AccentButtonForegroundPointerOver",
         "AccentButtonForegroundPressed",
         "AccentButtonForegroundDisabled",
+        "SystemControlBackgroundAccentBrush",
+        "SystemControlDisabledAccentBrush",
+        "SystemControlForegroundAccentBrush",
+        "SystemControlHighlightAccentBrush",
+        "SystemControlHighlightAltAccentBrush",
+        "SystemControlHyperlinkTextBrush",
+        "ToggleSwitchFillOn",
+        "ToggleSwitchFillOnPointerOver",
+        "ToggleSwitchFillOnPressed",
+        "ToggleSwitchFillOnDisabled",
+        "ToggleSwitchStrokeOn",
+        "ToggleSwitchStrokeOnPointerOver",
+        "ToggleSwitchStrokeOnPressed",
+        "ToggleSwitchStrokeOnDisabled",
+        "ToggleButtonBackgroundChecked",
+        "ToggleButtonBackgroundCheckedPointerOver",
+        "ToggleButtonBackgroundCheckedPressed",
+        "ToggleButtonForegroundChecked",
+        "ToggleButtonForegroundCheckedPointerOver",
+        "ToggleButtonForegroundCheckedPressed",
+        "TextOnAccentFillColorPrimaryBrush",
     ];
 
     /// <summary>Applies <paramref name="mode"/> to the main window root when available.</summary>
@@ -79,6 +110,9 @@ internal static class AppThemeService
     /// <param name="colorValue">Custom accent color in #AARRGGBB format.</param>
     public static void ApplyAccentColor(AppAccentColorMode mode, string colorValue)
     {
+        _appliedAccentColorMode = mode;
+        _appliedAccentColorValue = NormalizeAccentColorValue(colorValue);
+
         if (Application.Current is null)
         {
             return;
@@ -100,13 +134,19 @@ internal static class AppThemeService
             return;
         }
 
-        Color accentColor = ParseAccentColorOrDefault(colorValue);
+        Color accentColor = ParseAccentColorOrDefault(_appliedAccentColorValue);
         Color light1 = Blend(accentColor, Colors.White, 0.30);
         Color light2 = Blend(accentColor, Colors.White, 0.50);
         Color light3 = Blend(accentColor, Colors.White, 0.70);
         Color dark1 = Blend(accentColor, Colors.Black, 0.25);
         Color dark2 = Blend(accentColor, Colors.Black, 0.45);
         Color dark3 = Blend(accentColor, Colors.Black, 0.65);
+        SolidColorBrush accentBrush = new(accentColor);
+        SolidColorBrush light1Brush = new(light1);
+        SolidColorBrush light2Brush = new(light2);
+        SolidColorBrush disabledAccentBrush = new(Color.FromArgb(0x5C, accentColor.R, accentColor.G, accentColor.B));
+        SolidColorBrush whiteBrush = new(Colors.White);
+        SolidColorBrush transparentBrush = new(Colors.Transparent);
 
         resources["SystemAccentColor"] = accentColor;
         resources["SystemAccentColorLight1"] = light1;
@@ -116,22 +156,55 @@ internal static class AppThemeService
         resources["SystemAccentColorDark2"] = dark2;
         resources["SystemAccentColorDark3"] = dark3;
 
-        resources["AccentFillColorDefaultBrush"] = new SolidColorBrush(accentColor);
-        resources["AccentFillColorSecondaryBrush"] = new SolidColorBrush(light1);
-        resources["AccentFillColorTertiaryBrush"] = new SolidColorBrush(light2);
-        resources["AccentFillColorDisabledBrush"] = new SolidColorBrush(Color.FromArgb(0x5C, accentColor.R, accentColor.G, accentColor.B));
-        resources["AccentTextFillColorPrimaryBrush"] = new SolidColorBrush(Colors.White);
-        resources["AccentTextFillColorSecondaryBrush"] = new SolidColorBrush(Colors.White);
+        resources["AccentFillColorDefaultBrush"] = accentBrush;
+        resources["AccentFillColorSecondaryBrush"] = light1Brush;
+        resources["AccentFillColorTertiaryBrush"] = light2Brush;
+        resources["AccentFillColorDisabledBrush"] = disabledAccentBrush;
+        resources["AccentTextFillColorPrimaryBrush"] = whiteBrush;
+        resources["AccentTextFillColorSecondaryBrush"] = whiteBrush;
         resources["AccentTextFillColorTertiaryBrush"] = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
         resources["AccentTextFillColorDisabledBrush"] = new SolidColorBrush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
-        resources["AccentButtonBackground"] = new SolidColorBrush(accentColor);
-        resources["AccentButtonBackgroundPointerOver"] = new SolidColorBrush(light1);
+        resources["AccentButtonBackground"] = accentBrush;
+        resources["AccentButtonBackgroundPointerOver"] = light1Brush;
         resources["AccentButtonBackgroundPressed"] = new SolidColorBrush(dark1);
-        resources["AccentButtonBackgroundDisabled"] = new SolidColorBrush(Color.FromArgb(0x5C, accentColor.R, accentColor.G, accentColor.B));
-        resources["AccentButtonForeground"] = new SolidColorBrush(Colors.White);
-        resources["AccentButtonForegroundPointerOver"] = new SolidColorBrush(Colors.White);
-        resources["AccentButtonForegroundPressed"] = new SolidColorBrush(Colors.White);
+        resources["AccentButtonBackgroundDisabled"] = disabledAccentBrush;
+        resources["AccentButtonBorderBrush"] = transparentBrush;
+        resources["AccentButtonBorderBrushPointerOver"] = transparentBrush;
+        resources["AccentButtonBorderBrushPressed"] = transparentBrush;
+        resources["AccentButtonBorderBrushDisabled"] = transparentBrush;
+        resources["AccentButtonForeground"] = whiteBrush;
+        resources["AccentButtonForegroundPointerOver"] = whiteBrush;
+        resources["AccentButtonForegroundPressed"] = whiteBrush;
         resources["AccentButtonForegroundDisabled"] = new SolidColorBrush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
+        resources["SystemControlBackgroundAccentBrush"] = accentBrush;
+        resources["SystemControlDisabledAccentBrush"] = disabledAccentBrush;
+        resources["SystemControlForegroundAccentBrush"] = accentBrush;
+        resources["SystemControlHighlightAccentBrush"] = accentBrush;
+        resources["SystemControlHighlightAltAccentBrush"] = accentBrush;
+        resources["SystemControlHyperlinkTextBrush"] = accentBrush;
+        resources["ToggleSwitchFillOn"] = accentBrush;
+        resources["ToggleSwitchFillOnPointerOver"] = light1Brush;
+        resources["ToggleSwitchFillOnPressed"] = light2Brush;
+        resources["ToggleSwitchFillOnDisabled"] = disabledAccentBrush;
+        resources["ToggleSwitchStrokeOn"] = accentBrush;
+        resources["ToggleSwitchStrokeOnPointerOver"] = light1Brush;
+        resources["ToggleSwitchStrokeOnPressed"] = light2Brush;
+        resources["ToggleSwitchStrokeOnDisabled"] = disabledAccentBrush;
+        resources["ToggleButtonBackgroundChecked"] = accentBrush;
+        resources["ToggleButtonBackgroundCheckedPointerOver"] = light1Brush;
+        resources["ToggleButtonBackgroundCheckedPressed"] = light2Brush;
+        resources["ToggleButtonForegroundChecked"] = whiteBrush;
+        resources["ToggleButtonForegroundCheckedPointerOver"] = whiteBrush;
+        resources["ToggleButtonForegroundCheckedPressed"] = whiteBrush;
+        resources["TextOnAccentFillColorPrimaryBrush"] = whiteBrush;
+    }
+
+    /// <summary>Returns whether requested accent settings differ from the currently applied app resources.</summary>
+    public static bool IsAccentColorRestartPending(AppAccentColorMode mode, string colorValue)
+    {
+        return mode != _appliedAccentColorMode
+            || (mode == AppAccentColorMode.Custom
+                && !StringComparer.OrdinalIgnoreCase.Equals(NormalizeAccentColorValue(colorValue), _appliedAccentColorValue));
     }
 
     /// <summary>Parses an accent color value, returning Windows blue when parsing fails.</summary>
@@ -197,6 +270,12 @@ internal static class AppThemeService
         {
             return false;
         }
+    }
+
+    /// <summary>Normalizes a color value to #AARRGGBB, falling back to Windows blue.</summary>
+    private static string NormalizeAccentColorValue(string value)
+    {
+        return FormatAccentColor(ParseAccentColorOrDefault(value));
     }
 
     /// <summary>Blends <paramref name="source"/> toward <paramref name="target"/>.</summary>
