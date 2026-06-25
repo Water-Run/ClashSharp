@@ -323,6 +323,19 @@ public sealed class LocalizationResourcesTests
         Assert.Equal("Choose custom color", LocalizationResources.Translations[AppLanguage.English]["Settings.AppAccentColor.Pick"]);
     }
 
+    /// <summary>Verifies Simplified Chinese settings copy consistently uses the standard default-value wording.</summary>
+    [Fact]
+    public void Translations_SimplifiedChinese_DoesNotUseLegacyDefaultWording()
+    {
+        string[] legacyValues = LocalizationResources.Translations[AppLanguage.SimplifiedChinese]
+            .Where(pair => pair.Value.Contains("缺省", StringComparison.Ordinal))
+            .Select(pair => $"{pair.Key}={pair.Value}")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(legacyValues);
+    }
+
     /// <summary>Verifies China and mainland China labels remain separate so completion level can choose between them.</summary>
     [Fact]
     public void Translations_ChinaAndMainlandChinaLabels_AreSeparate()

@@ -444,7 +444,7 @@ public sealed partial class Settings : Page
                 Tag = option.Scope,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
-            row.Tapped += (_, _) => SelectDataPackageScopeRow(row, rows);
+            row.SelectionInvoked += (_, _) => SelectDataPackageScopeRow(row, rows);
             rows.Add(row);
             optionPanel.Children.Add(row);
         }

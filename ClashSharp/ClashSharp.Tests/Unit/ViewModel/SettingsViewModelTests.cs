@@ -585,9 +585,9 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Command.Backup", ReadProperty<string>(viewModel, "BackupText"));
     }
 
-    /// <summary>Verifies known connection-test URLs are summarized with localized names and defaults collapse to one label.</summary>
+    /// <summary>Verifies known connection-test URLs are summarized with localized provider names.</summary>
     [Fact]
-    public void ConnectionTestUrlSummary_UsesKnownLocalizedNamesAndDefaultLabel()
+    public void ConnectionTestUrlSummary_UsesKnownLocalizedProviderNames()
     {
         SettingsViewModel defaultViewModel = new(new FakeSettingsStore(), _ => { }, () => { }, key => key);
 

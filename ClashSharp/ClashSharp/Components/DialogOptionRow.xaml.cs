@@ -7,6 +7,7 @@
  * @date: 2026-06-26
  */
 
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -50,6 +51,8 @@ public sealed partial class DialogOptionRow : UserControl
         InitializeComponent();
     }
 
+    public event EventHandler? SelectionInvoked;
+
     public string Title
     {
         get => (string)GetValue(TitleProperty);
@@ -78,5 +81,10 @@ public sealed partial class DialogOptionRow : UserControl
     {
         get => (bool?)GetValue(IsCheckedProperty);
         set => SetValue(IsCheckedProperty, value);
+    }
+
+    private void OptionButton_Click(object sender, RoutedEventArgs e)
+    {
+        SelectionInvoked?.Invoke(this, EventArgs.Empty);
     }
 }

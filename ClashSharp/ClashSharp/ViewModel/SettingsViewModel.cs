@@ -1785,13 +1785,6 @@ internal sealed class SettingsViewModel : ObservableObject
         ConnectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
     }
 
-    private bool IsDefaultConnectionTestUrls()
-    {
-        return IsSameUrl(ConnectionTestProxyUrl1, DefaultConnectionTestProxyUrl1)
-            && IsSameUrl(ConnectionTestProxyUrl2, DefaultConnectionTestProxyUrl2)
-            && IsSameUrl(ConnectionTestDirectUrl, DefaultConnectionTestDirectUrl);
-    }
-
     private string FormatConnectionTestUrlSummaryPart(string url)
     {
         string host = ExtractNormalizedHost(url);
@@ -1808,13 +1801,6 @@ internal sealed class SettingsViewModel : ObservableObject
         }
 
         return _getString("Settings.ConnectionTestUrl.Provider.Custom");
-    }
-
-    private static bool IsSameUrl(string left, string right)
-    {
-        return TryNormalizeConnectionTestUrl(left, out string normalizedLeft)
-            && TryNormalizeConnectionTestUrl(right, out string normalizedRight)
-            && StringComparer.OrdinalIgnoreCase.Equals(normalizedLeft, normalizedRight);
     }
 
     private static string ExtractNormalizedHost(string value)

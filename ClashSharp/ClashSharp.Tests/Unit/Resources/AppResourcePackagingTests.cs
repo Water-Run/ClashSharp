@@ -1259,7 +1259,13 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Class=\"ClashSharp.Components.DialogOptionRow\"", componentXaml, StringComparison.Ordinal);
         Assert.Contains("Title", componentXaml, StringComparison.Ordinal);
         Assert.Contains("Description", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("<ToggleButton", componentXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<CheckBox", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DialogOptionHeadingGrid\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SelectedGlyph\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Column=\"2\"", componentXaml, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("SelectionInvoked += (_, _) => SelectDataPackageScopeRow", settingsCode, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", masterControlCode, StringComparison.Ordinal);
     }
 
