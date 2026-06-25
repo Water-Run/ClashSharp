@@ -8,7 +8,10 @@
  */
 
 using ClashSharp.Model;
+using ClashSharp.Service;
 using ClashSharp.ViewModel;
+using System.Net.Http;
+using System.Reflection;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
 
@@ -54,6 +57,7 @@ public sealed class SettingsViewModelTests
         Assert.True(viewModel.IsCustomAccentColorSelected);
         Assert.True(viewModel.LaunchAtStartupEnabled);
         Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.True(viewModel.CanToggleTransparentProxy);
         Assert.Equal(10990, viewModel.MixedPort);
         Assert.False(viewModel.ConnectionSamplingEnabled);
         Assert.Equal(45, viewModel.ConnectionSamplingIntervalSeconds);
@@ -119,9 +123,9 @@ public sealed class SettingsViewModelTests
         Assert.Contains(nameof(SettingsViewModel.TransparentProxyEnabled), changedProperties);
     }
 
-    /// <summary>Verifies transparent proxy cannot be enabled until the mihomo service is deployed.</summary>
+    /// <summary>Verifies transparent proxy preference can be enabled even before the mihomo service is deployed.</summary>
     [Fact]
-    public void TransparentProxyEnabled_Setter_WhenMihomoServiceMissing_DoesNotEnable()
+    public void TransparentProxyEnabled_Setter_WhenMihomoServiceMissing_PersistsPreference()
     {
         FakeSettingsStore store = new() { TransparentProxyEnabled = false };
         FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"));
@@ -129,9 +133,9 @@ public sealed class SettingsViewModelTests
 
         viewModel.TransparentProxyEnabled = true;
 
-        Assert.False(store.TransparentProxyEnabled);
-        Assert.False(viewModel.TransparentProxyEnabled);
-        Assert.False(viewModel.CanToggleTransparentProxy);
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
+        Assert.True(viewModel.CanToggleTransparentProxy);
         Assert.Equal("Not installed", viewModel.MihomoServiceStatusText);
     }
 
@@ -156,9 +160,9 @@ public sealed class SettingsViewModelTests
         Assert.True(viewModel.TransparentProxyEnabled);
     }
 
-    /// <summary>Verifies uninstalling the mihomo service disables the transparent proxy preference.</summary>
+    /// <summary>Verifies uninstalling the mihomo service preserves the transparent proxy preference.</summary>
     [Fact]
-    public async Task UninstallMihomoServiceAsync_DisablesTransparentProxyPreference()
+    public async Task UninstallMihomoServiceAsync_PreservesTransparentProxyPreference()
     {
         FakeSettingsStore store = new() { TransparentProxyEnabled = true };
         FakeMihomoServiceController service = new(new MihomoServiceStatus(true, true, "Installed"))
@@ -170,10 +174,43 @@ public sealed class SettingsViewModelTests
         await viewModel.UninstallMihomoServiceAsync(CancellationToken.None);
 
         Assert.True(service.UninstallCalled);
-        Assert.False(viewModel.CanToggleTransparentProxy);
-        Assert.False(store.TransparentProxyEnabled);
-        Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.True(viewModel.CanToggleTransparentProxy);
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
         Assert.Equal("Removed", viewModel.MihomoServiceStatusText);
+    }
+
+    /// <summary>Verifies loading settings preserves a stored transparent proxy preference when the service is missing.</summary>
+    [Fact]
+    public void Load_WhenTransparentProxyPreferenceEnabledAndServiceMissing_PreservesPreference()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = true };
+        FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"));
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+
+        viewModel.Load();
+
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
+        Assert.True(viewModel.CanToggleTransparentProxy);
+    }
+
+    /// <summary>Verifies the default mihomo service controller uses injected localization instead of global resources.</summary>
+    [Fact]
+    public async Task AlwaysAvailableMihomoServiceController_UsesInjectedLocalization()
+    {
+        AlwaysAvailableMihomoServiceController controller = new(key => key switch
+        {
+            "MihomoService.Status.Deployed" => "localized deployed",
+            "MihomoService.Status.NotDeployed" => "localized not deployed",
+            _ => key,
+        });
+
+        MihomoServiceStatus status = controller.GetStatus();
+        MihomoServiceStatus uninstallStatus = await controller.UninstallAsync(CancellationToken.None);
+
+        Assert.Equal("localized deployed", status.Message);
+        Assert.Equal("localized not deployed", uninstallStatus.Message);
     }
 
     /// <summary>Verifies app theme selection persists and notifies the shell theme controller.</summary>
@@ -438,6 +475,125 @@ public sealed class SettingsViewModelTests
         Assert.Equal("https://example.com/generate_204", viewModel.ConnectionTestUrl);
     }
 
+    /// <summary>Verifies the connection test runs through an injected probe and returns a localized success message.</summary>
+    [Fact]
+    public async Task RunConnectionTestAsync_ProbeSucceeds_ReturnsLocalizedStatusMessage()
+    {
+        Uri? requestedUri = null;
+        SettingsViewModel viewModel = CreateConnectionTestViewModel(async (uri, _) =>
+        {
+            requestedUri = uri;
+            await Task.Yield();
+            return 204;
+        });
+
+        string message = await InvokeRunConnectionTestAsync(viewModel, CancellationToken.None);
+
+        Assert.Equal("success 204", message);
+        Assert.Equal("https://www.google.com/generate_204", requestedUri?.ToString());
+        Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
+    }
+
+    /// <summary>Verifies connection test failures are caught and returned as localized messages.</summary>
+    [Fact]
+    public async Task RunConnectionTestAsync_ProbeFails_ReturnsLocalizedFailureMessage()
+    {
+        SettingsViewModel viewModel = CreateConnectionTestViewModel((_, _) => throw new HttpRequestException("network unavailable"));
+
+        string message = await InvokeRunConnectionTestAsync(viewModel, CancellationToken.None);
+
+        Assert.Equal("failed network unavailable", message);
+        Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
+    }
+
+    /// <summary>Verifies reset-all settings delegates maintenance work and reloads the current settings snapshot.</summary>
+    [Fact]
+    public void ResetAllSettings_RunsInjectedMaintenanceAndReloadsSettings()
+    {
+        FakeSettingsStore store = new()
+        {
+            DisplayLanguage = AppLanguage.German,
+            ConnectionTestUrl = "https://example.com/old",
+        };
+        bool resetCalled = false;
+        AppLanguage? appliedLanguage = null;
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            language => appliedLanguage = language,
+            resetAllSettings: () =>
+            {
+                resetCalled = true;
+                store.DisplayLanguage = AppLanguage.English;
+                store.ConnectionTestUrl = "https://example.com/reset";
+            },
+            clearAllData: () => { });
+
+        InvokeMethod<object?>(viewModel, "ResetAllSettings", Array.Empty<object>());
+
+        Assert.True(resetCalled);
+        Assert.Equal(AppLanguage.English, appliedLanguage);
+        Assert.Equal(AppLanguage.English, viewModel.DisplayLanguage);
+        Assert.Equal("https://example.com/reset", viewModel.ConnectionTestUrl);
+    }
+
+    /// <summary>Verifies clear-all data delegates maintenance work and reloads the current settings snapshot.</summary>
+    [Fact]
+    public void ClearAllData_RunsInjectedMaintenanceAndReloadsSettings()
+    {
+        FakeSettingsStore store = new()
+        {
+            DisplayLanguage = AppLanguage.French,
+            ConnectionTestUrl = "https://example.com/old",
+        };
+        bool clearCalled = false;
+        AppLanguage? appliedLanguage = null;
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            language => appliedLanguage = language,
+            resetAllSettings: () => { },
+            clearAllData: () =>
+            {
+                clearCalled = true;
+                store.DisplayLanguage = AppLanguage.AutoDetect;
+                store.ConnectionTestUrl = "https://example.com/cleared";
+            });
+
+        InvokeMethod<object?>(viewModel, "ClearAllData", Array.Empty<object>());
+
+        Assert.True(clearCalled);
+        Assert.Equal(AppLanguage.AutoDetect, appliedLanguage);
+        Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
+        Assert.Equal("https://example.com/cleared", viewModel.ConnectionTestUrl);
+    }
+
+    /// <summary>Verifies startup conflict checks are delegated through an injected checker using the current mixed port.</summary>
+    [Fact]
+    public void CheckStartupConflicts_UsesInjectedCheckerAndMixedPort()
+    {
+        FakeSettingsStore store = new() { MixedPort = 12345 };
+        int? checkedPort = null;
+        StartupConflictIssue expectedIssue = new(
+            StartupConflictKind.MixedPortOccupied,
+            "Port occupied",
+            "Port 12345 is occupied.",
+            "Inspect",
+            _ => Task.FromResult(new StartupConflictRepairResult(false, "No repair")));
+        SettingsViewModel viewModel = CreateStartupConflictViewModel(store, port =>
+        {
+            checkedPort = port;
+            return [expectedIssue];
+        });
+
+        IReadOnlyList<StartupConflictIssue> issues = InvokeMethod<IReadOnlyList<StartupConflictIssue>>(
+            viewModel,
+            "CheckStartupConflicts",
+            Array.Empty<object>());
+
+        Assert.Equal(12345, checkedPort);
+        StartupConflictIssue issue = Assert.Single(issues);
+        Assert.Same(expectedIssue, issue);
+    }
+
     private sealed class FakeSettingsStore : ISettingsStore
     {
         public AppLanguage DisplayLanguage { get; set; } = AppLanguage.AutoDetect;
@@ -477,6 +633,149 @@ public sealed class SettingsViewModelTests
         public string ConnectionTestUrl { get; set; } = "https://www.google.com/generate_204";
     }
 
+    private static SettingsViewModel CreateConnectionTestViewModel(Func<Uri, CancellationToken, Task<int>> testConnectionAsync)
+    {
+        ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types:
+            [
+                typeof(ISettingsStore),
+                typeof(Action<AppLanguage>),
+                typeof(Action<AppThemeMode>),
+                typeof(Action),
+                typeof(Action<bool>),
+                typeof(Func<string, string>),
+                typeof(Func<SettingsProxyInformation>),
+                typeof(SettingsDiagnosticsViewModel),
+                typeof(IMihomoServiceController),
+                typeof(Action<AppAccentColorMode, string>),
+                typeof(Func<Uri, CancellationToken, Task<int>>),
+                typeof(Action),
+                typeof(Action),
+                typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
+            ],
+            modifiers: null);
+        Assert.NotNull(constructor);
+
+        return Assert.IsType<SettingsViewModel>(constructor.Invoke(
+        [
+            new FakeSettingsStore(),
+            (Action<AppLanguage>)(_ => { }),
+            (Action<AppThemeMode>)(_ => { }),
+            () => { },
+            (Action<bool>)(_ => { }),
+            (Func<string, string>)(key => key switch
+            {
+                "Settings.ConnectionTest.Succeeded.Format" => "success {0}",
+                "Settings.ConnectionTest.Failed.Format" => "failed {0}",
+                _ => key,
+            }),
+            () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            null,
+            null,
+            null,
+            testConnectionAsync,
+            (Action)(() => { }),
+            (Action)(() => { }),
+            (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
+        ]));
+    }
+
+    private static SettingsViewModel CreateMaintenanceViewModel(
+        FakeSettingsStore store,
+        Action<AppLanguage> applyLanguage,
+        Action resetAllSettings,
+        Action clearAllData)
+    {
+        ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types:
+            [
+                typeof(ISettingsStore),
+                typeof(Action<AppLanguage>),
+                typeof(Action<AppThemeMode>),
+                typeof(Action),
+                typeof(Action<bool>),
+                typeof(Func<string, string>),
+                typeof(Func<SettingsProxyInformation>),
+                typeof(SettingsDiagnosticsViewModel),
+                typeof(IMihomoServiceController),
+                typeof(Action<AppAccentColorMode, string>),
+                typeof(Func<Uri, CancellationToken, Task<int>>),
+                typeof(Action),
+                typeof(Action),
+                typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
+            ],
+            modifiers: null);
+        Assert.NotNull(constructor);
+
+        return Assert.IsType<SettingsViewModel>(constructor.Invoke(
+        [
+            store,
+            applyLanguage,
+            (Action<AppThemeMode>)(_ => { }),
+            () => { },
+            (Action<bool>)(_ => { }),
+            (Func<string, string>)(key => key),
+            () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            null,
+            null,
+            null,
+            (Func<Uri, CancellationToken, Task<int>>)((_, _) => Task.FromResult(204)),
+            resetAllSettings,
+            clearAllData,
+            (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
+        ]));
+    }
+
+    private static SettingsViewModel CreateStartupConflictViewModel(
+        FakeSettingsStore store,
+        Func<int, IReadOnlyList<StartupConflictIssue>> checkStartupConflicts)
+    {
+        ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types:
+            [
+                typeof(ISettingsStore),
+                typeof(Action<AppLanguage>),
+                typeof(Action<AppThemeMode>),
+                typeof(Action),
+                typeof(Action<bool>),
+                typeof(Func<string, string>),
+                typeof(Func<SettingsProxyInformation>),
+                typeof(SettingsDiagnosticsViewModel),
+                typeof(IMihomoServiceController),
+                typeof(Action<AppAccentColorMode, string>),
+                typeof(Func<Uri, CancellationToken, Task<int>>),
+                typeof(Action),
+                typeof(Action),
+                typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
+            ],
+            modifiers: null);
+        Assert.NotNull(constructor);
+
+        return Assert.IsType<SettingsViewModel>(constructor.Invoke(
+        [
+            store,
+            (Action<AppLanguage>)(_ => { }),
+            (Action<AppThemeMode>)(_ => { }),
+            () => { },
+            (Action<bool>)(_ => { }),
+            (Func<string, string>)(key => key),
+            () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            null,
+            null,
+            null,
+            (Func<Uri, CancellationToken, Task<int>>)((_, _) => Task.FromResult(204)),
+            (Action)(() => { }),
+            (Action)(() => { }),
+            checkStartupConflicts,
+        ]));
+    }
+
     /// <summary>Reads a view model property by name so the red test can specify a new binding contract before implementation.</summary>
     /// <param name="viewModel">Settings view model under test.</param>
     /// <param name="propertyName">Property name to read.</param>
@@ -500,6 +799,23 @@ public sealed class SettingsViewModelTests
         System.Reflection.MethodInfo? method = typeof(SettingsViewModel).GetMethod(methodName);
         Assert.NotNull(method);
         return Assert.IsType<T>(method.Invoke(viewModel, [argument]));
+    }
+
+    private static T InvokeMethod<T>(SettingsViewModel viewModel, string methodName, object[] arguments)
+    {
+        System.Reflection.MethodInfo? method = typeof(SettingsViewModel).GetMethod(methodName);
+        Assert.NotNull(method);
+        object? result = method.Invoke(viewModel, arguments);
+        return result is null && default(T) is null ? default! : Assert.IsAssignableFrom<T>(result);
+    }
+
+    private static async Task<string> InvokeRunConnectionTestAsync(SettingsViewModel viewModel, CancellationToken cancellationToken)
+    {
+        MethodInfo? method = typeof(SettingsViewModel).GetMethod("RunConnectionTestAsync");
+        Assert.NotNull(method);
+        object? value = method.Invoke(viewModel, [cancellationToken]);
+        Task<string> task = Assert.IsAssignableFrom<Task<string>>(value);
+        return await task;
     }
 
     /// <summary>Fake mihomo service controller for transparent proxy settings tests.</summary>

@@ -9,12 +9,40 @@
 
 using ClashSharp.Model;
 using ClashSharp.Service;
+using System.Reflection;
 
 namespace ClashSharp.Tests.Unit.Services;
 
 /// <summary>Tests mainland China UI-only display replacement behavior.</summary>
 public sealed class MainlandChinaTextDisplayServiceTests
 {
+    /// <summary>Verifies display filtering can be tested without mutating global application settings.</summary>
+    [Fact]
+    public void Apply_InjectedDependencies_UsesInjectedPolicy()
+    {
+        ConstructorInfo? constructor = typeof(MainlandChinaTextDisplayService).GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types:
+            [
+                typeof(Func<MainlandChinaFeatureMode>),
+                typeof(Func<bool>),
+            ],
+            modifiers: null);
+
+        Assert.NotNull(constructor);
+
+        MainlandChinaTextDisplayService service = Assert.IsType<MainlandChinaTextDisplayService>(constructor.Invoke(
+        [
+            () => MainlandChinaFeatureMode.FlagReplacementAndTextCompletion,
+            () => false,
+        ]));
+
+        string displayText = service.Apply("香港");
+
+        Assert.Equal("中国香港", displayText);
+    }
+
     /// <summary>Verifies blacklisted sensitive URLs are masked only in the all-inclusive mode.</summary>
     [Fact]
     public void Apply_AllIncludingUrlBlacklist_MasksSensitiveUrls()

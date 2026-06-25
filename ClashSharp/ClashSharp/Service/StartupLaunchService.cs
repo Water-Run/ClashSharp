@@ -8,22 +8,71 @@
  */
 
 using System;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using Windows.ApplicationModel;
 
 namespace ClashSharp.Service;
 
+/// <summary>Normalized startup task states used by launch synchronization.</summary>
+internal enum StartupLaunchTaskState
+{
+    /// <summary>The packaged startup task is disabled and can request enablement.</summary>
+    Disabled,
+
+    /// <summary>The packaged startup task is enabled.</summary>
+    Enabled,
+
+    /// <summary>The packaged startup task is in another platform-specific state.</summary>
+    Other,
+}
+
+/// <summary>Retrieves the packaged startup task from the platform boundary.</summary>
+internal interface IStartupLaunchTaskProvider
+{
+    /// <summary>Gets the startup task identified by <paramref name="taskId"/>.</summary>
+    Task<IStartupLaunchTask> GetAsync(string taskId);
+}
+
+/// <summary>Wraps the platform startup task operations used by settings.</summary>
+internal interface IStartupLaunchTask
+{
+    /// <summary>Gets the normalized startup task state.</summary>
+    StartupLaunchTaskState State { get; }
+
+    /// <summary>Requests startup task enablement from Windows.</summary>
+    Task RequestEnableAsync();
+
+    /// <summary>Disables startup launch.</summary>
+    void Disable();
+}
+
+/// <summary>Persists startup launch warning logs.</summary>
+internal interface IStartupLaunchLog
+{
+    /// <summary>Appends a runtime log entry.</summary>
+    void AppendLog(string level, string category, string message, string? detail);
+}
+
 /// <summary>Manages the packaged startup task used to launch Clash# when the user signs in.</summary>
-internal sealed class StartupLaunchService
+internal sealed partial class StartupLaunchService
 {
     /// <summary>Startup task identifier declared in Package.appxmanifest.</summary>
     public const string TaskId = "ClashSharpStartup";
 
-    /// <summary>Shared singleton instance.</summary>
-    public static StartupLaunchService Instance { get; } = new();
+    private readonly IStartupLaunchTaskProvider _taskProvider;
 
-    private StartupLaunchService()
+    private readonly IStartupLaunchLog _log;
+
+    private readonly Func<string, string> _getString;
+
+    internal StartupLaunchService(
+        IStartupLaunchTaskProvider taskProvider,
+        IStartupLaunchLog log,
+        Func<string, string> getString)
     {
+        _taskProvider = taskProvider ?? throw new ArgumentNullException(nameof(taskProvider));
+        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     /// <summary>Requests the startup task state to match <paramref name="isEnabled"/>.</summary>
@@ -31,25 +80,30 @@ internal sealed class StartupLaunchService
     {
         try
         {
-            StartupTask startupTask = await StartupTask.GetAsync(TaskId);
+            IStartupLaunchTask startupTask = await _taskProvider.GetAsync(TaskId).ConfigureAwait(false);
             if (isEnabled)
             {
-                if (startupTask.State == StartupTaskState.Disabled)
+                if (startupTask.State == StartupLaunchTaskState.Disabled)
                 {
-                    await startupTask.RequestEnableAsync();
+                    await startupTask.RequestEnableAsync().ConfigureAwait(false);
                 }
 
                 return;
             }
 
-            if (startupTask.State == StartupTaskState.Enabled)
+            if (startupTask.State == StartupLaunchTaskState.Enabled)
             {
                 startupTask.Disable();
             }
         }
-        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.COMException)
+        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException or ArgumentException or COMException)
         {
-            LogStorageService.Instance.AppendLog("Warning", "StartupLaunch", "Failed to update launch-at-startup setting.", exception.Message);
+            _log.AppendLog("Warning", "StartupLaunch", GetString("StartupLaunch.UpdateFailed"), exception.Message);
         }
+    }
+
+    private string GetString(string key)
+    {
+        return _getString(key);
     }
 }

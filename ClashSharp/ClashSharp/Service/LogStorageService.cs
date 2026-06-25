@@ -62,27 +62,32 @@ public readonly record struct TrafficStatisticsSummary(
 /// Thread safety: Public methods serialize database access through a private lock.
 /// Side effects: Creates and mutates a local SQLite database under the application data directory.
 /// </remarks>
-public sealed class LogStorageService
+public sealed partial class LogStorageService
 {
-    /// <summary>Shared singleton instance created once at type initialization.</summary>
-    /// <value>A non-null <see cref="LogStorageService"/> instance.</value>
-    public static LogStorageService Instance { get; } = new();
-
     /// <summary>Synchronization object guarding all SQLite operations for this service lifetime.</summary>
     private readonly object _syncLock = new();
 
     /// <summary>Absolute path to the SQLite database file cached for this service lifetime.</summary>
     private readonly string _databasePath;
 
+    private readonly Func<string> _getActiveProfileId;
+
     /// <summary>Tracks whether schema creation has completed for this service instance.</summary>
     private bool _isInitialized;
 
     /// <summary>Initializes the storage service and computes the database path.</summary>
-    private LogStorageService()
+    internal LogStorageService(string databasePath, Func<string> getActiveProfileId)
     {
-        string dataDirectory = AppDataPathService.ResolveLocalDataDirectory();
-        Directory.CreateDirectory(dataDirectory);
-        _databasePath = Path.Combine(dataDirectory, "ClashSharpLogs.sqlite3");
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+
+        _databasePath = Path.GetFullPath(databasePath);
+        string? dataDirectory = Path.GetDirectoryName(_databasePath);
+        if (!string.IsNullOrWhiteSpace(dataDirectory))
+        {
+            Directory.CreateDirectory(dataDirectory);
+        }
+
+        _getActiveProfileId = getActiveProfileId ?? throw new ArgumentNullException(nameof(getActiveProfileId));
     }
 
     /// <summary>Gets the absolute SQLite database path used by this service.</summary>
@@ -406,7 +411,7 @@ public sealed class LogStorageService
                 ("$createdAt", createdAt),
                 ("$uploadBytes", totalUploadBytes),
                 ("$downloadBytes", totalDownloadBytes));
-            UpsertProfileTraffic(connection, transaction, AppSettingsService.Instance.ActiveProfileId, totalUploadBytes, totalDownloadBytes, insertedCount, createdAt);
+            UpsertProfileTraffic(connection, transaction, GetActiveProfileId(), totalUploadBytes, totalDownloadBytes, insertedCount, createdAt);
             transaction.Commit();
 
             return insertedCount;
@@ -837,6 +842,11 @@ public sealed class LogStorageService
     private static string BuildRuleName(RulePreview rule)
     {
         return $"{rule.RuleType},{rule.Payload},{rule.Action}";
+    }
+
+    private string GetActiveProfileId()
+    {
+        return _getActiveProfileId();
     }
 
 }

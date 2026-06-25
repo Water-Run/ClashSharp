@@ -9,9 +9,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -82,13 +79,21 @@ internal interface IStartupConflictEnvironment
 /// <summary>Detects startup conflicts and exposes repair actions for each issue.</summary>
 internal sealed class StartupConflictDetectionService
 {
-    public static StartupConflictDetectionService Instance { get; } = new(new DefaultStartupConflictEnvironment());
+    public static StartupConflictDetectionService Instance { get; } = StartupConflictDetectionServiceFactory.CreateDefault();
 
     private readonly IStartupConflictEnvironment _environment;
 
+    private readonly Func<string, string> _getString;
+
     public StartupConflictDetectionService(IStartupConflictEnvironment environment)
+        : this(environment, key => key)
+    {
+    }
+
+    public StartupConflictDetectionService(IStartupConflictEnvironment environment, Func<string, string> getString)
     {
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     public IReadOnlyList<StartupConflictIssue> CheckConflicts(int mixedPort)
@@ -104,9 +109,9 @@ internal sealed class StartupConflictDetectionService
         {
             issues.Add(new StartupConflictIssue(
                 StartupConflictKind.ExternalMihomoProcess,
-                LocalizationService.Instance.GetString("StartupConflict.Mihomo.Title"),
-                string.Format(LocalizationService.Instance.GetString("StartupConflict.Mihomo.Description"), processes.Count),
-                LocalizationService.Instance.GetString("StartupConflict.Mihomo.Repair"),
+                _getString("StartupConflict.Mihomo.Title"),
+                string.Format(_getString("StartupConflict.Mihomo.Description"), processes.Count),
+                _getString("StartupConflict.Mihomo.Repair"),
                 token => TerminateExternalMihomoProcessesAsync(processes, token)));
         }
 
@@ -114,12 +119,12 @@ internal sealed class StartupConflictDetectionService
         {
             issues.Add(new StartupConflictIssue(
                 StartupConflictKind.MixedPortOccupied,
-                LocalizationService.Instance.GetString("StartupConflict.Port.Title"),
-                string.Format(LocalizationService.Instance.GetString("StartupConflict.Port.Description"), mixedPort),
-                LocalizationService.Instance.GetString("StartupConflict.Port.Repair"),
+                _getString("StartupConflict.Port.Title"),
+                string.Format(_getString("StartupConflict.Port.Description"), mixedPort),
+                _getString("StartupConflict.Port.Repair"),
                 _ => Task.FromResult(new StartupConflictRepairResult(
                     false,
-                    LocalizationService.Instance.GetString("StartupConflict.Port.RepairFailed")))));
+                    _getString("StartupConflict.Port.RepairFailed")))));
         }
 
         WindowsProxyState proxyState = _environment.GetWindowsProxyState();
@@ -127,9 +132,9 @@ internal sealed class StartupConflictDetectionService
         {
             issues.Add(new StartupConflictIssue(
                 StartupConflictKind.WindowsProxyWrongPort,
-                LocalizationService.Instance.GetString("StartupConflict.Proxy.Title"),
-                string.Format(LocalizationService.Instance.GetString("StartupConflict.Proxy.Description"), proxyState.ProxyServer, mixedPort),
-                LocalizationService.Instance.GetString("StartupConflict.Proxy.Repair"),
+                _getString("StartupConflict.Proxy.Title"),
+                string.Format(_getString("StartupConflict.Proxy.Description"), proxyState.ProxyServer, mixedPort),
+                _getString("StartupConflict.Proxy.Repair"),
                 DisableWindowsProxyAsync));
         }
 
@@ -147,7 +152,7 @@ internal sealed class StartupConflictDetectionService
                 await _environment.TerminateProcessAsync(process.ProcessId, cancellationToken);
             }
 
-            return new StartupConflictRepairResult(true, LocalizationService.Instance.GetString("StartupConflict.Mihomo.RepairSucceeded"));
+            return new StartupConflictRepairResult(true, _getString("StartupConflict.Mihomo.RepairSucceeded"));
         }
         catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
         {
@@ -160,7 +165,7 @@ internal sealed class StartupConflictDetectionService
         try
         {
             await _environment.DisableWindowsProxyAsync(cancellationToken);
-            return new StartupConflictRepairResult(true, LocalizationService.Instance.GetString("StartupConflict.Proxy.RepairSucceeded"));
+            return new StartupConflictRepairResult(true, _getString("StartupConflict.Proxy.RepairSucceeded"));
         }
         catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
         {
@@ -175,63 +180,4 @@ internal sealed class StartupConflictDetectionService
                 || proxyServer.Contains("localhost", StringComparison.OrdinalIgnoreCase));
     }
 
-    private sealed class DefaultStartupConflictEnvironment : IStartupConflictEnvironment
-    {
-        public IReadOnlyList<StartupConflictProcess> GetExternalMihomoProcesses()
-        {
-            int currentProcessId = Environment.ProcessId;
-            List<StartupConflictProcess> processes = [];
-            foreach (Process process in Process.GetProcessesByName("mihomo"))
-            {
-                using (process)
-                {
-                    if (process.Id != currentProcessId)
-                    {
-                        processes.Add(new StartupConflictProcess(process.Id, process.ProcessName));
-                    }
-                }
-            }
-
-            return processes;
-        }
-
-        public bool IsTcpPortInUse(int port)
-        {
-            TcpListener? listener = null;
-            try
-            {
-                listener = new TcpListener(IPAddress.Loopback, port);
-                listener.Start();
-                return false;
-            }
-            catch (SocketException)
-            {
-                return true;
-            }
-            finally
-            {
-                listener?.Stop();
-            }
-        }
-
-        public WindowsProxyState GetWindowsProxyState()
-        {
-            return WindowsProxyService.Instance.GetCurrentState();
-        }
-
-        public Task TerminateProcessAsync(int processId, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using Process process = Process.GetProcessById(processId);
-            process.Kill(entireProcessTree: true);
-            return Task.CompletedTask;
-        }
-
-        public Task DisableWindowsProxyAsync(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            WindowsProxyService.Instance.DisableProxy();
-            return Task.CompletedTask;
-        }
-    }
 }

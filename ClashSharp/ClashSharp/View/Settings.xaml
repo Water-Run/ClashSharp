@@ -77,7 +77,7 @@
             <TextBlock x:Name="TransparentProxySectionTitleText" Text="{Binding TransparentProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsEnabled="{Binding CanToggleTransparentProxy}" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 

@@ -61,13 +61,18 @@ internal sealed class SettingsDiagnosticsViewModel
     /// <summary>Diagnostic log writer used by this view model.</summary>
     private readonly IDiagnosticsLog _log;
 
+    /// <summary>Localization lookup used for user-facing failure messages.</summary>
+    private readonly Func<string, string> _getString;
+
     /// <summary>Initializes a new diagnostics view model.</summary>
     /// <param name="diagnostics">Diagnostic operation runner. Must not be null.</param>
     /// <param name="log">Diagnostic log writer. Must not be null.</param>
-    public SettingsDiagnosticsViewModel(IWindowsDiagnosticsClient diagnostics, IDiagnosticsLog log)
+    /// <param name="getString">Localization lookup. Null returns localization keys directly.</param>
+    public SettingsDiagnosticsViewModel(IWindowsDiagnosticsClient diagnostics, IDiagnosticsLog log, Func<string, string>? getString = null)
     {
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _getString = getString ?? (key => key);
     }
 
     /// <summary>Executes a diagnostic command tag and returns the status that should be shown by the page.</summary>
@@ -169,13 +174,13 @@ internal sealed class SettingsDiagnosticsViewModel
     /// <summary>Returns the user-facing failure message for a diagnostic action.</summary>
     /// <param name="action">Diagnostic action.</param>
     /// <returns>Failure status text.</returns>
-    private static string GetFailureMessage(string action)
+    private string GetFailureMessage(string action)
     {
         return action switch
         {
-            DiagnosticActionApply => "应用失败",
-            DiagnosticActionReset => "还原失败",
-            _ => "诊断失败",
+            DiagnosticActionApply => _getString("Diagnostic.Failed.Apply"),
+            DiagnosticActionReset => _getString("Diagnostic.Failed.Reset"),
+            _ => _getString("Diagnostic.Failed.Diagnose"),
         };
     }
 }

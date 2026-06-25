@@ -54,6 +54,9 @@ public sealed partial class MainWindow : Window
     /// <summary>Bindable shell view model used by navigation controls.</summary>
     private readonly MainWindowViewModel _viewModel;
 
+    /// <summary>Coordinates tray commands without coupling behavior to WinUI callbacks.</summary>
+    private readonly TrayCommandService _trayCommandService;
+
     /// <summary>Current app window used for close interception.</summary>
     private AppWindow? _appWindow;
 
@@ -72,6 +75,7 @@ public sealed partial class MainWindow : Window
         _viewModel = new MainWindowViewModel(
             new ShellLocalizationAdapter(LocalizationService.Instance),
             CreatePageMap());
+        _trayCommandService = TrayCommandServiceFactory.CreateDefault();
         InitializeComponent();
         AppThemeService.Apply((FrameworkElement)Content, AppSettingsService.Instance.AppThemeMode);
         AppThemeService.ApplyAccentColor(
@@ -292,40 +296,21 @@ public sealed partial class MainWindow : Window
         return TrayMenuStateBuilder.Build(
             AppSettingsService.Instance.CurrentMode,
             AppSettingsService.Instance.TransparentProxyEnabled,
-            serviceStatus.IsInstalled);
+            serviceStatus.IsInstalled,
+            LocalizationService.Instance.GetString);
     }
 
     /// <summary>Applies a mode requested from the tray menu.</summary>
     private void ApplyModeFromTray(ClashSharpMode mode)
     {
-        try
-        {
-            NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyMode(mode);
-            AppSettingsService.Instance.CurrentMode = result.Mode;
-            LogStorageService.Instance.AppendLog("Info", "Tray", result.Message, null);
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or System.IO.FileNotFoundException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
-        {
-            LogStorageService.Instance.AppendLog("Error", "Tray", "Tray mode change failed.", exception.Message);
-        }
-        finally
-        {
-            _trayService?.RefreshMenu();
-        }
+        _trayCommandService.ApplyMode(mode);
+        _trayService?.RefreshMenu();
     }
 
     /// <summary>Sets transparent proxy preference from the tray menu.</summary>
     private void SetTransparentProxyFromTray(bool isEnabled)
     {
-        MihomoServiceStatus serviceStatus = MihomoServiceManager.Instance.GetStatus();
-        if (isEnabled && !serviceStatus.IsInstalled)
-        {
-            AppSettingsService.Instance.TransparentProxyEnabled = false;
-            _trayService?.RefreshMenu();
-            return;
-        }
-
-        AppSettingsService.Instance.TransparentProxyEnabled = isEnabled;
+        _trayCommandService.SetTransparentProxyEnabled(isEnabled);
         _trayService?.RefreshMenu();
     }
 

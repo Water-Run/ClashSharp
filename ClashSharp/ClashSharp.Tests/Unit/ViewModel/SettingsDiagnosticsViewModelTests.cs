@@ -79,9 +79,9 @@ public sealed class SettingsDiagnosticsViewModelTests
 
     /// <summary>Verifies supported diagnostic exceptions are converted into user-facing status messages.</summary>
     [Theory]
-    [InlineData("Wsl:Diagnose", "诊断失败")]
-    [InlineData("Wsl:Apply", "应用失败")]
-    [InlineData("Wsl:Reset", "还原失败")]
+    [InlineData("Wsl:Diagnose", "diagnose failed")]
+    [InlineData("Wsl:Apply", "apply failed")]
+    [InlineData("Wsl:Reset", "reset failed")]
     public async Task ExecuteCommandAsync_DiagnosticFailure_ReturnsFailureStatusAndLogsWarning(string commandTag, string expectedMessage)
     {
         FakeDiagnosticsClient client = new()
@@ -89,13 +89,24 @@ public sealed class SettingsDiagnosticsViewModelTests
             ExceptionToThrow = new InvalidOperationException("boom"),
         };
         FakeDiagnosticsLog log = new();
-        SettingsDiagnosticsViewModel viewModel = new(client, log);
+        SettingsDiagnosticsViewModel viewModel = new(client, log, GetString);
 
         SettingsDiagnosticStatus? status = await viewModel.ExecuteCommandAsync(commandTag, CancellationToken.None);
 
         Assert.Equal(WindowsDiagnosticTarget.Wsl, status?.Target);
         Assert.Equal(expectedMessage, status?.Message);
         Assert.Contains(log.Entries, entry => entry.Level == "Warning" && entry.Message == expectedMessage && entry.Detail == "boom");
+    }
+
+    private static string GetString(string key)
+    {
+        return key switch
+        {
+            "Diagnostic.Failed.Diagnose" => "diagnose failed",
+            "Diagnostic.Failed.Apply" => "apply failed",
+            "Diagnostic.Failed.Reset" => "reset failed",
+            _ => key,
+        };
     }
 
     private sealed class FakeDiagnosticsClient : IWindowsDiagnosticsClient

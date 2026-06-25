@@ -143,7 +143,7 @@ public sealed class SystemTrayService : IDisposable
             AppendMenu(modeMenu, MfString | (modeItem.IsChecked ? MfChecked : 0), new nint(MapModeCommand(modeItem.Mode)), modeItem.Label);
         }
 
-        AppendMenu(menu, MfPopup, modeMenu, "模式");
+        AppendMenu(menu, MfPopup, modeMenu, state.ModeMenuLabel);
         AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
         uint transparentFlags = MfString
             | (state.TransparentProxyItem.IsChecked ? MfChecked : 0)

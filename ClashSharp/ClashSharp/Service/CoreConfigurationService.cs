@@ -8,7 +8,6 @@
  */
 
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -17,18 +16,44 @@ using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
+/// <summary>Provides settings used when generating runtime mihomo configuration.</summary>
+internal interface ICoreConfigurationSettings
+{
+    /// <summary>Gets whether transparent proxy is preferred for active takeover modes.</summary>
+    bool TransparentProxyEnabled { get; }
+
+    /// <summary>Gets the configured mixed proxy port.</summary>
+    int MixedPort { get; }
+
+    /// <summary>Gets the active profile identifier.</summary>
+    string ActiveProfileId { get; }
+}
+
+/// <summary>Counts profile preview rows from configuration text.</summary>
+internal interface ICoreConfigurationProfileMetrics
+{
+    /// <summary>Counts proxy node preview rows.</summary>
+    int CountNodes(string configurationText);
+
+    /// <summary>Counts rule preview rows.</summary>
+    int CountRules(string configurationText);
+}
+
+/// <summary>Validates mihomo configuration files before import results are committed.</summary>
+internal interface ICoreConfigurationValidator
+{
+    /// <summary>Validates <paramref name="configurationPath"/> using <paramref name="workingDirectory"/>.</summary>
+    Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken);
+}
+
 /// <summary>Manages local mihomo configuration paths and default configuration generation.</summary>
 /// <remarks>
 /// Invariants: The configuration directory is created before a default configuration is written.
 /// Thread safety: Public mutation methods serialize filesystem access through a private lock.
 /// Side effects: Creates directories and writes the local mihomo configuration file.
 /// </remarks>
-public sealed class CoreConfigurationService
+public sealed partial class CoreConfigurationService
 {
-    /// <summary>Shared singleton instance created once at type initialization.</summary>
-    /// <value>A non-null <see cref="CoreConfigurationService"/> instance.</value>
-    public static CoreConfigurationService Instance { get; } = new();
-
     /// <summary>Synchronization object guarding filesystem mutations for this service lifetime.</summary>
     private readonly object _syncLock = new();
 
@@ -38,11 +63,30 @@ public sealed class CoreConfigurationService
     /// <summary>Absolute file path for the generated mihomo configuration.</summary>
     private readonly string _configurationFilePath;
 
+    private readonly ICoreConfigurationSettings _settings;
+
+    private readonly ICoreConfigurationProfileMetrics _profileMetrics;
+
+    private readonly ICoreConfigurationValidator _validator;
+
+    private readonly Func<string, string> _getString;
+
     /// <summary>Initializes the configuration service and resolves configuration paths.</summary>
-    private CoreConfigurationService()
+    internal CoreConfigurationService(
+        string configurationDirectoryPath,
+        ICoreConfigurationSettings settings,
+        ICoreConfigurationProfileMetrics profileMetrics,
+        ICoreConfigurationValidator validator,
+        Func<string, string> getString)
     {
-        _configurationDirectoryPath = Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "mihomo");
+        ArgumentException.ThrowIfNullOrWhiteSpace(configurationDirectoryPath);
+
+        _configurationDirectoryPath = Path.GetFullPath(configurationDirectoryPath);
         _configurationFilePath = Path.Combine(_configurationDirectoryPath, "config.yaml");
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _profileMetrics = profileMetrics ?? throw new ArgumentNullException(nameof(profileMetrics));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     /// <summary>Gets the current local mihomo configuration state.</summary>
@@ -70,7 +114,7 @@ public sealed class CoreConfigurationService
     {
         return EnsureConfiguration(
             mode,
-            MihomoRuntimeConfigurationBuilder.ShouldEnableTransparentProxy(mode, AppSettingsService.Instance.TransparentProxyEnabled));
+            MihomoRuntimeConfigurationBuilder.ShouldEnableTransparentProxy(mode, _settings.TransparentProxyEnabled));
     }
 
     /// <summary>Ensures the local configuration directory and managed configuration file match <paramref name="mode"/> and transparent proxy preference.</summary>
@@ -84,7 +128,7 @@ public sealed class CoreConfigurationService
         {
             Directory.CreateDirectory(_configurationDirectoryPath);
 
-            string configText = BuildRuntimeConfiguration(AppSettingsService.Instance.MixedPort, mode, transparentProxyEnabled);
+            string configText = BuildRuntimeConfiguration(_settings.MixedPort, mode, transparentProxyEnabled);
             File.WriteAllText(_configurationFilePath, configText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             return GetState();
@@ -132,8 +176,8 @@ public sealed class CoreConfigurationService
         string profileDirectory = GetProfileDirectoryPath(normalizedProfileId);
         string profileConfigPath = Path.Combine(profileDirectory, "config.yaml");
         string backupPath = Path.Combine(profileDirectory, "config.yaml.bak");
-        int nodeCount = MihomoProfileParserService.Instance.ParseNodes(normalizedText).Count;
-        int ruleCount = MihomoProfileParserService.Instance.ParseRules(normalizedText).Count;
+        int nodeCount = _profileMetrics.CountNodes(normalizedText);
+        int ruleCount = _profileMetrics.CountRules(normalizedText);
 
         lock (_syncLock)
         {
@@ -148,7 +192,7 @@ public sealed class CoreConfigurationService
 
         try
         {
-            await ValidateWithBundledMihomoAsync(profileDirectory, profileConfigPath, cancellationToken).ConfigureAwait(false);
+            await _validator.ValidateAsync(profileDirectory, profileConfigPath, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -167,7 +211,7 @@ public sealed class CoreConfigurationService
             profileConfigPath,
             nodeCount,
             ruleCount,
-            "配置已下载、校验并导入。");
+            GetString("CoreConfiguration.Imported"));
     }
 
     /// <summary>Returns the imported profile configuration path for <paramref name="profileId"/>.</summary>
@@ -208,15 +252,15 @@ public sealed class CoreConfigurationService
         string configurationText = MihomoRuntimeConfigurationBuilder.NormalizeConfigurationText(
             await File.ReadAllTextAsync(profileConfigPath, cancellationToken).ConfigureAwait(false));
         MihomoProfileShapeValidator.Validate(configurationText);
-        await ValidateWithBundledMihomoAsync(profileDirectory, profileConfigPath, cancellationToken).ConfigureAwait(false);
+        await _validator.ValidateAsync(profileDirectory, profileConfigPath, cancellationToken).ConfigureAwait(false);
 
         return new ProfileImportResult(
             normalizedProfileId,
             normalizedProfileId,
             profileConfigPath,
-            MihomoProfileParserService.Instance.ParseNodes(configurationText).Count,
-            MihomoProfileParserService.Instance.ParseRules(configurationText).Count,
-            "配置校验通过。");
+            _profileMetrics.CountNodes(configurationText),
+            _profileMetrics.CountRules(configurationText),
+            GetString("CoreConfiguration.Validated"));
     }
 
     /// <summary>Builds runtime configuration from the active imported profile when available, otherwise from the default profile.</summary>
@@ -225,7 +269,7 @@ public sealed class CoreConfigurationService
     /// <returns>Runtime configuration text with deterministic line endings.</returns>
     private string BuildRuntimeConfiguration(int mixedPort, ClashSharpMode mode, bool transparentProxyEnabled)
     {
-        string activeProfileId = AppSettingsService.Instance.ActiveProfileId;
+        string activeProfileId = _settings.ActiveProfileId;
         string profileConfigPath = GetProfileConfigurationPath(activeProfileId);
         if (File.Exists(profileConfigPath) && !StringComparer.Ordinal.Equals(activeProfileId, ProfileCatalogIds.BuiltInDirect))
         {
@@ -234,72 +278,6 @@ public sealed class CoreConfigurationService
         }
 
         return MihomoRuntimeConfigurationBuilder.BuildDefaultConfiguration(mixedPort, mode, transparentProxyEnabled);
-    }
-
-    /// <summary>Runs bundled mihomo configuration validation when the binary is available.</summary>
-    /// <param name="workingDirectory">Validation working directory. Must not be null.</param>
-    /// <param name="configurationPath">Configuration file path. Must not be null.</param>
-    /// <param name="cancellationToken">Cancels the validation process.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="workingDirectory"/> or <paramref name="configurationPath"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">mihomo exits with a non-zero code.</exception>
-    private static async Task ValidateWithBundledMihomoAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(workingDirectory);
-        ArgumentNullException.ThrowIfNull(configurationPath);
-
-        MihomoCoreService coreService = MihomoCoreService.Instance;
-        if (!coreService.IsBinaryAvailable)
-        {
-            return;
-        }
-
-        ProcessStartInfo startInfo = new()
-        {
-            FileName = coreService.BinaryPath,
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        startInfo.ArgumentList.Add("-t");
-        startInfo.ArgumentList.Add("-d");
-        startInfo.ArgumentList.Add(workingDirectory);
-        startInfo.ArgumentList.Add("-f");
-        startInfo.ArgumentList.Add(configurationPath);
-
-        using Process process = new()
-        {
-            StartInfo = startInfo,
-        };
-
-        if (!process.Start())
-        {
-            throw new InvalidOperationException("Unable to start bundled mihomo for configuration validation.");
-        }
-
-        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(TimeSpan.FromSeconds(15));
-
-        try
-        {
-            Task<string> outputTask = process.StandardOutput.ReadToEndAsync(timeoutSource.Token);
-            Task<string> errorTask = process.StandardError.ReadToEndAsync(timeoutSource.Token);
-            await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
-            string output = (await outputTask.ConfigureAwait(false)).Trim();
-            string error = (await errorTask.ConfigureAwait(false)).Trim();
-
-            if (process.ExitCode != 0)
-            {
-                string detail = string.IsNullOrWhiteSpace(error) ? output : error;
-                throw new InvalidOperationException($"mihomo rejected the imported configuration: {detail}");
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            TryKillProcess(process);
-            throw;
-        }
     }
 
     /// <summary>Restores the previous imported profile configuration after failed validation.</summary>
@@ -348,16 +326,8 @@ public sealed class CoreConfigurationService
         return Path.Combine(_configurationDirectoryPath, "profiles", profileId);
     }
 
-    /// <summary>Attempts to terminate <paramref name="process"/> after validation cancellation.</summary>
-    /// <param name="process">Process to terminate. Must not be null.</param>
-    private static void TryKillProcess(Process process)
+    private string GetString(string key)
     {
-        ArgumentNullException.ThrowIfNull(process);
-
-        if (!process.HasExited)
-        {
-            process.Kill(entireProcessTree: true);
-        }
+        return _getString(key);
     }
-
 }

@@ -63,7 +63,11 @@ public partial class App : Application
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
-            LogStorageService.Instance.AppendLog("Warning", "ProxyRecovery", "Startup proxy recovery failed.", exception.Message);
+            LogStorageService.Instance.AppendLog(
+                "Warning",
+                "ProxyRecovery",
+                LocalizationService.Instance.GetString("ProxyRecovery.StartupFailed"),
+                exception.Message);
         }
     }
 }

@@ -14,21 +14,63 @@ using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
+/// <summary>Provides settings required by startup stale-proxy recovery.</summary>
+internal interface IProxyRecoverySettings
+{
+    /// <summary>Gets whether stale Windows proxy state should be checked on startup.</summary>
+    bool CheckStaleProxyOnStartup { get; }
+
+    /// <summary>Gets the configured Clash# mixed proxy port.</summary>
+    int MixedPort { get; }
+
+    /// <summary>Gets the configured recovery action for stale proxy state.</summary>
+    ProxyRecoveryMode ProxyRecoveryMode { get; }
+}
+
+/// <summary>Reads and mutates Windows system proxy state for stale-proxy recovery.</summary>
+internal interface IProxyRecoveryWindowsProxy
+{
+    /// <summary>Returns the current Windows proxy state.</summary>
+    WindowsProxyState GetCurrentState();
+
+    /// <summary>Disables Windows system proxy.</summary>
+    void DisableProxy();
+}
+
+/// <summary>Restores Clash# system-proxy takeover after stale proxy detection.</summary>
+internal interface IProxyRecoveryTakeover
+{
+    /// <summary>Applies startup system-proxy recovery through the network takeover service.</summary>
+    NetworkTakeoverResult ApplyStartupSystemProxyRecovery();
+}
+
 /// <summary>Detects and recovers stale Windows proxy settings that point to the Clash# local proxy port.</summary>
 /// <remarks>
 /// Invariants: Recovery actions only run when stale proxy detection matches the configured mixed port.
 /// Thread safety: Stateless service and safe for concurrent calls.
 /// Side effects: Recovery may start the core process or mutate Windows system proxy settings.
 /// </remarks>
-public sealed class ProxyRecoveryService
+public sealed partial class ProxyRecoveryService
 {
-    /// <summary>Shared singleton instance created once at type initialization.</summary>
-    /// <value>A non-null <see cref="ProxyRecoveryService"/> instance.</value>
-    public static ProxyRecoveryService Instance { get; } = new();
+    private readonly IProxyRecoverySettings _settings;
+
+    private readonly IProxyRecoveryWindowsProxy _windowsProxy;
+
+    private readonly IProxyRecoveryTakeover _takeover;
+
+    private readonly Func<string, string> _getString;
 
     /// <summary>Initializes a new proxy recovery service instance.</summary>
-    private ProxyRecoveryService()
+    internal ProxyRecoveryService(
+        IProxyRecoverySettings settings,
+        IProxyRecoveryWindowsProxy windowsProxy,
+        IProxyRecoveryTakeover takeover,
+        Func<string, string> getString)
     {
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _windowsProxy = windowsProxy ?? throw new ArgumentNullException(nameof(windowsProxy));
+        _takeover = takeover ?? throw new ArgumentNullException(nameof(takeover));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     /// <summary>Determines whether <paramref name="state"/> appears to be a stale Clash# system proxy.</summary>
@@ -56,27 +98,26 @@ public sealed class ProxyRecoveryService
     /// <exception cref="InvalidOperationException">Windows proxy state cannot be read or written.</exception>
     public ProxyRecoveryResult ApplyStartupRecoveryIfNeeded()
     {
-        AppSettingsService settings = AppSettingsService.Instance;
-        if (!settings.CheckStaleProxyOnStartup)
+        if (!_settings.CheckStaleProxyOnStartup)
         {
-            return new ProxyRecoveryResult(false, "Startup stale-proxy check is disabled.");
+            return new ProxyRecoveryResult(false, GetString("ProxyRecovery.CheckDisabled"));
         }
 
-        WindowsProxyState state = WindowsProxyService.Instance.GetCurrentState();
-        if (!IsStaleClashProxy(state, settings.MixedPort))
+        WindowsProxyState state = _windowsProxy.GetCurrentState();
+        if (!IsStaleClashProxy(state, _settings.MixedPort))
         {
-            return new ProxyRecoveryResult(false, "No stale Clash# proxy state was detected.");
+            return new ProxyRecoveryResult(false, GetString("ProxyRecovery.NoStaleProxy"));
         }
 
-        switch (settings.ProxyRecoveryMode)
+        switch (_settings.ProxyRecoveryMode)
         {
             case ProxyRecoveryMode.EnableProxy:
                 return ApplyStartupEnableProxyRecovery();
             case ProxyRecoveryMode.DisableProxy:
-                WindowsProxyService.Instance.DisableProxy();
-                return new ProxyRecoveryResult(true, "Windows proxy was disabled because stale Clash# proxy state was detected.");
+                _windowsProxy.DisableProxy();
+                return new ProxyRecoveryResult(true, GetString("ProxyRecovery.Disabled"));
             default:
-                return new ProxyRecoveryResult(false, "Stale Clash# proxy state was detected, but recovery policy is set to do nothing.");
+                return new ProxyRecoveryResult(false, GetString("ProxyRecovery.DoNothing"));
         }
     }
 
@@ -86,16 +127,16 @@ public sealed class ProxyRecoveryService
     /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
     /// <exception cref="Win32Exception">Windows rejects a proxy change notification.</exception>
     /// <exception cref="UnauthorizedAccessException">Windows proxy settings cannot be changed by the current user.</exception>
-    private static ProxyRecoveryResult ApplyStartupEnableProxyRecovery()
+    private ProxyRecoveryResult ApplyStartupEnableProxyRecovery()
     {
         try
         {
-            NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyStartupSystemProxyRecovery();
+            NetworkTakeoverResult result = _takeover.ApplyStartupSystemProxyRecovery();
             return new ProxyRecoveryResult(true, result.Message);
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
-            WindowsProxyService.Instance.DisableProxy();
+            _windowsProxy.DisableProxy();
             throw;
         }
     }
@@ -125,5 +166,10 @@ public sealed class ProxyRecoveryService
         return proxyServer.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase)
             || proxyServer.Contains("localhost", StringComparison.OrdinalIgnoreCase)
             || proxyServer.Contains("[::1]", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string GetString(string key)
+    {
+        return _getString(key);
     }
 }

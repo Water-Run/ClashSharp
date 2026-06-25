@@ -17,7 +17,7 @@ namespace ClashSharp.Service;
 /// <remarks>
 /// Invariants: Parsing is best-effort and returns partial preview rows instead of validating full YAML correctness.
 /// Thread safety: Stateless methods are safe for concurrent calls.
-/// Side effects: None.
+/// Side effects: Reads localization resources for fallback display names.
 /// </remarks>
 internal static class MihomoProfilePreviewParser
 {
@@ -88,12 +88,15 @@ internal static class MihomoProfilePreviewParser
 
     /// <summary>Parses routing rule preview rows from profile text.</summary>
     /// <param name="configurationText">mihomo configuration text. Must not be null.</param>
+    /// <param name="getString">Localization lookup used for generated source names. Must not be null.</param>
     /// <returns>Parsed routing rule preview rows.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="configurationText"/> is null.</exception>
-    public static IReadOnlyList<RulePreview> ParseRules(string configurationText)
+    /// <exception cref="ArgumentNullException"><paramref name="configurationText"/> or <paramref name="getString"/> is null.</exception>
+    public static IReadOnlyList<RulePreview> ParseRules(string configurationText, Func<string, string> getString)
     {
         ArgumentNullException.ThrowIfNull(configurationText);
+        ArgumentNullException.ThrowIfNull(getString);
 
+        string sourceName = getString("ProfilePreview.CurrentConfiguration");
         List<RulePreview> rules = [];
         foreach (YamlListItem item in EnumerateTopLevelListItems(configurationText, "rules"))
         {
@@ -112,7 +115,7 @@ internal static class MihomoProfilePreviewParser
             string ruleType = parts[0];
             string payload = parts.Length > 2 ? parts[1] : "*";
             string action = parts.Length > 2 ? parts[2] : parts.Length > 1 ? parts[1] : "DIRECT";
-            rules.Add(new RulePreview("当前配置", ruleType, payload, action, 0));
+            rules.Add(new RulePreview(sourceName, ruleType, payload, action, 0));
         }
 
         return rules;
@@ -585,12 +588,6 @@ internal static class MihomoProfilePreviewParser
         }
     }
 
-    /// <summary>Parsed YAML mapping item with simple scalar access.</summary>
-    /// <remarks>
-    /// Invariants: Name and scalar dictionary are never null.
-    /// Thread safety: Not thread-safe; each item is confined to one parser invocation.
-    /// Side effects: None.
-    /// </remarks>
     private sealed class YamlMapItem
     {
         /// <summary>Initializes a parsed YAML mapping item.</summary>

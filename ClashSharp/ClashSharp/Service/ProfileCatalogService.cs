@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -19,18 +20,45 @@ using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
+/// <summary>Provides active profile settings for profile catalog rows.</summary>
+internal interface IProfileCatalogSettings
+{
+    /// <summary>Gets or sets the active profile identifier.</summary>
+    string ActiveProfileId { get; set; }
+}
+
+/// <summary>Imports, validates, and ensures profile configuration files.</summary>
+internal interface IProfileCatalogCoreConfiguration
+{
+    /// <summary>Imports a downloaded or local configuration profile.</summary>
+    Task<ProfileImportResult> ImportProfileConfigurationAsync(
+        string profileId,
+        string profileName,
+        string configurationText,
+        CancellationToken cancellationToken);
+
+    /// <summary>Ensures the built-in default configuration exists.</summary>
+    CoreConfigurationState EnsureDefaultConfiguration();
+
+    /// <summary>Validates an already imported profile.</summary>
+    Task<ProfileImportResult> ValidateImportedProfileAsync(string profileId, CancellationToken cancellationToken);
+}
+
+/// <summary>Persists profile catalog warning logs.</summary>
+internal interface IProfileCatalogLog
+{
+    /// <summary>Appends a profile catalog log entry.</summary>
+    void AppendLog(string level, string category, string message, string? detail);
+}
+
 /// <summary>Provides local configuration profile and subscription-link data for WinUI pages.</summary>
 /// <remarks>
 /// Invariants: At least one built-in profile is always available.
 /// Thread safety: Public members serialize mutable state through a private lock.
 /// Side effects: Reads and writes the local profile catalog JSON file; persists active profile selection to application settings.
 /// </remarks>
-public sealed class ProfileCatalogService
+public sealed partial class ProfileCatalogService
 {
-    /// <summary>Shared singleton instance created once at type initialization.</summary>
-    /// <value>A non-null <see cref="ProfileCatalogService"/> instance.</value>
-    public static ProfileCatalogService Instance { get; } = new();
-
     /// <summary>Synchronization object guarding active profile mutations for this service lifetime.</summary>
     private readonly object _syncLock = new();
 
@@ -40,6 +68,14 @@ public sealed class ProfileCatalogService
     /// <summary>Cached catalog document loaded from disk during this service lifetime.</summary>
     private ProfileCatalogDocument? _cachedDocument;
 
+    private readonly IProfileCatalogSettings _settings;
+
+    private readonly IProfileCatalogCoreConfiguration _coreConfiguration;
+
+    private readonly IProfileCatalogLog _log;
+
+    private readonly Func<string, string> _getString;
+
     /// <summary>Obsolete preview profile identifier removed from early catalog builds.</summary>
     private const string ObsoleteSampleProfileId = "sample-rule-profile";
 
@@ -47,11 +83,26 @@ public sealed class ProfileCatalogService
     private static readonly HttpClient HttpClient = CreateHttpClient();
 
     /// <summary>Initializes the profile catalog service.</summary>
-    private ProfileCatalogService()
+    internal ProfileCatalogService(
+        string catalogPath,
+        IProfileCatalogSettings settings,
+        IProfileCatalogCoreConfiguration coreConfiguration,
+        IProfileCatalogLog log,
+        Func<string, string> getString)
     {
-        string dataDirectory = AppDataPathService.ResolveLocalDataDirectory();
-        Directory.CreateDirectory(dataDirectory);
-        _catalogPath = Path.Combine(dataDirectory, "ProfileCatalog.json");
+        ArgumentException.ThrowIfNullOrWhiteSpace(catalogPath);
+
+        _catalogPath = Path.GetFullPath(catalogPath);
+        string? dataDirectory = Path.GetDirectoryName(_catalogPath);
+        if (!string.IsNullOrWhiteSpace(dataDirectory))
+        {
+            Directory.CreateDirectory(dataDirectory);
+        }
+
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _coreConfiguration = coreConfiguration ?? throw new ArgumentNullException(nameof(coreConfiguration));
+        _log = log ?? throw new ArgumentNullException(nameof(log));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     /// <summary>Returns all known configuration profiles with active-profile state applied.</summary>
@@ -123,7 +174,7 @@ public sealed class ProfileCatalogService
                 true,
                 24,
                 DateTimeOffset.Now,
-                "已添加");
+                GetString("ProfileCatalog.Status.Added"));
 
             document.Links.Add(link);
             SaveDocument(document);
@@ -185,13 +236,13 @@ public sealed class ProfileCatalogService
             using HttpResponseMessage response = await SendWithGetFallbackAsync(request, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
-            string status = $"检查通过 ({(int)response.StatusCode})";
+            string status = FormatString("ProfileCatalog.Subscription.CheckSucceeded.Format", (int)response.StatusCode);
             TryUpdateSubscriptionLinkStatus(link.Id, status);
             return status;
         }
         catch (Exception exception) when (exception is ArgumentException or HttpRequestException or OperationCanceledException or InvalidOperationException)
         {
-            TryUpdateSubscriptionLinkStatus(link.Id, "检查失败");
+            TryUpdateSubscriptionLinkStatus(link.Id, GetString("ProfileCatalog.Subscription.CheckFailed"));
             throw;
         }
     }
@@ -208,11 +259,11 @@ public sealed class ProfileCatalogService
         try
         {
             EnsureLinkHasHttpUri(link);
-            TryUpdateSubscriptionLinkStatus(link.Id, "正在下载");
+            TryUpdateSubscriptionLinkStatus(link.Id, GetString("ProfileCatalog.Subscription.Downloading"));
 
             string configurationText = await HttpClient.GetStringAsync(new Uri(link.Uri), cancellationToken).ConfigureAwait(false);
             string profileId = $"subscription-{link.Id}";
-            ProfileImportResult importResult = await CoreConfigurationService.Instance
+            ProfileImportResult importResult = await _coreConfiguration
                 .ImportProfileConfigurationAsync(profileId, link.Name, configurationText, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -220,7 +271,7 @@ public sealed class ProfileCatalogService
             {
                 ProfileCatalogDocument document = LoadDocument();
                 UpsertImportedProfile(document, importResult, link.Name);
-                UpdateLinkStatus(document, link.Id, "已更新");
+                UpdateLinkStatus(document, link.Id, GetString("ProfileCatalog.Subscription.Updated"));
                 SaveDocument(document);
             }
 
@@ -228,7 +279,11 @@ public sealed class ProfileCatalogService
         }
         catch (Exception exception) when (exception is ArgumentException or HttpRequestException or InvalidOperationException or IOException or OperationCanceledException)
         {
-            TryUpdateSubscriptionLinkStatus(link.Id, cancellationToken.IsCancellationRequested ? "已取消" : "更新失败");
+            TryUpdateSubscriptionLinkStatus(
+                link.Id,
+                cancellationToken.IsCancellationRequested
+                    ? GetString("ProfileCatalog.Status.Canceled")
+                    : GetString("ProfileCatalog.Subscription.UpdateFailed"));
             throw;
         }
     }
@@ -258,7 +313,7 @@ public sealed class ProfileCatalogService
         string configurationText = await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false);
         string profileName = Path.GetFileNameWithoutExtension(filePath);
         string profileId = $"local-{Guid.NewGuid():N}";
-        ProfileImportResult importResult = await CoreConfigurationService.Instance
+        ProfileImportResult importResult = await _coreConfiguration
             .ImportProfileConfigurationAsync(profileId, profileName, configurationText, cancellationToken)
             .ConfigureAwait(false);
 
@@ -283,24 +338,30 @@ public sealed class ProfileCatalogService
     {
         if (StringComparer.Ordinal.Equals(profile.Id, ProfileCatalogIds.BuiltInDirect))
         {
-            CoreConfigurationState state = CoreConfigurationService.Instance.EnsureDefaultConfiguration();
-            ProfileImportResult result = new(profile.Id, profile.Name, state.ConfigPath, 0, 1, "内置直连配置可用。");
-            TryUpdateProfileStatus(profile.Id, "可用", result.NodeCount, result.RuleCount);
+            CoreConfigurationState state = _coreConfiguration.EnsureDefaultConfiguration();
+            ProfileImportResult result = new(profile.Id, profile.Name, state.ConfigPath, 0, 1, GetString("ProfileCatalog.Profile.BuiltInDirectAvailable"));
+            TryUpdateProfileStatus(profile.Id, GetString("ProfileCatalog.Status.Available"), result.NodeCount, result.RuleCount);
             return result;
         }
 
         try
         {
-            ProfileImportResult result = await CoreConfigurationService.Instance
+            ProfileImportResult result = await _coreConfiguration
                 .ValidateImportedProfileAsync(profile.Id, cancellationToken)
                 .ConfigureAwait(false);
 
-            TryUpdateProfileStatus(profile.Id, "校验通过", result.NodeCount, result.RuleCount);
+            TryUpdateProfileStatus(profile.Id, GetString("ProfileCatalog.Profile.ValidationSucceeded"), result.NodeCount, result.RuleCount);
             return result with { ProfileName = profile.Name };
         }
         catch
         {
-            TryUpdateProfileStatus(profile.Id, cancellationToken.IsCancellationRequested ? "已取消" : "校验失败", profile.NodeCount, profile.RuleCount);
+            TryUpdateProfileStatus(
+                profile.Id,
+                cancellationToken.IsCancellationRequested
+                    ? GetString("ProfileCatalog.Status.Canceled")
+                    : GetString("ProfileCatalog.Profile.ValidationFailed"),
+                profile.NodeCount,
+                profile.RuleCount);
             throw;
         }
     }
@@ -319,7 +380,7 @@ public sealed class ProfileCatalogService
             {
                 if (StringComparer.Ordinal.Equals(profile.Id, profileId))
                 {
-                    AppSettingsService.Instance.ActiveProfileId = profileId;
+                    _settings.ActiveProfileId = profileId;
                     return true;
                 }
             }
@@ -383,7 +444,7 @@ public sealed class ProfileCatalogService
     /// <param name="document">Catalog document to mutate. Must not be null.</param>
     /// <param name="importResult">Import result used for profile metadata.</param>
     /// <param name="sourceName">Profile source display name. Must not be null.</param>
-    private static void UpsertImportedProfile(ProfileCatalogDocument document, ProfileImportResult importResult, string sourceName)
+    private void UpsertImportedProfile(ProfileCatalogDocument document, ProfileImportResult importResult, string sourceName)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(sourceName);
@@ -392,7 +453,7 @@ public sealed class ProfileCatalogService
             importResult.ProfileId,
             importResult.ProfileName,
             sourceName,
-            "可用",
+            GetString("ProfileCatalog.Status.Available"),
             DateTimeOffset.Now,
             importResult.NodeCount,
             importResult.RuleCount,
@@ -476,9 +537,9 @@ public sealed class ProfileCatalogService
 
     /// <summary>Reads the active profile identifier, normalizing missing values to the built-in profile.</summary>
     /// <returns>Active profile identifier; never null.</returns>
-    private static string GetActiveProfileId()
+    private string GetActiveProfileId()
     {
-        string activeProfileId = AppSettingsService.Instance.ActiveProfileId;
+        string activeProfileId = _settings.ActiveProfileId;
         return string.IsNullOrWhiteSpace(activeProfileId) ? ProfileCatalogIds.BuiltInDirect : activeProfileId;
     }
 
@@ -505,11 +566,11 @@ public sealed class ProfileCatalogService
             }
             catch (JsonException exception)
             {
-                LogStorageService.Instance.AppendLog("Warning", "Profiles", "Profile catalog JSON could not be read.", exception.Message);
+                _log.AppendLog("Warning", "Profiles", "Profile catalog JSON could not be read.", exception.Message);
             }
             catch (IOException exception)
             {
-                LogStorageService.Instance.AppendLog("Warning", "Profiles", "Profile catalog file could not be read.", exception.Message);
+                _log.AppendLog("Warning", "Profiles", "Profile catalog file could not be read.", exception.Message);
             }
         }
 
@@ -539,7 +600,7 @@ public sealed class ProfileCatalogService
     /// <param name="document">Catalog document to inspect. Must not be null.</param>
     /// <returns>The original document with the built-in profile inserted when necessary.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
-    private static ProfileCatalogDocument EnsureBuiltInProfile(ProfileCatalogDocument document)
+    private ProfileCatalogDocument EnsureBuiltInProfile(ProfileCatalogDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -561,7 +622,7 @@ public sealed class ProfileCatalogService
 
     /// <summary>Builds the default catalog document used on first run.</summary>
     /// <returns>A catalog document containing the built-in direct profile and no user links.</returns>
-    private static ProfileCatalogDocument BuildDefaultDocument()
+    private ProfileCatalogDocument BuildDefaultDocument()
     {
         return new ProfileCatalogDocument
         {
@@ -583,17 +644,27 @@ public sealed class ProfileCatalogService
 
     /// <summary>Builds the built-in direct profile.</summary>
     /// <returns>The built-in direct profile row.</returns>
-    private static ConfigurationProfile BuildDefaultProfile()
+    private ConfigurationProfile BuildDefaultProfile()
     {
         return new ConfigurationProfile(
             ProfileCatalogIds.BuiltInDirect,
-            "本机直连默认配置",
+            GetString("ProfileCatalog.BuiltInDirect.Name"),
             "Clash#",
-            "可用",
+            GetString("ProfileCatalog.Status.Available"),
             DateTimeOffset.Now,
             0,
             1,
             false);
+    }
+
+    private string GetString(string key)
+    {
+        return _getString(key);
+    }
+
+    private string FormatString(string key, params object[] args)
+    {
+        return string.Format(CultureInfo.CurrentCulture, GetString(key), args);
     }
 
     /// <summary>Serializable profile catalog document stored on disk.</summary>

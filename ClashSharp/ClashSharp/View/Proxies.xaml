@@ -25,7 +25,7 @@
                         <FontIcon Glyph="&#xE9D9;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="RefreshRuntimeButton" Label="{Binding RefreshNodesText}" Command="{Binding RefreshRuntimeCommand}">
+                <AppBarButton x:Name="RefreshRuntimeButton" Label="{Binding RefreshRuntimeText}" Command="{Binding RefreshRuntimeCommand}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE895;" />
                     </AppBarButton.Icon>
@@ -100,7 +100,11 @@
                             <TextBlock Grid.Column="2" Text="{Binding DetailDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="3" Text="{Binding ItemCountDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="4" Text="{Binding UpdatedAtDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                            <Button Grid.Column="5" Padding="8,4" Click="UpdateProviderButton_Click">
+                            <Button
+                                Grid.Column="5"
+                                Padding="8,4"
+                                Command="{Binding DataContext.UpdateProviderCommand, ElementName=ProviderResourcesList}"
+                                CommandParameter="{Binding}">
                                 <FontIcon Glyph="&#xE895;" FontSize="14" />
                             </Button>
                         </Grid>

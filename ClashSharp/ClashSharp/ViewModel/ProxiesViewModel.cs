@@ -231,6 +231,10 @@ internal sealed class ProxiesViewModel : ObservableObject
     /// <value>Localized command label; never null.</value>
     public string RefreshNodesText => _localization.GetString("Command.Refresh");
 
+    /// <summary>Gets the runtime refresh command label.</summary>
+    /// <value>Localized command label; never null.</value>
+    public string RefreshRuntimeText => _localization.GetString("ProxyNodes.Command.RefreshRuntime");
+
     /// <summary>Gets the latency-test command label.</summary>
     /// <value>Localized command label; never null.</value>
     public string TestLatencyText => _localization.GetString("Command.TestLatency");

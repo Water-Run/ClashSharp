@@ -8,8 +8,6 @@
  */
 
 using System;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,13 +15,41 @@ using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
+/// <summary>Runs Windows service-control commands for the mihomo service manager.</summary>
+internal interface IMihomoServiceCommandRunner
+{
+    /// <summary>Runs sc.exe without elevation.</summary>
+    MihomoServiceCommandResult RunSc(params string[] arguments);
+
+    /// <summary>Runs sc.exe with elevation.</summary>
+    Task<MihomoServiceCommandResult> RunScElevatedAsync(CancellationToken cancellationToken, params string[] arguments);
+}
+
+/// <summary>Provides deployment paths and configuration for the mihomo Windows service.</summary>
+internal interface IMihomoServiceDeploymentContext
+{
+    /// <summary>Returns the bundled service host path, or null when unavailable.</summary>
+    string? ResolveServiceHostPath();
+
+    /// <summary>Gets the bundled mihomo binary path.</summary>
+    string MihomoBinaryPath { get; }
+
+    /// <summary>Ensures a TUN-enabled runtime configuration exists for the service.</summary>
+    CoreConfigurationState EnsureTransparentProxyConfiguration();
+}
+
+/// <summary>Small command result record.</summary>
+/// <param name="ExitCode">Process exit code.</param>
+/// <param name="Output">Captured output text; never null.</param>
+internal readonly record struct MihomoServiceCommandResult(int ExitCode, string Output);
+
 /// <summary>Manages the optional Windows service used as transparent proxy prerequisite.</summary>
 /// <remarks>
 /// Invariants: Service state is read from Windows Service Control Manager.
-/// Thread safety: Stateless methods are safe for concurrent calls.
-/// Side effects: May start elevated sc.exe processes for deployment and removal.
+/// Thread safety: Stateless methods are safe for concurrent calls when dependencies are safe.
+/// Side effects: May start elevated sc.exe processes for deployment and removal through injected dependencies.
 /// </remarks>
-public sealed class MihomoServiceManager
+public sealed partial class MihomoServiceManager
 {
     /// <summary>Windows service name.</summary>
     public const string ServiceName = "ClashSharpMihomo";
@@ -31,23 +57,31 @@ public sealed class MihomoServiceManager
     /// <summary>Windows service display name.</summary>
     private const string ServiceDisplayName = "Clash# Mihomo Service";
 
-    /// <summary>Shared singleton instance.</summary>
-    /// <value>A non-null service manager.</value>
-    public static MihomoServiceManager Instance { get; } = new();
+    private readonly IMihomoServiceCommandRunner _commandRunner;
+
+    private readonly IMihomoServiceDeploymentContext _deploymentContext;
+
+    private readonly Func<string, string> _getString;
 
     /// <summary>Initializes the service manager.</summary>
-    private MihomoServiceManager()
+    internal MihomoServiceManager(
+        IMihomoServiceCommandRunner commandRunner,
+        IMihomoServiceDeploymentContext deploymentContext,
+        Func<string, string> getString)
     {
+        _commandRunner = commandRunner ?? throw new ArgumentNullException(nameof(commandRunner));
+        _deploymentContext = deploymentContext ?? throw new ArgumentNullException(nameof(deploymentContext));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     /// <summary>Gets current Windows service status.</summary>
     /// <returns>Service deployment status.</returns>
     public MihomoServiceStatus GetStatus()
     {
-        ProcessResult result = RunSc("query", ServiceName);
+        MihomoServiceCommandResult result = _commandRunner.RunSc("query", ServiceName);
         if (result.ExitCode != 0)
         {
-            return new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.NotDeployed"));
+            return new MihomoServiceStatus(false, false, GetString("MihomoService.Status.NotDeployed"));
         }
 
         bool isRunning = result.Output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
@@ -55,8 +89,8 @@ public sealed class MihomoServiceManager
             true,
             isRunning,
             isRunning
-                ? LocalizationService.Instance.GetString("MihomoService.Status.DeployedRunning")
-                : LocalizationService.Instance.GetString("MihomoService.Status.Deployed"));
+                ? GetString("MihomoService.Status.DeployedRunning")
+                : GetString("MihomoService.Status.Deployed"));
     }
 
     /// <summary>Deploys the Windows service when a service host is available.</summary>
@@ -70,23 +104,21 @@ public sealed class MihomoServiceManager
             return current;
         }
 
-        string? serviceHostPath = ResolveServiceHostPath();
+        string? serviceHostPath = _deploymentContext.ResolveServiceHostPath();
         if (serviceHostPath is null)
         {
-            return new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.HostMissing"));
+            return new MihomoServiceStatus(false, false, GetString("MihomoService.Status.HostMissing"));
         }
 
-        string mihomoPath = MihomoCoreService.Instance.BinaryPath;
-        string configPath = CoreConfigurationService.Instance.EnsureConfiguration(
-            AppSettingsService.Instance.CurrentMode,
-            transparentProxyEnabled: true).ConfigPath;
+        string mihomoPath = _deploymentContext.MihomoBinaryPath;
+        string configPath = _deploymentContext.EnsureTransparentProxyConfiguration().ConfigPath;
         string workDirectory = Path.GetDirectoryName(configPath) ?? AppContext.BaseDirectory;
         string binPath = Quote(serviceHostPath)
             + " --mihomo " + Quote(mihomoPath)
             + " --config " + Quote(configPath)
             + " --workdir " + Quote(workDirectory);
 
-        ProcessResult createResult = await RunScElevatedAsync(
+        MihomoServiceCommandResult createResult = await _commandRunner.RunScElevatedAsync(
             cancellationToken,
             "create",
             ServiceName,
@@ -99,7 +131,7 @@ public sealed class MihomoServiceManager
 
         if (createResult.ExitCode != 0)
         {
-            return new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.DeploymentFailed"));
+            return new MihomoServiceStatus(false, false, GetString("MihomoService.Status.DeploymentFailed"));
         }
 
         return GetStatus();
@@ -116,92 +148,11 @@ public sealed class MihomoServiceManager
             return current;
         }
 
-        await RunScElevatedAsync(cancellationToken, "stop", ServiceName).ConfigureAwait(false);
-        ProcessResult deleteResult = await RunScElevatedAsync(cancellationToken, "delete", ServiceName).ConfigureAwait(false);
+        await _commandRunner.RunScElevatedAsync(cancellationToken, "stop", ServiceName).ConfigureAwait(false);
+        MihomoServiceCommandResult deleteResult = await _commandRunner.RunScElevatedAsync(cancellationToken, "delete", ServiceName).ConfigureAwait(false);
         return deleteResult.ExitCode == 0
-            ? new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.Removed"))
-            : new MihomoServiceStatus(true, current.IsRunning, LocalizationService.Instance.GetString("MihomoService.Status.RemovalFailed"));
-    }
-
-    /// <summary>Attempts to locate the bundled service host.</summary>
-    /// <returns>Service host path, or null when unavailable.</returns>
-    private static string? ResolveServiceHostPath()
-    {
-        string[] candidates =
-        [
-            Path.Combine(AppContext.BaseDirectory, "Binaries", "Service", "ClashSharp.MihomoService.exe"),
-            Path.Combine(AppContext.BaseDirectory, "ClashSharp.MihomoService.exe"),
-        ];
-
-        foreach (string candidate in candidates)
-        {
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>Runs sc.exe and captures output without elevation.</summary>
-    private static ProcessResult RunSc(params string[] arguments)
-    {
-        try
-        {
-            using Process process = new()
-            {
-                StartInfo = BuildScStartInfo(useShellExecute: false, verb: null, arguments),
-            };
-            process.Start();
-            string output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
-            process.WaitForExit(5000);
-            return new ProcessResult(process.ExitCode, output);
-        }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
-        {
-            return new ProcessResult(-1, exception.Message);
-        }
-    }
-
-    /// <summary>Runs sc.exe with elevation and waits for completion.</summary>
-    private static async Task<ProcessResult> RunScElevatedAsync(CancellationToken cancellationToken, params string[] arguments)
-    {
-        try
-        {
-            using Process process = new()
-            {
-                StartInfo = BuildScStartInfo(useShellExecute: true, verb: "runas", arguments),
-            };
-            process.Start();
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            return new ProcessResult(process.ExitCode, string.Empty);
-        }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or OperationCanceledException)
-        {
-            return new ProcessResult(-1, exception.Message);
-        }
-    }
-
-    /// <summary>Builds sc.exe process start info.</summary>
-    private static ProcessStartInfo BuildScStartInfo(bool useShellExecute, string? verb, string[] arguments)
-    {
-        ProcessStartInfo startInfo = new()
-        {
-            FileName = "sc.exe",
-            UseShellExecute = useShellExecute,
-            Verb = verb ?? string.Empty,
-            CreateNoWindow = !useShellExecute,
-            RedirectStandardOutput = !useShellExecute,
-            RedirectStandardError = !useShellExecute,
-        };
-
-        foreach (string argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        return startInfo;
+            ? new MihomoServiceStatus(false, false, GetString("MihomoService.Status.Removed"))
+            : new MihomoServiceStatus(true, current.IsRunning, GetString("MihomoService.Status.RemovalFailed"));
     }
 
     /// <summary>Quotes one command-line path or value for sc.exe binPath.</summary>
@@ -210,6 +161,8 @@ public sealed class MihomoServiceManager
         return "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
     }
 
-    /// <summary>Small process result record.</summary>
-    private readonly record struct ProcessResult(int ExitCode, string Output);
+    private string GetString(string key)
+    {
+        return _getString(key);
+    }
 }

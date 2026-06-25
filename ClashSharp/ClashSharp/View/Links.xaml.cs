@@ -47,12 +47,12 @@ public sealed partial class Links : Page
     {
         TextBox nameBox = new()
         {
-            Header = "名称",
-            Text = "新订阅",
+            Header = LocalizationService.Instance.GetString("Links.Dialog.Name"),
+            Text = LocalizationService.Instance.GetString("Links.Dialog.DefaultName"),
         };
         TextBox uriBox = new()
         {
-            Header = "订阅链接",
+            Header = LocalizationService.Instance.GetString("Links.Dialog.Uri"),
             PlaceholderText = "https://example.com/subscription.yaml",
         };
         StackPanel content = new()
@@ -64,10 +64,10 @@ public sealed partial class Links : Page
 
         ContentDialog dialog = new()
         {
-            Title = "添加订阅链接",
+            Title = LocalizationService.Instance.GetString("Links.Dialog.AddTitle"),
             Content = content,
-            PrimaryButtonText = "添加",
-            CloseButtonText = "取消",
+            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Add"),
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             XamlRoot = XamlRoot,
         };
 

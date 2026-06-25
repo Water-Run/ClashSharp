@@ -7,6 +7,7 @@
  * @date: 2026-06-24
  */
 
+using System;
 using System.Collections.Generic;
 using ClashSharp.Model;
 
@@ -25,11 +26,13 @@ public readonly record struct TrayModeMenuItem(ClashSharpMode Mode, string Label
 public readonly record struct TrayCheckMenuItem(string Label, bool IsChecked, bool IsEnabled);
 
 /// <summary>Complete tray menu state.</summary>
+/// <param name="ModeMenuLabel">Mode submenu label.</param>
 /// <param name="ModeItems">Mode submenu items.</param>
 /// <param name="TransparentProxyItem">Transparent proxy menu item.</param>
 /// <param name="SettingsLabel">Settings command label.</param>
 /// <param name="SafeExitLabel">Safe exit command label.</param>
 public readonly record struct TrayMenuState(
+    string ModeMenuLabel,
     IReadOnlyList<TrayModeMenuItem> ModeItems,
     TrayCheckMenuItem TransparentProxyItem,
     string SettingsLabel,
@@ -38,25 +41,30 @@ public readonly record struct TrayMenuState(
 /// <summary>Builds deterministic tray menu state from runtime settings.</summary>
 public static class TrayMenuStateBuilder
 {
-    /// <summary>Builds tray menu state.</summary>
+    /// <summary>Builds tray menu state with localized labels.</summary>
     /// <param name="currentMode">Currently active Clash# mode.</param>
     /// <param name="transparentProxyEnabled">True when transparent proxy preference is enabled.</param>
     /// <param name="mihomoServiceInstalled">True when the mihomo service is deployed.</param>
+    /// <param name="getString">Localization lookup. Must not be null.</param>
     /// <returns>Tray menu state.</returns>
     public static TrayMenuState Build(
         ClashSharpMode currentMode,
         bool transparentProxyEnabled,
-        bool mihomoServiceInstalled)
+        bool mihomoServiceInstalled,
+        Func<string, string> getString)
     {
+        ArgumentNullException.ThrowIfNull(getString);
+
         return new TrayMenuState(
+            getString("Tray.Menu.Mode"),
             [
-                new(ClashSharpMode.Disabled, "未启用", currentMode == ClashSharpMode.Disabled),
-                new(ClashSharpMode.Standby, "待命", currentMode == ClashSharpMode.Standby),
-                new(ClashSharpMode.RuleTakeover, "按规则接管", currentMode == ClashSharpMode.RuleTakeover),
-                new(ClashSharpMode.FullTakeover, "接管所有", currentMode == ClashSharpMode.FullTakeover),
+                new(ClashSharpMode.Disabled, getString("Master.Mode.Disabled.Title"), currentMode == ClashSharpMode.Disabled),
+                new(ClashSharpMode.Standby, getString("Master.Mode.Standby.Title"), currentMode == ClashSharpMode.Standby),
+                new(ClashSharpMode.RuleTakeover, getString("Master.Mode.RuleTakeover.Title"), currentMode == ClashSharpMode.RuleTakeover),
+                new(ClashSharpMode.FullTakeover, getString("Master.Mode.FullTakeover.Title"), currentMode == ClashSharpMode.FullTakeover),
             ],
-            new TrayCheckMenuItem("透明代理", transparentProxyEnabled && mihomoServiceInstalled, mihomoServiceInstalled),
-            "设置",
-            "安全退出");
+            new TrayCheckMenuItem(getString("Settings.TransparentProxy.Title"), transparentProxyEnabled, true),
+            getString("Tray.Settings"),
+            getString("Tray.SafeExit"));
     }
 }

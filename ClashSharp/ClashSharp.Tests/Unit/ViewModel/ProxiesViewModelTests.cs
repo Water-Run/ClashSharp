@@ -25,6 +25,7 @@ public sealed class ProxiesViewModelTests
 
         Assert.Equal("Proxy nodes", viewModel.PageTitleText);
         Assert.Equal("Refresh", viewModel.RefreshNodesText);
+        Assert.Equal("Refresh runtime", viewModel.RefreshRuntimeText);
         Assert.Equal("Test latency", viewModel.TestLatencyText);
         Assert.Equal("Strategy groups", viewModel.ProxyGroupsSectionTitleText);
         Assert.Equal("Resources", viewModel.ProviderResourcesSectionTitleText);
@@ -157,6 +158,7 @@ public sealed class ProxiesViewModelTests
                 "Nav.ProxyNodes" => "Proxy nodes",
                 "Page.ProxyNodes.Description" => "Description",
                 "Command.Refresh" => "Refresh",
+                "ProxyNodes.Command.RefreshRuntime" => "Refresh runtime",
                 "Command.TestLatency" => "Test latency",
                 "ProxyNodes.Section.StrategyGroups" => "Strategy groups",
                 "ProxyNodes.Section.Resources" => "Resources",

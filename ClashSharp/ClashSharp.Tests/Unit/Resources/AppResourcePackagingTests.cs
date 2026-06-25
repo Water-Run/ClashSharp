@@ -101,6 +101,627 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("SettingsProxyInformationAdapter.CreateSnapshot", aboutCode, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies the add-subscription dialog uses localization keys instead of hard-coded Chinese labels.</summary>
+    [Fact]
+    public void LinksCodeBehind_UsesLocalizedAddDialogText()
+    {
+        string linksCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Links.xaml.cs");
+
+        string linksCode = File.ReadAllText(linksCodePath);
+
+        Assert.DoesNotContain("\"名称\"", linksCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"新订阅\"", linksCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"订阅链接\"", linksCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"添加订阅链接\"", linksCode, StringComparison.Ordinal);
+        Assert.Contains("Links.Dialog.Name", linksCode, StringComparison.Ordinal);
+        Assert.Contains("Links.Dialog.DefaultName", linksCode, StringComparison.Ordinal);
+        Assert.Contains("Links.Dialog.Uri", linksCode, StringComparison.Ordinal);
+        Assert.Contains("Links.Dialog.AddTitle", linksCode, StringComparison.Ordinal);
+        Assert.Contains("Command.Add", linksCode, StringComparison.Ordinal);
+        Assert.Contains("Command.Cancel", linksCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies network takeover result messages are localized instead of hard-coded English text.</summary>
+    [Fact]
+    public void NetworkTakeoverService_UsesLocalizedResultMessages()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "NetworkTakeoverService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("Full takeover is active through Windows system proxy.", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Rule takeover is active through Windows system proxy.", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Full takeover is active through TUN transparent proxy.", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Rule takeover is active through TUN transparent proxy.", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Mihomo service is not deployed; full takeover is active through Windows system proxy.", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("NetworkTakeover.SystemProxy.Full", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("NetworkTakeover.TransparentProxy.Rule", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("NetworkTakeover.TransparentProxyServiceMissing.Full", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies network takeover mode application is testable through injected dependencies.</summary>
+    [Fact]
+    public void NetworkTakeoverService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "NetworkTakeoverService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        foreach (string singletonAccess in new[]
+        {
+            "AppSettingsService.Instance",
+            "CoreConfigurationService.Instance",
+            "LocalizationService.Instance.GetString",
+            "MihomoCoreService.Instance",
+            "MihomoServiceManager.Instance",
+            "ProxyRecoveryService.Instance",
+            "WindowsProxyService.Instance",
+        })
+        {
+            Assert.DoesNotContain(singletonAccess, serviceCode, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("INetworkTakeoverSettings", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("INetworkTakeoverCoreConfiguration", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("INetworkTakeoverWindowsProxy", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies provider update actions use the view model command instead of page code-behind.</summary>
+    [Fact]
+    public void ProxiesXaml_BindsProviderUpdateCommand()
+    {
+        string proxiesXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Proxies.xaml");
+        string proxiesCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Proxies.xaml.cs");
+
+        string proxiesXaml = File.ReadAllText(proxiesXamlPath);
+        string proxiesCode = File.ReadAllText(proxiesCodePath);
+
+        Assert.DoesNotContain("Click=\"UpdateProviderButton_Click\"", proxiesXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdateProviderButton_Click", proxiesCode, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding DataContext.UpdateProviderCommand, ElementName=ProviderResourcesList}\"", proxiesXaml, StringComparison.Ordinal);
+        Assert.Contains("CommandParameter=\"{Binding}\"", proxiesXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies transparent proxy remains a user preference independent from service availability.</summary>
+    [Fact]
+    public void TransparentProxyPreference_IsNotClearedWhenUnavailable()
+    {
+        string settingsXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml");
+        string takeoverServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "NetworkTakeoverService.cs");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+        string takeoverServiceCode = File.ReadAllText(takeoverServicePath);
+
+        Assert.DoesNotContain("IsEnabled=\"{Binding CanToggleTransparentProxy}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppSettingsService.Instance.TransparentProxyEnabled = false", takeoverServiceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies core configuration status messages use localization keys.</summary>
+    [Fact]
+    public void CoreConfigurationService_UsesLocalizedResultMessages()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "CoreConfigurationService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("\"配置已下载、校验并导入。\"", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"配置校验通过。\"", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("CoreConfiguration.Imported", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("CoreConfiguration.Validated", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies core configuration service receives settings, metrics, validation, and localization through injected boundaries.</summary>
+    [Fact]
+    public void CoreConfigurationService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "CoreConfigurationService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MihomoProfileParserService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MihomoCoreService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("new Process", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ICoreConfigurationSettings", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ICoreConfigurationProfileMetrics", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ICoreConfigurationValidator", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies profile catalog row statuses use localization keys.</summary>
+    [Fact]
+    public void ProfileCatalogService_UsesLocalizedStatusMessages()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProfileCatalogService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        foreach (string literal in new[]
+        {
+            "\"已添加\"",
+            "\"检查失败\"",
+            "\"正在下载\"",
+            "\"已更新\"",
+            "\"已取消\"",
+            "\"更新失败\"",
+            "\"内置直连配置可用。\"",
+            "\"可用\"",
+            "\"校验通过\"",
+            "\"校验失败\"",
+            "\"本机直连默认配置\"",
+        })
+        {
+            Assert.DoesNotContain(literal, serviceCode, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ProfileCatalog.Status.Added", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ProfileCatalog.Subscription.CheckSucceeded.Format", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ProfileCatalog.BuiltInDirect.Name", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies profile catalog service receives settings, core configuration, logging, and localization through injected boundaries.</summary>
+    [Fact]
+    public void ProfileCatalogService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProfileCatalogService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("CoreConfigurationService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProfileCatalogSettings", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProfileCatalogCoreConfiguration", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProfileCatalogLog", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies profile and rule preview fallback names use localization keys.</summary>
+    [Fact]
+    public void ProfileAndRulePreviewFallbackNames_UseLocalizationKeys()
+    {
+        string previewParserPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "MihomoProfilePreviewParser.cs");
+        string ruleCatalogPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "RuleCatalogService.cs");
+
+        string previewParserCode = File.ReadAllText(previewParserPath);
+        string ruleCatalogCode = File.ReadAllText(ruleCatalogPath);
+
+        Assert.DoesNotContain("\"当前配置\"", previewParserCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"内置直连\"", ruleCatalogCode, StringComparison.Ordinal);
+        Assert.Contains("ProfilePreview.CurrentConfiguration", previewParserCode, StringComparison.Ordinal);
+        Assert.Contains("RuleCatalog.BuiltInDirect.Name", ruleCatalogCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the profile preview parser remains pure and receives localization from callers.</summary>
+    [Fact]
+    public void MihomoProfilePreviewParser_UsesInjectedLocalization()
+    {
+        string previewParserPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "MihomoProfilePreviewParser.cs");
+
+        string previewParserCode = File.ReadAllText(previewParserPath);
+
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", previewParserCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", previewParserCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies profile parser service receives file, display, and localization dependencies from production composition.</summary>
+    [Fact]
+    public void MihomoProfileParserService_UsesInjectedDisplayDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "MihomoProfileParserService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("CoreConfigurationService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.ReadAllText", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegionDisplayService.Instance.Resolve", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IMihomoProfileTextSource", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, RegionMetadata>", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the rule catalog service composes data through injected dependencies.</summary>
+    [Fact]
+    public void RuleCatalogService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "RuleCatalogService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("MihomoProfileParserService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IRuleCatalogProfileRules", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IRuleCatalogHitStorage", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the proxy node catalog service receives active-profile and region dependencies from composition.</summary>
+    [Fact]
+    public void ProxyNodeCatalogService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProxyNodeCatalogService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("MihomoProfileParserService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegionDisplayService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProxyNodeCatalogProfileNodes", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, RegionMetadata>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings language options are sourced from the centralized language catalog.</summary>
+    [Fact]
+    public void SettingsViewModel_UsesCentralizedSupportedLanguageList()
+    {
+        string viewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
+
+        string viewModelCode = File.ReadAllText(viewModelPath);
+
+        Assert.DoesNotContain("\"简体中文\"", viewModelCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"繁體中文\"", viewModelCode, StringComparison.Ordinal);
+        Assert.Contains("LocalizationService.GetSupportedLanguages", viewModelCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings view model helpers do not access the global localization singleton directly.</summary>
+    [Fact]
+    public void SettingsViewModel_DoesNotAccessLocalizationSingleton()
+    {
+        string viewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
+
+        string viewModelCode = File.ReadAllText(viewModelPath);
+
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", viewModelCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", viewModelCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies tray menu state construction receives localization from callers.</summary>
+    [Fact]
+    public void TrayMenuStateBuilder_UsesInjectedLocalizationOnly()
+    {
+        string builderPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TrayMenuStateBuilder.cs");
+
+        string builderCode = File.ReadAllText(builderPath);
+
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", builderCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", builderCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies region display names are resolved through localization keys.</summary>
+    [Fact]
+    public void RegionDisplayService_UsesLocalizedRegionNames()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "RegionDisplayService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        foreach (string literal in new[]
+        {
+            "\"中国大陆\"",
+            "\"香港\"",
+            "\"澳门\"",
+            "\"台湾\"",
+            "\"日本\"",
+            "\"韩国\"",
+            "\"新加坡\"",
+            "\"美国\"",
+            "\"英国\"",
+            "\"德国\"",
+            "\"法国\"",
+            "\"中国香港\"",
+            "\"中国澳门\"",
+            "\"中国台湾\"",
+        })
+        {
+            Assert.DoesNotContain(literal, serviceCode, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("Region.US", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Region.MainlandChina.TW", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppSettingsService.Instance.MainlandChinaFeatureMode", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies mainland China display filtering is not coupled directly to global settings.</summary>
+    [Fact]
+    public void MainlandChinaTextDisplayService_UsesInjectedSettings()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "MainlandChinaTextDisplayService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<MainlandChinaFeatureMode>", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<bool>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies startup conflict detection resolves user-facing text through an injected localizer.</summary>
+    [Fact]
+    public void StartupConflictDetectionService_UsesInjectedLocalization()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "StartupConflictDetectionService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowsProxyService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Process.GetProcessesByName", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TcpListener", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("DefaultStartupConflictEnvironment", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IStartupConflictEnvironment", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings code-behind delegates connection testing to the view model.</summary>
+    [Fact]
+    public void SettingsCodeBehind_DoesNotOwnConnectionTestHttpRequest()
+    {
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.DoesNotContain("new HttpClient", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpResponseMessage", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("RunConnectionTestAsync", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings code-behind delegates data-maintenance actions to the view model.</summary>
+    [Fact]
+    public void SettingsCodeBehind_DoesNotOwnDataMaintenanceActions()
+    {
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.DoesNotContain("AppDataMaintenanceService.ResetAllSettings()", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppDataMaintenanceService.ClearAllData()", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppSettingsService.Instance.DisplayLanguage", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.ResetAllSettings()", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.ClearAllData()", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings code-behind delegates startup conflict detection to the view model.</summary>
+    [Fact]
+    public void SettingsCodeBehind_DoesNotOwnStartupConflictDetection()
+    {
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.DoesNotContain("StartupConflictDetectionService.Instance.CheckConflicts(_viewModel.MixedPort)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.CheckStartupConflicts()", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies Windows diagnostic result messages use localization keys.</summary>
+    [Fact]
+    public void WindowsNetworkDiagnosticService_UsesLocalizedResultMessages()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "WindowsNetworkDiagnosticService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        foreach (string literal in new[]
+        {
+            "\"WSL 代理桥接已配置。\"",
+            "\"WSL 已配置桥接，但用户代理环境变量未指向 Clash#。\"",
+            "\"WSL 可用，但未配置代理桥接。\"",
+            "\"WSL 不可用或未安装。\"",
+            "\"终端代理环境变量已配置。\"",
+            "\"终端代理环境变量未指向 Clash#。\"",
+            "\"终端\"",
+            "\"Microsoft Store 已允许访问本机代理。\"",
+            "\"Microsoft Store 未配置本机代理访问豁免。\"",
+        })
+        {
+            Assert.DoesNotContain(literal, serviceCode, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("WindowsDiagnostic.Wsl.Ready", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("WindowsDiagnostic.Terminal.ProxyEnvironmentMissing", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("WindowsDiagnostic.MicrosoftStore.LoopbackMissing", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies Windows diagnostics use injected settings, environment, process, and localization dependencies.</summary>
+    [Fact]
+    public void WindowsNetworkDiagnosticService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "WindowsNetworkDiagnosticService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Environment.GetEnvironmentVariable", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Environment.SetEnvironmentVariable", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IWindowsDiagnosticSettings", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IWindowsDiagnosticEnvironment", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IWindowsDiagnosticProcessRunner", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the mihomo service manager uses injected command, deployment, and localization dependencies.</summary>
+    [Fact]
+    public void MihomoServiceManager_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "MihomoServiceManager.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("LocalizationService.Instance.GetString", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("CoreConfigurationService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MihomoCoreService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("new Process", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IMihomoServiceCommandRunner", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IMihomoServiceDeploymentContext", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies stale proxy recovery result messages use localization keys.</summary>
+    [Fact]
+    public void ProxyRecoveryService_UsesLocalizedResultMessages()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProxyRecoveryService.cs");
+        string appPath = FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+        string appCode = File.ReadAllText(appPath);
+
+        foreach (string literal in new[]
+        {
+            "\"Startup stale-proxy check is disabled.\"",
+            "\"No stale Clash# proxy state was detected.\"",
+            "\"Windows proxy was disabled because stale Clash# proxy state was detected.\"",
+            "\"Stale Clash# proxy state was detected, but recovery policy is set to do nothing.\"",
+            "\"Startup proxy recovery failed.\"",
+        })
+        {
+            Assert.DoesNotContain(literal, serviceCode, StringComparison.Ordinal);
+            Assert.DoesNotContain(literal, appCode, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ProxyRecovery.CheckDisabled", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ProxyRecovery.NoStaleProxy", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ProxyRecovery.Disabled", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ProxyRecovery.DoNothing", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ProxyRecovery.StartupFailed", appCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies stale proxy recovery composes platform dependencies through injected boundaries.</summary>
+    [Fact]
+    public void ProxyRecoveryService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProxyRecoveryService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowsProxyService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("NetworkTakeoverService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProxyRecoverySettings", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProxyRecoveryWindowsProxy", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProxyRecoveryTakeover", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies runtime shutdown cleanup composes dependencies and localized warning text through injected boundaries.</summary>
+    [Fact]
+    public void RuntimeShutdownService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "RuntimeShutdownService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("ConnectionSamplingService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MihomoCoreService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowsProxyService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Runtime shutdown cleanup failed.\"", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IRuntimeShutdownSampling", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IRuntimeShutdownCore", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IRuntimeShutdownSettings", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IRuntimeShutdownWindowsProxy", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IRuntimeShutdownLog", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("RuntimeShutdown.CleanupFailed", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies startup launch synchronization composes Windows startup task and logging through injected boundaries.</summary>
+    [Fact]
+    public void StartupLaunchService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "StartupLaunchService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("Windows.ApplicationModel", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartupTask.GetAsync", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Failed to update launch-at-startup setting.\"", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IStartupLaunchTaskProvider", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IStartupLaunchTask", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IStartupLaunchLog", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("StartupLaunch.UpdateFailed", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies proxy latency orchestration receives storage and TCP probing through injected boundaries.</summary>
+    [Fact]
+    public void ProxyLatencyService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProxyLatencyService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("new TcpClient", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Stopwatch.StartNew", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProxyLatencyStorage", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProxyLatencyProbe", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies destructive data maintenance composes storage, runtime, and file cleanup through injected boundaries.</summary>
+    [Fact]
+    public void AppDataMaintenanceService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppDataMaintenanceService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("RuntimeShutdownService.Shutdown", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProfileCatalogService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppDataPathService.ResolveLocalDataDirectory", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Log storage could not be cleared before data deletion.\"", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IAppDataMaintenanceSettings", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IAppDataMaintenanceRuntime", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IAppDataMaintenanceLogStorage", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IAppDataMaintenanceLocalDataStore", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IAppDataMaintenanceProfileCatalog", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Maintenance.LogClearFailed", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies connection sampling composes settings, mihomo reads, storage, and localized logs through injected boundaries.</summary>
+    [Fact]
+    public void ConnectionSamplingService_UsesInjectedDependencies()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ConnectionSamplingService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MihomoConnectionService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Background connection sampling recovered.\"", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Background connection sampling failed.\"", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IConnectionSamplingSettings", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IConnectionSamplingSource", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IConnectionSamplingStorage", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ConnectionSampling.Failed", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ConnectionSampling.Recovered", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies log storage receives active profile context through an injected function.</summary>
+    [Fact]
+    public void LogStorageService_UsesInjectedActiveProfile()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "LogStorageService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string>", serviceCode, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies mainland China feature settings split display level from URL blocking.</summary>
     [Fact]
     public void SettingsXaml_UsesMainlandChinaFeatureModeSelector()

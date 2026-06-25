@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -97,15 +98,18 @@ internal interface IMihomoServiceController
 internal sealed class AlwaysAvailableMihomoServiceController : IMihomoServiceController
 {
     /// <summary>Shared controller instance.</summary>
-    public static AlwaysAvailableMihomoServiceController Instance { get; } = new();
+    public static AlwaysAvailableMihomoServiceController Instance { get; } = new(key => key);
 
-    private AlwaysAvailableMihomoServiceController()
+    private readonly Func<string, string> _getString;
+
+    public AlwaysAvailableMihomoServiceController(Func<string, string> getString)
     {
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     public MihomoServiceStatus GetStatus()
     {
-        return new MihomoServiceStatus(true, false, LocalizationService.Instance.GetString("MihomoService.Status.Deployed"));
+        return new MihomoServiceStatus(true, false, _getString("MihomoService.Status.Deployed"));
     }
 
     public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
@@ -115,7 +119,7 @@ internal sealed class AlwaysAvailableMihomoServiceController : IMihomoServiceCon
 
     public Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
     {
-        return Task.FromResult(new MihomoServiceStatus(false, false, LocalizationService.Instance.GetString("MihomoService.Status.NotDeployed")));
+        return Task.FromResult(new MihomoServiceStatus(false, false, _getString("MihomoService.Status.NotDeployed")));
     }
 }
 
@@ -273,6 +277,18 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Proxy information snapshot provider used by the proxy information card.</summary>
     private readonly Func<SettingsProxyInformation> _getProxyInformation;
 
+    /// <summary>Connection-test HTTP probe.</summary>
+    private readonly Func<Uri, CancellationToken, Task<int>> _testConnectionAsync;
+
+    /// <summary>Callback that resets persisted settings.</summary>
+    private readonly Action _resetAllSettings;
+
+    /// <summary>Callback that clears all local application data.</summary>
+    private readonly Action _clearAllData;
+
+    /// <summary>Startup conflict checker.</summary>
+    private readonly Func<int, IReadOnlyList<StartupConflictIssue>> _checkStartupConflicts;
+
     /// <summary>Diagnostics command router used by Windows-native diagnostic buttons.</summary>
     private readonly SettingsDiagnosticsViewModel? _diagnosticsViewModel;
 
@@ -364,7 +380,11 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<SettingsProxyInformation> getProxyInformation,
         SettingsDiagnosticsViewModel? diagnosticsViewModel = null,
         IMihomoServiceController? mihomoServiceController = null,
-        Action<AppAccentColorMode, string>? applyAccentColor = null)
+        Action<AppAccentColorMode, string>? applyAccentColor = null,
+        Func<Uri, CancellationToken, Task<int>>? testConnectionAsync = null,
+        Action? resetAllSettings = null,
+        Action? clearAllData = null,
+        Func<int, IReadOnlyList<StartupConflictIssue>>? checkStartupConflicts = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
@@ -374,6 +394,10 @@ internal sealed class SettingsViewModel : ObservableObject
         _restartConnectionSampling = restartConnectionSampling ?? throw new ArgumentNullException(nameof(restartConnectionSampling));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _getProxyInformation = getProxyInformation ?? throw new ArgumentNullException(nameof(getProxyInformation));
+        _testConnectionAsync = testConnectionAsync ?? TestConnectionAsync;
+        _resetAllSettings = resetAllSettings ?? (() => { });
+        _clearAllData = clearAllData ?? (() => { });
+        _checkStartupConflicts = checkStartupConflicts ?? (_ => []);
         _diagnosticsViewModel = diagnosticsViewModel;
         _mihomoServiceController = mihomoServiceController ?? AlwaysAvailableMihomoServiceController.Instance;
         WindowsDiagnosticCommand = new AsyncRelayCommand(ExecuteWindowsDiagnosticCommandAsync);
@@ -393,16 +417,21 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string LanguageDescriptionText => _getString("Settings.Language.Description");
 
-    public IReadOnlyList<string> DisplayLanguageOptions =>
-    [
-        _getString("Settings.Language.AutoDetect"),
-        "简体中文",
-        "繁體中文",
-        "English",
-        "Русский",
-        "Français",
-        "Deutsch",
-    ];
+    public IReadOnlyList<string> DisplayLanguageOptions
+    {
+        get
+        {
+            List<string> options = [];
+            foreach ((AppLanguage language, string displayName) in LocalizationService.GetSupportedLanguages())
+            {
+                options.Add(language == AppLanguage.AutoDetect
+                    ? _getString("Settings.Language.AutoDetect")
+                    : displayName);
+            }
+
+            return options;
+        }
+    }
 
     public string AppThemeModeTitleText => _getString("Settings.AppTheme.Title");
 
@@ -474,6 +503,12 @@ internal sealed class SettingsViewModel : ObservableObject
     public string ConnectionTestUrlTitleText => _getString("Settings.ConnectionTestUrl.Title");
 
     public string ConnectionTestUrlDescriptionText => _getString("Settings.ConnectionTestUrl.Description");
+
+    public bool IsConnectionTestRunning
+    {
+        get => _isConnectionTestRunning;
+        private set => SetProperty(ref _isConnectionTestRunning, value);
+    }
 
     public string ProxyInformationTitleText => _getString("Settings.ProxyInformation.Title");
 
@@ -695,6 +730,9 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="ConnectionTestUrl"/>.</summary>
     private string _connectionTestUrl = string.Empty;
 
+    /// <summary>Backing field for <see cref="IsConnectionTestRunning"/>.</summary>
+    private bool _isConnectionTestRunning;
+
     /// <summary>Backing field for <see cref="ProxyLocalEntryText"/>.</summary>
     private string _proxyLocalEntryText = string.Empty;
 
@@ -794,7 +832,7 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetTransparentProxyEnabled(value);
     }
 
-    public bool CanToggleTransparentProxy => _mihomoServiceStatus.IsInstalled;
+    public bool CanToggleTransparentProxy => true;
 
     public string MihomoServiceStatusText
     {
@@ -943,13 +981,7 @@ internal sealed class SettingsViewModel : ObservableObject
         AppAccentColorValue = _settings.AppAccentColorValue;
         SetProperty(ref _launchAtStartupEnabled, _settings.LaunchAtStartupEnabled, nameof(LaunchAtStartupEnabled));
         RefreshMihomoServiceStatus();
-        bool transparentProxyEnabled = _settings.TransparentProxyEnabled && CanToggleTransparentProxy;
-        if (_settings.TransparentProxyEnabled && !transparentProxyEnabled)
-        {
-            _settings.TransparentProxyEnabled = false;
-        }
-
-        SetProperty(ref _transparentProxyEnabled, transparentProxyEnabled, nameof(TransparentProxyEnabled));
+        SetProperty(ref _transparentProxyEnabled, _settings.TransparentProxyEnabled, nameof(TransparentProxyEnabled));
         MixedPort = _settings.MixedPort;
         SetProperty(ref _connectionSamplingEnabled, _settings.ConnectionSamplingEnabled, nameof(ConnectionSamplingEnabled));
         ConnectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
@@ -1175,13 +1207,6 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <param name="isEnabled">Switch value.</param>
     public void SetTransparentProxyEnabled(bool isEnabled)
     {
-        if (isEnabled && !CanToggleTransparentProxy)
-        {
-            _settings.TransparentProxyEnabled = false;
-            SetProperty(ref _transparentProxyEnabled, false, nameof(TransparentProxyEnabled));
-            return;
-        }
-
         _settings.TransparentProxyEnabled = isEnabled;
         SetProperty(ref _transparentProxyEnabled, isEnabled, nameof(TransparentProxyEnabled));
     }
@@ -1194,16 +1219,12 @@ internal sealed class SettingsViewModel : ObservableObject
         SetMihomoServiceStatus(await _mihomoServiceController.DeployAsync(cancellationToken));
     }
 
-    /// <summary>Uninstalls the mihomo Windows service and disables transparent proxy.</summary>
+    /// <summary>Uninstalls the mihomo Windows service and preserves transparent proxy preference.</summary>
     /// <param name="cancellationToken">Cancels uninstall wait when requested.</param>
     /// <returns>A task that completes after service status is refreshed.</returns>
     public async Task UninstallMihomoServiceAsync(CancellationToken cancellationToken)
     {
         SetMihomoServiceStatus(await _mihomoServiceController.UninstallAsync(cancellationToken));
-        if (!CanToggleTransparentProxy)
-        {
-            SetTransparentProxyEnabled(false);
-        }
     }
 
     /// <summary>Refreshes the cached mihomo service status.</summary>
@@ -1479,5 +1500,66 @@ internal sealed class SettingsViewModel : ObservableObject
         _settings.ConnectionTestUrl = persistedValue;
         ConnectionTestUrl = persistedValue;
         return true;
+    }
+
+    /// <summary>Runs a connection test against the persisted connection-test URL.</summary>
+    /// <param name="cancellationToken">Cancels the test when requested.</param>
+    /// <returns>Localized result message.</returns>
+    public async Task<string> RunConnectionTestAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            IsConnectionTestRunning = true;
+            Uri uri = new(ConnectionTestUrl);
+            int statusCode = await _testConnectionAsync(uri, cancellationToken);
+            return string.Format(_getString("Settings.ConnectionTest.Succeeded.Format"), statusCode);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
+        {
+            return string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message);
+        }
+        finally
+        {
+            IsConnectionTestRunning = false;
+        }
+    }
+
+    /// <summary>Resets all persisted settings through the injected maintenance action and reloads the view model.</summary>
+    public void ResetAllSettings()
+    {
+        _resetAllSettings();
+        ReloadAfterMaintenance();
+    }
+
+    /// <summary>Clears all local application data through the injected maintenance action and reloads the view model.</summary>
+    public void ClearAllData()
+    {
+        _clearAllData();
+        ReloadAfterMaintenance();
+    }
+
+    /// <summary>Checks startup conflicts for the currently configured mixed port.</summary>
+    /// <returns>Detected startup conflict issues.</returns>
+    public IReadOnlyList<StartupConflictIssue> CheckStartupConflicts()
+    {
+        return _checkStartupConflicts(MixedPort);
+    }
+
+    private void ReloadAfterMaintenance()
+    {
+        _applyLanguage(_settings.DisplayLanguage);
+        Load();
+        RaiseLocalizedTextChanges();
+        ResetDiagnosticStatusText();
+    }
+
+    private static async Task<int> TestConnectionAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        using HttpClient client = new()
+        {
+            Timeout = TimeSpan.FromSeconds(8),
+        };
+        using HttpResponseMessage response = await client.GetAsync(uri, cancellationToken);
+        return (int)response.StatusCode;
     }
 }

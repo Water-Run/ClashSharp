@@ -63,12 +63,4 @@ public sealed partial class Proxies : Page
         await _viewModel.SelectProxyAsync(group, proxyName, default);
     }
 
-    /// <summary>Handles one provider update request.</summary>
-    private async void UpdateProviderButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { DataContext: MihomoProviderResource provider })
-        {
-            await _viewModel.UpdateProviderAsync(provider, default);
-        }
-    }
 }

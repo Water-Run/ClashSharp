@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -17,20 +18,51 @@ using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
+/// <summary>Provides connection sampling settings.</summary>
+internal interface IConnectionSamplingSettings
+{
+    /// <summary>Gets whether background connection sampling is enabled.</summary>
+    bool IsEnabled { get; }
+
+    /// <summary>Gets the sampling loop interval in seconds.</summary>
+    int IntervalSeconds { get; }
+}
+
+/// <summary>Reads active mihomo connections for sampling.</summary>
+internal interface IConnectionSamplingSource
+{
+    /// <summary>Returns current active connections.</summary>
+    Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>Persists sampled connection snapshots and sampling logs.</summary>
+internal interface IConnectionSamplingStorage
+{
+    /// <summary>Appends one connection snapshot and returns inserted row count.</summary>
+    int AppendConnectionSnapshot(IReadOnlyList<ActiveConnection> connections);
+
+    /// <summary>Appends a sampling log entry.</summary>
+    void AppendLog(string level, string category, string message, string? detail);
+}
+
 /// <summary>Periodically reads mihomo active connections and writes SQLite statistics.</summary>
 /// <remarks>
 /// Invariants: Only one sampling loop can run for this service instance.
 /// Thread safety: Start and stop operations serialize state through a private lock.
 /// Side effects: Performs local mihomo API requests and writes connection snapshots to SQLite.
 /// </remarks>
-public sealed class ConnectionSamplingService
+public sealed partial class ConnectionSamplingService
 {
-    /// <summary>Shared singleton instance created once at type initialization.</summary>
-    /// <value>A non-null <see cref="ConnectionSamplingService"/> instance.</value>
-    public static ConnectionSamplingService Instance { get; } = new();
-
     /// <summary>Synchronization object guarding service lifetime state.</summary>
     private readonly object _syncLock = new();
+
+    private readonly IConnectionSamplingSettings _settings;
+
+    private readonly IConnectionSamplingSource _source;
+
+    private readonly IConnectionSamplingStorage _storage;
+
+    private readonly Func<string, string> _getString;
 
     /// <summary>Cancellation source for the running sampling loop.</summary>
     private CancellationTokenSource? _cancellationTokenSource;
@@ -42,8 +74,16 @@ public sealed class ConnectionSamplingService
     private bool _lastSampleFailed;
 
     /// <summary>Initializes the connection sampling service.</summary>
-    private ConnectionSamplingService()
+    internal ConnectionSamplingService(
+        IConnectionSamplingSettings settings,
+        IConnectionSamplingSource source,
+        IConnectionSamplingStorage storage,
+        Func<string, string> getString)
     {
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _source = source ?? throw new ArgumentNullException(nameof(source));
+        _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     /// <summary>Gets whether the background sampling loop is currently running.</summary>
@@ -62,7 +102,7 @@ public sealed class ConnectionSamplingService
     /// <summary>Starts the background sampling loop when enabled by settings.</summary>
     public void StartIfEnabled()
     {
-        if (!AppSettingsService.Instance.ConnectionSamplingEnabled)
+        if (!_settings.IsEnabled)
         {
             return;
         }
@@ -114,7 +154,7 @@ public sealed class ConnectionSamplingService
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            TimeSpan interval = TimeSpan.FromSeconds(AppSettingsService.Instance.ConnectionSamplingIntervalSeconds);
+            TimeSpan interval = TimeSpan.FromSeconds(_settings.IntervalSeconds);
             try
             {
                 await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
@@ -130,15 +170,19 @@ public sealed class ConnectionSamplingService
 
     /// <summary>Samples active connections once and writes them to SQLite.</summary>
     /// <param name="cancellationToken">Cancels the sample.</param>
-    private async Task SampleOnceAsync(CancellationToken cancellationToken)
+    internal async Task SampleOnceAsync(CancellationToken cancellationToken)
     {
         try
         {
-            IReadOnlyList<ActiveConnection> connections = await MihomoConnectionService.Instance.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
-            int insertedCount = LogStorageService.Instance.AppendConnectionSnapshot(connections);
+            IReadOnlyList<ActiveConnection> connections = await _source.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
+            int insertedCount = _storage.AppendConnectionSnapshot(connections);
             if (_lastSampleFailed)
             {
-                LogStorageService.Instance.AppendLog("Info", "ConnectionSampling", "Background connection sampling recovered.", $"{insertedCount:N0} rows.");
+                _storage.AppendLog(
+                    "Info",
+                    "ConnectionSampling",
+                    GetString("ConnectionSampling.Recovered"),
+                    FormatString("ConnectionSampling.RecoveredDetail.Format", insertedCount));
             }
 
             _lastSampleFailed = false;
@@ -152,10 +196,20 @@ public sealed class ConnectionSamplingService
 
             if (!_lastSampleFailed)
             {
-                LogStorageService.Instance.AppendLog("Warning", "ConnectionSampling", "Background connection sampling failed.", exception.Message);
+                _storage.AppendLog("Warning", "ConnectionSampling", GetString("ConnectionSampling.Failed"), exception.Message);
             }
 
             _lastSampleFailed = true;
         }
+    }
+
+    private string GetString(string key)
+    {
+        return _getString(key);
+    }
+
+    private string FormatString(string key, params object[] args)
+    {
+        return string.Format(CultureInfo.CurrentCulture, GetString(key), args);
     }
 }

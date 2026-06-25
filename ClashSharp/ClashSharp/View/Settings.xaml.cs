@@ -9,7 +9,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Service;
@@ -36,7 +36,8 @@ public sealed partial class Settings : Page
     {
         SettingsDiagnosticsViewModel diagnosticsViewModel = new(
             new WindowsDiagnosticsClient(WindowsNetworkDiagnosticService.Instance),
-            new DiagnosticsLog(LogStorageService.Instance));
+            new DiagnosticsLog(LogStorageService.Instance),
+            LocalizationService.Instance.GetString);
         _viewModel = new(
             new AppSettingsStore(AppSettingsService.Instance),
             language => LocalizationService.Instance.CurrentLanguage = language,
@@ -47,7 +48,10 @@ public sealed partial class Settings : Page
             SettingsProxyInformationAdapter.CreateSnapshot,
             diagnosticsViewModel,
             new MihomoServiceControllerAdapter(MihomoServiceManager.Instance),
-            AppThemeService.ApplyAccentColor);
+            AppThemeService.ApplyAccentColor,
+            resetAllSettings: AppDataMaintenanceService.ResetAllSettings,
+            clearAllData: AppDataMaintenanceService.ClearAllData,
+            checkStartupConflicts: StartupConflictDetectionService.Instance.CheckConflicts);
         InitializeComponent();
         DataContext = _viewModel;
         LoadSettings();
@@ -86,21 +90,7 @@ public sealed partial class Settings : Page
         ConnectionTestButton.IsEnabled = false;
         try
         {
-            using HttpClient client = new()
-            {
-                Timeout = TimeSpan.FromSeconds(8),
-            };
-            using HttpResponseMessage response = await client.GetAsync(new Uri(_viewModel.ConnectionTestUrl));
-            string message = string.Format(
-                LocalizationService.Instance.GetString("Settings.ConnectionTest.Succeeded.Format"),
-                (int)response.StatusCode);
-            await ShowConnectionTestResultAsync(message);
-        }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
-        {
-            string message = string.Format(
-                LocalizationService.Instance.GetString("Settings.ConnectionTest.Failed.Format"),
-                exception.Message);
+            string message = await _viewModel.RunConnectionTestAsync(CancellationToken.None);
             await ShowConnectionTestResultAsync(message);
         }
         finally
@@ -185,7 +175,7 @@ public sealed partial class Settings : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void CheckStartupConflictsButton_Click(object sender, RoutedEventArgs e)
     {
-        IReadOnlyList<StartupConflictIssue> issues = StartupConflictDetectionService.Instance.CheckConflicts(_viewModel.MixedPort);
+        IReadOnlyList<StartupConflictIssue> issues = _viewModel.CheckStartupConflicts();
         await StartupConflictDialogPresenter.ShowAsync(GetDialogXamlRoot(), issues);
     }
 
@@ -305,10 +295,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppDataMaintenanceService.ResetAllSettings();
-        LocalizationService.Instance.CurrentLanguage = AppSettingsService.Instance.DisplayLanguage;
-        _viewModel.SetDisplayLanguageIndex(ToLanguageIndex(AppSettingsService.Instance.DisplayLanguage));
-        _viewModel.Load();
+        _viewModel.ResetAllSettings();
         ConnectionTestUrlBox.Text = _viewModel.ConnectionTestUrl;
     }
 
@@ -345,17 +332,8 @@ public sealed partial class Settings : Page
             return;
         }
 
-        AppDataMaintenanceService.ClearAllData();
-        LocalizationService.Instance.CurrentLanguage = AppSettingsService.Instance.DisplayLanguage;
-        _viewModel.SetDisplayLanguageIndex(ToLanguageIndex(AppSettingsService.Instance.DisplayLanguage));
-        _viewModel.Load();
+        _viewModel.ClearAllData();
         ConnectionTestUrlBox.Text = _viewModel.ConnectionTestUrl;
-    }
-
-    /// <summary>Maps language settings to the settings combo-box index.</summary>
-    private static int ToLanguageIndex(AppLanguage language)
-    {
-        return language == AppLanguage.AutoDetect ? 0 : (int)language + 1;
     }
 
 }

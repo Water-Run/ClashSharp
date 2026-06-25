@@ -18,41 +18,49 @@ namespace ClashSharp.Service;
 /// <remarks>
 /// Invariants: Known region mappings are immutable after type initialization.
 /// Thread safety: Public methods are thread-safe and read immutable mapping data.
-/// Side effects: Reads the mainland China display policy from <see cref="AppSettingsService"/>.
+/// Side effects: Delegated to injected settings and localization providers.
 /// </remarks>
 public sealed class RegionDisplayService
 {
     /// <summary>Shared singleton instance created once at type initialization.</summary>
     /// <value>A non-null <see cref="RegionDisplayService"/> instance.</value>
-    public static RegionDisplayService Instance { get; } = new();
+    public static RegionDisplayService Instance { get; } = RegionDisplayServiceFactory.CreateDefault();
 
-    /// <summary>Immutable default region display map keyed by uppercase region code.</summary>
-    private static readonly FrozenDictionary<string, string> DefaultRegionNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    private readonly Func<MainlandChinaFeatureMode> _getFeatureMode;
+
+    private readonly Func<string, string> _getString;
+
+    /// <summary>Immutable default region resource-key map keyed by uppercase region code.</summary>
+    private static readonly FrozenDictionary<string, string> DefaultRegionKeys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["CN"] = "中国大陆",
-        ["HK"] = "香港",
-        ["MO"] = "澳门",
-        ["TW"] = "台湾",
-        ["JP"] = "日本",
-        ["KR"] = "韩国",
-        ["SG"] = "新加坡",
-        ["US"] = "美国",
-        ["GB"] = "英国",
-        ["DE"] = "德国",
-        ["FR"] = "法国",
+        ["CN"] = "Region.CN",
+        ["HK"] = "Region.HK",
+        ["MO"] = "Region.MO",
+        ["TW"] = "Region.TW",
+        ["JP"] = "Region.JP",
+        ["KR"] = "Region.KR",
+        ["SG"] = "Region.SG",
+        ["US"] = "Region.US",
+        ["GB"] = "Region.GB",
+        ["DE"] = "Region.DE",
+        ["FR"] = "Region.FR",
     }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Immutable mainland China display override map keyed by uppercase region code.</summary>
-    private static readonly FrozenDictionary<string, (string Name, string FlagAssetKey)> MainlandChinaOverrides = new Dictionary<string, (string Name, string FlagAssetKey)>(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenDictionary<string, (string NameKey, string FlagAssetKey)> MainlandChinaOverrides = new Dictionary<string, (string NameKey, string FlagAssetKey)>(StringComparer.OrdinalIgnoreCase)
     {
-        ["HK"] = ("中国香港", "HK"),
-        ["MO"] = ("中国澳门", "MO"),
-        ["TW"] = ("中国台湾", "CN"),
+        ["HK"] = ("Region.MainlandChina.HK", "HK"),
+        ["MO"] = ("Region.MainlandChina.MO", "MO"),
+        ["TW"] = ("Region.MainlandChina.TW", "CN"),
     }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Initializes a new region display service instance.</summary>
-    private RegionDisplayService()
+    /// <param name="getFeatureMode">Provider for the active mainland China display policy. Must not be null.</param>
+    /// <param name="getString">Localized string resolver. Must not be null.</param>
+    internal RegionDisplayService(Func<MainlandChinaFeatureMode> getFeatureMode, Func<string, string> getString)
     {
+        _getFeatureMode = getFeatureMode ?? throw new ArgumentNullException(nameof(getFeatureMode));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
     /// <summary>Resolves display metadata for <paramref name="regionCode"/>.</summary>
@@ -69,19 +77,19 @@ public sealed class RegionDisplayService
             normalizedCode = "UN";
         }
 
-        string displayName = DefaultRegionNames.TryGetValue(normalizedCode, out string? knownName)
-            ? knownName
+        string displayName = DefaultRegionKeys.TryGetValue(normalizedCode, out string? knownNameKey)
+            ? _getString(knownNameKey)
             : normalizedCode;
         string flagAssetKey = normalizedCode;
-        MainlandChinaFeatureMode featureMode = AppSettingsService.Instance.MainlandChinaFeatureMode;
+        MainlandChinaFeatureMode featureMode = _getFeatureMode();
 
         if (featureMode >= MainlandChinaFeatureMode.FlagReplacementOnly
-            && MainlandChinaOverrides.TryGetValue(normalizedCode, out (string Name, string FlagAssetKey) mainlandOverride))
+            && MainlandChinaOverrides.TryGetValue(normalizedCode, out (string NameKey, string FlagAssetKey) mainlandOverride))
         {
             flagAssetKey = mainlandOverride.FlagAssetKey;
             if (featureMode >= MainlandChinaFeatureMode.FlagReplacementAndTextCompletion)
             {
-                displayName = mainlandOverride.Name;
+                displayName = _getString(mainlandOverride.NameKey);
             }
         }
 

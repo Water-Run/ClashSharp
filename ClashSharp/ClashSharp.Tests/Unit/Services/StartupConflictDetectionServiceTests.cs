@@ -9,6 +9,7 @@
 
 using ClashSharp.Model;
 using ClashSharp.Service;
+using System.Reflection;
 
 namespace ClashSharp.Tests.Unit.Services;
 
@@ -73,6 +74,64 @@ public sealed class StartupConflictDetectionServiceTests
         Assert.False(portResult.Succeeded);
         Assert.True(proxyResult.Succeeded);
         Assert.True(environment.ProxyDisabled);
+    }
+
+    /// <summary>Verifies user-facing issue text is resolved through an injected localizer.</summary>
+    [Fact]
+    public async Task CheckConflicts_UsesInjectedLocalizerForIssueTextAndRepairResults()
+    {
+        FakeStartupConflictEnvironment environment = new()
+        {
+            Processes = [new StartupConflictProcess(42, "mihomo")],
+            IsPortInUse = true,
+            ProxyState = new WindowsProxyState(true, "127.0.0.1:7890"),
+        };
+        StartupConflictDetectionService service = CreateService(environment, key => key switch
+        {
+            "StartupConflict.Mihomo.Title" => "mihomo title",
+            "StartupConflict.Mihomo.Description" => "mihomo count {0}",
+            "StartupConflict.Mihomo.Repair" => "mihomo repair",
+            "StartupConflict.Mihomo.RepairSucceeded" => "mihomo repaired",
+            "StartupConflict.Port.Title" => "port title",
+            "StartupConflict.Port.Description" => "port {0}",
+            "StartupConflict.Port.Repair" => "port repair",
+            "StartupConflict.Port.RepairFailed" => "port failed",
+            "StartupConflict.Proxy.Title" => "proxy title",
+            "StartupConflict.Proxy.Description" => "proxy {0} {1}",
+            "StartupConflict.Proxy.Repair" => "proxy repair",
+            "StartupConflict.Proxy.RepairSucceeded" => "proxy repaired",
+            _ => key,
+        });
+
+        IReadOnlyList<StartupConflictIssue> issues = service.CheckConflicts(10000);
+
+        Assert.Equal("mihomo title", issues[0].Title);
+        Assert.Equal("mihomo count 1", issues[0].Description);
+        Assert.Equal("mihomo repair", issues[0].RepairText);
+        Assert.Equal("port title", issues[1].Title);
+        Assert.Equal("port 10000", issues[1].Description);
+        Assert.Equal("proxy title", issues[2].Title);
+        Assert.Equal("proxy 127.0.0.1:7890 10000", issues[2].Description);
+        Assert.Equal("mihomo repaired", (await issues[0].RepairAsync(CancellationToken.None)).Message);
+        Assert.Equal("port failed", (await issues[1].RepairAsync(CancellationToken.None)).Message);
+        Assert.Equal("proxy repaired", (await issues[2].RepairAsync(CancellationToken.None)).Message);
+    }
+
+    private static StartupConflictDetectionService CreateService(
+        IStartupConflictEnvironment environment,
+        Func<string, string> getString)
+    {
+        ConstructorInfo? constructor = typeof(StartupConflictDetectionService).GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types:
+            [
+                typeof(IStartupConflictEnvironment),
+                typeof(Func<string, string>),
+            ],
+            modifiers: null);
+        Assert.NotNull(constructor);
+        return Assert.IsType<StartupConflictDetectionService>(constructor.Invoke([environment, getString]));
     }
 
     private sealed class FakeStartupConflictEnvironment : IStartupConflictEnvironment

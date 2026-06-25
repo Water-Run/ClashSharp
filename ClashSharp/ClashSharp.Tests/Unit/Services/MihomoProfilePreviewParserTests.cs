@@ -95,7 +95,7 @@ public sealed class MihomoProfilePreviewParserTests
               - MATCH,DIRECT
             """;
 
-        RulePreview[] rules = MihomoProfilePreviewParser.ParseRules(Configuration).ToArray();
+        RulePreview[] rules = MihomoProfilePreviewParser.ParseRules(Configuration, key => key).ToArray();
 
         Assert.Equal(3, rules.Length);
         Assert.Equal("GEOIP", rules[0].RuleType);
@@ -107,6 +107,22 @@ public sealed class MihomoProfilePreviewParserTests
         Assert.Equal("MATCH", rules[2].RuleType);
         Assert.Equal("*", rules[2].Payload);
         Assert.Equal("DIRECT", rules[2].Action);
+    }
+
+    /// <summary>Verifies rule preview source names are resolved through an injected localizer.</summary>
+    [Fact]
+    public void ParseRules_WithLocalization_UsesInjectedSourceName()
+    {
+        const string Configuration = """
+            rules:
+              - DOMAIN-SUFFIX,example.com,PROXY
+            """;
+
+        RulePreview rule = Assert.Single(MihomoProfilePreviewParser.ParseRules(
+            Configuration,
+            key => key == "ProfilePreview.CurrentConfiguration" ? "localized profile" : key));
+
+        Assert.Equal("localized profile", rule.ProviderName);
     }
 
     /// <summary>Resolves test region metadata without reading user display settings.</summary>

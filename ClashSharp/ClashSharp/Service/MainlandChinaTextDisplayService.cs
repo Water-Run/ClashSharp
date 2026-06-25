@@ -18,13 +18,17 @@ namespace ClashSharp.Service;
 /// <remarks>
 /// Invariants: Replacement is applied only when the mainland China display policy is enabled.
 /// Thread safety: Stateless service and safe for concurrent reads.
-/// Side effects: Reads mainland China display policy from <see cref="AppSettingsService"/>.
+/// Side effects: Delegated to injected settings providers.
 /// </remarks>
 public sealed class MainlandChinaTextDisplayService
 {
     /// <summary>Shared singleton instance created once at type initialization.</summary>
     /// <value>A non-null <see cref="MainlandChinaTextDisplayService"/> instance.</value>
-    public static MainlandChinaTextDisplayService Instance { get; } = new();
+    public static MainlandChinaTextDisplayService Instance { get; } = MainlandChinaTextDisplayServiceFactory.CreateDefault();
+
+    private readonly Func<MainlandChinaFeatureMode> _getFeatureMode;
+
+    private readonly Func<bool> _getUrlBlockingEnabled;
 
     /// <summary>Region terms completed when mainland China text completion is enabled.</summary>
     private static readonly FrozenDictionary<string, string> TextCompletions = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -62,8 +66,12 @@ public sealed class MainlandChinaTextDisplayService
     ];
 
     /// <summary>Initializes the display service.</summary>
-    private MainlandChinaTextDisplayService()
+    /// <param name="getFeatureMode">Provider for the active mainland China display policy. Must not be null.</param>
+    /// <param name="getUrlBlockingEnabled">Provider for the URL blocking preference. Must not be null.</param>
+    internal MainlandChinaTextDisplayService(Func<MainlandChinaFeatureMode> getFeatureMode, Func<bool> getUrlBlockingEnabled)
     {
+        _getFeatureMode = getFeatureMode ?? throw new ArgumentNullException(nameof(getFeatureMode));
+        _getUrlBlockingEnabled = getUrlBlockingEnabled ?? throw new ArgumentNullException(nameof(getUrlBlockingEnabled));
     }
 
     /// <summary>Applies UI-only replacement to <paramref name="text"/> for the configured mainland China feature mode.</summary>
@@ -74,13 +82,13 @@ public sealed class MainlandChinaTextDisplayService
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        MainlandChinaFeatureMode featureMode = AppSettingsService.Instance.MainlandChinaFeatureMode;
+        MainlandChinaFeatureMode featureMode = _getFeatureMode();
         if (featureMode == MainlandChinaFeatureMode.Disabled)
         {
             return text;
         }
 
-        if (AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled && ContainsSensitiveUrl(text))
+        if (_getUrlBlockingEnabled() && ContainsSensitiveUrl(text))
         {
             return "***";
         }

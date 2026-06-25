@@ -22,7 +22,8 @@ public sealed class TrayMenuStateBuilderTests
         TrayMenuState state = TrayMenuStateBuilder.Build(
             ClashSharpMode.RuleTakeover,
             transparentProxyEnabled: true,
-            mihomoServiceInstalled: true);
+            mihomoServiceInstalled: true,
+            key => key);
 
         Assert.Equal(4, state.ModeItems.Count);
         Assert.True(state.ModeItems.Single(item => item.Mode == ClashSharpMode.RuleTakeover).IsChecked);
@@ -38,22 +39,57 @@ public sealed class TrayMenuStateBuilderTests
         TrayMenuState state = TrayMenuStateBuilder.Build(
             ClashSharpMode.Standby,
             transparentProxyEnabled: true,
-            mihomoServiceInstalled: true);
+            mihomoServiceInstalled: true,
+            key => key);
 
         Assert.True(state.TransparentProxyItem.IsEnabled);
         Assert.True(state.TransparentProxyItem.IsChecked);
     }
 
-    /// <summary>Verifies transparent proxy tray command is disabled when the mihomo service is not deployed.</summary>
+    /// <summary>Verifies transparent proxy tray command mirrors preference even when the service is not deployed.</summary>
     [Fact]
-    public void Build_WhenServiceMissing_DisablesTransparentProxyCommand()
+    public void Build_WhenServiceMissing_PreservesTransparentProxyPreference()
     {
         TrayMenuState state = TrayMenuStateBuilder.Build(
             ClashSharpMode.Standby,
             transparentProxyEnabled: true,
-            mihomoServiceInstalled: false);
+            mihomoServiceInstalled: false,
+            key => key);
 
-        Assert.False(state.TransparentProxyItem.IsEnabled);
-        Assert.False(state.TransparentProxyItem.IsChecked);
+        Assert.True(state.TransparentProxyItem.IsEnabled);
+        Assert.True(state.TransparentProxyItem.IsChecked);
+    }
+
+    /// <summary>Verifies tray menu labels are resolved through localization keys.</summary>
+    [Fact]
+    public void Build_WithLocalization_UsesLocalizedLabels()
+    {
+        static string GetString(string key)
+        {
+            return key switch
+            {
+                "Tray.Menu.Mode" => "Mode",
+                "Master.Mode.Disabled.Title" => "Disabled",
+                "Master.Mode.Standby.Title" => "Standby",
+                "Master.Mode.RuleTakeover.Title" => "Rule",
+                "Master.Mode.FullTakeover.Title" => "Global",
+                "Settings.TransparentProxy.Title" => "TUN",
+                "Tray.Settings" => "Settings",
+                "Tray.SafeExit" => "Safe exit",
+                _ => key,
+            };
+        }
+
+        TrayMenuState state = TrayMenuStateBuilder.Build(
+            ClashSharpMode.Disabled,
+            transparentProxyEnabled: false,
+            mihomoServiceInstalled: true,
+            GetString);
+
+        Assert.Equal("Mode", state.ModeMenuLabel);
+        Assert.Equal(["Disabled", "Standby", "Rule", "Global"], state.ModeItems.Select(item => item.Label));
+        Assert.Equal("TUN", state.TransparentProxyItem.Label);
+        Assert.Equal("Settings", state.SettingsLabel);
+        Assert.Equal("Safe exit", state.SafeExitLabel);
     }
 }
