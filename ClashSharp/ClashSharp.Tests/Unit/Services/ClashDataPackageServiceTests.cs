@@ -67,9 +67,9 @@ public sealed class ClashDataPackageServiceTests
         Assert.DoesNotContain("logs.sqlite3", relativePaths);
     }
 
-    /// <summary>Verifies all-data export ignores SQLite logs while keeping other local data.</summary>
+    /// <summary>Verifies all-data export includes logs together with other local data.</summary>
     [Fact]
-    public async Task ExportAsync_AllScope_IgnoresLogs()
+    public async Task ExportAsync_AllScope_IncludesLogs()
     {
         using TemporaryDirectory directory = new();
         await File.WriteAllTextAsync(Path.Combine(directory.Path, "ProfileCatalog.json"), "catalog");
@@ -85,9 +85,9 @@ public sealed class ClashDataPackageServiceTests
         string[] relativePaths = LoadExportedRelativePaths(packagePath);
         Assert.Contains("ProfileCatalog.json", relativePaths);
         Assert.Contains("settings.cache", relativePaths);
-        Assert.DoesNotContain("logs.sqlite3", relativePaths);
-        Assert.DoesNotContain("logs.sqlite3-wal", relativePaths);
-        Assert.DoesNotContain("logs.sqlite3-shm", relativePaths);
+        Assert.Contains("logs.sqlite3", relativePaths);
+        Assert.Contains("logs.sqlite3-wal", relativePaths);
+        Assert.Contains("logs.sqlite3-shm", relativePaths);
     }
 
     /// <summary>Verifies import applies settings and restores package files into local data.</summary>

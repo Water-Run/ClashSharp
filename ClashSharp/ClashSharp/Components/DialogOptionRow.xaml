@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ClashSharp.Components.DialogOptionRow"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <CheckBox
+        x:Name="OptionCheckBox"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        IsChecked="{Binding IsChecked, ElementName=Root, Mode=TwoWay}">
+        <Grid MinHeight="64" Padding="2" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <FontIcon
+                Glyph="{Binding Glyph, ElementName=Root}"
+                FontSize="18"
+                Width="24"
+                VerticalAlignment="Top"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+            <StackPanel Grid.Column="1" Spacing="3">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock
+                        Text="{Binding Title, ElementName=Root}"
+                        Style="{ThemeResource BodyStrongTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        Text="{Binding Metadata, ElementName=Root}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        VerticalAlignment="Center"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock
+                    Text="{Binding Description, ElementName=Root}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="WrapWholeWords"
+                    MaxLines="2"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Grid>
+    </CheckBox>
+</UserControl>

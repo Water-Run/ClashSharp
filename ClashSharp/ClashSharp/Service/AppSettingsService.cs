@@ -237,16 +237,16 @@ public sealed class AppSettingsService
     }
 
     /// <summary>Gets or sets the background connection sampling interval in seconds.</summary>
-    /// <value>Interval in the inclusive range [5, 3600]; defaults to 30.</value>
+    /// <value>Interval in the inclusive range [3, 300]; defaults to 30.</value>
     /// <exception cref="ArgumentOutOfRangeException">Assigned value is outside the valid interval range.</exception>
     public int ConnectionSamplingIntervalSeconds
     {
         get => GetInt32(KeyConnectionSamplingIntervalSeconds, 30);
         set
         {
-            if (value is < 5 or > 3600)
+            if (value is < 3 or > 300)
             {
-                throw new ArgumentOutOfRangeException(nameof(value), "Sampling interval must be in the range [5, 3600] seconds.");
+                throw new ArgumentOutOfRangeException(nameof(value), "Sampling interval must be in the range [3, 300] seconds.");
             }
 
             SetInt32(KeyConnectionSamplingIntervalSeconds, value);

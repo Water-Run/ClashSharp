@@ -3,21 +3,36 @@
     x:Class="ClashSharp.Components.MasterModeButton"
     x:Name="Root"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:ClashSharp.Converters">
 
-    <RadioButton
-        x:Name="ModeRadioButton"
-        GroupName="MasterControlMode"
+    <UserControl.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Button
+        x:Name="ModeButton"
         MinHeight="78"
         HorizontalAlignment="Stretch"
         HorizontalContentAlignment="Stretch"
-        IsChecked="{Binding IsChecked, ElementName=Root, Mode=OneWay}"
+        Padding="0"
+        Background="Transparent"
+        BorderThickness="0"
         Command="{Binding Command, ElementName=Root}">
-        <Grid Style="{StaticResource ClashCardGridStyle}" Padding="12" ColumnSpacing="10">
+        <Grid Style="{StaticResource ClashCardGridStyle}" Padding="12" ColumnSpacing="10" MinHeight="78">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
+
+            <Border
+                x:Name="SelectedOverlay"
+                Grid.ColumnSpan="2"
+                Margin="-12"
+                CornerRadius="4"
+                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                Opacity="0.16"
+                Visibility="{Binding IsChecked, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <FontIcon
                 Glyph="{Binding Glyph, ElementName=Root}"
@@ -41,5 +56,5 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </Grid>
-    </RadioButton>
+    </Button>
 </UserControl>

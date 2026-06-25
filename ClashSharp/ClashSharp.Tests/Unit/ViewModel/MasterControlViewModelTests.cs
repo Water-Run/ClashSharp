@@ -92,7 +92,7 @@ public sealed class MasterControlViewModelTests
         Assert.Contains(log.Entries, entry => entry.Level == "Error" && entry.Detail == "missing core");
     }
 
-    /// <summary>Verifies the redesigned master control exposes a complete 3x3 tile model.</summary>
+    /// <summary>Verifies the redesigned master control exposes information tiles without mixing in editor commands.</summary>
     [Fact]
     public void Constructor_BuildsCompleteInfoTiles()
     {
@@ -109,9 +109,9 @@ public sealed class MasterControlViewModelTests
 
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
 
-        Assert.True(viewModel.InfoTiles.Count >= 13);
-        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "edit-tiles" && tile.TileCommand is not null);
-        Assert.Equal("edit-tiles", viewModel.InfoTiles[0].Id);
+        Assert.True(viewModel.InfoTiles.Count >= 12);
+        Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "edit-tiles");
+        Assert.Equal("core", viewModel.InfoTiles[0].Id);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "transparent-proxy" && tile.IsToggleVisible && tile.IsToggleOn);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-1" && tile.Value == "google.com");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-2" && tile.Value == "github.com");
@@ -121,6 +121,8 @@ public sealed class MasterControlViewModelTests
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-launch" && tile.Value == "On");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "active-profile" && tile.Value == "profile-a");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mixed-port" && tile.Value == "12000");
+        Assert.All(viewModel.InfoTiles, tile => Assert.False(string.IsNullOrWhiteSpace(tile.Description)));
+        Assert.Equal("Search tiles", viewModel.SearchInfoTilesPlaceholderText);
     }
 
     /// <summary>Verifies the transparent-proxy tile toggle persists through the settings boundary.</summary>
@@ -146,13 +148,12 @@ public sealed class MasterControlViewModelTests
         List<MasterControlTileAction> actions = [];
         viewModel.TileActionRequested += (_, action) => actions.Add(action);
 
-        viewModel.InfoTiles.Single(tile => tile.Id == "edit-tiles").TileCommand?.Execute(null);
         viewModel.InfoTiles.Single(tile => tile.Id == "startup-prompt").TileCommand?.Execute(null);
         viewModel.InfoTiles.Single(tile => tile.Id == "startup-conflicts").TileCommand?.Execute(null);
         viewModel.InfoTiles.Single(tile => tile.Id == "latency").TileCommand?.Execute(null);
 
         Assert.Equal(
-            [MasterControlTileAction.EditInfoTiles, MasterControlTileAction.ShowStartupPrompt, MasterControlTileAction.CheckStartupConflicts, MasterControlTileAction.RunLatencyTest],
+            [MasterControlTileAction.ShowStartupPrompt, MasterControlTileAction.CheckStartupConflicts, MasterControlTileAction.RunLatencyTest],
             actions);
     }
 
@@ -230,6 +231,21 @@ public sealed class MasterControlViewModelTests
                 "Master.Tile.Visible" => "Visible",
                 "Master.Tile.Edit" => "Edit tiles",
                 "Master.Tile.EditTiles" => "Edit tiles",
+                "Master.Tile.SearchPlaceholder" => "Search tiles",
+                "Master.Tile.Description.Core" => "Core status description",
+                "Master.Tile.Description.SystemProxy" => "System proxy description",
+                "Master.Tile.Description.TransparentProxy" => "Transparent proxy description",
+                "Master.Tile.Description.Latency" => "Latency description",
+                "Master.Tile.Description.StartupLaunch" => "Startup launch description",
+                "Master.Tile.Description.ActiveProfile" => "Active profile description",
+                "Master.Tile.Description.MixedPort" => "Mixed port description",
+                "Master.Tile.Description.ConnectionTest" => "Connection test description",
+                "Master.Tile.Description.ConnectionTestProxyUrl1" => "Proxy URL 1 description",
+                "Master.Tile.Description.ConnectionTestProxyUrl2" => "Proxy URL 2 description",
+                "Master.Tile.Description.ConnectionTestDirectUrl" => "Direct URL description",
+                "Master.Tile.Description.StartupPrompt" => "Startup prompt description",
+                "Master.Tile.Description.StartupConflicts" => "Startup conflicts description",
+                "Master.Tile.Description.Backup" => "Backup description",
                 "Settings.StartupGuide.ShowNow" => "Show now",
                 "Settings.CheckStartupConflicts.Now" => "Check now",
                 "Master.Status.CurrentNodeUnavailable" => "No node",

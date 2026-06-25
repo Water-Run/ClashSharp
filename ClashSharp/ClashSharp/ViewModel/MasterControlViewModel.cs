@@ -109,7 +109,6 @@ internal interface IMasterControlSettings
 /// <summary>Page-level action requested by a functional master-control tile.</summary>
 internal enum MasterControlTileAction
 {
-    EditInfoTiles,
     ShowStartupPrompt,
     CheckStartupConflicts,
     RunLatencyTest,
@@ -182,6 +181,7 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
         string value,
         string detail,
         string glyph,
+        string description,
         string typeText,
         bool isToggleVisible = false,
         bool isToggleOn = false,
@@ -192,6 +192,7 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
         _value = value ?? throw new ArgumentNullException(nameof(value));
         _detail = detail ?? throw new ArgumentNullException(nameof(detail));
         Glyph = glyph ?? throw new ArgumentNullException(nameof(glyph));
+        Description = description ?? throw new ArgumentNullException(nameof(description));
         TypeText = typeText ?? throw new ArgumentNullException(nameof(typeText));
         IsToggleVisible = isToggleVisible;
         _isToggleOn = isToggleOn;
@@ -203,6 +204,8 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
     public string Title { get; }
 
     public string Glyph { get; }
+
+    public string Description { get; }
 
     public string TypeText { get; }
 
@@ -411,6 +414,8 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     public string EditInfoTilesText => _localization.GetString("Master.Tile.Edit");
 
+    public string SearchInfoTilesPlaceholderText => _localization.GetString("Master.Tile.SearchPlaceholder");
+
     public string VisibleTileText => _localization.GetString("Master.Tile.Visible");
 
     public IReadOnlyList<MasterControlInfoTileViewModel> InfoTiles => _infoTiles;
@@ -615,30 +620,30 @@ internal sealed class MasterControlViewModel : ObservableObject
         string actionType = _localization.GetString("Master.Tile.Type.Action");
         string navigationType = _localization.GetString("Master.Tile.Type.Navigation");
 
-        _infoTiles.Add(new MasterControlInfoTileViewModel("edit-tiles", _localization.GetString("Master.Tile.EditTiles"), _localization.GetString("Master.Tile.Edit"), string.Empty, "\uE70F", actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.EditInfoTiles))));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("core", _localization.GetString("Master.Tile.Core"), string.Empty, string.Empty, "\uE950", infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("system-proxy", _localization.GetString("Master.Tile.SystemProxy"), string.Empty, string.Empty, "\uE968", infoType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("core", _localization.GetString("Master.Tile.Core"), string.Empty, string.Empty, "\uE950", TileDescription("Core"), infoType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("system-proxy", _localization.GetString("Master.Tile.SystemProxy"), string.Empty, string.Empty, "\uE968", TileDescription("SystemProxy"), infoType));
         _infoTiles.Add(new MasterControlInfoTileViewModel(
             "transparent-proxy",
             _localization.GetString("Master.Tile.TransparentProxy"),
             string.Empty,
             string.Empty,
             "\uE8A7",
+            TileDescription("TransparentProxy"),
             controllableType,
             isToggleVisible: true,
             isToggleOn: _settings.TransparentProxyEnabled,
             tileCommand: new RelayCommand(ToggleTransparentProxy)));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("latency", _localization.GetString("Master.Tile.Latency"), string.Empty, string.Empty, "\uEC4A", actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.RunLatencyTest))));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-launch", _localization.GetString("Master.Tile.StartupLaunch"), string.Empty, string.Empty, "\uE7C3", infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("active-profile", _localization.GetString("Master.Tile.ActiveProfile"), string.Empty, string.Empty, "\uE8A5", infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("mixed-port", _localization.GetString("Master.Tile.MixedPort"), string.Empty, string.Empty, "\uE839", infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test", _localization.GetString("Master.Tile.ConnectionTest"), string.Empty, string.Empty, "\uE9D9", navigationType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-proxy-url-1", _localization.GetString("Master.Tile.ConnectionTestProxyUrl1"), string.Empty, string.Empty, "\uE774", infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-proxy-url-2", _localization.GetString("Master.Tile.ConnectionTestProxyUrl2"), string.Empty, string.Empty, "\uE774", infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-direct-url", _localization.GetString("Master.Tile.ConnectionTestDirectUrl"), string.Empty, string.Empty, "\uE8A7", infoType));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-prompt", _localization.GetString("Master.Tile.StartupPrompt"), string.Empty, string.Empty, "\uE946", actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.ShowStartupPrompt))));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-conflicts", _localization.GetString("Master.Tile.StartupConflicts"), string.Empty, string.Empty, "\uE9D9", actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.CheckStartupConflicts))));
-        _infoTiles.Add(new MasterControlInfoTileViewModel("backup", _localization.GetString("Master.Tile.Backup"), string.Empty, string.Empty, "\uE777", navigationType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("latency", _localization.GetString("Master.Tile.Latency"), string.Empty, string.Empty, "\uEC4A", TileDescription("Latency"), actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.RunLatencyTest))));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-launch", _localization.GetString("Master.Tile.StartupLaunch"), string.Empty, string.Empty, "\uE7C3", TileDescription("StartupLaunch"), infoType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("active-profile", _localization.GetString("Master.Tile.ActiveProfile"), string.Empty, string.Empty, "\uE8A5", TileDescription("ActiveProfile"), infoType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("mixed-port", _localization.GetString("Master.Tile.MixedPort"), string.Empty, string.Empty, "\uE839", TileDescription("MixedPort"), infoType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test", _localization.GetString("Master.Tile.ConnectionTest"), string.Empty, string.Empty, "\uE9D9", TileDescription("ConnectionTest"), navigationType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-proxy-url-1", _localization.GetString("Master.Tile.ConnectionTestProxyUrl1"), string.Empty, string.Empty, "\uE774", TileDescription("ConnectionTestProxyUrl1"), infoType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-proxy-url-2", _localization.GetString("Master.Tile.ConnectionTestProxyUrl2"), string.Empty, string.Empty, "\uE774", TileDescription("ConnectionTestProxyUrl2"), infoType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test-direct-url", _localization.GetString("Master.Tile.ConnectionTestDirectUrl"), string.Empty, string.Empty, "\uE8A7", TileDescription("ConnectionTestDirectUrl"), infoType));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-prompt", _localization.GetString("Master.Tile.StartupPrompt"), string.Empty, string.Empty, "\uE946", TileDescription("StartupPrompt"), actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.ShowStartupPrompt))));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-conflicts", _localization.GetString("Master.Tile.StartupConflicts"), string.Empty, string.Empty, "\uE9D9", TileDescription("StartupConflicts"), actionType, tileCommand: new RelayCommand(() => RequestTileAction(MasterControlTileAction.CheckStartupConflicts))));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("backup", _localization.GetString("Master.Tile.Backup"), string.Empty, string.Empty, "\uE777", TileDescription("Backup"), navigationType));
     }
 
     private void RefreshTileValues()
@@ -659,7 +664,11 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("startup-prompt", _localization.GetString("Settings.StartupGuide.ShowNow"), string.Empty);
         SetTile("startup-conflicts", _localization.GetString("Settings.CheckStartupConflicts.Now"), string.Empty);
         SetTile("backup", _localization.GetString("Master.Status.BackupAvailable"), string.Empty);
-        SetTile("edit-tiles", _localization.GetString("Master.Tile.Edit"), _localization.GetString("Master.Tile.Type.Action"));
+    }
+
+    private string TileDescription(string key)
+    {
+        return _localization.GetString($"Master.Tile.Description.{key}");
     }
 
     private void SetTile(string id, string value, string detail, bool? toggleOn = null)

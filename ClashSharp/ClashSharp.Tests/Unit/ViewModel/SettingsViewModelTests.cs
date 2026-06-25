@@ -389,8 +389,6 @@ public sealed class SettingsViewModelTests
         Assert.All(viewModel.MainlandChinaFeatureModeOptions, Assert.NotEmpty);
         Assert.Equal(3, viewModel.StartupBehaviorModeOptions.Count);
         Assert.All(viewModel.StartupBehaviorModeOptions, Assert.NotEmpty);
-        Assert.Equal(3, ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions").Count);
-        Assert.All(ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions"), Assert.NotEmpty);
     }
 
     /// <summary>Verifies startup settings expose a dedicated section, manual conflict check text, and guide toggle state.</summary>
@@ -580,10 +578,8 @@ public sealed class SettingsViewModelTests
 
         Assert.Equal("Settings.DataPackage.Title", ReadProperty<string>(viewModel, "DataPackageTitleText"));
         Assert.Equal("Settings.DataPackage.Description", ReadProperty<string>(viewModel, "DataPackageDescriptionText"));
-        Assert.Equal("Settings.DataPackage.Scope.Settings", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[0]);
-        Assert.Equal("Settings.DataPackage.Scope.SettingsAndProxyConfiguration", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[1]);
-        Assert.Equal("Settings.DataPackage.Scope.All", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[2]);
-        Assert.Equal(0, ReadProperty<int>(viewModel, "DataPackageScopeIndex"));
+        Assert.Equal("Settings.DataExport.Title", ReadProperty<string>(viewModel, "DataExportTitleText"));
+        Assert.Equal("Settings.DataExport.Description", ReadProperty<string>(viewModel, "DataExportDescriptionText"));
         Assert.Equal("Command.Export", ReadProperty<string>(viewModel, "ExportText"));
         Assert.Equal("Command.Import", ReadProperty<string>(viewModel, "ImportText"));
         Assert.Equal("Command.Backup", ReadProperty<string>(viewModel, "BackupText"));
@@ -595,7 +591,9 @@ public sealed class SettingsViewModelTests
     {
         SettingsViewModel defaultViewModel = new(new FakeSettingsStore(), _ => { }, () => { }, key => key);
 
-        Assert.Equal("Settings.ConnectionTestUrl.Summary.Default", ReadProperty<string>(defaultViewModel, "ConnectionTestUrlSummaryText"));
+        Assert.Equal(
+            "Settings.ConnectionTestUrl.Provider.Google | Settings.ConnectionTestUrl.Provider.GitHub | Settings.ConnectionTestUrl.Provider.Baidu",
+            ReadProperty<string>(defaultViewModel, "ConnectionTestUrlSummaryText"));
 
         FakeSettingsStore store = new()
         {
@@ -608,6 +606,24 @@ public sealed class SettingsViewModelTests
         Assert.Equal(
             "Settings.ConnectionTestUrl.Provider.Google | Settings.ConnectionTestUrl.Provider.Custom | Settings.ConnectionTestUrl.Provider.Baidu",
             ReadProperty<string>(viewModel, "ConnectionTestUrlSummaryText"));
+    }
+
+    /// <summary>Verifies background sampling interval uses the user-facing 3-300 second range.</summary>
+    [Theory]
+    [InlineData(2d, 30, false)]
+    [InlineData(3d, 3, true)]
+    [InlineData(300d, 300, true)]
+    [InlineData(301d, 30, false)]
+    public void SetConnectionSamplingIntervalSeconds_ValidatesUserFacingRange(double input, int expectedInterval, bool expectedResult)
+    {
+        FakeSettingsStore store = new() { ConnectionSamplingIntervalSeconds = 30 };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+
+        bool changed = viewModel.SetConnectionSamplingIntervalSeconds(input);
+
+        Assert.Equal(expectedResult, changed);
+        Assert.Equal(expectedInterval, store.ConnectionSamplingIntervalSeconds);
+        Assert.Equal(expectedInterval, viewModel.ConnectionSamplingIntervalSeconds);
     }
 
     /// <summary>Verifies the connection test runs through an injected probe and returns a localized success message.</summary>

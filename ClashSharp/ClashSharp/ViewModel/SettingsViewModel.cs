@@ -280,6 +280,8 @@ internal sealed class SettingsViewModel : ObservableObject
     private const string DefaultAppAccentColorValue = "#FF0078D4";
     private const int DefaultMixedPort = 10000;
     private const int DefaultConnectionSamplingIntervalSeconds = 30;
+    private const int MinConnectionSamplingIntervalSeconds = 3;
+    private const int MaxConnectionSamplingIntervalSeconds = 300;
     private const string DefaultConnectionTestUrl = "https://www.google.com/generate_204";
     private const string DefaultConnectionTestProxyUrl1 = "https://www.google.com";
     private const string DefaultConnectionTestProxyUrl2 = "https://github.com";
@@ -574,13 +576,11 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string ConnectionTestDirectUrlTitleText => _getString("Settings.ConnectionTestUrl.Direct");
 
-    public string ConnectionTestUrlSummaryText => IsDefaultConnectionTestUrls()
-        ? _getString("Settings.ConnectionTestUrl.Summary.Default")
-        : string.Join(
-            " | ",
-            FormatConnectionTestUrlSummaryPart(ConnectionTestProxyUrl1),
-            FormatConnectionTestUrlSummaryPart(ConnectionTestProxyUrl2),
-            FormatConnectionTestUrlSummaryPart(ConnectionTestDirectUrl));
+    public string ConnectionTestUrlSummaryText => string.Join(
+        " | ",
+        FormatConnectionTestUrlSummaryPart(ConnectionTestProxyUrl1),
+        FormatConnectionTestUrlSummaryPart(ConnectionTestProxyUrl2),
+        FormatConnectionTestUrlSummaryPart(ConnectionTestDirectUrl));
 
     public bool IsConnectionTestRunning
     {
@@ -746,32 +746,21 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string MainlandChinaUrlBlockingDescriptionText => _getString("Settings.MainlandChinaUrlBlocking.Description");
 
-    public string MainlandChinaUnfriendlyListTitleText => _getString("Settings.MainlandChinaUnfriendlyList.Title");
-
-    public string MainlandChinaUnfriendlyListDescriptionText => _getString("Settings.MainlandChinaUnfriendlyList.Description");
-
-    public string ShowMainlandChinaBlacklistText => _getString("Settings.MainlandChina.ShowBlacklist");
-
     public string DataSectionTitleText => _getString("Settings.Section.Data");
 
     public string DataPackageTitleText => _getString("Settings.DataPackage.Title");
 
     public string DataPackageDescriptionText => _getString("Settings.DataPackage.Description");
 
+    public string DataExportTitleText => _getString("Settings.DataExport.Title");
+
+    public string DataExportDescriptionText => _getString("Settings.DataExport.Description");
+
     public string DataPackageScopeSettingsText => _getString("Settings.DataPackage.Scope.Settings");
 
     public string DataPackageScopeSettingsAndProxyConfigurationText => _getString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration");
 
     public string DataPackageScopeAllText => _getString("Settings.DataPackage.Scope.All");
-
-    public IReadOnlyList<string> DataPackageScopeOptions =>
-    [
-        DataPackageScopeSettingsText,
-        DataPackageScopeSettingsAndProxyConfigurationText,
-        DataPackageScopeAllText,
-    ];
-
-    public ClashDataPackageScope SelectedDataPackageScope => (ClashDataPackageScope)DataPackageScopeIndex;
 
     public string ResetAllSettingsTitleText => _getString("Settings.ResetAllSettings.Title");
 
@@ -882,9 +871,6 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="StoreDiagnosticStatusText"/>.</summary>
     private string _storeDiagnosticStatusText = string.Empty;
-
-    /// <summary>Backing field for <see cref="DataPackageScopeIndex"/>.</summary>
-    private int _dataPackageScopeIndex;
 
     public AsyncRelayCommand WindowsDiagnosticCommand { get; }
 
@@ -1156,23 +1142,6 @@ internal sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    public int DataPackageScopeIndex
-    {
-        get => _dataPackageScopeIndex;
-        set
-        {
-            if (!Enum.IsDefined((ClashDataPackageScope)value))
-            {
-                return;
-            }
-
-            if (SetProperty(ref _dataPackageScopeIndex, value))
-            {
-                OnPropertyChanged(nameof(SelectedDataPackageScope));
-            }
-        }
-    }
-
     /// <summary>Loads the latest persisted settings into the view model properties.</summary>
     public void Load()
     {
@@ -1334,8 +1303,6 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(ProxyRecoveryModeIndex),
             nameof(MainlandChinaFeatureModeOptions),
             nameof(MainlandChinaFeatureModeIndex),
-            nameof(DataPackageScopeOptions),
-            nameof(DataPackageScopeIndex),
         ];
 
         foreach (string propertyName in propertyNames)
@@ -1456,16 +1423,14 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(MainlandChinaFeatureModeOptions),
             nameof(MainlandChinaUrlBlockingTitleText),
             nameof(MainlandChinaUrlBlockingDescriptionText),
-            nameof(MainlandChinaUnfriendlyListTitleText),
-            nameof(MainlandChinaUnfriendlyListDescriptionText),
-            nameof(ShowMainlandChinaBlacklistText),
             nameof(DataSectionTitleText),
             nameof(DataPackageTitleText),
             nameof(DataPackageDescriptionText),
+            nameof(DataExportTitleText),
+            nameof(DataExportDescriptionText),
             nameof(DataPackageScopeSettingsText),
             nameof(DataPackageScopeSettingsAndProxyConfigurationText),
             nameof(DataPackageScopeAllText),
-            nameof(DataPackageScopeOptions),
             nameof(ResetAllSettingsTitleText),
             nameof(ResetAllSettingsDescriptionText),
             nameof(ClearAllDataTitleText),
@@ -1648,7 +1613,7 @@ internal sealed class SettingsViewModel : ObservableObject
         }
 
         int intervalSeconds = (int)Math.Round(value);
-        if (intervalSeconds is < 5 or > 3600)
+        if (intervalSeconds is < MinConnectionSamplingIntervalSeconds or > MaxConnectionSamplingIntervalSeconds)
         {
             return false;
         }

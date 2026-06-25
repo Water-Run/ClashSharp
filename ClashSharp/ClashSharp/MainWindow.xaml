@@ -25,7 +25,7 @@
             IsPaneToggleButtonVisible="True"
             PaneToggleRequested="AppTitleBar_PaneToggleRequested">
             <TitleBar.IconSource>
-                <BitmapIconSource UriSource="ms-appx:///Assets/Logo.png" />
+                <BitmapIconSource UriSource="ms-appx:///Assets/Square44x44Logo.scale-200.png" ShowAsMonochrome="False" />
             </TitleBar.IconSource>
         </TitleBar>
 

@@ -82,7 +82,6 @@ internal sealed partial class ClashDataPackageService
     private const string PackageVersion = "1";
     private const string ProfileCatalogFileName = "ProfileCatalog.json";
     private const string MihomoDirectoryName = "mihomo";
-    private const string LogDatabaseFileName = "logs.sqlite3";
 
     private readonly IClashDataPackageSettings _settings;
     private readonly string _localDataDirectory;
@@ -219,8 +218,7 @@ internal sealed partial class ClashDataPackageService
         IEnumerable<string> files = scope switch
         {
             ClashDataPackageScope.SettingsAndProxyConfiguration => EnumerateProxyConfigurationFiles(),
-            ClashDataPackageScope.All => Directory.EnumerateFiles(_localDataDirectory, "*", SearchOption.AllDirectories)
-                .Where(path => !IsLogStorageFile(path)),
+            ClashDataPackageScope.All => Directory.EnumerateFiles(_localDataDirectory, "*", SearchOption.AllDirectories),
             _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unsupported data package scope."),
         };
 
@@ -248,14 +246,6 @@ internal sealed partial class ClashDataPackageService
         {
             yield return filePath;
         }
-    }
-
-    private static bool IsLogStorageFile(string filePath)
-    {
-        string fileName = Path.GetFileName(filePath);
-        return fileName.Equals(LogDatabaseFileName, StringComparison.OrdinalIgnoreCase)
-            || fileName.Equals($"{LogDatabaseFileName}-wal", StringComparison.OrdinalIgnoreCase)
-            || fileName.Equals($"{LogDatabaseFileName}-shm", StringComparison.OrdinalIgnoreCase);
     }
 
     private void ImportSettings(XElement? settingsElement)

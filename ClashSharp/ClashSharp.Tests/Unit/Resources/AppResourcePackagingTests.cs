@@ -50,7 +50,8 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("<TitleBar", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"AppTitleBar\"", mainWindowXaml, StringComparison.Ordinal);
-        Assert.Contains("ms-appx:///Assets/Logo.png", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("ms-appx:///Assets/Square44x44Logo.scale-200.png", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("ShowAsMonochrome=\"False\"", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("PaneToggleRequested=\"AppTitleBar_PaneToggleRequested\"", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("Grid.Row=\"1\"", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("IsPaneToggleButtonVisible=\"False\"", mainWindowXaml, StringComparison.Ordinal);
@@ -810,20 +811,20 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("Content=\"{Binding MainlandChinaDisabledText}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"MainlandChinaAllItem\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"MainlandChinaUrlBlockingToggle\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"ShowMainlandChinaUnfriendlyListButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"ShowMainlandChinaUnfriendlyListButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MainlandChinaDisplayToggle", settingsXaml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the mainland China URL blocking row exposes the covered unfriendly-site list.</summary>
+    /// <summary>Verifies the mainland China URL blocking row no longer exposes a blocked-URL viewer.</summary>
     [Fact]
-    public void SettingsCodeBehind_ShowsMainlandChinaUnfriendlyList()
+    public void SettingsCodeBehind_DoesNotShowMainlandChinaBlockedUrlViewer()
     {
         string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
 
         string settingsCode = File.ReadAllText(settingsCodePath);
 
-        Assert.Contains("ShowMainlandChinaUnfriendlyListButton_Click", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("MainlandChinaTextDisplayService.GetUnfriendlyDisplayList()", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowMainlandChinaUnfriendlyListButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainlandChinaTextDisplayService.GetUnfriendlyDisplayList()", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies language and recovery combo boxes use bindable option lists instead of empty ComboBoxItem bindings.</summary>
@@ -1082,7 +1083,7 @@ public sealed class AppResourcePackagingTests
         string masterControlXaml = File.ReadAllText(masterControlXamlPath);
 
         Assert.Contains("x:Name=\"HeaderLogo\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Source=\"ms-appx:///Assets/Logo.png\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Source=\"ms-appx:///Assets/Square150x150Logo.scale-200.png\"", masterControlXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"PageTitleText\"", masterControlXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DescriptionText\"", masterControlXaml, StringComparison.Ordinal);
     }
@@ -1108,13 +1109,17 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("AllowDrop=\"True\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"OpenLatencyDialogButton\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("OpenLatencyDialogButton_Click", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("EditInfoTilesButton_Click", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"EditInfoTilesLink\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"{Binding EditInfoTilesText}\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"EditInfoTilesButton_Click\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ProgressBar", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("DispatcherTimer", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("x:Class=\"ClashSharp.Components.MasterModeButton\"", modeButtonXaml, StringComparison.Ordinal);
         Assert.Contains("x:Class=\"ClashSharp.Components.MasterInfoTile\"", infoTileXaml, StringComparison.Ordinal);
-        Assert.Contains("<RadioButton", modeButtonXaml, StringComparison.Ordinal);
-        Assert.Contains("GroupName=\"MasterControlMode\"", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("<Button", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SelectedOverlay\"", modeButtonXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<RadioButton", modeButtonXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("GroupName=\"MasterControlMode\"", modeButtonXaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource ClashCardGridStyle}\"", modeButtonXaml, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", modeButtonXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<ToggleButton", modeButtonXaml, StringComparison.Ordinal);
@@ -1122,13 +1127,20 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"SelectedOverlay\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("MaxLines=\"2\"", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ToggleSwitch", infoTileXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("x:Name=\"EditInfoTilesButton\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Id == \"edit-tiles\"", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("BuildInfoTileEditorRow", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("FontIcon", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("MasterControlTileAction.EditInfoTiles", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("Name = \"InfoTileSearchBox\"", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("TextChanged += (_, _) => FilterInfoTileEditorRows", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("new ScrollViewer", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight = Math.Max(260, XamlRoot.Size.Height - 260)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.ShowStartupPrompt", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.CheckStartupConflicts", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.RunLatencyTest", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("ContainerContentChanging=\"InfoTileGrid_ContainerContentChanging\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxInfoTileColumns = 4", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Setter Property=\"Width\" Value=\"250\" />", masterControlXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings page exposes a restart-required notice and keeps reset links away from the edge.</summary>
@@ -1203,7 +1215,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ResetConnectionTestUrlsToDefaults", settingsCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies settings exposes XML data package import, export, and backup controls.</summary>
+    /// <summary>Verifies settings opens export scope selection in a dialog instead of pinning a scope dropdown on the page.</summary>
     [Fact]
     public void SettingsXaml_ExposesDataPackageImportExportBackup()
     {
@@ -1214,12 +1226,15 @@ public sealed class AppResourcePackagingTests
         string settingsCode = File.ReadAllText(settingsCodePath);
 
         Assert.Contains("x:Name=\"DataPackageRow\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"DataPackageScopeBox\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("ItemsSource=\"{Binding DataPackageScopeOptions}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"DataPackageScopeBox\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ItemsSource=\"{Binding DataPackageScopeOptions}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ExportDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ImportDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"BackupDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ExportDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("SelectDataPackageExportScopeAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("Settings.DataExport.Title", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("DataExportDescriptionText", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ImportDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.Contains("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.Contains("Settings.DataImport.Warning.Title", settingsCode, StringComparison.Ordinal);
@@ -1227,6 +1242,25 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ReadPackageScope", settingsCode, StringComparison.Ordinal);
         Assert.Contains("FormatDataImportWarning", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ClashDataPackageService.Instance", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies dialog option rows are componentized for repeated title/description choice UI.</summary>
+    [Fact]
+    public void DialogOptionRowComponent_IsUsedBySettingsAndMasterDialogs()
+    {
+        string componentXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "DialogOptionRow.xaml");
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+        string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
+
+        string componentXaml = File.ReadAllText(componentXamlPath);
+        string settingsCode = File.ReadAllText(settingsCodePath);
+        string masterControlCode = File.ReadAllText(masterControlCodePath);
+
+        Assert.Contains("x:Class=\"ClashSharp.Components.DialogOptionRow\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("Title", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("Description", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("DialogOptionRow", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("DialogOptionRow", masterControlCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies conflict dialogs use general conflict wording and place actions below status text.</summary>
@@ -1394,6 +1428,7 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", xaml, StringComparison.Ordinal);
         Assert.Contains("HorizontalScrollBarVisibility=\"Disabled\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Padding=\"24,18,18,24\"", xaml, StringComparison.Ordinal);
+        string expectedPadding = fileName == "MasterControl.xaml" ? "Padding=\"24,18,24,24\"" : "Padding=\"24,18,18,24\"";
+        Assert.Contains(expectedPadding, xaml, StringComparison.Ordinal);
     }
 }

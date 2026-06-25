@@ -14,7 +14,7 @@
     </Page.Resources>
 
     <ScrollViewer
-        Padding="24,18,18,24"
+        Padding="24,18,24,24"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="14">
@@ -36,7 +36,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Logo.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
+                        <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                             <TextBlock Text="Clash#" Style="{ThemeResource TitleTextBlockStyle}" />
                             <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" />
@@ -81,7 +81,7 @@
                     </Grid>
                 </Grid>
 
-                <Grid Grid.Column="1" RowSpacing="10">
+                <Grid Grid.Column="1" RowSpacing="10" Margin="0,0,0,0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="*" />
@@ -126,25 +126,34 @@
                 </Grid>
             </Grid>
 
-                <GridView
+            <HyperlinkButton
+                x:Name="EditInfoTilesLink"
+                Content="{Binding EditInfoTilesText}"
+                HorizontalAlignment="Left"
+                Padding="0"
+                Click="EditInfoTilesButton_Click" />
+
+            <GridView
                     x:Name="InfoTileGrid"
                     Margin="0"
                     ItemsSource="{Binding InfoTiles}"
                     SelectionMode="None"
                     CanReorderItems="True"
                     AllowDrop="True"
-                    IsItemClickEnabled="False">
+                    IsItemClickEnabled="False"
+                    SizeChanged="InfoTileGrid_SizeChanged"
+                    ContainerContentChanging="InfoTileGrid_ContainerContentChanging">
                     <GridView.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="3" />
+                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" />
                         </ItemsPanelTemplate>
                     </GridView.ItemsPanel>
                     <GridView.ItemContainerStyle>
                         <Style TargetType="GridViewItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                            <Setter Property="Margin" Value="0,0,10,10" />
-                            <Setter Property="Width" Value="250" />
+                            <Setter Property="Margin" Value="5,0,5,10" />
+                            <Setter Property="MinWidth" Value="220" />
                         </Style>
                     </GridView.ItemContainerStyle>
                     <GridView.ItemTemplate>
@@ -160,7 +169,7 @@
                                 TileCommand="{Binding TileCommand}" />
                         </DataTemplate>
                     </GridView.ItemTemplate>
-                </GridView>
+            </GridView>
         </StackPanel>
     </ScrollViewer>
 </Page>

@@ -34,6 +34,8 @@ namespace ClashSharp.View;
 /// </remarks>
 public sealed partial class Settings : Page
 {
+    private sealed record DataPackageScopeOption(ClashDataPackageScope Scope, string Title, string Description, string Glyph);
+
     /// <summary>Owns settings state transitions and persistence.</summary>
     private readonly SettingsViewModel _viewModel;
 
@@ -385,47 +387,14 @@ public sealed partial class Settings : Page
         _viewModel.UninstallStartupRestoreFallback();
     }
 
-    /// <summary>Shows the mainland China unfriendly-site list.</summary>
-    private async void ShowMainlandChinaUnfriendlyListButton_Click(object sender, RoutedEventArgs e)
-    {
-        StackPanel panel = new()
-        {
-            Spacing = 6,
-            MinWidth = 360,
-            MaxWidth = 560,
-        };
-
-        foreach (string entry in MainlandChinaTextDisplayService.GetUnfriendlyDisplayList())
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = entry,
-                TextWrapping = TextWrapping.WrapWholeWords,
-                Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
-            });
-        }
-
-        ContentDialog dialog = new()
-        {
-            Title = _viewModel.MainlandChinaUnfriendlyListTitleText,
-            Content = new ScrollViewer
-            {
-                Content = panel,
-                MaxHeight = Math.Max(240, XamlRoot.Size.Height - 220),
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            },
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        await dialog.ShowAsync();
-    }
-
     /// <summary>Exports a Clash# XML data package with the selected scope.</summary>
     private async void ExportDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
-        await PickAndExportDataPackageAsync(_viewModel.SelectedDataPackageScope);
+        ClashDataPackageScope? scope = await SelectDataPackageExportScopeAsync();
+        if (scope is ClashDataPackageScope selectedScope)
+        {
+            await PickAndExportDataPackageAsync(selectedScope);
+        }
     }
 
     /// <summary>Imports a Clash# XML data package after two confirmations.</summary>
@@ -448,10 +417,106 @@ public sealed partial class Settings : Page
         ApplyImportedSettings();
     }
 
-    /// <summary>Exports a full backup package while ignoring local logs.</summary>
+    /// <summary>Exports a full backup package.</summary>
     private async void BackupDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
         await PickAndExportDataPackageAsync(ClashDataPackageScope.All);
+    }
+
+    /// <summary>Prompts for the package export scope immediately before saving.</summary>
+    private async Task<ClashDataPackageScope?> SelectDataPackageExportScopeAsync()
+    {
+        StackPanel optionPanel = new()
+        {
+            Spacing = 8,
+        };
+        List<DialogOptionRow> rows = [];
+
+        foreach (DataPackageScopeOption option in BuildDataPackageScopeOptions())
+        {
+            DialogOptionRow row = new()
+            {
+                Title = option.Title,
+                Metadata = _viewModel.DataExportTitleText,
+                Description = option.Description,
+                Glyph = option.Glyph,
+                IsChecked = option.Scope == ClashDataPackageScope.Settings,
+                Tag = option.Scope,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+            };
+            row.Tapped += (_, _) => SelectDataPackageScopeRow(row, rows);
+            rows.Add(row);
+            optionPanel.Children.Add(row);
+        }
+
+        StackPanel panel = new()
+        {
+            Spacing = 12,
+            MinWidth = 420,
+            MaxWidth = 620,
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text = _viewModel.DataExportDescriptionText,
+            TextWrapping = TextWrapping.WrapWholeWords,
+            Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
+        });
+        panel.Children.Add(optionPanel);
+
+        ContentDialog dialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("Settings.DataExport.Title"),
+            Content = panel,
+            PrimaryButtonText = _viewModel.ExportText,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        foreach (DialogOptionRow row in rows)
+        {
+            if (row.IsChecked == true && row.Tag is ClashDataPackageScope scope)
+            {
+                return scope;
+            }
+        }
+
+        return ClashDataPackageScope.Settings;
+    }
+
+    private IReadOnlyList<DataPackageScopeOption> BuildDataPackageScopeOptions()
+    {
+        return
+        [
+            new(
+                ClashDataPackageScope.Settings,
+                _viewModel.DataPackageScopeSettingsText,
+                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.Settings.Description"),
+                "\uE713"),
+            new(
+                ClashDataPackageScope.SettingsAndProxyConfiguration,
+                _viewModel.DataPackageScopeSettingsAndProxyConfigurationText,
+                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration.Description"),
+                "\uE968"),
+            new(
+                ClashDataPackageScope.All,
+                _viewModel.DataPackageScopeAllText,
+                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.All.Description"),
+                "\uE777"),
+        ];
+    }
+
+    private static void SelectDataPackageScopeRow(DialogOptionRow selectedRow, IReadOnlyList<DialogOptionRow> rows)
+    {
+        foreach (DialogOptionRow row in rows)
+        {
+            row.IsChecked = ReferenceEquals(row, selectedRow);
+        }
     }
 
     /// <summary>Shows a save picker and exports the selected data package scope.</summary>

@@ -30,8 +30,15 @@ namespace ClashSharp.View;
 /// </remarks>
 public sealed partial class MasterControl : Page
 {
+    private const double MinInfoTileWidth = 220;
+    private const double PreferredInfoTileWidth = 280;
+    private const double InfoTileHorizontalMargin = 10;
+    private const int MaxInfoTileColumns = 4;
+
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
+
+    private double _infoTileItemWidth = PreferredInfoTileWidth;
 
     /// <summary>Initializes the master control page and its view model.</summary>
     public MasterControl()
@@ -71,9 +78,6 @@ public sealed partial class MasterControl : Page
     {
         switch (action)
         {
-            case MasterControlTileAction.EditInfoTiles:
-                await ShowInfoTilesEditorAsync();
-                break;
             case MasterControlTileAction.ShowStartupPrompt:
                 await ShowStartupPromptDialogAsync();
                 break;
@@ -212,16 +216,38 @@ public sealed partial class MasterControl : Page
     /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
     private async Task ShowInfoTilesEditorAsync()
     {
-        StackPanel panel = new()
+        TextBox searchBox = new()
+        {
+            Name = "InfoTileSearchBox",
+            PlaceholderText = _viewModel.SearchInfoTilesPlaceholderText,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+
+        StackPanel listPanel = new()
         {
             Spacing = 8,
-            MinWidth = 280,
         };
+        searchBox.TextChanged += (_, _) => FilterInfoTileEditorRows(searchBox.Text, listPanel);
+
+        StackPanel panel = new()
+        {
+            Spacing = 10,
+            MinWidth = 420,
+            MaxWidth = 620,
+        };
+        panel.Children.Add(searchBox);
 
         foreach (MasterControlInfoTileViewModel tile in _viewModel.InfoTiles)
         {
-            panel.Children.Add(BuildInfoTileEditorRow(tile));
+            listPanel.Children.Add(BuildInfoTileEditorRow(tile));
         }
+        panel.Children.Add(new ScrollViewer
+        {
+            Content = listPanel,
+            MaxHeight = Math.Max(260, XamlRoot.Size.Height - 260),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        });
 
         ContentDialog dialog = new()
         {
@@ -238,52 +264,88 @@ public sealed partial class MasterControl : Page
             return;
         }
 
-        foreach (object child in panel.Children)
+        foreach (object child in listPanel.Children)
         {
-            if (child is CheckBox { Tag: MasterControlInfoTileViewModel tile } checkBox)
+            if (child is DialogOptionRow { Tag: MasterControlInfoTileViewModel tile } optionRow)
             {
-                tile.IsVisible = checkBox.IsChecked == true;
+                tile.IsVisible = optionRow.IsChecked == true;
             }
         }
     }
 
     /// <summary>Builds one tile-visibility editor row with icon and localized tile name.</summary>
-    private static CheckBox BuildInfoTileEditorRow(MasterControlInfoTileViewModel tile)
+    private static DialogOptionRow BuildInfoTileEditorRow(MasterControlInfoTileViewModel tile)
     {
-        StackPanel content = new()
+        return new DialogOptionRow
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-        };
-        content.Children.Add(new FontIcon
-        {
+            Title = tile.Title,
+            Metadata = tile.TypeText,
+            Description = tile.Description,
             Glyph = tile.Glyph,
-            FontSize = 16,
-            Width = 20,
-        });
-        StackPanel textPanel = new()
-        {
-            Spacing = 2,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        textPanel.Children.Add(new TextBlock
-        {
-            Text = tile.Title,
-        });
-        textPanel.Children.Add(new TextBlock
-        {
-            Text = tile.TypeText,
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-        });
-        content.Children.Add(textPanel);
-
-        return new CheckBox
-        {
-            Content = content,
             IsChecked = tile.IsVisible,
             Tag = tile,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
         };
+    }
+
+    private static void FilterInfoTileEditorRows(string query, StackPanel listPanel)
+    {
+        string normalizedQuery = query.Trim();
+        foreach (object child in listPanel.Children)
+        {
+            if (child is not DialogOptionRow { Tag: MasterControlInfoTileViewModel tile } optionRow)
+            {
+                continue;
+            }
+
+            bool isVisible = normalizedQuery.Length == 0
+                || tile.Title.Contains(normalizedQuery, StringComparison.CurrentCultureIgnoreCase)
+                || tile.TypeText.Contains(normalizedQuery, StringComparison.CurrentCultureIgnoreCase)
+                || tile.Description.Contains(normalizedQuery, StringComparison.CurrentCultureIgnoreCase);
+            optionRow.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void InfoTileGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateInfoTileWidths(e.NewSize.Width);
+    }
+
+    private void InfoTileGrid_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        ApplyInfoTileContainerWidth(args.ItemContainer);
+    }
+
+    private void UpdateInfoTileWidths(double availableWidth)
+    {
+        if (availableWidth <= 0)
+        {
+            return;
+        }
+
+        int columns = Math.Clamp((int)Math.Round(availableWidth / PreferredInfoTileWidth), 1, MaxInfoTileColumns);
+        while (columns > 1 && CalculateInfoTileWidth(availableWidth, columns) < MinInfoTileWidth)
+        {
+            columns--;
+        }
+
+        _infoTileItemWidth = Math.Max(MinInfoTileWidth, CalculateInfoTileWidth(availableWidth, columns));
+        foreach (MasterControlInfoTileViewModel tile in _viewModel.InfoTiles)
+        {
+            if (InfoTileGrid.ContainerFromItem(tile) is FrameworkElement item)
+            {
+                ApplyInfoTileContainerWidth(item);
+            }
+        }
+    }
+
+    private void ApplyInfoTileContainerWidth(FrameworkElement item)
+    {
+        item.Width = _infoTileItemWidth;
+    }
+
+    private static double CalculateInfoTileWidth(double availableWidth, int columns)
+    {
+        return Math.Floor((availableWidth / columns) - InfoTileHorizontalMargin);
     }
 }
