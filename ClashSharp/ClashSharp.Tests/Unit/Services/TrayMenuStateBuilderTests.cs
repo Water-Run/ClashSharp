@@ -60,6 +60,66 @@ public sealed class TrayMenuStateBuilderTests
         Assert.True(state.TransparentProxyItem.IsChecked);
     }
 
+    /// <summary>Verifies runtime details are grouped under the tray status submenu.</summary>
+    [Fact]
+    public void Build_WithStatusSnapshot_CreatesStatusMenuItems()
+    {
+        static string GetString(string key)
+        {
+            return key switch
+            {
+                "Tray.Menu.Status" => "Status",
+                "Tray.Status.Mode.Format" => "Mode: {0}",
+                "Tray.Status.Node.Format" => "Node: {0}",
+                "Tray.Status.Latency.Format" => "Latency: {0} ms",
+                "Tray.Status.NodeUnavailable" => "Node: unavailable",
+                "Tray.Status.LatencyUnavailable" => "Latency: unavailable",
+                "Master.Mode.RuleTakeover.Title" => "Rule",
+                _ => key,
+            };
+        }
+
+        TrayMenuState state = TrayMenuStateBuilder.Build(
+            ClashSharpMode.RuleTakeover,
+            transparentProxyEnabled: true,
+            mihomoServiceInstalled: true,
+            new TrayStatusSnapshot("Proxy A", 42),
+            GetString);
+
+        Assert.Equal("Status", state.StatusMenuLabel);
+        Assert.Equal(["Mode: Rule", "Node: Proxy A", "Latency: 42 ms"], state.StatusItems.Select(item => item.Label));
+        Assert.All(state.StatusItems, item => Assert.False(item.IsEnabled));
+    }
+
+    /// <summary>Verifies unavailable runtime details remain explicit in the tray status submenu.</summary>
+    [Fact]
+    public void Build_WithoutStatusSnapshotValues_UsesUnavailableStatusText()
+    {
+        static string GetString(string key)
+        {
+            return key switch
+            {
+                "Tray.Menu.Status" => "Status",
+                "Tray.Status.Mode.Format" => "Mode: {0}",
+                "Tray.Status.Node.Format" => "Node: {0}",
+                "Tray.Status.Latency.Format" => "Latency: {0} ms",
+                "Tray.Status.NodeUnavailable" => "Node: unavailable",
+                "Tray.Status.LatencyUnavailable" => "Latency: unavailable",
+                "Master.Mode.Disabled.Title" => "Disabled",
+                _ => key,
+            };
+        }
+
+        TrayMenuState state = TrayMenuStateBuilder.Build(
+            ClashSharpMode.Disabled,
+            transparentProxyEnabled: false,
+            mihomoServiceInstalled: false,
+            TrayStatusSnapshot.Unavailable,
+            GetString);
+
+        Assert.Equal(["Mode: Disabled", "Node: unavailable", "Latency: unavailable"], state.StatusItems.Select(item => item.Label));
+    }
+
     /// <summary>Verifies tray menu labels are resolved through localization keys.</summary>
     [Fact]
     public void Build_WithLocalization_UsesLocalizedLabels()

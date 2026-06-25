@@ -10,11 +10,14 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
+using ClashSharp.Service;
 
 namespace ClashSharp.ViewModel;
 
@@ -80,9 +83,21 @@ internal interface IMasterControlSettings
     /// <value>Current persisted mode.</value>
     ClashSharpMode CurrentMode { get; set; }
 
-    /// <summary>Gets whether transparent proxy is enabled in settings.</summary>
+    /// <summary>Gets or sets whether transparent proxy is enabled in settings.</summary>
     /// <value>True when transparent proxy is enabled; otherwise false.</value>
-    bool TransparentProxyEnabled { get; }
+    bool TransparentProxyEnabled { get; set; }
+
+    /// <summary>Gets whether Clash# launches when the user signs in.</summary>
+    bool LaunchAtStartupEnabled { get; }
+
+    /// <summary>Gets the active profile identifier.</summary>
+    string ActiveProfileId { get; }
+
+    /// <summary>Gets the local mixed proxy port.</summary>
+    int MixedPort { get; }
+
+    /// <summary>Gets the first proxy connection-test URL.</summary>
+    string ConnectionTestProxyUrl1 { get; }
 }
 
 /// <summary>Network takeover contract required by <see cref="MasterControlViewModel"/>.</summary>
@@ -120,6 +135,87 @@ internal interface IMasterControlLog
     void Append(string level, string category, string message, string? detail);
 }
 
+/// <summary>Tray status contract required by the master-control page.</summary>
+internal interface IMasterControlTrayStatus
+{
+    /// <summary>Gets current node and latency status.</summary>
+    TrayStatusSnapshot GetSnapshot();
+}
+
+/// <summary>Fallback tray status provider used in tests and when runtime status is unavailable.</summary>
+internal sealed class UnavailableMasterControlTrayStatus : IMasterControlTrayStatus
+{
+    public static UnavailableMasterControlTrayStatus Instance { get; } = new();
+
+    public TrayStatusSnapshot GetSnapshot()
+    {
+        return TrayStatusSnapshot.Unavailable;
+    }
+}
+
+/// <summary>One draggable master-control information tile.</summary>
+internal sealed class MasterControlInfoTileViewModel : ObservableObject
+{
+    private string _value;
+    private string _detail;
+    private bool _isVisible = true;
+    private bool _isToggleOn;
+
+    public MasterControlInfoTileViewModel(
+        string id,
+        string title,
+        string value,
+        string detail,
+        string glyph,
+        bool isToggleVisible = false,
+        bool isToggleOn = false,
+        RelayCommand? toggleCommand = null)
+    {
+        Id = id ?? throw new ArgumentNullException(nameof(id));
+        Title = title ?? throw new ArgumentNullException(nameof(title));
+        _value = value ?? throw new ArgumentNullException(nameof(value));
+        _detail = detail ?? throw new ArgumentNullException(nameof(detail));
+        Glyph = glyph ?? throw new ArgumentNullException(nameof(glyph));
+        IsToggleVisible = isToggleVisible;
+        _isToggleOn = isToggleOn;
+        ToggleCommand = toggleCommand ?? new RelayCommand(() => { });
+    }
+
+    public string Id { get; }
+
+    public string Title { get; }
+
+    public string Glyph { get; }
+
+    public bool IsToggleVisible { get; }
+
+    public RelayCommand ToggleCommand { get; }
+
+    public string Value
+    {
+        get => _value;
+        set => SetProperty(ref _value, value);
+    }
+
+    public string Detail
+    {
+        get => _detail;
+        set => SetProperty(ref _detail, value);
+    }
+
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set => SetProperty(ref _isVisible, value);
+    }
+
+    public bool IsToggleOn
+    {
+        get => _isToggleOn;
+        set => SetProperty(ref _isToggleOn, value);
+    }
+}
+
 /// <summary>Bindable view model for the master control page.</summary>
 /// <remarks>
 /// Invariants: Exactly one primary mode flag is true when <see cref="SelectedMode"/> is not faulted.
@@ -146,6 +242,9 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Log sink used by mode application.</summary>
     private readonly IMasterControlLog _log;
 
+    /// <summary>Tray status provider used for current node and latency details.</summary>
+    private readonly IMasterControlTrayStatus _trayStatus;
+
     /// <summary>Backing field for <see cref="SelectedMode"/>.</summary>
     private ClashSharpMode _selectedMode;
 
@@ -157,6 +256,18 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="TransparentProxyStatusText"/>.</summary>
     private string _transparentProxyStatusText = string.Empty;
+
+    /// <summary>Backing field for <see cref="CurrentNodeText"/>.</summary>
+    private string _currentNodeText = string.Empty;
+
+    /// <summary>Backing field for <see cref="LatencySummaryText"/>.</summary>
+    private string _latencySummaryText = string.Empty;
+
+    /// <summary>Whether the bundled core was available during the latest status refresh.</summary>
+    private bool _isCoreAvailable = true;
+
+    /// <summary>Information tiles displayed in the lower grid.</summary>
+    private readonly ObservableCollection<MasterControlInfoTileViewModel> _infoTiles = [];
 
     /// <summary>Initializes a master control view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
@@ -172,7 +283,8 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterControlWindowsProxy windowsProxy,
         IMasterControlSettings settings,
         IMasterControlTakeover takeover,
-        IMasterControlLog log)
+        IMasterControlLog log,
+        IMasterControlTrayStatus? trayStatus = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -180,6 +292,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _takeover = takeover ?? throw new ArgumentNullException(nameof(takeover));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _trayStatus = trayStatus ?? UnavailableMasterControlTrayStatus.Instance;
         _selectedMode = _settings.CurrentMode;
 
         DisabledModeCommand = new AsyncRelayCommand(token => ApplyModeAsync(ClashSharpMode.Disabled, token));
@@ -191,6 +304,10 @@ internal sealed class MasterControlViewModel : ObservableObject
         CoreStatusText = string.Empty;
         SystemProxyStatusText = string.Empty;
         TransparentProxyStatusText = string.Empty;
+        CurrentNodeText = _localization.GetString("Master.Status.CurrentNodeUnavailable");
+        LatencySummaryText = _localization.GetString("Master.Status.LatencyUnavailable");
+        BuildInfoTiles();
+        RefreshTileValues();
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -253,6 +370,32 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <value>Localized status title; never null.</value>
     public string TransparentProxyTitleText => _localization.GetString("Master.Status.TransparentProxy");
 
+    /// <summary>Gets compact basic status text for the redesigned control header.</summary>
+    public string BasicStatusText
+    {
+        get
+        {
+            if (!_isCoreAvailable || SelectedMode == ClashSharpMode.Faulted)
+            {
+                return _localization.GetString("Master.BasicStatus.Unavailable");
+            }
+
+            return SelectedMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
+                ? _localization.GetString("Master.BasicStatus.Active")
+                : _localization.GetString("Master.BasicStatus.Ready");
+        }
+    }
+
+    public string CurrentNodeTitleText => _localization.GetString("Tray.Status.Node.Format").Replace("{0}", string.Empty, StringComparison.Ordinal).Trim();
+
+    public string LatencyTitleText => _localization.GetString("Master.Tile.Latency");
+
+    public string EditInfoTilesText => _localization.GetString("Master.Tile.Edit");
+
+    public string VisibleTileText => _localization.GetString("Master.Tile.Visible");
+
+    public IReadOnlyList<MasterControlInfoTileViewModel> InfoTiles => _infoTiles;
+
     /// <summary>Gets the selected takeover mode.</summary>
     /// <value>Current selected mode, including faulted state when application fails.</value>
     public ClashSharpMode SelectedMode
@@ -266,6 +409,8 @@ internal sealed class MasterControlViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsStandbyModeSelected));
                 OnPropertyChanged(nameof(IsRuleTakeoverModeSelected));
                 OnPropertyChanged(nameof(IsFullTakeoverModeSelected));
+                OnPropertyChanged(nameof(BasicStatusText));
+                RefreshTileValues();
             }
         }
     }
@@ -310,6 +455,18 @@ internal sealed class MasterControlViewModel : ObservableObject
         private set => SetProperty(ref _transparentProxyStatusText, value);
     }
 
+    public string CurrentNodeText
+    {
+        get => _currentNodeText;
+        private set => SetProperty(ref _currentNodeText, value);
+    }
+
+    public string LatencySummaryText
+    {
+        get => _latencySummaryText;
+        private set => SetProperty(ref _latencySummaryText, value);
+    }
+
     /// <summary>Gets the command that loads runtime status.</summary>
     /// <value>Asynchronous load command.</value>
     public AsyncRelayCommand LoadCommand { get; }
@@ -345,13 +502,18 @@ internal sealed class MasterControlViewModel : ObservableObject
             CoreStatusText = string.Format(
                 _localization.GetString("Master.Status.CoreReady.Format"),
                 versionText);
+            _isCoreAvailable = true;
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException)
         {
             CoreStatusText = _localization.GetString("Master.Status.CoreUnavailable");
+            _isCoreAvailable = false;
         }
 
         RefreshProxyStatus();
+        RefreshTrayStatus();
+        OnPropertyChanged(nameof(BasicStatusText));
+        RefreshTileValues();
     }
 
     /// <summary>Applies a selected takeover mode and refreshes visible status.</summary>
@@ -377,14 +539,18 @@ internal sealed class MasterControlViewModel : ObservableObject
                 : _localization.GetString("Master.Status.Off");
             TransparentProxyStatusText = ResolveTransparentProxyStatus(result.TransparentProxyEnabled);
             _log.Append("Info", "MasterControl", result.Message, null);
+            _isCoreAvailable = true;
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
             SelectedMode = ClashSharpMode.Faulted;
             CoreStatusText = _localization.GetString("Master.Status.CoreStartFailed");
+            _isCoreAvailable = false;
             _log.Append("Error", "MasterControl", "Failed to apply selected Clash# mode.", exception.Message);
         }
 
+        OnPropertyChanged(nameof(BasicStatusText));
+        RefreshTileValues();
         return Task.CompletedTask;
     }
 
@@ -406,6 +572,83 @@ internal sealed class MasterControlViewModel : ObservableObject
         TransparentProxyStatusText = _settings.TransparentProxyEnabled
             ? _localization.GetString("Master.Status.Standby")
             : _localization.GetString("Master.Status.Off");
+    }
+
+    private void RefreshTrayStatus()
+    {
+        TrayStatusSnapshot snapshot = _trayStatus.GetSnapshot();
+        CurrentNodeText = string.IsNullOrWhiteSpace(snapshot.CurrentNodeName)
+            ? _localization.GetString("Master.Status.CurrentNodeUnavailable")
+            : snapshot.CurrentNodeName;
+        LatencySummaryText = snapshot.LatencyMilliseconds is int latency
+            ? string.Format(_localization.GetString("Master.Status.Latency.Format"), latency)
+            : _localization.GetString("Master.Status.LatencyUnavailable");
+    }
+
+    private void BuildInfoTiles()
+    {
+        _infoTiles.Clear();
+        _infoTiles.Add(new MasterControlInfoTileViewModel("core", _localization.GetString("Master.Tile.Core"), string.Empty, string.Empty, "\uE950"));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("system-proxy", _localization.GetString("Master.Tile.SystemProxy"), string.Empty, string.Empty, "\uE968"));
+        _infoTiles.Add(new MasterControlInfoTileViewModel(
+            "transparent-proxy",
+            _localization.GetString("Master.Tile.TransparentProxy"),
+            string.Empty,
+            string.Empty,
+            "\uE8A7",
+            isToggleVisible: true,
+            isToggleOn: _settings.TransparentProxyEnabled,
+            toggleCommand: new RelayCommand(ToggleTransparentProxy)));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("latency", _localization.GetString("Master.Tile.Latency"), string.Empty, string.Empty, "\uEC4A"));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("startup-launch", _localization.GetString("Master.Tile.StartupLaunch"), string.Empty, string.Empty, "\uE7C3"));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("active-profile", _localization.GetString("Master.Tile.ActiveProfile"), string.Empty, string.Empty, "\uE8A5"));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("mixed-port", _localization.GetString("Master.Tile.MixedPort"), string.Empty, string.Empty, "\uE839"));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("connection-test", _localization.GetString("Master.Tile.ConnectionTest"), string.Empty, string.Empty, "\uE9D9"));
+        _infoTiles.Add(new MasterControlInfoTileViewModel("backup", _localization.GetString("Master.Tile.Backup"), string.Empty, string.Empty, "\uE777"));
+    }
+
+    private void RefreshTileValues()
+    {
+        SetTile("core", CoreStatusText, BasicStatusText);
+        SetTile("system-proxy", SystemProxyStatusText, string.Empty);
+        SetTile("transparent-proxy", TransparentProxyStatusText, string.Empty, _settings.TransparentProxyEnabled);
+        SetTile("latency", LatencySummaryText, CurrentNodeText);
+        SetTile("startup-launch", _settings.LaunchAtStartupEnabled
+            ? _localization.GetString("Master.Status.StartupLaunchOn")
+            : _localization.GetString("Master.Status.StartupLaunchOff"), string.Empty);
+        SetTile("active-profile", _settings.ActiveProfileId, string.Empty);
+        SetTile("mixed-port", _settings.MixedPort.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
+        SetTile("connection-test", _settings.ConnectionTestProxyUrl1, string.Empty);
+        SetTile("backup", _localization.GetString("Master.Status.BackupAvailable"), string.Empty);
+    }
+
+    private void SetTile(string id, string value, string detail, bool? toggleOn = null)
+    {
+        foreach (MasterControlInfoTileViewModel tile in _infoTiles)
+        {
+            if (!StringComparer.Ordinal.Equals(tile.Id, id))
+            {
+                continue;
+            }
+
+            tile.Value = value;
+            tile.Detail = detail;
+            if (toggleOn is bool isToggleOn)
+            {
+                tile.IsToggleOn = isToggleOn;
+            }
+
+            return;
+        }
+    }
+
+    private void ToggleTransparentProxy()
+    {
+        _settings.TransparentProxyEnabled = !_settings.TransparentProxyEnabled;
+        TransparentProxyStatusText = _settings.TransparentProxyEnabled
+            ? _localization.GetString("Master.Status.Standby")
+            : _localization.GetString("Master.Status.Off");
+        RefreshTileValues();
     }
 
     /// <summary>Resolves transparent proxy status after mode application.</summary>

@@ -15,6 +15,8 @@
             <StackPanel Spacing="8" HorizontalAlignment="Center">
                 <Image Source="ms-appx:///Assets/Logo.png" Width="96" Height="96" Stretch="Uniform" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding VersionSummaryText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding RuntimeValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding AppDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" />
             </StackPanel>
 
@@ -25,31 +27,19 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="VersionLabelText" Text="{Binding VersionLabelText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="VersionValueText" Text="{Binding VersionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-
-                <StackPanel Grid.Row="1" Spacing="4">
-                    <TextBlock x:Name="RuntimeTitleText" Text="{Binding RuntimeTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock x:Name="RuntimeValueText" Text="{Binding RuntimeValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-
-                <StackPanel Grid.Row="2" Spacing="4">
                     <TextBlock x:Name="AuthorTitleText" Text="{Binding AuthorTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                     <TextBlock x:Name="AuthorValueText" Text="{Binding AuthorValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
 
-                <StackPanel Grid.Row="3" Spacing="4">
+                <StackPanel Grid.Row="1" Spacing="4">
                     <TextBlock x:Name="LicenseTitleText" Text="{Binding LicenseTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                     <TextBlock x:Name="LicenseValueText" Text="{Binding LicenseValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
 
-                <Grid Grid.Row="4" ColumnSpacing="12">
+                <Grid Grid.Row="2" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -66,7 +56,7 @@
                     </Button>
                 </Grid>
 
-                <Grid Grid.Row="5" ColumnSpacing="12">
+                <Grid Grid.Row="3" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -84,7 +74,7 @@
                     </Button>
                 </Grid>
 
-                <Grid Grid.Row="6" ColumnSpacing="12">
+                <Grid Grid.Row="4" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />

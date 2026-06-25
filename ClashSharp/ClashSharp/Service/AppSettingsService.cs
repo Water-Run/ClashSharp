@@ -98,8 +98,15 @@ public sealed class AppSettingsService
     /// <summary>Storage key for proxy connection-test URL.</summary>
     private const string KeyConnectionTestUrl = "ConnectionTestUrl";
 
+    private const string KeyConnectionTestProxyUrl1 = "ConnectionTestProxyUrl1";
+    private const string KeyConnectionTestProxyUrl2 = "ConnectionTestProxyUrl2";
+    private const string KeyConnectionTestDirectUrl = "ConnectionTestDirectUrl";
+
     /// <summary>Default proxy connection-test URL.</summary>
     private const string DefaultConnectionTestUrl = "https://www.google.com/generate_204";
+    private const string DefaultConnectionTestProxyUrl1 = "https://www.google.com";
+    private const string DefaultConnectionTestProxyUrl2 = "https://github.com";
+    private const string DefaultConnectionTestDirectUrl = "https://www.baidu.com";
 
     /// <summary>Default custom accent color used as the picker seed.</summary>
     private const string DefaultAppAccentColorValue = "#FF0078D4";
@@ -128,6 +135,9 @@ public sealed class AppSettingsService
         KeyMainlandChinaFeatureMode,
         KeyMainlandChinaUrlBlockingEnabled,
         KeyConnectionTestUrl,
+        KeyConnectionTestProxyUrl1,
+        KeyConnectionTestProxyUrl2,
+        KeyConnectionTestDirectUrl,
     ];
 
     /// <summary>Initializes the settings service and resolves the preferred storage container.</summary>
@@ -343,6 +353,24 @@ public sealed class AppSettingsService
     {
         get => GetString(KeyConnectionTestUrl, DefaultConnectionTestUrl);
         set => SetString(KeyConnectionTestUrl, NormalizeConnectionTestUrl(value));
+    }
+
+    public string ConnectionTestProxyUrl1
+    {
+        get => GetString(KeyConnectionTestProxyUrl1, DefaultConnectionTestProxyUrl1);
+        set => SetString(KeyConnectionTestProxyUrl1, NormalizeConnectionTestUrl(value));
+    }
+
+    public string ConnectionTestProxyUrl2
+    {
+        get => GetString(KeyConnectionTestProxyUrl2, DefaultConnectionTestProxyUrl2);
+        set => SetString(KeyConnectionTestProxyUrl2, NormalizeConnectionTestUrl(value));
+    }
+
+    public string ConnectionTestDirectUrl
+    {
+        get => GetString(KeyConnectionTestDirectUrl, DefaultConnectionTestDirectUrl);
+        set => SetString(KeyConnectionTestDirectUrl, NormalizeConnectionTestUrl(value));
     }
 
     /// <summary>Gets or sets whether mainland China display replacement is enabled.</summary>

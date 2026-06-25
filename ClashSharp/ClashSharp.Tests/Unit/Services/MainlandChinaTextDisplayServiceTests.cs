@@ -108,4 +108,16 @@ public sealed class MainlandChinaTextDisplayServiceTests
             AppSettingsService.Instance.MainlandChinaUrlBlockingEnabled = originalUrlBlocking;
         }
     }
+
+    /// <summary>Verifies the UI can display the unfriendly-site block list without duplicating private arrays.</summary>
+    [Fact]
+    public void GetUnfriendlyDisplayList_IncludesKnownTermsAndUrls()
+    {
+        IReadOnlyList<string> entries = MainlandChinaTextDisplayService.GetUnfriendlyDisplayList();
+
+        Assert.Contains("品葱", entries);
+        Assert.Contains("大纪元", entries);
+        Assert.Contains("pincong.rocks", entries);
+        Assert.Contains("epochtimes.com", entries);
+    }
 }

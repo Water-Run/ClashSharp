@@ -8,6 +8,7 @@
  */
 
 using ClashSharp.Model;
+using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
@@ -36,13 +37,17 @@ public sealed class MasterControlViewModelTests
         FakeMasterCore core = new() { VersionText = "Mihomo Meta v1.19.11 windows amd64 with go1.24.4" };
         FakeMasterWindowsProxy proxy = new() { CurrentState = new WindowsProxyState(true, "127.0.0.1:7890") };
         FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
-        MasterControlViewModel viewModel = CreateViewModel(core, proxy, settings);
+        FakeMasterTrayStatus trayStatus = new() { Snapshot = new TrayStatusSnapshot("HK-01", 82) };
+        MasterControlViewModel viewModel = CreateViewModel(core, proxy, settings, trayStatus: trayStatus);
 
         await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal("Core ready: v1.19.11", viewModel.CoreStatusText);
         Assert.Equal("On", viewModel.SystemProxyStatusText);
         Assert.Equal("Standby", viewModel.TransparentProxyStatusText);
+        Assert.Equal("Ready", viewModel.BasicStatusText);
+        Assert.Equal("HK-01", viewModel.CurrentNodeText);
+        Assert.Equal("82 ms", viewModel.LatencySummaryText);
     }
 
     /// <summary>Verifies applying a mode persists the mode, updates statuses, and logs the result.</summary>
@@ -65,6 +70,7 @@ public sealed class MasterControlViewModelTests
         Assert.Equal("On", viewModel.SystemProxyStatusText);
         Assert.Equal("Off", viewModel.TransparentProxyStatusText);
         Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Message == "applied");
+        Assert.Equal("Active", viewModel.BasicStatusText);
     }
 
     /// <summary>Verifies expected takeover failures move the view model to a faulted state and log an error.</summary>
@@ -82,7 +88,45 @@ public sealed class MasterControlViewModelTests
 
         Assert.Equal(ClashSharpMode.Faulted, viewModel.SelectedMode);
         Assert.Equal("Core failed", viewModel.CoreStatusText);
+        Assert.Equal("Unavailable", viewModel.BasicStatusText);
         Assert.Contains(log.Entries, entry => entry.Level == "Error" && entry.Detail == "missing core");
+    }
+
+    /// <summary>Verifies the redesigned master control exposes a complete 3x3 tile model.</summary>
+    [Fact]
+    public void Constructor_BuildsCompleteInfoTiles()
+    {
+        FakeMasterSettings settings = new()
+        {
+            LaunchAtStartupEnabled = true,
+            ActiveProfileId = "profile-a",
+            TransparentProxyEnabled = true,
+            MixedPort = 12000,
+            ConnectionTestProxyUrl1 = "https://google.com",
+        };
+
+        MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+
+        Assert.Equal(9, viewModel.InfoTiles.Count);
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "transparent-proxy" && tile.IsToggleVisible && tile.IsToggleOn);
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-launch" && tile.Value == "On");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "active-profile" && tile.Value == "profile-a");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mixed-port" && tile.Value == "12000");
+    }
+
+    /// <summary>Verifies the transparent-proxy tile toggle persists through the settings boundary.</summary>
+    [Fact]
+    public void ToggleTransparentProxyCommand_UpdatesSettingsAndTile()
+    {
+        FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
+        MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+        MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "transparent-proxy");
+
+        tile.ToggleCommand.Execute(null);
+
+        Assert.False(settings.TransparentProxyEnabled);
+        Assert.False(tile.IsToggleOn);
+        Assert.Equal("Off", viewModel.TransparentProxyStatusText);
     }
 
     /// <summary>Creates a master control view model with fake dependencies.</summary>
@@ -97,7 +141,8 @@ public sealed class MasterControlViewModelTests
         FakeMasterWindowsProxy? proxy = null,
         FakeMasterSettings? settings = null,
         FakeMasterTakeover? takeover = null,
-        FakeMasterLog? log = null)
+        FakeMasterLog? log = null,
+        FakeMasterTrayStatus? trayStatus = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -105,7 +150,8 @@ public sealed class MasterControlViewModelTests
             proxy ?? new FakeMasterWindowsProxy(),
             settings ?? new FakeMasterSettings(),
             takeover ?? new FakeMasterTakeover(),
-            log ?? new FakeMasterLog());
+            log ?? new FakeMasterLog(),
+            trayStatus ?? new FakeMasterTrayStatus());
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>
@@ -133,6 +179,26 @@ public sealed class MasterControlViewModelTests
                 "Master.Status.Core" => "Core",
                 "Master.Status.SystemProxy" => "System proxy",
                 "Master.Status.TransparentProxy" => "Transparent proxy",
+                "Master.BasicStatus.Unavailable" => "Unavailable",
+                "Master.BasicStatus.Ready" => "Ready",
+                "Master.BasicStatus.Active" => "Active",
+                "Master.Tile.Core" => "Core",
+                "Master.Tile.SystemProxy" => "System proxy",
+                "Master.Tile.TransparentProxy" => "Transparent proxy",
+                "Master.Tile.Latency" => "Latency",
+                "Master.Tile.StartupLaunch" => "Startup launch",
+                "Master.Tile.ActiveProfile" => "Active profile",
+                "Master.Tile.MixedPort" => "Mixed port",
+                "Master.Tile.ConnectionTest" => "Connection test",
+                "Master.Tile.Backup" => "Backup",
+                "Master.Tile.Visible" => "Visible",
+                "Master.Tile.Edit" => "Edit tiles",
+                "Master.Status.CurrentNodeUnavailable" => "No node",
+                "Master.Status.LatencyUnavailable" => "Not tested",
+                "Master.Status.Latency.Format" => "{0} ms",
+                "Master.Status.StartupLaunchOn" => "On",
+                "Master.Status.StartupLaunchOff" => "Off",
+                "Master.Status.BackupAvailable" => "Available",
                 "Master.Status.CoreReady.Format" => "Core ready: {0}",
                 "Master.Status.CoreUnavailable" => "Core unavailable",
                 "Master.Status.Running" => "Running",
@@ -195,6 +261,14 @@ public sealed class MasterControlViewModelTests
         /// <summary>Gets or sets whether transparent proxy is enabled.</summary>
         /// <value>True when transparent proxy is enabled.</value>
         public bool TransparentProxyEnabled { get; set; }
+
+        public bool LaunchAtStartupEnabled { get; set; }
+
+        public string ActiveProfileId { get; set; } = "direct";
+
+        public int MixedPort { get; set; } = 10000;
+
+        public string ConnectionTestProxyUrl1 { get; set; } = "https://www.google.com";
     }
 
     /// <summary>Fake takeover service for master-control tests.</summary>
@@ -248,4 +322,15 @@ public sealed class MasterControlViewModelTests
     /// <param name="Message">Log message.</param>
     /// <param name="Detail">Optional detail text.</param>
     private sealed record LogEntry(string Level, string Category, string Message, string? Detail);
+
+    /// <summary>Fake tray-status provider for master-control tests.</summary>
+    private sealed class FakeMasterTrayStatus : IMasterControlTrayStatus
+    {
+        public TrayStatusSnapshot Snapshot { get; set; } = TrayStatusSnapshot.Unavailable;
+
+        public TrayStatusSnapshot GetSnapshot()
+        {
+            return Snapshot;
+        }
+    }
 }

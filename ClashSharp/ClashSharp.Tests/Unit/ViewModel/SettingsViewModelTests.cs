@@ -41,6 +41,9 @@ public sealed class SettingsViewModelTests
             MainlandChinaFeatureMode = MainlandChinaFeatureMode.AllIncludingUrlBlacklist,
             MainlandChinaUrlBlockingEnabled = true,
             ConnectionTestUrl = "https://example.com/generate_204",
+            ConnectionTestProxyUrl1 = "https://proxy-one.example",
+            ConnectionTestProxyUrl2 = "https://proxy-two.example",
+            ConnectionTestDirectUrl = "https://direct.example",
         };
 
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
@@ -72,6 +75,9 @@ public sealed class SettingsViewModelTests
         Assert.Equal((int)MainlandChinaFeatureMode.AllIncludingUrlBlacklist, viewModel.MainlandChinaFeatureModeIndex);
         Assert.True(viewModel.MainlandChinaUrlBlockingEnabled);
         Assert.Equal("https://example.com/generate_204", viewModel.ConnectionTestUrl);
+        Assert.Equal("https://proxy-one.example", ReadProperty<string>(viewModel, "ConnectionTestProxyUrl1"));
+        Assert.Equal("https://proxy-two.example", ReadProperty<string>(viewModel, "ConnectionTestProxyUrl2"));
+        Assert.Equal("https://direct.example", ReadProperty<string>(viewModel, "ConnectionTestDirectUrl"));
     }
 
     /// <summary>Verifies language selection persists and notifies the shell language controller.</summary>
@@ -366,6 +372,8 @@ public sealed class SettingsViewModelTests
         Assert.All(viewModel.MainlandChinaFeatureModeOptions, Assert.NotEmpty);
         Assert.Equal(3, viewModel.StartupBehaviorModeOptions.Count);
         Assert.All(viewModel.StartupBehaviorModeOptions, Assert.NotEmpty);
+        Assert.Equal(3, ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions").Count);
+        Assert.All(ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions"), Assert.NotEmpty);
     }
 
     /// <summary>Verifies startup settings expose a dedicated section, manual conflict check text, and guide toggle state.</summary>
@@ -416,6 +424,25 @@ public sealed class SettingsViewModelTests
         Assert.True(ReadProperty<bool>(viewModel, "IsCustomAccentColorSelected"));
         Assert.Equal(1, ReadProperty<int>(viewModel, "AppAccentColorModeIndex"));
         Assert.Equal("#FF2D7D9A", ReadProperty<string>(viewModel, "AppAccentColorValue"));
+    }
+
+    /// <summary>Verifies custom accent color changes mark the setting as restart-required until reverted.</summary>
+    [Fact]
+    public void AccentColorSettings_RestartPendingTracksChangesUntilReverted()
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+
+        InvokeMethod<bool>(viewModel, "SetAppAccentColorModeIndex", (int)AppAccentColorMode.Custom);
+        InvokeMethod<bool>(viewModel, "SetAppAccentColorValue", "#FF00AA00");
+
+        Assert.True(ReadProperty<bool>(viewModel, "IsAppAccentColorRestartPending"));
+        Assert.Equal("Settings.AppAccentColor.Title*", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
+
+        InvokeMethod<bool>(viewModel, "SetAppAccentColorModeIndex", (int)AppAccentColorMode.FollowSystem);
+
+        Assert.False(ReadProperty<bool>(viewModel, "IsAppAccentColorRestartPending"));
+        Assert.Equal("Settings.AppAccentColor.Title", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
     }
 
     /// <summary>Verifies mainland China feature mode selection persists only valid enum indexes.</summary>
@@ -475,22 +502,73 @@ public sealed class SettingsViewModelTests
         Assert.Equal("https://example.com/generate_204", viewModel.ConnectionTestUrl);
     }
 
+    /// <summary>Verifies the three registered connection-test URLs can be edited and restored to defaults.</summary>
+    [Fact]
+    public void ConnectionTestUrls_EditAndRestoreDefaults()
+    {
+        FakeSettingsStore store = new()
+        {
+            ConnectionTestProxyUrl1 = "https://old-one.example",
+            ConnectionTestProxyUrl2 = "https://old-two.example",
+            ConnectionTestDirectUrl = "https://old-direct.example",
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+
+        bool changed = InvokeMethod<bool>(
+            viewModel,
+            "SetConnectionTestUrls",
+            ["google.com", " github.com ", "baidu.com"]);
+
+        Assert.True(changed);
+        Assert.Equal("https://google.com", store.ConnectionTestProxyUrl1);
+        Assert.Equal("https://github.com", store.ConnectionTestProxyUrl2);
+        Assert.Equal("https://baidu.com", store.ConnectionTestDirectUrl);
+        Assert.Equal("https://google.com", ReadProperty<string>(viewModel, "ConnectionTestProxyUrl1"));
+
+        InvokeMethod<object?>(viewModel, "ResetConnectionTestUrlsToDefaults", Array.Empty<object>());
+
+        Assert.Equal("https://www.google.com", store.ConnectionTestProxyUrl1);
+        Assert.Equal("https://github.com", store.ConnectionTestProxyUrl2);
+        Assert.Equal("https://www.baidu.com", store.ConnectionTestDirectUrl);
+    }
+
+    /// <summary>Verifies data package import and export bindings expose level choices and commands.</summary>
+    [Fact]
+    public void DataPackageSettings_ExposeScopeAndCommandBindings()
+    {
+        SettingsViewModel viewModel = new(new FakeSettingsStore(), _ => { }, () => { }, key => key);
+
+        Assert.Equal("Settings.DataPackage.Title", ReadProperty<string>(viewModel, "DataPackageTitleText"));
+        Assert.Equal("Settings.DataPackage.Description", ReadProperty<string>(viewModel, "DataPackageDescriptionText"));
+        Assert.Equal("Settings.DataPackage.Scope.Settings", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[0]);
+        Assert.Equal("Settings.DataPackage.Scope.SettingsAndProxyConfiguration", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[1]);
+        Assert.Equal("Settings.DataPackage.Scope.AllIncludingLogs", ReadProperty<IReadOnlyList<string>>(viewModel, "DataPackageScopeOptions")[2]);
+        Assert.Equal(0, ReadProperty<int>(viewModel, "DataPackageScopeIndex"));
+        Assert.Equal("Command.Export", ReadProperty<string>(viewModel, "ExportText"));
+        Assert.Equal("Command.Import", ReadProperty<string>(viewModel, "ImportText"));
+        Assert.Equal("Command.Backup", ReadProperty<string>(viewModel, "BackupText"));
+    }
+
     /// <summary>Verifies the connection test runs through an injected probe and returns a localized success message.</summary>
     [Fact]
     public async Task RunConnectionTestAsync_ProbeSucceeds_ReturnsLocalizedStatusMessage()
     {
-        Uri? requestedUri = null;
+        List<Uri> requestedUris = [];
         SettingsViewModel viewModel = CreateConnectionTestViewModel(async (uri, _) =>
         {
-            requestedUri = uri;
+            requestedUris.Add(uri);
             await Task.Yield();
             return 204;
         });
 
         string message = await InvokeRunConnectionTestAsync(viewModel, CancellationToken.None);
 
-        Assert.Equal("success 204", message);
-        Assert.Equal("https://www.google.com/generate_204", requestedUri?.ToString());
+        Assert.Contains("Settings.ConnectionTestUrl.Proxy1: success 204", message);
+        Assert.Contains("Settings.ConnectionTestUrl.Proxy2: success 204", message);
+        Assert.Contains("Settings.ConnectionTestUrl.Direct: success 204", message);
+        Assert.Equal(
+            ["https://www.google.com/", "https://github.com/", "https://www.baidu.com/"],
+            requestedUris.Select(uri => uri.ToString()).ToArray());
         Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
     }
 
@@ -502,7 +580,9 @@ public sealed class SettingsViewModelTests
 
         string message = await InvokeRunConnectionTestAsync(viewModel, CancellationToken.None);
 
-        Assert.Equal("failed network unavailable", message);
+        Assert.Contains("Settings.ConnectionTestUrl.Proxy1: failed network unavailable", message);
+        Assert.Contains("Settings.ConnectionTestUrl.Proxy2: failed network unavailable", message);
+        Assert.Contains("Settings.ConnectionTestUrl.Direct: failed network unavailable", message);
         Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
     }
 
@@ -564,6 +644,80 @@ public sealed class SettingsViewModelTests
         Assert.Equal(AppLanguage.AutoDetect, appliedLanguage);
         Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
         Assert.Equal("https://example.com/cleared", viewModel.ConnectionTestUrl);
+    }
+
+    /// <summary>Verifies settings can be reset by visible settings group without touching unrelated groups.</summary>
+    [Fact]
+    public void ResetGroupDefaults_RestoresExpectedSettingsPerGroup()
+    {
+        FakeSettingsStore store = new()
+        {
+            DisplayLanguage = AppLanguage.French,
+            AppThemeMode = AppThemeMode.Dark,
+            AppAccentColorMode = AppAccentColorMode.Custom,
+            AppAccentColorValue = "#FF00AA00",
+            LaunchAtStartupEnabled = true,
+            TransparentProxyEnabled = false,
+            MixedPort = 12345,
+            ConnectionSamplingEnabled = false,
+            ConnectionSamplingIntervalSeconds = 90,
+            StartupConflictCheckEnabled = false,
+            StartupBehaviorMode = StartupBehaviorMode.DisableProxy,
+            ShowStartupGuideOnStartup = false,
+            CheckStaleProxyOnStartup = false,
+            RestoreProxyOnExit = false,
+            ProxyRecoveryMode = ProxyRecoveryMode.EnableProxy,
+            MainlandChinaFeatureMode = MainlandChinaFeatureMode.Disabled,
+            MainlandChinaUrlBlockingEnabled = true,
+            ConnectionTestUrl = "https://example.com/test",
+        };
+        AppLanguage? appliedLanguage = null;
+        AppThemeMode? appliedTheme = null;
+        bool? appliedLaunch = null;
+        int samplingRestarts = 0;
+        SettingsViewModel viewModel = new(
+            store,
+            language => appliedLanguage = language,
+            theme => appliedTheme = theme,
+            () => samplingRestarts++,
+            isEnabled => appliedLaunch = isEnabled);
+
+        InvokeMethod<object?>(viewModel, "ResetBasicSettingsToDefaults", Array.Empty<object>());
+
+        Assert.Equal(AppLanguage.AutoDetect, store.DisplayLanguage);
+        Assert.Equal(AppThemeMode.FollowSystem, store.AppThemeMode);
+        Assert.Equal(AppAccentColorMode.FollowSystem, store.AppAccentColorMode);
+        Assert.Equal("#FF0078D4", store.AppAccentColorValue);
+        Assert.Equal(AppLanguage.AutoDetect, appliedLanguage);
+        Assert.Equal(AppThemeMode.FollowSystem, appliedTheme);
+
+        InvokeMethod<object?>(viewModel, "ResetStartupSettingsToDefaults", Array.Empty<object>());
+
+        Assert.False(store.LaunchAtStartupEnabled);
+        Assert.True(store.StartupConflictCheckEnabled);
+        Assert.True(store.ShowStartupGuideOnStartup);
+        Assert.Equal(StartupBehaviorMode.LastSetting, store.StartupBehaviorMode);
+        Assert.False(appliedLaunch);
+
+        InvokeMethod<object?>(viewModel, "ResetProxySettingsToDefaults", Array.Empty<object>());
+
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.Equal(10000, store.MixedPort);
+        Assert.True(store.ConnectionSamplingEnabled);
+        Assert.Equal(30, store.ConnectionSamplingIntervalSeconds);
+        Assert.Equal("https://www.google.com/generate_204", store.ConnectionTestUrl);
+        Assert.Equal(1, samplingRestarts);
+
+        InvokeMethod<object?>(viewModel, "ResetWindowsNativeSettingsToDefaults", Array.Empty<object>());
+
+        Assert.True(store.CheckStaleProxyOnStartup);
+        Assert.True(store.RestoreProxyOnExit);
+        Assert.Equal(ProxyRecoveryMode.DisableProxy, store.ProxyRecoveryMode);
+
+        InvokeMethod<object?>(viewModel, "ResetMainlandChinaSettingsToDefaults", Array.Empty<object>());
+
+        Assert.Equal(MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter, store.MainlandChinaFeatureMode);
+        Assert.False(store.MainlandChinaUrlBlockingEnabled);
     }
 
     /// <summary>Verifies startup conflict checks are delegated through an injected checker using the current mixed port.</summary>
@@ -631,6 +785,12 @@ public sealed class SettingsViewModelTests
         public bool MainlandChinaUrlBlockingEnabled { get; set; }
 
         public string ConnectionTestUrl { get; set; } = "https://www.google.com/generate_204";
+
+        public string ConnectionTestProxyUrl1 { get; set; } = "https://www.google.com";
+
+        public string ConnectionTestProxyUrl2 { get; set; } = "https://github.com";
+
+        public string ConnectionTestDirectUrl { get; set; } = "https://www.baidu.com";
     }
 
     private static SettingsViewModel CreateConnectionTestViewModel(Func<Uri, CancellationToken, Task<int>> testConnectionAsync)

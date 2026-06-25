@@ -98,4 +98,47 @@ public sealed class RegionDisplayServiceTests
             AppSettingsService.Instance.MainlandChinaFeatureMode = originalMode;
         }
     }
+
+    /// <summary>Verifies CN display text is not mainland-completed until text completion is enabled.</summary>
+    [Theory]
+    [InlineData(MainlandChinaFeatureMode.Disabled, "China")]
+    [InlineData(MainlandChinaFeatureMode.FlagReplacementOnly, "China")]
+    [InlineData(MainlandChinaFeatureMode.FlagReplacementAndTextCompletion, "Mainland China")]
+    public void Resolve_CnName_UsesMainlandNameOnlyWhenTextCompletionIsEnabled(
+        MainlandChinaFeatureMode mode,
+        string expectedDisplayName)
+    {
+        RegionDisplayService service = CreateService(
+            () => mode,
+            key => key switch
+            {
+                "Region.CN" => "China",
+                "Region.MainlandChina.CN" => "Mainland China",
+                _ => key,
+            });
+
+        RegionMetadata metadata = service.Resolve("CN");
+
+        Assert.Equal("CN", metadata.RegionCode);
+        Assert.Equal(expectedDisplayName, metadata.DisplayName);
+        Assert.Equal("CN", metadata.FlagAssetKey);
+    }
+
+    private static RegionDisplayService CreateService(
+        Func<MainlandChinaFeatureMode> getFeatureMode,
+        Func<string, string> getString)
+    {
+        ConstructorInfo? constructor = typeof(RegionDisplayService).GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types:
+            [
+                typeof(Func<MainlandChinaFeatureMode>),
+                typeof(Func<string, string>),
+            ],
+            modifiers: null);
+
+        Assert.NotNull(constructor);
+        return Assert.IsType<RegionDisplayService>(constructor.Invoke([getFeatureMode, getString]));
+    }
 }

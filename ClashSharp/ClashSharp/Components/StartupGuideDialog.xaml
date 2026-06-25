@@ -5,6 +5,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <StackPanel MinWidth="420" MaxWidth="640" Spacing="12">
+        <Image Source="ms-appx:///Assets/Logo.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
         <TextBlock x:Name="GuideDescriptionText" TextWrapping="WrapWholeWords" Style="{ThemeResource BodyTextBlockStyle}" />
+        <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="ChecksPanel" Spacing="8" />
+        </ScrollViewer>
     </StackPanel>
 </ContentDialog>

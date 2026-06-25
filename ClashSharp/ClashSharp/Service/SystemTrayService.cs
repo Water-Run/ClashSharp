@@ -137,12 +137,21 @@ public sealed class SystemTrayService : IDisposable
     {
         TrayMenuState state = _getState();
         nint menu = CreatePopupMenu();
+        nint statusMenu = CreatePopupMenu();
+        foreach (TrayStatusMenuItem statusItem in state.StatusItems)
+        {
+            uint statusFlags = MfString | (statusItem.IsEnabled ? 0 : MfGrayed);
+            AppendMenu(statusMenu, statusFlags, nint.Zero, statusItem.Label);
+        }
+
         nint modeMenu = CreatePopupMenu();
         foreach (TrayModeMenuItem modeItem in state.ModeItems)
         {
             AppendMenu(modeMenu, MfString | (modeItem.IsChecked ? MfChecked : 0), new nint(MapModeCommand(modeItem.Mode)), modeItem.Label);
         }
 
+        AppendMenu(menu, MfPopup, statusMenu, state.StatusMenuLabel);
+        AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
         AppendMenu(menu, MfPopup, modeMenu, state.ModeMenuLabel);
         AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
         uint transparentFlags = MfString

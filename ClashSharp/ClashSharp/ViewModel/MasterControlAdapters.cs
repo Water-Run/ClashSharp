@@ -132,9 +132,21 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
         set => _settings.CurrentMode = value;
     }
 
-    /// <summary>Gets whether transparent proxy is enabled in settings.</summary>
+    /// <summary>Gets or sets whether transparent proxy is enabled in settings.</summary>
     /// <value>True when transparent proxy is enabled; otherwise false.</value>
-    public bool TransparentProxyEnabled => _settings.TransparentProxyEnabled;
+    public bool TransparentProxyEnabled
+    {
+        get => _settings.TransparentProxyEnabled;
+        set => _settings.TransparentProxyEnabled = value;
+    }
+
+    public bool LaunchAtStartupEnabled => _settings.LaunchAtStartupEnabled;
+
+    public string ActiveProfileId => _settings.ActiveProfileId;
+
+    public int MixedPort => _settings.MixedPort;
+
+    public string ConnectionTestProxyUrl1 => _settings.ConnectionTestProxyUrl1;
 }
 
 /// <summary>Adapts <see cref="NetworkTakeoverService"/> to master-control mode application.</summary>
@@ -192,5 +204,21 @@ internal sealed class MasterControlLogAdapter : IMasterControlLog
     public void Append(string level, string category, string message, string? detail)
     {
         _log.AppendLog(level, category, message, detail);
+    }
+}
+
+/// <summary>Adapts tray status snapshots to the master-control page.</summary>
+internal sealed class MasterControlTrayStatusAdapter : IMasterControlTrayStatus
+{
+    private readonly TrayStatusService _trayStatus;
+
+    public MasterControlTrayStatusAdapter(TrayStatusService trayStatus)
+    {
+        _trayStatus = trayStatus ?? throw new ArgumentNullException(nameof(trayStatus));
+    }
+
+    public TrayStatusSnapshot GetSnapshot()
+    {
+        return _trayStatus.GetSnapshot();
     }
 }

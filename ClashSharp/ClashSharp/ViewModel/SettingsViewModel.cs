@@ -60,6 +60,12 @@ internal interface ISettingsStore
     bool MainlandChinaUrlBlockingEnabled { get; set; }
 
     string ConnectionTestUrl { get; set; }
+
+    string ConnectionTestProxyUrl1 { get; set; }
+
+    string ConnectionTestProxyUrl2 { get; set; }
+
+    string ConnectionTestDirectUrl { get; set; }
 }
 
 /// <summary>Immutable proxy information snapshot used by <see cref="SettingsViewModel"/>.</summary>
@@ -243,6 +249,24 @@ internal sealed class AppSettingsStore : ISettingsStore
         get => _settings.ConnectionTestUrl;
         set => _settings.ConnectionTestUrl = value;
     }
+
+    public string ConnectionTestProxyUrl1
+    {
+        get => _settings.ConnectionTestProxyUrl1;
+        set => _settings.ConnectionTestProxyUrl1 = value;
+    }
+
+    public string ConnectionTestProxyUrl2
+    {
+        get => _settings.ConnectionTestProxyUrl2;
+        set => _settings.ConnectionTestProxyUrl2 = value;
+    }
+
+    public string ConnectionTestDirectUrl
+    {
+        get => _settings.ConnectionTestDirectUrl;
+        set => _settings.ConnectionTestDirectUrl = value;
+    }
 }
 
 /// <summary>Owns user-editable settings state and persistence for the settings page.</summary>
@@ -253,6 +277,14 @@ internal sealed class AppSettingsStore : ISettingsStore
 /// </remarks>
 internal sealed class SettingsViewModel : ObservableObject
 {
+    private const string DefaultAppAccentColorValue = "#FF0078D4";
+    private const int DefaultMixedPort = 10000;
+    private const int DefaultConnectionSamplingIntervalSeconds = 30;
+    private const string DefaultConnectionTestUrl = "https://www.google.com/generate_204";
+    private const string DefaultConnectionTestProxyUrl1 = "https://www.google.com";
+    private const string DefaultConnectionTestProxyUrl2 = "https://github.com";
+    private const string DefaultConnectionTestDirectUrl = "https://www.baidu.com";
+
     /// <summary>Persistent settings store used by this view model.</summary>
     private readonly ISettingsStore _settings;
 
@@ -263,8 +295,6 @@ internal sealed class SettingsViewModel : ObservableObject
     private readonly Action<AppThemeMode> _applyTheme;
 
     /// <summary>Callback invoked when the application accent color changes.</summary>
-    private readonly Action<AppAccentColorMode, string> _applyAccentColor;
-
     /// <summary>Callback invoked when launch-at-startup changes.</summary>
     private readonly Action<bool> _applyLaunchAtStartup;
 
@@ -389,7 +419,6 @@ internal sealed class SettingsViewModel : ObservableObject
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
         _applyTheme = applyTheme ?? throw new ArgumentNullException(nameof(applyTheme));
-        _applyAccentColor = applyAccentColor ?? ((_, _) => { });
         _applyLaunchAtStartup = applyLaunchAtStartup ?? throw new ArgumentNullException(nameof(applyLaunchAtStartup));
         _restartConnectionSampling = restartConnectionSampling ?? throw new ArgumentNullException(nameof(restartConnectionSampling));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
@@ -450,7 +479,9 @@ internal sealed class SettingsViewModel : ObservableObject
         AppThemeDarkText,
     ];
 
-    public string AppAccentColorTitleText => _getString("Settings.AppAccentColor.Title");
+    public string AppAccentColorTitleText => IsAppAccentColorRestartPending
+        ? $"{_getString("Settings.AppAccentColor.Title")}*"
+        : _getString("Settings.AppAccentColor.Title");
 
     public string AppAccentColorDescriptionText => _getString("Settings.AppAccentColor.Description");
 
@@ -480,9 +511,23 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string StartupGuideDescriptionText => _getString("Settings.StartupGuide.Description");
 
-    public string ProxySectionTitleText => _getString("Settings.Section.Proxy");
+    public string StartupGuideShowNowText => _getString("Settings.StartupGuide.ShowNow");
 
-    public string TransparentProxySectionTitleText => _getString("Settings.Section.TransparentProxy");
+    public string StartupRestoreFallbackTitleText => _getString("Settings.StartupRestoreFallback.Title");
+
+    public string StartupRestoreFallbackDescriptionText => _getString("Settings.StartupRestoreFallback.Description");
+
+    public string StartupRestoreFallbackStatusText
+    {
+        get => _startupRestoreFallbackStatusText;
+        private set => SetProperty(ref _startupRestoreFallbackStatusText, value);
+    }
+
+    public string RegisterText => _getString("Command.Register");
+
+    public string DetectText => _getString("Command.Detect");
+
+    public string ProxySectionTitleText => _getString("Settings.Section.Proxy");
 
     public string TransparentProxyTitleText => _getString("Settings.TransparentProxy.Title");
 
@@ -503,6 +548,18 @@ internal sealed class SettingsViewModel : ObservableObject
     public string ConnectionTestUrlTitleText => _getString("Settings.ConnectionTestUrl.Title");
 
     public string ConnectionTestUrlDescriptionText => _getString("Settings.ConnectionTestUrl.Description");
+
+    public string ConnectionTestProxyUrl1TitleText => _getString("Settings.ConnectionTestUrl.Proxy1");
+
+    public string ConnectionTestProxyUrl2TitleText => _getString("Settings.ConnectionTestUrl.Proxy2");
+
+    public string ConnectionTestDirectUrlTitleText => _getString("Settings.ConnectionTestUrl.Direct");
+
+    public string ConnectionTestUrlSummaryText => string.Join(
+        " | ",
+        ConnectionTestProxyUrl1,
+        ConnectionTestProxyUrl2,
+        ConnectionTestDirectUrl);
 
     public bool IsConnectionTestRunning
     {
@@ -568,6 +625,14 @@ internal sealed class SettingsViewModel : ObservableObject
     public string WindowsNativeDescriptionText => _getString("Settings.WindowsNative.Description");
 
     public string OpenText => _getString("Command.Open");
+
+    public string EditText => _getString("Command.Edit");
+
+    public string ExportText => _getString("Command.Export");
+
+    public string ImportText => _getString("Command.Import");
+
+    public string BackupText => _getString("Command.Backup");
 
     public string CheckText => _getString("Command.Check");
 
@@ -660,7 +725,30 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string MainlandChinaUrlBlockingDescriptionText => _getString("Settings.MainlandChinaUrlBlocking.Description");
 
+    public string MainlandChinaUnfriendlyListTitleText => _getString("Settings.MainlandChinaUnfriendlyList.Title");
+
+    public string MainlandChinaUnfriendlyListDescriptionText => _getString("Settings.MainlandChinaUnfriendlyList.Description");
+
     public string DataSectionTitleText => _getString("Settings.Section.Data");
+
+    public string DataPackageTitleText => _getString("Settings.DataPackage.Title");
+
+    public string DataPackageDescriptionText => _getString("Settings.DataPackage.Description");
+
+    public string DataPackageScopeSettingsText => _getString("Settings.DataPackage.Scope.Settings");
+
+    public string DataPackageScopeSettingsAndProxyConfigurationText => _getString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration");
+
+    public string DataPackageScopeAllIncludingLogsText => _getString("Settings.DataPackage.Scope.AllIncludingLogs");
+
+    public IReadOnlyList<string> DataPackageScopeOptions =>
+    [
+        DataPackageScopeSettingsText,
+        DataPackageScopeSettingsAndProxyConfigurationText,
+        DataPackageScopeAllIncludingLogsText,
+    ];
+
+    public ClashDataPackageScope SelectedDataPackageScope => (ClashDataPackageScope)DataPackageScopeIndex;
 
     public string ResetAllSettingsTitleText => _getString("Settings.ResetAllSettings.Title");
 
@@ -669,6 +757,12 @@ internal sealed class SettingsViewModel : ObservableObject
     public string ClearAllDataTitleText => _getString("Settings.ClearAllData.Title");
 
     public string ClearAllDataDescriptionText => _getString("Settings.ClearAllData.Description");
+
+    public string ResetGroupToDefaultsText => _getString("Settings.ResetGroupToDefaults");
+
+    public string ResetGroupConfirmTitleText => _getString("Settings.ResetGroupConfirm.Title");
+
+    public string ResetGroupConfirmMessageText => _getString("Settings.ResetGroupConfirm.Message");
 
     /// <summary>Backing field for <see cref="DisplayLanguage"/>.</summary>
     private AppLanguage _displayLanguage;
@@ -682,11 +776,20 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="AppAccentColorValue"/>.</summary>
     private string _appAccentColorValue = string.Empty;
 
+    /// <summary>Accent color mode loaded when this view model was initialized.</summary>
+    private AppAccentColorMode _loadedAppAccentColorMode;
+
+    /// <summary>Accent color value loaded when this view model was initialized.</summary>
+    private string _loadedAppAccentColorValue = string.Empty;
+
     /// <summary>Backing field for <see cref="LaunchAtStartupEnabled"/>.</summary>
     private bool _launchAtStartupEnabled;
 
     /// <summary>Backing field for <see cref="TransparentProxyEnabled"/>.</summary>
     private bool _transparentProxyEnabled;
+
+    /// <summary>Backing field for <see cref="StartupRestoreFallbackStatusText"/>.</summary>
+    private string _startupRestoreFallbackStatusText = string.Empty;
 
     /// <summary>Backing field for <see cref="MihomoServiceStatusText"/>.</summary>
     private string _mihomoServiceStatusText = string.Empty;
@@ -730,6 +833,12 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="ConnectionTestUrl"/>.</summary>
     private string _connectionTestUrl = string.Empty;
 
+    private string _connectionTestProxyUrl1 = string.Empty;
+
+    private string _connectionTestProxyUrl2 = string.Empty;
+
+    private string _connectionTestDirectUrl = string.Empty;
+
     /// <summary>Backing field for <see cref="IsConnectionTestRunning"/>.</summary>
     private bool _isConnectionTestRunning;
 
@@ -750,6 +859,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="StoreDiagnosticStatusText"/>.</summary>
     private string _storeDiagnosticStatusText = string.Empty;
+
+    /// <summary>Backing field for <see cref="DataPackageScopeIndex"/>.</summary>
+    private int _dataPackageScopeIndex;
 
     public AsyncRelayCommand WindowsDiagnosticCommand { get; }
 
@@ -802,6 +914,7 @@ internal sealed class SettingsViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(AppAccentColorModeIndex));
                 OnPropertyChanged(nameof(IsCustomAccentColorSelected));
+                RaiseAppAccentColorRestartStateChanged();
             }
         }
     }
@@ -815,10 +928,22 @@ internal sealed class SettingsViewModel : ObservableObject
     public string AppAccentColorValue
     {
         get => _appAccentColorValue;
-        private set => SetProperty(ref _appAccentColorValue, value);
+        private set
+        {
+            if (SetProperty(ref _appAccentColorValue, value))
+            {
+                RaiseAppAccentColorRestartStateChanged();
+            }
+        }
     }
 
     public bool IsCustomAccentColorSelected => AppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom;
+
+    public bool IsAppAccentColorRestartPending =>
+        AppAccentColorMode != _loadedAppAccentColorMode
+        || (AppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom
+            && _loadedAppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom
+            && !StringComparer.OrdinalIgnoreCase.Equals(AppAccentColorValue, _loadedAppAccentColorValue));
 
     public bool LaunchAtStartupEnabled
     {
@@ -972,6 +1097,59 @@ internal sealed class SettingsViewModel : ObservableObject
         private set => SetProperty(ref _connectionTestUrl, value);
     }
 
+    public string ConnectionTestProxyUrl1
+    {
+        get => _connectionTestProxyUrl1;
+        private set
+        {
+            if (SetProperty(ref _connectionTestProxyUrl1, value))
+            {
+                OnPropertyChanged(nameof(ConnectionTestUrlSummaryText));
+            }
+        }
+    }
+
+    public string ConnectionTestProxyUrl2
+    {
+        get => _connectionTestProxyUrl2;
+        private set
+        {
+            if (SetProperty(ref _connectionTestProxyUrl2, value))
+            {
+                OnPropertyChanged(nameof(ConnectionTestUrlSummaryText));
+            }
+        }
+    }
+
+    public string ConnectionTestDirectUrl
+    {
+        get => _connectionTestDirectUrl;
+        private set
+        {
+            if (SetProperty(ref _connectionTestDirectUrl, value))
+            {
+                OnPropertyChanged(nameof(ConnectionTestUrlSummaryText));
+            }
+        }
+    }
+
+    public int DataPackageScopeIndex
+    {
+        get => _dataPackageScopeIndex;
+        set
+        {
+            if (!Enum.IsDefined((ClashDataPackageScope)value))
+            {
+                return;
+            }
+
+            if (SetProperty(ref _dataPackageScopeIndex, value))
+            {
+                OnPropertyChanged(nameof(SelectedDataPackageScope));
+            }
+        }
+    }
+
     /// <summary>Loads the latest persisted settings into the view model properties.</summary>
     public void Load()
     {
@@ -979,6 +1157,9 @@ internal sealed class SettingsViewModel : ObservableObject
         AppThemeMode = _settings.AppThemeMode;
         AppAccentColorMode = _settings.AppAccentColorMode;
         AppAccentColorValue = _settings.AppAccentColorValue;
+        _loadedAppAccentColorMode = AppAccentColorMode;
+        _loadedAppAccentColorValue = AppAccentColorValue;
+        RaiseAppAccentColorRestartStateChanged();
         SetProperty(ref _launchAtStartupEnabled, _settings.LaunchAtStartupEnabled, nameof(LaunchAtStartupEnabled));
         RefreshMihomoServiceStatus();
         SetProperty(ref _transparentProxyEnabled, _settings.TransparentProxyEnabled, nameof(TransparentProxyEnabled));
@@ -988,12 +1169,16 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _startupConflictCheckEnabled, _settings.StartupConflictCheckEnabled, nameof(StartupConflictCheckEnabled));
         StartupBehaviorMode = _settings.StartupBehaviorMode;
         SetProperty(ref _showStartupGuideOnStartup, _settings.ShowStartupGuideOnStartup, nameof(ShowStartupGuideOnStartup));
+        RefreshStartupRestoreFallbackStatus();
         SetProperty(ref _checkStaleProxyOnStartup, _settings.CheckStaleProxyOnStartup, nameof(CheckStaleProxyOnStartup));
         SetProperty(ref _restoreProxyOnExit, _settings.RestoreProxyOnExit, nameof(RestoreProxyOnExit));
         ProxyRecoveryMode = _settings.ProxyRecoveryMode;
         MainlandChinaFeatureMode = _settings.MainlandChinaFeatureMode;
         SetProperty(ref _mainlandChinaUrlBlockingEnabled, _settings.MainlandChinaUrlBlockingEnabled, nameof(MainlandChinaUrlBlockingEnabled));
         ConnectionTestUrl = _settings.ConnectionTestUrl;
+        ConnectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
+        ConnectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
+        ConnectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
         RefreshProxyInformation();
     }
 
@@ -1061,7 +1246,6 @@ internal sealed class SettingsViewModel : ObservableObject
         AppAccentColorMode mode = (AppAccentColorMode)index;
         _settings.AppAccentColorMode = mode;
         AppAccentColorMode = mode;
-        _applyAccentColor(mode, AppAccentColorValue);
         return true;
     }
 
@@ -1079,17 +1263,19 @@ internal sealed class SettingsViewModel : ObservableObject
         {
             _settings.AppAccentColorValue = value;
             AppAccentColorValue = _settings.AppAccentColorValue;
-            if (AppAccentColorMode == ClashSharp.Model.AppAccentColorMode.Custom)
-            {
-                _applyAccentColor(ClashSharp.Model.AppAccentColorMode.Custom, AppAccentColorValue);
-            }
-
             return true;
         }
         catch (ArgumentException)
         {
             return false;
         }
+    }
+
+    /// <summary>Raises bindable notifications for the app accent color restart marker.</summary>
+    private void RaiseAppAccentColorRestartStateChanged()
+    {
+        OnPropertyChanged(nameof(IsAppAccentColorRestartPending));
+        OnPropertyChanged(nameof(AppAccentColorTitleText));
     }
 
     /// <summary>Raises property changes for all localized bindable text properties.</summary>
@@ -1122,8 +1308,13 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(CheckStartupConflictsDescriptionText),
             nameof(StartupGuideTitleText),
             nameof(StartupGuideDescriptionText),
+            nameof(StartupGuideShowNowText),
+            nameof(StartupRestoreFallbackTitleText),
+            nameof(StartupRestoreFallbackDescriptionText),
+            nameof(StartupRestoreFallbackStatusText),
+            nameof(RegisterText),
+            nameof(DetectText),
             nameof(ProxySectionTitleText),
-            nameof(TransparentProxySectionTitleText),
             nameof(TransparentProxyTitleText),
             nameof(TransparentProxyDescriptionText),
             nameof(TransparentProxyServiceTitleText),
@@ -1135,6 +1326,10 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(MixedPortDescriptionText),
             nameof(ConnectionTestUrlTitleText),
             nameof(ConnectionTestUrlDescriptionText),
+            nameof(ConnectionTestProxyUrl1TitleText),
+            nameof(ConnectionTestProxyUrl2TitleText),
+            nameof(ConnectionTestDirectUrlTitleText),
+            nameof(ConnectionTestUrlSummaryText),
             nameof(ProxyInformationTitleText),
             nameof(ProxyInformationDescriptionText),
             nameof(ProxyLocalEntryText),
@@ -1156,6 +1351,10 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(WindowsNativeTitleText),
             nameof(WindowsNativeDescriptionText),
             nameof(OpenText),
+            nameof(EditText),
+            nameof(ExportText),
+            nameof(ImportText),
+            nameof(BackupText),
             nameof(CheckText),
             nameof(TestText),
             nameof(WslDiagnosticTitleText),
@@ -1190,11 +1389,22 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(MainlandChinaFeatureModeOptions),
             nameof(MainlandChinaUrlBlockingTitleText),
             nameof(MainlandChinaUrlBlockingDescriptionText),
+            nameof(MainlandChinaUnfriendlyListTitleText),
+            nameof(MainlandChinaUnfriendlyListDescriptionText),
             nameof(DataSectionTitleText),
+            nameof(DataPackageTitleText),
+            nameof(DataPackageDescriptionText),
+            nameof(DataPackageScopeSettingsText),
+            nameof(DataPackageScopeSettingsAndProxyConfigurationText),
+            nameof(DataPackageScopeAllIncludingLogsText),
+            nameof(DataPackageScopeOptions),
             nameof(ResetAllSettingsTitleText),
             nameof(ResetAllSettingsDescriptionText),
             nameof(ClearAllDataTitleText),
             nameof(ClearAllDataDescriptionText),
+            nameof(ResetGroupToDefaultsText),
+            nameof(ResetGroupConfirmTitleText),
+            nameof(ResetGroupConfirmMessageText),
         ];
 
         foreach (string propertyName in propertyNames)
@@ -1413,6 +1623,29 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _showStartupGuideOnStartup, isEnabled, nameof(ShowStartupGuideOnStartup));
     }
 
+    /// <summary>Refreshes the startup restore fallback registration status text.</summary>
+    public void RefreshStartupRestoreFallbackStatus()
+    {
+        StartupRestoreFallbackStatus status = StartupRestoreFallbackService.Instance.GetStatus();
+        StartupRestoreFallbackStatusText = _getString(status.IsRegistered
+            ? "Settings.StartupRestoreFallback.Status.Registered"
+            : "Settings.StartupRestoreFallback.Status.NotRegistered");
+    }
+
+    /// <summary>Registers the startup restore fallback helper and refreshes status.</summary>
+    public void RegisterStartupRestoreFallback()
+    {
+        StartupRestoreFallbackService.Instance.Register();
+        RefreshStartupRestoreFallbackStatus();
+    }
+
+    /// <summary>Uninstalls the startup restore fallback helper and refreshes status.</summary>
+    public void UninstallStartupRestoreFallback()
+    {
+        StartupRestoreFallbackService.Instance.Uninstall();
+        RefreshStartupRestoreFallbackStatus();
+    }
+
     /// <summary>Persists the stale proxy startup check switch.</summary>
     /// <param name="isEnabled">Switch value.</param>
     public void SetCheckStaleProxyOnStartup(bool isEnabled)
@@ -1479,6 +1712,49 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <returns>True when the value was valid and persisted; otherwise false.</returns>
     public bool SetConnectionTestUrl(string value)
     {
+        if (!TryNormalizeConnectionTestUrl(value, out string persistedValue))
+        {
+            return false;
+        }
+
+        _settings.ConnectionTestUrl = persistedValue;
+        ConnectionTestUrl = persistedValue;
+        return true;
+    }
+
+    /// <summary>Persists all registered connection-test URLs.</summary>
+    public bool SetConnectionTestUrls(string proxyUrl1, string proxyUrl2, string directUrl)
+    {
+        if (!TryNormalizeConnectionTestUrl(proxyUrl1, out string normalizedProxyUrl1)
+            || !TryNormalizeConnectionTestUrl(proxyUrl2, out string normalizedProxyUrl2)
+            || !TryNormalizeConnectionTestUrl(directUrl, out string normalizedDirectUrl))
+        {
+            return false;
+        }
+
+        _settings.ConnectionTestProxyUrl1 = normalizedProxyUrl1;
+        _settings.ConnectionTestProxyUrl2 = normalizedProxyUrl2;
+        _settings.ConnectionTestDirectUrl = normalizedDirectUrl;
+        ConnectionTestProxyUrl1 = normalizedProxyUrl1;
+        ConnectionTestProxyUrl2 = normalizedProxyUrl2;
+        ConnectionTestDirectUrl = normalizedDirectUrl;
+        return true;
+    }
+
+    /// <summary>Restores registered connection-test URLs to defaults.</summary>
+    public void ResetConnectionTestUrlsToDefaults()
+    {
+        _settings.ConnectionTestProxyUrl1 = DefaultConnectionTestProxyUrl1;
+        _settings.ConnectionTestProxyUrl2 = DefaultConnectionTestProxyUrl2;
+        _settings.ConnectionTestDirectUrl = DefaultConnectionTestDirectUrl;
+        ConnectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
+        ConnectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
+        ConnectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
+    }
+
+    private static bool TryNormalizeConnectionTestUrl(string value, out string normalizedUrl)
+    {
+        normalizedUrl = string.Empty;
         if (string.IsNullOrWhiteSpace(value))
         {
             return false;
@@ -1496,9 +1772,7 @@ internal sealed class SettingsViewModel : ObservableObject
             return false;
         }
 
-        string persistedValue = uri.ToString().TrimEnd('/');
-        _settings.ConnectionTestUrl = persistedValue;
-        ConnectionTestUrl = persistedValue;
+        normalizedUrl = uri.ToString().TrimEnd('/');
         return true;
     }
 
@@ -1507,21 +1781,128 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <returns>Localized result message.</returns>
     public async Task<string> RunConnectionTestAsync(CancellationToken cancellationToken)
     {
+        List<string> results = [];
         try
         {
             IsConnectionTestRunning = true;
-            Uri uri = new(ConnectionTestUrl);
-            int statusCode = await _testConnectionAsync(uri, cancellationToken);
-            return string.Format(_getString("Settings.ConnectionTest.Succeeded.Format"), statusCode);
-        }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
-        {
-            return string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message);
+            (string Label, string Url)[] targets =
+            [
+                (ConnectionTestProxyUrl1TitleText, ConnectionTestProxyUrl1),
+                (ConnectionTestProxyUrl2TitleText, ConnectionTestProxyUrl2),
+                (ConnectionTestDirectUrlTitleText, ConnectionTestDirectUrl),
+            ];
+
+            foreach ((string label, string url) in targets)
+            {
+                try
+                {
+                    Uri uri = new(url);
+                    int statusCode = await _testConnectionAsync(uri, cancellationToken);
+                    results.Add($"{label}: {string.Format(_getString("Settings.ConnectionTest.Succeeded.Format"), statusCode)}");
+                }
+                catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
+                {
+                    results.Add($"{label}: {string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message)}");
+                }
+            }
+
+            return string.Join(Environment.NewLine, results);
         }
         finally
         {
             IsConnectionTestRunning = false;
         }
+    }
+
+    /// <summary>Restores base display settings to defaults.</summary>
+    public void ResetBasicSettingsToDefaults()
+    {
+        _settings.DisplayLanguage = AppLanguage.AutoDetect;
+        DisplayLanguage = AppLanguage.AutoDetect;
+        _applyLanguage(AppLanguage.AutoDetect);
+
+        _settings.AppThemeMode = AppThemeMode.FollowSystem;
+        AppThemeMode = AppThemeMode.FollowSystem;
+        _applyTheme(AppThemeMode.FollowSystem);
+
+        _settings.AppAccentColorMode = AppAccentColorMode.FollowSystem;
+        _settings.AppAccentColorValue = DefaultAppAccentColorValue;
+        AppAccentColorMode = AppAccentColorMode.FollowSystem;
+        AppAccentColorValue = _settings.AppAccentColorValue;
+
+        RaiseLocalizedTextChanges();
+        RefreshProxyInformation();
+        ResetDiagnosticStatusText();
+    }
+
+    /// <summary>Restores startup settings to defaults.</summary>
+    public void ResetStartupSettingsToDefaults()
+    {
+        _settings.LaunchAtStartupEnabled = false;
+        SetProperty(ref _launchAtStartupEnabled, false, nameof(LaunchAtStartupEnabled));
+        _applyLaunchAtStartup(false);
+
+        _settings.StartupConflictCheckEnabled = true;
+        SetProperty(ref _startupConflictCheckEnabled, true, nameof(StartupConflictCheckEnabled));
+
+        _settings.ShowStartupGuideOnStartup = true;
+        SetProperty(ref _showStartupGuideOnStartup, true, nameof(ShowStartupGuideOnStartup));
+
+        _settings.StartupBehaviorMode = StartupBehaviorMode.LastSetting;
+        StartupBehaviorMode = StartupBehaviorMode.LastSetting;
+    }
+
+    /// <summary>Restores transparent proxy settings to defaults.</summary>
+    public void ResetTransparentProxySettingsToDefaults()
+    {
+        _settings.TransparentProxyEnabled = true;
+        SetProperty(ref _transparentProxyEnabled, true, nameof(TransparentProxyEnabled));
+    }
+
+    /// <summary>Restores proxy runtime settings to defaults.</summary>
+    public void ResetProxySettingsToDefaults()
+    {
+        _settings.TransparentProxyEnabled = true;
+        SetProperty(ref _transparentProxyEnabled, true, nameof(TransparentProxyEnabled));
+
+        _settings.MixedPort = DefaultMixedPort;
+        MixedPort = DefaultMixedPort;
+
+        _settings.ConnectionSamplingEnabled = true;
+        SetProperty(ref _connectionSamplingEnabled, true, nameof(ConnectionSamplingEnabled));
+
+        _settings.ConnectionSamplingIntervalSeconds = DefaultConnectionSamplingIntervalSeconds;
+        ConnectionSamplingIntervalSeconds = DefaultConnectionSamplingIntervalSeconds;
+
+        _settings.ConnectionTestUrl = DefaultConnectionTestUrl;
+        ConnectionTestUrl = _settings.ConnectionTestUrl;
+        ResetConnectionTestUrlsToDefaults();
+
+        _restartConnectionSampling();
+        RefreshProxyInformation();
+    }
+
+    /// <summary>Restores Windows-native repair and proxy recovery settings to defaults.</summary>
+    public void ResetWindowsNativeSettingsToDefaults()
+    {
+        _settings.CheckStaleProxyOnStartup = true;
+        SetProperty(ref _checkStaleProxyOnStartup, true, nameof(CheckStaleProxyOnStartup));
+
+        _settings.RestoreProxyOnExit = true;
+        SetProperty(ref _restoreProxyOnExit, true, nameof(RestoreProxyOnExit));
+
+        _settings.ProxyRecoveryMode = ProxyRecoveryMode.DisableProxy;
+        ProxyRecoveryMode = ProxyRecoveryMode.DisableProxy;
+    }
+
+    /// <summary>Restores mainland China feature settings to defaults.</summary>
+    public void ResetMainlandChinaSettingsToDefaults()
+    {
+        _settings.MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
+        MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
+
+        _settings.MainlandChinaUrlBlockingEnabled = false;
+        SetProperty(ref _mainlandChinaUrlBlockingEnabled, false, nameof(MainlandChinaUrlBlockingEnabled));
     }
 
     /// <summary>Resets all persisted settings through the injected maintenance action and reloads the view model.</summary>

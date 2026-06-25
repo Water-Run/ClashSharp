@@ -49,6 +49,7 @@ public sealed class RegionDisplayService
     /// <summary>Immutable mainland China display override map keyed by uppercase region code.</summary>
     private static readonly FrozenDictionary<string, (string NameKey, string FlagAssetKey)> MainlandChinaOverrides = new Dictionary<string, (string NameKey, string FlagAssetKey)>(StringComparer.OrdinalIgnoreCase)
     {
+        ["CN"] = ("Region.MainlandChina.CN", "CN"),
         ["HK"] = ("Region.MainlandChina.HK", "HK"),
         ["MO"] = ("Region.MainlandChina.MO", "MO"),
         ["TW"] = ("Region.MainlandChina.TW", "CN"),

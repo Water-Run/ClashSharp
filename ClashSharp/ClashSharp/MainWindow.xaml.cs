@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using ClashSharp.Components;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.View;
@@ -76,11 +77,11 @@ public sealed partial class MainWindow : Window
             new ShellLocalizationAdapter(LocalizationService.Instance),
             CreatePageMap());
         _trayCommandService = TrayCommandServiceFactory.CreateDefault();
-        InitializeComponent();
-        AppThemeService.Apply((FrameworkElement)Content, AppSettingsService.Instance.AppThemeMode);
         AppThemeService.ApplyAccentColor(
             AppSettingsService.Instance.AppAccentColorMode,
             AppSettingsService.Instance.AppAccentColorValue);
+        InitializeComponent();
+        AppThemeService.Apply((FrameworkElement)Content, AppSettingsService.Instance.AppThemeMode);
         NavView.DataContext = _viewModel;
         InitializeWindowMinSize();
         InitializeTitleBar();
@@ -227,6 +228,11 @@ public sealed partial class MainWindow : Window
             }
         }
 
+        if (settings.ShowStartupGuideOnStartup)
+        {
+            await ShowStartupPromptDialogAsync();
+        }
+
         ClashSharpMode startupMode = StartupBehaviorService.ResolveStartupMode(settings.StartupBehaviorMode, settings.CurrentMode);
         try
         {
@@ -251,6 +257,22 @@ public sealed partial class MainWindow : Window
         }
 
         await StartupConflictDialogPresenter.ShowAsync(xamlRoot, issues);
+    }
+
+    /// <summary>Shows the startup health prompt when enabled by settings.</summary>
+    private async Task ShowStartupPromptDialogAsync()
+    {
+        if (ContentFrame.XamlRoot is null)
+        {
+            LogStorageService.Instance.AppendLog("Warning", "Startup", "Startup prompt skipped because ContentFrame has no XamlRoot.", null);
+            return;
+        }
+
+        StartupGuideDialog dialog = new()
+        {
+            XamlRoot = ContentFrame.XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 
     /// <summary>Prompts when closing while proxy takeover is active.</summary>
@@ -297,6 +319,7 @@ public sealed partial class MainWindow : Window
             AppSettingsService.Instance.CurrentMode,
             AppSettingsService.Instance.TransparentProxyEnabled,
             serviceStatus.IsInstalled,
+            TrayStatusService.Instance.GetSnapshot(),
             LocalizationService.Instance.GetString);
     }
 

@@ -9,9 +9,27 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
+
+/// <summary>Runtime status displayed in the tray status submenu.</summary>
+/// <param name="CurrentNodeName">Current proxy node name; empty when unavailable.</param>
+/// <param name="LatencyMilliseconds">Measured latency in milliseconds; null when unavailable.</param>
+public readonly record struct TrayStatusSnapshot(string CurrentNodeName, int? LatencyMilliseconds)
+{
+    /// <summary>Unavailable status snapshot.</summary>
+    public static TrayStatusSnapshot Unavailable { get; } = new(string.Empty, null);
+
+    /// <summary>Gets whether the snapshot contains a current node name.</summary>
+    public bool HasCurrentNode => !string.IsNullOrWhiteSpace(CurrentNodeName);
+}
+
+/// <summary>One tray status menu item.</summary>
+/// <param name="Label">Display label; never null.</param>
+/// <param name="IsEnabled">True when the status item can be clicked.</param>
+public readonly record struct TrayStatusMenuItem(string Label, bool IsEnabled);
 
 /// <summary>One tray mode menu item.</summary>
 /// <param name="Mode">Clash# mode represented by the item.</param>
@@ -26,12 +44,16 @@ public readonly record struct TrayModeMenuItem(ClashSharpMode Mode, string Label
 public readonly record struct TrayCheckMenuItem(string Label, bool IsChecked, bool IsEnabled);
 
 /// <summary>Complete tray menu state.</summary>
+/// <param name="StatusMenuLabel">Status submenu label.</param>
+/// <param name="StatusItems">Runtime status items.</param>
 /// <param name="ModeMenuLabel">Mode submenu label.</param>
 /// <param name="ModeItems">Mode submenu items.</param>
 /// <param name="TransparentProxyItem">Transparent proxy menu item.</param>
 /// <param name="SettingsLabel">Settings command label.</param>
 /// <param name="SafeExitLabel">Safe exit command label.</param>
 public readonly record struct TrayMenuState(
+    string StatusMenuLabel,
+    IReadOnlyList<TrayStatusMenuItem> StatusItems,
     string ModeMenuLabel,
     IReadOnlyList<TrayModeMenuItem> ModeItems,
     TrayCheckMenuItem TransparentProxyItem,
@@ -53,18 +75,74 @@ public static class TrayMenuStateBuilder
         bool mihomoServiceInstalled,
         Func<string, string> getString)
     {
+        return Build(
+            currentMode,
+            transparentProxyEnabled,
+            mihomoServiceInstalled,
+            TrayStatusSnapshot.Unavailable,
+            getString);
+    }
+
+    /// <summary>Builds tray menu state with localized labels and runtime status.</summary>
+    /// <param name="currentMode">Currently active Clash# mode.</param>
+    /// <param name="transparentProxyEnabled">True when transparent proxy preference is enabled.</param>
+    /// <param name="mihomoServiceInstalled">True when the mihomo service is deployed.</param>
+    /// <param name="status">Current runtime status snapshot.</param>
+    /// <param name="getString">Localization lookup. Must not be null.</param>
+    /// <returns>Tray menu state.</returns>
+    public static TrayMenuState Build(
+        ClashSharpMode currentMode,
+        bool transparentProxyEnabled,
+        bool mihomoServiceInstalled,
+        TrayStatusSnapshot status,
+        Func<string, string> getString)
+    {
         ArgumentNullException.ThrowIfNull(getString);
+        string modeLabel = GetModeLabel(currentMode, getString);
 
         return new TrayMenuState(
+            getString("Tray.Menu.Status"),
+            BuildStatusItems(modeLabel, status, getString),
             getString("Tray.Menu.Mode"),
             [
-                new(ClashSharpMode.Disabled, getString("Master.Mode.Disabled.Title"), currentMode == ClashSharpMode.Disabled),
-                new(ClashSharpMode.Standby, getString("Master.Mode.Standby.Title"), currentMode == ClashSharpMode.Standby),
-                new(ClashSharpMode.RuleTakeover, getString("Master.Mode.RuleTakeover.Title"), currentMode == ClashSharpMode.RuleTakeover),
-                new(ClashSharpMode.FullTakeover, getString("Master.Mode.FullTakeover.Title"), currentMode == ClashSharpMode.FullTakeover),
+                new(ClashSharpMode.Disabled, GetModeLabel(ClashSharpMode.Disabled, getString), currentMode == ClashSharpMode.Disabled),
+                new(ClashSharpMode.Standby, GetModeLabel(ClashSharpMode.Standby, getString), currentMode == ClashSharpMode.Standby),
+                new(ClashSharpMode.RuleTakeover, GetModeLabel(ClashSharpMode.RuleTakeover, getString), currentMode == ClashSharpMode.RuleTakeover),
+                new(ClashSharpMode.FullTakeover, GetModeLabel(ClashSharpMode.FullTakeover, getString), currentMode == ClashSharpMode.FullTakeover),
             ],
             new TrayCheckMenuItem(getString("Settings.TransparentProxy.Title"), transparentProxyEnabled, true),
             getString("Tray.Settings"),
             getString("Tray.SafeExit"));
+    }
+
+    private static IReadOnlyList<TrayStatusMenuItem> BuildStatusItems(
+        string modeLabel,
+        TrayStatusSnapshot status,
+        Func<string, string> getString)
+    {
+        string nodeLabel = status.HasCurrentNode
+            ? string.Format(CultureInfo.CurrentCulture, getString("Tray.Status.Node.Format"), status.CurrentNodeName)
+            : getString("Tray.Status.NodeUnavailable");
+        string latencyLabel = status.LatencyMilliseconds is int latencyMilliseconds
+            ? string.Format(CultureInfo.CurrentCulture, getString("Tray.Status.Latency.Format"), latencyMilliseconds)
+            : getString("Tray.Status.LatencyUnavailable");
+
+        return
+        [
+            new(string.Format(CultureInfo.CurrentCulture, getString("Tray.Status.Mode.Format"), modeLabel), false),
+            new(nodeLabel, false),
+            new(latencyLabel, false),
+        ];
+    }
+
+    private static string GetModeLabel(ClashSharpMode mode, Func<string, string> getString)
+    {
+        return mode switch
+        {
+            ClashSharpMode.Standby => getString("Master.Mode.Standby.Title"),
+            ClashSharpMode.RuleTakeover => getString("Master.Mode.RuleTakeover.Title"),
+            ClashSharpMode.FullTakeover => getString("Master.Mode.FullTakeover.Title"),
+            _ => getString("Master.Mode.Disabled.Title"),
+        };
     }
 }

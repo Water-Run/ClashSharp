@@ -41,10 +41,38 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         LocalizationService.Instance.CurrentLanguage = AppSettingsService.Instance.DisplayLanguage;
+        if (args.Arguments.Contains(StartupRestoreFallbackService.HelperArgument, StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyStartupRestoreFallback();
+            Exit();
+            return;
+        }
+
         ApplyStartupProxyRecovery();
         _mainWindow = new MainWindow();
         _mainWindow.Activate();
         ConnectionSamplingService.Instance.StartIfEnabled();
+    }
+
+    /// <summary>Runs the lightweight login fallback helper path and exits without showing UI.</summary>
+    private static void ApplyStartupRestoreFallback()
+    {
+        try
+        {
+            ProxyRecoveryResult result = StartupRestoreFallbackService.Instance.RunRestoreOnce();
+            if (result.WasApplied)
+            {
+                LogStorageService.Instance.AppendLog("Info", "StartupRestoreFallback", result.Message, null);
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
+        {
+            LogStorageService.Instance.AppendLog(
+                "Warning",
+                "StartupRestoreFallback",
+                LocalizationService.Instance.GetString("ProxyRecovery.StartupFailed"),
+                exception.Message);
+        }
     }
 
     /// <summary>Applies startup stale proxy recovery before creating the main window.</summary>

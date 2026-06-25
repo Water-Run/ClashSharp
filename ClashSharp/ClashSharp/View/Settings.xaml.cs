@@ -12,11 +12,15 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
+using ClashSharp.Components;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace ClashSharp.View;
 
@@ -30,6 +34,9 @@ public sealed partial class Settings : Page
 {
     /// <summary>Owns settings state transitions and persistence.</summary>
     private readonly SettingsViewModel _viewModel;
+
+    /// <summary>True while initial settings are being bound to controls.</summary>
+    private bool _isLoadingSettings = true;
 
     /// <summary>Initializes the settings page and applies localized text.</summary>
     public Settings()
@@ -55,6 +62,7 @@ public sealed partial class Settings : Page
         InitializeComponent();
         DataContext = _viewModel;
         LoadSettings();
+        _isLoadingSettings = false;
     }
 
     /// <summary>Loads persisted settings into visible controls.</summary>
@@ -72,21 +80,9 @@ public sealed partial class Settings : Page
             : XamlRoot;
     }
 
-    /// <summary>Persists the connection test URL when the input loses focus.</summary>
-    /// <param name="sender">URL text box. Not null.</param>
-    /// <param name="e">Routed event arguments. Not null.</param>
-    private void ConnectionTestUrlBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (!_viewModel.SetConnectionTestUrl(ConnectionTestUrlBox.Text))
-        {
-            ConnectionTestUrlBox.Text = _viewModel.ConnectionTestUrl;
-        }
-    }
-
     /// <summary>Runs a connection test against the configured test URL.</summary>
     private async void ConnectionTestButton_Click(object sender, RoutedEventArgs e)
     {
-        ConnectionTestUrlBox_LostFocus(ConnectionTestUrlBox, e);
         ConnectionTestButton.IsEnabled = false;
         try
         {
@@ -129,10 +125,23 @@ public sealed partial class Settings : Page
         await dialog.ShowAsync();
     }
 
-    /// <summary>Opens the application accent color picker and persists the selected color.</summary>
-    /// <param name="sender">Clicked button. Not null.</param>
+    /// <summary>Shows restart guidance when accent color mode changes after initial binding.</summary>
+    /// <param name="sender">Accent color mode combo box. Not null.</param>
     /// <param name="e">Routed event arguments. Not null.</param>
-    private async void AppAccentColorPickerButton_Click(object sender, RoutedEventArgs e)
+    private async void AppAccentColorModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingSettings || !_viewModel.IsAppAccentColorRestartPending)
+        {
+            return;
+        }
+
+        await ShowRestartRequiredDialogAsync();
+    }
+
+    /// <summary>Opens the application accent color picker and persists the selected color.</summary>
+    /// <param name="sender">Clicked color swatch button. Not null.</param>
+    /// <param name="e">Routed event arguments. Not null.</param>
+    private async void AppAccentColorSwatchButton_Click(object sender, RoutedEventArgs e)
     {
         ColorPicker picker = new()
         {
@@ -142,18 +151,18 @@ public sealed partial class Settings : Page
             MaxWidth = 320,
         };
 
-        ScrollViewer pickerScrollViewer = new()
+        Grid pickerPanel = new()
         {
-            Content = picker,
-            MaxHeight = 180,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Width = 340,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
         };
+        pickerPanel.Children.Add(picker);
 
         ContentDialog dialog = new()
         {
             Title = _viewModel.AppAccentColorTitleText,
-            Content = pickerScrollViewer,
+            Content = pickerPanel,
             MaxWidth = 420,
             PrimaryButtonText = _viewModel.AppAccentColorPickText,
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
@@ -168,6 +177,146 @@ public sealed partial class Settings : Page
 
         _viewModel.SetAppAccentColorModeIndex((int)AppAccentColorMode.Custom);
         _viewModel.SetAppAccentColorValue(AppThemeService.FormatAccentColor(picker.Color));
+        if (_viewModel.IsAppAccentColorRestartPending)
+        {
+            await ShowRestartRequiredDialogAsync();
+        }
+    }
+
+    /// <summary>Opens the connection-test URL editor dialog.</summary>
+    private async void EditConnectionTestUrlsButton_Click(object sender, RoutedEventArgs e)
+    {
+        TextBox proxyUrl1Box = new() { Text = _viewModel.ConnectionTestProxyUrl1, Width = 360 };
+        TextBox proxyUrl2Box = new() { Text = _viewModel.ConnectionTestProxyUrl2, Width = 360 };
+        TextBox directUrlBox = new() { Text = _viewModel.ConnectionTestDirectUrl, Width = 360 };
+        StackPanel panel = BuildConnectionTestUrlsPanel(proxyUrl1Box, proxyUrl2Box, directUrlBox);
+
+        ContentDialog dialog = new()
+        {
+            Title = _viewModel.ConnectionTestUrlTitleText,
+            Content = panel,
+            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Save"),
+            SecondaryButtonText = _viewModel.ResetText,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        ContentDialogResult result = await dialog.ShowAsync();
+        if (result is ContentDialogResult.Secondary)
+        {
+            _viewModel.ResetConnectionTestUrlsToDefaults();
+            return;
+        }
+
+        if (result is ContentDialogResult.Primary)
+        {
+            _viewModel.SetConnectionTestUrls(proxyUrl1Box.Text, proxyUrl2Box.Text, directUrlBox.Text);
+        }
+    }
+
+    /// <summary>Builds the connection-test URL editor content.</summary>
+    private StackPanel BuildConnectionTestUrlsPanel(TextBox proxyUrl1Box, TextBox proxyUrl2Box, TextBox directUrlBox)
+    {
+        StackPanel panel = new()
+        {
+            Spacing = 10,
+            MinWidth = 420,
+        };
+        AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestProxyUrl1TitleText, proxyUrl1Box);
+        AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestProxyUrl2TitleText, proxyUrl2Box);
+        AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestDirectUrlTitleText, directUrlBox);
+
+        Button restoreButton = new()
+        {
+            Name = "RestoreConnectionTestUrlsButton",
+            Content = _viewModel.ResetText,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        restoreButton.Click += (_, _) =>
+        {
+            proxyUrl1Box.Text = "https://www.google.com";
+            proxyUrl2Box.Text = "https://github.com";
+            directUrlBox.Text = "https://www.baidu.com";
+        };
+        panel.Children.Add(restoreButton);
+        return panel;
+    }
+
+    private static void AddConnectionTestUrlEditorRow(StackPanel panel, string label, TextBox textBox)
+    {
+        panel.Children.Add(new TextBlock
+        {
+            Text = label,
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+        });
+        panel.Children.Add(textBox);
+    }
+
+    /// <summary>Shows a short prompt explaining that the edited setting applies after restart.</summary>
+    private async Task ShowRestartRequiredDialogAsync()
+    {
+        ContentDialog dialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("Settings.RestartRequired.Title"),
+            Content = LocalizationService.Instance.GetString("Settings.RestartRequired.Message"),
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        await dialog.ShowAsync();
+    }
+
+    private async void ResetBasicSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetBasicSettingsToDefaults);
+    }
+
+    private async void ResetStartupSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetStartupSettingsToDefaults);
+    }
+
+    private async void ResetTransparentProxySettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetTransparentProxySettingsToDefaults);
+    }
+
+    private async void ResetProxySettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetProxySettingsToDefaults);
+    }
+
+    private async void ResetWindowsNativeSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetWindowsNativeSettingsToDefaults);
+    }
+
+    private async void ResetMainlandChinaSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetMainlandChinaSettingsToDefaults);
+    }
+
+    /// <summary>Confirms and applies a settings-group default reset.</summary>
+    /// <param name="resetAction">Group reset action. Must not be null.</param>
+    private async Task ResetSettingsGroupAsync(Action resetAction)
+    {
+        ArgumentNullException.ThrowIfNull(resetAction);
+
+        ContentDialog dialog = new()
+        {
+            Title = _viewModel.ResetGroupConfirmTitleText,
+            Content = _viewModel.ResetGroupConfirmMessageText,
+            PrimaryButtonText = _viewModel.ResetGroupToDefaultsText,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        if (await dialog.ShowAsync() is ContentDialogResult.Primary)
+        {
+            resetAction();
+        }
     }
 
     /// <summary>Runs startup conflict detection immediately and shows the shared result dialog.</summary>
@@ -177,6 +326,178 @@ public sealed partial class Settings : Page
     {
         IReadOnlyList<StartupConflictIssue> issues = _viewModel.CheckStartupConflicts();
         await StartupConflictDialogPresenter.ShowAsync(GetDialogXamlRoot(), issues);
+    }
+
+    /// <summary>Shows the startup prompt immediately.</summary>
+    private async void ShowStartupPromptButton_Click(object sender, RoutedEventArgs e)
+    {
+        StartupGuideDialog dialog = new()
+        {
+            XamlRoot = GetDialogXamlRoot(),
+        };
+        await dialog.ShowAsync();
+    }
+
+    /// <summary>Registers the startup restore fallback helper.</summary>
+    private void RegisterStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.RegisterStartupRestoreFallback();
+    }
+
+    /// <summary>Refreshes startup restore fallback registration status.</summary>
+    private void DetectStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.RefreshStartupRestoreFallbackStatus();
+    }
+
+    /// <summary>Uninstalls the startup restore fallback helper.</summary>
+    private void UninstallStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.UninstallStartupRestoreFallback();
+    }
+
+    /// <summary>Shows the mainland China unfriendly-site list.</summary>
+    private async void ShowMainlandChinaUnfriendlyListButton_Click(object sender, RoutedEventArgs e)
+    {
+        StackPanel panel = new()
+        {
+            Spacing = 6,
+            MinWidth = 360,
+            MaxWidth = 560,
+        };
+
+        foreach (string entry in MainlandChinaTextDisplayService.GetUnfriendlyDisplayList())
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = entry,
+                TextWrapping = TextWrapping.WrapWholeWords,
+                Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
+            });
+        }
+
+        ContentDialog dialog = new()
+        {
+            Title = _viewModel.MainlandChinaUnfriendlyListTitleText,
+            Content = new ScrollViewer
+            {
+                Content = panel,
+                MaxHeight = Math.Max(240, XamlRoot.Size.Height - 220),
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            },
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        await dialog.ShowAsync();
+    }
+
+    /// <summary>Exports a Clash# XML data package with the selected scope.</summary>
+    private async void ExportDataPackageButton_Click(object sender, RoutedEventArgs e)
+    {
+        await PickAndExportDataPackageAsync(_viewModel.SelectedDataPackageScope);
+    }
+
+    /// <summary>Imports a Clash# XML data package after two confirmations.</summary>
+    private async void ImportDataPackageButton_Click(object sender, RoutedEventArgs e)
+    {
+        FileOpenPicker picker = new()
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+        };
+        InitializePickerWithWindow(picker);
+        picker.FileTypeFilter.Add(".xml");
+
+        StorageFile? file = await picker.PickSingleFileAsync();
+        if (file is null || !await ConfirmDataImportAsync())
+        {
+            return;
+        }
+
+        await ClashDataPackageService.Instance.ImportAsync(file.Path, CancellationToken.None);
+        ApplyImportedSettings();
+    }
+
+    /// <summary>Exports a full backup package including logs.</summary>
+    private async void BackupDataPackageButton_Click(object sender, RoutedEventArgs e)
+    {
+        await PickAndExportDataPackageAsync(ClashDataPackageScope.AllIncludingLogs);
+    }
+
+    /// <summary>Shows a save picker and exports the selected data package scope.</summary>
+    private async Task PickAndExportDataPackageAsync(ClashDataPackageScope scope)
+    {
+        FileSavePicker picker = new()
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            SuggestedFileName = $"ClashSharp-{DateTime.Now:yyyyMMdd-HHmmss}",
+        };
+        InitializePickerWithWindow(picker);
+        picker.FileTypeChoices.Add("Clash# XML", [".xml"]);
+
+        StorageFile? file = await picker.PickSaveFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        await ClashDataPackageService.Instance.ExportAsync(file.Path, scope, CancellationToken.None);
+    }
+
+    /// <summary>Confirms import overwrite behavior in two steps.</summary>
+    private async Task<bool> ConfirmDataImportAsync()
+    {
+        ContentDialog firstDialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("Settings.DataImport.Warning.Title"),
+            Content = LocalizationService.Instance.GetString("Settings.DataImport.Warning.Message"),
+            PrimaryButtonText = _viewModel.ImportText,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        if (await firstDialog.ShowAsync() is not ContentDialogResult.Primary)
+        {
+            return false;
+        }
+
+        ContentDialog secondDialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("Settings.DataImport.SecondConfirm.Title"),
+            Content = LocalizationService.Instance.GetString("Settings.DataImport.SecondConfirm.Message"),
+            PrimaryButtonText = _viewModel.ImportText,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        return await secondDialog.ShowAsync() is ContentDialogResult.Primary;
+    }
+
+    /// <summary>Re-applies settings that affect running application services after package import.</summary>
+    private void ApplyImportedSettings()
+    {
+        AppSettingsService settings = AppSettingsService.Instance;
+        LocalizationService.Instance.CurrentLanguage = settings.DisplayLanguage;
+        AppThemeService.Apply(settings.AppThemeMode);
+        AppThemeService.ApplyAccentColor(settings.AppAccentColorMode, settings.AppAccentColorValue);
+        _ = StartupLaunchService.Instance.SetEnabledAsync(settings.LaunchAtStartupEnabled);
+        ConnectionSamplingService.Instance.RestartFromSettings();
+        _viewModel.Load();
+    }
+
+    /// <summary>Associates a WinUI picker with the application window so it can be shown from unpackaged desktop context.</summary>
+    private static void InitializePickerWithWindow(object picker)
+    {
+        if (App.MainWindow is null)
+        {
+            return;
+        }
+
+        nint windowHandle = WindowNative.GetWindowHandle(App.MainWindow);
+        InitializeWithWindow.Initialize(picker, windowHandle);
     }
 
     /// <summary>Builds the network repair dialog content.</summary>
@@ -296,7 +617,6 @@ public sealed partial class Settings : Page
         }
 
         _viewModel.ResetAllSettings();
-        ConnectionTestUrlBox.Text = _viewModel.ConnectionTestUrl;
     }
 
     /// <summary>Shows a two-step confirmation and clears all local application data.</summary>
@@ -333,7 +653,6 @@ public sealed partial class Settings : Page
         }
 
         _viewModel.ClearAllData();
-        ConnectionTestUrlBox.Text = _viewModel.ConnectionTestUrl;
     }
 
 }

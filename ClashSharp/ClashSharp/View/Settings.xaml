@@ -4,9 +4,15 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:components="using:ClashSharp.Components"
+    xmlns:converters="using:ClashSharp.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
+
+    <Page.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:HexColorBrushConverter x:Key="HexColorBrushConverter" />
+    </Page.Resources>
 
     <ScrollViewer
         x:Name="SettingsScrollViewer"
@@ -29,14 +35,56 @@
 
             <components:SettingRow x:Name="AppAccentColorRow" Title="{Binding AppAccentColorTitleText}" Description="{Binding AppAccentColorDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ComboBox x:Name="AppAccentColorModeBox" Width="150" ItemsSource="{Binding AppAccentColorModeOptions}" SelectedIndex="{Binding AppAccentColorModeIndex, Mode=TwoWay}" />
-                        <Button x:Name="AppAccentColorPickerButton" Width="40" MinWidth="40" Padding="0" Click="AppAccentColorPickerButton_Click" AutomationProperties.Name="{Binding AppAccentColorPickText}" ToolTipService.ToolTip="{Binding AppAccentColorPickText}">
-                            <FontIcon Glyph="&#xE790;" FontSize="14" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ComboBox x:Name="AppAccentColorModeBox" Width="150" ItemsSource="{Binding AppAccentColorModeOptions}" SelectedIndex="{Binding AppAccentColorModeIndex, Mode=TwoWay}" SelectionChanged="AppAccentColorModeBox_SelectionChanged" />
+                        <Button
+                            x:Name="AppAccentColorSwatchButton"
+                            Width="32"
+                            Height="32"
+                            MinWidth="32"
+                            Padding="4"
+                            Click="AppAccentColorSwatchButton_Click"
+                            AutomationProperties.Name="{Binding AppAccentColorPickText}"
+                            ToolTipService.ToolTip="{Binding AppAccentColorPickText}"
+                            Visibility="{Binding IsCustomAccentColorSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Border
+                                Width="20"
+                                Height="20"
+                                CornerRadius="4"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                Background="{Binding AppAccentColorValue, Converter={StaticResource HexColorBrushConverter}}" />
                         </Button>
                     </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
+
+            <components:SettingRow x:Name="StartupRestoreFallbackRow" Title="{Binding StartupRestoreFallbackTitleText}" Description="{Binding StartupRestoreFallbackDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding StartupRestoreFallbackStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" TextWrapping="NoWrap" />
+                        <Button x:Name="RegisterStartupRestoreFallbackButton" Click="RegisterStartupRestoreFallbackButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8FB;" FontSize="14" />
+                                <TextBlock Text="{Binding RegisterText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="DetectStartupRestoreFallbackButton" Click="DetectStartupRestoreFallbackButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="14" />
+                                <TextBlock Text="{Binding DetectText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="UninstallStartupRestoreFallbackButton" Click="UninstallStartupRestoreFallbackButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                <TextBlock Text="{Binding UninstallMihomoServiceText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+            <HyperlinkButton x:Name="ResetBasicSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetBasicSettingsButton_Click" />
 
             <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="LaunchAtStartupRow" Title="{Binding LaunchAtStartupTitleText}" Description="{Binding LaunchAtStartupDescriptionText}">
@@ -64,7 +112,15 @@
 
             <components:SettingRow x:Name="ShowStartupGuideRow" Title="{Binding StartupGuideTitleText}" Description="{Binding StartupGuideDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="ShowStartupGuideToggle" MinWidth="0" IsOn="{Binding ShowStartupGuideOnStartup, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ToggleSwitch x:Name="ShowStartupGuideToggle" MinWidth="0" IsOn="{Binding ShowStartupGuideOnStartup, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                        <Button x:Name="ShowStartupPromptButton" Click="ShowStartupPromptButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE946;" FontSize="14" />
+                                <TextBlock Text="{Binding StartupGuideShowNowText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -73,8 +129,9 @@
                     <ComboBox x:Name="StartupBehaviorModeBox" Width="180" ItemsSource="{Binding StartupBehaviorModeOptions}" SelectedIndex="{Binding StartupBehaviorModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
+            <HyperlinkButton x:Name="ResetStartupSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetStartupSettingsButton_Click" />
 
-            <TextBlock x:Name="TransparentProxySectionTitleText" Text="{Binding TransparentProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
@@ -101,7 +158,6 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="MixedPortRow" Title="{Binding MixedPortTitleText}" Description="{Binding MixedPortDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <NumberBox x:Name="MixedPortBox" Width="140" Minimum="1" Maximum="65535" Value="{Binding MixedPortValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />
@@ -111,7 +167,13 @@
             <components:SettingRow x:Name="ConnectionTestUrlRow" Title="{Binding ConnectionTestUrlTitleText}" Description="{Binding ConnectionTestUrlDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBox x:Name="ConnectionTestUrlBox" Width="260" Text="{Binding ConnectionTestUrl, Mode=OneWay}" LostFocus="ConnectionTestUrlBox_LostFocus" />
+                        <TextBlock Text="{Binding ConnectionTestUrlSummaryText}" Width="260" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Button x:Name="EditConnectionTestUrlsButton" Click="EditConnectionTestUrlsButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                                <TextBlock Text="{Binding EditText}" />
+                            </StackPanel>
+                        </Button>
                         <Button x:Name="ConnectionTestButton" Click="ConnectionTestButton_Click">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE9D9;" FontSize="14" />
@@ -133,6 +195,7 @@
                     <NumberBox x:Name="ConnectionSamplingIntervalBox" Width="140" Minimum="5" Maximum="3600" Value="{Binding ConnectionSamplingIntervalSecondsValue, Mode=TwoWay}" SpinButtonPlacementMode="Compact" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
+            <HyperlinkButton x:Name="ResetProxySettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetProxySettingsButton_Click" />
 
             <TextBlock x:Name="WindowsNativeSectionTitleText" Text="{Binding WindowsNativeSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <Grid Style="{StaticResource ClashCardGridStyle}" MinHeight="60">
@@ -169,6 +232,7 @@
                     <ComboBox x:Name="ProxyRecoveryModeBox" Width="180" ItemsSource="{Binding ProxyRecoveryModeOptions}" SelectedIndex="{Binding ProxyRecoveryModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
+            <HyperlinkButton x:Name="ResetWindowsNativeSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetWindowsNativeSettingsButton_Click" />
 
             <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="MainlandChinaDisplayRow" Title="{Binding MainlandChinaDisplayTitleText}" Description="{Binding MainlandChinaDisplayDescriptionText}">
@@ -179,11 +243,46 @@
 
             <components:SettingRow x:Name="MainlandChinaUrlBlockingRow" Title="{Binding MainlandChinaUrlBlockingTitleText}" Description="{Binding MainlandChinaUrlBlockingDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="MainlandChinaUrlBlockingToggle" MinWidth="0" IsOn="{Binding MainlandChinaUrlBlockingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ToggleSwitch x:Name="MainlandChinaUrlBlockingToggle" MinWidth="0" IsOn="{Binding MainlandChinaUrlBlockingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                        <Button x:Name="ShowMainlandChinaUnfriendlyListButton" Click="ShowMainlandChinaUnfriendlyListButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8FD;" FontSize="14" />
+                                <TextBlock Text="{Binding OpenText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+            <HyperlinkButton x:Name="ResetMainlandChinaSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Padding="0" Click="ResetMainlandChinaSettingsButton_Click" />
+
+            <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <components:SettingRow x:Name="DataPackageRow" Title="{Binding DataPackageTitleText}" Description="{Binding DataPackageDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ComboBox x:Name="DataPackageScopeBox" Width="260" ItemsSource="{Binding DataPackageScopeOptions}" SelectedIndex="{Binding DataPackageScopeIndex, Mode=TwoWay}" />
+                        <Button x:Name="ExportDataPackageButton" Click="ExportDataPackageButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE74E;" FontSize="14" />
+                                <TextBlock Text="{Binding ExportText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ImportDataPackageButton" Click="ImportDataPackageButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8B5;" FontSize="14" />
+                                <TextBlock Text="{Binding ImportText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="BackupDataPackageButton" Click="BackupDataPackageButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE777;" FontSize="14" />
+                                <TextBlock Text="{Binding BackupText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="ResetAllSettingsRow" Title="{Binding ResetAllSettingsTitleText}" Description="{Binding ResetAllSettingsDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <HyperlinkButton x:Name="ResetAllSettingsLink" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Center" Content="{Binding ResetText}" Click="ResetAllSettingsButton_Click" />

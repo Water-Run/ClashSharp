@@ -285,6 +285,37 @@ public sealed partial class LogStorageService
         }
     }
 
+    /// <summary>Gets the latest measured latency for a proxy node.</summary>
+    /// <param name="nodeName">Proxy node name. Must not be null.</param>
+    /// <returns>Latency in milliseconds, or null when no latency is stored.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="nodeName"/> is null.</exception>
+    public int? GetNodeLatencyMilliseconds(string nodeName)
+    {
+        ArgumentNullException.ThrowIfNull(nodeName);
+
+        if (string.IsNullOrWhiteSpace(nodeName))
+        {
+            return null;
+        }
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT LatencyMilliseconds
+                FROM NodeHealthStats
+                WHERE NodeName = $nodeName
+                LIMIT 1;
+                """;
+            command.Parameters.AddWithValue("$nodeName", nodeName.Trim());
+            object? result = command.ExecuteScalar();
+            return result is null or DBNull ? null : Convert.ToInt32(result, CultureInfo.InvariantCulture);
+        }
+    }
+
     /// <summary>Ensures rule hit rows exist for the provided rules without changing existing counts.</summary>
     /// <param name="rules">Rule rows to register. Must not be null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rules"/> is null.</exception>

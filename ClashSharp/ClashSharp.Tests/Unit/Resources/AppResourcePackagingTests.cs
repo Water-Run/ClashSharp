@@ -56,6 +56,21 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("Margin=\"304,0,138,0\"", mainWindowXaml, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies custom accent resources are applied before WinUI controls are created on startup.</summary>
+    [Fact]
+    public void MainWindowCode_AppliesAccentColorBeforeInitializeComponent()
+    {
+        string mainWindowCodePath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
+
+        string mainWindowCode = File.ReadAllText(mainWindowCodePath);
+        int applyAccentIndex = mainWindowCode.IndexOf("AppThemeService.ApplyAccentColor", StringComparison.Ordinal);
+        int initializeIndex = mainWindowCode.IndexOf("InitializeComponent();", StringComparison.Ordinal);
+
+        Assert.True(applyAccentIndex >= 0, "Accent color application is missing.");
+        Assert.True(initializeIndex >= 0, "InitializeComponent call is missing.");
+        Assert.True(applyAccentIndex < initializeIndex, "Accent color resources must be applied before WinUI controls are created.");
+    }
+
     /// <summary>Verifies logs are only reachable from statistics and not duplicated in the footer navigation.</summary>
     [Fact]
     public void MainWindowXaml_DoesNotExposeLogsAsFooterNavigation()
@@ -99,6 +114,27 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"ProxyInformationButton\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("OpenProxyInformationButton_Click", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("SettingsProxyInformationAdapter.CreateSnapshot", aboutCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies about page version and runtime summary live under the product name before the app description.</summary>
+    [Fact]
+    public void AboutXaml_PlacesVersionAndRuntimeUnderAppName()
+    {
+        string aboutXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "About.xaml");
+
+        string aboutXaml = File.ReadAllText(aboutXamlPath);
+
+        int appNameIndex = aboutXaml.IndexOf("Text=\"{Binding AppNameText}\"", StringComparison.Ordinal);
+        int versionIndex = aboutXaml.IndexOf("Text=\"{Binding VersionSummaryText}\"", StringComparison.Ordinal);
+        int runtimeIndex = aboutXaml.IndexOf("Text=\"{Binding RuntimeValueText}\"", StringComparison.Ordinal);
+        int descriptionIndex = aboutXaml.IndexOf("Text=\"{Binding AppDescriptionText}\"", StringComparison.Ordinal);
+
+        Assert.True(appNameIndex >= 0, "App name text is missing.");
+        Assert.True(versionIndex > appNameIndex, "Version summary must be below the app name.");
+        Assert.True(runtimeIndex > versionIndex, "Runtime summary must be below the version.");
+        Assert.True(descriptionIndex > runtimeIndex, "App description must be below version and runtime.");
+        Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the add-subscription dialog uses localization keys instead of hard-coded Chinese labels.</summary>
@@ -390,6 +426,36 @@ public sealed class AppResourcePackagingTests
 
         Assert.DoesNotContain("LocalizationService.Instance.GetString", builderCode, StringComparison.Ordinal);
         Assert.Contains("Func<string, string>", builderCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies custom accent colors update WinUI brush resources used by controls such as buttons.</summary>
+    [Fact]
+    public void AppThemeService_OverridesAccentBrushResources()
+    {
+        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppThemeService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        foreach (string resourceKey in new[]
+        {
+            "AccentFillColorDefaultBrush",
+            "AccentFillColorSecondaryBrush",
+            "AccentFillColorTertiaryBrush",
+            "AccentFillColorDisabledBrush",
+            "AccentTextFillColorPrimaryBrush",
+            "AccentTextFillColorSecondaryBrush",
+            "AccentTextFillColorTertiaryBrush",
+            "AccentTextFillColorDisabledBrush",
+            "AccentButtonBackground",
+            "AccentButtonBackgroundPointerOver",
+            "AccentButtonBackgroundPressed",
+            "AccentButtonForeground",
+        })
+        {
+            Assert.Contains(resourceKey, serviceCode, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("new SolidColorBrush", serviceCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies region display names are resolved through localization keys.</summary>
@@ -735,7 +801,20 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("Content=\"{Binding MainlandChinaDisabledText}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"MainlandChinaAllItem\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"MainlandChinaUrlBlockingToggle\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ShowMainlandChinaUnfriendlyListButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MainlandChinaDisplayToggle", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the mainland China URL blocking row exposes the covered unfriendly-site list.</summary>
+    [Fact]
+    public void SettingsCodeBehind_ShowsMainlandChinaUnfriendlyList()
+    {
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.Contains("ShowMainlandChinaUnfriendlyListButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("MainlandChinaTextDisplayService.GetUnfriendlyDisplayList()", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies language and recovery combo boxes use bindable option lists instead of empty ComboBoxItem bindings.</summary>
@@ -753,8 +832,14 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"AppAccentColorRow\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"AppAccentColorModeBox\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding AppAccentColorModeOptions}\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"AppAccentColorPickerButton\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("Click=\"AppAccentColorPickerButton_Click\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AppAccentColorSwatchButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"AppAccentColorSwatchButton_Click\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Converter={StaticResource HexColorBrushConverter}", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("BooleanToVisibilityConverter", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{Binding IsCustomAccentColorSelected, Converter={StaticResource BooleanToVisibilityConverter}}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"AppAccentColorPickerButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<FontIcon Glyph=\"&#xE790;\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"{Binding AppAccentColorPickText}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding ProxyRecoveryModeOptions}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding StartupBehaviorModeOptions}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Content=\"{Binding ProxyRecoveryIgnoreText}\"", settingsXaml, StringComparison.Ordinal);
@@ -777,6 +862,64 @@ public sealed class AppResourcePackagingTests
         Assert.True(startupSectionIndex > accentColorIndex, "Startup section must follow display settings.");
     }
 
+    /// <summary>Verifies accent color picker uses centered dialog content and shows a restart-required prompt after changes.</summary>
+    [Fact]
+    public void SettingsCodeBehind_CentersAccentColorPickerAndShowsRestartPrompt()
+    {
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.Contains("AppAccentColorSwatchButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment = HorizontalAlignment.Center", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("VerticalAlignment = VerticalAlignment.Center", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ShowRestartRequiredDialogAsync", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ScrollViewer pickerScrollViewer", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MaxHeight = 180", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies each settings group exposes a compact right-aligned reset-to-defaults text action.</summary>
+    [Fact]
+    public void SettingsXaml_UsesCompactGroupResetLinks()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+
+        string[] resetLinkNames =
+        [
+            "ResetBasicSettingsLink",
+            "ResetStartupSettingsLink",
+            "ResetProxySettingsLink",
+            "ResetWindowsNativeSettingsLink",
+            "ResetMainlandChinaSettingsLink",
+        ];
+
+        foreach (string resetLinkName in resetLinkNames)
+        {
+            Assert.Contains($"x:Name=\"{resetLinkName}\"", settingsXaml, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(resetLinkNames.Length, CountOccurrences(settingsXaml, "Content=\"{Binding ResetGroupToDefaultsText}\""));
+        Assert.Contains("HorizontalAlignment=\"Right\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"ResetGroupSettingsRow\"", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies group reset actions share one confirmation dialog path before applying defaults.</summary>
+    [Fact]
+    public void SettingsCodeBehind_UsesSharedGroupResetConfirmation()
+    {
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.Contains("ResetSettingsGroupAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ResetGroupConfirmTitleText", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ResetGroupConfirmMessageText", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ResetBasicSettingsButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ResetProxySettingsButton_Click", settingsCode, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies proxy startup controls include conflict checks, startup behavior, and no TUN fallback switch.</summary>
     [Fact]
     public void SettingsXaml_UsesStartupControlsAndRemovesTunFallback()
@@ -791,7 +934,8 @@ public sealed class AppResourcePackagingTests
         int autoConflictIndex = settingsXaml.IndexOf("x:Name=\"StartupConflictCheckRow\"", StringComparison.Ordinal);
         int guideIndex = settingsXaml.IndexOf("x:Name=\"ShowStartupGuideRow\"", StringComparison.Ordinal);
         int behaviorIndex = settingsXaml.IndexOf("x:Name=\"StartupBehaviorModeRow\"", StringComparison.Ordinal);
-        int transparentProxyIndex = settingsXaml.IndexOf("x:Name=\"TransparentProxySectionTitleText\"", StringComparison.Ordinal);
+        int proxySectionIndex = settingsXaml.IndexOf("x:Name=\"ProxySectionTitleText\"", StringComparison.Ordinal);
+        int transparentProxyIndex = settingsXaml.IndexOf("x:Name=\"TransparentProxyRow\"", StringComparison.Ordinal);
 
         Assert.True(startupSectionIndex >= 0, "Startup settings section is missing.");
         Assert.True(launchIndex > startupSectionIndex, "Launch-at-startup row must be under the startup section.");
@@ -799,10 +943,13 @@ public sealed class AppResourcePackagingTests
         Assert.True(autoConflictIndex > manualConflictIndex, "Automatic startup conflict setting must follow manual conflict check.");
         Assert.True(guideIndex > autoConflictIndex, "Startup guide setting must follow conflict check settings.");
         Assert.True(behaviorIndex > guideIndex, "Startup behavior mode must stay with startup settings.");
-        Assert.True(transparentProxyIndex > behaviorIndex, "Transparent proxy settings must follow the startup section.");
+        Assert.True(proxySectionIndex > behaviorIndex, "Proxy settings must follow the startup section.");
+        Assert.True(transparentProxyIndex > proxySectionIndex, "Transparent proxy rows must be integrated into the proxy section.");
+        Assert.DoesNotContain("x:Name=\"TransparentProxySectionTitleText\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"StartupConflictCheckToggle\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"CheckStartupConflictsButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ShowStartupGuideToggle\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ShowStartupPromptButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"StartupBehaviorModeBox\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LaunchAtStartupToggle\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("TunFallbackRow", settingsXaml, StringComparison.Ordinal);
@@ -907,6 +1054,36 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("x:Name=\"DescriptionText\"", masterControlXaml, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies master control page uses extracted reusable mode-button and info-tile components.</summary>
+    [Fact]
+    public void MasterControlXaml_UsesModeButtonAndTileComponents()
+    {
+        string masterControlXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "MasterControl.xaml");
+        string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
+        string modeButtonXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "MasterModeButton.xaml");
+        string infoTileXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "MasterInfoTile.xaml");
+
+        string masterControlXaml = File.ReadAllText(masterControlXamlPath);
+        string masterControlCode = File.ReadAllText(masterControlCodePath);
+        string modeButtonXaml = File.ReadAllText(modeButtonXamlPath);
+        string infoTileXaml = File.ReadAllText(infoTileXamlPath);
+
+        Assert.Contains("xmlns:components=\"using:ClashSharp.Components\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(masterControlXaml, "components:MasterModeButton"));
+        Assert.Contains("x:Name=\"InfoTileGrid\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("CanReorderItems=\"True\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("AllowDrop=\"True\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"OpenLatencyDialogButton\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("OpenLatencyDialogButton_Click", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"EditInfoTilesButton\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("EditInfoTilesButton_Click", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("ProgressBar", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("DispatcherTimer", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("x:Class=\"ClashSharp.Components.MasterModeButton\"", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Class=\"ClashSharp.Components.MasterInfoTile\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("ToggleSwitch", infoTileXaml, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies the about page uses a centered, bounded layout with complete app identity fields.</summary>
     [Fact]
     public void AboutXaml_UsesCenteredCompleteIdentityLayout()
@@ -917,8 +1094,10 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("HorizontalAlignment=\"Center\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("MaxWidth=\"720\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding VersionSummaryText}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding RuntimeValueText}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LicenseTitleText\"", aboutXaml, StringComparison.Ordinal);
     }
 
@@ -930,11 +1109,54 @@ public sealed class AppResourcePackagingTests
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
 
-        Assert.DoesNotContain("ConnectionTestUrlBox\" MinWidth=", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConnectionTestUrlBox", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MainlandChinaFeatureModeBox\" MinWidth=", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("ConnectionTestUrlBox\" Width=\"260\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"EditConnectionTestUrlsButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("MainlandChinaFeatureModeBox\" Width=\"280\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ConnectionTestButton\"", settingsXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies connection test URLs are edited through a child dialog with restore-defaults support.</summary>
+    [Fact]
+    public void SettingsXaml_UsesConnectionTestUrlEditorDialog()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.Contains("x:Name=\"EditConnectionTestUrlsButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"EditConnectionTestUrlsButton_Click\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"ConnectionTestUrlBox\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("BuildConnectionTestUrlsPanel", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("RestoreConnectionTestUrlsButton", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("SetConnectionTestUrls", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ResetConnectionTestUrlsToDefaults", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings exposes XML data package import, export, and backup controls.</summary>
+    [Fact]
+    public void SettingsXaml_ExposesDataPackageImportExportBackup()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.Contains("x:Name=\"DataPackageRow\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DataPackageScopeBox\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding DataPackageScopeOptions}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ExportDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ImportDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"BackupDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("ExportDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ImportDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("Settings.DataImport.Warning.Title", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("Settings.DataImport.SecondConfirm.Title", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ClashDataPackageService.Instance", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies maintenance actions are right-aligned links instead of full-height row buttons.</summary>
@@ -1019,6 +1241,20 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Category=\"windows.startupTask\"", manifestXml, StringComparison.Ordinal);
         Assert.Contains("TaskId=\"ClashSharpStartup\"", manifestXml, StringComparison.Ordinal);
         Assert.Contains("EntryPoint=\"Windows.FullTrustApplication\"", manifestXml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Counts non-overlapping occurrences of a string fragment.</summary>
+    private static int CountOccurrences(string value, string fragment)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = value.IndexOf(fragment, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += fragment.Length;
+        }
+
+        return count;
     }
 
     /// <summary>Finds a source file by walking upward from the test output directory.</summary>

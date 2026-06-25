@@ -31,6 +31,27 @@ internal static class AppThemeService
         "SystemAccentColorDark3",
     ];
 
+    /// <summary>Application brush keys overridden for custom accent colors.</summary>
+    private static readonly string[] AccentBrushResourceKeys =
+    [
+        "AccentFillColorDefaultBrush",
+        "AccentFillColorSecondaryBrush",
+        "AccentFillColorTertiaryBrush",
+        "AccentFillColorDisabledBrush",
+        "AccentTextFillColorPrimaryBrush",
+        "AccentTextFillColorSecondaryBrush",
+        "AccentTextFillColorTertiaryBrush",
+        "AccentTextFillColorDisabledBrush",
+        "AccentButtonBackground",
+        "AccentButtonBackgroundPointerOver",
+        "AccentButtonBackgroundPressed",
+        "AccentButtonBackgroundDisabled",
+        "AccentButtonForeground",
+        "AccentButtonForegroundPointerOver",
+        "AccentButtonForegroundPressed",
+        "AccentButtonForegroundDisabled",
+    ];
+
     /// <summary>Applies <paramref name="mode"/> to the main window root when available.</summary>
     public static void Apply(AppThemeMode mode)
     {
@@ -71,17 +92,46 @@ internal static class AppThemeService
                 resources.Remove(key);
             }
 
+            foreach (string key in AccentBrushResourceKeys)
+            {
+                resources.Remove(key);
+            }
+
             return;
         }
 
         Color accentColor = ParseAccentColorOrDefault(colorValue);
+        Color light1 = Blend(accentColor, Colors.White, 0.30);
+        Color light2 = Blend(accentColor, Colors.White, 0.50);
+        Color light3 = Blend(accentColor, Colors.White, 0.70);
+        Color dark1 = Blend(accentColor, Colors.Black, 0.25);
+        Color dark2 = Blend(accentColor, Colors.Black, 0.45);
+        Color dark3 = Blend(accentColor, Colors.Black, 0.65);
+
         resources["SystemAccentColor"] = accentColor;
-        resources["SystemAccentColorLight1"] = Blend(accentColor, Colors.White, 0.30);
-        resources["SystemAccentColorLight2"] = Blend(accentColor, Colors.White, 0.50);
-        resources["SystemAccentColorLight3"] = Blend(accentColor, Colors.White, 0.70);
-        resources["SystemAccentColorDark1"] = Blend(accentColor, Colors.Black, 0.25);
-        resources["SystemAccentColorDark2"] = Blend(accentColor, Colors.Black, 0.45);
-        resources["SystemAccentColorDark3"] = Blend(accentColor, Colors.Black, 0.65);
+        resources["SystemAccentColorLight1"] = light1;
+        resources["SystemAccentColorLight2"] = light2;
+        resources["SystemAccentColorLight3"] = light3;
+        resources["SystemAccentColorDark1"] = dark1;
+        resources["SystemAccentColorDark2"] = dark2;
+        resources["SystemAccentColorDark3"] = dark3;
+
+        resources["AccentFillColorDefaultBrush"] = new SolidColorBrush(accentColor);
+        resources["AccentFillColorSecondaryBrush"] = new SolidColorBrush(light1);
+        resources["AccentFillColorTertiaryBrush"] = new SolidColorBrush(light2);
+        resources["AccentFillColorDisabledBrush"] = new SolidColorBrush(Color.FromArgb(0x5C, accentColor.R, accentColor.G, accentColor.B));
+        resources["AccentTextFillColorPrimaryBrush"] = new SolidColorBrush(Colors.White);
+        resources["AccentTextFillColorSecondaryBrush"] = new SolidColorBrush(Colors.White);
+        resources["AccentTextFillColorTertiaryBrush"] = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
+        resources["AccentTextFillColorDisabledBrush"] = new SolidColorBrush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
+        resources["AccentButtonBackground"] = new SolidColorBrush(accentColor);
+        resources["AccentButtonBackgroundPointerOver"] = new SolidColorBrush(light1);
+        resources["AccentButtonBackgroundPressed"] = new SolidColorBrush(dark1);
+        resources["AccentButtonBackgroundDisabled"] = new SolidColorBrush(Color.FromArgb(0x5C, accentColor.R, accentColor.G, accentColor.B));
+        resources["AccentButtonForeground"] = new SolidColorBrush(Colors.White);
+        resources["AccentButtonForegroundPointerOver"] = new SolidColorBrush(Colors.White);
+        resources["AccentButtonForegroundPressed"] = new SolidColorBrush(Colors.White);
+        resources["AccentButtonForegroundDisabled"] = new SolidColorBrush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
     }
 
     /// <summary>Parses an accent color value, returning Windows blue when parsing fails.</summary>

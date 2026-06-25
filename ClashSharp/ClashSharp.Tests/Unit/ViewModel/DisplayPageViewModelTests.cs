@@ -72,6 +72,8 @@ public sealed class DisplayPageViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal("About", viewModel.PageTitleText);
+        Assert.Equal("Version 1.0.0.0", viewModel.VersionSummaryText);
+        Assert.Equal("Built with .NET 10 and WinUI 3", viewModel.RuntimeValueText);
         Assert.Equal("mihomo available: v1.19.11", viewModel.MihomoStatusText);
     }
 
@@ -144,7 +146,9 @@ public sealed class DisplayPageViewModelTests
                 "About.Mihomo.Description" => "Core",
                 "About.OpenMihomo" => "Open mihomo",
                 "About.Version.Title" => "Version",
+                "About.Version.Value.Format" => "Version {0}",
                 "About.Runtime.Title" => "Runtime",
+                "About.Runtime.Value" => "Built with .NET 10 and WinUI 3",
                 "About.License.Title" => "License",
                 "About.Mihomo.Loading" => "Loading",
                 "About.Mihomo.Available.Format" => "mihomo available: {0}",

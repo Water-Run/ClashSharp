@@ -43,6 +43,19 @@ public sealed class LogStorageServiceTests
         Assert.Equal(1, row.SampleCount);
     }
 
+    /// <summary>Verifies node health latency can be read by node name for tray status display.</summary>
+    [Fact]
+    public void GetNodeLatencyMilliseconds_ReturnsStoredLatency()
+    {
+        using TempDatabase tempDatabase = new();
+        LogStorageService service = new(tempDatabase.Path, () => "profile-a");
+        service.UpsertNodeHealth("Proxy A", "US", 86);
+
+        int? latency = service.GetNodeLatencyMilliseconds("Proxy A");
+
+        Assert.Equal(86, latency);
+    }
+
     private sealed class TempDatabase : IDisposable
     {
         public TempDatabase()

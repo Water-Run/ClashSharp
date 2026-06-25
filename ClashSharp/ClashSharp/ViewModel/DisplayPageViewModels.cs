@@ -12,11 +12,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
-using Windows.ApplicationModel;
 
 namespace ClashSharp.ViewModel;
 
@@ -487,7 +485,11 @@ internal sealed class AboutViewModel : ObservableObject
 
     /// <summary>Gets the application version text.</summary>
     /// <value>Application package or assembly version.</value>
-    public string VersionText => GetVersionText();
+    public string VersionText => "1.0.0.0";
+
+    /// <summary>Gets the application version summary text.</summary>
+    /// <value>Localized version summary.</value>
+    public string VersionSummaryText => string.Format(_localization.GetString("About.Version.Value.Format"), VersionText);
 
     /// <summary>Gets the version label text.</summary>
     /// <value>Localized version field label.</value>
@@ -499,7 +501,7 @@ internal sealed class AboutViewModel : ObservableObject
 
     /// <summary>Gets the runtime value text.</summary>
     /// <value>Runtime stack summary for this application.</value>
-    public string RuntimeValueText => ".NET 10 / WinUI 3";
+    public string RuntimeValueText => _localization.GetString("About.Runtime.Value");
 
     /// <summary>Gets the author title text.</summary>
     /// <value>Localized author title.</value>
@@ -609,18 +611,4 @@ internal sealed class AboutViewModel : ObservableObject
         }
     }
 
-    /// <summary>Resolves the current application version for display.</summary>
-    /// <returns>Package version when available; otherwise assembly version.</returns>
-    private static string GetVersionText()
-    {
-        try
-        {
-            PackageVersion version = Package.Current.Id.Version;
-            return $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-        }
-        catch (InvalidOperationException)
-        {
-            return Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0.0";
-        }
-    }
 }

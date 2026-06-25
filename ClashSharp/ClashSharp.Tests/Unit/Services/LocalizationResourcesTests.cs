@@ -77,6 +77,39 @@ public sealed class LocalizationResourcesTests
         }
     }
 
+    /// <summary>Verifies Chinese resource dictionaries do not contain accidentally pasted Cyrillic strings.</summary>
+    [Theory]
+    [InlineData(AppLanguage.SimplifiedChinese)]
+    [InlineData(AppLanguage.TraditionalChinese)]
+    public void Translations_ChineseLanguages_DoNotContainCyrillicValues(AppLanguage language)
+    {
+        string[] cyrillicValues = LocalizationResources.Translations[language]
+            .Where(pair => pair.Value.Any(IsCyrillic))
+            .Select(pair => $"{language}:{pair.Key}={pair.Value}")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(cyrillicValues);
+    }
+
+    /// <summary>Verifies known previously mixed resource values stay in the matching language.</summary>
+    [Theory]
+    [InlineData(AppLanguage.SimplifiedChinese, "About.Runtime.Value", "基于.NET 10和WinUI3构建")]
+    [InlineData(AppLanguage.SimplifiedChinese, "Settings.ConnectionTest.Succeeded.Format", "连接测试成功，HTTP 状态：{0}。")]
+    [InlineData(AppLanguage.TraditionalChinese, "Settings.ConnectionTest.Succeeded.Format", "連線測試成功，HTTP 狀態：{0}。")]
+    [InlineData(AppLanguage.TraditionalChinese, "StartupConflict.Mihomo.Title", "另一個 mihomo 核心正在執行")]
+    [InlineData(AppLanguage.Russian, "About.ProxyInformation.Title", "Этот прокси")]
+    [InlineData(AppLanguage.Russian, "Settings.ConnectionTest.Succeeded.Format", "Проверка подключения успешна, HTTP-статус: {0}.")]
+    [InlineData(AppLanguage.Russian, "StartupConflict.Proxy.Repair", "Отключить прокси")]
+    [InlineData(AppLanguage.French, "About.ProxyInformation.Title", "Ce proxy")]
+    [InlineData(AppLanguage.French, "Settings.ConnectionTest.Succeeded.Format", "Test de connexion réussi, état HTTP : {0}.")]
+    [InlineData(AppLanguage.French, "StartupConflict.Proxy.Repair", "Désactiver le proxy")]
+    [InlineData(AppLanguage.German, "Settings.ConnectionTest.Succeeded.Format", "Verbindungstest erfolgreich, HTTP-Status: {0}.")]
+    public void Translations_PreviouslyMixedValues_AreCorrectLanguage(AppLanguage language, string key, string expected)
+    {
+        Assert.Equal(expected, LocalizationResources.Translations[language][key]);
+    }
+
     /// <summary>Verifies core navigation keys are present in the English fallback resources.</summary>
     [Theory]
     [InlineData("Nav.MasterControl")]
@@ -86,7 +119,17 @@ public sealed class LocalizationResourcesTests
     [InlineData("About.GitHub.Title")]
     [InlineData("About.Mihomo.Title")]
     [InlineData("Command.Refresh")]
+    [InlineData("Command.Edit")]
+    [InlineData("Command.Export")]
+    [InlineData("Command.Save")]
+    [InlineData("Command.Backup")]
+    [InlineData("Command.Register")]
+    [InlineData("Command.Detect")]
     [InlineData("Settings.MainlandChinaDisplay.Description")]
+    [InlineData("Settings.MainlandChinaUnfriendlyList.Title")]
+    [InlineData("Settings.ConnectionTestUrl.Proxy1")]
+    [InlineData("Settings.ConnectionTestUrl.Proxy2")]
+    [InlineData("Settings.ConnectionTestUrl.Direct")]
     [InlineData("Settings.MainlandChinaFeature.All")]
     [InlineData("Settings.ProxyInformation.CoreConfig.Format")]
     [InlineData("Settings.Section.Startup")]
@@ -94,11 +137,66 @@ public sealed class LocalizationResourcesTests
     [InlineData("Settings.AppAccentColor.FollowSystem")]
     [InlineData("Settings.AppAccentColor.Custom")]
     [InlineData("Settings.AppAccentColor.Pick")]
+    [InlineData("Settings.RestartRequired.Title")]
+    [InlineData("Settings.RestartRequired.Message")]
+    [InlineData("Settings.ResetGroupToDefaults")]
+    [InlineData("Settings.ResetGroupConfirm.Title")]
+    [InlineData("Settings.ResetGroupConfirm.Message")]
+    [InlineData("Settings.DataPackage.Title")]
+    [InlineData("Settings.DataPackage.Description")]
+    [InlineData("Settings.DataPackage.Scope.Settings")]
+    [InlineData("Settings.DataPackage.Scope.SettingsAndProxyConfiguration")]
+    [InlineData("Settings.DataPackage.Scope.AllIncludingLogs")]
+    [InlineData("Settings.DataImport.Warning.Title")]
+    [InlineData("Settings.DataImport.Warning.Message")]
+    [InlineData("Settings.DataImport.SecondConfirm.Title")]
+    [InlineData("Settings.DataImport.SecondConfirm.Message")]
     [InlineData("Settings.CheckStartupConflicts.Title")]
     [InlineData("Settings.StartupGuide.Title")]
+    [InlineData("Settings.StartupGuide.ShowNow")]
+    [InlineData("Settings.StartupRestoreFallback.Title")]
+    [InlineData("Settings.StartupRestoreFallback.Status.Registered")]
+    [InlineData("Settings.StartupRestoreFallback.Status.NotRegistered")]
+    [InlineData("StartupPrompt.Check.Subscription.Title")]
+    [InlineData("StartupPrompt.Check.Subscription.Ready")]
+    [InlineData("StartupPrompt.Check.Subscription.Missing")]
+    [InlineData("StartupPrompt.Check.TransparentProxy.Title")]
+    [InlineData("StartupPrompt.Check.TransparentProxy.Missing")]
+    [InlineData("StartupPrompt.Check.Fallback.Title")]
+    [InlineData("StartupPrompt.Check.StaleProxy.Title")]
     [InlineData("MihomoService.Status.NotDeployed")]
     [InlineData("MihomoService.Status.DeployedRunning")]
     [InlineData("Tray.Menu.Mode")]
+    [InlineData("Tray.Menu.Status")]
+    [InlineData("Tray.Status.Mode.Format")]
+    [InlineData("Tray.Status.Node.Format")]
+    [InlineData("Tray.Status.NodeUnavailable")]
+    [InlineData("Tray.Status.Latency.Format")]
+    [InlineData("Tray.Status.LatencyUnavailable")]
+    [InlineData("Master.BasicStatus.Unavailable")]
+    [InlineData("Master.BasicStatus.Ready")]
+    [InlineData("Master.BasicStatus.Active")]
+    [InlineData("Master.Tile.Core")]
+    [InlineData("Master.Tile.SystemProxy")]
+    [InlineData("Master.Tile.TransparentProxy")]
+    [InlineData("Master.Tile.Latency")]
+    [InlineData("Master.Tile.StartupLaunch")]
+    [InlineData("Master.Tile.ActiveProfile")]
+    [InlineData("Master.Tile.MixedPort")]
+    [InlineData("Master.Tile.ConnectionTest")]
+    [InlineData("Master.Tile.Backup")]
+    [InlineData("Master.Tile.Visible")]
+    [InlineData("Master.Tile.Edit")]
+    [InlineData("Master.Status.CurrentNodeUnavailable")]
+    [InlineData("Master.Status.LatencyUnavailable")]
+    [InlineData("Master.Status.Latency.Format")]
+    [InlineData("Master.LatencyDialog.Title")]
+    [InlineData("Master.LatencyDialog.Running")]
+    [InlineData("Master.LatencyDialog.Completed.Format")]
+    [InlineData("Master.LatencyDialog.Failed")]
+    [InlineData("Master.Status.StartupLaunchOn")]
+    [InlineData("Master.Status.StartupLaunchOff")]
+    [InlineData("Master.Status.BackupAvailable")]
     [InlineData("Tray.Settings")]
     [InlineData("Tray.SafeExit")]
     [InlineData("Links.Dialog.AddTitle")]
@@ -148,6 +246,7 @@ public sealed class LocalizationResourcesTests
     [InlineData("ProfilePreview.CurrentConfiguration")]
     [InlineData("RuleCatalog.BuiltInDirect.Name")]
     [InlineData("Region.CN")]
+    [InlineData("Region.MainlandChina.CN")]
     [InlineData("Region.HK")]
     [InlineData("Region.MO")]
     [InlineData("Region.TW")]
@@ -177,8 +276,33 @@ public sealed class LocalizationResourcesTests
             $"Missing English fallback key {key}.");
     }
 
+    /// <summary>Verifies the accent color picker command clearly communicates custom color selection.</summary>
+    [Fact]
+    public void Translations_AccentColorPickText_DescribesCustomColorSelection()
+    {
+        Assert.Equal("选择自定义颜色", LocalizationResources.Translations[AppLanguage.SimplifiedChinese]["Settings.AppAccentColor.Pick"]);
+        Assert.Equal("選擇自訂顏色", LocalizationResources.Translations[AppLanguage.TraditionalChinese]["Settings.AppAccentColor.Pick"]);
+        Assert.Equal("Choose custom color", LocalizationResources.Translations[AppLanguage.English]["Settings.AppAccentColor.Pick"]);
+    }
+
+    /// <summary>Verifies China and mainland China labels remain separate so completion level can choose between them.</summary>
+    [Fact]
+    public void Translations_ChinaAndMainlandChinaLabels_AreSeparate()
+    {
+        Assert.Equal("中国", LocalizationResources.Translations[AppLanguage.SimplifiedChinese]["Region.CN"]);
+        Assert.Equal("中国大陆", LocalizationResources.Translations[AppLanguage.SimplifiedChinese]["Region.MainlandChina.CN"]);
+        Assert.Equal("China", LocalizationResources.Translations[AppLanguage.English]["Region.CN"]);
+        Assert.Equal("Mainland China", LocalizationResources.Translations[AppLanguage.English]["Region.MainlandChina.CN"]);
+    }
+
     private static bool IsCjk(char value)
     {
         return value is >= '\u4E00' and <= '\u9FFF';
+    }
+
+    private static bool IsCyrillic(char value)
+    {
+        return value is >= '\u0400' and <= '\u04FF'
+            or >= '\u0500' and <= '\u052F';
     }
 }

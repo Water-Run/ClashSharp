@@ -74,6 +74,12 @@ public sealed class MainlandChinaTextDisplayService
         _getUrlBlockingEnabled = getUrlBlockingEnabled ?? throw new ArgumentNullException(nameof(getUrlBlockingEnabled));
     }
 
+    /// <summary>Gets the user-visible terms and URL fragments covered by the unfriendly-site list.</summary>
+    public static IReadOnlyList<string> GetUnfriendlyDisplayList()
+    {
+        return [.. SensitiveTerms, .. SensitiveUrlFragments];
+    }
+
     /// <summary>Applies UI-only replacement to <paramref name="text"/> for the configured mainland China feature mode.</summary>
     /// <param name="text">Input display text. Must not be null.</param>
     /// <returns>Display text with sensitive terms replaced when the policy is enabled.</returns>
