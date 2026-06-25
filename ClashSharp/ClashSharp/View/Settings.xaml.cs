@@ -618,11 +618,6 @@ public sealed partial class Settings : Page
         try
         {
             string? scopeText = XDocument.Load(packagePath).Root?.Attribute("Scope")?.Value;
-            if (string.Equals(scopeText, "AllIncludingLogs", StringComparison.Ordinal))
-            {
-                return ClashDataPackageScope.All;
-            }
-
             return Enum.TryParse(scopeText, out ClashDataPackageScope scope)
                 ? scope
                 : null;
@@ -650,7 +645,6 @@ public sealed partial class Settings : Page
         {
             ClashDataPackageScope.Settings => _viewModel.DataPackageScopeSettingsText,
             ClashDataPackageScope.SettingsAndProxyConfiguration => _viewModel.DataPackageScopeSettingsAndProxyConfigurationText,
-            ClashDataPackageScope.All => _viewModel.DataPackageScopeAllText,
             _ => scope.ToString(),
         };
     }

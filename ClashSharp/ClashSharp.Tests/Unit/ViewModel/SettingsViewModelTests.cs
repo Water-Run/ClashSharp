@@ -526,6 +526,34 @@ public sealed class SettingsViewModelTests
         Assert.Equal(MainlandChinaFeatureMode.FlagReplacementOnly, store.MainlandChinaFeatureMode);
     }
 
+    /// <summary>Verifies mainland China display and URL blocking changes are surfaced as restart-required settings.</summary>
+    [Fact]
+    public void MainlandChinaSettings_RestartPendingTracksDisplayAndUrlBlockingChanges()
+    {
+        FakeSettingsStore store = new()
+        {
+            MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementOnly,
+            MainlandChinaUrlBlockingEnabled = false,
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+
+        viewModel.SetMainlandChinaFeatureModeIndex((int)MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter);
+
+        Assert.True(ReadProperty<bool>(viewModel, "IsMainlandChinaDisplayRestartPending"));
+        Assert.True(ReadProperty<bool>(viewModel, "HasRestartRequiredSettings"));
+        Assert.Equal("Settings.MainlandChinaDisplay.Title*", ReadProperty<string>(viewModel, "MainlandChinaDisplayTitleText"));
+
+        viewModel.SetMainlandChinaFeatureModeIndex((int)MainlandChinaFeatureMode.FlagReplacementOnly);
+
+        Assert.False(ReadProperty<bool>(viewModel, "IsMainlandChinaDisplayRestartPending"));
+        Assert.False(ReadProperty<bool>(viewModel, "HasRestartRequiredSettings"));
+
+        viewModel.MainlandChinaUrlBlockingEnabled = true;
+
+        Assert.True(ReadProperty<bool>(viewModel, "IsMainlandChinaDisplayRestartPending"));
+        Assert.Equal("Settings.MainlandChinaUrlBlocking.Title*", ReadProperty<string>(viewModel, "MainlandChinaUrlBlockingTitleText"));
+    }
+
     /// <summary>Verifies connection test URL input persists non-empty normalized text.</summary>
     [Fact]
     public void SetConnectionTestUrl_PersistsNonEmptyUrl()
@@ -582,7 +610,6 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Settings.DataExport.Description", ReadProperty<string>(viewModel, "DataExportDescriptionText"));
         Assert.Equal("Command.Export", ReadProperty<string>(viewModel, "ExportText"));
         Assert.Equal("Command.Import", ReadProperty<string>(viewModel, "ImportText"));
-        Assert.Equal("Command.Backup", ReadProperty<string>(viewModel, "BackupText"));
     }
 
     /// <summary>Verifies known connection-test URLs are summarized with localized provider names.</summary>

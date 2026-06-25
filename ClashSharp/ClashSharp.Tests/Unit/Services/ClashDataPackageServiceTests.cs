@@ -67,29 +67,6 @@ public sealed class ClashDataPackageServiceTests
         Assert.DoesNotContain("logs.sqlite3", relativePaths);
     }
 
-    /// <summary>Verifies all-data export includes logs together with other local data.</summary>
-    [Fact]
-    public async Task ExportAsync_AllScope_IncludesLogs()
-    {
-        using TemporaryDirectory directory = new();
-        await File.WriteAllTextAsync(Path.Combine(directory.Path, "ProfileCatalog.json"), "catalog");
-        await File.WriteAllTextAsync(Path.Combine(directory.Path, "settings.cache"), "cache");
-        await File.WriteAllTextAsync(Path.Combine(directory.Path, "logs.sqlite3"), "logs");
-        await File.WriteAllTextAsync(Path.Combine(directory.Path, "logs.sqlite3-wal"), "wal");
-        await File.WriteAllTextAsync(Path.Combine(directory.Path, "logs.sqlite3-shm"), "shm");
-        ClashDataPackageService service = new(new FakeClashDataPackageSettings(), directory.Path);
-        string packagePath = Path.Combine(directory.Path, "all.clashsharp.xml");
-
-        await service.ExportAsync(packagePath, ClashDataPackageScope.All, CancellationToken.None);
-
-        string[] relativePaths = LoadExportedRelativePaths(packagePath);
-        Assert.Contains("ProfileCatalog.json", relativePaths);
-        Assert.Contains("settings.cache", relativePaths);
-        Assert.Contains("logs.sqlite3", relativePaths);
-        Assert.Contains("logs.sqlite3-wal", relativePaths);
-        Assert.Contains("logs.sqlite3-shm", relativePaths);
-    }
-
     /// <summary>Verifies import applies settings and restores package files into local data.</summary>
     [Fact]
     public async Task ImportAsync_AppliesSettingsAndRestoresFiles()
@@ -135,7 +112,7 @@ public sealed class ClashDataPackageServiceTests
             new XElement("ClashSharpDataPackage",
                 new XAttribute("Format", "ClashSharp.XmlDataPackage"),
                 new XAttribute("Version", "1"),
-                new XAttribute("Scope", ClashDataPackageScope.All.ToString()),
+                new XAttribute("Scope", ClashDataPackageScope.SettingsAndProxyConfiguration.ToString()),
                 new XElement("Settings"),
                 new XElement("Files",
                     new XElement("File",

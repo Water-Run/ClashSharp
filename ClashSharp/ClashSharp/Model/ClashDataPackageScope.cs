@@ -14,5 +14,4 @@ public enum ClashDataPackageScope
 {
     Settings = 0,
     SettingsAndProxyConfiguration = 1,
-    All = 2,
 }

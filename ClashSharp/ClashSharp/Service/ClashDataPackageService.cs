@@ -251,7 +251,6 @@ internal sealed partial class ClashDataPackageService
         IEnumerable<string> files = scope switch
         {
             ClashDataPackageScope.SettingsAndProxyConfiguration => EnumerateProxyConfigurationFiles(),
-            ClashDataPackageScope.All => Directory.EnumerateFiles(_localDataDirectory, "*", SearchOption.AllDirectories),
             _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unsupported data package scope."),
         };
 

@@ -666,8 +666,6 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string ImportText => _getString("Command.Import");
 
-    public string BackupText => _getString("Command.Backup");
-
     public string CheckText => _getString("Command.Check");
 
     public string TestText => _getString("Command.Test");
@@ -733,7 +731,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string MainlandChinaSectionTitleText => _getString("Settings.Section.MainlandChina");
 
-    public string MainlandChinaDisplayTitleText => _getString("Settings.MainlandChinaDisplay.Title");
+    public string MainlandChinaDisplayTitleText => IsMainlandChinaDisplayRestartPending
+        ? _getString("Settings.MainlandChinaDisplay.Title") + "*"
+        : _getString("Settings.MainlandChinaDisplay.Title");
 
     public string MainlandChinaDisplayDescriptionText => _getString("Settings.MainlandChinaDisplay.Description");
 
@@ -755,7 +755,9 @@ internal sealed class SettingsViewModel : ObservableObject
         MainlandChinaKeywordFilterText,
     ];
 
-    public string MainlandChinaUrlBlockingTitleText => _getString("Settings.MainlandChinaUrlBlocking.Title");
+    public string MainlandChinaUrlBlockingTitleText => IsMainlandChinaDisplayRestartPending
+        ? _getString("Settings.MainlandChinaUrlBlocking.Title") + "*"
+        : _getString("Settings.MainlandChinaUrlBlocking.Title");
 
     public string MainlandChinaUrlBlockingDescriptionText => _getString("Settings.MainlandChinaUrlBlocking.Description");
 
@@ -794,8 +796,6 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string DataPackageScopeSettingsAndProxyConfigurationText => _getString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration");
 
-    public string DataPackageScopeAllText => _getString("Settings.DataPackage.Scope.All");
-
     public string ResetAllSettingsTitleText => _getString("Settings.ResetAllSettings.Title");
 
     public string ResetAllSettingsDescriptionText => _getString("Settings.ResetAllSettings.Description");
@@ -827,6 +827,12 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Accent color value loaded when this view model was initialized.</summary>
     private string _loadedAppAccentColorValue = string.Empty;
+
+    /// <summary>Mainland China feature mode loaded when this view model was initialized.</summary>
+    private MainlandChinaFeatureMode _loadedMainlandChinaFeatureMode;
+
+    /// <summary>Mainland China URL blocking value loaded when this view model was initialized.</summary>
+    private bool _loadedMainlandChinaUrlBlockingEnabled;
 
     /// <summary>Backing field for <see cref="LaunchAtStartupEnabled"/>.</summary>
     private bool _launchAtStartupEnabled;
@@ -987,7 +993,11 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public bool IsAppAccentColorRestartPending => _isAccentColorRestartPending(AppAccentColorMode, AppAccentColorValue);
 
-    public bool HasRestartRequiredSettings => IsAppAccentColorRestartPending;
+    public bool IsMainlandChinaDisplayRestartPending =>
+        MainlandChinaFeatureMode != _loadedMainlandChinaFeatureMode
+        || MainlandChinaUrlBlockingEnabled != _loadedMainlandChinaUrlBlockingEnabled;
+
+    public bool HasRestartRequiredSettings => IsAppAccentColorRestartPending || IsMainlandChinaDisplayRestartPending;
 
     public string RestartRequiredNoticeText => _getString("Settings.RestartRequiredNotice");
 
@@ -1121,6 +1131,7 @@ internal sealed class SettingsViewModel : ObservableObject
             if (SetProperty(ref _mainlandChinaFeatureMode, value))
             {
                 OnPropertyChanged(nameof(MainlandChinaFeatureModeIndex));
+                RaiseMainlandChinaRestartStateChanged();
             }
         }
     }
@@ -1220,8 +1231,11 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _checkStaleProxyOnStartup, _settings.CheckStaleProxyOnStartup, nameof(CheckStaleProxyOnStartup));
         SetProperty(ref _restoreProxyOnExit, _settings.RestoreProxyOnExit, nameof(RestoreProxyOnExit));
         ProxyRecoveryMode = _settings.ProxyRecoveryMode;
-        MainlandChinaFeatureMode = _settings.MainlandChinaFeatureMode;
-        SetProperty(ref _mainlandChinaUrlBlockingEnabled, _settings.MainlandChinaUrlBlockingEnabled, nameof(MainlandChinaUrlBlockingEnabled));
+        _loadedMainlandChinaFeatureMode = _settings.MainlandChinaFeatureMode;
+        _loadedMainlandChinaUrlBlockingEnabled = _settings.MainlandChinaUrlBlockingEnabled;
+        MainlandChinaFeatureMode = _loadedMainlandChinaFeatureMode;
+        SetProperty(ref _mainlandChinaUrlBlockingEnabled, _loadedMainlandChinaUrlBlockingEnabled, nameof(MainlandChinaUrlBlockingEnabled));
+        RaiseMainlandChinaRestartStateChanged();
         NotificationLevel = _settings.NotificationLevel;
         ConnectionTestUrl = _settings.ConnectionTestUrl;
         ConnectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
@@ -1330,6 +1344,16 @@ internal sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAppAccentColorRestartPending));
         OnPropertyChanged(nameof(HasRestartRequiredSettings));
         OnPropertyChanged(nameof(AppAccentColorTitleText));
+        OnPropertyChanged(nameof(RestartRequiredNoticeText));
+    }
+
+    /// <summary>Raises bindable notifications for mainland China display settings that need a restart.</summary>
+    private void RaiseMainlandChinaRestartStateChanged()
+    {
+        OnPropertyChanged(nameof(IsMainlandChinaDisplayRestartPending));
+        OnPropertyChanged(nameof(HasRestartRequiredSettings));
+        OnPropertyChanged(nameof(MainlandChinaDisplayTitleText));
+        OnPropertyChanged(nameof(MainlandChinaUrlBlockingTitleText));
         OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
@@ -1444,7 +1468,6 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(EditText),
             nameof(ExportText),
             nameof(ImportText),
-            nameof(BackupText),
             nameof(CheckText),
             nameof(TestText),
             nameof(WslDiagnosticTitleText),
@@ -1494,7 +1517,6 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(DataExportDescriptionText),
             nameof(DataPackageScopeSettingsText),
             nameof(DataPackageScopeSettingsAndProxyConfigurationText),
-            nameof(DataPackageScopeAllText),
             nameof(ResetAllSettingsTitleText),
             nameof(ResetAllSettingsDescriptionText),
             nameof(ClearAllDataTitleText),
@@ -1801,7 +1823,10 @@ internal sealed class SettingsViewModel : ObservableObject
     public void SetMainlandChinaUrlBlockingEnabled(bool isEnabled)
     {
         _settings.MainlandChinaUrlBlockingEnabled = isEnabled;
-        SetProperty(ref _mainlandChinaUrlBlockingEnabled, isEnabled, nameof(MainlandChinaUrlBlockingEnabled));
+        if (SetProperty(ref _mainlandChinaUrlBlockingEnabled, isEnabled, nameof(MainlandChinaUrlBlockingEnabled)))
+        {
+            RaiseMainlandChinaRestartStateChanged();
+        }
     }
 
     /// <summary>Persists a notification verbosity selected by combo box index.</summary>
@@ -2055,6 +2080,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
         _settings.MainlandChinaUrlBlockingEnabled = false;
         SetProperty(ref _mainlandChinaUrlBlockingEnabled, false, nameof(MainlandChinaUrlBlockingEnabled));
+        RaiseMainlandChinaRestartStateChanged();
         RaiseSelectorBindingsChanged();
     }
 

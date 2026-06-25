@@ -53,6 +53,29 @@ public sealed class LocalizationResourcesTests
         }
     }
 
+    /// <summary>Verifies removed backup/data-package entry points are not exposed in addition to current export choices.</summary>
+    [Fact]
+    public void Translations_DoNotExposeRemovedBackupEntryPoints()
+    {
+        string[] removedStandaloneBackupKeys =
+        [
+            "Command.Backup",
+            "Master.Tile.Backup",
+            "Master.Tile.Description.Backup",
+            "Master.Status.BackupAvailable",
+            "Settings.DataPackage.Scope.All",
+            "Settings.DataPackage.Scope.All.Description",
+        ];
+
+        foreach (IReadOnlyDictionary<string, string> translations in LocalizationResources.Translations.Values)
+        {
+            foreach (string key in removedStandaloneBackupKeys)
+            {
+                Assert.False(translations.ContainsKey(key), $"Removed backup entry point key remains: {key}");
+            }
+        }
+    }
+
     /// <summary>Verifies non-CJK languages do not contain copied Chinese resource values.</summary>
     [Fact]
     public void Translations_NonCjkLanguages_DoNotContainCjkValues()
@@ -122,7 +145,6 @@ public sealed class LocalizationResourcesTests
     [InlineData("Command.Edit")]
     [InlineData("Command.Export")]
     [InlineData("Command.Save")]
-    [InlineData("Command.Backup")]
     [InlineData("Command.Register")]
     [InlineData("Command.Detect")]
     [InlineData("Settings.MainlandChinaDisplay.Description")]
@@ -145,10 +167,8 @@ public sealed class LocalizationResourcesTests
     [InlineData("Settings.DataPackage.Description")]
     [InlineData("Settings.DataPackage.Scope.Settings")]
     [InlineData("Settings.DataPackage.Scope.SettingsAndProxyConfiguration")]
-    [InlineData("Settings.DataPackage.Scope.All")]
     [InlineData("Settings.DataPackage.Scope.Settings.Description")]
     [InlineData("Settings.DataPackage.Scope.SettingsAndProxyConfiguration.Description")]
-    [InlineData("Settings.DataPackage.Scope.All.Description")]
     [InlineData("Settings.DataExport.Title")]
     [InlineData("Settings.DataExport.Description")]
     [InlineData("Settings.DataImport.Warning.Title")]
@@ -204,7 +224,6 @@ public sealed class LocalizationResourcesTests
     [InlineData("Master.Tile.ConnectionTestDirectUrl")]
     [InlineData("Master.Tile.StartupPrompt")]
     [InlineData("Master.Tile.StartupConflicts")]
-    [InlineData("Master.Tile.Backup")]
     [InlineData("Master.Tile.Visible")]
     [InlineData("Master.Tile.Edit")]
     [InlineData("Master.Tile.EditTiles")]
@@ -222,7 +241,6 @@ public sealed class LocalizationResourcesTests
     [InlineData("Master.Tile.Description.ConnectionTestDirectUrl")]
     [InlineData("Master.Tile.Description.StartupPrompt")]
     [InlineData("Master.Tile.Description.StartupConflicts")]
-    [InlineData("Master.Tile.Description.Backup")]
     [InlineData("Settings.RestartRequiredNotice")]
     [InlineData("Master.Status.CurrentNodeUnavailable")]
     [InlineData("Master.Status.LatencyUnavailable")]
@@ -233,7 +251,6 @@ public sealed class LocalizationResourcesTests
     [InlineData("Master.LatencyDialog.Failed")]
     [InlineData("Master.Status.StartupLaunchOn")]
     [InlineData("Master.Status.StartupLaunchOff")]
-    [InlineData("Master.Status.BackupAvailable")]
     [InlineData("Tray.Settings")]
     [InlineData("Tray.SafeExit")]
     [InlineData("Links.Dialog.AddTitle")]

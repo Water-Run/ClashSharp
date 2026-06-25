@@ -113,6 +113,7 @@ public sealed class MasterControlViewModelTests
 
         Assert.True(viewModel.InfoTiles.Count >= 12);
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "edit-tiles");
+        Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "backup");
         Assert.Equal("core", viewModel.InfoTiles[0].Id);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "transparent-proxy" && tile.IsToggleVisible && tile.IsToggleOn);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-1" && tile.Value == "google.com");
@@ -265,7 +266,6 @@ public sealed class MasterControlViewModelTests
                 "Master.Status.Latency.Format" => "{0} ms",
                 "Master.Status.StartupLaunchOn" => "On",
                 "Master.Status.StartupLaunchOff" => "Off",
-                "Master.Status.BackupAvailable" => "Available",
                 "Master.Status.CoreReady.Format" => "Core ready: {0}",
                 "Master.Status.CoreUnavailable" => "Core unavailable",
                 "Master.Status.Running" => "Running",
