@@ -26,10 +26,10 @@
                                 <ColumnDefinition Width="90" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Text="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Grid.Column="1" Text="{Binding RuleType}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Column="2" Text="{Binding PayloadDisplay}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="3" Text="{Binding Action}" />
+                            <TextBlock Grid.Column="2" Text="{Binding PayloadDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Grid.Column="3" Text="{Binding Action}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Grid.Column="4" Text="{Binding HitCount}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </Grid>
                     </DataTemplate>

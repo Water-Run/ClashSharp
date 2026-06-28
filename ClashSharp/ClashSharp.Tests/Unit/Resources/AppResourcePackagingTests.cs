@@ -664,7 +664,6 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ProxyRecovery.CheckDisabled", serviceCode, StringComparison.Ordinal);
         Assert.Contains("ProxyRecovery.NoStaleProxy", serviceCode, StringComparison.Ordinal);
         Assert.Contains("ProxyRecovery.Disabled", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("ProxyRecovery.DoNothing", serviceCode, StringComparison.Ordinal);
         Assert.Contains("ProxyRecovery.StartupFailed", appCode, StringComparison.Ordinal);
     }
 
@@ -681,7 +680,6 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("NetworkTakeoverService.Instance", serviceCode, StringComparison.Ordinal);
         Assert.Contains("IProxyRecoverySettings", serviceCode, StringComparison.Ordinal);
         Assert.Contains("IProxyRecoveryWindowsProxy", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IProxyRecoveryTakeover", serviceCode, StringComparison.Ordinal);
         Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
     }
 
@@ -850,8 +848,9 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("x:Name=\"AppAccentColorPickerButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<FontIcon Glyph=\"&#xE790;\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Text=\"{Binding AppAccentColorPickText}\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("ItemsSource=\"{Binding ProxyRecoveryModeOptions}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding StartupBehaviorModeOptions}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ItemsSource=\"{Binding ProxyRecoveryModeOptions}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProxyRecoveryModeBox", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Content=\"{Binding ProxyRecoveryIgnoreText}\"", settingsXaml, StringComparison.Ordinal);
     }
 
@@ -900,6 +899,9 @@ public sealed class AppResourcePackagingTests
         [
             "ResetBasicSettingsLink",
             "ResetStartupSettingsLink",
+            "ResetNotificationSettingsLink",
+            "ResetTriggerSettingsLink",
+            "ResetTraySettingsLink",
             "ResetProxySettingsLink",
             "ResetWindowsNativeSettingsLink",
             "ResetMainlandChinaSettingsLink",
@@ -926,8 +928,92 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ResetSettingsGroupAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ResetGroupConfirmTitleText", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ResetGroupConfirmMessageText", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ResetGroupServiceDeploymentNoteText", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ResetBasicSettingsButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ResetProxySettingsButton_Click", settingsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies trigger behavior is controlled from settings while the trigger page stays task-focused.</summary>
+    [Fact]
+    public void SettingsXaml_UsesTriggerSettingsGroup()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+        string settingsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
+        string appSettingsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.cs");
+        string triggerServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerService.cs");
+        string triggerViewPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml");
+        string triggerCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml.cs");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+        string settingsViewModel = File.ReadAllText(settingsViewModelPath);
+        string appSettings = File.ReadAllText(appSettingsPath);
+        string triggerService = File.ReadAllText(triggerServicePath);
+        string triggerView = File.ReadAllText(triggerViewPath);
+        string triggerCode = File.ReadAllText(triggerCodePath);
+
+        Assert.Contains("TriggerSectionTitleText", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("TriggersEnabledRow", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("TriggerNotificationsEnabledRow", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("ResetTriggerSettingsLink", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("TriggerNotificationsEnabled", settingsViewModel, StringComparison.Ordinal);
+        Assert.Contains("TriggerNotificationsEnabled", appSettings, StringComparison.Ordinal);
+        Assert.Contains("TriggersEnabled", appSettings, StringComparison.Ordinal);
+        Assert.Contains("TriggerNotificationsEnabled", triggerService, StringComparison.Ordinal);
+        Assert.Contains("CreateDefault", triggerService, StringComparison.Ordinal);
+        Assert.Contains("triggersEnabledAtStartup", triggerService, StringComparison.Ordinal);
+        Assert.DoesNotContain("() => AppSettingsService.Instance.TriggersEnabled", triggerService, StringComparison.Ordinal);
+        Assert.Contains("Triggers.Log.Fired.Format", triggerService, StringComparison.Ordinal);
+        Assert.Contains("SetAllTasksEnabled", triggerService, StringComparison.Ordinal);
+        Assert.Contains("CanEditTriggers", triggerView, StringComparison.Ordinal);
+        Assert.DoesNotContain("TriggersEnabledSwitch", triggerView, StringComparison.Ordinal);
+        Assert.Contains("TriggerListHost", triggerView, StringComparison.Ordinal);
+        Assert.Contains("TriggerEditorHost", triggerView, StringComparison.Ordinal);
+        Assert.Contains("TriggerConditionList", triggerView, StringComparison.Ordinal);
+        Assert.Contains("TriggerActionList", triggerView, StringComparison.Ordinal);
+        Assert.Contains("ShowTriggerEditorForNewTask", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("OpenTriggerList", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("ValidateTriggerName", triggerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowTriggerNameStepAsync", triggerCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies taskbar tray behavior is configured through its own settings group.</summary>
+    [Fact]
+    public void SettingsXaml_UsesTaskbarTraySettingsGroup()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+        string settingsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
+        string appSettingsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.cs");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+        string settingsCode = File.ReadAllText(settingsCodePath);
+        string settingsViewModel = File.ReadAllText(settingsViewModelPath);
+        string appSettings = File.ReadAllText(appSettingsPath);
+
+        Assert.Contains("TraySectionTitleText", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("TrayFadeInactiveIconRow", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("TrayUseMonochromeInactiveIconRow", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("TrayVisibleFeaturesRow", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("EditTrayVisibleFeaturesButton_Click", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("ResetTraySettingsLink", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("SearchableOptionList", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("SetTrayVisibleFeatureIds", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("CloseBehaviorModeOptions", settingsViewModel, StringComparison.Ordinal);
+        Assert.Contains("TrayVisibleFeatureSummaryText", settingsViewModel, StringComparison.Ordinal);
+        Assert.Contains("TrayVisibleFeatureIds", appSettings, StringComparison.Ordinal);
+        Assert.Contains("CloseBehaviorMode", appSettings, StringComparison.Ordinal);
+        Assert.Contains("TriggersEnabledToggle_Toggled", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("TrayUseMonochromeInactiveIconToggle_Toggled", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Mode=OneWay", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("ConfirmRestartRequiredSettingChangeAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("Settings.RestartSettingConfirm.Title", settingsCode, StringComparison.Ordinal);
+
+        int traySectionIndex = settingsXaml.IndexOf("x:Name=\"TraySectionTitleText\"", StringComparison.Ordinal);
+        int closeBehaviorIndex = settingsXaml.IndexOf("x:Name=\"CloseBehaviorModeRow\"", StringComparison.Ordinal);
+        Assert.True(closeBehaviorIndex >= 0, "Close behavior row is missing.");
+        Assert.True(closeBehaviorIndex < traySectionIndex, "Close behavior is a basic window behavior and must not live in the tray group.");
+        Assert.DoesNotContain("CloseBehaviorDefaultMinimizeToTray", settingsViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("DefaultMinimizeToTray", appSettings, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies proxy startup controls include conflict checks, startup behavior, and no TUN fallback switch.</summary>
@@ -1002,6 +1088,14 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("x:Class=\"ClashSharp.Components.StartupGuideDialog\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("public sealed partial class StartupGuideDialog : ContentDialog", dialogCode, StringComparison.Ordinal);
+        Assert.Contains("Width=\"520\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("MinWidth=\"0\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("MinWidth=\"360\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth=\"520\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth=\"480\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("ContentDialogMinWidth", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("ContentDialogMaxWidth", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"260\"", dialogXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the bundled mihomo binary is accompanied by redistributable license and source metadata.</summary>
@@ -1079,11 +1173,14 @@ public sealed class AppResourcePackagingTests
     public void MasterControlXaml_UsesCenteredLogoWithoutPageIntro()
     {
         string masterControlXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "MasterControl.xaml");
+        string projectPath = FindSourceFile("ClashSharp", "ClashSharp", "ClashSharp.csproj");
 
         string masterControlXaml = File.ReadAllText(masterControlXamlPath);
+        string projectXml = File.ReadAllText(projectPath);
 
         Assert.Contains("x:Name=\"HeaderLogo\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Source=\"ms-appx:///Assets/Square150x150Logo.scale-200.png\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Source=\"ms-appx:///Assets/Logo.png\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Content Include=\"Assets\\Logo.png\" CopyToOutputDirectory=\"PreserveNewest\"", projectXml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"PageTitleText\"", masterControlXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DescriptionText\"", masterControlXaml, StringComparison.Ordinal);
     }
@@ -1106,7 +1203,9 @@ public sealed class AppResourcePackagingTests
         Assert.Equal(4, CountOccurrences(masterControlXaml, "components:MasterModeButton"));
         Assert.Contains("x:Name=\"InfoTileGrid\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("CanReorderItems=\"True\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("CanDragItems=\"True\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("AllowDrop=\"True\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("ReorderThemeTransition", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"OpenLatencyDialogButton\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("OpenLatencyDialogButton_Click", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"EditInfoTilesLink\"", masterControlXaml, StringComparison.Ordinal);
@@ -1122,9 +1221,16 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("GroupName=\"MasterControlMode\"", modeButtonXaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource ClashCardGridStyle}\"", modeButtonXaml, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedOn", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedOff", modeButtonXaml, StringComparison.Ordinal);
+        Assert.Contains("DoubleAnimation", modeButtonXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<ToggleButton", modeButtonXaml, StringComparison.Ordinal);
         Assert.Contains("Tapped=\"TileRoot_Tapped\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SelectedOverlay\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ToggleThumbTransform\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("SwitchOn", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("SwitchOff", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("DoubleAnimation", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("MaxLines=\"2\"", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ToggleSwitch", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Id == \"edit-tiles\"", masterControlCode, StringComparison.Ordinal);
@@ -1132,14 +1238,37 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MaxListHeight = Math.Max(260, XamlRoot.Size.Height - 260)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionItem", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("tile.IsVisible)));", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.ShowStartupPrompt", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.CheckStartupConflicts", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.RunLatencyTest", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("ContainerContentChanging=\"InfoTileGrid_ContainerContentChanging\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxInfoTileColumns = 4", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Width\" Value=\"260\" />", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContainerContentChanging=\"InfoTileGrid_ContainerContentChanging\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("MaxInfoTileColumns = 4", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
         Assert.DoesNotContain("<Setter Property=\"Width\" Value=\"250\" />", masterControlXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies master control places the status card beside a vertically matched mode stack and keeps edit tiles fixed-width.</summary>
+    [Fact]
+    public void MasterControlXaml_UsesSideBySideHeroAndFixedInfoTileWidth()
+    {
+        string masterControlXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "MasterControl.xaml");
+        string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
+
+        string masterControlXaml = File.ReadAllText(masterControlXamlPath);
+        string masterControlCode = File.ReadAllText(masterControlCodePath);
+
+        Assert.Contains("x:Name=\"HeroAndModeGrid\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeroStatusCard\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.RowSpan=\"4\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Column=\"1\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Row=\"3\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Width\" Value=\"260\" />", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("CalculateInfoTileWidth", masterControlCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings page exposes a restart-required notice and keeps reset links away from the edge.</summary>
@@ -1259,7 +1388,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("BackupRestoreDescriptionText", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("BackupDataPackageButton", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("DataPackageExportScope.SystemLogs", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("DataPackageExportScope.SystemLogs", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportLogsXmlAsync", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportLogsAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("DataPackageExportScope.SystemLogSqlite", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ExportLogSqliteAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("IsImportableDataPackageScope", settingsCode, StringComparison.Ordinal);
@@ -1295,6 +1426,7 @@ public sealed class AppResourcePackagingTests
         string triggerViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "TriggersViewModel.cs");
         string triggerViewPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml");
         string triggerCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml.cs");
+        string settingsViewPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
         string searchableComponentPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "SearchableOptionList.xaml");
 
         string triggerModel = File.ReadAllText(triggerModelPath);
@@ -1302,6 +1434,7 @@ public sealed class AppResourcePackagingTests
         string triggerViewModel = File.ReadAllText(triggerViewModelPath);
         string triggerView = File.ReadAllText(triggerViewPath);
         string triggerCode = File.ReadAllText(triggerCodePath);
+        string settingsView = File.ReadAllText(settingsViewPath);
         string searchableComponent = File.ReadAllText(searchableComponentPath);
 
         foreach (string expected in new[]
@@ -1328,10 +1461,37 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("TriggerLog", triggerService, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", searchableComponent, StringComparison.Ordinal);
         Assert.Contains("SearchBox", searchableComponent, StringComparison.Ordinal);
-        Assert.Contains("SearchableOptionList", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("components:SearchableOptionList", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TriggerConditionList\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TriggerActionList\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("MoveUpCommand", triggerViewModel, StringComparison.Ordinal);
         Assert.Contains("MoveDownCommand", triggerViewModel, StringComparison.Ordinal);
-        Assert.Contains("TriggersEnabled", triggerView, StringComparison.Ordinal);
+        Assert.Contains("CanEditTriggers", triggerView, StringComparison.Ordinal);
+        Assert.Contains("TriggersEnabledRow", settingsView, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies trigger creation is a full in-page editor reached from the final list item instead of a multi-dialog wizard.</summary>
+    [Fact]
+    public void TriggerFeature_UsesFullAddEditorSubpage()
+    {
+        string triggerViewPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml");
+        string triggerCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml.cs");
+
+        string triggerView = File.ReadAllText(triggerViewPath);
+        string triggerCode = File.ReadAllText(triggerCodePath);
+
+        Assert.Contains("x:Name=\"TriggerListHost\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TriggerEditorHost\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AddTriggerCardButton\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TriggerEditorNameBox\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TriggerConditionList\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TriggerActionList\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SaveTriggerButton\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("ShowTriggerEditorForNewTask", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("OpenTriggerList", triggerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowTriggerNameStepAsync", triggerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowTriggerConditionStepAsync", triggerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowTriggerActionStepAsync", triggerCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies notification settings and a notification service are present.</summary>
@@ -1348,13 +1508,65 @@ public sealed class AppResourcePackagingTests
         string notificationService = File.ReadAllText(notificationServicePath);
         string appSettings = File.ReadAllText(appSettingsPath);
 
+        Assert.Contains("NotificationSectionTitleText", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("NotificationEnabledRow", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("NotificationEnabledToggle", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("NotificationLevelRow", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("NotificationEnabled", settingsViewModel, StringComparison.Ordinal);
         Assert.Contains("NotificationLevelBox", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("NotificationLevelOptions", settingsViewModel, StringComparison.Ordinal);
+        Assert.Contains("NotificationEnabled", appSettings, StringComparison.Ordinal);
         Assert.Contains("NotificationLevel", appSettings, StringComparison.Ordinal);
         Assert.Contains("Microsoft.Windows.AppNotifications", notificationService, StringComparison.Ordinal);
         Assert.Contains("NotifyProxyModeChanged", notificationService, StringComparison.Ordinal);
         Assert.Contains("NotifyTriggerFired", notificationService, StringComparison.Ordinal);
         Assert.Contains("NotifyConnectionTestTimeout", notificationService, StringComparison.Ordinal);
+        Assert.Contains("GetString(\"Notification.ProxyMode.Title\")", notificationService, StringComparison.Ordinal);
+        Assert.Contains("AppendNotificationLog", notificationService, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Clash# proxy mode\"", notificationService, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Clash# trigger fired\"", notificationService, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Clash# URL validation timed out\"", notificationService, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the tray menu exposes a page-navigation submenu backed by localized labels.</summary>
+    [Fact]
+    public void TrayMenu_ExposesPageNavigationSubmenu()
+    {
+        string trayServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "SystemTrayService.cs");
+        string trayBuilderPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TrayMenuStateBuilder.cs");
+        string mainWindowCodePath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
+
+        string trayService = File.ReadAllText(trayServicePath);
+        string trayBuilder = File.ReadAllText(trayBuilderPath);
+        string mainWindowCode = File.ReadAllText(mainWindowCodePath);
+
+        Assert.Contains("TrayPageMenuItem", trayBuilder, StringComparison.Ordinal);
+        Assert.Contains("PagesMenuLabel", trayBuilder, StringComparison.Ordinal);
+        Assert.Contains("PageItems", trayBuilder, StringComparison.Ordinal);
+        Assert.Contains("Tray.Menu.Pages", trayBuilder, StringComparison.Ordinal);
+        Assert.Contains("VisibleFeatureIds", trayBuilder, StringComparison.Ordinal);
+        Assert.Contains("AppendMenu(pageMenu", trayService, StringComparison.Ordinal);
+        Assert.Contains("MapPageCommand", trayService, StringComparison.Ordinal);
+        Assert.Contains("Action<string> openPage", trayService, StringComparison.Ordinal);
+        Assert.Contains("RefreshTrayIcon", trayService, StringComparison.Ordinal);
+        Assert.Contains("NavigateFromTray(tag", mainWindowCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the old abnormal-exit recovery policy is no longer exposed beside startup restore fallback.</summary>
+    [Fact]
+    public void Settings_DoNotExposeAbnormalExitRecoveryPolicy()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+        string settingsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
+        string dataPackagePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ClashDataPackageService.cs");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+        string settingsViewModel = File.ReadAllText(settingsViewModelPath);
+        string dataPackage = File.ReadAllText(dataPackagePath);
+
+        Assert.DoesNotContain("ProxyRecoveryModeRow", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProxyRecoveryModeOptions", settingsViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("IClashDataPackageSettings.ProxyRecoveryMode", dataPackage, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies master tiles are catalog-driven and expose action tiles beyond passive information.</summary>
@@ -1379,6 +1591,36 @@ public sealed class AppResourcePackagingTests
             "startup-launch",
             "transparent-proxy",
             "connection-sampling",
+            "app-name",
+            "app-version",
+            "app-runtime",
+            "notification-level",
+            "triggers-enabled",
+            "tray-visible-features",
+            "close-behavior",
+            "startup-behavior",
+            "app-theme",
+            "display-language",
+            "sampling-interval",
+            "app-accent",
+            "restore-proxy-on-exit",
+            "stale-proxy-check",
+            "startup-conflict-check",
+            "startup-guide",
+            "mainland-feature-mode",
+            "startup-restore-fallback",
+            "mihomo-service",
+            "core-config-file",
+            "profile-count",
+            "subscription-count",
+            "proxy-node-count",
+            "rule-count",
+            "trigger-count",
+            "system-log-count",
+            "connection-records",
+            "traffic-total",
+            "traffic-snapshots",
+            "node-health-records",
         })
         {
             Assert.Contains(expectedTile, masterViewModel, StringComparison.Ordinal);
@@ -1388,6 +1630,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ImportConfiguration", actionService, StringComparison.Ordinal);
         Assert.Contains("SetLaunchAtStartup", actionService, StringComparison.Ordinal);
         Assert.Contains("SetTransparentProxy", actionService, StringComparison.Ordinal);
+        Assert.Contains("ApplicationAction.UiPickerRequired.Format", actionService, StringComparison.Ordinal);
+        Assert.DoesNotContain("requires a UI picker", actionService, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies dialog option rows are componentized for repeated title/description choice UI.</summary>
@@ -1407,15 +1651,57 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Class=\"ClashSharp.Components.DialogOptionRow\"", componentXaml, StringComparison.Ordinal);
         Assert.Contains("Title", componentXaml, StringComparison.Ordinal);
         Assert.Contains("Description", componentXaml, StringComparison.Ordinal);
-        Assert.Contains("<ToggleButton", componentXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("<CheckBox", componentXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"DialogOptionHeadingGrid\"", componentXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"SelectedGlyph\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("<Button", componentXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ToggleButton", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("<CheckBox", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SelectionCheckBox\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("Width=\"32\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("MinWidth=\"0\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("IsHitTestVisible=\"False\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"OptionButton\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Column=\"1\"", componentXaml, StringComparison.Ordinal);
         Assert.Contains("Grid.Column=\"2\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalContentAlignment=\"Stretch\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("<ColumnDefinition Width=\"*\" />", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", componentXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"SelectedGlyph\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("<ListView", searchableComponentXaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"HorizontalContentAlignment\" Value=\"Stretch\"", searchableComponentXaml, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", settingsCode, StringComparison.Ordinal);
         Assert.Contains("SelectionInvoked += (_, _) => SelectDataPackageScopeRow", settingsCode, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", searchableComponentXaml, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", masterControlCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies reusable cards and dense card rows pin text to theme-aware foreground brushes.</summary>
+    [Fact]
+    public void CardText_UsesThemeForegroundBrushesForReadableStates()
+    {
+        string settingRowPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "SettingRow.xaml");
+        string masterInfoTilePath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "MasterInfoTile.xaml");
+        string masterControlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml");
+        string statisticsPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Statistics.xaml");
+        string triggersPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml");
+        string logsPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Logs.xaml");
+        string profilesPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Profiles.xaml");
+
+        string settingRow = File.ReadAllText(settingRowPath);
+        string masterInfoTile = File.ReadAllText(masterInfoTilePath);
+        string masterControl = File.ReadAllText(masterControlPath);
+        string statistics = File.ReadAllText(statisticsPath);
+        string triggers = File.ReadAllText(triggersPath);
+        string logs = File.ReadAllText(logsPath);
+        string profiles = File.ReadAllText(profilesPath);
+
+        Assert.Contains("Text=\"{Binding Title, ElementName=Root}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", settingRow, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Value, ElementName=Root}\"", masterInfoTile, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", masterInfoTile, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"CoreStatusText\" Text=\"{Binding CoreStatusText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", masterControl, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TotalTrafficText\" Text=\"{Binding TotalTrafficText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", statistics, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding ConditionsSummary}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", triggers, StringComparison.Ordinal);
+        Assert.Contains("Grid.Column=\"1\" Text=\"{Binding Level}\" Style=\"{ThemeResource CaptionTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", logs, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ActiveProfileText\" Text=\"{Binding ActiveProfileText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", profiles, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies conflict dialogs use general conflict wording and place actions below status text.</summary>
@@ -1430,6 +1716,37 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Orientation = Orientation.Vertical", presenterCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment = HorizontalAlignment.Right", presenterCode, StringComparison.Ordinal);
         Assert.Contains("statusText.Text = result.Succeeded", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("Width = 420", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("MinWidth = 0", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth = 420", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("ContentDialogMinWidth", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("ContentDialogMaxWidth", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("MinWidth = 340", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth = 380", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("Math.Min(320", presenterCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies startup dialogs use the window root and bounded content to remain centered and visible.</summary>
+    [Fact]
+    public void StartupDialogs_UseWindowRootAndBoundedContent()
+    {
+        string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+        string guideXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "StartupGuideDialog.xaml");
+        string presenterPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "StartupConflictDialogPresenter.cs");
+
+        string masterControlCode = File.ReadAllText(masterControlCodePath);
+        string settingsCode = File.ReadAllText(settingsCodePath);
+        string guideXaml = File.ReadAllText(guideXamlPath);
+        string presenterCode = File.ReadAllText(presenterPath);
+
+        Assert.Contains("GetDialogXamlRoot()", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("App.MainWindow?.Content is FrameworkElement root", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("XamlRoot = GetDialogXamlRoot()", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("XamlRoot = GetDialogXamlRoot()", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"260\"", guideXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth=\"520\"", guideXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight = Math.Min(320", presenterCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies maintenance actions are right-aligned links instead of full-height row buttons.</summary>
@@ -1487,6 +1804,12 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("ContentFrame.Loaded += OnContentFrameLoaded", mainWindowCode, StringComparison.Ordinal);
         Assert.Contains("xamlRoot is null", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("GetDialogXamlRoot()", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("Content is FrameworkElement root", mainWindowCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("XamlRoot = ContentFrame.XamlRoot", mainWindowCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("XamlRoot? xamlRoot = ContentFrame.XamlRoot", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("SkipStartupDialogsArgument", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("ShouldSkipStartupDialogs()", mainWindowCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Activated += OnWindowActivated", mainWindowCode, StringComparison.Ordinal);
     }
 

@@ -9,6 +9,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -49,15 +52,27 @@ internal interface ISettingsStore
 
     bool ShowStartupGuideOnStartup { get; set; }
 
+    bool TriggersEnabled { get; set; }
+
+    bool TriggerNotificationsEnabled { get; set; }
+
+    CloseBehaviorMode CloseBehaviorMode { get; set; }
+
+    bool TrayFadeInactiveIcon { get; set; }
+
+    bool TrayUseMonochromeInactiveIcon { get; set; }
+
+    string TrayVisibleFeatureIds { get; set; }
+
     bool CheckStaleProxyOnStartup { get; set; }
 
     bool RestoreProxyOnExit { get; set; }
 
-    ProxyRecoveryMode ProxyRecoveryMode { get; set; }
-
     MainlandChinaFeatureMode MainlandChinaFeatureMode { get; set; }
 
     bool MainlandChinaUrlBlockingEnabled { get; set; }
+
+    bool NotificationEnabled { get; set; }
 
     NotificationLevel NotificationLevel { get; set; }
 
@@ -83,6 +98,27 @@ internal readonly record struct SettingsProxyInformation(
     string ConfigPath,
     bool IsCoreBinaryAvailable,
     string CoreBinaryPath);
+
+/// <summary>One taskbar tray menu feature exposed in settings.</summary>
+internal readonly record struct SettingsTrayFeatureDefinition(
+    string Id,
+    string TitleKey,
+    string DescriptionKey,
+    string Glyph);
+
+/// <summary>One connection-test target result ready for dialog presentation.</summary>
+internal sealed record ConnectionTestTargetResult(
+    string Label,
+    string Url,
+    bool Succeeded,
+    string StatusText,
+    string LatencyText,
+    int? LatencyMilliseconds);
+
+/// <summary>Connection-test report containing all target rows and a localized summary.</summary>
+internal sealed record ConnectionTestReport(
+    IReadOnlyList<ConnectionTestTargetResult> Results,
+    string SummaryText);
 
 /// <summary>Mihomo service control contract required by transparent proxy settings.</summary>
 internal interface IMihomoServiceController
@@ -216,6 +252,42 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.ShowStartupGuideOnStartup = value;
     }
 
+    public bool TriggersEnabled
+    {
+        get => _settings.TriggersEnabled;
+        set => _settings.TriggersEnabled = value;
+    }
+
+    public bool TriggerNotificationsEnabled
+    {
+        get => _settings.TriggerNotificationsEnabled;
+        set => _settings.TriggerNotificationsEnabled = value;
+    }
+
+    public CloseBehaviorMode CloseBehaviorMode
+    {
+        get => _settings.CloseBehaviorMode;
+        set => _settings.CloseBehaviorMode = value;
+    }
+
+    public bool TrayFadeInactiveIcon
+    {
+        get => _settings.TrayFadeInactiveIcon;
+        set => _settings.TrayFadeInactiveIcon = value;
+    }
+
+    public bool TrayUseMonochromeInactiveIcon
+    {
+        get => _settings.TrayUseMonochromeInactiveIcon;
+        set => _settings.TrayUseMonochromeInactiveIcon = value;
+    }
+
+    public string TrayVisibleFeatureIds
+    {
+        get => _settings.TrayVisibleFeatureIds;
+        set => _settings.TrayVisibleFeatureIds = value;
+    }
+
     public bool CheckStaleProxyOnStartup
     {
         get => _settings.CheckStaleProxyOnStartup;
@@ -228,12 +300,6 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.RestoreProxyOnExit = value;
     }
 
-    public ProxyRecoveryMode ProxyRecoveryMode
-    {
-        get => _settings.ProxyRecoveryMode;
-        set => _settings.ProxyRecoveryMode = value;
-    }
-
     public MainlandChinaFeatureMode MainlandChinaFeatureMode
     {
         get => _settings.MainlandChinaFeatureMode;
@@ -244,6 +310,12 @@ internal sealed class AppSettingsStore : ISettingsStore
     {
         get => _settings.MainlandChinaUrlBlockingEnabled;
         set => _settings.MainlandChinaUrlBlockingEnabled = value;
+    }
+
+    public bool NotificationEnabled
+    {
+        get => _settings.NotificationEnabled;
+        set => _settings.NotificationEnabled = value;
     }
 
     public NotificationLevel NotificationLevel
@@ -290,10 +362,22 @@ internal sealed class SettingsViewModel : ObservableObject
     private const int DefaultConnectionSamplingIntervalSeconds = 30;
     private const int MinConnectionSamplingIntervalSeconds = 3;
     private const int MaxConnectionSamplingIntervalSeconds = 300;
+    private const int ConnectionTestTimeoutSeconds = 4;
     private const string DefaultConnectionTestUrl = "https://www.google.com/generate_204";
     private const string DefaultConnectionTestProxyUrl1 = "https://www.google.com";
     private const string DefaultConnectionTestProxyUrl2 = "https://github.com";
     private const string DefaultConnectionTestDirectUrl = "https://www.baidu.com";
+    private const string DefaultTrayVisibleFeatureIds = "status,mode,pages,transparent-proxy,settings,safe-exit";
+
+    public static IReadOnlyList<SettingsTrayFeatureDefinition> TrayFeatureDefinitions { get; } =
+    [
+        new("status", "Settings.Tray.Feature.Status", "Settings.Tray.Feature.Status.Description", "\uE946"),
+        new("mode", "Settings.Tray.Feature.Mode", "Settings.Tray.Feature.Mode.Description", "\uE8AB"),
+        new("pages", "Settings.Tray.Feature.Pages", "Settings.Tray.Feature.Pages.Description", "\uE8A7"),
+        new("transparent-proxy", "Settings.Tray.Feature.TransparentProxy", "Settings.Tray.Feature.TransparentProxy.Description", "\uE968"),
+        new("settings", "Settings.Tray.Feature.Settings", "Settings.Tray.Feature.Settings.Description", "\uE713"),
+        new("safe-exit", "Settings.Tray.Feature.SafeExit", "Settings.Tray.Feature.SafeExit.Description", "\uE8BB"),
+    ];
 
     private static readonly (string ResourceKey, string[] Hosts)[] KnownConnectionTestUrlHosts =
     [
@@ -461,6 +545,7 @@ internal sealed class SettingsViewModel : ObservableObject
         _isAccentColorRestartPending = isAccentColorRestartPending ?? IsAccentColorChangedSinceLoad;
         _diagnosticsViewModel = diagnosticsViewModel;
         _mihomoServiceController = mihomoServiceController ?? AlwaysAvailableMihomoServiceController.Instance;
+        RefreshDisplayLanguageOptions();
         WindowsDiagnosticCommand = new AsyncRelayCommand(ExecuteWindowsDiagnosticCommandAsync);
         DeployMihomoServiceCommand = new AsyncRelayCommand(DeployMihomoServiceAsync);
         UninstallMihomoServiceCommand = new AsyncRelayCommand(UninstallMihomoServiceAsync);
@@ -478,21 +563,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string LanguageDescriptionText => _getString("Settings.Language.Description");
 
-    public IReadOnlyList<string> DisplayLanguageOptions
-    {
-        get
-        {
-            List<string> options = [];
-            foreach ((AppLanguage language, string displayName) in LocalizationService.GetSupportedLanguages())
-            {
-                options.Add(language == AppLanguage.AutoDetect
-                    ? _getString("Settings.Language.AutoDetect")
-                    : displayName);
-            }
-
-            return options;
-        }
-    }
+    public IReadOnlyList<string> DisplayLanguageOptions => _displayLanguageOptions;
 
     public string AppThemeModeTitleText => _getString("Settings.AppTheme.Title");
 
@@ -589,6 +660,10 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string ConnectionTestDirectUrlTitleText => _getString("Settings.ConnectionTestUrl.Direct");
 
+    public string ConnectionTestStatusColumnText => _getString("Settings.ConnectionTest.StatusColumn");
+
+    public string ConnectionTestLatencyColumnText => _getString("Settings.ConnectionTest.LatencyColumn");
+
     public string ConnectionTestUrlSummaryText => string.Join(
         " | ",
         FormatConnectionTestUrlSummaryPart(ConnectionTestProxyUrl1),
@@ -652,6 +727,59 @@ internal sealed class SettingsViewModel : ObservableObject
         StartupBehaviorDisableProxyText,
     ];
 
+    public string TriggerSectionTitleText => _getString("Settings.Section.Triggers");
+
+    public string TriggersEnabledTitleText => IsTriggerEngineRestartPending
+        ? $"{_getString("Settings.Triggers.Enabled.Title")}*"
+        : _getString("Settings.Triggers.Enabled.Title");
+
+    public string TriggersEnabledDescriptionText => _getString("Settings.Triggers.Enabled.Description");
+
+    public string TriggerNotificationsEnabledTitleText => _getString("Settings.Triggers.Notifications.Title");
+
+    public string TriggerNotificationsEnabledDescriptionText => _getString("Settings.Triggers.Notifications.Description");
+
+    public string TraySectionTitleText => _getString("Settings.Section.Tray");
+
+    public string CloseBehaviorModeTitleText => _getString("Settings.CloseBehavior.Title");
+
+    public string CloseBehaviorModeDescriptionText => _getString("Settings.CloseBehavior.Description");
+
+    public string CloseBehaviorExitWithoutConfirmationText => _getString("Settings.CloseBehavior.ExitWithoutConfirmation");
+
+    public string CloseBehaviorConfirmExitText => _getString("Settings.CloseBehavior.ConfirmExit");
+
+    public string CloseBehaviorMinimizeToTrayText => _getString("Settings.CloseBehavior.MinimizeToTray");
+
+    public IReadOnlyList<string> CloseBehaviorModeOptions =>
+    [
+        CloseBehaviorExitWithoutConfirmationText,
+        CloseBehaviorConfirmExitText,
+        CloseBehaviorMinimizeToTrayText,
+    ];
+
+    public string TrayFadeInactiveIconTitleText => _getString("Settings.Tray.FadeInactiveIcon.Title");
+
+    public string TrayFadeInactiveIconDescriptionText => _getString("Settings.Tray.FadeInactiveIcon.Description");
+
+    public string TrayUseMonochromeInactiveIconTitleText => IsTrayIconRestartPending
+        ? $"{_getString("Settings.Tray.MonochromeInactiveIcon.Title")}*"
+        : _getString("Settings.Tray.MonochromeInactiveIcon.Title");
+
+    public string TrayUseMonochromeInactiveIconDescriptionText => _getString("Settings.Tray.MonochromeInactiveIcon.Description");
+
+    public string TrayVisibleFeaturesTitleText => _getString("Settings.Tray.VisibleFeatures.Title");
+
+    public string TrayVisibleFeaturesDescriptionText => _getString("Settings.Tray.VisibleFeatures.Description");
+
+    public string TrayVisibleFeatureSummaryText => string.Format(
+        _getString("Settings.Tray.VisibleFeatures.Summary.Format"),
+        GetTrayVisibleFeatureDefinitions().Count);
+
+    public string TrayVisibleFeatureSearchPlaceholderText => _getString("Settings.Tray.VisibleFeatures.SearchPlaceholder");
+
+    public string ResetGroupServiceDeploymentNoteText => _getString("Settings.ResetGroupConfirm.ServiceDeploymentNote");
+
     public string WindowsNativeSectionTitleText => _getString("Settings.Section.WindowsNative");
 
     public string WindowsNativeTitleText => _getString("Settings.WindowsNative.Title");
@@ -712,23 +840,6 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string RestoreProxyOnExitDescriptionText => _getString("Settings.RestoreProxyOnExit.Description");
 
-    public string ProxyRecoveryModeTitleText => _getString("Settings.ProxyRecoveryMode.Title");
-
-    public string ProxyRecoveryModeDescriptionText => _getString("Settings.ProxyRecoveryMode.Description");
-
-    public string ProxyRecoveryIgnoreText => _getString("Settings.ProxyRecoveryMode.Ignore");
-
-    public string ProxyRecoveryEnableText => _getString("Settings.ProxyRecoveryMode.Enable");
-
-    public string ProxyRecoveryDisableText => _getString("Settings.ProxyRecoveryMode.Disable");
-
-    public IReadOnlyList<string> ProxyRecoveryModeOptions =>
-    [
-        ProxyRecoveryIgnoreText,
-        ProxyRecoveryEnableText,
-        ProxyRecoveryDisableText,
-    ];
-
     public string MainlandChinaSectionTitleText => _getString("Settings.Section.MainlandChina");
 
     public string MainlandChinaDisplayTitleText => IsMainlandChinaDisplayRestartPending
@@ -760,6 +871,12 @@ internal sealed class SettingsViewModel : ObservableObject
         : _getString("Settings.MainlandChinaUrlBlocking.Title");
 
     public string MainlandChinaUrlBlockingDescriptionText => _getString("Settings.MainlandChinaUrlBlocking.Description");
+
+    public string NotificationSectionTitleText => _getString("Settings.Section.Notification");
+
+    public string NotificationEnabledTitleText => _getString("Settings.Notification.Enabled.Title");
+
+    public string NotificationEnabledDescriptionText => _getString("Settings.Notification.Enabled.Description");
 
     public string NotificationTitleText => _getString("Settings.Notification.Title");
 
@@ -834,6 +951,9 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Mainland China URL blocking value loaded when this view model was initialized.</summary>
     private bool _loadedMainlandChinaUrlBlockingEnabled;
 
+    /// <summary>Stable display-language option source used by WinUI ComboBox.</summary>
+    private readonly ObservableCollection<string> _displayLanguageOptions = [];
+
     /// <summary>Backing field for <see cref="LaunchAtStartupEnabled"/>.</summary>
     private bool _launchAtStartupEnabled;
 
@@ -848,6 +968,9 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="NotificationLevel"/>.</summary>
     private NotificationLevel _notificationLevel;
+
+    /// <summary>Backing field for <see cref="NotificationEnabled"/>.</summary>
+    private bool _notificationEnabled;
 
     /// <summary>Latest mihomo service status snapshot.</summary>
     private MihomoServiceStatus _mihomoServiceStatus;
@@ -870,14 +993,35 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="ShowStartupGuideOnStartup"/>.</summary>
     private bool _showStartupGuideOnStartup;
 
+    /// <summary>Backing field for <see cref="TriggersEnabled"/>.</summary>
+    private bool _triggersEnabled;
+
+    /// <summary>Trigger engine setting loaded when this view model was initialized.</summary>
+    private bool _loadedTriggersEnabled;
+
+    /// <summary>Backing field for <see cref="TriggerNotificationsEnabled"/>.</summary>
+    private bool _triggerNotificationsEnabled;
+
+    /// <summary>Backing field for <see cref="CloseBehaviorMode"/>.</summary>
+    private CloseBehaviorMode _closeBehaviorMode;
+
+    /// <summary>Backing field for <see cref="TrayFadeInactiveIcon"/>.</summary>
+    private bool _trayFadeInactiveIcon;
+
+    /// <summary>Backing field for <see cref="TrayUseMonochromeInactiveIcon"/>.</summary>
+    private bool _trayUseMonochromeInactiveIcon;
+
+    /// <summary>Tray monochrome icon setting loaded when this view model was initialized.</summary>
+    private bool _loadedTrayUseMonochromeInactiveIcon;
+
+    /// <summary>Backing field for <see cref="TrayVisibleFeatureIds"/>.</summary>
+    private string _trayVisibleFeatureIds = DefaultTrayVisibleFeatureIds;
+
     /// <summary>Backing field for <see cref="CheckStaleProxyOnStartup"/>.</summary>
     private bool _checkStaleProxyOnStartup;
 
     /// <summary>Backing field for <see cref="RestoreProxyOnExit"/>.</summary>
     private bool _restoreProxyOnExit;
-
-    /// <summary>Backing field for <see cref="ProxyRecoveryMode"/>.</summary>
-    private ProxyRecoveryMode _proxyRecoveryMode;
 
     /// <summary>Backing field for <see cref="MainlandChinaFeatureMode"/>.</summary>
     private MainlandChinaFeatureMode _mainlandChinaFeatureMode;
@@ -997,7 +1141,15 @@ internal sealed class SettingsViewModel : ObservableObject
         MainlandChinaFeatureMode != _loadedMainlandChinaFeatureMode
         || MainlandChinaUrlBlockingEnabled != _loadedMainlandChinaUrlBlockingEnabled;
 
-    public bool HasRestartRequiredSettings => IsAppAccentColorRestartPending || IsMainlandChinaDisplayRestartPending;
+    public bool IsTriggerEngineRestartPending => TriggersEnabled != _loadedTriggersEnabled;
+
+    public bool IsTrayIconRestartPending => TrayUseMonochromeInactiveIcon != _loadedTrayUseMonochromeInactiveIcon;
+
+    public bool HasRestartRequiredSettings =>
+        IsAppAccentColorRestartPending
+        || IsMainlandChinaDisplayRestartPending
+        || IsTriggerEngineRestartPending
+        || IsTrayIconRestartPending;
 
     public string RestartRequiredNoticeText => _getString("Settings.RestartRequiredNotice");
 
@@ -1087,6 +1239,60 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetShowStartupGuideOnStartup(value);
     }
 
+    public bool TriggersEnabled
+    {
+        get => _triggersEnabled;
+        set => SetTriggersEnabled(value);
+    }
+
+    public bool TriggerNotificationsEnabled
+    {
+        get => _triggerNotificationsEnabled;
+        set => SetTriggerNotificationsEnabled(value);
+    }
+
+    public CloseBehaviorMode CloseBehaviorMode
+    {
+        get => _closeBehaviorMode;
+        private set
+        {
+            if (SetProperty(ref _closeBehaviorMode, value))
+            {
+                OnPropertyChanged(nameof(CloseBehaviorModeIndex));
+            }
+        }
+    }
+
+    public int CloseBehaviorModeIndex
+    {
+        get => (int)CloseBehaviorMode;
+        set => SetCloseBehaviorModeIndex(value);
+    }
+
+    public bool TrayFadeInactiveIcon
+    {
+        get => _trayFadeInactiveIcon;
+        set => SetTrayFadeInactiveIcon(value);
+    }
+
+    public bool TrayUseMonochromeInactiveIcon
+    {
+        get => _trayUseMonochromeInactiveIcon;
+        set => SetTrayUseMonochromeInactiveIcon(value);
+    }
+
+    public string TrayVisibleFeatureIds
+    {
+        get => _trayVisibleFeatureIds;
+        private set
+        {
+            if (SetProperty(ref _trayVisibleFeatureIds, value))
+            {
+                OnPropertyChanged(nameof(TrayVisibleFeatureSummaryText));
+            }
+        }
+    }
+
     public double ConnectionSamplingIntervalSecondsValue
     {
         get => ConnectionSamplingIntervalSeconds;
@@ -1103,24 +1309,6 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         get => _restoreProxyOnExit;
         set => SetRestoreProxyOnExit(value);
-    }
-
-    public ProxyRecoveryMode ProxyRecoveryMode
-    {
-        get => _proxyRecoveryMode;
-        private set
-        {
-            if (SetProperty(ref _proxyRecoveryMode, value))
-            {
-                OnPropertyChanged(nameof(ProxyRecoveryModeIndex));
-            }
-        }
-    }
-
-    public int ProxyRecoveryModeIndex
-    {
-        get => (int)ProxyRecoveryMode;
-        set => SetProxyRecoveryModeIndex(value);
     }
 
     public MainlandChinaFeatureMode MainlandChinaFeatureMode
@@ -1146,6 +1334,12 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         get => _mainlandChinaUrlBlockingEnabled;
         set => SetMainlandChinaUrlBlockingEnabled(value);
+    }
+
+    public bool NotificationEnabled
+    {
+        get => _notificationEnabled;
+        set => SetNotificationEnabled(value);
     }
 
     public NotificationLevel NotificationLevel
@@ -1227,15 +1421,25 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _startupConflictCheckEnabled, _settings.StartupConflictCheckEnabled, nameof(StartupConflictCheckEnabled));
         StartupBehaviorMode = _settings.StartupBehaviorMode;
         SetProperty(ref _showStartupGuideOnStartup, _settings.ShowStartupGuideOnStartup, nameof(ShowStartupGuideOnStartup));
+        _loadedTriggersEnabled = _settings.TriggersEnabled;
+        SetProperty(ref _triggersEnabled, _loadedTriggersEnabled, nameof(TriggersEnabled));
+        SetProperty(ref _triggerNotificationsEnabled, _settings.TriggerNotificationsEnabled, nameof(TriggerNotificationsEnabled));
+        CloseBehaviorMode = _settings.CloseBehaviorMode;
+        SetProperty(ref _trayFadeInactiveIcon, _settings.TrayFadeInactiveIcon, nameof(TrayFadeInactiveIcon));
+        _loadedTrayUseMonochromeInactiveIcon = _settings.TrayUseMonochromeInactiveIcon;
+        SetProperty(ref _trayUseMonochromeInactiveIcon, _loadedTrayUseMonochromeInactiveIcon, nameof(TrayUseMonochromeInactiveIcon));
+        TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
+        RaiseTriggerRestartStateChanged();
+        RaiseTrayIconRestartStateChanged();
         RefreshStartupRestoreFallbackStatus();
         SetProperty(ref _checkStaleProxyOnStartup, _settings.CheckStaleProxyOnStartup, nameof(CheckStaleProxyOnStartup));
         SetProperty(ref _restoreProxyOnExit, _settings.RestoreProxyOnExit, nameof(RestoreProxyOnExit));
-        ProxyRecoveryMode = _settings.ProxyRecoveryMode;
         _loadedMainlandChinaFeatureMode = _settings.MainlandChinaFeatureMode;
         _loadedMainlandChinaUrlBlockingEnabled = _settings.MainlandChinaUrlBlockingEnabled;
         MainlandChinaFeatureMode = _loadedMainlandChinaFeatureMode;
         SetProperty(ref _mainlandChinaUrlBlockingEnabled, _loadedMainlandChinaUrlBlockingEnabled, nameof(MainlandChinaUrlBlockingEnabled));
         RaiseMainlandChinaRestartStateChanged();
+        SetProperty(ref _notificationEnabled, _settings.NotificationEnabled, nameof(NotificationEnabled));
         NotificationLevel = _settings.NotificationLevel;
         ConnectionTestUrl = _settings.ConnectionTestUrl;
         ConnectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
@@ -1357,6 +1561,81 @@ internal sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
+    /// <summary>Raises bindable notifications for trigger engine settings that need a restart.</summary>
+    private void RaiseTriggerRestartStateChanged()
+    {
+        OnPropertyChanged(nameof(IsTriggerEngineRestartPending));
+        OnPropertyChanged(nameof(HasRestartRequiredSettings));
+        OnPropertyChanged(nameof(TriggersEnabledTitleText));
+        OnPropertyChanged(nameof(RestartRequiredNoticeText));
+    }
+
+    /// <summary>Raises bindable notifications for tray icon settings that need a restart.</summary>
+    private void RaiseTrayIconRestartStateChanged()
+    {
+        OnPropertyChanged(nameof(IsTrayIconRestartPending));
+        OnPropertyChanged(nameof(HasRestartRequiredSettings));
+        OnPropertyChanged(nameof(TrayUseMonochromeInactiveIconTitleText));
+        OnPropertyChanged(nameof(RestartRequiredNoticeText));
+    }
+
+    /// <summary>Refreshes the stable language option collection without replacing the ComboBox item source.</summary>
+    private void RefreshDisplayLanguageOptions()
+    {
+        List<string> options = [];
+        foreach ((AppLanguage language, string displayName) in LocalizationService.GetSupportedLanguages())
+        {
+            options.Add(language == AppLanguage.AutoDetect
+                ? _getString("Settings.Language.AutoDetect")
+                : displayName);
+        }
+
+        for (int index = 0; index < options.Count; index++)
+        {
+            if (index >= _displayLanguageOptions.Count)
+            {
+                _displayLanguageOptions.Add(options[index]);
+                continue;
+            }
+
+            if (!StringComparer.Ordinal.Equals(_displayLanguageOptions[index], options[index]))
+            {
+                _displayLanguageOptions[index] = options[index];
+            }
+        }
+
+        while (_displayLanguageOptions.Count > options.Count)
+        {
+            _displayLanguageOptions.RemoveAt(_displayLanguageOptions.Count - 1);
+        }
+    }
+
+    private static string NormalizeTrayVisibleFeatureIds(IEnumerable<string> ids)
+    {
+        HashSet<string> knownIds = TrayFeatureDefinitions
+            .Select(static definition => definition.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        List<string> normalized = [];
+        foreach (string id in ids)
+        {
+            string trimmedId = id.Trim();
+            if (!knownIds.Contains(trimmedId) || !seen.Add(trimmedId))
+            {
+                continue;
+            }
+
+            normalized.Add(trimmedId);
+        }
+
+        return normalized.Count == 0 ? DefaultTrayVisibleFeatureIds : string.Join(",", normalized);
+    }
+
+    private static IEnumerable<string> SplitTrayVisibleFeatureIds(string value)
+    {
+        return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
     /// <summary>Compares accent settings against the load-time fallback baseline.</summary>
     private bool IsAccentColorChangedSinceLoad(AppAccentColorMode mode, string colorValue)
     {
@@ -1379,8 +1658,8 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(AppAccentColorModeIndex),
             nameof(StartupBehaviorModeOptions),
             nameof(StartupBehaviorModeIndex),
-            nameof(ProxyRecoveryModeOptions),
-            nameof(ProxyRecoveryModeIndex),
+            nameof(CloseBehaviorModeOptions),
+            nameof(CloseBehaviorModeIndex),
             nameof(MainlandChinaFeatureModeOptions),
             nameof(MainlandChinaFeatureModeIndex),
         ];
@@ -1394,6 +1673,7 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Raises property changes for all localized bindable text properties.</summary>
     private void RaiseLocalizedTextChanges()
     {
+        RefreshDisplayLanguageOptions();
         string[] propertyNames =
         [
             nameof(PageTitleText),
@@ -1402,6 +1682,7 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(LanguageTitleText),
             nameof(LanguageDescriptionText),
             nameof(DisplayLanguageOptions),
+            nameof(DisplayLanguageIndex),
             nameof(AppThemeModeTitleText),
             nameof(AppThemeModeDescriptionText),
             nameof(AppThemeFollowSystemText),
@@ -1443,6 +1724,8 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(ConnectionTestProxyUrl1TitleText),
             nameof(ConnectionTestProxyUrl2TitleText),
             nameof(ConnectionTestDirectUrlTitleText),
+            nameof(ConnectionTestStatusColumnText),
+            nameof(ConnectionTestLatencyColumnText),
             nameof(ConnectionTestUrlSummaryText),
             nameof(ProxyInformationTitleText),
             nameof(ProxyInformationDescriptionText),
@@ -1461,6 +1744,28 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(StartupBehaviorStartRuleProxyText),
             nameof(StartupBehaviorDisableProxyText),
             nameof(StartupBehaviorModeOptions),
+            nameof(TriggerSectionTitleText),
+            nameof(TriggersEnabledTitleText),
+            nameof(TriggersEnabledDescriptionText),
+            nameof(TriggerNotificationsEnabledTitleText),
+            nameof(TriggerNotificationsEnabledDescriptionText),
+            nameof(IsTriggerEngineRestartPending),
+            nameof(TraySectionTitleText),
+            nameof(CloseBehaviorModeTitleText),
+            nameof(CloseBehaviorModeDescriptionText),
+            nameof(CloseBehaviorExitWithoutConfirmationText),
+            nameof(CloseBehaviorConfirmExitText),
+            nameof(CloseBehaviorMinimizeToTrayText),
+            nameof(CloseBehaviorModeOptions),
+            nameof(TrayFadeInactiveIconTitleText),
+            nameof(TrayFadeInactiveIconDescriptionText),
+            nameof(TrayUseMonochromeInactiveIconTitleText),
+            nameof(TrayUseMonochromeInactiveIconDescriptionText),
+            nameof(IsTrayIconRestartPending),
+            nameof(TrayVisibleFeaturesTitleText),
+            nameof(TrayVisibleFeaturesDescriptionText),
+            nameof(TrayVisibleFeatureSummaryText),
+            nameof(TrayVisibleFeatureSearchPlaceholderText),
             nameof(WindowsNativeSectionTitleText),
             nameof(WindowsNativeTitleText),
             nameof(WindowsNativeDescriptionText),
@@ -1485,12 +1790,6 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(CheckStaleProxyDescriptionText),
             nameof(RestoreProxyOnExitTitleText),
             nameof(RestoreProxyOnExitDescriptionText),
-            nameof(ProxyRecoveryModeTitleText),
-            nameof(ProxyRecoveryModeDescriptionText),
-            nameof(ProxyRecoveryIgnoreText),
-            nameof(ProxyRecoveryEnableText),
-            nameof(ProxyRecoveryDisableText),
-            nameof(ProxyRecoveryModeOptions),
             nameof(MainlandChinaSectionTitleText),
             nameof(MainlandChinaDisplayTitleText),
             nameof(MainlandChinaDisplayDescriptionText),
@@ -1502,6 +1801,9 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(MainlandChinaFeatureModeOptions),
             nameof(MainlandChinaUrlBlockingTitleText),
             nameof(MainlandChinaUrlBlockingDescriptionText),
+            nameof(NotificationSectionTitleText),
+            nameof(NotificationEnabledTitleText),
+            nameof(NotificationEnabledDescriptionText),
             nameof(NotificationTitleText),
             nameof(NotificationDescriptionText),
             nameof(NotificationDefaultText),
@@ -1524,6 +1826,7 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(ResetGroupToDefaultsText),
             nameof(ResetGroupConfirmTitleText),
             nameof(ResetGroupConfirmMessageText),
+            nameof(ResetGroupServiceDeploymentNoteText),
         ];
 
         foreach (string propertyName in propertyNames)
@@ -1742,6 +2045,80 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _showStartupGuideOnStartup, isEnabled, nameof(ShowStartupGuideOnStartup));
     }
 
+    /// <summary>Persists whether trigger evaluation is enabled.</summary>
+    public void SetTriggersEnabled(bool isEnabled)
+    {
+        _settings.TriggersEnabled = isEnabled;
+        if (SetProperty(ref _triggersEnabled, isEnabled, nameof(TriggersEnabled)))
+        {
+            RaiseTriggerRestartStateChanged();
+        }
+    }
+
+    /// <summary>Persists whether fired triggers send dedicated notifications.</summary>
+    public void SetTriggerNotificationsEnabled(bool isEnabled)
+    {
+        _settings.TriggerNotificationsEnabled = isEnabled;
+        SetProperty(ref _triggerNotificationsEnabled, isEnabled, nameof(TriggerNotificationsEnabled));
+    }
+
+    /// <summary>Persists the close behavior selected by combo box index.</summary>
+    public bool SetCloseBehaviorModeIndex(int index)
+    {
+        if (!Enum.IsDefined((CloseBehaviorMode)index))
+        {
+            return false;
+        }
+
+        CloseBehaviorMode mode = (CloseBehaviorMode)index;
+        _settings.CloseBehaviorMode = mode;
+        CloseBehaviorMode = mode;
+        return true;
+    }
+
+    /// <summary>Persists whether the inactive tray icon is faded.</summary>
+    public void SetTrayFadeInactiveIcon(bool isEnabled)
+    {
+        _settings.TrayFadeInactiveIcon = isEnabled;
+        SetProperty(ref _trayFadeInactiveIcon, isEnabled, nameof(TrayFadeInactiveIcon));
+    }
+
+    /// <summary>Persists whether the inactive tray icon uses a monochrome logo.</summary>
+    public void SetTrayUseMonochromeInactiveIcon(bool isEnabled)
+    {
+        _settings.TrayUseMonochromeInactiveIcon = isEnabled;
+        if (SetProperty(ref _trayUseMonochromeInactiveIcon, isEnabled, nameof(TrayUseMonochromeInactiveIcon)))
+        {
+            RaiseTrayIconRestartStateChanged();
+        }
+    }
+
+    /// <summary>Persists selected tray feature ids.</summary>
+    public void SetTrayVisibleFeatureIds(IEnumerable<string> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        _settings.TrayVisibleFeatureIds = NormalizeTrayVisibleFeatureIds(ids);
+        TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
+    }
+
+    /// <summary>Gets visible tray feature definitions in persisted order.</summary>
+    public IReadOnlyList<SettingsTrayFeatureDefinition> GetTrayVisibleFeatureDefinitions()
+    {
+        Dictionary<string, SettingsTrayFeatureDefinition> definitions = TrayFeatureDefinitions.ToDictionary(
+            static definition => definition.Id,
+            StringComparer.OrdinalIgnoreCase);
+        List<SettingsTrayFeatureDefinition> selected = [];
+        foreach (string id in SplitTrayVisibleFeatureIds(TrayVisibleFeatureIds))
+        {
+            if (definitions.TryGetValue(id, out SettingsTrayFeatureDefinition definition))
+            {
+                selected.Add(definition);
+            }
+        }
+
+        return selected.Count == 0 ? TrayFeatureDefinitions : selected;
+    }
+
     /// <summary>Refreshes the startup restore fallback registration status text.</summary>
     public void RefreshStartupRestoreFallbackStatus()
     {
@@ -1779,22 +2156,6 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         _settings.RestoreProxyOnExit = isEnabled;
         SetProperty(ref _restoreProxyOnExit, isEnabled, nameof(RestoreProxyOnExit));
-    }
-
-    /// <summary>Persists a proxy recovery mode selected by combo box index.</summary>
-    /// <param name="index">Recovery mode enum index.</param>
-    /// <returns>True when the index was valid and persisted; otherwise false.</returns>
-    public bool SetProxyRecoveryModeIndex(int index)
-    {
-        if (!Enum.IsDefined((ProxyRecoveryMode)index))
-        {
-            return false;
-        }
-
-        ProxyRecoveryMode mode = (ProxyRecoveryMode)index;
-        _settings.ProxyRecoveryMode = mode;
-        ProxyRecoveryMode = mode;
-        return true;
     }
 
     /// <summary>Persists a mainland China feature mode selected by combo box index.</summary>
@@ -1843,6 +2204,14 @@ internal sealed class SettingsViewModel : ObservableObject
         _settings.NotificationLevel = level;
         NotificationLevel = level;
         return true;
+    }
+
+    /// <summary>Persists whether Windows system notifications are enabled.</summary>
+    /// <param name="isEnabled">True to show notifications subject to level filtering.</param>
+    public void SetNotificationEnabled(bool isEnabled)
+    {
+        _settings.NotificationEnabled = isEnabled;
+        SetProperty(ref _notificationEnabled, isEnabled, nameof(NotificationEnabled));
     }
 
     /// <summary>Persists the proxy connection-test URL.</summary>
@@ -1945,12 +2314,12 @@ internal sealed class SettingsViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>Runs a connection test against the persisted connection-test URL.</summary>
+    /// <summary>Runs a connection test against the persisted connection-test URLs.</summary>
     /// <param name="cancellationToken">Cancels the test when requested.</param>
-    /// <returns>Localized result message.</returns>
-    public async Task<string> RunConnectionTestAsync(CancellationToken cancellationToken)
+    /// <returns>Structured target rows and localized summary text.</returns>
+    public async Task<ConnectionTestReport> RunConnectionTestAsync(CancellationToken cancellationToken)
     {
-        List<string> results = [];
+        List<ConnectionTestTargetResult> results = [];
         try
         {
             IsConnectionTestRunning = true;
@@ -1963,29 +2332,74 @@ internal sealed class SettingsViewModel : ObservableObject
 
             foreach ((string label, string url) in targets)
             {
+                Stopwatch stopwatch = Stopwatch.StartNew();
                 try
                 {
                     Uri uri = new(url);
                     int statusCode = await _testConnectionAsync(uri, cancellationToken);
-                    results.Add($"{label}: {string.Format(_getString("Settings.ConnectionTest.Succeeded.Format"), statusCode)}");
+                    stopwatch.Stop();
+                    bool succeeded = statusCode is >= 200 and < 400;
+                    results.Add(new ConnectionTestTargetResult(
+                        label,
+                        url,
+                        succeeded,
+                        string.Format(_getString("Settings.ConnectionTest.StatusHttp.Format"), statusCode),
+                        FormatLatency(stopwatch.Elapsed),
+                        (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds)));
                 }
-                catch (TaskCanceledException exception)
+                catch (TaskCanceledException)
                 {
+                    stopwatch.Stop();
                     _notifyConnectionTestTimeout(url);
-                    results.Add($"{label}: {string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message)}");
+                    results.Add(new ConnectionTestTargetResult(
+                        label,
+                        url,
+                        false,
+                        _getString("Settings.ConnectionTest.TimedOut"),
+                        FormatLatency(stopwatch.Elapsed),
+                        null));
                 }
                 catch (Exception exception) when (exception is HttpRequestException or UriFormatException)
                 {
-                    results.Add($"{label}: {string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message)}");
+                    stopwatch.Stop();
+                    results.Add(new ConnectionTestTargetResult(
+                        label,
+                        url,
+                        false,
+                        string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message),
+                        FormatLatency(stopwatch.Elapsed),
+                        null));
                 }
             }
 
-            return string.Join(Environment.NewLine, results);
+            return new ConnectionTestReport(results, BuildConnectionTestSummary(results));
         }
         finally
         {
             IsConnectionTestRunning = false;
         }
+    }
+
+    private string BuildConnectionTestSummary(IReadOnlyList<ConnectionTestTargetResult> results)
+    {
+        if (results.All(static result => result.Succeeded))
+        {
+            return _getString("Settings.ConnectionTest.AllPassed");
+        }
+
+        if (results.All(static result => !result.Succeeded))
+        {
+            return _getString("Settings.ConnectionTest.AllFailed");
+        }
+
+        int passed = results.Count(static result => result.Succeeded);
+        return string.Format(_getString("Settings.ConnectionTest.PartialPassed.Format"), passed, results.Count);
+    }
+
+    private static string FormatLatency(TimeSpan elapsed)
+    {
+        int milliseconds = Math.Max(0, (int)Math.Round(elapsed.TotalMilliseconds));
+        return $"{milliseconds} ms";
     }
 
     /// <summary>Restores base display settings to defaults.</summary>
@@ -2004,10 +2418,24 @@ internal sealed class SettingsViewModel : ObservableObject
         AppAccentColorMode = AppAccentColorMode.FollowSystem;
         AppAccentColorValue = _settings.AppAccentColorValue;
 
+        _settings.CloseBehaviorMode = CloseBehaviorMode.MinimizeToTray;
+        CloseBehaviorMode = CloseBehaviorMode.MinimizeToTray;
+
         RaiseLocalizedTextChanges();
         RaiseSelectorBindingsChanged();
         RefreshProxyInformation();
         ResetDiagnosticStatusText();
+    }
+
+    /// <summary>Restores notification settings to defaults.</summary>
+    public void ResetNotificationSettingsToDefaults()
+    {
+        _settings.NotificationEnabled = true;
+        SetProperty(ref _notificationEnabled, true, nameof(NotificationEnabled));
+
+        _settings.NotificationLevel = NotificationLevel.Default;
+        NotificationLevel = NotificationLevel.Default;
+        RaiseSelectorBindingsChanged();
     }
 
     /// <summary>Restores startup settings to defaults.</summary>
@@ -2025,6 +2453,37 @@ internal sealed class SettingsViewModel : ObservableObject
 
         _settings.StartupBehaviorMode = StartupBehaviorMode.LastSetting;
         StartupBehaviorMode = StartupBehaviorMode.LastSetting;
+        RaiseSelectorBindingsChanged();
+    }
+
+    /// <summary>Restores trigger settings to defaults.</summary>
+    public void ResetTriggerSettingsToDefaults()
+    {
+        _settings.TriggersEnabled = true;
+        if (SetProperty(ref _triggersEnabled, true, nameof(TriggersEnabled)))
+        {
+            RaiseTriggerRestartStateChanged();
+        }
+
+        _settings.TriggerNotificationsEnabled = true;
+        SetProperty(ref _triggerNotificationsEnabled, true, nameof(TriggerNotificationsEnabled));
+    }
+
+    /// <summary>Restores taskbar tray settings to defaults without changing deployed services.</summary>
+    public void ResetTraySettingsToDefaults()
+    {
+        _settings.TrayFadeInactiveIcon = true;
+        SetProperty(ref _trayFadeInactiveIcon, true, nameof(TrayFadeInactiveIcon));
+
+        _settings.TrayUseMonochromeInactiveIcon = false;
+        if (SetProperty(ref _trayUseMonochromeInactiveIcon, false, nameof(TrayUseMonochromeInactiveIcon)))
+        {
+            RaiseTrayIconRestartStateChanged();
+        }
+
+        _settings.TrayVisibleFeatureIds = DefaultTrayVisibleFeatureIds;
+        TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
+
         RaiseSelectorBindingsChanged();
     }
 
@@ -2058,7 +2517,7 @@ internal sealed class SettingsViewModel : ObservableObject
         RefreshProxyInformation();
     }
 
-    /// <summary>Restores Windows-native repair and proxy recovery settings to defaults.</summary>
+    /// <summary>Restores Windows-native repair settings to defaults.</summary>
     public void ResetWindowsNativeSettingsToDefaults()
     {
         _settings.CheckStaleProxyOnStartup = true;
@@ -2066,10 +2525,6 @@ internal sealed class SettingsViewModel : ObservableObject
 
         _settings.RestoreProxyOnExit = true;
         SetProperty(ref _restoreProxyOnExit, true, nameof(RestoreProxyOnExit));
-
-        _settings.ProxyRecoveryMode = ProxyRecoveryMode.DisableProxy;
-        ProxyRecoveryMode = ProxyRecoveryMode.DisableProxy;
-        RaiseSelectorBindingsChanged();
     }
 
     /// <summary>Restores mainland China feature settings to defaults.</summary>
@@ -2118,7 +2573,7 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         using HttpClient client = new()
         {
-            Timeout = TimeSpan.FromSeconds(8),
+            Timeout = TimeSpan.FromSeconds(ConnectionTestTimeoutSeconds),
         };
         using HttpResponseMessage response = await client.GetAsync(uri, cancellationToken);
         return (int)response.StatusCode;

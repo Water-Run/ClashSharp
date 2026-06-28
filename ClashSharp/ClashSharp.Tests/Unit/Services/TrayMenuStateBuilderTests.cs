@@ -129,6 +129,17 @@ public sealed class TrayMenuStateBuilderTests
             return key switch
             {
                 "Tray.Menu.Mode" => "Mode",
+                "Tray.Menu.Pages" => "Pages",
+                "Nav.MasterControl" => "Master",
+                "Nav.ProxyNodes" => "Nodes",
+                "Nav.Profiles" => "Profiles",
+                "Nav.Links" => "Links",
+                "Nav.Rules" => "Rules",
+                "Nav.Triggers" => "Triggers",
+                "Nav.Statistics" => "Statistics",
+                "Nav.Logs" => "Logs",
+                "Nav.About" => "About",
+                "Nav.Settings" => "Settings page",
                 "Master.Mode.Disabled.Title" => "Disabled",
                 "Master.Mode.Standby.Title" => "Standby",
                 "Master.Mode.RuleTakeover.Title" => "Rule",
@@ -148,8 +159,36 @@ public sealed class TrayMenuStateBuilderTests
 
         Assert.Equal("Mode", state.ModeMenuLabel);
         Assert.Equal(["Disabled", "Standby", "Rule", "Global"], state.ModeItems.Select(item => item.Label));
+        Assert.Equal("Pages", state.PagesMenuLabel);
+        Assert.Equal(
+            ["MasterControl", "ProxyNodes", "Profiles", "Links", "Rules", "Triggers", "Statistics", "Logs", "About", "Settings"],
+            state.PageItems.Select(item => item.Tag));
+        Assert.Equal(
+            ["Master", "Nodes", "Profiles", "Links", "Rules", "Triggers", "Statistics", "Logs", "About", "Settings page"],
+            state.PageItems.Select(item => item.Label));
         Assert.Equal("TUN", state.TransparentProxyItem.Label);
         Assert.Equal("Settings", state.SettingsLabel);
         Assert.Equal("Safe exit", state.SafeExitLabel);
+    }
+
+    /// <summary>Verifies tray visible feature ids filter optional menu groups without changing page items.</summary>
+    [Fact]
+    public void Build_WithVisibleFeatureIds_FiltersMenuFeatures()
+    {
+        TrayMenuState state = TrayMenuStateBuilder.Build(
+            ClashSharpMode.Disabled,
+            transparentProxyEnabled: false,
+            mihomoServiceInstalled: true,
+            TrayStatusSnapshot.Unavailable,
+            ["pages", "safe-exit"],
+            key => key);
+
+        Assert.False(state.ShowStatus);
+        Assert.False(state.ShowMode);
+        Assert.True(state.ShowPages);
+        Assert.False(state.ShowTransparentProxy);
+        Assert.False(state.ShowSettings);
+        Assert.True(state.ShowSafeExit);
+        Assert.NotEmpty(state.PageItems);
     }
 }

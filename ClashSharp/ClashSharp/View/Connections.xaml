@@ -48,10 +48,10 @@
                                 <ColumnDefinition Width="72" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="{Binding ProcessNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                            <TextBlock Grid.Column="1" Text="{Binding HostDisplay}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding ProcessNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Grid.Column="1" Text="{Binding HostDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Grid.Column="2" Text="{Binding RuleDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="3" Text="{Binding ProxyNameDisplay}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="3" Text="{Binding ProxyNameDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Grid.Column="4" Text="{Binding UploadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <TextBlock Grid.Column="5" Text="{Binding DownloadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <Button

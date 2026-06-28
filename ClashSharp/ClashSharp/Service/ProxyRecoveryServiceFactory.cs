@@ -28,7 +28,6 @@ internal static class ProxyRecoveryServiceFactory
         return new ProxyRecoveryService(
             new ProxyRecoverySettingsAdapter(AppSettingsService.Instance),
             new ProxyRecoveryWindowsProxyAdapter(WindowsProxyService.Instance),
-            new ProxyRecoveryTakeoverAdapter(),
             LocalizationService.Instance.GetString);
     }
 }
@@ -38,8 +37,6 @@ internal sealed class ProxyRecoverySettingsAdapter(AppSettingsService settings) 
     public bool CheckStaleProxyOnStartup => settings.CheckStaleProxyOnStartup;
 
     public int MixedPort => settings.MixedPort;
-
-    public ProxyRecoveryMode ProxyRecoveryMode => settings.ProxyRecoveryMode;
 }
 
 internal sealed class ProxyRecoveryWindowsProxyAdapter(WindowsProxyService windowsProxy) : IProxyRecoveryWindowsProxy
@@ -52,13 +49,5 @@ internal sealed class ProxyRecoveryWindowsProxyAdapter(WindowsProxyService windo
     public void DisableProxy()
     {
         windowsProxy.DisableProxy();
-    }
-}
-
-internal sealed class ProxyRecoveryTakeoverAdapter : IProxyRecoveryTakeover
-{
-    public NetworkTakeoverResult ApplyStartupSystemProxyRecovery()
-    {
-        return NetworkTakeoverService.Instance.ApplyStartupSystemProxyRecovery();
     }
 }

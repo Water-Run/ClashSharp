@@ -14,7 +14,7 @@
         <StackPanel Spacing="18" MaxWidth="720" HorizontalAlignment="Center">
             <StackPanel Spacing="8" HorizontalAlignment="Center">
                 <Image Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="96" Height="96" Stretch="Uniform" HorizontalAlignment="Center" />
-                <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding VersionSummaryText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding RuntimeValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding AppDescriptionText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" />
@@ -30,12 +30,12 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="AuthorTitleText" Text="{Binding AuthorTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="AuthorTitleText" Text="{Binding AuthorTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                     <TextBlock x:Name="AuthorValueText" Text="{Binding AuthorValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Spacing="4">
-                    <TextBlock x:Name="LicenseTitleText" Text="{Binding LicenseTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock x:Name="LicenseTitleText" Text="{Binding LicenseTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                     <TextBlock x:Name="LicenseValueText" Text="{Binding LicenseValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -45,7 +45,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="GitHubTitleText" Text="{Binding GitHubTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="GitHubTitleText" Text="{Binding GitHubTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock x:Name="GitHubDescriptionText" Text="{Binding GitHubDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                     <Button x:Name="GitHubButton" Grid.Column="1" Command="{Binding OpenGitHubCommand}">
@@ -62,7 +62,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="MihomoTitleText" Text="{Binding MihomoTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="MihomoTitleText" Text="{Binding MihomoTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock x:Name="MihomoDescriptionText" Text="{Binding MihomoDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                         <TextBlock x:Name="MihomoStatusText" Text="{Binding MihomoStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
@@ -80,7 +80,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Spacing="4">
-                        <TextBlock x:Name="ProxyInformationTitleText" Text="{Binding ProxyInformationTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="ProxyInformationTitleText" Text="{Binding ProxyInformationTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock x:Name="ProxyInformationDescriptionText" Text="{Binding ProxyInformationDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                     <Button x:Name="ProxyInformationButton" Grid.Column="1" Click="OpenProxyInformationButton_Click">

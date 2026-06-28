@@ -69,7 +69,7 @@ public sealed class SettingsDiagnosticsViewModelTests
     public async Task ExecuteCommandAsync_InvalidCommand_ReturnsNullAndLogsWarning(string? commandTag)
     {
         FakeDiagnosticsLog log = new();
-        SettingsDiagnosticsViewModel viewModel = new(new FakeDiagnosticsClient(), log);
+        SettingsDiagnosticsViewModel viewModel = new(new FakeDiagnosticsClient(), log, GetString);
 
         SettingsDiagnosticStatus? status = await viewModel.ExecuteCommandAsync(commandTag, CancellationToken.None);
 
@@ -105,6 +105,7 @@ public sealed class SettingsDiagnosticsViewModelTests
             "Diagnostic.Failed.Diagnose" => "diagnose failed",
             "Diagnostic.Failed.Apply" => "apply failed",
             "Diagnostic.Failed.Reset" => "reset failed",
+            "Diagnostic.UnsupportedCommand" => "Unsupported diagnostic command.",
             _ => key,
         };
     }

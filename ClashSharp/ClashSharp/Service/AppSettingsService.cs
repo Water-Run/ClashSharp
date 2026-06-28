@@ -83,8 +83,23 @@ public sealed class AppSettingsService
     /// <summary>Storage key for showing the startup guide during application startup.</summary>
     private const string KeyShowStartupGuideOnStartup = "ShowStartupGuideOnStartup";
 
-    /// <summary>Storage key for stale proxy recovery behavior after abnormal exits or restarts.</summary>
-    private const string KeyProxyRecoveryMode = "ProxyRecoveryMode";
+    /// <summary>Storage key for enabling the trigger engine.</summary>
+    private const string KeyTriggersEnabled = "TriggersEnabled";
+
+    /// <summary>Storage key for sending notifications when triggers fire.</summary>
+    private const string KeyTriggerNotificationsEnabled = "TriggerNotificationsEnabled";
+
+    /// <summary>Storage key for the main-window close behavior.</summary>
+    private const string KeyCloseBehaviorMode = "CloseBehaviorMode";
+
+    /// <summary>Storage key for fading the tray icon while proxy takeover is inactive.</summary>
+    private const string KeyTrayFadeInactiveIcon = "TrayFadeInactiveIcon";
+
+    /// <summary>Storage key for using a monochrome tray icon while proxy takeover is inactive.</summary>
+    private const string KeyTrayUseMonochromeInactiveIcon = "TrayUseMonochromeInactiveIcon";
+
+    /// <summary>Storage key for comma-separated tray menu feature ids.</summary>
+    private const string KeyTrayVisibleFeatureIds = "TrayVisibleFeatureIds";
 
     /// <summary>Storage key for mainland China display text and flag replacement.</summary>
     private const string KeyMainlandChinaDisplayEnabled = "MainlandChinaDisplayEnabled";
@@ -97,6 +112,9 @@ public sealed class AppSettingsService
 
     /// <summary>Storage key for Windows system notification verbosity.</summary>
     private const string KeyNotificationLevel = "NotificationLevel";
+
+    /// <summary>Storage key for enabling Windows system notifications.</summary>
+    private const string KeyNotificationEnabled = "NotificationEnabled";
 
     /// <summary>Storage key for proxy connection-test URL.</summary>
     private const string KeyConnectionTestUrl = "ConnectionTestUrl";
@@ -113,6 +131,9 @@ public sealed class AppSettingsService
 
     /// <summary>Default custom accent color used as the picker seed.</summary>
     private const string DefaultAppAccentColorValue = "#FF0078D4";
+
+    /// <summary>Default taskbar tray menu feature ids.</summary>
+    private const string DefaultTrayVisibleFeatureIds = "status,mode,pages,transparent-proxy,settings,safe-exit";
 
     /// <summary>Settings keys owned by this service.</summary>
     private static readonly string[] KnownKeys =
@@ -133,10 +154,16 @@ public sealed class AppSettingsService
         KeyStartupConflictCheckEnabled,
         KeyStartupBehaviorMode,
         KeyShowStartupGuideOnStartup,
-        KeyProxyRecoveryMode,
+        KeyTriggersEnabled,
+        KeyTriggerNotificationsEnabled,
+        KeyCloseBehaviorMode,
+        KeyTrayFadeInactiveIcon,
+        KeyTrayUseMonochromeInactiveIcon,
+        KeyTrayVisibleFeatureIds,
         KeyMainlandChinaDisplayEnabled,
         KeyMainlandChinaFeatureMode,
         KeyMainlandChinaUrlBlockingEnabled,
+        KeyNotificationEnabled,
         KeyNotificationLevel,
         KeyConnectionTestUrl,
         KeyConnectionTestProxyUrl1,
@@ -297,12 +324,46 @@ public sealed class AppSettingsService
         set => SetBoolean(KeyShowStartupGuideOnStartup, value);
     }
 
-    /// <summary>Gets or sets the recovery action applied to stale proxy state after abnormal exits.</summary>
-    /// <value>Selected <see cref="ProxyRecoveryMode"/> value; defaults to <see cref="ProxyRecoveryMode.DisableProxy"/>.</value>
-    public ProxyRecoveryMode ProxyRecoveryMode
+    /// <summary>Gets or sets whether trigger tasks are evaluated.</summary>
+    public bool TriggersEnabled
     {
-        get => GetEnum(KeyProxyRecoveryMode, ProxyRecoveryMode.DisableProxy);
-        set => SetEnum(KeyProxyRecoveryMode, value);
+        get => GetBoolean(KeyTriggersEnabled, true);
+        set => SetBoolean(KeyTriggersEnabled, value);
+    }
+
+    /// <summary>Gets or sets whether fired triggers send dedicated system notifications.</summary>
+    public bool TriggerNotificationsEnabled
+    {
+        get => GetBoolean(KeyTriggerNotificationsEnabled, true);
+        set => SetBoolean(KeyTriggerNotificationsEnabled, value);
+    }
+
+    /// <summary>Gets or sets how the main window handles user close requests.</summary>
+    public CloseBehaviorMode CloseBehaviorMode
+    {
+        get => GetEnum(KeyCloseBehaviorMode, CloseBehaviorMode.MinimizeToTray);
+        set => SetEnum(KeyCloseBehaviorMode, value);
+    }
+
+    /// <summary>Gets or sets whether the tray icon is faded when proxy takeover is inactive.</summary>
+    public bool TrayFadeInactiveIcon
+    {
+        get => GetBoolean(KeyTrayFadeInactiveIcon, true);
+        set => SetBoolean(KeyTrayFadeInactiveIcon, value);
+    }
+
+    /// <summary>Gets or sets whether the tray icon uses the monochrome logo when proxy takeover is inactive.</summary>
+    public bool TrayUseMonochromeInactiveIcon
+    {
+        get => GetBoolean(KeyTrayUseMonochromeInactiveIcon, false);
+        set => SetBoolean(KeyTrayUseMonochromeInactiveIcon, value);
+    }
+
+    /// <summary>Gets or sets comma-separated ids for tray menu features that should be displayed.</summary>
+    public string TrayVisibleFeatureIds
+    {
+        get => GetString(KeyTrayVisibleFeatureIds, DefaultTrayVisibleFeatureIds);
+        set => SetString(KeyTrayVisibleFeatureIds, NormalizeTrayVisibleFeatureIds(value));
     }
 
     /// <summary>Gets or sets the mainland China specific display feature level.</summary>
@@ -393,6 +454,13 @@ public sealed class AppSettingsService
     {
         get => GetEnum(KeyNotificationLevel, NotificationLevel.Default);
         set => SetEnum(KeyNotificationLevel, value);
+    }
+
+    /// <summary>Gets or sets whether Windows system notifications are enabled.</summary>
+    public bool NotificationEnabled
+    {
+        get => GetBoolean(KeyNotificationEnabled, true);
+        set => SetBoolean(KeyNotificationEnabled, value);
     }
 
     /// <summary>Removes all persisted settings owned by Clash#, restoring default values on subsequent reads.</summary>
@@ -609,6 +677,26 @@ public sealed class AppSettingsService
         }
 
         return uri.ToString().TrimEnd('/');
+    }
+
+    /// <summary>Normalizes comma-separated tray feature ids while preserving order.</summary>
+    private static string NormalizeTrayVisibleFeatureIds(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        List<string> ids = [];
+        foreach (string id in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (id.Length == 0 || !seen.Add(id))
+            {
+                continue;
+            }
+
+            ids.Add(id);
+        }
+
+        return ids.Count == 0 ? DefaultTrayVisibleFeatureIds : string.Join(",", ids);
     }
 
     /// <summary>Normalizes a user-selected accent color to #AARRGGBB.</summary>

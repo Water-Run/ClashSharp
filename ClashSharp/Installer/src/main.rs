@@ -552,6 +552,9 @@ fn run_action(
             Ok(text.repaired_done)
         }
         InstallerAction::Uninstall => {
+            set_progress(app_weak, 0.36, text.removing_title, text.removing_message);
+            cleanup_installed_services()?;
+
             if !context.is_installed {
                 return Ok(text.uninstalled_done);
             }
@@ -688,6 +691,35 @@ fn uninstall_package() -> Result<(), String> {
         "$pkg = Get-AppxPackage -Name {}; if ($null -ne $pkg) {{ Remove-AppxPackage -Package $pkg.PackageFullName }}",
         powershell_quote_text(PACKAGE_NAME)
     ))
+}
+
+/// Removes services and startup helpers that can survive package removal.
+fn cleanup_installed_services() -> Result<(), String> {
+    uninstall_mihomo_service()?;
+    uninstall_startup_restore_fallback()
+}
+
+/// Stops and deletes the optional transparent-proxy Windows service.
+fn uninstall_mihomo_service() -> Result<(), String> {
+    run_powershell(
+        "$name = 'ClashSharpMihomo'; \
+         $svc = Get-Service -Name $name -ErrorAction SilentlyContinue; \
+         if ($null -ne $svc) { \
+             Stop-Service -Name $name -Force -ErrorAction SilentlyContinue; \
+             & sc.exe delete $name | Out-Null; \
+             if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1060) { exit $LASTEXITCODE } \
+         }",
+    )
+}
+
+/// Deletes the current-user startup restore fallback registration.
+fn uninstall_startup_restore_fallback() -> Result<(), String> {
+    run_powershell(
+        "Remove-ItemProperty \
+            -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' \
+            -Name 'ClashSharp.ProxyRestoreFallback' \
+            -ErrorAction SilentlyContinue",
+    )
 }
 
 /// Returns whether the Clash# package is installed for the current user.

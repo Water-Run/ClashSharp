@@ -30,7 +30,7 @@
                 TextWrapping="Wrap"
                 Visibility="{Binding HasRestartRequiredSettings, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-            <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+            <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <ComboBox x:Name="LanguageBox" Width="180" ItemsSource="{Binding DisplayLanguageOptions}" SelectedIndex="{Binding DisplayLanguageIndex, Mode=TwoWay}" />
@@ -69,15 +69,71 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="NotificationLevelRow" Title="{Binding NotificationTitleText}" Description="{Binding NotificationDescriptionText}">
+            <components:SettingRow x:Name="CloseBehaviorModeRow" Title="{Binding CloseBehaviorModeTitleText}" Description="{Binding CloseBehaviorModeDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="NotificationLevelBox" Width="180" ItemsSource="{Binding NotificationLevelOptions}" SelectedIndex="{Binding NotificationLevelIndex, Mode=TwoWay}" />
+                    <ComboBox x:Name="CloseBehaviorModeBox" Width="220" ItemsSource="{Binding CloseBehaviorModeOptions}" SelectedIndex="{Binding CloseBehaviorModeIndex, Mode=TwoWay}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <HyperlinkButton x:Name="ResetBasicSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetBasicSettingsButton_Click" />
 
-            <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <TextBlock x:Name="NotificationSectionTitleText" Text="{Binding NotificationSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
+            <components:SettingRow x:Name="NotificationEnabledRow" Title="{Binding NotificationEnabledTitleText}" Description="{Binding NotificationEnabledDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="NotificationEnabledToggle" MinWidth="0" IsOn="{Binding NotificationEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="NotificationLevelRow" Title="{Binding NotificationTitleText}" Description="{Binding NotificationDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ComboBox x:Name="NotificationLevelBox" Width="180" ItemsSource="{Binding NotificationLevelOptions}" SelectedIndex="{Binding NotificationLevelIndex, Mode=TwoWay}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+            <HyperlinkButton x:Name="ResetNotificationSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetNotificationSettingsButton_Click" />
+
+            <TextBlock x:Name="TriggerSectionTitleText" Text="{Binding TriggerSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
+            <components:SettingRow x:Name="TriggersEnabledRow" Title="{Binding TriggersEnabledTitleText}" Description="{Binding TriggersEnabledDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="TriggersEnabledToggle" MinWidth="0" IsOn="{Binding TriggersEnabled, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TriggersEnabledToggle_Toggled" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="TriggerNotificationsEnabledRow" Title="{Binding TriggerNotificationsEnabledTitleText}" Description="{Binding TriggerNotificationsEnabledDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="TriggerNotificationsEnabledToggle" MinWidth="0" IsOn="{Binding TriggerNotificationsEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+            <HyperlinkButton x:Name="ResetTriggerSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetTriggerSettingsButton_Click" />
+
+            <TextBlock x:Name="TraySectionTitleText" Text="{Binding TraySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
+            <components:SettingRow x:Name="TrayFadeInactiveIconRow" Title="{Binding TrayFadeInactiveIconTitleText}" Description="{Binding TrayFadeInactiveIconDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="TrayFadeInactiveIconToggle" MinWidth="0" IsOn="{Binding TrayFadeInactiveIcon, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="TrayUseMonochromeInactiveIconRow" Title="{Binding TrayUseMonochromeInactiveIconTitleText}" Description="{Binding TrayUseMonochromeInactiveIconDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <ToggleSwitch x:Name="TrayUseMonochromeInactiveIconToggle" MinWidth="0" IsOn="{Binding TrayUseMonochromeInactiveIcon, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TrayUseMonochromeInactiveIconToggle_Toggled" />
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
+            <components:SettingRow x:Name="TrayVisibleFeaturesRow" Title="{Binding TrayVisibleFeaturesTitleText}" Description="{Binding TrayVisibleFeaturesDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding TrayVisibleFeatureSummaryText}" MinWidth="120" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Button x:Name="EditTrayVisibleFeaturesButton" Click="EditTrayVisibleFeaturesButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                                <TextBlock Text="{Binding EditText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+            <HyperlinkButton x:Name="ResetTraySettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetTraySettingsButton_Click" />
+
+            <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="LaunchAtStartupRow" Title="{Binding LaunchAtStartupTitleText}" Description="{Binding LaunchAtStartupDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <ToggleSwitch x:Name="LaunchAtStartupToggle" MinWidth="0" IsOn="{Binding LaunchAtStartupEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
@@ -119,7 +175,7 @@
             </components:SettingRow>
             <HyperlinkButton x:Name="ResetStartupSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetStartupSettingsButton_Click" />
 
-            <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
@@ -185,7 +241,7 @@
             </components:SettingRow>
             <HyperlinkButton x:Name="ResetProxySettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetProxySettingsButton_Click" />
 
-            <TextBlock x:Name="WindowsNativeSectionTitleText" Text="{Binding WindowsNativeSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <TextBlock x:Name="WindowsNativeSectionTitleText" Text="{Binding WindowsNativeSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="StartupRestoreFallbackRow" Title="{Binding StartupRestoreFallbackTitleText}" Description="{Binding StartupRestoreFallbackDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -218,7 +274,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="6">
-                    <TextBlock x:Name="WindowsNativeTitleText" Text="{Binding WindowsNativeTitleText}" Style="{ThemeResource BodyTextBlockStyle}" />
+                    <TextBlock x:Name="WindowsNativeTitleText" Text="{Binding WindowsNativeTitleText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                     <TextBlock x:Name="WindowsNativeDescriptionText" Text="{Binding WindowsNativeDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Click="OpenNetworkRepairButton_Click">
@@ -241,14 +297,9 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
-            <components:SettingRow x:Name="ProxyRecoveryModeRow" Title="{Binding ProxyRecoveryModeTitleText}" Description="{Binding ProxyRecoveryModeDescriptionText}">
-                <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="ProxyRecoveryModeBox" Width="180" ItemsSource="{Binding ProxyRecoveryModeOptions}" SelectedIndex="{Binding ProxyRecoveryModeIndex, Mode=TwoWay}" />
-                </components:SettingRow.ActionContent>
-            </components:SettingRow>
             <HyperlinkButton x:Name="ResetWindowsNativeSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetWindowsNativeSettingsButton_Click" />
 
-            <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="MainlandChinaDisplayRow" Title="{Binding MainlandChinaDisplayTitleText}" Description="{Binding MainlandChinaDisplayDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <ComboBox x:Name="MainlandChinaFeatureModeBox" Width="280" ItemsSource="{Binding MainlandChinaFeatureModeOptions}" SelectedIndex="{Binding MainlandChinaFeatureModeIndex, Mode=TwoWay}" />
@@ -264,7 +315,7 @@
             </components:SettingRow>
             <HyperlinkButton x:Name="ResetMainlandChinaSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetMainlandChinaSettingsButton_Click" />
 
-            <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+            <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="DataPackageRow" Title="{Binding BackupRestoreTitleText}" Description="{Binding BackupRestoreDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">

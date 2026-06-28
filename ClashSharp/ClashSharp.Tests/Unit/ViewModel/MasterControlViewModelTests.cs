@@ -48,6 +48,8 @@ public sealed class MasterControlViewModelTests
         Assert.Equal("Ready", viewModel.BasicStatusText);
         Assert.Equal("HK-01", viewModel.CurrentNodeText);
         Assert.Equal("82 ms", viewModel.LatencySummaryText);
+        Assert.DoesNotContain("v1.19.11", viewModel.InfoTiles.Single(tile => tile.Id == "core").Detail);
+        Assert.Equal("v1.19.11", viewModel.InfoTiles.Single(tile => tile.Id == "mihomo-version").Value);
     }
 
     /// <summary>Verifies applying a mode persists the mode, updates statuses, and logs the result.</summary>
@@ -71,6 +73,36 @@ public sealed class MasterControlViewModelTests
         Assert.Equal("Off", viewModel.TransparentProxyStatusText);
         Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Message == "applied");
         Assert.Equal("Active", viewModel.BasicStatusText);
+    }
+
+    /// <summary>Verifies clicking the already-active mode leaves runtime services untouched.</summary>
+    [Fact]
+    public async Task ApplyModeAsync_WhenModeAlreadySelected_DoesNotApplyOrNotify()
+    {
+        FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.Disabled };
+        FakeMasterTakeover takeover = new();
+        FakeMasterLog log = new();
+        int notifiedCount = 0;
+        MasterControlViewModel viewModel = new(
+            new FakeMasterLocalization(),
+            new FakeMasterCore(),
+            new FakeMasterWindowsProxy(),
+            settings,
+            takeover,
+            log,
+            new FakeMasterTrayStatus(),
+            modeApplied: _ =>
+            {
+                notifiedCount++;
+                return Task.CompletedTask;
+            });
+
+        await viewModel.ApplyModeAsync(ClashSharpMode.Disabled, CancellationToken.None);
+
+        Assert.Equal(0, takeover.ApplyCount);
+        Assert.Equal(0, notifiedCount);
+        Assert.Empty(log.Entries);
+        Assert.True(viewModel.IsDisabledModeSelected);
     }
 
     /// <summary>Verifies expected takeover failures move the view model to a faulted state and log an error.</summary>
@@ -104,6 +136,25 @@ public sealed class MasterControlViewModelTests
             ActiveProfileId = "profile-a",
             TransparentProxyEnabled = true,
             MixedPort = 12000,
+            ConnectionSamplingIntervalSeconds = 45,
+            DisplayLanguage = AppLanguage.English,
+            AppThemeMode = AppThemeMode.Dark,
+            StartupBehaviorMode = StartupBehaviorMode.StartRuleProxy,
+            TriggersEnabled = true,
+            TriggerNotificationsEnabled = false,
+            CloseBehaviorMode = CloseBehaviorMode.ConfirmExit,
+            TrayFadeInactiveIcon = true,
+            TrayUseMonochromeInactiveIcon = false,
+            TrayVisibleFeatureIds = "status,mode,pages,settings",
+            NotificationEnabled = true,
+            NotificationLevel = NotificationLevel.More,
+            RestoreProxyOnExit = true,
+            CheckStaleProxyOnStartup = true,
+            StartupConflictCheckEnabled = true,
+            ShowStartupGuideOnStartup = false,
+            MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter,
+            AppAccentColorMode = AppAccentColorMode.Custom,
+            AppAccentColorValue = "#FF112233",
             ConnectionTestProxyUrl1 = "https://google.com",
             ConnectionTestProxyUrl2 = "https://github.com",
             ConnectionTestDirectUrl = "https://baidu.com",
@@ -111,10 +162,12 @@ public sealed class MasterControlViewModelTests
 
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
 
-        Assert.True(viewModel.InfoTiles.Count >= 12);
+        Assert.True(viewModel.InfoTiles.Count >= 50);
+        Assert.Equal(viewModel.InfoTiles.Count, viewModel.InfoTiles.Select(static tile => tile.Id).Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "edit-tiles");
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "backup");
         Assert.Equal("core", viewModel.InfoTiles[0].Id);
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mihomo-version" && tile.Value == string.Empty);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "transparent-proxy" && tile.IsToggleVisible && tile.IsToggleOn);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-1" && tile.Value == "google.com");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-2" && tile.Value == "github.com");
@@ -126,8 +179,63 @@ public sealed class MasterControlViewModelTests
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "blocked-url" && tile.Value == "On");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "active-profile" && tile.Value == "profile-a");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "port" && tile.Value == "12000");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-name" && tile.Value == "Clash#");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-version" && tile.Value == "Version 1.0.0.0");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-runtime" && tile.Value == ".NET 10 + WinUI 3");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "notification-level" && tile.Value == "More");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "triggers-enabled" && tile.Value == "On");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "trigger-notifications" && tile.Value == "Off");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "tray-visible-features" && tile.Value == "4 features enabled");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "close-behavior" && tile.Value == "Exit with confirmation");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-behavior" && tile.Value == "Start proxy");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-theme" && tile.Value == "Dark");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "display-language" && tile.Value == "English");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "sampling-interval" && tile.Value == "45 s");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-accent" && tile.Value == "Custom");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "restore-proxy-on-exit" && tile.Value == "On");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "stale-proxy-check" && tile.Value == "On");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-conflict-check" && tile.Value == "On");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-guide" && tile.Value == "Off");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mainland-feature-mode" && tile.Value == "Keyword filter");
         Assert.All(viewModel.InfoTiles, tile => Assert.False(string.IsNullOrWhiteSpace(tile.Description)));
         Assert.Equal("Search tiles", viewModel.SearchInfoTilesPlaceholderText);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RefreshesRuntimeInfoTiles()
+    {
+        FakeMasterRuntime runtime = new()
+        {
+            Snapshot = new MasterControlRuntimeSnapshot(
+                new CoreConfigurationState(@"C:\Data", @"C:\Data\config.yaml", true),
+                3,
+                2,
+                24,
+                150,
+                5,
+                4,
+                new LogStorageSummary(@"C:\Data\logs.sqlite", 2048, 9, 11),
+                new TrafficStatisticsSummary(1024, 2048, 11, 7, 3, 6, 8, 10),
+                new MihomoServiceStatus(true, true, "Service running"),
+                new StartupRestoreFallbackStatus(true, "helper.exe --restore")),
+        };
+        MasterControlViewModel viewModel = CreateViewModel(runtime: runtime);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "core-config-file" && tile.Value == "Available");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "profile-count" && tile.Value == "3");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "subscription-count" && tile.Value == "2");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "proxy-node-count" && tile.Value == "24");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "rule-count" && tile.Value == "150");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "trigger-count" && tile.Value == "4/5");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "system-log-count" && tile.Value == "9");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-records" && tile.Value == "11");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "traffic-total" && tile.Value == "3 KB");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "traffic-snapshots" && tile.Value == "7");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "node-health-records" && tile.Value == "8");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mihomo-service" && tile.Value == "Service running");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-restore-fallback" && tile.Value == "Registered");
     }
 
     /// <summary>Verifies the transparent-proxy tile toggle persists through the settings boundary.</summary>
@@ -175,7 +283,8 @@ public sealed class MasterControlViewModelTests
         FakeMasterSettings? settings = null,
         FakeMasterTakeover? takeover = null,
         FakeMasterLog? log = null,
-        FakeMasterTrayStatus? trayStatus = null)
+        FakeMasterTrayStatus? trayStatus = null,
+        FakeMasterRuntime? runtime = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -184,7 +293,8 @@ public sealed class MasterControlViewModelTests
             settings ?? new FakeMasterSettings(),
             takeover ?? new FakeMasterTakeover(),
             log ?? new FakeMasterLog(),
-            trayStatus ?? new FakeMasterTrayStatus());
+            trayStatus ?? new FakeMasterTrayStatus(),
+            runtime ?? new FakeMasterRuntime());
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>
@@ -237,6 +347,7 @@ public sealed class MasterControlViewModelTests
                 "Master.Tile.Type.Navigation" => "Navigation",
                 "Master.Tile.ExportConfig" => "Export config",
                 "Master.Tile.ImportConfig" => "Import config",
+                "Master.Tile.AppName" => "App name",
                 "Master.Tile.Visible" => "Visible",
                 "Master.Tile.Edit" => "Edit tiles",
                 "Master.Tile.EditTiles" => "Edit tiles",
@@ -259,8 +370,104 @@ public sealed class MasterControlViewModelTests
                 "Master.Tile.Description.StartupConflicts" => "Startup conflicts description",
                 "Master.Tile.Description.ExportConfig" => "Export config description",
                 "Master.Tile.Description.ImportConfig" => "Import config description",
+                "Master.Tile.Description.AppName" => "App name description",
+                "Master.Tile.Description.AppVersion" => "App version description",
+                "Master.Tile.Description.AppRuntime" => "App runtime description",
                 "Settings.StartupGuide.ShowNow" => "Show now",
                 "Settings.CheckStartupConflicts.Now" => "Check now",
+                "Settings.Notification.Enabled.Title" => "Notifications enabled",
+                "Settings.Notification.Enabled.Description" => "Notifications enabled description",
+                "Settings.Notification.Title" => "Notifications",
+                "Settings.Notification.Description" => "Notifications description",
+                "Settings.Notification.Default" => "Default",
+                "Settings.Notification.CriticalOnly" => "Critical only",
+                "Settings.Notification.More" => "More",
+                "Settings.Triggers.Enabled.Title" => "Triggers enabled",
+                "Settings.Triggers.Enabled.Description" => "Triggers enabled description",
+                "Settings.Triggers.Notifications.Title" => "Trigger notifications",
+                "Settings.Triggers.Notifications.Description" => "Trigger notifications description",
+                "Settings.Section.Triggers" => "Triggers",
+                "Settings.Tray.VisibleFeatures.Title" => "Tray features",
+                "Settings.Tray.VisibleFeatures.Description" => "Tray features description",
+                "Settings.Tray.VisibleFeatures.Summary.Format" => "{0} features enabled",
+                "Settings.Tray.FadeInactiveIcon.Title" => "Fade tray icon",
+                "Settings.Tray.FadeInactiveIcon.Description" => "Fade tray icon description",
+                "Settings.Tray.MonochromeInactiveIcon.Title" => "Monochrome tray icon",
+                "Settings.Tray.MonochromeInactiveIcon.Description" => "Monochrome tray icon description",
+                "Settings.CloseBehavior.Title" => "Close behavior",
+                "Settings.CloseBehavior.Description" => "Close behavior description",
+                "Settings.CloseBehavior.ExitWithoutConfirmation" => "Exit without confirmation",
+                "Settings.CloseBehavior.ConfirmExit" => "Exit with confirmation",
+                "Settings.CloseBehavior.MinimizeToTray" => "Minimize",
+                "Settings.StartupBehavior.Title" => "Startup behavior",
+                "Settings.StartupBehavior.Description" => "Startup behavior description",
+                "Settings.StartupBehavior.LastSetting" => "Last setting",
+                "Settings.StartupBehavior.StartRuleProxy" => "Start proxy",
+                "Settings.StartupBehavior.DisableProxy" => "Disable proxy",
+                "Settings.AppTheme.Title" => "Theme",
+                "Settings.AppTheme.Description" => "Theme description",
+                "Settings.AppTheme.FollowSystem" => "Follow system",
+                "Settings.AppTheme.Light" => "Light",
+                "Settings.AppTheme.Dark" => "Dark",
+                "Settings.Language.Title" => "Language",
+                "Settings.Language.Description" => "Language description",
+                "Settings.Language.AutoDetect" => "Auto detect",
+                "Settings.AppAccentColor.Title" => "Accent color",
+                "Settings.AppAccentColor.Description" => "Accent color description",
+                "Settings.AppAccentColor.FollowSystem" => "Follow system",
+                "Settings.AppAccentColor.Custom" => "Custom",
+                "Settings.SamplingInterval.Title" => "Sampling interval",
+                "Settings.SamplingInterval.Description" => "Sampling interval description",
+                "Settings.RestoreProxyOnExit.Title" => "Restore proxy on exit",
+                "Settings.RestoreProxyOnExit.Description" => "Restore proxy on exit description",
+                "Settings.CheckStaleProxy.Title" => "Stale proxy check",
+                "Settings.CheckStaleProxy.Description" => "Stale proxy check description",
+                "Settings.StartupConflictCheck.Title" => "Startup conflict check",
+                "Settings.StartupConflictCheck.Description" => "Startup conflict check description",
+                "Settings.StartupGuide.Title" => "Startup guide",
+                "Settings.StartupGuide.Description" => "Startup guide description",
+                "Settings.MainlandChinaDisplay.Title" => "Mainland display",
+                "Settings.MainlandChinaDisplay.Description" => "Mainland display description",
+                "Settings.MainlandChinaFeature.Disabled" => "Disabled",
+                "Settings.MainlandChinaFeature.FlagOnly" => "Flag only",
+                "Settings.MainlandChinaFeature.FlagAndText" => "Flag and text",
+                "Settings.MainlandChinaFeature.KeywordFilter" => "Keyword filter",
+                "Settings.MainlandChinaFeature.All" => "All",
+                "Settings.StartupRestoreFallback.Title" => "Fallback restore",
+                "Settings.StartupRestoreFallback.Description" => "Fallback restore description",
+                "Settings.StartupRestoreFallback.Status.Registered" => "Registered",
+                "Settings.StartupRestoreFallback.Status.NotRegistered" => "Not registered",
+                "Settings.TransparentProxy.Service.Title" => "Mihomo service",
+                "Settings.TransparentProxy.Service.Description" => "Mihomo service description",
+                "Settings.ProxyInformation.Description" => "Proxy information description",
+                "Settings.ProxyInformation.CoreBinary.Missing" => "Missing",
+                "Tray.Menu.Mode" => "Mode",
+                "Tray.Status.Node.Format" => "Node: {0}",
+                "Nav.Profiles" => "Profiles",
+                "Page.Profiles.Description" => "Profiles description",
+                "StartupPrompt.Check.Subscription.Title" => "Subscriptions",
+                "Nav.ProxyNodes" => "Nodes",
+                "Page.ProxyNodes.Description" => "Nodes description",
+                "Nav.Rules" => "Rules",
+                "Page.Rules.Description" => "Rules description",
+                "Page.Triggers.Description" => "Triggers description",
+                "Statistics.LogsShortcut.Title" => "System logs",
+                "Statistics.LogsShortcut.Description" => "System logs description",
+                "Nav.Connections" => "Connections",
+                "Page.Connections.Description" => "Connections description",
+                "Statistics.Total.Title" => "Total",
+                "Page.Statistics.Description" => "Statistics description",
+                "Statistics.TotalTraffic.Format" => "Upload {0} / download {1}",
+                "Statistics.ByDate.Title" => "By date",
+                "Statistics.Node.Title" => "Nodes",
+                "ProfileCatalog.Status.Available" => "Available",
+                "About.App.Description" => "Clash# app",
+                "About.Version.Title" => "Version",
+                "About.Version.Value.Format" => "Version {0}",
+                "About.Runtime.Title" => "Runtime",
+                "About.Runtime.Value" => ".NET 10 + WinUI 3",
+                "Master.Log.ApplyModeFailed" => "Mode failed",
+                "Master.Status.Seconds.Format" => "{0} s",
                 "Master.Status.CurrentNodeUnavailable" => "No node",
                 "Master.Status.LatencyUnavailable" => "Not tested",
                 "Master.Status.Latency.Format" => "{0} ms",
@@ -344,6 +551,44 @@ public sealed class MasterControlViewModelTests
         public string ConnectionTestProxyUrl2 { get; set; } = "https://github.com";
 
         public string ConnectionTestDirectUrl { get; set; } = "https://www.baidu.com";
+
+        public AppLanguage DisplayLanguage { get; set; } = AppLanguage.AutoDetect;
+
+        public AppThemeMode AppThemeMode { get; set; } = AppThemeMode.FollowSystem;
+
+        public int ConnectionSamplingIntervalSeconds { get; set; } = 30;
+
+        public StartupBehaviorMode StartupBehaviorMode { get; set; } = StartupBehaviorMode.LastSetting;
+
+        public bool TriggersEnabled { get; set; } = true;
+
+        public bool TriggerNotificationsEnabled { get; set; } = true;
+
+        public CloseBehaviorMode CloseBehaviorMode { get; set; } = CloseBehaviorMode.MinimizeToTray;
+
+        public bool TrayFadeInactiveIcon { get; set; } = true;
+
+        public bool TrayUseMonochromeInactiveIcon { get; set; }
+
+        public string TrayVisibleFeatureIds { get; set; } = "status,mode,pages,transparent-proxy,settings,safe-exit";
+
+        public bool NotificationEnabled { get; set; } = true;
+
+        public NotificationLevel NotificationLevel { get; set; } = NotificationLevel.Default;
+
+        public bool RestoreProxyOnExit { get; set; } = true;
+
+        public bool CheckStaleProxyOnStartup { get; set; } = true;
+
+        public bool StartupConflictCheckEnabled { get; set; } = true;
+
+        public bool ShowStartupGuideOnStartup { get; set; } = true;
+
+        public MainlandChinaFeatureMode MainlandChinaFeatureMode { get; set; } = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
+
+        public AppAccentColorMode AppAccentColorMode { get; set; } = AppAccentColorMode.FollowSystem;
+
+        public string AppAccentColorValue { get; set; } = "#FF0078D4";
     }
 
     /// <summary>Fake takeover service for master-control tests.</summary>
@@ -360,8 +605,11 @@ public sealed class MasterControlViewModelTests
         /// <summary>Applies a fake master mode.</summary>
         /// <param name="mode">Mode requested by the view model.</param>
         /// <returns>Configured takeover result using the requested mode when the result has default disabled mode.</returns>
+        public int ApplyCount { get; private set; }
+
         public NetworkTakeoverResult ApplyMode(ClashSharpMode mode)
         {
+            ApplyCount++;
             if (ExceptionToThrow is not null)
             {
                 throw ExceptionToThrow;
@@ -404,6 +652,16 @@ public sealed class MasterControlViewModelTests
         public TrayStatusSnapshot Snapshot { get; set; } = TrayStatusSnapshot.Unavailable;
 
         public TrayStatusSnapshot GetSnapshot()
+        {
+            return Snapshot;
+        }
+    }
+
+    private sealed class FakeMasterRuntime : IMasterControlRuntime
+    {
+        public MasterControlRuntimeSnapshot Snapshot { get; set; } = MasterControlRuntimeSnapshot.Unavailable;
+
+        public MasterControlRuntimeSnapshot GetSnapshot()
         {
             return Snapshot;
         }

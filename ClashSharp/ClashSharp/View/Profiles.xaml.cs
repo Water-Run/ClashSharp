@@ -77,7 +77,7 @@ public sealed partial class Profiles : Page
 
         if (App.MainWindow is null)
         {
-            LogStorageService.Instance.AppendLog("Warning", "Profiles", "Profile file picker could not find the main window.", null);
+            LogStorageService.Instance.AppendLog("Warning", "Profiles", LocalizationService.Instance.GetString("Profiles.Log.FilePickerNoMainWindow"), null);
             return false;
         }
 

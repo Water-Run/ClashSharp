@@ -10,16 +10,32 @@
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
 
-    <Button
-        x:Name="ModeButton"
-        MinHeight="78"
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
-        Padding="0"
-        Background="Transparent"
-        BorderThickness="0"
-        Command="{Binding Command, ElementName=Root}">
-        <Grid Style="{StaticResource ClashCardGridStyle}" Padding="12" ColumnSpacing="10" MinHeight="78">
+    <Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="SelectionStates">
+                <VisualState x:Name="SelectedOff">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="SelectedOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.16" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="SelectedOn">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="SelectedOverlay" Storyboard.TargetProperty="Opacity" To="0.16" Duration="0:0:0.18" />
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Button
+            x:Name="ModeButton"
+            MinHeight="78"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Padding="0"
+            Background="Transparent"
+            BorderThickness="0"
+            Command="{Binding Command, ElementName=Root}">
+            <Grid Style="{StaticResource ClashCardGridStyle}" Padding="12" ColumnSpacing="10" MinHeight="78">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -31,8 +47,7 @@
                 Margin="-12"
                 CornerRadius="4"
                 Background="{ThemeResource AccentFillColorDefaultBrush}"
-                Opacity="0.16"
-                Visibility="{Binding IsChecked, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                Opacity="0" />
 
             <FontIcon
                 Glyph="{Binding Glyph, ElementName=Root}"
@@ -55,6 +70,7 @@
                     Opacity="0.78"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
-        </Grid>
-    </Button>
+            </Grid>
+        </Button>
+    </Grid>
 </UserControl>

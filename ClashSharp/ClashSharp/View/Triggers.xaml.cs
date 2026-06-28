@@ -26,6 +26,7 @@ namespace ClashSharp.View;
 public sealed partial class Triggers : Page
 {
     private readonly TriggersViewModel _viewModel;
+    private TriggerTaskItemViewModel? _editingItem;
 
     public Triggers()
     {
@@ -34,14 +35,32 @@ public sealed partial class Triggers : Page
         DataContext = _viewModel;
     }
 
-    private async void AddTriggerButton_Click(object sender, RoutedEventArgs e)
+    private void AddTriggerCardButton_Click(object sender, RoutedEventArgs e)
     {
-        await ShowAddTriggerDialogAsync();
+        ShowTriggerEditorForNewTask();
+    }
+
+    private void EditTriggerButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: TriggerTaskItemViewModel item })
+        {
+            ShowTriggerEditor(item);
+        }
     }
 
     private void OpenTriggerLogsButton_Click(object sender, RoutedEventArgs e)
     {
         Frame.Navigate(typeof(Logs), "Trigger");
+    }
+
+    private void EnableAllTriggersButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.SetAllTasksEnabled(true);
+    }
+
+    private void DisableAllTriggersButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.SetAllTasksEnabled(false);
     }
 
     private void MoveTriggerUpButton_Click(object sender, RoutedEventArgs e)
@@ -98,77 +117,88 @@ public sealed partial class Triggers : Page
         }
     }
 
-    private async System.Threading.Tasks.Task ShowAddTriggerDialogAsync()
+    private void ShowTriggerEditorForNewTask()
     {
-        TextBox nameBox = new()
-        {
-            Header = LocalizationService.Instance.GetString("Triggers.Name"),
-            Text = LocalizationService.Instance.GetString("Triggers.DefaultName"),
-        };
+        ShowTriggerEditor(null);
+    }
 
-        SearchableOptionList conditionList = new()
-        {
-            SearchPlaceholder = LocalizationService.Instance.GetString("Triggers.SearchConditions"),
-            AllowMultiple = true,
-            MaxListHeight = 240,
-        };
-        conditionList.SetOptions(BuildConditionOptions());
+    private void ShowTriggerEditor(TriggerTaskItemViewModel? item)
+    {
+        _editingItem = item;
+        TriggerEditorTitleText.Text = item is null
+            ? LocalizationService.Instance.GetString("Triggers.Add")
+            : item.Name;
+        TriggerEditorNameBox.Header = LocalizationService.Instance.GetString("Triggers.Name");
+        TriggerEditorNameBox.Text = item?.Name ?? LocalizationService.Instance.GetString("Triggers.DefaultName");
 
-        SearchableOptionList actionList = new()
-        {
-            SearchPlaceholder = LocalizationService.Instance.GetString("Triggers.SearchActions"),
-            AllowMultiple = true,
-            MaxListHeight = 240,
-        };
-        actionList.SetOptions(BuildActionOptions());
+        TriggerConditionKind selectedCondition = item?.Task.Conditions.FirstOrDefault()?.Kind ?? TriggerConditionKind.AppEntered;
+        HashSet<TriggerActionKind> selectedActions = item is null
+            ? [TriggerActionKind.SendNotification]
+            : item.Task.Actions.Select(static action => action.Kind).ToHashSet();
 
-        StackPanel content = new()
-        {
-            Spacing = 14,
-            MinWidth = 520,
-            MaxWidth = 720,
-        };
-        content.Children.Add(new TextBlock
-        {
-            Text = LocalizationService.Instance.GetString("Triggers.Add.Description"),
-            TextWrapping = TextWrapping.WrapWholeWords,
-        });
-        content.Children.Add(nameBox);
-        content.Children.Add(BuildSectionLabel("Triggers.Conditions"));
-        content.Children.Add(conditionList);
-        content.Children.Add(BuildSectionLabel("Triggers.Actions"));
-        content.Children.Add(actionList);
+        TriggerConditionList.SearchPlaceholder = LocalizationService.Instance.GetString("Triggers.SearchConditions");
+        TriggerConditionList.AllowMultiple = false;
+        TriggerConditionList.SetOptions(BuildConditionOptions(selectedCondition));
+        TriggerActionList.SearchPlaceholder = LocalizationService.Instance.GetString("Triggers.SearchActions");
+        TriggerActionList.AllowMultiple = true;
+        TriggerActionList.SetOptions(BuildActionOptions(selectedActions));
 
-        ContentDialog dialog = new()
-        {
-            Title = LocalizationService.Instance.GetString("Triggers.Add"),
-            Content = content,
-            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Add"),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
+        TriggerListHost.Visibility = Visibility.Collapsed;
+        TriggerEditorHost.Visibility = Visibility.Visible;
+    }
 
-        if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
-        {
-            return;
-        }
+    private void OpenTriggerList()
+    {
+        _editingItem = null;
+        TriggerEditorHost.Visibility = Visibility.Collapsed;
+        TriggerListHost.Visibility = Visibility.Visible;
+    }
 
-        IReadOnlyList<TriggerCondition> conditions = conditionList.SelectedOptions
+    private void CancelTriggerEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        OpenTriggerList();
+    }
+
+    private void SaveTriggerButton_Click(object sender, RoutedEventArgs e)
+    {
+        IReadOnlyList<TriggerCondition> conditions = TriggerConditionList.SelectedOptions
             .Select(static option => option.Payload)
             .OfType<TriggerCondition>()
+            .Take(1)
             .ToList();
-        IReadOnlyList<TriggerTaskAction> actions = actionList.SelectedOptions
+        IReadOnlyList<TriggerTaskAction> actions = TriggerActionList.SelectedOptions
             .Select(static option => option.Payload)
             .OfType<TriggerTaskAction>()
             .ToList();
 
-        _viewModel.AddTask(new TriggerTask(
-            Guid.NewGuid().ToString("N"),
-            nameBox.Text,
-            isEnabled: true,
-            conditions.Count == 0 ? [new TriggerCondition(TriggerConditionKind.AppEntered)] : conditions,
-            actions.Count == 0 ? [new TriggerTaskAction(TriggerActionKind.SendNotification, "Trigger fired")] : actions));
+        conditions = conditions.Count == 0 ? [new TriggerCondition(TriggerConditionKind.AppEntered)] : conditions;
+        actions = actions.Count == 0
+            ? [new TriggerTaskAction(TriggerActionKind.SendNotification, LocalizationService.Instance.GetString("Notification.Custom.Message"))]
+            : actions;
+
+        if (_editingItem is TriggerTaskItemViewModel item)
+        {
+            item.Name = TriggerEditorNameBox.Text;
+            item.Task.Conditions = conditions;
+            item.Task.Actions = actions;
+            _viewModel.UpdateTask(item);
+        }
+        else
+        {
+            _viewModel.AddTask(new TriggerTask(
+                Guid.NewGuid().ToString("N"),
+                ValidateTriggerName(TriggerEditorNameBox.Text),
+                isEnabled: true,
+                conditions,
+                actions));
+        }
+
+        OpenTriggerList();
+    }
+
+    private string ValidateTriggerName(string name)
+    {
+        return _viewModel.ValidateTriggerName(name);
     }
 
     private static TextBlock BuildSectionLabel(string key)
@@ -180,29 +210,29 @@ public sealed partial class Triggers : Page
         };
     }
 
-    private static IReadOnlyList<SearchableOptionItem> BuildConditionOptions()
+    private static IReadOnlyList<SearchableOptionItem> BuildConditionOptions(TriggerConditionKind selectedKind)
     {
         return
         [
-            CreateConditionOption(TriggerConditionKind.AppEntered, new TriggerCondition(TriggerConditionKind.AppEntered), "\uE7C1", true),
-            CreateConditionOption(TriggerConditionKind.ProxyStarted, new TriggerCondition(TriggerConditionKind.ProxyStarted), "\uE968"),
-            CreateConditionOption(TriggerConditionKind.NotificationRaised, new TriggerCondition(TriggerConditionKind.NotificationRaised, 0, NotificationLevel.CriticalOnly.ToString()), "\uEA8F"),
-            CreateConditionOption(TriggerConditionKind.TotalTraffic, new TriggerCondition(TriggerConditionKind.TotalTraffic, 1024L * 1024L * 1024L), "\uE9D2"),
-            CreateConditionOption(TriggerConditionKind.TrafficInWindow, new TriggerCondition(TriggerConditionKind.TrafficInWindow, 100L * 1024L * 1024L), "\uE81C"),
-            CreateConditionOption(TriggerConditionKind.Runtime, new TriggerCondition(TriggerConditionKind.Runtime, 3600), "\uE823"),
-            CreateConditionOption(TriggerConditionKind.SystemTime, new TriggerCondition(TriggerConditionKind.SystemTime, 0, "23:00"), "\uE121"),
+            CreateConditionOption(TriggerConditionKind.AppEntered, new TriggerCondition(TriggerConditionKind.AppEntered), "\uE7C1", selectedKind == TriggerConditionKind.AppEntered),
+            CreateConditionOption(TriggerConditionKind.ProxyStarted, new TriggerCondition(TriggerConditionKind.ProxyStarted), "\uE968", selectedKind == TriggerConditionKind.ProxyStarted),
+            CreateConditionOption(TriggerConditionKind.NotificationRaised, new TriggerCondition(TriggerConditionKind.NotificationRaised, 0, NotificationLevel.CriticalOnly.ToString()), "\uEA8F", selectedKind == TriggerConditionKind.NotificationRaised),
+            CreateConditionOption(TriggerConditionKind.TotalTraffic, new TriggerCondition(TriggerConditionKind.TotalTraffic, 1024L * 1024L * 1024L), "\uE9D2", selectedKind == TriggerConditionKind.TotalTraffic),
+            CreateConditionOption(TriggerConditionKind.TrafficInWindow, new TriggerCondition(TriggerConditionKind.TrafficInWindow, 100L * 1024L * 1024L), "\uE81C", selectedKind == TriggerConditionKind.TrafficInWindow),
+            CreateConditionOption(TriggerConditionKind.Runtime, new TriggerCondition(TriggerConditionKind.Runtime, 3600), "\uE823", selectedKind == TriggerConditionKind.Runtime),
+            CreateConditionOption(TriggerConditionKind.SystemTime, new TriggerCondition(TriggerConditionKind.SystemTime, 0, "23:00"), "\uE121", selectedKind == TriggerConditionKind.SystemTime),
         ];
     }
 
-    private static IReadOnlyList<SearchableOptionItem> BuildActionOptions()
+    private static IReadOnlyList<SearchableOptionItem> BuildActionOptions(IReadOnlySet<TriggerActionKind> selectedKinds)
     {
         return
         [
-            CreateActionOption(TriggerActionKind.CloseConnections, new TriggerTaskAction(TriggerActionKind.CloseConnections), "\uE711"),
-            CreateActionOption(TriggerActionKind.SetTransparentProxy, new TriggerTaskAction(TriggerActionKind.SetTransparentProxy, bool.TrueString), "\uE8A7"),
-            CreateActionOption(TriggerActionKind.SwitchProxyMode, new TriggerTaskAction(TriggerActionKind.SwitchProxyMode, ClashSharpMode.RuleTakeover.ToString()), "\uE8AB"),
-            CreateActionOption(TriggerActionKind.ExitApplication, new TriggerTaskAction(TriggerActionKind.ExitApplication), "\uE8BB"),
-            CreateActionOption(TriggerActionKind.SendNotification, new TriggerTaskAction(TriggerActionKind.SendNotification, "Trigger fired"), "\uEA8F", true),
+            CreateActionOption(TriggerActionKind.CloseConnections, new TriggerTaskAction(TriggerActionKind.CloseConnections), "\uE711", selectedKinds.Contains(TriggerActionKind.CloseConnections)),
+            CreateActionOption(TriggerActionKind.SetTransparentProxy, new TriggerTaskAction(TriggerActionKind.SetTransparentProxy, bool.TrueString), "\uE8A7", selectedKinds.Contains(TriggerActionKind.SetTransparentProxy)),
+            CreateActionOption(TriggerActionKind.SwitchProxyMode, new TriggerTaskAction(TriggerActionKind.SwitchProxyMode, ClashSharpMode.RuleTakeover.ToString()), "\uE8AB", selectedKinds.Contains(TriggerActionKind.SwitchProxyMode)),
+            CreateActionOption(TriggerActionKind.ExitApplication, new TriggerTaskAction(TriggerActionKind.ExitApplication), "\uE8BB", selectedKinds.Contains(TriggerActionKind.ExitApplication)),
+            CreateActionOption(TriggerActionKind.SendNotification, new TriggerTaskAction(TriggerActionKind.SendNotification, "Trigger fired"), "\uEA8F", selectedKinds.Contains(TriggerActionKind.SendNotification)),
         ];
     }
 

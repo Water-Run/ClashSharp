@@ -10,6 +10,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
@@ -21,6 +22,8 @@ namespace ClashSharp.ViewModel;
 /// <summary>Bindable trigger task panel view model.</summary>
 internal sealed class TriggersViewModel : ObservableObject
 {
+    internal const int MaxTriggerNameLength = 48;
+
     private readonly Func<string, string> _getString;
     private readonly TriggerService _triggerService;
     private bool _triggersEnabled;
@@ -44,7 +47,17 @@ internal sealed class TriggersViewModel : ObservableObject
 
     public string AddTriggerText => _getString("Triggers.Add");
 
+    public string AddDescriptionText => _getString("Triggers.Add.Description");
+
+    public string NameText => _getString("Triggers.Name");
+
     public string OpenTriggerLogsText => _getString("Triggers.OpenLogs");
+
+    public string EnableAllText => _getString("Triggers.EnableAll");
+
+    public string DisableAllText => _getString("Triggers.DisableAll");
+
+    public string DisabledNoticeText => _getString("Triggers.DisabledNotice");
 
     public string EmptyText => _getString("Triggers.Empty");
 
@@ -53,6 +66,10 @@ internal sealed class TriggersViewModel : ObservableObject
     public string ActionsText => _getString("Triggers.Actions");
 
     public string LastTriggeredText => _getString("Triggers.LastTriggered");
+
+    public string SaveText => _getString("Command.Save");
+
+    public string CancelText => _getString("Command.Cancel");
 
     public ObservableCollection<TriggerTaskItemViewModel> TriggerTasks { get; } = [];
 
@@ -68,9 +85,15 @@ internal sealed class TriggersViewModel : ObservableObject
             if (SetProperty(ref _triggersEnabled, value))
             {
                 _triggerService.TriggersEnabled = value;
+                OnPropertyChanged(nameof(CanEditTriggers));
+                OnPropertyChanged(nameof(IsDisabledNoticeVisible));
             }
         }
     }
+
+    public bool CanEditTriggers => TriggersEnabled;
+
+    public bool IsDisabledNoticeVisible => !TriggersEnabled;
 
     public bool IsEmpty => TriggerTasks.Count == 0;
 
@@ -83,12 +106,15 @@ internal sealed class TriggersViewModel : ObservableObject
         }
 
         SetProperty(ref _triggersEnabled, _triggerService.TriggersEnabled, nameof(TriggersEnabled));
+        OnPropertyChanged(nameof(CanEditTriggers));
+        OnPropertyChanged(nameof(IsDisabledNoticeVisible));
         OnPropertyChanged(nameof(IsEmpty));
     }
 
     public void AddTask(TriggerTask task)
     {
         ArgumentNullException.ThrowIfNull(task);
+        task.Name = ValidateTriggerName(task.Name, task.Id);
         _triggerService.AddTask(task);
         Reload();
     }
@@ -108,8 +134,50 @@ internal sealed class TriggersViewModel : ObservableObject
     public void UpdateTask(TriggerTaskItemViewModel item)
     {
         ArgumentNullException.ThrowIfNull(item);
+        item.Name = ValidateTriggerName(item.Name, item.Id);
         _triggerService.SaveTasks(TriggerTasks.Select(static row => row.Task).ToList());
         Reload();
+    }
+
+    public void SetAllTasksEnabled(bool isEnabled)
+    {
+        _triggerService.SetAllTasksEnabled(isEnabled);
+        Reload();
+    }
+
+    public string ValidateTriggerName(string name, string? currentId = null)
+    {
+        string normalized = string.IsNullOrWhiteSpace(name) ? _getString("Triggers.DefaultName") : name.Trim();
+        if (normalized.Length > MaxTriggerNameLength)
+        {
+            normalized = normalized[..MaxTriggerNameLength];
+        }
+
+        HashSet<string> existingNames = TriggerTasks
+            .Where(item => !StringComparer.Ordinal.Equals(item.Id, currentId))
+            .Select(static item => item.Name)
+            .ToHashSet(StringComparer.CurrentCultureIgnoreCase);
+        if (!existingNames.Contains(normalized))
+        {
+            return normalized;
+        }
+
+        string baseName = normalized;
+        for (int suffix = 2; suffix < 1000; suffix++)
+        {
+            string candidate = $"{baseName} {suffix}";
+            if (candidate.Length > MaxTriggerNameLength)
+            {
+                candidate = $"{baseName[..Math.Max(0, MaxTriggerNameLength - suffix.ToString(CultureInfo.InvariantCulture).Length - 1)]} {suffix}";
+            }
+
+            if (!existingNames.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return $"{Guid.NewGuid():N}"[..MaxTriggerNameLength];
     }
 }
 
@@ -138,6 +206,10 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
         set
         {
             string normalized = string.IsNullOrWhiteSpace(value) ? _getString("Triggers.DefaultName") : value.Trim();
+            if (normalized.Length > TriggersViewModel.MaxTriggerNameLength)
+            {
+                normalized = normalized[..TriggersViewModel.MaxTriggerNameLength];
+            }
             if (SetProperty(ref _name, normalized))
             {
                 Task.Name = normalized;

@@ -71,7 +71,7 @@ public sealed class ConnectionsViewModelTests
 
         Assert.Equal(client.Connections, log.LastSnapshot);
         Assert.Equal("Persisted 2", viewModel.ConnectionStatusText);
-        Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Detail == "2 rows.");
+        Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Message == "Persisted 2" && entry.Detail is null);
     }
 
     /// <summary>Verifies closing one connection calls mihomo and refreshes the visible list.</summary>
@@ -87,7 +87,7 @@ public sealed class ConnectionsViewModelTests
         Assert.Equal("1", client.ClosedConnectionId);
         Assert.Equal(1, client.RefreshCount);
         Assert.Equal("Closed", viewModel.ConnectionStatusText);
-        Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Message == "Active connection closed.");
+        Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Message == "Closed" && entry.Detail == "1");
     }
 
     /// <summary>Verifies closing all connections calls mihomo and refreshes the visible list.</summary>

@@ -30,6 +30,27 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("ClashSharp-Installer", script, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies installer uninstall removes the app package, bundled service, and startup restore fallback.</summary>
+    [Fact]
+    public void InstallerUninstall_RemovesPackageServiceAndStartupFallback()
+    {
+        string installerPath = FindSourceFile("ClashSharp", "Installer", "src", "main.rs");
+
+        string installer = File.ReadAllText(installerPath);
+
+        Assert.Contains("cleanup_installed_services()", installer, StringComparison.Ordinal);
+        Assert.Contains("uninstall_mihomo_service()", installer, StringComparison.Ordinal);
+        Assert.Contains("uninstall_startup_restore_fallback()", installer, StringComparison.Ordinal);
+        Assert.Contains("sc.exe", installer, StringComparison.Ordinal);
+        Assert.Contains("ClashSharpMihomo", installer, StringComparison.Ordinal);
+        Assert.Contains("ClashSharp.ProxyRestoreFallback", installer, StringComparison.Ordinal);
+        Assert.Contains("Remove-ItemProperty", installer, StringComparison.Ordinal);
+        Assert.True(
+            installer.IndexOf("cleanup_installed_services()", StringComparison.Ordinal)
+            < installer.IndexOf("Remove-AppxPackage", StringComparison.Ordinal),
+            "Service cleanup should run before removing the package so packaged files are still available if needed.");
+    }
+
     private static string FindSourceFile(params string[] segments)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

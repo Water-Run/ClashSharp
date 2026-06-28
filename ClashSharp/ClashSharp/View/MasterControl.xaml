@@ -14,20 +14,28 @@
     </Page.Resources>
 
     <ScrollViewer
+        x:Name="RootScrollViewer"
         Padding="24,18,24,24"
         VerticalScrollBarVisibility="Auto"
-        HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="14">
-            <Grid ColumnSpacing="14">
+        HorizontalScrollBarVisibility="Disabled"
+        SizeChanged="RootScrollViewer_SizeChanged">
+        <StackPanel x:Name="ContentHost" Spacing="14">
+            <Grid x:Name="HeroAndModeGrid" ColumnSpacing="12" RowSpacing="10" MinHeight="342">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*" MinWidth="360" />
-                    <ColumnDefinition Width="320" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="380" />
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                <Grid Style="{StaticResource ClashCardGridStyle}" Padding="18" RowSpacing="16">
+                <Grid x:Name="HeroStatusCard" Grid.RowSpan="4" Style="{StaticResource ClashCardGridStyle}" Padding="18" RowSpacing="16">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <Grid ColumnSpacing="16">
@@ -36,16 +44,15 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
+                        <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Logo.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                            <TextBlock Text="Clash#" Style="{ThemeResource TitleTextBlockStyle}" />
-                            <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="Clash#" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         </StackPanel>
                     </Grid>
 
                     <Grid Grid.Row="1" ColumnSpacing="10" RowSpacing="10">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
@@ -56,23 +63,23 @@
 
                         <StackPanel Spacing="4">
                             <TextBlock x:Name="CoreStatusTitleText" Text="{Binding CoreStatusTitleText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="CoreStatusText" Text="{Binding CoreStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="CoreStatusText" Text="{Binding CoreStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Spacing="4">
                             <TextBlock x:Name="SystemProxyTitleText" Text="{Binding SystemProxyTitleText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="SystemProxyStatusText" Text="{Binding SystemProxyStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="SystemProxyStatusText" Text="{Binding SystemProxyStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
 
-                        <StackPanel Grid.Column="2" Spacing="4">
+                        <StackPanel Grid.Row="1" Spacing="4">
                             <TextBlock x:Name="TransparentProxyTitleText" Text="{Binding TransparentProxyTitleText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="TransparentProxyStatusText" Text="{Binding TransparentProxyStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="TransparentProxyStatusText" Text="{Binding TransparentProxyStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
 
-                        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="4">
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
                             <TextBlock Text="{Binding CurrentNodeText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding LatencySummaryText}" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                                <TextBlock Text="{Binding LatencySummaryText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                                 <Button x:Name="OpenLatencyDialogButton" Click="OpenLatencyDialogButton_Click" Padding="8,4">
                                     <FontIcon Glyph="&#xE9D9;" FontSize="14" />
                                 </Button>
@@ -81,49 +88,44 @@
                     </Grid>
                 </Grid>
 
-                <Grid Grid.Column="1" RowSpacing="10" Margin="0,0,0,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
+                <components:MasterModeButton
+                    x:Name="DisabledModeButton"
+                    Grid.Column="1"
+                    Title="{Binding DisabledModeTitleText}"
+                    Description="{Binding DisabledModeDescriptionText}"
+                    Glyph="&#xE711;"
+                    IsChecked="{Binding IsDisabledModeSelected, Mode=OneWay}"
+                    Command="{Binding DisabledModeCommand}" />
 
-                    <components:MasterModeButton
-                        x:Name="DisabledModeButton"
-                        Title="{Binding DisabledModeTitleText}"
-                        Description="{Binding DisabledModeDescriptionText}"
-                        Glyph="&#xE711;"
-                        IsChecked="{Binding IsDisabledModeSelected, Mode=OneWay}"
-                        Command="{Binding DisabledModeCommand}" />
+                <components:MasterModeButton
+                    x:Name="StandbyModeButton"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Title="{Binding StandbyModeTitleText}"
+                    Description="{Binding StandbyModeDescriptionText}"
+                    Glyph="&#xE774;"
+                    IsChecked="{Binding IsStandbyModeSelected, Mode=OneWay}"
+                    Command="{Binding StandbyModeCommand}" />
 
-                    <components:MasterModeButton
-                        x:Name="StandbyModeButton"
-                        Grid.Row="1"
-                        Title="{Binding StandbyModeTitleText}"
-                        Description="{Binding StandbyModeDescriptionText}"
-                        Glyph="&#xE774;"
-                        IsChecked="{Binding IsStandbyModeSelected, Mode=OneWay}"
-                        Command="{Binding StandbyModeCommand}" />
+                <components:MasterModeButton
+                    x:Name="RuleTakeoverModeButton"
+                    Grid.Row="2"
+                    Grid.Column="1"
+                    Title="{Binding RuleTakeoverModeTitleText}"
+                    Description="{Binding RuleTakeoverModeDescriptionText}"
+                    Glyph="&#xE9D9;"
+                    IsChecked="{Binding IsRuleTakeoverModeSelected, Mode=OneWay}"
+                    Command="{Binding RuleTakeoverModeCommand}" />
 
-                    <components:MasterModeButton
-                        x:Name="RuleTakeoverModeButton"
-                        Grid.Row="2"
-                        Title="{Binding RuleTakeoverModeTitleText}"
-                        Description="{Binding RuleTakeoverModeDescriptionText}"
-                        Glyph="&#xE9D9;"
-                        IsChecked="{Binding IsRuleTakeoverModeSelected, Mode=OneWay}"
-                        Command="{Binding RuleTakeoverModeCommand}" />
-
-                    <components:MasterModeButton
-                        x:Name="FullTakeoverModeButton"
-                        Grid.Row="3"
-                        Title="{Binding FullTakeoverModeTitleText}"
-                        Description="{Binding FullTakeoverModeDescriptionText}"
-                        Glyph="&#xE968;"
-                        IsChecked="{Binding IsFullTakeoverModeSelected, Mode=OneWay}"
-                        Command="{Binding FullTakeoverModeCommand}" />
-                </Grid>
+                <components:MasterModeButton
+                    x:Name="FullTakeoverModeButton"
+                    Grid.Row="3"
+                    Grid.Column="1"
+                    Title="{Binding FullTakeoverModeTitleText}"
+                    Description="{Binding FullTakeoverModeDescriptionText}"
+                    Glyph="&#xE968;"
+                    IsChecked="{Binding IsFullTakeoverModeSelected, Mode=OneWay}"
+                    Command="{Binding FullTakeoverModeCommand}" />
             </Grid>
 
             <HyperlinkButton
@@ -140,10 +142,15 @@
                     ItemsSource="{Binding InfoTiles}"
                     SelectionMode="None"
                     CanReorderItems="True"
+                    CanDragItems="True"
                     AllowDrop="True"
                     IsItemClickEnabled="False"
-                    SizeChanged="InfoTileGrid_SizeChanged"
-                    ContainerContentChanging="InfoTileGrid_ContainerContentChanging">
+                    >
+                    <GridView.Transitions>
+                        <TransitionCollection>
+                            <ReorderThemeTransition />
+                        </TransitionCollection>
+                    </GridView.Transitions>
                     <GridView.ItemsPanel>
                         <ItemsPanelTemplate>
                             <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" />
@@ -155,6 +162,7 @@
                             <Setter Property="VerticalContentAlignment" Value="Stretch" />
                             <Setter Property="Margin" Value="5,0,5,10" />
                             <Setter Property="MinWidth" Value="220" />
+                            <Setter Property="Width" Value="260" />
                         </Style>
                     </GridView.ItemContainerStyle>
                     <GridView.ItemTemplate>

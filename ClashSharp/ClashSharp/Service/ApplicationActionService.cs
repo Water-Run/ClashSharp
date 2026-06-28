@@ -23,6 +23,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         MihomoConnectionService.Instance,
         NotificationService.Instance,
         LogStorageService.Instance.AppendLog,
+        LocalizationService.Instance.GetString,
         () => App.MainWindow?.Close());
 
     private readonly AppSettingsService _settings;
@@ -30,6 +31,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly MihomoConnectionService _connections;
     private readonly NotificationService _notifications;
     private readonly Action<string, string, string, string?> _appendLog;
+    private readonly Func<string, string> _getString;
     private readonly Action _exitApplication;
 
     internal ApplicationActionService(
@@ -38,6 +40,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         MihomoConnectionService connections,
         NotificationService notifications,
         Action<string, string, string, string?> appendLog,
+        Func<string, string> getString,
         Action exitApplication)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -45,6 +48,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _exitApplication = exitApplication ?? throw new ArgumentNullException(nameof(exitApplication));
     }
 
@@ -80,14 +84,18 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
                 await _connections.CloseAllConnectionsAsync(cancellationToken).ConfigureAwait(false);
                 break;
             case ApplicationActionKind.SendNotification:
-                _notifications.Show(NotificationLevel.Default, "Clash#", string.IsNullOrWhiteSpace(value) ? "Notification" : value);
+                _notifications.NotifyCustom(value);
                 break;
             case ApplicationActionKind.ExitApplication:
                 _exitApplication();
                 break;
             case ApplicationActionKind.ExportConfiguration:
             case ApplicationActionKind.ImportConfiguration:
-                _appendLog("Info", "ApplicationAction", $"{kind} requires a UI picker and was delegated to the page.", value);
+                _appendLog(
+                    "Info",
+                    "ApplicationAction",
+                    string.Format(_getString("ApplicationAction.UiPickerRequired.Format"), kind),
+                    value);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported application action.");

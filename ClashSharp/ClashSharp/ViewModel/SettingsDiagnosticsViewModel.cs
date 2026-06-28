@@ -83,7 +83,7 @@ internal sealed class SettingsDiagnosticsViewModel
     {
         if (!TryParseCommand(commandTag, out WindowsDiagnosticTarget target, out string action))
         {
-            _log.Append("Warning", LogCategory, "Unsupported diagnostic command.", commandTag);
+            _log.Append("Warning", LogCategory, _getString("Diagnostic.UnsupportedCommand"), commandTag);
             return null;
         }
 

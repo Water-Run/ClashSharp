@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,59 +23,50 @@ internal sealed class TriggerService
 {
     private const string TriggerLog = "Trigger";
 
-    public static TriggerService Instance { get; } = new(
-        Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "Triggers.json"),
-        ApplicationActionService.Instance,
-        NotificationService.Instance,
-        LogStorageService.Instance.AppendLog);
+    public static TriggerService Instance { get; } = CreateDefault();
 
     private readonly string _storagePath;
     private readonly IApplicationActionDispatcher _actions;
     private readonly NotificationService _notifications;
     private readonly Action<string, string, string, string?> _appendLog;
+    private readonly Func<string, string> _getString;
+    private readonly Func<bool> _getTriggersEnabled;
+    private readonly Action<bool> _setTriggersEnabled;
+    private readonly Func<bool> _getTriggerNotificationsEnabled;
     private readonly object _syncLock = new();
     private List<TriggerTask> _tasks = [];
-    private bool _triggersEnabled = true;
     private int _notificationEvaluationActive;
 
     public TriggerService(
         string storagePath,
         IApplicationActionDispatcher actions,
         NotificationService notifications,
-        Action<string, string, string, string?> appendLog)
+        Action<string, string, string, string?> appendLog,
+        Func<string, string>? getString = null,
+        Func<bool>? getTriggersEnabled = null,
+        Action<bool>? setTriggersEnabled = null,
+        Func<bool>? getTriggerNotificationsEnabled = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storagePath);
         _storagePath = Path.GetFullPath(storagePath);
         _actions = actions ?? throw new ArgumentNullException(nameof(actions));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
+        _getString = getString ?? (key => key);
+        _getTriggersEnabled = getTriggersEnabled ?? (() => true);
+        _setTriggersEnabled = setTriggersEnabled ?? (_ => { });
+        _getTriggerNotificationsEnabled = getTriggerNotificationsEnabled ?? (() => true);
         _notifications.NotificationRaised += OnNotificationRaised;
         Load();
     }
 
     public bool TriggersEnabled
     {
-        get
-        {
-            lock (_syncLock)
-            {
-                return _triggersEnabled;
-            }
-        }
-        set
-        {
-            lock (_syncLock)
-            {
-                if (_triggersEnabled == value)
-                {
-                    return;
-                }
-
-                _triggersEnabled = value;
-                Save();
-            }
-        }
+        get => _getTriggersEnabled();
+        set => _setTriggersEnabled(value);
     }
+
+    public bool TriggerNotificationsEnabled => _getTriggerNotificationsEnabled();
 
     public IReadOnlyList<TriggerTask> GetTasks()
     {
@@ -131,6 +123,19 @@ internal sealed class TriggerService
         }
     }
 
+    public void SetAllTasksEnabled(bool isEnabled)
+    {
+        lock (_syncLock)
+        {
+            foreach (TriggerTask task in _tasks)
+            {
+                task.IsEnabled = isEnabled;
+            }
+
+            Save();
+        }
+    }
+
     public async Task<IReadOnlyList<TriggerExecutionResult>> EvaluateAsync(TriggerEvaluationContext context, CancellationToken cancellationToken)
     {
         if (!TriggersEnabled)
@@ -155,8 +160,15 @@ internal sealed class TriggerService
 
             task.LastTriggeredAt = triggeredAt;
             results.Add(new TriggerExecutionResult(task.Id, task.Name, triggeredAt, task.Actions));
-            _appendLog("Info", TriggerLog, $"Trigger fired: {task.Name}", string.Join(", ", task.Actions));
-            _notifications.NotifyTriggerFired(task.Name);
+            _appendLog(
+                "Info",
+                TriggerLog,
+                string.Format(_getString("Triggers.Log.Fired.Format"), task.Name),
+                string.Join(", ", task.Actions.Select(FormatActionForLog)));
+            if (TriggerNotificationsEnabled)
+            {
+                _notifications.NotifyTriggerFired(task.Name);
+            }
         }
 
         if (results.Count > 0)
@@ -165,6 +177,25 @@ internal sealed class TriggerService
         }
 
         return results;
+    }
+
+    private static TriggerService CreateDefault()
+    {
+        bool triggersEnabledAtStartup = AppSettingsService.Instance.TriggersEnabled;
+        return new TriggerService(
+            Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "Triggers.json"),
+            ApplicationActionService.Instance,
+            NotificationService.Instance,
+            LogStorageService.Instance.AppendLog,
+            LocalizationService.Instance.GetString,
+            () => triggersEnabledAtStartup,
+            _ => { },
+            () => AppSettingsService.Instance.TriggerNotificationsEnabled);
+    }
+
+    private string FormatActionForLog(TriggerAction action)
+    {
+        return _getString($"Triggers.Action.{action.Kind}");
     }
 
     private Task ExecuteActionAsync(TriggerAction action, CancellationToken cancellationToken)
@@ -260,12 +291,10 @@ internal sealed class TriggerService
             if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
             {
                 _tasks = JsonSerializer.Deserialize<List<TriggerTask>>(json) ?? [];
-                _triggersEnabled = true;
                 return;
             }
 
             TriggerStoreDocument? document = JsonSerializer.Deserialize<TriggerStoreDocument>(json);
-            _triggersEnabled = document?.TriggersEnabled ?? true;
             _tasks = document?.Tasks is null ? [] : [.. document.Tasks];
         }
     }
@@ -278,9 +307,9 @@ internal sealed class TriggerService
             Directory.CreateDirectory(directory);
         }
 
-        TriggerStoreDocument document = new(_triggersEnabled, _tasks);
+        TriggerStoreDocument document = new(_tasks);
         File.WriteAllText(_storagePath, JsonSerializer.Serialize(document, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private sealed record TriggerStoreDocument(bool TriggersEnabled, IReadOnlyList<TriggerTask> Tasks);
+    private sealed record TriggerStoreDocument(IReadOnlyList<TriggerTask> Tasks);
 }

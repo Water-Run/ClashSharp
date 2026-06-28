@@ -12,7 +12,7 @@
         </Grid.ColumnDefinitions>
 
         <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="{Binding Title, ElementName=Root}" Style="{ThemeResource BodyTextBlockStyle}" />
+            <TextBlock Text="{Binding Title, ElementName=Root}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             <TextBlock
                 Text="{Binding Description, ElementName=Root}"
                 Style="{ThemeResource CaptionTextBlockStyle}"

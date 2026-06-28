@@ -10,6 +10,7 @@
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
+using System.Collections.Specialized;
 using System.Net.Http;
 using System.Reflection;
 
@@ -35,9 +36,14 @@ public sealed class SettingsViewModelTests
             ConnectionSamplingIntervalSeconds = 45,
             StartupConflictCheckEnabled = false,
             StartupBehaviorMode = StartupBehaviorMode.DisableProxy,
+            CloseBehaviorMode = CloseBehaviorMode.ConfirmExit,
+            TriggersEnabled = false,
+            TriggerNotificationsEnabled = false,
+            TrayFadeInactiveIcon = false,
+            TrayUseMonochromeInactiveIcon = false,
+            TrayVisibleFeatureIds = "status,settings",
             CheckStaleProxyOnStartup = false,
             RestoreProxyOnExit = false,
-            ProxyRecoveryMode = ProxyRecoveryMode.EnableProxy,
             MainlandChinaFeatureMode = MainlandChinaFeatureMode.AllIncludingUrlBlacklist,
             MainlandChinaUrlBlockingEnabled = true,
             ConnectionTestUrl = "https://example.com/generate_204",
@@ -67,10 +73,15 @@ public sealed class SettingsViewModelTests
         Assert.False(viewModel.StartupConflictCheckEnabled);
         Assert.Equal(StartupBehaviorMode.DisableProxy, viewModel.StartupBehaviorMode);
         Assert.Equal((int)StartupBehaviorMode.DisableProxy, viewModel.StartupBehaviorModeIndex);
+        Assert.Equal(CloseBehaviorMode.ConfirmExit, viewModel.CloseBehaviorMode);
+        Assert.Equal((int)CloseBehaviorMode.ConfirmExit, viewModel.CloseBehaviorModeIndex);
+        Assert.False(viewModel.TriggersEnabled);
+        Assert.False(viewModel.TriggerNotificationsEnabled);
+        Assert.False(viewModel.TrayFadeInactiveIcon);
+        Assert.False(viewModel.TrayUseMonochromeInactiveIcon);
+        Assert.Equal("status,settings", viewModel.TrayVisibleFeatureIds);
         Assert.False(viewModel.CheckStaleProxyOnStartup);
         Assert.False(viewModel.RestoreProxyOnExit);
-        Assert.Equal(ProxyRecoveryMode.EnableProxy, viewModel.ProxyRecoveryMode);
-        Assert.Equal((int)ProxyRecoveryMode.EnableProxy, viewModel.ProxyRecoveryModeIndex);
         Assert.Equal(MainlandChinaFeatureMode.AllIncludingUrlBlacklist, viewModel.MainlandChinaFeatureMode);
         Assert.Equal((int)MainlandChinaFeatureMode.AllIncludingUrlBlacklist, viewModel.MainlandChinaFeatureModeIndex);
         Assert.True(viewModel.MainlandChinaUrlBlockingEnabled);
@@ -111,6 +122,60 @@ public sealed class SettingsViewModelTests
         Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
         Assert.Equal(0, viewModel.DisplayLanguageIndex);
         Assert.Equal(AppLanguage.AutoDetect, notifiedLanguage);
+    }
+
+    /// <summary>Verifies language switching keeps a stable, non-empty option source for WinUI ComboBox selection text.</summary>
+    [Fact]
+    public void SetDisplayLanguageIndex_RefreshesStableLanguageOptions()
+    {
+        FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        IReadOnlyList<string> originalOptions = viewModel.DisplayLanguageOptions;
+
+        bool changed = viewModel.SetDisplayLanguageIndex(0);
+
+        Assert.True(changed);
+        Assert.Same(originalOptions, viewModel.DisplayLanguageOptions);
+        Assert.Equal(0, viewModel.DisplayLanguageIndex);
+        Assert.Equal(7, viewModel.DisplayLanguageOptions.Count);
+        Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
+
+        changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.German + 1);
+
+        Assert.True(changed);
+        Assert.Same(originalOptions, viewModel.DisplayLanguageOptions);
+        Assert.Equal((int)AppLanguage.German + 1, viewModel.DisplayLanguageIndex);
+        Assert.Equal(7, viewModel.DisplayLanguageOptions.Count);
+        Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
+    }
+
+    /// <summary>Verifies language switching never leaves the bound ComboBox option source empty and reasserts the selected index after relocalizing options.</summary>
+    [Fact]
+    public void SetDisplayLanguageIndex_RelocalizesOptionsWithoutBlankingSelectedInput()
+    {
+        FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        INotifyCollectionChanged collection = Assert.IsAssignableFrom<INotifyCollectionChanged>(viewModel.DisplayLanguageOptions);
+        List<int> countsDuringRefresh = [];
+        List<NotifyCollectionChangedAction> collectionActions = [];
+        List<string?> changedProperties = [];
+        collection.CollectionChanged += (_, args) =>
+        {
+            countsDuringRefresh.Add(viewModel.DisplayLanguageOptions.Count);
+            collectionActions.Add(args.Action);
+        };
+        viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        bool changed = viewModel.SetDisplayLanguageIndex(0);
+
+        Assert.True(changed);
+        Assert.DoesNotContain(0, countsDuringRefresh);
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, collectionActions);
+        Assert.True(
+            changedProperties.LastIndexOf(nameof(SettingsViewModel.DisplayLanguageIndex))
+            > changedProperties.LastIndexOf(nameof(SettingsViewModel.DisplayLanguageOptions)));
+        Assert.Equal(0, viewModel.DisplayLanguageIndex);
+        Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
     }
 
     /// <summary>Verifies repeated ComboBox write-back for the current language does not re-enter localization refresh.</summary>
@@ -371,6 +436,76 @@ public sealed class SettingsViewModelTests
         Assert.Contains(nameof(SettingsViewModel.StartupConflictCheckEnabled), changedProperties);
     }
 
+    /// <summary>Verifies notification enablement and level are persisted through the settings view model.</summary>
+    [Fact]
+    public void NotificationSettings_PersistEnablementAndLevel()
+    {
+        FakeSettingsStore store = new()
+        {
+            NotificationEnabled = true,
+            NotificationLevel = NotificationLevel.Default,
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        List<string?> changedProperties = [];
+        viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        viewModel.NotificationEnabled = false;
+        bool levelChanged = viewModel.SetNotificationLevelIndex((int)NotificationLevel.More);
+
+        Assert.True(levelChanged);
+        Assert.False(store.NotificationEnabled);
+        Assert.False(viewModel.NotificationEnabled);
+        Assert.Equal(NotificationLevel.More, store.NotificationLevel);
+        Assert.Equal(NotificationLevel.More, viewModel.NotificationLevel);
+        Assert.Contains(nameof(SettingsViewModel.NotificationEnabled), changedProperties);
+        Assert.Contains(nameof(SettingsViewModel.NotificationLevelIndex), changedProperties);
+    }
+
+    /// <summary>Verifies trigger settings persist independently from notification verbosity.</summary>
+    [Fact]
+    public void TriggerSettings_PersistEnablementAndNotificationSwitch()
+    {
+        FakeSettingsStore store = new()
+        {
+            TriggersEnabled = true,
+            TriggerNotificationsEnabled = true,
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+
+        viewModel.TriggersEnabled = false;
+        viewModel.TriggerNotificationsEnabled = false;
+
+        Assert.False(store.TriggersEnabled);
+        Assert.False(store.TriggerNotificationsEnabled);
+        Assert.False(viewModel.TriggersEnabled);
+        Assert.False(viewModel.TriggerNotificationsEnabled);
+    }
+
+    /// <summary>Verifies tray settings persist close behavior, inactive icon behavior, and visible feature ids.</summary>
+    [Fact]
+    public void TraySettings_PersistCloseBehaviorAndVisibleFeatures()
+    {
+        FakeSettingsStore store = new()
+        {
+            CloseBehaviorMode = CloseBehaviorMode.MinimizeToTray,
+            TrayVisibleFeatureIds = "status,mode,pages",
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+
+        bool changed = viewModel.SetCloseBehaviorModeIndex((int)CloseBehaviorMode.ConfirmExit);
+        viewModel.TrayFadeInactiveIcon = false;
+        viewModel.TrayUseMonochromeInactiveIcon = false;
+        viewModel.SetTrayVisibleFeatureIds(["pages", "safe-exit"]);
+
+        Assert.True(changed);
+        Assert.Equal(CloseBehaviorMode.ConfirmExit, store.CloseBehaviorMode);
+        Assert.Equal(CloseBehaviorMode.ConfirmExit, viewModel.CloseBehaviorMode);
+        Assert.False(store.TrayFadeInactiveIcon);
+        Assert.False(store.TrayUseMonochromeInactiveIcon);
+        Assert.Equal("pages,safe-exit", store.TrayVisibleFeatureIds);
+        Assert.Equal("pages,safe-exit", viewModel.TrayVisibleFeatureIds);
+    }
+
     /// <summary>Verifies bindable option lists expose non-empty defaults without relying on ComboBoxItem binding.</summary>
     [Fact]
     public void OptionLists_ExposeNonEmptyText()
@@ -383,8 +518,8 @@ public sealed class SettingsViewModelTests
         Assert.All(viewModel.AppThemeModeOptions, Assert.NotEmpty);
         Assert.Equal(2, ReadProperty<IReadOnlyList<string>>(viewModel, "AppAccentColorModeOptions").Count);
         Assert.All(ReadProperty<IReadOnlyList<string>>(viewModel, "AppAccentColorModeOptions"), Assert.NotEmpty);
-        Assert.Equal(3, viewModel.ProxyRecoveryModeOptions.Count);
-        Assert.All(viewModel.ProxyRecoveryModeOptions, Assert.NotEmpty);
+        Assert.Equal(3, viewModel.CloseBehaviorModeOptions.Count);
+        Assert.All(viewModel.CloseBehaviorModeOptions, Assert.NotEmpty);
         Assert.Equal(4, viewModel.MainlandChinaFeatureModeOptions.Count);
         Assert.All(viewModel.MainlandChinaFeatureModeOptions, Assert.NotEmpty);
         Assert.Equal(3, viewModel.StartupBehaviorModeOptions.Count);
@@ -665,11 +800,41 @@ public sealed class SettingsViewModelTests
             return 204;
         });
 
-        string message = await InvokeRunConnectionTestAsync(viewModel, CancellationToken.None);
+        object report = await InvokeRunConnectionTestReportAsync(viewModel, CancellationToken.None);
+        IReadOnlyList<object> rows = ReadObjectProperty<IReadOnlyList<object>>(report, "Results");
 
-        Assert.Contains("Settings.ConnectionTestUrl.Proxy1: success 204", message);
-        Assert.Contains("Settings.ConnectionTestUrl.Proxy2: success 204", message);
-        Assert.Contains("Settings.ConnectionTestUrl.Direct: success 204", message);
+        Assert.Equal(3, rows.Count);
+        Assert.All(rows, row => Assert.True(ReadObjectProperty<bool>(row, "Succeeded")));
+        Assert.All(rows, row => Assert.Equal("HTTP 204", ReadObjectProperty<string>(row, "StatusText")));
+        Assert.Equal("Settings.ConnectionTest.AllPassed", ReadObjectProperty<string>(report, "SummaryText"));
+        Assert.Equal(
+            ["https://www.google.com/", "https://github.com/", "https://www.baidu.com/"],
+            requestedUris.Select(uri => uri.ToString()).ToArray());
+        Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
+    }
+
+    /// <summary>Verifies connection testing returns table-ready rows with URL, status, latency, and a summary.</summary>
+    [Fact]
+    public async Task RunConnectionTestAsync_ReturnsStructuredRowsWithSummary()
+    {
+        List<Uri> requestedUris = [];
+        SettingsViewModel viewModel = CreateConnectionTestViewModel(async (uri, _) =>
+        {
+            requestedUris.Add(uri);
+            await Task.Delay(5);
+            return uri.Host.Contains("github", StringComparison.OrdinalIgnoreCase) ? 302 : 204;
+        });
+
+        object report = await InvokeRunConnectionTestReportAsync(viewModel, CancellationToken.None);
+        IReadOnlyList<object> rows = ReadObjectProperty<IReadOnlyList<object>>(report, "Results");
+
+        Assert.Equal(3, rows.Count);
+        Assert.Equal("https://www.google.com", ReadObjectProperty<string>(rows[0], "Url"));
+        Assert.Equal("Settings.ConnectionTestUrl.Proxy1", ReadObjectProperty<string>(rows[0], "Label"));
+        Assert.True(ReadObjectProperty<bool>(rows[0], "Succeeded"));
+        Assert.Equal("HTTP 204", ReadObjectProperty<string>(rows[0], "StatusText"));
+        Assert.EndsWith(" ms", ReadObjectProperty<string>(rows[0], "LatencyText"), StringComparison.Ordinal);
+        Assert.Equal("Settings.ConnectionTest.AllPassed", ReadObjectProperty<string>(report, "SummaryText"));
         Assert.Equal(
             ["https://www.google.com/", "https://github.com/", "https://www.baidu.com/"],
             requestedUris.Select(uri => uri.ToString()).ToArray());
@@ -682,11 +847,13 @@ public sealed class SettingsViewModelTests
     {
         SettingsViewModel viewModel = CreateConnectionTestViewModel((_, _) => throw new HttpRequestException("network unavailable"));
 
-        string message = await InvokeRunConnectionTestAsync(viewModel, CancellationToken.None);
+        object report = await InvokeRunConnectionTestReportAsync(viewModel, CancellationToken.None);
+        IReadOnlyList<object> rows = ReadObjectProperty<IReadOnlyList<object>>(report, "Results");
 
-        Assert.Contains("Settings.ConnectionTestUrl.Proxy1: failed network unavailable", message);
-        Assert.Contains("Settings.ConnectionTestUrl.Proxy2: failed network unavailable", message);
-        Assert.Contains("Settings.ConnectionTestUrl.Direct: failed network unavailable", message);
+        Assert.Equal(3, rows.Count);
+        Assert.All(rows, row => Assert.False(ReadObjectProperty<bool>(row, "Succeeded")));
+        Assert.All(rows, row => Assert.Equal("failed network unavailable", ReadObjectProperty<string>(row, "StatusText")));
+        Assert.Equal("Settings.ConnectionTest.AllFailed", ReadObjectProperty<string>(report, "SummaryText"));
         Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
     }
 
@@ -768,9 +935,14 @@ public sealed class SettingsViewModelTests
             StartupConflictCheckEnabled = false,
             StartupBehaviorMode = StartupBehaviorMode.DisableProxy,
             ShowStartupGuideOnStartup = false,
+            TriggersEnabled = false,
+            TriggerNotificationsEnabled = false,
+            CloseBehaviorMode = CloseBehaviorMode.ExitWithoutConfirmation,
+            TrayFadeInactiveIcon = false,
+            TrayUseMonochromeInactiveIcon = false,
+            TrayVisibleFeatureIds = "status,settings",
             CheckStaleProxyOnStartup = false,
             RestoreProxyOnExit = false,
-            ProxyRecoveryMode = ProxyRecoveryMode.EnableProxy,
             MainlandChinaFeatureMode = MainlandChinaFeatureMode.Disabled,
             MainlandChinaUrlBlockingEnabled = true,
             ConnectionTestUrl = "https://example.com/test",
@@ -792,6 +964,7 @@ public sealed class SettingsViewModelTests
         Assert.Equal(AppThemeMode.FollowSystem, store.AppThemeMode);
         Assert.Equal(AppAccentColorMode.FollowSystem, store.AppAccentColorMode);
         Assert.Equal("#FF0078D4", store.AppAccentColorValue);
+        Assert.Equal(CloseBehaviorMode.MinimizeToTray, store.CloseBehaviorMode);
         Assert.Equal(AppLanguage.AutoDetect, appliedLanguage);
         Assert.Equal(AppThemeMode.FollowSystem, appliedTheme);
 
@@ -802,6 +975,17 @@ public sealed class SettingsViewModelTests
         Assert.True(store.ShowStartupGuideOnStartup);
         Assert.Equal(StartupBehaviorMode.LastSetting, store.StartupBehaviorMode);
         Assert.False(appliedLaunch);
+
+        InvokeMethod<object?>(viewModel, "ResetTriggerSettingsToDefaults", Array.Empty<object>());
+
+        Assert.True(store.TriggersEnabled);
+        Assert.True(store.TriggerNotificationsEnabled);
+
+        InvokeMethod<object?>(viewModel, "ResetTraySettingsToDefaults", Array.Empty<object>());
+
+        Assert.True(store.TrayFadeInactiveIcon);
+        Assert.False(store.TrayUseMonochromeInactiveIcon);
+        Assert.Contains("pages", store.TrayVisibleFeatureIds, StringComparison.Ordinal);
 
         InvokeMethod<object?>(viewModel, "ResetProxySettingsToDefaults", Array.Empty<object>());
 
@@ -816,7 +1000,6 @@ public sealed class SettingsViewModelTests
 
         Assert.True(store.CheckStaleProxyOnStartup);
         Assert.True(store.RestoreProxyOnExit);
-        Assert.Equal(ProxyRecoveryMode.DisableProxy, store.ProxyRecoveryMode);
 
         InvokeMethod<object?>(viewModel, "ResetMainlandChinaSettingsToDefaults", Array.Empty<object>());
 
@@ -878,15 +1061,27 @@ public sealed class SettingsViewModelTests
 
         public bool ShowStartupGuideOnStartup { get; set; } = true;
 
+        public bool TriggersEnabled { get; set; } = true;
+
+        public bool TriggerNotificationsEnabled { get; set; } = true;
+
+        public CloseBehaviorMode CloseBehaviorMode { get; set; } = CloseBehaviorMode.MinimizeToTray;
+
+        public bool TrayFadeInactiveIcon { get; set; } = true;
+
+        public bool TrayUseMonochromeInactiveIcon { get; set; } = true;
+
+        public string TrayVisibleFeatureIds { get; set; } = "status,mode,pages,transparent-proxy,settings,safe-exit";
+
         public bool CheckStaleProxyOnStartup { get; set; } = true;
 
         public bool RestoreProxyOnExit { get; set; } = true;
 
-        public ProxyRecoveryMode ProxyRecoveryMode { get; set; } = ProxyRecoveryMode.DisableProxy;
-
         public MainlandChinaFeatureMode MainlandChinaFeatureMode { get; set; } = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
 
         public bool MainlandChinaUrlBlockingEnabled { get; set; }
+
+        public bool NotificationEnabled { get; set; } = true;
 
         public NotificationLevel NotificationLevel { get; set; } = NotificationLevel.Default;
 
@@ -937,6 +1132,10 @@ public sealed class SettingsViewModelTests
             {
                 "Settings.ConnectionTest.Succeeded.Format" => "success {0}",
                 "Settings.ConnectionTest.Failed.Format" => "failed {0}",
+                "Settings.ConnectionTest.StatusHttp.Format" => "HTTP {0}",
+                "Settings.ConnectionTest.AllPassed" => "Settings.ConnectionTest.AllPassed",
+                "Settings.ConnectionTest.AllFailed" => "Settings.ConnectionTest.AllFailed",
+                "Settings.ConnectionTest.PartialPassed.Format" => "{0}/{1}",
                 _ => key,
             }),
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
@@ -1137,13 +1336,26 @@ public sealed class SettingsViewModelTests
         return result is null && default(T) is null ? default! : Assert.IsAssignableFrom<T>(result);
     }
 
-    private static async Task<string> InvokeRunConnectionTestAsync(SettingsViewModel viewModel, CancellationToken cancellationToken)
+    private static async Task<object> InvokeRunConnectionTestReportAsync(SettingsViewModel viewModel, CancellationToken cancellationToken)
     {
         MethodInfo? method = typeof(SettingsViewModel).GetMethod("RunConnectionTestAsync");
         Assert.NotNull(method);
+        Type? reportType = typeof(SettingsViewModel).Assembly.GetType("ClashSharp.ViewModel.ConnectionTestReport");
+        Assert.NotNull(reportType);
         object? value = method.Invoke(viewModel, [cancellationToken]);
-        Task<string> task = Assert.IsAssignableFrom<Task<string>>(value);
-        return await task;
+        Type expectedTaskType = typeof(Task<>).MakeGenericType(reportType);
+        Assert.IsAssignableFrom(expectedTaskType, value);
+        await (Task)value!;
+        object? result = value.GetType().GetProperty("Result")?.GetValue(value);
+        Assert.IsType(reportType, result);
+        return result!;
+    }
+
+    private static T ReadObjectProperty<T>(object value, string propertyName)
+    {
+        PropertyInfo? property = value.GetType().GetProperty(propertyName);
+        Assert.NotNull(property);
+        return Assert.IsAssignableFrom<T>(property.GetValue(value));
     }
 
     /// <summary>Fake mihomo service controller for transparent proxy settings tests.</summary>

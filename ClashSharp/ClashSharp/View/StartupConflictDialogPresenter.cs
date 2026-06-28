@@ -40,8 +40,13 @@ internal static class StartupConflictDialogPresenter
             Title = LocalizationService.Instance.GetString("StartupConflict.Dialog.Title"),
             Content = BuildContent(issues, xamlRoot),
             CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            Width = 420,
+            MinWidth = 0,
+            MaxWidth = 420,
             XamlRoot = xamlRoot,
         };
+        dialog.Resources["ContentDialogMinWidth"] = 360d;
+        dialog.Resources["ContentDialogMaxWidth"] = 420d;
 
         await dialog.ShowAsync();
     }
@@ -58,15 +63,15 @@ internal static class StartupConflictDialogPresenter
             {
                 Text = LocalizationService.Instance.GetString("StartupConflict.Dialog.Empty"),
                 TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 640,
+                MaxWidth = 380,
             };
         }
 
         StackPanel panel = new()
         {
             Spacing = 8,
-            MinWidth = 420,
-            MaxWidth = 680,
+            MinWidth = 340,
+            MaxWidth = 380,
         };
         panel.Children.Add(new TextBlock
         {
@@ -85,7 +90,7 @@ internal static class StartupConflictDialogPresenter
             Content = panel,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = Math.Min(420, Math.Max(240, xamlRoot.Size.Height - 220)),
+            MaxHeight = Math.Min(320, Math.Max(160, xamlRoot.Size.Height - 220)),
             Padding = new Thickness(0, 0, 12, 0),
         };
     }

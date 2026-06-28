@@ -14,6 +14,5 @@ internal enum DataPackageExportScope
 {
     Settings,
     SettingsAndProxyConfiguration,
-    SystemLogs,
     SystemLogSqlite,
 }

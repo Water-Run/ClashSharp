@@ -13,7 +13,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -110,6 +113,44 @@ internal interface IMasterControlSettings
 
     /// <summary>Gets the direct connection-test URL.</summary>
     string ConnectionTestDirectUrl { get; }
+
+    AppLanguage DisplayLanguage { get; }
+
+    AppThemeMode AppThemeMode { get; }
+
+    int ConnectionSamplingIntervalSeconds { get; }
+
+    StartupBehaviorMode StartupBehaviorMode { get; }
+
+    bool TriggersEnabled { get; }
+
+    bool TriggerNotificationsEnabled { get; }
+
+    CloseBehaviorMode CloseBehaviorMode { get; }
+
+    bool TrayFadeInactiveIcon { get; }
+
+    bool TrayUseMonochromeInactiveIcon { get; }
+
+    string TrayVisibleFeatureIds { get; }
+
+    bool NotificationEnabled { get; }
+
+    NotificationLevel NotificationLevel { get; }
+
+    bool RestoreProxyOnExit { get; set; }
+
+    bool CheckStaleProxyOnStartup { get; set; }
+
+    bool StartupConflictCheckEnabled { get; set; }
+
+    bool ShowStartupGuideOnStartup { get; set; }
+
+    MainlandChinaFeatureMode MainlandChinaFeatureMode { get; }
+
+    AppAccentColorMode AppAccentColorMode { get; }
+
+    string AppAccentColorValue { get; }
 }
 
 /// <summary>Page-level action requested by a functional master-control tile.</summary>
@@ -162,6 +203,51 @@ internal interface IMasterControlTrayStatus
 {
     /// <summary>Gets current node and latency status.</summary>
     TrayStatusSnapshot GetSnapshot();
+}
+
+/// <summary>Runtime counters and storage summaries shown by master-control information tiles.</summary>
+internal sealed record MasterControlRuntimeSnapshot(
+    CoreConfigurationState CoreConfiguration,
+    int ProfileCount,
+    int SubscriptionCount,
+    int ProxyNodeCount,
+    int RuleCount,
+    int TriggerTaskCount,
+    int EnabledTriggerTaskCount,
+    LogStorageSummary LogStorage,
+    TrafficStatisticsSummary Traffic,
+    MihomoServiceStatus MihomoService,
+    StartupRestoreFallbackStatus StartupRestoreFallback)
+{
+    public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
+        new CoreConfigurationState(string.Empty, string.Empty, false),
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        new LogStorageSummary(string.Empty, 0, 0, 0),
+        new TrafficStatisticsSummary(0, 0, 0, 0, 0, 0, 0, 0),
+        new MihomoServiceStatus(false, false, string.Empty),
+        new StartupRestoreFallbackStatus(false, string.Empty));
+}
+
+/// <summary>Runtime information contract required by the master-control tile catalog.</summary>
+internal interface IMasterControlRuntime
+{
+    MasterControlRuntimeSnapshot GetSnapshot();
+}
+
+/// <summary>Fallback runtime provider used when counters are unavailable.</summary>
+internal sealed class UnavailableMasterControlRuntime : IMasterControlRuntime
+{
+    public static UnavailableMasterControlRuntime Instance { get; } = new();
+
+    public MasterControlRuntimeSnapshot GetSnapshot()
+    {
+        return MasterControlRuntimeSnapshot.Unavailable;
+    }
 }
 
 /// <summary>Fallback tray status provider used in tests and when runtime status is unavailable.</summary>
@@ -275,6 +361,9 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Tray status provider used for current node and latency details.</summary>
     private readonly IMasterControlTrayStatus _trayStatus;
 
+    /// <summary>Runtime summary provider used for count and storage tiles.</summary>
+    private readonly IMasterControlRuntime _runtime;
+
     /// <summary>Shared application action dispatcher used by functional tiles.</summary>
     private readonly IApplicationActionDispatcher _actions;
 
@@ -299,8 +388,18 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Backing field for <see cref="LatencySummaryText"/>.</summary>
     private string _latencySummaryText = string.Empty;
 
+    /// <summary>Backing field for the latest formatted mihomo version tile value.</summary>
+    private string _mihomoVersionText = string.Empty;
+
+    private const string ApplicationDisplayName = "Clash#";
+
+    private static readonly string ApplicationVersionText = ResolveApplicationVersionText();
+
     /// <summary>Whether the bundled core was available during the latest status refresh.</summary>
     private bool _isCoreAvailable = true;
+
+    /// <summary>Latest runtime snapshot backing count and storage tiles.</summary>
+    private MasterControlRuntimeSnapshot _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
 
     /// <summary>Information tiles displayed in the lower grid.</summary>
     private readonly ObservableCollection<MasterControlInfoTileViewModel> _infoTiles = [];
@@ -321,6 +420,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterControlTakeover takeover,
         IMasterControlLog log,
         IMasterControlTrayStatus? trayStatus = null,
+        IMasterControlRuntime? runtime = null,
         IApplicationActionDispatcher? actions = null,
         Func<ClashSharpMode, Task>? modeApplied = null)
     {
@@ -331,6 +431,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         _takeover = takeover ?? throw new ArgumentNullException(nameof(takeover));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _trayStatus = trayStatus ?? UnavailableMasterControlTrayStatus.Instance;
+        _runtime = runtime ?? UnavailableMasterControlRuntime.Instance;
         _actions = actions ?? NoMasterControlApplicationActionDispatcher.Instance;
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         _selectedMode = _settings.CurrentMode;
@@ -544,6 +645,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         try
         {
             string versionText = CoreVersionDisplayFormatter.Format(await _core.GetVersionTextAsync(cancellationToken));
+            _mihomoVersionText = versionText;
             CoreStatusText = string.Format(
                 _localization.GetString("Master.Status.CoreReady.Format"),
                 versionText);
@@ -551,10 +653,12 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException)
         {
+            _mihomoVersionText = _localization.GetString("Master.Status.Unavailable");
             CoreStatusText = _localization.GetString("Master.Status.CoreUnavailable");
             _isCoreAvailable = false;
         }
 
+        RefreshRuntimeSnapshot();
         RefreshProxyStatus();
         RefreshTrayStatus();
         OnPropertyChanged(nameof(BasicStatusText));
@@ -571,6 +675,11 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// </remarks>
     public Task ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
     {
+        if (mode == SelectedMode && mode == _settings.CurrentMode)
+        {
+            return Task.CompletedTask;
+        }
+
         try
         {
             NetworkTakeoverResult result = _takeover.ApplyMode(mode);
@@ -592,7 +701,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             SelectedMode = ClashSharpMode.Faulted;
             CoreStatusText = _localization.GetString("Master.Status.CoreStartFailed");
             _isCoreAvailable = false;
-            _log.Append("Error", "MasterControl", "Failed to apply selected Clash# mode.", exception.Message);
+            _log.Append("Error", "MasterControl", _localization.GetString("Master.Log.ApplyModeFailed"), exception.Message);
         }
 
         OnPropertyChanged(nameof(BasicStatusText));
@@ -631,6 +740,18 @@ internal sealed class MasterControlViewModel : ObservableObject
             : _localization.GetString("Master.Status.LatencyUnavailable");
     }
 
+    private void RefreshRuntimeSnapshot()
+    {
+        try
+        {
+            _runtimeSnapshot = _runtime.GetSnapshot();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
+        }
+    }
+
     private void BuildInfoTiles()
     {
         _infoTiles.Clear();
@@ -652,8 +773,8 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private void RefreshTileValues()
     {
-        SetTile("core", CoreStatusText, BasicStatusText);
-        SetTile("mihomo-version", CoreStatusText, BasicStatusText);
+        SetTile("core", GetCoreTileStatusText(), string.Empty);
+        SetTile("mihomo-version", _mihomoVersionText, string.Empty);
         SetTile("system-proxy", SystemProxyStatusText, string.Empty);
         SetTile("transparent-proxy", TransparentProxyStatusText, string.Empty, _settings.TransparentProxyEnabled);
         SetTile("latency", LatencySummaryText, CurrentNodeText);
@@ -676,6 +797,51 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("startup-conflicts", _localization.GetString("Settings.CheckStartupConflicts.Now"), string.Empty);
         SetTile("export-config", _localization.GetString("Command.Export"), string.Empty);
         SetTile("import-config", _localization.GetString("Command.Import"), string.Empty);
+        SetTile("app-name", ApplicationDisplayName, _localization.GetString("About.App.Description"));
+        SetTile("app-version", string.Format(_localization.GetString("About.Version.Value.Format"), ApplicationVersionText), string.Empty);
+        SetTile("app-runtime", _localization.GetString("About.Runtime.Value"), string.Empty);
+        SetTile("current-mode", GetModeTitle(SelectedMode), BasicStatusText);
+        SetTile("current-node", CurrentNodeText, LatencySummaryText);
+        SetTile("notification-enabled", FormatSwitch(_settings.NotificationEnabled), GetNotificationLevelText(_settings.NotificationLevel), _settings.NotificationEnabled);
+        SetTile("notification-level", GetNotificationLevelText(_settings.NotificationLevel), FormatSwitch(_settings.NotificationEnabled));
+        SetTile("triggers-enabled", FormatSwitch(_settings.TriggersEnabled), string.Empty, _settings.TriggersEnabled);
+        SetTile("trigger-notifications", FormatSwitch(_settings.TriggerNotificationsEnabled), string.Empty, _settings.TriggerNotificationsEnabled);
+        SetTile("tray-visible-features", FormatTrayVisibleFeatureCount(_settings.TrayVisibleFeatureIds), string.Empty);
+        SetTile("tray-fade-icon", FormatSwitch(_settings.TrayFadeInactiveIcon), string.Empty, _settings.TrayFadeInactiveIcon);
+        SetTile("tray-monochrome-icon", FormatSwitch(_settings.TrayUseMonochromeInactiveIcon), string.Empty, _settings.TrayUseMonochromeInactiveIcon);
+        SetTile("close-behavior", GetCloseBehaviorText(_settings.CloseBehaviorMode), string.Empty);
+        SetTile("startup-behavior", GetStartupBehaviorText(_settings.StartupBehaviorMode), string.Empty);
+        SetTile("app-theme", GetAppThemeText(_settings.AppThemeMode), string.Empty);
+        SetTile("display-language", GetDisplayLanguageText(_settings.DisplayLanguage), string.Empty);
+        SetTile(
+            "sampling-interval",
+            string.Format(_localization.GetString("Master.Status.Seconds.Format"), _settings.ConnectionSamplingIntervalSeconds),
+            FormatSwitch(_settings.ConnectionSamplingEnabled));
+        SetTile("app-accent", GetAppAccentColorText(_settings.AppAccentColorMode), _settings.AppAccentColorValue);
+        SetTile("restore-proxy-on-exit", FormatSwitch(_settings.RestoreProxyOnExit), string.Empty, _settings.RestoreProxyOnExit);
+        SetTile("stale-proxy-check", FormatSwitch(_settings.CheckStaleProxyOnStartup), string.Empty, _settings.CheckStaleProxyOnStartup);
+        SetTile("startup-conflict-check", FormatSwitch(_settings.StartupConflictCheckEnabled), string.Empty, _settings.StartupConflictCheckEnabled);
+        SetTile("startup-guide", FormatSwitch(_settings.ShowStartupGuideOnStartup), string.Empty, _settings.ShowStartupGuideOnStartup);
+        SetTile("mainland-feature-mode", GetMainlandChinaFeatureText(_settings.MainlandChinaFeatureMode), string.Empty);
+        SetTile("startup-restore-fallback", GetStartupRestoreFallbackStatusText(), CompactPath(_runtimeSnapshot.StartupRestoreFallback.CommandLine));
+        SetTile("mihomo-service", GetMihomoServiceStatusText(), string.Empty);
+        SetTile("core-config-file", GetCoreConfigurationStatusText(), CompactPath(_runtimeSnapshot.CoreConfiguration.ConfigPath));
+        SetTile("profile-count", FormatNumber(_runtimeSnapshot.ProfileCount), _settings.ActiveProfileId);
+        SetTile("subscription-count", FormatNumber(_runtimeSnapshot.SubscriptionCount), string.Empty);
+        SetTile("proxy-node-count", FormatNumber(_runtimeSnapshot.ProxyNodeCount), string.Empty);
+        SetTile("rule-count", FormatNumber(_runtimeSnapshot.RuleCount), string.Empty);
+        SetTile("trigger-count", FormatEnabledCount(_runtimeSnapshot.EnabledTriggerTaskCount, _runtimeSnapshot.TriggerTaskCount), FormatSwitch(_settings.TriggersEnabled));
+        SetTile("system-log-count", FormatNumber(_runtimeSnapshot.LogStorage.LogCount), FormatBytes(_runtimeSnapshot.LogStorage.DatabaseSizeBytes));
+        SetTile("connection-records", FormatNumber(_runtimeSnapshot.LogStorage.ConnectionCount), FormatBytes(_runtimeSnapshot.LogStorage.DatabaseSizeBytes));
+        SetTile(
+            "traffic-total",
+            FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
+            string.Format(
+                _localization.GetString("Statistics.TotalTraffic.Format"),
+                FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes),
+                FormatBytes(_runtimeSnapshot.Traffic.TotalDownloadBytes)));
+        SetTile("traffic-snapshots", FormatNumber(_runtimeSnapshot.Traffic.SnapshotCount), string.Empty);
+        SetTile("node-health-records", FormatNumber(_runtimeSnapshot.Traffic.NodeHealthCount), FormatNumber(_runtimeSnapshot.Traffic.NodeCount));
     }
 
     private string TileDescription(string key)
@@ -737,6 +903,30 @@ internal sealed class MasterControlViewModel : ObservableObject
         RefreshTileValues();
     }
 
+    private void ToggleRestoreProxyOnExit()
+    {
+        _settings.RestoreProxyOnExit = !_settings.RestoreProxyOnExit;
+        RefreshTileValues();
+    }
+
+    private void ToggleCheckStaleProxyOnStartup()
+    {
+        _settings.CheckStaleProxyOnStartup = !_settings.CheckStaleProxyOnStartup;
+        RefreshTileValues();
+    }
+
+    private void ToggleStartupConflictCheck()
+    {
+        _settings.StartupConflictCheckEnabled = !_settings.StartupConflictCheckEnabled;
+        RefreshTileValues();
+    }
+
+    private void ToggleStartupGuide()
+    {
+        _settings.ShowStartupGuideOnStartup = !_settings.ShowStartupGuideOnStartup;
+        RefreshTileValues();
+    }
+
     private void RequestTileAction(MasterControlTileAction action)
     {
         TileActionRequested?.Invoke(this, action);
@@ -752,6 +942,188 @@ internal sealed class MasterControlViewModel : ObservableObject
         return uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
             ? uri.Host[4..]
             : uri.Host;
+    }
+
+    private string FormatSwitch(bool isEnabled)
+    {
+        return isEnabled
+            ? _localization.GetString("Master.Status.On")
+            : _localization.GetString("Master.Status.Off");
+    }
+
+    private string GetCoreTileStatusText()
+    {
+        return _isCoreAvailable
+            ? _localization.GetString("Master.BasicStatus.Ready")
+            : _localization.GetString("Master.Status.CoreUnavailable");
+    }
+
+    private string GetStartupRestoreFallbackStatusText()
+    {
+        return _runtimeSnapshot.StartupRestoreFallback.IsRegistered
+            ? _localization.GetString("Settings.StartupRestoreFallback.Status.Registered")
+            : _localization.GetString("Settings.StartupRestoreFallback.Status.NotRegistered");
+    }
+
+    private string GetMihomoServiceStatusText()
+    {
+        if (!string.IsNullOrWhiteSpace(_runtimeSnapshot.MihomoService.Message))
+        {
+            return _runtimeSnapshot.MihomoService.Message;
+        }
+
+        return _runtimeSnapshot.MihomoService.IsRunning
+            ? _localization.GetString("MihomoService.Status.DeployedRunning")
+            : _runtimeSnapshot.MihomoService.IsInstalled
+                ? _localization.GetString("MihomoService.Status.Deployed")
+                : _localization.GetString("MihomoService.Status.NotDeployed");
+    }
+
+    private string GetCoreConfigurationStatusText()
+    {
+        return _runtimeSnapshot.CoreConfiguration.Exists
+            ? _localization.GetString("ProfileCatalog.Status.Available")
+            : _localization.GetString("Settings.ProxyInformation.CoreBinary.Missing");
+    }
+
+    private string GetAppAccentColorText(AppAccentColorMode mode)
+    {
+        return mode switch
+        {
+            AppAccentColorMode.FollowSystem => _localization.GetString("Settings.AppAccentColor.FollowSystem"),
+            AppAccentColorMode.Custom => _localization.GetString("Settings.AppAccentColor.Custom"),
+            _ => _localization.GetString("Settings.AppAccentColor.FollowSystem"),
+        };
+    }
+
+    private string GetMainlandChinaFeatureText(MainlandChinaFeatureMode mode)
+    {
+        return mode switch
+        {
+            MainlandChinaFeatureMode.Disabled => _localization.GetString("Settings.MainlandChinaFeature.Disabled"),
+            MainlandChinaFeatureMode.FlagReplacementOnly => _localization.GetString("Settings.MainlandChinaFeature.FlagOnly"),
+            MainlandChinaFeatureMode.FlagReplacementAndTextCompletion => _localization.GetString("Settings.MainlandChinaFeature.FlagAndText"),
+            MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter => _localization.GetString("Settings.MainlandChinaFeature.KeywordFilter"),
+            MainlandChinaFeatureMode.AllIncludingUrlBlacklist => _localization.GetString("Settings.MainlandChinaFeature.All"),
+            _ => _localization.GetString("Settings.MainlandChinaFeature.Disabled"),
+        };
+    }
+
+    private static string FormatNumber(long value)
+    {
+        return Math.Max(0, value).ToString("N0", CultureInfo.CurrentCulture);
+    }
+
+    private static string FormatEnabledCount(int enabledCount, int totalCount)
+    {
+        return string.Create(
+            CultureInfo.CurrentCulture,
+            $"{Math.Max(0, enabledCount):N0}/{Math.Max(0, totalCount):N0}");
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        double value = Math.Max(0, bytes);
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        int unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024;
+            unitIndex++;
+        }
+
+        return string.Format(CultureInfo.CurrentCulture, "{0:0.##} {1}", value, units[unitIndex]);
+    }
+
+    private static string CompactPath(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        string fileName = Path.GetFileName(value);
+        return string.IsNullOrWhiteSpace(fileName) ? value : fileName;
+    }
+
+    private string FormatTrayVisibleFeatureCount(string value)
+    {
+        int count = value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        return string.Format(_localization.GetString("Settings.Tray.VisibleFeatures.Summary.Format"), count);
+    }
+
+    private string GetModeTitle(ClashSharpMode mode)
+    {
+        return mode switch
+        {
+            ClashSharpMode.Disabled => DisabledModeTitleText,
+            ClashSharpMode.Standby => StandbyModeTitleText,
+            ClashSharpMode.RuleTakeover => RuleTakeoverModeTitleText,
+            ClashSharpMode.FullTakeover => FullTakeoverModeTitleText,
+            _ => _localization.GetString("Master.Status.Unavailable"),
+        };
+    }
+
+    private string GetNotificationLevelText(NotificationLevel level)
+    {
+        return level switch
+        {
+            NotificationLevel.Default => _localization.GetString("Settings.Notification.Default"),
+            NotificationLevel.CriticalOnly => _localization.GetString("Settings.Notification.CriticalOnly"),
+            NotificationLevel.More => _localization.GetString("Settings.Notification.More"),
+            _ => _localization.GetString("Settings.Notification.Default"),
+        };
+    }
+
+    private string GetCloseBehaviorText(CloseBehaviorMode mode)
+    {
+        return mode switch
+        {
+            CloseBehaviorMode.ExitWithoutConfirmation => _localization.GetString("Settings.CloseBehavior.ExitWithoutConfirmation"),
+            CloseBehaviorMode.ConfirmExit => _localization.GetString("Settings.CloseBehavior.ConfirmExit"),
+            CloseBehaviorMode.MinimizeToTray => _localization.GetString("Settings.CloseBehavior.MinimizeToTray"),
+            _ => _localization.GetString("Settings.CloseBehavior.MinimizeToTray"),
+        };
+    }
+
+    private string GetStartupBehaviorText(StartupBehaviorMode mode)
+    {
+        return mode switch
+        {
+            StartupBehaviorMode.LastSetting => _localization.GetString("Settings.StartupBehavior.LastSetting"),
+            StartupBehaviorMode.StartRuleProxy => _localization.GetString("Settings.StartupBehavior.StartRuleProxy"),
+            StartupBehaviorMode.DisableProxy => _localization.GetString("Settings.StartupBehavior.DisableProxy"),
+            _ => _localization.GetString("Settings.StartupBehavior.LastSetting"),
+        };
+    }
+
+    private string GetAppThemeText(AppThemeMode mode)
+    {
+        return mode switch
+        {
+            AppThemeMode.FollowSystem => _localization.GetString("Settings.AppTheme.FollowSystem"),
+            AppThemeMode.Light => _localization.GetString("Settings.AppTheme.Light"),
+            AppThemeMode.Dark => _localization.GetString("Settings.AppTheme.Dark"),
+            _ => _localization.GetString("Settings.AppTheme.FollowSystem"),
+        };
+    }
+
+    private string GetDisplayLanguageText(AppLanguage language)
+    {
+        return language switch
+        {
+            AppLanguage.AutoDetect => _localization.GetString("Settings.Language.AutoDetect"),
+            AppLanguage.SimplifiedChinese => "简体中文",
+            AppLanguage.TraditionalChinese => "繁體中文",
+            AppLanguage.English => "English",
+            AppLanguage.Russian => "Русский",
+            AppLanguage.French => "Français",
+            AppLanguage.German => "Deutsch",
+            _ => _localization.GetString("Settings.Language.AutoDetect"),
+        };
     }
 
     /// <summary>Resolves transparent proxy status after mode application.</summary>
@@ -808,6 +1180,42 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.CheckStartupConflicts)),
                 owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ExportConfiguration)),
                 owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ImportConfiguration)),
+                owner.CreateTile("app-name", "AppName", "\uE946", infoType),
+                owner.CreateTileFromKeys("app-version", "About.Version.Title", "\uE946", "Master.Tile.Description.AppVersion", infoType),
+                owner.CreateTileFromKeys("app-runtime", "About.Runtime.Title", "\uE7F8", "Master.Tile.Description.AppRuntime", infoType),
+                owner.CreateTileFromKeys("current-mode", "Tray.Menu.Mode", "\uE8AB", "Master.Mode.RuleTakeover.Description", infoType),
+                owner.CreateTileFromKeys("current-node", "Tray.Status.Node.Format", "\uE8A5", "Settings.Tray.Feature.Status.Description", infoType),
+                owner.CreateTileFromKeys("notification-enabled", "Settings.Notification.Enabled.Title", "\uE7F4", "Settings.Notification.Enabled.Description", infoType),
+                owner.CreateTileFromKeys("notification-level", "Settings.Notification.Title", "\uE7F4", "Settings.Notification.Description", infoType),
+                owner.CreateTileFromKeys("triggers-enabled", "Settings.Triggers.Enabled.Title", "\uE9F5", "Settings.Triggers.Enabled.Description", infoType),
+                owner.CreateTileFromKeys("trigger-notifications", "Settings.Triggers.Notifications.Title", "\uE7F4", "Settings.Triggers.Notifications.Description", infoType),
+                owner.CreateTileFromKeys("tray-visible-features", "Settings.Tray.VisibleFeatures.Title", "\uE8A7", "Settings.Tray.VisibleFeatures.Description", infoType),
+                owner.CreateTileFromKeys("tray-fade-icon", "Settings.Tray.FadeInactiveIcon.Title", "\uE706", "Settings.Tray.FadeInactiveIcon.Description", infoType),
+                owner.CreateTileFromKeys("tray-monochrome-icon", "Settings.Tray.MonochromeInactiveIcon.Title", "\uE790", "Settings.Tray.MonochromeInactiveIcon.Description", infoType),
+                owner.CreateTileFromKeys("close-behavior", "Settings.CloseBehavior.Title", "\uE8BB", "Settings.CloseBehavior.Description", infoType),
+                owner.CreateTileFromKeys("startup-behavior", "Settings.StartupBehavior.Title", "\uE7C3", "Settings.StartupBehavior.Description", infoType),
+                owner.CreateTileFromKeys("app-theme", "Settings.AppTheme.Title", "\uE790", "Settings.AppTheme.Description", infoType),
+                owner.CreateTileFromKeys("display-language", "Settings.Language.Title", "\uE774", "Settings.Language.Description", infoType),
+                owner.CreateTileFromKeys("sampling-interval", "Settings.SamplingInterval.Title", "\uE916", "Settings.SamplingInterval.Description", infoType),
+                owner.CreateTileFromKeys("app-accent", "Settings.AppAccentColor.Title", "\uE790", "Settings.AppAccentColor.Description", infoType),
+                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, owner.ToggleRestoreProxyOnExit),
+                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, owner.ToggleCheckStaleProxyOnStartup),
+                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, owner.ToggleStartupConflictCheck),
+                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, owner.ToggleStartupGuide),
+                owner.CreateTileFromKeys("mainland-feature-mode", "Settings.MainlandChinaDisplay.Title", "\uE7B5", "Settings.MainlandChinaDisplay.Description", infoType),
+                owner.CreateTileFromKeys("startup-restore-fallback", "Settings.StartupRestoreFallback.Title", "\uE7C3", "Settings.StartupRestoreFallback.Description", infoType),
+                owner.CreateTileFromKeys("mihomo-service", "Settings.TransparentProxy.Service.Title", "\uE95A", "Settings.TransparentProxy.Service.Description", infoType),
+                owner.CreateTileFromKeys("core-config-file", "Master.Status.CoreConfiguration", "\uE8A5", "Settings.ProxyInformation.Description", infoType),
+                owner.CreateTileFromKeys("profile-count", "Nav.Profiles", "\uE8A5", "Page.Profiles.Description", infoType),
+                owner.CreateTileFromKeys("subscription-count", "StartupPrompt.Check.Subscription.Title", "\uE774", "Page.Profiles.Description", infoType),
+                owner.CreateTileFromKeys("proxy-node-count", "Nav.ProxyNodes", "\uE8A5", "Page.ProxyNodes.Description", infoType),
+                owner.CreateTileFromKeys("rule-count", "Nav.Rules", "\uE8D7", "Page.Rules.Description", infoType),
+                owner.CreateTileFromKeys("trigger-count", "Settings.Section.Triggers", "\uE9F5", "Page.Triggers.Description", infoType),
+                owner.CreateTileFromKeys("system-log-count", "Statistics.LogsShortcut.Title", "\uE9D9", "Statistics.LogsShortcut.Description", infoType),
+                owner.CreateTileFromKeys("connection-records", "Nav.Connections", "\uE839", "Page.Connections.Description", infoType),
+                owner.CreateTileFromKeys("traffic-total", "Statistics.Total.Title", "\uE9D2", "Page.Statistics.Description", infoType),
+                owner.CreateTileFromKeys("traffic-snapshots", "Statistics.ByDate.Title", "\uE121", "Page.Statistics.Description", infoType),
+                owner.CreateTileFromKeys("node-health-records", "Statistics.Node.Title", "\uE8A5", "Page.Statistics.Description", infoType),
             ];
         }
     }
@@ -830,6 +1238,38 @@ internal sealed class MasterControlViewModel : ObservableObject
             isToggleVisible,
             isToggleOn,
             command is null ? null : new RelayCommand(command));
+    }
+
+    private MasterTileDefinition CreateTileFromKeys(
+        string id,
+        string titleKey,
+        string glyph,
+        string descriptionKey,
+        string typeText,
+        bool isToggleVisible = false,
+        bool isToggleOn = false,
+        Action? command = null)
+    {
+        return new MasterTileDefinition(
+            id,
+            CleanTileTitle(_localization.GetString(titleKey)),
+            glyph,
+            _localization.GetString(descriptionKey),
+            typeText,
+            isToggleVisible,
+            isToggleOn,
+            command is null ? null : new RelayCommand(command));
+    }
+
+    private static string CleanTileTitle(string title)
+    {
+        return title.Replace("{0}", string.Empty, StringComparison.Ordinal).Trim().TrimEnd(':', '：');
+    }
+
+    private static string ResolveApplicationVersionText()
+    {
+        Version? version = Assembly.GetExecutingAssembly().GetName().Version;
+        return version is null ? "1.0.0.0" : version.ToString();
     }
 
     private sealed class NoMasterControlApplicationActionDispatcher : IApplicationActionDispatcher

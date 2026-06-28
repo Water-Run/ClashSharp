@@ -318,11 +318,11 @@ internal sealed class ProxiesViewModel : ObservableObject
         {
             IReadOnlyList<ProxyNode> testedNodes = await _latencyTester.TestNodesAsync(ProxyNodes, cancellationToken);
             ProxyNodes = testedNodes;
-            _log.Append("Info", "ProxyNodes", "Proxy node latency test completed.", $"{testedNodes.Count:N0} nodes tested.");
+            _log.Append("Info", "ProxyNodes", string.Format(_localization.GetString("Master.LatencyDialog.Completed.Format"), testedNodes.Count), null);
         }
         catch (Exception exception) when (exception is OperationCanceledException or InvalidOperationException)
         {
-            _log.Append("Warning", "ProxyNodes", "Proxy node latency test failed.", exception.Message);
+            _log.Append("Warning", "ProxyNodes", _localization.GetString("Master.LatencyDialog.Failed"), exception.Message);
         }
     }
 
@@ -342,7 +342,7 @@ internal sealed class ProxiesViewModel : ObservableObject
             ProxyGroups = [];
             ProviderResources = [];
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeUnavailable");
-            _log.Append("Warning", "ProxyNodes", "Runtime proxy refresh failed.", exception.Message);
+            _log.Append("Warning", "ProxyNodes", RuntimeStatusText, exception.Message);
         }
     }
 
@@ -358,12 +358,12 @@ internal sealed class ProxiesViewModel : ObservableObject
             await _runtimeController.SelectProxyAsync(group.Name, proxyName, cancellationToken);
             await RefreshRuntimeAsync(cancellationToken);
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.SelectionApplied");
-            _log.Append("Info", "ProxyNodes", "Runtime proxy group selection applied.", $"{group.Name} -> {proxyName}");
+            _log.Append("Info", "ProxyNodes", RuntimeStatusText, $"{group.Name} -> {proxyName}");
         }
         catch (Exception exception) when (exception is OperationCanceledException or InvalidOperationException or ArgumentException or System.Net.Http.HttpRequestException or System.Text.Json.JsonException)
         {
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeUnavailable");
-            _log.Append("Warning", "ProxyNodes", "Runtime proxy group selection failed.", exception.Message);
+            _log.Append("Warning", "ProxyNodes", RuntimeStatusText, exception.Message);
         }
     }
 
@@ -378,12 +378,12 @@ internal sealed class ProxiesViewModel : ObservableObject
             await _runtimeController.UpdateProviderAsync(provider, cancellationToken);
             await RefreshRuntimeAsync(cancellationToken);
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.ProviderUpdated");
-            _log.Append("Info", "ProxyNodes", "Runtime provider updated.", provider.Name);
+            _log.Append("Info", "ProxyNodes", RuntimeStatusText, provider.Name);
         }
         catch (Exception exception) when (exception is OperationCanceledException or InvalidOperationException or ArgumentException or System.Net.Http.HttpRequestException or System.Text.Json.JsonException)
         {
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeUnavailable");
-            _log.Append("Warning", "ProxyNodes", "Runtime provider update failed.", exception.Message);
+            _log.Append("Warning", "ProxyNodes", RuntimeStatusText, exception.Message);
         }
     }
 

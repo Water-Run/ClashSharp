@@ -10,6 +10,8 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -167,6 +169,60 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
     public string ConnectionTestProxyUrl2 => _settings.ConnectionTestProxyUrl2;
 
     public string ConnectionTestDirectUrl => _settings.ConnectionTestDirectUrl;
+
+    public AppLanguage DisplayLanguage => _settings.DisplayLanguage;
+
+    public AppThemeMode AppThemeMode => _settings.AppThemeMode;
+
+    public int ConnectionSamplingIntervalSeconds => _settings.ConnectionSamplingIntervalSeconds;
+
+    public StartupBehaviorMode StartupBehaviorMode => _settings.StartupBehaviorMode;
+
+    public bool TriggersEnabled => _settings.TriggersEnabled;
+
+    public bool TriggerNotificationsEnabled => _settings.TriggerNotificationsEnabled;
+
+    public CloseBehaviorMode CloseBehaviorMode => _settings.CloseBehaviorMode;
+
+    public bool TrayFadeInactiveIcon => _settings.TrayFadeInactiveIcon;
+
+    public bool TrayUseMonochromeInactiveIcon => _settings.TrayUseMonochromeInactiveIcon;
+
+    public string TrayVisibleFeatureIds => _settings.TrayVisibleFeatureIds;
+
+    public bool NotificationEnabled => _settings.NotificationEnabled;
+
+    public NotificationLevel NotificationLevel => _settings.NotificationLevel;
+
+    public bool RestoreProxyOnExit
+    {
+        get => _settings.RestoreProxyOnExit;
+        set => _settings.RestoreProxyOnExit = value;
+    }
+
+    public bool CheckStaleProxyOnStartup
+    {
+        get => _settings.CheckStaleProxyOnStartup;
+        set => _settings.CheckStaleProxyOnStartup = value;
+    }
+
+    public bool StartupConflictCheckEnabled
+    {
+        get => _settings.StartupConflictCheckEnabled;
+        set => _settings.StartupConflictCheckEnabled = value;
+    }
+
+    public bool ShowStartupGuideOnStartup
+    {
+        get => _settings.ShowStartupGuideOnStartup;
+        set => _settings.ShowStartupGuideOnStartup = value;
+    }
+
+    public MainlandChinaFeatureMode MainlandChinaFeatureMode => _settings.MainlandChinaFeatureMode;
+
+    public AppAccentColorMode AppAccentColorMode => _settings.AppAccentColorMode;
+
+    public string AppAccentColorValue => _settings.AppAccentColorValue;
 }
 
 /// <summary>Adapts <see cref="NetworkTakeoverService"/> to master-control mode application.</summary>
@@ -240,5 +296,31 @@ internal sealed class MasterControlTrayStatusAdapter : IMasterControlTrayStatus
     public TrayStatusSnapshot GetSnapshot()
     {
         return _trayStatus.GetSnapshot();
+    }
+}
+
+/// <summary>Adapts runtime services to master-control summary tiles.</summary>
+internal sealed class MasterControlRuntimeAdapter : IMasterControlRuntime
+{
+    public MasterControlRuntimeSnapshot GetSnapshot()
+    {
+        IReadOnlyList<ConfigurationProfile> profiles = ProfileCatalogService.Instance.GetProfiles();
+        IReadOnlyList<ProfileSubscriptionLink> links = ProfileCatalogService.Instance.GetSubscriptionLinks();
+        IReadOnlyList<ProxyNode> nodes = ProxyNodeCatalogService.Instance.GetNodes();
+        IReadOnlyList<RulePreview> rules = RuleCatalogService.Instance.GetRules();
+        IReadOnlyList<TriggerTask> triggerTasks = TriggerService.Instance.GetTasks();
+
+        return new MasterControlRuntimeSnapshot(
+            CoreConfigurationService.Instance.GetState(),
+            profiles.Count,
+            links.Count,
+            nodes.Count,
+            rules.Count,
+            triggerTasks.Count,
+            triggerTasks.Count(static task => task.IsEnabled),
+            LogStorageService.Instance.GetStorageSummary(),
+            LogStorageService.Instance.GetTrafficStatisticsSummary(),
+            MihomoServiceManager.Instance.GetStatus(),
+            StartupRestoreFallbackService.Instance.GetStatus());
     }
 }

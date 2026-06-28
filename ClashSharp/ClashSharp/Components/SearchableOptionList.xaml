@@ -13,26 +13,34 @@
             HorizontalAlignment="Stretch"
             TextChanged="SearchBox_TextChanged" />
 
-        <ScrollViewer
+        <ListView
+            x:Name="OptionsControl"
+            ItemsSource="{Binding FilteredOptions, ElementName=Root}"
             MaxHeight="{Binding MaxListHeight, ElementName=Root}"
-            VerticalScrollBarVisibility="Auto"
-            HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl x:Name="OptionsControl" ItemsSource="{Binding FilteredOptions, ElementName=Root}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <components:DialogOptionRow
-                            Title="{Binding Title}"
-                            Metadata="{Binding Metadata}"
-                            Description="{Binding Description}"
-                            Glyph="{Binding Glyph}"
-                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                            Tag="{Binding}"
-                            Margin="0,0,0,8"
-                            HorizontalAlignment="Stretch"
-                            SelectionInvoked="DialogOptionRow_SelectionInvoked" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+            SelectionMode="None"
+            HorizontalAlignment="Stretch"
+            ScrollViewer.VerticalScrollBarVisibility="Auto"
+            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0,0,0,8" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <components:DialogOptionRow
+                        Title="{Binding Title}"
+                        Metadata="{Binding Metadata}"
+                        Description="{Binding Description}"
+                        Glyph="{Binding Glyph}"
+                        IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                        Tag="{Binding}"
+                        HorizontalAlignment="Stretch"
+                        SelectionInvoked="DialogOptionRow_SelectionInvoked" />
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
     </StackPanel>
 </UserControl>

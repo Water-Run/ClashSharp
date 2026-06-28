@@ -38,7 +38,7 @@ public sealed partial class MasterModeButton : UserControl
         nameof(IsChecked),
         typeof(bool),
         typeof(MasterModeButton),
-        new PropertyMetadata(false));
+        new PropertyMetadata(false, OnIsCheckedChanged));
 
     public static readonly DependencyProperty CommandProperty = DependencyProperty.Register(
         nameof(Command),
@@ -49,6 +49,7 @@ public sealed partial class MasterModeButton : UserControl
     public MasterModeButton()
     {
         InitializeComponent();
+        Loaded += (_, _) => UpdateVisualState(useTransitions: false);
     }
 
     public string Title
@@ -79,5 +80,18 @@ public sealed partial class MasterModeButton : UserControl
     {
         get => (ICommand?)GetValue(CommandProperty);
         set => SetValue(CommandProperty, value);
+    }
+
+    private static void OnIsCheckedChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+    {
+        if (dependencyObject is MasterModeButton button)
+        {
+            button.UpdateVisualState(useTransitions: true);
+        }
+    }
+
+    private void UpdateVisualState(bool useTransitions)
+    {
+        _ = VisualStateManager.GoToState(this, IsChecked ? "SelectedOn" : "SelectedOff", useTransitions);
     }
 }

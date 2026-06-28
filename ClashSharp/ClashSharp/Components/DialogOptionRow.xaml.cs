@@ -42,7 +42,7 @@ public sealed partial class DialogOptionRow : UserControl
 
     public static readonly DependencyProperty IsCheckedProperty = DependencyProperty.Register(
         nameof(IsChecked),
-        typeof(bool?),
+        typeof(bool),
         typeof(DialogOptionRow),
         new PropertyMetadata(false));
 
@@ -77,14 +77,15 @@ public sealed partial class DialogOptionRow : UserControl
         set => SetValue(GlyphProperty, value);
     }
 
-    public bool? IsChecked
+    public bool IsChecked
     {
-        get => (bool?)GetValue(IsCheckedProperty);
+        get => (bool)GetValue(IsCheckedProperty);
         set => SetValue(IsCheckedProperty, value);
     }
 
     private void OptionButton_Click(object sender, RoutedEventArgs e)
     {
+        IsChecked = !IsChecked;
         SelectionInvoked?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -204,7 +204,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         {
             Connections = [];
             ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
-            _log.Append("Warning", "Connections", "Active connection refresh failed.", exception.Message);
+            _log.Append("Warning", "Connections", _localization.GetString("Connections.Status.Unavailable"), exception.Message);
             return [];
         }
     }
@@ -221,7 +221,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         IReadOnlyList<ActiveConnection> connections = await RefreshConnectionsAsync(cancellationToken);
         int insertedCount = _log.AppendConnectionSnapshot(connections);
         ConnectionStatusText = string.Format(_localization.GetString("Connections.Status.Persisted.Format"), insertedCount);
-        _log.Append("Info", "Connections", "Active connection snapshot persisted.", $"{insertedCount:N0} rows.");
+        _log.Append("Info", "Connections", ConnectionStatusText, null);
     }
 
     /// <summary>Closes one active connection and refreshes the visible list.</summary>
@@ -235,12 +235,12 @@ internal sealed class ConnectionsViewModel : ObservableObject
             await _connectionClient.CloseConnectionAsync(connection.Id, cancellationToken);
             await RefreshConnectionsAsync(cancellationToken);
             ConnectionStatusText = _localization.GetString("Connections.Status.Closed");
-            _log.Append("Info", "Connections", "Active connection closed.", connection.Id);
+            _log.Append("Info", "Connections", ConnectionStatusText, connection.Id);
         }
         catch (Exception exception) when (exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException or ArgumentException)
         {
             ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
-            _log.Append("Warning", "Connections", "Active connection close failed.", exception.Message);
+            _log.Append("Warning", "Connections", ConnectionStatusText, exception.Message);
         }
     }
 
@@ -254,12 +254,12 @@ internal sealed class ConnectionsViewModel : ObservableObject
             await _connectionClient.CloseAllConnectionsAsync(cancellationToken);
             await RefreshConnectionsAsync(cancellationToken);
             ConnectionStatusText = _localization.GetString("Connections.Status.ClosedAll");
-            _log.Append("Info", "Connections", "All active connections closed.", null);
+            _log.Append("Info", "Connections", ConnectionStatusText, null);
         }
         catch (Exception exception) when (exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException or ArgumentException)
         {
             ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
-            _log.Append("Warning", "Connections", "Active connection close-all failed.", exception.Message);
+            _log.Append("Warning", "Connections", ConnectionStatusText, exception.Message);
         }
     }
 

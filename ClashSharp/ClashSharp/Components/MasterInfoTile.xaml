@@ -16,6 +16,23 @@
         MinHeight="116"
         RowSpacing="10"
         Tapped="TileRoot_Tapped">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="SwitchStates">
+                <VisualState x:Name="SwitchOff">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="SelectedOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.16" />
+                        <DoubleAnimation Storyboard.TargetName="ToggleThumbTransform" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.16" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="SwitchOn">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="SelectedOverlay" Storyboard.TargetProperty="Opacity" To="0.14" Duration="0:0:0.18" />
+                        <DoubleAnimation Storyboard.TargetName="ToggleThumbTransform" Storyboard.TargetProperty="X" To="16" Duration="0:0:0.18" />
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -27,13 +44,13 @@
             Margin="-16"
             CornerRadius="4"
             Background="{ThemeResource AccentFillColorDefaultBrush}"
-            Opacity="0.14"
-            Visibility="{Binding IsToggleOn, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            Opacity="0" />
 
         <Grid ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <FontIcon
@@ -47,12 +64,33 @@
                 Style="{ThemeResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextTrimming="CharacterEllipsis" />
+            <Border
+                x:Name="SwitchTrack"
+                Grid.Column="2"
+                Width="36"
+                Height="20"
+                CornerRadius="10"
+                Background="{ThemeResource ControlFillColorTertiaryBrush}"
+                Visibility="{Binding IsToggleVisible, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Border
+                    Width="16"
+                    Height="16"
+                    Margin="2"
+                    HorizontalAlignment="Left"
+                    CornerRadius="8"
+                    Background="{ThemeResource AccentFillColorDefaultBrush}">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="ToggleThumbTransform" />
+                    </Border.RenderTransform>
+                </Border>
+            </Border>
         </Grid>
 
         <StackPanel Grid.Row="1" Spacing="4" VerticalAlignment="Bottom">
             <TextBlock
                 Text="{Binding Value, ElementName=Root}"
                 Style="{ThemeResource SubtitleTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                 TextWrapping="WrapWholeWords"
                 MaxLines="2"
                 TextTrimming="CharacterEllipsis" />

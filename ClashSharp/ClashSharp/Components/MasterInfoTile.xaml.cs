@@ -51,7 +51,7 @@ public sealed partial class MasterInfoTile : UserControl
         nameof(IsToggleOn),
         typeof(bool),
         typeof(MasterInfoTile),
-        new PropertyMetadata(false));
+        new PropertyMetadata(false, OnIsToggleOnChanged));
 
     public static readonly DependencyProperty TileCommandProperty = DependencyProperty.Register(
         nameof(TileCommand),
@@ -62,6 +62,7 @@ public sealed partial class MasterInfoTile : UserControl
     public MasterInfoTile()
     {
         InitializeComponent();
+        Loaded += (_, _) => UpdateVisualState(useTransitions: false);
     }
 
     public string Title
@@ -114,5 +115,18 @@ public sealed partial class MasterInfoTile : UserControl
         }
 
         command.Execute(null);
+    }
+
+    private static void OnIsToggleOnChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+    {
+        if (dependencyObject is MasterInfoTile tile)
+        {
+            tile.UpdateVisualState(useTransitions: true);
+        }
+    }
+
+    private void UpdateVisualState(bool useTransitions)
+    {
+        _ = VisualStateManager.GoToState(this, IsToggleOn ? "SwitchOn" : "SwitchOff", useTransitions);
     }
 }

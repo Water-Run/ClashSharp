@@ -3,6 +3,7 @@
     x:Class="ClashSharp.View.Triggers"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:components="using:ClashSharp.Components"
     xmlns:converters="using:ClashSharp.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -12,107 +13,204 @@
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Page.Resources>
 
-    <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <StackPanel Spacing="4">
-            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
-        </StackPanel>
-
-        <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+    <Grid Padding="{StaticResource ClashPagePadding}">
+        <Grid x:Name="TriggerListHost" RowSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="{Binding EnabledTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                <TextBlock Text="{Binding EnabledDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
             </StackPanel>
 
-            <ToggleSwitch
-                x:Name="TriggersEnabledSwitch"
-                Grid.Column="1"
-                MinWidth="0"
-                IsOn="{Binding TriggersEnabled, Mode=TwoWay}"
-                OnContent="{x:Null}"
-                OffContent="{x:Null}"
-                VerticalAlignment="Center" />
+            <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <Button x:Name="AddTriggerButton" Grid.Column="2" Click="AddTriggerButton_Click" VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE710;" FontSize="14" />
-                    <TextBlock Text="{Binding AddTriggerText}" />
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                    <TextBlock Text="{Binding DisabledNoticeText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" Visibility="{Binding IsDisabledNoticeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </StackPanel>
-            </Button>
 
-            <Button x:Name="OpenTriggerLogsButton" Grid.Column="3" Click="OpenTriggerLogsButton_Click" VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE8A5;" FontSize="14" />
-                    <TextBlock Text="{Binding OpenTriggerLogsText}" />
+                <Button x:Name="EnableAllTriggersButton" Grid.Column="1" Click="EnableAllTriggersButton_Click" VerticalAlignment="Center" IsEnabled="{Binding CanEditTriggers}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE73E;" FontSize="14" />
+                        <TextBlock Text="{Binding EnableAllText}" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="DisableAllTriggersButton" Grid.Column="2" Click="DisableAllTriggersButton_Click" VerticalAlignment="Center" IsEnabled="{Binding CanEditTriggers}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE711;" FontSize="14" />
+                        <TextBlock Text="{Binding DisableAllText}" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="OpenTriggerLogsButton" Grid.Column="3" Click="OpenTriggerLogsButton_Click" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE8A5;" FontSize="14" />
+                        <TextBlock Text="{Binding OpenTriggerLogsText}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="10">
+                    <ListView x:Name="TriggerTasksList" ItemsSource="{Binding TriggerTasks}" SelectionMode="None" IsEnabled="{Binding CanEditTriggers}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Style="{StaticResource ClashCardGridStyle}" Margin="0,0,0,10" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <FontIcon Glyph="&#xE7C1;" FontSize="20" Width="28" VerticalAlignment="Top" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                                    <StackPanel Grid.Column="1" Spacing="8">
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Text="{Binding Name, Mode=TwoWay}" Tag="{Binding}" LostFocus="TriggerNameBox_LostFocus" />
+                                            <ToggleSwitch Grid.Column="1" IsOn="{Binding IsEnabled, Mode=TwoWay}" Tag="{Binding}" Toggled="TriggerEnabledToggle_Toggled" MinWidth="0" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                        </Grid>
+
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding ConditionsLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock Text="{Binding ConditionsSummary}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding ActionsLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock Text="{Binding ActionsSummary}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
+                                        </StackPanel>
+
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding LastTriggeredLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock Text="{Binding LastTriggeredSummary}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+                                        <Button Tag="{Binding}" Click="EditTriggerButton_Click">
+                                            <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                                        </Button>
+                                        <Button Tag="{Binding Id}" Click="MoveTriggerUpButton_Click">
+                                            <FontIcon Glyph="&#xE70E;" FontSize="14" />
+                                        </Button>
+                                        <Button Tag="{Binding Id}" Click="MoveTriggerDownButton_Click">
+                                            <FontIcon Glyph="&#xE70D;" FontSize="14" />
+                                        </Button>
+                                        <Button Tag="{Binding Id}" Click="DeleteTriggerButton_Click">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <Button
+                        x:Name="AddTriggerCardButton"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="AddTriggerCardButton_Click"
+                        IsEnabled="{Binding CanEditTriggers}">
+                        <Grid Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="12" MinHeight="76">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE710;" FontSize="20" Width="28" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding AddTriggerText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding DescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
                 </StackPanel>
-            </Button>
+            </ScrollViewer>
         </Grid>
 
-        <ListView x:Name="TriggerTasksList" Grid.Row="2" ItemsSource="{Binding TriggerTasks}" SelectionMode="None">
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <Grid Style="{StaticResource ClashCardGridStyle}" Margin="0,0,0,10" ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+        <Grid x:Name="TriggerEditorHost" RowSpacing="16" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-                        <FontIcon Glyph="&#xE7C1;" FontSize="20" Width="28" VerticalAlignment="Top" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TriggerEditorTitleText" Text="{Binding AddTriggerText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+            </StackPanel>
 
-                        <StackPanel Grid.Column="1" Spacing="8">
-                            <Grid ColumnSpacing="10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox Text="{Binding Name, Mode=TwoWay}" Tag="{Binding}" LostFocus="TriggerNameBox_LostFocus" />
-                                <ToggleSwitch Grid.Column="1" IsOn="{Binding IsEnabled, Mode=TwoWay}" Tag="{Binding}" Toggled="TriggerEnabledToggle_Toggled" MinWidth="0" OnContent="{x:Null}" OffContent="{x:Null}" />
-                            </Grid>
-
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding ConditionsLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Text="{Binding ConditionsSummary}" TextWrapping="WrapWholeWords" />
-                            </StackPanel>
-
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding ActionsLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Text="{Binding ActionsSummary}" TextWrapping="WrapWholeWords" />
-                            </StackPanel>
-
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{Binding LastTriggeredLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <TextBlock Text="{Binding LastTriggeredSummary}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
-                            <Button Tag="{Binding Id}" Click="MoveTriggerUpButton_Click">
-                                <FontIcon Glyph="&#xE70E;" FontSize="14" />
-                            </Button>
-                            <Button Tag="{Binding Id}" Click="MoveTriggerDownButton_Click">
-                                <FontIcon Glyph="&#xE70D;" FontSize="14" />
-                            </Button>
-                            <Button Tag="{Binding Id}" Click="DeleteTriggerButton_Click">
-                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                            </Button>
-                        </StackPanel>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="14">
+                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="8">
+                        <TextBox
+                            x:Name="TriggerEditorNameBox"
+                            Header="{Binding NameText}"
+                            MaxLength="48" />
                     </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+
+                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding ConditionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{Binding AddDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                        <components:SearchableOptionList
+                            x:Name="TriggerConditionList"
+                            Grid.Row="1"
+                            SearchPlaceholder="{Binding DescriptionText}"
+                            MaxListHeight="280" />
+                    </Grid>
+
+                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding ActionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{Binding AddDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                        <components:SearchableOptionList
+                            x:Name="TriggerActionList"
+                            Grid.Row="1"
+                            SearchPlaceholder="{Binding DescriptionText}"
+                            AllowMultiple="True"
+                            MaxListHeight="360" />
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid Grid.Row="2">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                    <Button x:Name="CancelTriggerEditButton" Click="CancelTriggerEditButton_Click">
+                        <TextBlock Text="{Binding CancelText}" />
+                    </Button>
+                    <Button x:Name="SaveTriggerButton" Click="SaveTriggerButton_Click">
+                        <TextBlock Text="{Binding SaveText}" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Grid>
     </Grid>
 </Page>

@@ -31,15 +31,8 @@ namespace ClashSharp.View;
 /// </remarks>
 public sealed partial class MasterControl : Page
 {
-    private const double MinInfoTileWidth = 220;
-    private const double PreferredInfoTileWidth = 280;
-    private const double InfoTileHorizontalMargin = 10;
-    private const int MaxInfoTileColumns = 4;
-
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
-
-    private double _infoTileItemWidth = PreferredInfoTileWidth;
 
     /// <summary>Initializes the master control page and its view model.</summary>
     public MasterControl()
@@ -52,6 +45,7 @@ public sealed partial class MasterControl : Page
             new MasterControlTakeoverAdapter(NetworkTakeoverService.Instance),
             new MasterControlLogAdapter(LogStorageService.Instance),
             new MasterControlTrayStatusAdapter(TrayStatusService.Instance),
+            new MasterControlRuntimeAdapter(),
             ApplicationActionService.Instance,
             OnModeAppliedAsync);
 
@@ -117,6 +111,15 @@ public sealed partial class MasterControl : Page
         Unloaded -= OnUnloaded;
     }
 
+    /// <summary>Returns the window-level XAML root so dialogs center in the visible window.</summary>
+    /// <returns>Window root when available; otherwise the page root.</returns>
+    private XamlRoot GetDialogXamlRoot()
+    {
+        return App.MainWindow?.Content is FrameworkElement root && root.XamlRoot is not null
+            ? root.XamlRoot
+            : XamlRoot;
+    }
+
     /// <summary>Opens the latency-test dialog and runs a timed progress workflow.</summary>
     private async Task ShowLatencyDialogAsync()
     {
@@ -139,7 +142,7 @@ public sealed partial class MasterControl : Page
             Title = LocalizationService.Instance.GetString("Master.LatencyDialog.Title"),
             Content = content,
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
-            XamlRoot = XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
 
         dialog.Closing += (_, _) => cancellation.Cancel();
@@ -157,7 +160,7 @@ public sealed partial class MasterControl : Page
     {
         StartupGuideDialog dialog = new()
         {
-            XamlRoot = XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
         await dialog.ShowAsync();
     }
@@ -166,7 +169,7 @@ public sealed partial class MasterControl : Page
     private async Task ShowStartupConflictDialogAsync()
     {
         IReadOnlyList<StartupConflictIssue> issues = StartupConflictDetectionService.Instance.CheckConflicts(AppSettingsService.Instance.MixedPort);
-        await StartupConflictDialogPresenter.ShowAsync(XamlRoot, issues);
+        await StartupConflictDialogPresenter.ShowAsync(GetDialogXamlRoot(), issues);
     }
 
     /// <summary>Builds latency-test dialog content using the RunOnce-style progress row and timeout bar.</summary>
@@ -266,7 +269,7 @@ public sealed partial class MasterControl : Page
             PrimaryButtonText = LocalizationService.Instance.GetString("Command.Save"),
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
 
         if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
@@ -283,46 +286,9 @@ public sealed partial class MasterControl : Page
         }
     }
 
-    private void InfoTileGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    private void RootScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        UpdateInfoTileWidths(e.NewSize.Width);
-    }
-
-    private void InfoTileGrid_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
-    {
-        ApplyInfoTileContainerWidth(args.ItemContainer);
-    }
-
-    private void UpdateInfoTileWidths(double availableWidth)
-    {
-        if (availableWidth <= 0)
-        {
-            return;
-        }
-
-        int columns = Math.Clamp((int)Math.Round(availableWidth / PreferredInfoTileWidth), 1, MaxInfoTileColumns);
-        while (columns > 1 && CalculateInfoTileWidth(availableWidth, columns) < MinInfoTileWidth)
-        {
-            columns--;
-        }
-
-        _infoTileItemWidth = Math.Max(MinInfoTileWidth, CalculateInfoTileWidth(availableWidth, columns));
-        foreach (MasterControlInfoTileViewModel tile in _viewModel.InfoTiles)
-        {
-            if (InfoTileGrid.ContainerFromItem(tile) is FrameworkElement item)
-            {
-                ApplyInfoTileContainerWidth(item);
-            }
-        }
-    }
-
-    private void ApplyInfoTileContainerWidth(FrameworkElement item)
-    {
-        item.Width = _infoTileItemWidth;
-    }
-
-    private static double CalculateInfoTileWidth(double availableWidth, int columns)
-    {
-        return Math.Floor((availableWidth / columns) - InfoTileHorizontalMargin);
+        double horizontalPadding = RootScrollViewer.Padding.Left + RootScrollViewer.Padding.Right;
+        ContentHost.Width = Math.Max(320, e.NewSize.Width - horizontalPadding);
     }
 }

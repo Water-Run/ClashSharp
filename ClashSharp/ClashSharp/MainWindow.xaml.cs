@@ -31,6 +31,9 @@ namespace ClashSharp;
 /// </remarks>
 public sealed partial class MainWindow : Window
 {
+    /// <summary>Command-line argument used by automated UI validation to skip startup modal dialogs.</summary>
+    internal const string SkipStartupDialogsArgument = "--skip-startup-dialogs";
+
     /// <summary>Minimum window width in device-independent pixels.</summary>
     private const int MinWindowWidth = 800;
 
@@ -124,8 +127,7 @@ public sealed partial class MainWindow : Window
         _trayService = new SystemTrayService(
             _hWnd,
             BuildTrayMenuState,
-            () => DispatcherQueue.TryEnqueue(() => NavigateFromTray("MasterControl", NavMasterControlItem)),
-            () => DispatcherQueue.TryEnqueue(() => NavigateFromTray("Settings", NavSettingsItem)),
+            tag => DispatcherQueue.TryEnqueue(() => NavigateFromTray(tag)),
             () => DispatcherQueue.TryEnqueue(RequestSafeExitFromTray),
             mode => DispatcherQueue.TryEnqueue(() => ApplyModeFromTray(mode)),
             isEnabled => DispatcherQueue.TryEnqueue(() => SetTransparentProxyFromTray(isEnabled)));
@@ -168,11 +170,33 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Navigates from tray callbacks and brings the window forward.</summary>
-    private void NavigateFromTray(string tag, NavigationViewItem item)
+    private void NavigateFromTray(string tag)
     {
-        NavView.SelectedItem = item;
+        if (FindNavigationItemByTag(tag) is NavigationViewItem item)
+        {
+            NavView.SelectedItem = item;
+        }
+
         NavigateToTag(tag);
         Activate();
+    }
+
+    private NavigationViewItem? FindNavigationItemByTag(string tag)
+    {
+        return tag switch
+        {
+            "MasterControl" => NavMasterControlItem,
+            "ProxyNodes" => NavProxyNodesItem,
+            "Profiles" => NavProfilesItem,
+            "Links" => NavLinksItem,
+            "Rules" => NavRulesItem,
+            "Triggers" => NavTriggersItem,
+            "Statistics" => NavStatisticsItem,
+            "Logs" => null,
+            "About" => NavAboutItem,
+            "Settings" => NavSettingsItem,
+            _ => null,
+        };
     }
 
     /// <summary>Restores the original window procedure and releases native resources on window close.</summary>
@@ -224,7 +248,9 @@ public sealed partial class MainWindow : Window
             TriggerEvaluationContextFactory.Create(TriggerEventKind.AppEntered),
             System.Threading.CancellationToken.None);
 
-        if (settings.StartupConflictCheckEnabled)
+        bool skipStartupDialogs = ShouldSkipStartupDialogs();
+
+        if (!skipStartupDialogs && settings.StartupConflictCheckEnabled)
         {
             IReadOnlyList<StartupConflictIssue> issues = StartupConflictDetectionService.Instance.CheckConflicts(settings.MixedPort);
             if (issues.Count > 0)
@@ -233,7 +259,7 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        if (settings.ShowStartupGuideOnStartup)
+        if (!skipStartupDialogs && settings.ShowStartupGuideOnStartup)
         {
             await ShowStartupPromptDialogAsync();
         }
@@ -254,17 +280,30 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.IO.FileNotFoundException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            LogStorageService.Instance.AppendLog("Warning", "Startup", "Startup proxy behavior failed.", exception.Message);
+            LogStorageService.Instance.AppendLog("Warning", "Startup", LocalizationService.Instance.GetString("Startup.Log.ProxyBehaviorFailed"), exception.Message);
         }
+    }
+
+    private static bool ShouldSkipStartupDialogs()
+    {
+        foreach (string argument in Environment.GetCommandLineArgs())
+        {
+            if (string.Equals(argument, SkipStartupDialogsArgument, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Shows detected startup conflicts in a repairable dialog.</summary>
     private async Task ShowStartupConflictDialogAsync(IReadOnlyList<StartupConflictIssue> issues)
     {
-        XamlRoot? xamlRoot = ContentFrame.XamlRoot;
+        XamlRoot? xamlRoot = GetDialogXamlRoot();
         if (xamlRoot is null)
         {
-            LogStorageService.Instance.AppendLog("Warning", "Startup", "Startup conflict dialog skipped because ContentFrame has no XamlRoot.", null);
+            LogStorageService.Instance.AppendLog("Warning", "Startup", LocalizationService.Instance.GetString("Startup.Log.ConflictDialogSkipped"), null);
             return;
         }
 
@@ -274,17 +313,26 @@ public sealed partial class MainWindow : Window
     /// <summary>Shows the startup health prompt when enabled by settings.</summary>
     private async Task ShowStartupPromptDialogAsync()
     {
-        if (ContentFrame.XamlRoot is null)
+        XamlRoot? xamlRoot = GetDialogXamlRoot();
+        if (xamlRoot is null)
         {
-            LogStorageService.Instance.AppendLog("Warning", "Startup", "Startup prompt skipped because ContentFrame has no XamlRoot.", null);
+            LogStorageService.Instance.AppendLog("Warning", "Startup", LocalizationService.Instance.GetString("Startup.Log.PromptSkipped"), null);
             return;
         }
 
         StartupGuideDialog dialog = new()
         {
-            XamlRoot = ContentFrame.XamlRoot,
+            XamlRoot = xamlRoot,
         };
         await dialog.ShowAsync();
+    }
+
+    /// <summary>Returns the top-level XAML root so dialogs are centered in the whole app window.</summary>
+    private XamlRoot? GetDialogXamlRoot()
+    {
+        return Content is FrameworkElement root && root.XamlRoot is not null
+            ? root.XamlRoot
+            : ContentFrame.XamlRoot;
     }
 
     /// <summary>Prompts when closing while proxy takeover is active.</summary>
@@ -292,20 +340,34 @@ public sealed partial class MainWindow : Window
     /// <param name="args">Closing event arguments. Not null.</param>
     private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
-        if (_isCloseConfirmed || !IsProxyTakeoverActive())
+        if (_isCloseConfirmed)
         {
             return;
         }
 
+        CloseBehaviorMode closeBehavior = AppSettingsService.Instance.CloseBehaviorMode;
+        if (closeBehavior is CloseBehaviorMode.MinimizeToTray)
+        {
+            args.Cancel = true;
+            _appWindow?.Hide();
+            return;
+        }
+
+        if (closeBehavior == CloseBehaviorMode.ExitWithoutConfirmation)
+        {
+            return;
+        }
+
+        bool proxyTakeoverActive = IsProxyTakeoverActive();
         args.Cancel = true;
         ContentDialog dialog = new()
         {
-            Title = LocalizationService.Instance.GetString("Close.ProxyActive.Title"),
-            Content = LocalizationService.Instance.GetString("Close.ProxyActive.Message"),
+            Title = LocalizationService.Instance.GetString(proxyTakeoverActive ? "Close.ProxyActive.Title" : "Close.Confirm.Title"),
+            Content = LocalizationService.Instance.GetString(proxyTakeoverActive ? "Close.ProxyActive.Message" : "Close.Confirm.Message"),
             PrimaryButtonText = LocalizationService.Instance.GetString("Command.Close"),
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = ContentFrame.XamlRoot,
+            XamlRoot = GetDialogXamlRoot(),
         };
 
         if (await dialog.ShowAsync() is ContentDialogResult.Primary)
@@ -332,12 +394,18 @@ public sealed partial class MainWindow : Window
             AppSettingsService.Instance.TransparentProxyEnabled,
             serviceStatus.IsInstalled,
             TrayStatusService.Instance.GetSnapshot(),
+            AppSettingsService.Instance.TrayVisibleFeatureIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             LocalizationService.Instance.GetString);
     }
 
     /// <summary>Applies a mode requested from the tray menu.</summary>
     private void ApplyModeFromTray(ClashSharpMode mode)
     {
+        if (mode == AppSettingsService.Instance.CurrentMode)
+        {
+            return;
+        }
+
         _trayCommandService.ApplyMode(mode);
         _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
         _trayService?.RefreshMenu();
@@ -346,6 +414,11 @@ public sealed partial class MainWindow : Window
     /// <summary>Sets transparent proxy preference from the tray menu.</summary>
     private void SetTransparentProxyFromTray(bool isEnabled)
     {
+        if (isEnabled == AppSettingsService.Instance.TransparentProxyEnabled)
+        {
+            return;
+        }
+
         _trayCommandService.SetTransparentProxyEnabled(isEnabled);
         _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
         _trayService?.RefreshMenu();

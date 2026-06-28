@@ -34,7 +34,7 @@
 
             <TextBlock x:Name="RuntimeStatusText" Text="{Binding RuntimeStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-            <TextBlock x:Name="ProxyGroupsSectionTitleText" Text="{Binding ProxyGroupsSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+            <TextBlock x:Name="ProxyGroupsSectionTitleText" Text="{Binding ProxyGroupsSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             <ListView x:Name="ProxyGroupsList" ItemsSource="{Binding ProxyGroups}" MaxHeight="220">
                 <ListView.ItemTemplate>
                     <DataTemplate>
@@ -44,7 +44,7 @@
                                 <ColumnDefinition Width="120" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Grid.Column="1" Text="{Binding Type}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             <ComboBox
                                 Grid.Column="2"
@@ -72,9 +72,9 @@
                                 <Border Width="28" Height="20" CornerRadius="2" Background="{ThemeResource ControlFillColorDefaultBrush}">
                                     <Image Source="{Binding Region.FlagAssetPath}" Stretch="UniformToFill" />
                                 </Border>
-                                <TextBlock Text="{Binding Region.DisplayName}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Region.DisplayName}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             </StackPanel>
-                            <TextBlock Grid.Column="1" Text="{Binding NameDisplay}" />
+                            <TextBlock Grid.Column="1" Text="{Binding NameDisplay}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Grid.Column="2" Text="{Binding Protocol}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <TextBlock Grid.Column="3" Text="{Binding LatencyMilliseconds}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </Grid>
@@ -82,7 +82,7 @@
                 </ListView.ItemTemplate>
             </ListView>
 
-            <TextBlock x:Name="ProviderResourcesSectionTitleText" Text="{Binding ProviderResourcesSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+            <TextBlock x:Name="ProviderResourcesSectionTitleText" Text="{Binding ProviderResourcesSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             <ListView x:Name="ProviderResourcesList" ItemsSource="{Binding ProviderResources}" MaxHeight="220">
                 <ListView.ItemTemplate>
                     <DataTemplate>
@@ -95,7 +95,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Grid.Column="1" Text="{Binding TypeDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="2" Text="{Binding DetailDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="3" Text="{Binding ItemCountDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />

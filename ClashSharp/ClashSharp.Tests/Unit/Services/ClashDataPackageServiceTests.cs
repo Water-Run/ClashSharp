@@ -188,7 +188,21 @@ public sealed class ClashDataPackageServiceTests
 
         public bool ShowStartupGuideOnStartup { get; set; } = true;
 
-        public ProxyRecoveryMode ProxyRecoveryMode { get; set; } = ProxyRecoveryMode.DisableProxy;
+        public bool TriggersEnabled { get; set; } = true;
+
+        public bool TriggerNotificationsEnabled { get; set; } = true;
+
+        public CloseBehaviorMode CloseBehaviorMode { get; set; } = CloseBehaviorMode.MinimizeToTray;
+
+        public bool TrayFadeInactiveIcon { get; set; } = true;
+
+        public bool TrayUseMonochromeInactiveIcon { get; set; } = true;
+
+        public string TrayVisibleFeatureIds { get; set; } = "status,mode,pages,transparent-proxy,settings,safe-exit";
+
+        public bool NotificationEnabled { get; set; } = true;
+
+        public NotificationLevel NotificationLevel { get; set; } = NotificationLevel.Default;
 
         public MainlandChinaFeatureMode MainlandChinaFeatureMode { get; set; } = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
 

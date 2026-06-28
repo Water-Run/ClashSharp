@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -21,6 +22,8 @@ using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -42,6 +45,9 @@ public sealed partial class Settings : Page
 
     /// <summary>True while initial settings are being bound to controls.</summary>
     private bool _isLoadingSettings = true;
+
+    /// <summary>True while a restart-required switch is being restored after cancellation.</summary>
+    private bool _isRevertingRestartSwitch;
 
     /// <summary>Initializes the settings page and applies localized text.</summary>
     public Settings()
@@ -119,8 +125,8 @@ public sealed partial class Settings : Page
         ConnectionTestButton.IsEnabled = false;
         try
         {
-            string message = await _viewModel.RunConnectionTestAsync(CancellationToken.None);
-            await ShowConnectionTestResultAsync(message);
+            ConnectionTestReport report = await _viewModel.RunConnectionTestAsync(CancellationToken.None);
+            await ShowConnectionTestResultAsync(report);
         }
         finally
         {
@@ -129,17 +135,108 @@ public sealed partial class Settings : Page
     }
 
     /// <summary>Shows the connection test result.</summary>
-    private async Task ShowConnectionTestResultAsync(string message)
+    private async Task ShowConnectionTestResultAsync(ConnectionTestReport report)
     {
         ContentDialog dialog = new()
         {
             Title = _viewModel.ConnectionTestUrlTitleText,
-            Content = message,
+            Content = BuildConnectionTestResultPanel(report),
             CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
             XamlRoot = GetDialogXamlRoot(),
         };
 
         await dialog.ShowAsync();
+    }
+
+    private StackPanel BuildConnectionTestResultPanel(ConnectionTestReport report)
+    {
+        StackPanel panel = new()
+        {
+            Spacing = 12,
+            MinWidth = 520,
+            MaxWidth = 680,
+        };
+
+        Grid table = new()
+        {
+            RowSpacing = 8,
+            ColumnSpacing = 12,
+        };
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        AddConnectionTestHeader(table);
+
+        foreach (ConnectionTestTargetResult result in report.Results)
+        {
+            AddConnectionTestResultRow(table, result);
+        }
+
+        panel.Children.Add(table);
+        panel.Children.Add(new TextBlock
+        {
+            Text = report.SummaryText,
+            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+            Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+            TextWrapping = TextWrapping.WrapWholeWords,
+        });
+        return panel;
+    }
+
+    private void AddConnectionTestHeader(Grid table)
+    {
+        int rowIndex = table.RowDefinitions.Count;
+        table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        AddConnectionTestText(table, rowIndex, 0, "URL", "CaptionTextBlockStyle", "TextFillColorSecondaryBrush");
+        AddConnectionTestText(table, rowIndex, 1, _viewModel.ConnectionTestStatusColumnText, "CaptionTextBlockStyle", "TextFillColorSecondaryBrush");
+        AddConnectionTestText(table, rowIndex, 2, _viewModel.ConnectionTestLatencyColumnText, "CaptionTextBlockStyle", "TextFillColorSecondaryBrush");
+    }
+
+    private static void AddConnectionTestResultRow(Grid table, ConnectionTestTargetResult result)
+    {
+        int rowIndex = table.RowDefinitions.Count;
+        table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        AddConnectionTestText(table, rowIndex, 0, result.Url, "BodyTextBlockStyle", "TextFillColorPrimaryBrush");
+
+        StackPanel statusPanel = new()
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        statusPanel.Children.Add(new Ellipse
+        {
+            Width = 10,
+            Height = 10,
+            Fill = new SolidColorBrush(result.Succeeded ? Windows.UI.Color.FromArgb(255, 16, 124, 16) : Windows.UI.Color.FromArgb(255, 196, 43, 28)),
+        });
+        statusPanel.Children.Add(new TextBlock
+        {
+            Text = result.StatusText,
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+        });
+        Grid.SetRow(statusPanel, rowIndex);
+        Grid.SetColumn(statusPanel, 1);
+        table.Children.Add(statusPanel);
+
+        AddConnectionTestText(table, rowIndex, 2, result.LatencyText, "BodyTextBlockStyle", "TextFillColorPrimaryBrush");
+    }
+
+    private static void AddConnectionTestText(Grid table, int rowIndex, int columnIndex, string text, string styleKey, string brushKey)
+    {
+        TextBlock textBlock = new()
+        {
+            Text = text,
+            Style = (Style)Application.Current.Resources[styleKey],
+            Foreground = (Brush)Application.Current.Resources[brushKey],
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetRow(textBlock, rowIndex);
+        Grid.SetColumn(textBlock, columnIndex);
+        table.Children.Add(textBlock);
     }
 
     /// <summary>Opens the Windows-native network repair dialog.</summary>
@@ -300,6 +397,71 @@ public sealed partial class Settings : Page
         await dialog.ShowAsync();
     }
 
+    /// <summary>Confirms a setting change that is persisted now but only applied after restart.</summary>
+    private async Task<bool> ConfirmRestartRequiredSettingChangeAsync()
+    {
+        ContentDialog dialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("Settings.RestartSettingConfirm.Title"),
+            Content = LocalizationService.Instance.GetString("Settings.RestartSettingConfirm.Message"),
+            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Apply"),
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        return await dialog.ShowAsync() is ContentDialogResult.Primary;
+    }
+
+    private async void TriggersEnabledToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoadingSettings || _isRevertingRestartSwitch || sender is not ToggleSwitch toggle || toggle.IsOn == _viewModel.TriggersEnabled)
+        {
+            return;
+        }
+
+        bool previousValue = _viewModel.TriggersEnabled;
+        if (!await ConfirmRestartRequiredSettingChangeAsync())
+        {
+            RestoreRestartSwitch(toggle, previousValue);
+            return;
+        }
+
+        _viewModel.SetTriggersEnabled(toggle.IsOn);
+        UpdateRestartRequiredState();
+    }
+
+    private async void TrayUseMonochromeInactiveIconToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoadingSettings || _isRevertingRestartSwitch || sender is not ToggleSwitch toggle || toggle.IsOn == _viewModel.TrayUseMonochromeInactiveIcon)
+        {
+            return;
+        }
+
+        bool previousValue = _viewModel.TrayUseMonochromeInactiveIcon;
+        if (!await ConfirmRestartRequiredSettingChangeAsync())
+        {
+            RestoreRestartSwitch(toggle, previousValue);
+            return;
+        }
+
+        _viewModel.SetTrayUseMonochromeInactiveIcon(toggle.IsOn);
+        UpdateRestartRequiredState();
+    }
+
+    private void RestoreRestartSwitch(ToggleSwitch toggle, bool value)
+    {
+        _isRevertingRestartSwitch = true;
+        try
+        {
+            toggle.IsOn = value;
+        }
+        finally
+        {
+            _isRevertingRestartSwitch = false;
+        }
+    }
+
     private async void ResetBasicSettingsButton_Click(object sender, RoutedEventArgs e)
     {
         await ResetSettingsGroupAsync(_viewModel.ResetBasicSettingsToDefaults);
@@ -310,19 +472,34 @@ public sealed partial class Settings : Page
         await ResetSettingsGroupAsync(_viewModel.ResetStartupSettingsToDefaults);
     }
 
+    private async void ResetNotificationSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetNotificationSettingsToDefaults);
+    }
+
+    private async void ResetTriggerSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetTriggerSettingsToDefaults);
+    }
+
+    private async void ResetTraySettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ResetSettingsGroupAsync(_viewModel.ResetTraySettingsToDefaults);
+    }
+
     private async void ResetTransparentProxySettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetTransparentProxySettingsToDefaults);
+        await ResetSettingsGroupAsync(_viewModel.ResetTransparentProxySettingsToDefaults, includeServiceDeploymentNote: true);
     }
 
     private async void ResetProxySettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetProxySettingsToDefaults);
+        await ResetSettingsGroupAsync(_viewModel.ResetProxySettingsToDefaults, includeServiceDeploymentNote: true);
     }
 
     private async void ResetWindowsNativeSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetWindowsNativeSettingsToDefaults);
+        await ResetSettingsGroupAsync(_viewModel.ResetWindowsNativeSettingsToDefaults, includeServiceDeploymentNote: true);
     }
 
     private async void ResetMainlandChinaSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -332,14 +509,19 @@ public sealed partial class Settings : Page
 
     /// <summary>Confirms and applies a settings-group default reset.</summary>
     /// <param name="resetAction">Group reset action. Must not be null.</param>
-    private async Task ResetSettingsGroupAsync(Action resetAction)
+    private async Task ResetSettingsGroupAsync(Action resetAction, bool includeServiceDeploymentNote = false)
     {
         ArgumentNullException.ThrowIfNull(resetAction);
+        string message = _viewModel.ResetGroupConfirmMessageText;
+        if (includeServiceDeploymentNote)
+        {
+            message = $"{message}{Environment.NewLine}{Environment.NewLine}{_viewModel.ResetGroupServiceDeploymentNoteText}";
+        }
 
         ContentDialog dialog = new()
         {
             Title = _viewModel.ResetGroupConfirmTitleText,
-            Content = _viewModel.ResetGroupConfirmMessageText,
+            Content = message,
             PrimaryButtonText = _viewModel.ResetGroupToDefaultsText,
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
@@ -349,6 +531,43 @@ public sealed partial class Settings : Page
         if (await dialog.ShowAsync() is ContentDialogResult.Primary)
         {
             resetAction();
+        }
+    }
+
+    /// <summary>Opens the searchable tray feature selector.</summary>
+    private async void EditTrayVisibleFeaturesButton_Click(object sender, RoutedEventArgs e)
+    {
+        HashSet<string> selectedIds = new(
+            _viewModel.TrayVisibleFeatureIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            StringComparer.OrdinalIgnoreCase);
+        SearchableOptionList optionList = new()
+        {
+            SearchPlaceholder = _viewModel.TrayVisibleFeatureSearchPlaceholderText,
+            AllowMultiple = true,
+            MaxListHeight = 360,
+        };
+        optionList.SetOptions(SettingsViewModel.TrayFeatureDefinitions.Select(feature => new SearchableOptionItem(
+            feature.Id,
+            LocalizationService.Instance.GetString(feature.TitleKey),
+            _viewModel.TraySectionTitleText,
+            LocalizationService.Instance.GetString(feature.DescriptionKey),
+            feature.Glyph,
+            feature.Id,
+            selectedIds.Contains(feature.Id))));
+
+        ContentDialog dialog = new()
+        {
+            Title = _viewModel.TrayVisibleFeaturesTitleText,
+            Content = optionList,
+            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Save"),
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        if (await dialog.ShowAsync() is ContentDialogResult.Primary)
+        {
+            _viewModel.SetTrayVisibleFeatureIds(optionList.SelectedOptions.Select(static option => option.Id));
         }
     }
 
@@ -477,7 +696,7 @@ public sealed partial class Settings : Page
 
         foreach (DialogOptionRow row in rows)
         {
-            if (row.IsChecked == true && row.Tag is DataPackageExportScope scope)
+            if (row.IsChecked && row.Tag is DataPackageExportScope scope)
             {
                 return scope;
             }
@@ -500,11 +719,6 @@ public sealed partial class Settings : Page
                 _viewModel.DataPackageScopeSettingsAndProxyConfigurationText,
                 LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration.Description"),
                 "\uE968"),
-            new(
-                DataPackageExportScope.SystemLogs,
-                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogs"),
-                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogs.Description"),
-                "\uE8A5"),
             new(
                 DataPackageExportScope.SystemLogSqlite,
                 LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogSqlite"),
@@ -553,20 +767,12 @@ public sealed partial class Settings : Page
             case DataPackageExportScope.SettingsAndProxyConfiguration:
                 await ClashDataPackageService.Instance.ExportAsync(file.Path, ClashDataPackageScope.SettingsAndProxyConfiguration, CancellationToken.None);
                 break;
-            case DataPackageExportScope.SystemLogs:
-                await ExportLogsXmlAsync(file.Path, CancellationToken.None);
-                break;
             case DataPackageExportScope.SystemLogSqlite:
                 await ExportLogSqliteAsync(file.Path, CancellationToken.None);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unsupported export scope.");
         }
-    }
-
-    private static async Task ExportLogsXmlAsync(string path, CancellationToken cancellationToken)
-    {
-        await ClashDataPackageService.Instance.ExportLogsAsync(path, LogStorageService.Instance.GetRecentLogs(10000), cancellationToken);
     }
 
     private static async Task ExportLogSqliteAsync(string path, CancellationToken cancellationToken)

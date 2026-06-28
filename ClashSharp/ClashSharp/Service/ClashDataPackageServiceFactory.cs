@@ -134,10 +134,52 @@ internal sealed class ClashDataPackageSettingsAdapter : IClashDataPackageSetting
         set => _settings.ShowStartupGuideOnStartup = value;
     }
 
-    public ProxyRecoveryMode ProxyRecoveryMode
+    public bool TriggersEnabled
     {
-        get => _settings.ProxyRecoveryMode;
-        set => _settings.ProxyRecoveryMode = value;
+        get => _settings.TriggersEnabled;
+        set => _settings.TriggersEnabled = value;
+    }
+
+    public bool TriggerNotificationsEnabled
+    {
+        get => _settings.TriggerNotificationsEnabled;
+        set => _settings.TriggerNotificationsEnabled = value;
+    }
+
+    public CloseBehaviorMode CloseBehaviorMode
+    {
+        get => _settings.CloseBehaviorMode;
+        set => _settings.CloseBehaviorMode = value;
+    }
+
+    public bool TrayFadeInactiveIcon
+    {
+        get => _settings.TrayFadeInactiveIcon;
+        set => _settings.TrayFadeInactiveIcon = value;
+    }
+
+    public bool TrayUseMonochromeInactiveIcon
+    {
+        get => _settings.TrayUseMonochromeInactiveIcon;
+        set => _settings.TrayUseMonochromeInactiveIcon = value;
+    }
+
+    public string TrayVisibleFeatureIds
+    {
+        get => _settings.TrayVisibleFeatureIds;
+        set => _settings.TrayVisibleFeatureIds = value;
+    }
+
+    public bool NotificationEnabled
+    {
+        get => _settings.NotificationEnabled;
+        set => _settings.NotificationEnabled = value;
+    }
+
+    public NotificationLevel NotificationLevel
+    {
+        get => _settings.NotificationLevel;
+        set => _settings.NotificationLevel = value;
     }
 
     public MainlandChinaFeatureMode MainlandChinaFeatureMode

@@ -3,44 +3,62 @@
     x:Class="ClashSharp.Components.DialogOptionRow"
     x:Name="Root"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:converters="using:ClashSharp.Converters">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <UserControl.Resources>
-        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-    </UserControl.Resources>
-
-    <ToggleButton
+    <Button
         x:Name="OptionButton"
         HorizontalAlignment="Stretch"
         HorizontalContentAlignment="Stretch"
         Padding="0"
-        IsChecked="{Binding IsChecked, ElementName=Root, Mode=TwoWay}"
+        Background="Transparent"
+        BorderThickness="0"
         Click="OptionButton_Click">
-        <Grid MinHeight="64" Padding="10,8" ColumnSpacing="10">
+        <Grid
+            Style="{StaticResource ClashCardGridStyle}"
+            MinHeight="72"
+            Padding="10,8"
+            ColumnSpacing="10"
+            HorizontalAlignment="Stretch">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
+            <CheckBox
+                x:Name="SelectionCheckBox"
+                Grid.Column="0"
+                Width="32"
+                MinWidth="0"
+                Padding="0"
+                IsChecked="{Binding IsChecked, ElementName=Root, Mode=TwoWay}"
+                IsHitTestVisible="False"
+                VerticalAlignment="Center" />
+
             <FontIcon
+                Grid.Column="1"
                 Glyph="{Binding Glyph, ElementName=Root}"
                 FontSize="18"
                 Width="24"
-                VerticalAlignment="Top"
+                VerticalAlignment="Center"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-            <StackPanel Grid.Column="1" Spacing="3" MinWidth="0">
-                <Grid x:Name="DialogOptionHeadingGrid" ColumnSpacing="8">
+            <Grid Grid.Column="2" RowSpacing="3" MinWidth="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid ColumnSpacing="8" MinWidth="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-
                     <TextBlock
                         Text="{Binding Title, ElementName=Root}"
                         Style="{ThemeResource BodyStrongTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        MinWidth="0"
                         TextTrimming="CharacterEllipsis" />
                     <TextBlock
                         Grid.Column="1"
@@ -48,27 +66,19 @@
                         Style="{ThemeResource CaptionTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         VerticalAlignment="Center"
-                        MaxWidth="180"
+                        MaxWidth="160"
                         TextTrimming="CharacterEllipsis" />
                 </Grid>
+
                 <TextBlock
+                    Grid.Row="1"
                     Text="{Binding Description, ElementName=Root}"
                     Style="{ThemeResource CaptionTextBlockStyle}"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="WrapWholeWords"
                     MaxLines="2"
                     TextTrimming="CharacterEllipsis" />
-            </StackPanel>
-
-            <FontIcon
-                x:Name="SelectedGlyph"
-                Grid.Column="2"
-                Glyph="&#xE73E;"
-                FontSize="16"
-                Width="24"
-                VerticalAlignment="Center"
-                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                Visibility="{Binding IsChecked, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </Grid>
         </Grid>
-    </ToggleButton>
+    </Button>
 </UserControl>
