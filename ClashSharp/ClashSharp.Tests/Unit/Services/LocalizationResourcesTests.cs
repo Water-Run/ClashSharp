@@ -279,8 +279,6 @@ public sealed class LocalizationResourcesTests
     [InlineData("Settings.CloseBehavior.ExitWithoutConfirmation")]
     [InlineData("Settings.CloseBehavior.ConfirmExit")]
     [InlineData("Settings.CloseBehavior.MinimizeToTray")]
-    [InlineData("Settings.Tray.FadeInactiveIcon.Title")]
-    [InlineData("Settings.Tray.FadeInactiveIcon.Description")]
     [InlineData("Settings.Tray.MonochromeInactiveIcon.Title")]
     [InlineData("Settings.Tray.MonochromeInactiveIcon.Description")]
     [InlineData("Settings.Tray.VisibleFeatures.Title")]

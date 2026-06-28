@@ -152,12 +152,6 @@ internal sealed class ClashDataPackageSettingsAdapter : IClashDataPackageSetting
         set => _settings.CloseBehaviorMode = value;
     }
 
-    public bool TrayFadeInactiveIcon
-    {
-        get => _settings.TrayFadeInactiveIcon;
-        set => _settings.TrayFadeInactiveIcon = value;
-    }
-
     public bool TrayUseMonochromeInactiveIcon
     {
         get => _settings.TrayUseMonochromeInactiveIcon;

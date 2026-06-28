@@ -58,8 +58,6 @@ internal interface ISettingsStore
 
     CloseBehaviorMode CloseBehaviorMode { get; set; }
 
-    bool TrayFadeInactiveIcon { get; set; }
-
     bool TrayUseMonochromeInactiveIcon { get; set; }
 
     string TrayVisibleFeatureIds { get; set; }
@@ -279,12 +277,6 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.CloseBehaviorMode = value;
     }
 
-    public bool TrayFadeInactiveIcon
-    {
-        get => _settings.TrayFadeInactiveIcon;
-        set => _settings.TrayFadeInactiveIcon = value;
-    }
-
     public bool TrayUseMonochromeInactiveIcon
     {
         get => _settings.TrayUseMonochromeInactiveIcon;
@@ -428,6 +420,9 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Callback invoked when a connection-test target times out.</summary>
     private readonly Action<string> _notifyConnectionTestTimeout;
 
+    /// <summary>Runtime log sink used for settings actions that produce diagnostics.</summary>
+    private readonly Action<string, string, string, string?> _appendLog;
+
     /// <summary>Callback that resets persisted settings.</summary>
     private readonly Action _resetAllSettings;
 
@@ -537,7 +532,8 @@ internal sealed class SettingsViewModel : ObservableObject
         Action? clearAllData = null,
         Func<int, IReadOnlyList<StartupConflictIssue>>? checkStartupConflicts = null,
         Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending = null,
-        Action<string>? notifyConnectionTestTimeout = null)
+        Action<string>? notifyConnectionTestTimeout = null,
+        Action<string, string, string, string?>? appendLog = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
@@ -548,13 +544,14 @@ internal sealed class SettingsViewModel : ObservableObject
         _getProxyInformation = getProxyInformation ?? throw new ArgumentNullException(nameof(getProxyInformation));
         _testConnectionAsync = testConnectionAsync ?? TestConnectionAsync;
         _notifyConnectionTestTimeout = notifyConnectionTestTimeout ?? (_ => { });
+        _appendLog = appendLog ?? ((_, _, _, _) => { });
         _resetAllSettings = resetAllSettings ?? (() => { });
         _clearAllData = clearAllData ?? (() => { });
         _checkStartupConflicts = checkStartupConflicts ?? (_ => []);
         _isAccentColorRestartPending = isAccentColorRestartPending ?? IsAccentColorChangedSinceLoad;
         _diagnosticsViewModel = diagnosticsViewModel;
         _mihomoServiceController = mihomoServiceController ?? AlwaysAvailableMihomoServiceController.Instance;
-        RefreshDisplayLanguageOptions();
+        RefreshSelectorOptions();
         WindowsDiagnosticCommand = new AsyncRelayCommand(ExecuteWindowsDiagnosticCommandAsync);
         DeployMihomoServiceCommand = new AsyncRelayCommand(DeployMihomoServiceAsync);
         UninstallMihomoServiceCommand = new AsyncRelayCommand(UninstallMihomoServiceAsync);
@@ -584,12 +581,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string AppThemeDarkText => _getString("Settings.AppTheme.Dark");
 
-    public IReadOnlyList<string> AppThemeModeOptions =>
-    [
-        AppThemeFollowSystemText,
-        AppThemeLightText,
-        AppThemeDarkText,
-    ];
+    public IReadOnlyList<string> AppThemeModeOptions => _appThemeModeOptions;
 
     public string AppAccentColorTitleText => IsAppAccentColorRestartPending
         ? $"{_getString("Settings.AppAccentColor.Title")}*"
@@ -603,11 +595,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string AppAccentColorPickText => _getString("Settings.AppAccentColor.Pick");
 
-    public IReadOnlyList<string> AppAccentColorModeOptions =>
-    [
-        AppAccentColorFollowSystemText,
-        AppAccentColorCustomText,
-    ];
+    public IReadOnlyList<string> AppAccentColorModeOptions => _appAccentColorModeOptions;
 
     public string LaunchAtStartupTitleText => _getString("Settings.LaunchAtStartup.Title");
 
@@ -729,12 +717,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string StartupBehaviorDisableProxyText => _getString("Settings.StartupBehavior.DisableProxy");
 
-    public IReadOnlyList<string> StartupBehaviorModeOptions =>
-    [
-        StartupBehaviorLastSettingText,
-        StartupBehaviorStartRuleProxyText,
-        StartupBehaviorDisableProxyText,
-    ];
+    public IReadOnlyList<string> StartupBehaviorModeOptions => _startupBehaviorModeOptions;
 
     public string TriggerSectionTitleText => _getString("Settings.Section.Triggers");
 
@@ -760,16 +743,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string CloseBehaviorMinimizeToTrayText => _getString("Settings.CloseBehavior.MinimizeToTray");
 
-    public IReadOnlyList<string> CloseBehaviorModeOptions =>
-    [
-        CloseBehaviorExitWithoutConfirmationText,
-        CloseBehaviorConfirmExitText,
-        CloseBehaviorMinimizeToTrayText,
-    ];
-
-    public string TrayFadeInactiveIconTitleText => _getString("Settings.Tray.FadeInactiveIcon.Title");
-
-    public string TrayFadeInactiveIconDescriptionText => _getString("Settings.Tray.FadeInactiveIcon.Description");
+    public IReadOnlyList<string> CloseBehaviorModeOptions => _closeBehaviorModeOptions;
 
     public string TrayUseMonochromeInactiveIconTitleText => IsTrayIconRestartPending
         ? $"{_getString("Settings.Tray.MonochromeInactiveIcon.Title")}*"
@@ -867,13 +841,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string MainlandChinaAllText => _getString("Settings.MainlandChinaFeature.All");
 
-    public IReadOnlyList<string> MainlandChinaFeatureModeOptions =>
-    [
-        MainlandChinaDisabledText,
-        MainlandChinaFlagOnlyText,
-        MainlandChinaFlagAndTextText,
-        MainlandChinaKeywordFilterText,
-    ];
+    public IReadOnlyList<string> MainlandChinaFeatureModeOptions => _mainlandChinaFeatureModeOptions;
 
     public string MainlandChinaUrlBlockingTitleText => IsMainlandChinaDisplayRestartPending
         ? _getString("Settings.MainlandChinaUrlBlocking.Title") + "*"
@@ -897,12 +865,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string NotificationMoreText => _getString("Settings.Notification.More");
 
-    public IReadOnlyList<string> NotificationLevelOptions =>
-    [
-        NotificationDefaultText,
-        NotificationCriticalOnlyText,
-        NotificationMoreText,
-    ];
+    public IReadOnlyList<string> NotificationLevelOptions => _notificationLevelOptions;
 
     public string DataSectionTitleText => _getString("Settings.Section.Data");
 
@@ -963,6 +926,24 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Stable display-language option source used by WinUI ComboBox.</summary>
     private readonly ObservableCollection<string> _displayLanguageOptions = [];
 
+    /// <summary>Stable app-theme option source used by WinUI ComboBox.</summary>
+    private readonly ObservableCollection<string> _appThemeModeOptions = [];
+
+    /// <summary>Stable accent-color option source used by WinUI ComboBox.</summary>
+    private readonly ObservableCollection<string> _appAccentColorModeOptions = [];
+
+    /// <summary>Stable startup-behavior option source used by WinUI ComboBox.</summary>
+    private readonly ObservableCollection<string> _startupBehaviorModeOptions = [];
+
+    /// <summary>Stable close-behavior option source used by WinUI ComboBox.</summary>
+    private readonly ObservableCollection<string> _closeBehaviorModeOptions = [];
+
+    /// <summary>Stable mainland-China feature option source used by WinUI ComboBox.</summary>
+    private readonly ObservableCollection<string> _mainlandChinaFeatureModeOptions = [];
+
+    /// <summary>Stable notification-level option source used by WinUI ComboBox.</summary>
+    private readonly ObservableCollection<string> _notificationLevelOptions = [];
+
     /// <summary>Backing field for <see cref="LaunchAtStartupEnabled"/>.</summary>
     private bool _launchAtStartupEnabled;
 
@@ -1013,9 +994,6 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="CloseBehaviorMode"/>.</summary>
     private CloseBehaviorMode _closeBehaviorMode;
-
-    /// <summary>Backing field for <see cref="TrayFadeInactiveIcon"/>.</summary>
-    private bool _trayFadeInactiveIcon;
 
     /// <summary>Backing field for <see cref="TrayUseMonochromeInactiveIcon"/>.</summary>
     private bool _trayUseMonochromeInactiveIcon;
@@ -1278,12 +1256,6 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetCloseBehaviorModeIndex(value);
     }
 
-    public bool TrayFadeInactiveIcon
-    {
-        get => _trayFadeInactiveIcon;
-        set => SetTrayFadeInactiveIcon(value);
-    }
-
     public bool TrayUseMonochromeInactiveIcon
     {
         get => _trayUseMonochromeInactiveIcon;
@@ -1434,7 +1406,6 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _triggersEnabled, _loadedTriggersEnabled, nameof(TriggersEnabled));
         SetProperty(ref _triggerNotificationsEnabled, _settings.TriggerNotificationsEnabled, nameof(TriggerNotificationsEnabled));
         CloseBehaviorMode = _settings.CloseBehaviorMode;
-        SetProperty(ref _trayFadeInactiveIcon, _settings.TrayFadeInactiveIcon, nameof(TrayFadeInactiveIcon));
         _loadedTrayUseMonochromeInactiveIcon = _settings.TrayUseMonochromeInactiveIcon;
         SetProperty(ref _trayUseMonochromeInactiveIcon, _loadedTrayUseMonochromeInactiveIcon, nameof(TrayUseMonochromeInactiveIcon));
         TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
@@ -1588,34 +1559,45 @@ internal sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
-    /// <summary>Refreshes the stable language option collection without replacing the ComboBox item source.</summary>
-    private void RefreshDisplayLanguageOptions()
+    /// <summary>Refreshes stable selector option collections without replacing ComboBox item sources.</summary>
+    private void RefreshSelectorOptions()
     {
-        List<string> options = [];
+        List<string> languageOptions = [];
         foreach ((AppLanguage language, string displayName) in LocalizationService.GetSupportedLanguages())
         {
-            options.Add(language == AppLanguage.AutoDetect
+            languageOptions.Add(language == AppLanguage.AutoDetect
                 ? _getString("Settings.Language.AutoDetect")
                 : displayName);
         }
 
+        ReplaceStableOptions(_displayLanguageOptions, languageOptions);
+        ReplaceStableOptions(_appThemeModeOptions, [AppThemeFollowSystemText, AppThemeLightText, AppThemeDarkText]);
+        ReplaceStableOptions(_appAccentColorModeOptions, [AppAccentColorFollowSystemText, AppAccentColorCustomText]);
+        ReplaceStableOptions(_startupBehaviorModeOptions, [StartupBehaviorLastSettingText, StartupBehaviorStartRuleProxyText, StartupBehaviorDisableProxyText]);
+        ReplaceStableOptions(_closeBehaviorModeOptions, [CloseBehaviorExitWithoutConfirmationText, CloseBehaviorConfirmExitText, CloseBehaviorMinimizeToTrayText]);
+        ReplaceStableOptions(_mainlandChinaFeatureModeOptions, [MainlandChinaDisabledText, MainlandChinaFlagOnlyText, MainlandChinaFlagAndTextText, MainlandChinaKeywordFilterText]);
+        ReplaceStableOptions(_notificationLevelOptions, [NotificationDefaultText, NotificationCriticalOnlyText, NotificationMoreText]);
+    }
+
+    private static void ReplaceStableOptions(ObservableCollection<string> target, IReadOnlyList<string> options)
+    {
         for (int index = 0; index < options.Count; index++)
         {
-            if (index >= _displayLanguageOptions.Count)
+            if (index >= target.Count)
             {
-                _displayLanguageOptions.Add(options[index]);
+                target.Add(options[index]);
                 continue;
             }
 
-            if (!StringComparer.Ordinal.Equals(_displayLanguageOptions[index], options[index]))
+            if (!StringComparer.Ordinal.Equals(target[index], options[index]))
             {
-                _displayLanguageOptions[index] = options[index];
+                target[index] = options[index];
             }
         }
 
-        while (_displayLanguageOptions.Count > options.Count)
+        while (target.Count > options.Count)
         {
-            _displayLanguageOptions.RemoveAt(_displayLanguageOptions.Count - 1);
+            target.RemoveAt(target.Count - 1);
         }
     }
 
@@ -1682,7 +1664,7 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Raises property changes for all localized bindable text properties.</summary>
     private void RaiseLocalizedTextChanges()
     {
-        RefreshDisplayLanguageOptions();
+        RefreshSelectorOptions();
         string[] propertyNames =
         [
             nameof(PageTitleText),
@@ -1766,8 +1748,6 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(CloseBehaviorConfirmExitText),
             nameof(CloseBehaviorMinimizeToTrayText),
             nameof(CloseBehaviorModeOptions),
-            nameof(TrayFadeInactiveIconTitleText),
-            nameof(TrayFadeInactiveIconDescriptionText),
             nameof(TrayUseMonochromeInactiveIconTitleText),
             nameof(TrayUseMonochromeInactiveIconDescriptionText),
             nameof(IsTrayIconRestartPending),
@@ -1857,7 +1837,9 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <returns>A task that completes after service status is refreshed.</returns>
     public async Task DeployMihomoServiceAsync(CancellationToken cancellationToken)
     {
-        SetMihomoServiceStatus(await _mihomoServiceController.DeployAsync(cancellationToken));
+        MihomoServiceStatus status = await _mihomoServiceController.DeployAsync(cancellationToken);
+        SetMihomoServiceStatus(status);
+        _appendLog(status.IsInstalled ? "Info" : "Warning", "MihomoService", status.Message, null);
     }
 
     /// <summary>Uninstalls the mihomo Windows service and preserves transparent proxy preference.</summary>
@@ -1865,7 +1847,9 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <returns>A task that completes after service status is refreshed.</returns>
     public async Task UninstallMihomoServiceAsync(CancellationToken cancellationToken)
     {
-        SetMihomoServiceStatus(await _mihomoServiceController.UninstallAsync(cancellationToken));
+        MihomoServiceStatus status = await _mihomoServiceController.UninstallAsync(cancellationToken);
+        SetMihomoServiceStatus(status);
+        _appendLog(status.IsInstalled ? "Warning" : "Info", "MihomoService", status.Message, null);
     }
 
     /// <summary>Refreshes the cached mihomo service status.</summary>
@@ -2083,13 +2067,6 @@ internal sealed class SettingsViewModel : ObservableObject
         _settings.CloseBehaviorMode = mode;
         CloseBehaviorMode = mode;
         return true;
-    }
-
-    /// <summary>Persists whether the inactive tray icon is faded.</summary>
-    public void SetTrayFadeInactiveIcon(bool isEnabled)
-    {
-        _settings.TrayFadeInactiveIcon = isEnabled;
-        SetProperty(ref _trayFadeInactiveIcon, isEnabled, nameof(TrayFadeInactiveIcon));
     }
 
     /// <summary>Persists whether the inactive tray icon uses a monochrome logo.</summary>
@@ -2339,55 +2316,68 @@ internal sealed class SettingsViewModel : ObservableObject
                 (ConnectionTestDirectUrlTitleText, ConnectionTestDirectUrl),
             ];
 
-            foreach ((string label, string url) in targets)
-            {
-                Stopwatch stopwatch = Stopwatch.StartNew();
-                try
-                {
-                    Uri uri = new(url);
-                    int statusCode = await _testConnectionAsync(uri, cancellationToken);
-                    stopwatch.Stop();
-                    bool succeeded = statusCode is >= 200 and < 400;
-                    results.Add(new ConnectionTestTargetResult(
-                        label,
-                        url,
-                        succeeded,
-                        string.Format(_getString("Settings.ConnectionTest.StatusHttp.Format"), statusCode),
-                        FormatLatency(stopwatch.Elapsed),
-                        (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds)));
-                }
-                catch (TaskCanceledException)
-                {
-                    stopwatch.Stop();
-                    _notifyConnectionTestTimeout(url);
-                    results.Add(new ConnectionTestTargetResult(
-                        label,
-                        url,
-                        false,
-                        _getString("Settings.ConnectionTest.TimedOut"),
-                        FormatLatency(stopwatch.Elapsed),
-                        null));
-                }
-                catch (Exception exception) when (exception is HttpRequestException or UriFormatException)
-                {
-                    stopwatch.Stop();
-                    results.Add(new ConnectionTestTargetResult(
-                        label,
-                        url,
-                        false,
-                        string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message),
-                        FormatLatency(stopwatch.Elapsed),
-                        null));
-                }
-            }
+            results.AddRange(await Task.WhenAll(targets.Select(target => RunConnectionTestTargetAsync(target.Label, target.Url, cancellationToken))));
 
             ConnectionTestSummaryState summaryState = BuildConnectionTestSummaryState(results);
-            return new ConnectionTestReport(results, BuildConnectionTestSummary(results, summaryState), summaryState);
+            ConnectionTestReport report = new(results, BuildConnectionTestSummary(results, summaryState), summaryState);
+            AppendConnectionTestLog(report);
+            return report;
         }
         finally
         {
             IsConnectionTestRunning = false;
         }
+    }
+
+    private async Task<ConnectionTestTargetResult> RunConnectionTestTargetAsync(string label, string url, CancellationToken cancellationToken)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        try
+        {
+            Uri uri = new(url);
+            int statusCode = await _testConnectionAsync(uri, cancellationToken).ConfigureAwait(false);
+            stopwatch.Stop();
+            bool succeeded = statusCode is >= 200 and < 400;
+            return new ConnectionTestTargetResult(
+                label,
+                url,
+                succeeded,
+                string.Format(_getString("Settings.ConnectionTest.StatusHttp.Format"), statusCode),
+                FormatLatency(stopwatch.Elapsed),
+                (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds));
+        }
+        catch (TaskCanceledException)
+        {
+            stopwatch.Stop();
+            _notifyConnectionTestTimeout(url);
+            return new ConnectionTestTargetResult(
+                label,
+                url,
+                false,
+                _getString("Settings.ConnectionTest.TimedOut"),
+                FormatLatency(stopwatch.Elapsed),
+                null);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or UriFormatException)
+        {
+            stopwatch.Stop();
+            return new ConnectionTestTargetResult(
+                label,
+                url,
+                false,
+                string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message),
+                FormatLatency(stopwatch.Elapsed),
+                null);
+        }
+    }
+
+    private void AppendConnectionTestLog(ConnectionTestReport report)
+    {
+        string level = report.SummaryState == ConnectionTestSummaryState.AllPassed ? "Info" : "Warning";
+        string detail = string.Join(
+            Environment.NewLine,
+            report.Results.Select(result => $"{result.Label} | {result.Url} | {result.StatusText} | {result.LatencyText}"));
+        _appendLog(level, "ConnectionTest", report.SummaryText, detail);
     }
 
     private static ConnectionTestSummaryState BuildConnectionTestSummaryState(IReadOnlyList<ConnectionTestTargetResult> results)
@@ -2497,9 +2487,6 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Restores taskbar tray settings to defaults without changing deployed services.</summary>
     public void ResetTraySettingsToDefaults()
     {
-        _settings.TrayFadeInactiveIcon = true;
-        SetProperty(ref _trayFadeInactiveIcon, true, nameof(TrayFadeInactiveIcon));
-
         _settings.TrayUseMonochromeInactiveIcon = false;
         if (SetProperty(ref _trayUseMonochromeInactiveIcon, false, nameof(TrayUseMonochromeInactiveIcon)))
         {

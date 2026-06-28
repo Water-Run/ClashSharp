@@ -194,8 +194,6 @@ public sealed class ClashDataPackageServiceTests
 
         public CloseBehaviorMode CloseBehaviorMode { get; set; } = CloseBehaviorMode.MinimizeToTray;
 
-        public bool TrayFadeInactiveIcon { get; set; } = true;
-
         public bool TrayUseMonochromeInactiveIcon { get; set; } = true;
 
         public string TrayVisibleFeatureIds { get; set; } = "status,mode,pages,transparent-proxy,settings,safe-exit";

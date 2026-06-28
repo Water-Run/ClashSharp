@@ -403,8 +403,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _trayCommandService.ApplyMode(mode);
-        _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
+        if (_trayCommandService.ApplyMode(mode))
+        {
+            _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
+        }
+
         _trayService?.RefreshMenu();
     }
 
@@ -416,8 +419,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _trayCommandService.SetTransparentProxyEnabled(isEnabled);
-        _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
+        if (_trayCommandService.SetTransparentProxyEnabled(isEnabled))
+        {
+            _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
+        }
+
         _trayService?.RefreshMenu();
     }
 

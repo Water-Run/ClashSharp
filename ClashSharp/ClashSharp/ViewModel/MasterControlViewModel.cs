@@ -128,8 +128,6 @@ internal interface IMasterControlSettings
 
     CloseBehaviorMode CloseBehaviorMode { get; }
 
-    bool TrayFadeInactiveIcon { get; }
-
     bool TrayUseMonochromeInactiveIcon { get; }
 
     string TrayVisibleFeatureIds { get; }
@@ -673,18 +671,18 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// Cancellation semantics: Cancellation is accepted for command-shape consistency but does not cancel synchronous mode application.
     /// Thread / reentrancy: Not guarded; callers should use mode commands for UI invocation.
     /// </remarks>
-    public Task ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
+    public async Task ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
     {
         if (mode == SelectedMode && mode == _settings.CurrentMode)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         try
         {
             NetworkTakeoverResult result = _takeover.ApplyMode(mode);
-            SelectedMode = mode;
-            _settings.CurrentMode = mode;
+            SelectedMode = result.Mode;
+            _settings.CurrentMode = result.Mode;
             CoreStatusText = result.CoreRunning
                 ? _localization.GetString("Master.Status.Running")
                 : _localization.GetString("Master.Status.NotRunning");
@@ -693,7 +691,7 @@ internal sealed class MasterControlViewModel : ObservableObject
                 : _localization.GetString("Master.Status.Off");
             TransparentProxyStatusText = ResolveTransparentProxyStatus(result.TransparentProxyEnabled);
             _log.Append("Info", "MasterControl", result.Message, null);
-            _ = _modeApplied(result.Mode);
+            await _modeApplied(result.Mode);
             _isCoreAvailable = true;
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
@@ -706,7 +704,6 @@ internal sealed class MasterControlViewModel : ObservableObject
 
         OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
-        return Task.CompletedTask;
     }
 
     /// <summary>Refreshes visible proxy and transparent-proxy status from current service state.</summary>
@@ -807,7 +804,6 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("triggers-enabled", FormatSwitch(_settings.TriggersEnabled), string.Empty, _settings.TriggersEnabled);
         SetTile("trigger-notifications", FormatSwitch(_settings.TriggerNotificationsEnabled), string.Empty, _settings.TriggerNotificationsEnabled);
         SetTile("tray-visible-features", FormatTrayVisibleFeatureCount(_settings.TrayVisibleFeatureIds), string.Empty);
-        SetTile("tray-fade-icon", FormatSwitch(_settings.TrayFadeInactiveIcon), string.Empty, _settings.TrayFadeInactiveIcon);
         SetTile("tray-monochrome-icon", FormatSwitch(_settings.TrayUseMonochromeInactiveIcon), string.Empty, _settings.TrayUseMonochromeInactiveIcon);
         SetTile("close-behavior", GetCloseBehaviorText(_settings.CloseBehaviorMode), string.Empty);
         SetTile("startup-behavior", GetStartupBehaviorText(_settings.StartupBehaviorMode), string.Empty);
@@ -1190,7 +1186,6 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTileFromKeys("triggers-enabled", "Settings.Triggers.Enabled.Title", "\uE9F5", "Settings.Triggers.Enabled.Description", infoType),
                 owner.CreateTileFromKeys("trigger-notifications", "Settings.Triggers.Notifications.Title", "\uE7F4", "Settings.Triggers.Notifications.Description", infoType),
                 owner.CreateTileFromKeys("tray-visible-features", "Settings.Tray.VisibleFeatures.Title", "\uE8A7", "Settings.Tray.VisibleFeatures.Description", infoType),
-                owner.CreateTileFromKeys("tray-fade-icon", "Settings.Tray.FadeInactiveIcon.Title", "\uE706", "Settings.Tray.FadeInactiveIcon.Description", infoType),
                 owner.CreateTileFromKeys("tray-monochrome-icon", "Settings.Tray.MonochromeInactiveIcon.Title", "\uE790", "Settings.Tray.MonochromeInactiveIcon.Description", infoType),
                 owner.CreateTileFromKeys("close-behavior", "Settings.CloseBehavior.Title", "\uE8BB", "Settings.CloseBehavior.Description", infoType),
                 owner.CreateTileFromKeys("startup-behavior", "Settings.StartupBehavior.Title", "\uE7C3", "Settings.StartupBehavior.Description", infoType),

@@ -19,7 +19,8 @@
             MaxHeight="{Binding MaxListHeight, ElementName=Root}"
             SelectionMode="None"
             HorizontalAlignment="Stretch"
-            ScrollViewer.VerticalScrollBarVisibility="Auto"
+            Padding="0,0,14,0"
+            ScrollViewer.VerticalScrollBarVisibility="Visible"
             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">

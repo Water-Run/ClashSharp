@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -30,7 +31,11 @@ internal sealed class TriggerService
 {
     private const string TriggerLog = "Trigger";
 
+#if UNIT_TESTS
+    public static TriggerService Instance => throw new NotSupportedException("Use explicit TriggerService dependencies in tests.");
+#else
     public static TriggerService Instance { get; } = CreateDefault();
+#endif
 
     private readonly string _storagePath;
     private readonly IApplicationActionDispatcher _actions;
@@ -44,7 +49,8 @@ internal sealed class TriggerService
     private readonly Func<bool> _getTriggerNotificationsEnabled;
     private readonly object _syncLock = new();
     private List<TriggerTask> _tasks = [];
-    private int _runtimeEventEvaluationActive;
+    private readonly ConcurrentQueue<TriggerRuntimeEvent> _pendingRuntimeEvents = new();
+    private int _runtimeEventDrainActive;
 
     public TriggerService(
         string storagePath,
@@ -103,6 +109,8 @@ internal sealed class TriggerService
             _tasks = [.. tasks];
             Save();
         }
+
+        _appendLog("Info", TriggerLog, GetString("Triggers.Log.Saved"), $"{tasks.Count} task(s)");
     }
 
     public void AddTask(TriggerTask task)
@@ -113,19 +121,29 @@ internal sealed class TriggerService
             _tasks.Add(task);
             Save();
         }
+
+        _appendLog("Info", TriggerLog, string.Format(GetString("Triggers.Log.Added.Format"), task.Name), task.Id);
     }
 
     public void DeleteTask(string id)
     {
+        string? deletedName = null;
         lock (_syncLock)
         {
+            deletedName = _tasks.FirstOrDefault(task => StringComparer.Ordinal.Equals(task.Id, id))?.Name;
             _tasks.RemoveAll(task => StringComparer.Ordinal.Equals(task.Id, id));
             Save();
+        }
+
+        if (deletedName is not null)
+        {
+            _appendLog("Info", TriggerLog, string.Format(GetString("Triggers.Log.Deleted.Format"), deletedName), id);
         }
     }
 
     public void MoveTask(string id, int direction)
     {
+        string? movedName = null;
         lock (_syncLock)
         {
             int index = _tasks.FindIndex(task => StringComparer.Ordinal.Equals(task.Id, id));
@@ -138,7 +156,13 @@ internal sealed class TriggerService
             TriggerTask task = _tasks[index];
             _tasks.RemoveAt(index);
             _tasks.Insert(newIndex, task);
+            movedName = task.Name;
             Save();
+        }
+
+        if (movedName is not null)
+        {
+            _appendLog("Info", TriggerLog, string.Format(GetString("Triggers.Log.Moved.Format"), movedName), direction.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
     }
 
@@ -153,6 +177,8 @@ internal sealed class TriggerService
 
             Save();
         }
+
+        _appendLog("Info", TriggerLog, GetString(isEnabled ? "Triggers.Log.EnabledAll" : "Triggers.Log.DisabledAll"), null);
     }
 
     public async Task<IReadOnlyList<TriggerExecutionResult>> EvaluateAsync(TriggerEvaluationContext context, CancellationToken cancellationToken)
@@ -172,9 +198,28 @@ internal sealed class TriggerService
             }
 
             DateTimeOffset triggeredAt = DateTimeOffset.Now;
+            bool taskFailed = false;
             foreach (TriggerAction action in task.Actions)
             {
-                await ExecuteActionAsync(action, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await ExecuteActionAsync(action, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    taskFailed = true;
+                    AppendActionFailureLog(task, action, exception);
+                    break;
+                }
+            }
+
+            if (taskFailed)
+            {
+                continue;
             }
 
             task.LastTriggeredAt = triggeredAt;
@@ -192,12 +237,21 @@ internal sealed class TriggerService
 
         if (results.Count > 0)
         {
-            SaveTasks(GetTasks());
+            PersistCurrentTasks();
         }
 
         return results;
     }
 
+    private void PersistCurrentTasks()
+    {
+        lock (_syncLock)
+        {
+            Save();
+        }
+    }
+
+#if !UNIT_TESTS
     private static TriggerService CreateDefault()
     {
         bool triggersEnabledAtStartup = AppSettingsService.Instance.TriggersEnabled;
@@ -213,10 +267,16 @@ internal sealed class TriggerService
             _ => { },
             () => AppSettingsService.Instance.TriggerNotificationsEnabled);
     }
+#endif
 
     private string FormatActionForLog(TriggerAction action)
     {
         return _getString($"Triggers.Action.{action.Kind}");
+    }
+
+    private string GetString(string key)
+    {
+        return _getString(key);
     }
 
     private Task ExecuteActionAsync(TriggerAction action, CancellationToken cancellationToken)
@@ -234,22 +294,52 @@ internal sealed class TriggerService
         return _actions.DispatchAsync(kind, action.Value, cancellationToken);
     }
 
-    private async void OnRuntimeEventRaised(object? sender, TriggerRuntimeEvent triggerEvent)
+    private void OnRuntimeEventRaised(object? sender, TriggerRuntimeEvent triggerEvent)
     {
-        if (Interlocked.Exchange(ref _runtimeEventEvaluationActive, 1) == 1)
+        _pendingRuntimeEvents.Enqueue(triggerEvent);
+        if (Interlocked.Exchange(ref _runtimeEventDrainActive, 1) == 1)
         {
             return;
         }
 
+        _ = DrainRuntimeEventsAsync();
+    }
+
+    private async Task DrainRuntimeEventsAsync()
+    {
         try
         {
-            TriggerEvaluationContext context = _createEvaluationContext(triggerEvent);
-            await EvaluateAsync(context, CancellationToken.None).ConfigureAwait(false);
+            while (_pendingRuntimeEvents.TryDequeue(out TriggerRuntimeEvent? triggerEvent))
+            {
+                try
+                {
+                    TriggerEvaluationContext context = _createEvaluationContext(triggerEvent);
+                    await EvaluateAsync(context, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    _appendLog("Warning", TriggerLog, GetString("Triggers.Log.RuntimeEventFailed"), exception.Message);
+                }
+            }
         }
         finally
         {
-            Volatile.Write(ref _runtimeEventEvaluationActive, 0);
+            Volatile.Write(ref _runtimeEventDrainActive, 0);
+            if (!_pendingRuntimeEvents.IsEmpty
+                && Interlocked.Exchange(ref _runtimeEventDrainActive, 1) == 0)
+            {
+                _ = DrainRuntimeEventsAsync();
+            }
         }
+    }
+
+    private void AppendActionFailureLog(TriggerTask task, TriggerAction action, Exception exception)
+    {
+        _appendLog(
+            "Warning",
+            TriggerLog,
+            string.Format(GetString("Triggers.Log.ActionFailed.Format"), task.Name),
+            $"{FormatActionForLog(action)}: {exception.Message}");
     }
 
     private static bool Matches(TriggerTask task, TriggerEvaluationContext context)

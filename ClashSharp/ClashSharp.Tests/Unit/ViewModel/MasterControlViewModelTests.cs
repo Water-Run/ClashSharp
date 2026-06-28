@@ -75,6 +75,37 @@ public sealed class MasterControlViewModelTests
         Assert.Equal("Active", viewModel.BasicStatusText);
     }
 
+    /// <summary>Verifies takeover fallback results are persisted instead of the originally requested mode.</summary>
+    [Fact]
+    public async Task ApplyModeAsync_WhenTakeoverReturnsDifferentMode_PersistsResultMode()
+    {
+        FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.Disabled };
+        FakeMasterTakeover takeover = new()
+        {
+            Result = new NetworkTakeoverResult(ClashSharpMode.Standby, true, false, false, "fallback"),
+        };
+        ClashSharpMode? notifiedMode = null;
+        MasterControlViewModel viewModel = new(
+            new FakeMasterLocalization(),
+            new FakeMasterCore(),
+            new FakeMasterWindowsProxy(),
+            settings,
+            takeover,
+            new FakeMasterLog(),
+            new FakeMasterTrayStatus(),
+            modeApplied: mode =>
+            {
+                notifiedMode = mode;
+                return Task.CompletedTask;
+            });
+
+        await viewModel.ApplyModeAsync(ClashSharpMode.FullTakeover, CancellationToken.None);
+
+        Assert.Equal(ClashSharpMode.Standby, settings.CurrentMode);
+        Assert.Equal(ClashSharpMode.Standby, viewModel.SelectedMode);
+        Assert.Equal(ClashSharpMode.Standby, notifiedMode);
+    }
+
     /// <summary>Verifies clicking the already-active mode leaves runtime services untouched.</summary>
     [Fact]
     public async Task ApplyModeAsync_WhenModeAlreadySelected_DoesNotApplyOrNotify()
@@ -143,7 +174,6 @@ public sealed class MasterControlViewModelTests
             TriggersEnabled = true,
             TriggerNotificationsEnabled = false,
             CloseBehaviorMode = CloseBehaviorMode.ConfirmExit,
-            TrayFadeInactiveIcon = true,
             TrayUseMonochromeInactiveIcon = false,
             TrayVisibleFeatureIds = "status,mode,pages,settings",
             NotificationEnabled = true,
@@ -162,7 +192,7 @@ public sealed class MasterControlViewModelTests
 
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
 
-        Assert.True(viewModel.InfoTiles.Count >= 50);
+        Assert.True(viewModel.InfoTiles.Count >= 49);
         Assert.Equal(viewModel.InfoTiles.Count, viewModel.InfoTiles.Select(static tile => tile.Id).Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "edit-tiles");
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "backup");
@@ -186,6 +216,7 @@ public sealed class MasterControlViewModelTests
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "triggers-enabled" && tile.Value == "On");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "trigger-notifications" && tile.Value == "Off");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "tray-visible-features" && tile.Value == "4 features enabled");
+        Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "tray-fade-icon");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "close-behavior" && tile.Value == "Exit with confirmation");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-behavior" && tile.Value == "Start proxy");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-theme" && tile.Value == "Dark");
@@ -390,8 +421,6 @@ public sealed class MasterControlViewModelTests
                 "Settings.Tray.VisibleFeatures.Title" => "Tray features",
                 "Settings.Tray.VisibleFeatures.Description" => "Tray features description",
                 "Settings.Tray.VisibleFeatures.Summary.Format" => "{0} features enabled",
-                "Settings.Tray.FadeInactiveIcon.Title" => "Fade tray icon",
-                "Settings.Tray.FadeInactiveIcon.Description" => "Fade tray icon description",
                 "Settings.Tray.MonochromeInactiveIcon.Title" => "Monochrome tray icon",
                 "Settings.Tray.MonochromeInactiveIcon.Description" => "Monochrome tray icon description",
                 "Settings.CloseBehavior.Title" => "Close behavior",
@@ -565,8 +594,6 @@ public sealed class MasterControlViewModelTests
         public bool TriggerNotificationsEnabled { get; set; } = true;
 
         public CloseBehaviorMode CloseBehaviorMode { get; set; } = CloseBehaviorMode.MinimizeToTray;
-
-        public bool TrayFadeInactiveIcon { get; set; } = true;
 
         public bool TrayUseMonochromeInactiveIcon { get; set; }
 

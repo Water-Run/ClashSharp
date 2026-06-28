@@ -61,6 +61,25 @@ public sealed class RuntimeShutdownServiceTests
         Assert.Equal("stop failed", entry.Detail);
     }
 
+    /// <summary>Verifies later cleanup steps still run when an earlier step fails.</summary>
+    [Fact]
+    public void ShutdownRuntime_WhenCoreStopFails_StillDisablesWindowsProxy()
+    {
+        List<string> calls = [];
+        InvalidOperationException exception = new("stop failed");
+        FakeRuntimeShutdownLog log = new();
+        RuntimeShutdownService service = CreateService(
+            calls: calls,
+            core: new FakeRuntimeShutdownCore(calls, exception),
+            settings: new FakeRuntimeShutdownSettings { RestoreProxyOnExit = true },
+            log: log);
+
+        service.ShutdownRuntime();
+
+        Assert.Equal(["sampling.stop", "core.stop", "proxy.disable"], calls);
+        Assert.Single(log.Entries);
+    }
+
     private static RuntimeShutdownService CreateService(
         List<string>? calls = null,
         FakeRuntimeShutdownSettings? settings = null,

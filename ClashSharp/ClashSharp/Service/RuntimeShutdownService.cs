@@ -89,15 +89,20 @@ internal sealed partial class RuntimeShutdownService
     /// <summary>Stops owned runtime services and restores Windows proxy state when configured.</summary>
     public void ShutdownRuntime()
     {
+        TryCleanupStep(_sampling.Stop);
+        TryCleanupStep(_core.Stop);
+
+        if (_settings.RestoreProxyOnExit)
+        {
+            TryCleanupStep(_windowsProxy.DisableProxy);
+        }
+    }
+
+    private void TryCleanupStep(Action cleanup)
+    {
         try
         {
-            _sampling.Stop();
-            _core.Stop();
-
-            if (_settings.RestoreProxyOnExit)
-            {
-                _windowsProxy.DisableProxy();
-            }
+            cleanup();
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {

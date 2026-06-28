@@ -150,9 +150,12 @@ public sealed partial class MihomoServiceManager
 
         await _commandRunner.RunScElevatedAsync(cancellationToken, "stop", ServiceName).ConfigureAwait(false);
         MihomoServiceCommandResult deleteResult = await _commandRunner.RunScElevatedAsync(cancellationToken, "delete", ServiceName).ConfigureAwait(false);
-        return deleteResult.ExitCode == 0
-            ? new MihomoServiceStatus(false, false, GetString("MihomoService.Status.Removed"))
-            : new MihomoServiceStatus(true, current.IsRunning, GetString("MihomoService.Status.RemovalFailed"));
+        if (deleteResult.ExitCode != 0)
+        {
+            return new MihomoServiceStatus(true, current.IsRunning, GetString("MihomoService.Status.RemovalFailed"));
+        }
+
+        return GetStatus();
     }
 
     /// <summary>Quotes one command-line path or value for sc.exe binPath.</summary>

@@ -67,6 +67,27 @@ public sealed class MihomoServiceManagerTests
         Assert.Equal("deployed", status.Message);
     }
 
+    /// <summary>Verifies uninstall success is proven by querying service state again after delete.</summary>
+    [Fact]
+    public async Task UninstallAsync_WhenDeleteSucceeds_ReturnsRequeriedServiceStatus()
+    {
+        FakeMihomoServiceCommandRunner runner = new();
+        runner.QueryResults.Enqueue(new MihomoServiceCommandResult(0, "STATE              : 1  STOPPED"));
+        runner.QueryResults.Enqueue(new MihomoServiceCommandResult(1060, "service does not exist"));
+        MihomoServiceManager manager = CreateManager(runner);
+
+        MihomoServiceStatus status = await manager.UninstallAsync(CancellationToken.None);
+
+        Assert.False(status.IsInstalled);
+        Assert.Equal("not deployed", status.Message);
+        Assert.Equal(
+            [["query", MihomoServiceManager.ServiceName], ["query", MihomoServiceManager.ServiceName]],
+            runner.RunScCalls);
+        Assert.Equal(
+            [["stop", MihomoServiceManager.ServiceName], ["delete", MihomoServiceManager.ServiceName]],
+            runner.RunScElevatedCalls);
+    }
+
     private static MihomoServiceManager CreateManager(FakeMihomoServiceCommandRunner runner)
     {
         return new MihomoServiceManager(
@@ -77,6 +98,7 @@ public sealed class MihomoServiceManagerTests
                 "MihomoService.Status.NotDeployed" => "not deployed",
                 "MihomoService.Status.DeployedRunning" => "running",
                 "MihomoService.Status.Deployed" => "deployed",
+                "MihomoService.Status.RemovalFailed" => "removal failed",
                 _ => key,
             });
     }
@@ -85,16 +107,26 @@ public sealed class MihomoServiceManagerTests
     {
         public MihomoServiceCommandResult QueryResult { get; init; }
 
+        public Queue<MihomoServiceCommandResult> QueryResults { get; } = [];
+
         public List<IReadOnlyList<string>> RunScCalls { get; } = [];
+
+        public List<IReadOnlyList<string>> RunScElevatedCalls { get; } = [];
 
         public MihomoServiceCommandResult RunSc(params string[] arguments)
         {
             RunScCalls.Add(arguments);
+            if (QueryResults.TryDequeue(out MihomoServiceCommandResult result))
+            {
+                return result;
+            }
+
             return QueryResult;
         }
 
         public Task<MihomoServiceCommandResult> RunScElevatedAsync(CancellationToken cancellationToken, params string[] arguments)
         {
+            RunScElevatedCalls.Add(arguments);
             return Task.FromResult(new MihomoServiceCommandResult(0, string.Empty));
         }
     }

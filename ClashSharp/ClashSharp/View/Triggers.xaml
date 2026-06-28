@@ -11,10 +11,23 @@
 
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <Storyboard x:Name="ShowTriggerEditorStoryboard">
+            <DoubleAnimation Storyboard.TargetName="TriggerListHost" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12" />
+            <DoubleAnimation Storyboard.TargetName="TriggerEditorHost" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18" />
+            <DoubleAnimation Storyboard.TargetName="TriggerEditorHostTranslateTransform" Storyboard.TargetProperty="X" From="32" To="0" Duration="0:0:0.18" />
+        </Storyboard>
+        <Storyboard x:Name="ShowTriggerListStoryboard">
+            <DoubleAnimation Storyboard.TargetName="TriggerEditorHost" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12" />
+            <DoubleAnimation Storyboard.TargetName="TriggerListHost" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18" />
+            <DoubleAnimation Storyboard.TargetName="TriggerListHostTranslateTransform" Storyboard.TargetProperty="X" From="-24" To="0" Duration="0:0:0.18" />
+        </Storyboard>
     </Page.Resources>
 
     <Grid Padding="{StaticResource ClashPagePadding}">
-        <Grid x:Name="TriggerListHost" RowSpacing="16">
+        <Grid x:Name="TriggerListHost" RowSpacing="16" Opacity="1">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="TriggerListHostTranslateTransform" />
+            </Grid.RenderTransform>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -145,7 +158,10 @@
             </ScrollViewer>
         </Grid>
 
-        <Grid x:Name="TriggerEditorHost" RowSpacing="16" Visibility="Collapsed">
+        <Grid x:Name="TriggerEditorHost" RowSpacing="16" Visibility="Collapsed" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="TriggerEditorHostTranslateTransform" />
+            </Grid.RenderTransform>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />

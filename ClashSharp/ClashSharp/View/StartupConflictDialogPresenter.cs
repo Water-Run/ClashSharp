@@ -25,7 +25,7 @@ namespace ClashSharp.View;
 /// </remarks>
 internal static class StartupConflictDialogPresenter
 {
-    private const double DialogWidth = 420;
+    private const double DialogWidth = 560;
 
     /// <summary>Shows the startup conflict dialog for the supplied issue snapshot.</summary>
     /// <param name="xamlRoot">XAML root used to host the dialog. Must not be null.</param>
@@ -64,8 +64,8 @@ internal static class StartupConflictDialogPresenter
         StackPanel panel = new()
         {
             Spacing = 8,
-            MinWidth = 340,
-            MaxWidth = 380,
+            MinWidth = 420,
+            MaxWidth = 500,
         };
         panel.Children.Add(new TextBlock
         {
@@ -84,7 +84,7 @@ internal static class StartupConflictDialogPresenter
             Content = panel,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = Math.Min(320, Math.Max(160, xamlRoot.Size.Height - 220)),
+            MaxHeight = Math.Min(420, Math.Max(180, xamlRoot.Size.Height - 220)),
             Padding = new Thickness(0, 0, 12, 0),
         };
     }

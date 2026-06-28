@@ -1024,14 +1024,17 @@ public sealed class AppResourcePackagingTests
         string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
         string settingsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
         string appSettingsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.cs");
+        string systemTrayPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "SystemTrayService.cs");
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
         string settingsCode = File.ReadAllText(settingsCodePath);
         string settingsViewModel = File.ReadAllText(settingsViewModelPath);
         string appSettings = File.ReadAllText(appSettingsPath);
+        string systemTray = File.ReadAllText(systemTrayPath);
 
         Assert.Contains("TraySectionTitleText", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("TrayFadeInactiveIconRow", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TrayFadeInactiveIconRow", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TrayFadeInactiveIconToggle", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("TrayUseMonochromeInactiveIconRow", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("TrayVisibleFeaturesRow", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("EditTrayVisibleFeaturesButton_Click", settingsXaml, StringComparison.Ordinal);
@@ -1040,8 +1043,12 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("SetTrayVisibleFeatureIds", settingsCode, StringComparison.Ordinal);
         Assert.Contains("CloseBehaviorModeOptions", settingsViewModel, StringComparison.Ordinal);
         Assert.Contains("TrayVisibleFeatureSummaryText", settingsViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("TrayFadeInactiveIconTitleText", settingsViewModel, StringComparison.Ordinal);
         Assert.Contains("TrayVisibleFeatureIds", appSettings, StringComparison.Ordinal);
         Assert.Contains("CloseBehaviorMode", appSettings, StringComparison.Ordinal);
+        Assert.DoesNotContain("fade: AppSettingsService.Instance.TrayFadeInactiveIcon", systemTray, StringComparison.Ordinal);
+        Assert.DoesNotContain("color.A * 0.55d", systemTray, StringComparison.Ordinal);
+        Assert.Contains("CreateInactiveBitmap(bitmap, useMonochrome)", systemTray, StringComparison.Ordinal);
         Assert.Contains("TriggersEnabledToggle_Toggled", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("TrayUseMonochromeInactiveIconToggle_Toggled", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("Mode=OneWay", settingsXaml, StringComparison.Ordinal);
@@ -1280,17 +1287,20 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("Id == \"edit-tiles\"", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("MaxListHeight = Math.Max(260, XamlRoot.Size.Height - 260)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionItem", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("tile.IsVisible)));", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.ShowStartupPrompt", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.CheckStartupConflicts", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.RunLatencyTest", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("<Setter Property=\"Width\" Value=\"260\" />", masterControlXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("ContainerContentChanging=\"InfoTileGrid_ContainerContentChanging\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("MaxInfoTileColumns = 4", masterControlCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Setter Property=\"Width\" Value=\"260\" />", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("ContainerContentChanging=\"InfoTileGrid_ContainerContentChanging\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxInfoTileColumns = 4", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("CalculateInfoTileWidth", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("double editorWidth = CalculateInfoTilesEditorWidth(dialogRoot)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("Width = editorWidth", masterControlCode, StringComparison.Ordinal);
         Assert.DoesNotContain("<Setter Property=\"Width\" Value=\"250\" />", masterControlXaml, StringComparison.Ordinal);
     }
 
@@ -1309,10 +1319,11 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Grid.RowSpan=\"4\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Grid.Column=\"1\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Grid.Row=\"3\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("<Setter Property=\"Width\" Value=\"260\" />", masterControlXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("CalculateInfoTileWidth", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Setter Property=\"Width\" Value=\"260\" />", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("CalculateInfoTileWidth", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("RootScrollBarGutter", masterControlCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings page exposes a restart-required notice and keeps reset links away from the edge.</summary>
@@ -1510,6 +1521,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("TriggerLog", triggerService, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", searchableComponent, StringComparison.Ordinal);
         Assert.Contains("SearchBox", searchableComponent, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"0,0,14,0\"", searchableComponent, StringComparison.Ordinal);
+        Assert.Contains("ScrollViewer.VerticalScrollBarVisibility=\"Visible\"", searchableComponent, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", triggerCode, StringComparison.Ordinal);
         Assert.Contains("ShowTriggerConditionPickerAsync", triggerCode, StringComparison.Ordinal);
         Assert.Contains("ShowTriggerActionPickerAsync", triggerCode, StringComparison.Ordinal);
@@ -1531,6 +1544,10 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("x:Name=\"TriggerListHost\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TriggerEditorHost\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ShowTriggerEditorStoryboard\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ShowTriggerListStoryboard\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TriggerListHostTranslateTransform\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TriggerEditorHostTranslateTransform\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"AddTriggerCardButton\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"BackToTriggerListButton\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TriggerEditorNameBox\"", triggerView, StringComparison.Ordinal);
@@ -1543,6 +1560,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"SaveTriggerButton\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("ShowTriggerEditorForNewTask", triggerCode, StringComparison.Ordinal);
         Assert.Contains("OpenTriggerList", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("ShowTriggerEditorStoryboard.Begin()", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("ShowTriggerListStoryboard.Begin()", triggerCode, StringComparison.Ordinal);
         Assert.Contains("BackToTriggerListButton_Click", triggerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowTriggerNameStepAsync", triggerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowTriggerConditionStepAsync", triggerCode, StringComparison.Ordinal);
@@ -1831,13 +1850,13 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Orientation = Orientation.Vertical", presenterCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment = HorizontalAlignment.Right", presenterCode, StringComparison.Ordinal);
         Assert.Contains("statusText.Text = result.Succeeded", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("private const double DialogWidth = 420", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("private const double DialogWidth = 560", presenterCode, StringComparison.Ordinal);
         Assert.Contains("CenteredDialogOverlay.ShowAsync", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialogMinWidth", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialogMaxWidth", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("MinWidth = 340", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth = 380", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("Math.Min(320", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("MinWidth = 420", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth = 500", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("Math.Min(420", presenterCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies startup dialogs use the window root and bounded content to remain centered and visible.</summary>
@@ -1872,13 +1891,14 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("await dialog.ShowCenteredAsync(xamlRoot)", settingsCode, StringComparison.Ordinal);
         Assert.Contains("await dialog.ShowCenteredAsync(xamlRoot)", File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs")), StringComparison.Ordinal);
         Assert.Contains("CenteredDialogOverlay.ShowAsync", guideCode, StringComparison.Ordinal);
-        Assert.Contains("private const double DialogWidth = 420", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("private const double DialogWidth = 560", presenterCode, StringComparison.Ordinal);
         Assert.Contains("CenteredDialogOverlay.ShowAsync", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialog dialog = new()", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Popup", overlayCode, StringComparison.Ordinal);
         Assert.Contains("App.MainWindow?.Content is FrameworkElement root", overlayCode, StringComparison.Ordinal);
         Assert.Contains("root.ActualWidth", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("Width = overlaySize.Width", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("MinWidth = overlaySize.Width", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment = HorizontalAlignment.Stretch", overlayCode, StringComparison.Ordinal);
         Assert.Contains("App.MainWindow?.Content is not Panel rootPanel", overlayCode, StringComparison.Ordinal);
         Assert.Contains("Canvas.SetZIndex(overlay", overlayCode, StringComparison.Ordinal);
         Assert.Contains("rootPanel.Children.Add(overlay)", overlayCode, StringComparison.Ordinal);
@@ -1888,7 +1908,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("SolidBackgroundFillColorBaseBrush", overlayCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Background = ResourceBrush(\"CardBackgroundFillColorDefaultBrush\"", overlayCode, StringComparison.Ordinal);
         Assert.Contains("TextWrapping = TextWrapping.Wrap", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("MaxHeight = Math.Min(320", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight = Math.Min(420", presenterCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies maintenance actions are right-aligned links instead of full-height row buttons.</summary>

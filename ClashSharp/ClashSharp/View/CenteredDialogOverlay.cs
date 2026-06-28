@@ -65,9 +65,11 @@ internal static class CenteredDialogOverlay
         (double Width, double Height) overlaySize = ResolveOverlaySize(xamlRoot);
         Grid overlay = new()
         {
-            Width = overlaySize.Width,
-            Height = overlaySize.Height,
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(128, 0, 0, 0)),
+            MinWidth = overlaySize.Width,
+            MinHeight = overlaySize.Height,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(210, 0, 0, 0)),
         };
 
         Border card = BuildCard(overlaySize.Width, overlaySize.Height, dialogWidth);

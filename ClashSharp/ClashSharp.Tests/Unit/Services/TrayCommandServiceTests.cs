@@ -94,10 +94,26 @@ public sealed class TrayCommandServiceTests
             new FakeTrayServiceStatus(new MihomoServiceStatus(false, false, "Not installed")),
             takeover);
 
-        service.SetTransparentProxyEnabled(true);
+        bool modeApplied = service.SetTransparentProxyEnabled(true);
 
         Assert.True(settings.TransparentProxyEnabled);
         Assert.Empty(takeover.AppliedModes);
+        Assert.False(modeApplied);
+    }
+
+    /// <summary>Verifies failed tray mode application reports failure to callers that own notifications.</summary>
+    [Fact]
+    public void ApplyMode_WhenTakeoverFails_ReturnsFalse()
+    {
+        FakeTrayTakeover takeover = new()
+        {
+            ExceptionToThrow = new InvalidOperationException("missing core"),
+        };
+        TrayCommandService service = CreateService(takeover: takeover);
+
+        bool modeApplied = service.ApplyMode(ClashSharpMode.FullTakeover);
+
+        Assert.False(modeApplied);
     }
 
     /// <summary>Creates a tray command service with test doubles.</summary>

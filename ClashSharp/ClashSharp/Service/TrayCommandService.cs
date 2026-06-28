@@ -62,38 +62,42 @@ internal sealed class TrayCommandService
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
-    public void ApplyMode(ClashSharpMode mode)
+    public bool ApplyMode(ClashSharpMode mode)
     {
-        TryApplyMode(mode, "Tray mode change failed.");
+        return TryApplyMode(mode, "Tray mode change failed.");
     }
 
-    public void SetTransparentProxyEnabled(bool isEnabled)
+    public bool SetTransparentProxyEnabled(bool isEnabled)
     {
         MihomoServiceStatus serviceStatus = _mihomoService.GetStatus();
         if (isEnabled && !serviceStatus.IsInstalled)
         {
             _settings.TransparentProxyEnabled = true;
-            return;
+            return false;
         }
 
         _settings.TransparentProxyEnabled = isEnabled;
         if (_settings.CurrentMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
         {
-            TryApplyMode(_settings.CurrentMode, "Tray transparent proxy change failed.");
+            return TryApplyMode(_settings.CurrentMode, "Tray transparent proxy change failed.");
         }
+
+        return false;
     }
 
-    private void TryApplyMode(ClashSharpMode mode, string failureMessage)
+    private bool TryApplyMode(ClashSharpMode mode, string failureMessage)
     {
         try
         {
             NetworkTakeoverResult result = _takeover.ApplyMode(mode);
             _settings.CurrentMode = result.Mode;
             _log.Append("Info", LogCategory, result.Message, null);
+            return true;
         }
         catch (Exception exception) when (IsExpectedTakeoverFailure(exception))
         {
             _log.Append("Error", LogCategory, failureMessage, exception.Message);
+            return false;
         }
     }
 

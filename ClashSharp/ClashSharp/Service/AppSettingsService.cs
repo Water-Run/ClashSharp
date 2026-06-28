@@ -92,9 +92,6 @@ public sealed class AppSettingsService
     /// <summary>Storage key for the main-window close behavior.</summary>
     private const string KeyCloseBehaviorMode = "CloseBehaviorMode";
 
-    /// <summary>Storage key for fading the tray icon while proxy takeover is inactive.</summary>
-    private const string KeyTrayFadeInactiveIcon = "TrayFadeInactiveIcon";
-
     /// <summary>Storage key for using a monochrome tray icon while proxy takeover is inactive.</summary>
     private const string KeyTrayUseMonochromeInactiveIcon = "TrayUseMonochromeInactiveIcon";
 
@@ -157,7 +154,6 @@ public sealed class AppSettingsService
         KeyTriggersEnabled,
         KeyTriggerNotificationsEnabled,
         KeyCloseBehaviorMode,
-        KeyTrayFadeInactiveIcon,
         KeyTrayUseMonochromeInactiveIcon,
         KeyTrayVisibleFeatureIds,
         KeyMainlandChinaDisplayEnabled,
@@ -346,13 +342,6 @@ public sealed class AppSettingsService
     {
         get => GetEnum(KeyCloseBehaviorMode, CloseBehaviorMode.MinimizeToTray);
         set => SetEnum(KeyCloseBehaviorMode, value);
-    }
-
-    /// <summary>Gets or sets whether the tray icon is faded when proxy takeover is inactive.</summary>
-    public bool TrayFadeInactiveIcon
-    {
-        get => GetBoolean(KeyTrayFadeInactiveIcon, true);
-        set => SetBoolean(KeyTrayFadeInactiveIcon, value);
     }
 
     /// <summary>Gets or sets whether the tray icon uses the monochrome logo when proxy takeover is inactive.</summary>

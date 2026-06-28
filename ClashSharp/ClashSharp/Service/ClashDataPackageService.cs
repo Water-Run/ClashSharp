@@ -60,8 +60,6 @@ internal interface IClashDataPackageSettings
 
     CloseBehaviorMode CloseBehaviorMode { get; set; }
 
-    bool TrayFadeInactiveIcon { get; set; }
-
     bool TrayUseMonochromeInactiveIcon { get; set; }
 
     string TrayVisibleFeatureIds { get; set; }
@@ -121,7 +119,6 @@ internal sealed partial class ClashDataPackageService
         BoolSetting(nameof(IClashDataPackageSettings.TriggersEnabled), settings => settings.TriggersEnabled, (settings, value) => settings.TriggersEnabled = value),
         BoolSetting(nameof(IClashDataPackageSettings.TriggerNotificationsEnabled), settings => settings.TriggerNotificationsEnabled, (settings, value) => settings.TriggerNotificationsEnabled = value),
         EnumSetting(nameof(IClashDataPackageSettings.CloseBehaviorMode), settings => settings.CloseBehaviorMode, (settings, value) => settings.CloseBehaviorMode = value),
-        BoolSetting(nameof(IClashDataPackageSettings.TrayFadeInactiveIcon), settings => settings.TrayFadeInactiveIcon, (settings, value) => settings.TrayFadeInactiveIcon = value),
         BoolSetting(nameof(IClashDataPackageSettings.TrayUseMonochromeInactiveIcon), settings => settings.TrayUseMonochromeInactiveIcon, (settings, value) => settings.TrayUseMonochromeInactiveIcon = value),
         StringSetting(nameof(IClashDataPackageSettings.TrayVisibleFeatureIds), settings => settings.TrayVisibleFeatureIds, (settings, value) => settings.TrayVisibleFeatureIds = value),
         BoolSetting(nameof(IClashDataPackageSettings.NotificationEnabled), settings => settings.NotificationEnabled, (settings, value) => settings.NotificationEnabled = value),

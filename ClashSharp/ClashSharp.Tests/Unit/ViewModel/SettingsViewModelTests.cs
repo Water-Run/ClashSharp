@@ -39,7 +39,6 @@ public sealed class SettingsViewModelTests
             CloseBehaviorMode = CloseBehaviorMode.ConfirmExit,
             TriggersEnabled = false,
             TriggerNotificationsEnabled = false,
-            TrayFadeInactiveIcon = false,
             TrayUseMonochromeInactiveIcon = false,
             TrayVisibleFeatureIds = "status,settings",
             CheckStaleProxyOnStartup = false,
@@ -77,7 +76,6 @@ public sealed class SettingsViewModelTests
         Assert.Equal((int)CloseBehaviorMode.ConfirmExit, viewModel.CloseBehaviorModeIndex);
         Assert.False(viewModel.TriggersEnabled);
         Assert.False(viewModel.TriggerNotificationsEnabled);
-        Assert.False(viewModel.TrayFadeInactiveIcon);
         Assert.False(viewModel.TrayUseMonochromeInactiveIcon);
         Assert.Equal("status,settings", viewModel.TrayVisibleFeatureIds);
         Assert.False(viewModel.CheckStaleProxyOnStartup);
@@ -176,6 +174,47 @@ public sealed class SettingsViewModelTests
             > changedProperties.LastIndexOf(nameof(SettingsViewModel.DisplayLanguageOptions)));
         Assert.Equal(0, viewModel.DisplayLanguageIndex);
         Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
+    }
+
+    /// <summary>Verifies every localized ComboBox option source remains stable and populated after language switching.</summary>
+    [Fact]
+    public void SetDisplayLanguageIndex_RelocalizesAllSelectorOptionsWithoutReplacingSources()
+    {
+        FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        IReadOnlyList<string> languageOptions = viewModel.DisplayLanguageOptions;
+        IReadOnlyList<string> themeOptions = viewModel.AppThemeModeOptions;
+        IReadOnlyList<string> accentOptions = viewModel.AppAccentColorModeOptions;
+        IReadOnlyList<string> startupOptions = viewModel.StartupBehaviorModeOptions;
+        IReadOnlyList<string> closeOptions = viewModel.CloseBehaviorModeOptions;
+        IReadOnlyList<string> mainlandOptions = viewModel.MainlandChinaFeatureModeOptions;
+        IReadOnlyList<string> notificationOptions = viewModel.NotificationLevelOptions;
+
+        bool changed = viewModel.SetDisplayLanguageIndex(0);
+
+        Assert.True(changed);
+        Assert.Same(languageOptions, viewModel.DisplayLanguageOptions);
+        Assert.Same(themeOptions, viewModel.AppThemeModeOptions);
+        Assert.Same(accentOptions, viewModel.AppAccentColorModeOptions);
+        Assert.Same(startupOptions, viewModel.StartupBehaviorModeOptions);
+        Assert.Same(closeOptions, viewModel.CloseBehaviorModeOptions);
+        Assert.Same(mainlandOptions, viewModel.MainlandChinaFeatureModeOptions);
+        Assert.Same(notificationOptions, viewModel.NotificationLevelOptions);
+        Assert.All(
+            [
+                viewModel.DisplayLanguageOptions,
+                viewModel.AppThemeModeOptions,
+                viewModel.AppAccentColorModeOptions,
+                viewModel.StartupBehaviorModeOptions,
+                viewModel.CloseBehaviorModeOptions,
+                viewModel.MainlandChinaFeatureModeOptions,
+                viewModel.NotificationLevelOptions,
+            ],
+            options =>
+            {
+                Assert.NotEmpty(options);
+                Assert.All(options, Assert.NotEmpty);
+            });
     }
 
     /// <summary>Verifies repeated ComboBox write-back for the current language does not re-enter localization refresh.</summary>
@@ -493,14 +532,12 @@ public sealed class SettingsViewModelTests
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
         bool changed = viewModel.SetCloseBehaviorModeIndex((int)CloseBehaviorMode.ConfirmExit);
-        viewModel.TrayFadeInactiveIcon = false;
         viewModel.TrayUseMonochromeInactiveIcon = false;
         viewModel.SetTrayVisibleFeatureIds(["pages", "safe-exit"]);
 
         Assert.True(changed);
         Assert.Equal(CloseBehaviorMode.ConfirmExit, store.CloseBehaviorMode);
         Assert.Equal(CloseBehaviorMode.ConfirmExit, viewModel.CloseBehaviorMode);
-        Assert.False(store.TrayFadeInactiveIcon);
         Assert.False(store.TrayUseMonochromeInactiveIcon);
         Assert.Equal("pages,safe-exit", store.TrayVisibleFeatureIds);
         Assert.Equal("pages,safe-exit", viewModel.TrayVisibleFeatureIds);
@@ -843,6 +880,30 @@ public sealed class SettingsViewModelTests
         Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
     }
 
+    /// <summary>Verifies connection testing appends one searchable diagnostic log with every tested target.</summary>
+    [Fact]
+    public async Task RunConnectionTestAsync_AppendsSummaryLogWithTargetDetails()
+    {
+        List<LogEntry> logs = [];
+        SettingsViewModel viewModel = CreateConnectionTestViewModel(
+            async (_, _) =>
+            {
+                await Task.Delay(5);
+                return 204;
+            },
+            (level, category, message, detail) => logs.Add(new LogEntry(level, category, message, detail)));
+
+        await InvokeRunConnectionTestReportAsync(viewModel, CancellationToken.None);
+
+        LogEntry entry = Assert.Single(logs);
+        Assert.Equal("Info", entry.Level);
+        Assert.Equal("ConnectionTest", entry.Category);
+        Assert.Equal("Settings.ConnectionTest.AllPassed", entry.Message);
+        Assert.Contains("https://www.google.com", entry.Detail);
+        Assert.Contains("HTTP 204", entry.Detail);
+        Assert.Contains("Settings.ConnectionTestUrl.Direct", entry.Detail);
+    }
+
     /// <summary>Verifies a mixed connection-test result reports a partial-failure summary state.</summary>
     [Fact]
     public async Task RunConnectionTestAsync_OneProbeFails_ReturnsPartialSummaryState()
@@ -961,7 +1022,6 @@ public sealed class SettingsViewModelTests
             TriggersEnabled = false,
             TriggerNotificationsEnabled = false,
             CloseBehaviorMode = CloseBehaviorMode.ExitWithoutConfirmation,
-            TrayFadeInactiveIcon = false,
             TrayUseMonochromeInactiveIcon = false,
             TrayVisibleFeatureIds = "status,settings",
             CheckStaleProxyOnStartup = false,
@@ -1006,7 +1066,6 @@ public sealed class SettingsViewModelTests
 
         InvokeMethod<object?>(viewModel, "ResetTraySettingsToDefaults", Array.Empty<object>());
 
-        Assert.True(store.TrayFadeInactiveIcon);
         Assert.False(store.TrayUseMonochromeInactiveIcon);
         Assert.Contains("pages", store.TrayVisibleFeatureIds, StringComparison.Ordinal);
 
@@ -1090,8 +1149,6 @@ public sealed class SettingsViewModelTests
 
         public CloseBehaviorMode CloseBehaviorMode { get; set; } = CloseBehaviorMode.MinimizeToTray;
 
-        public bool TrayFadeInactiveIcon { get; set; } = true;
-
         public bool TrayUseMonochromeInactiveIcon { get; set; } = true;
 
         public string TrayVisibleFeatureIds { get; set; } = "status,mode,pages,transparent-proxy,settings,safe-exit";
@@ -1117,7 +1174,9 @@ public sealed class SettingsViewModelTests
         public string ConnectionTestDirectUrl { get; set; } = "https://www.baidu.com";
     }
 
-    private static SettingsViewModel CreateConnectionTestViewModel(Func<Uri, CancellationToken, Task<int>> testConnectionAsync)
+    private static SettingsViewModel CreateConnectionTestViewModel(
+        Func<Uri, CancellationToken, Task<int>> testConnectionAsync,
+        Action<string, string, string, string?>? appendLog = null)
     {
         ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
@@ -1140,6 +1199,7 @@ public sealed class SettingsViewModelTests
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
                 typeof(Func<AppAccentColorMode, string, bool>),
                 typeof(Action<string>),
+                typeof(Action<string, string, string, string>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -1171,8 +1231,11 @@ public sealed class SettingsViewModelTests
             (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
             null,
             (Action<string>)(_ => { }),
+            appendLog ?? ((_, _, _, _) => { }),
         ]));
     }
+
+    private sealed record LogEntry(string Level, string Category, string Message, string? Detail);
 
     private static SettingsViewModel CreateMaintenanceViewModel(
         FakeSettingsStore store,
@@ -1201,6 +1264,7 @@ public sealed class SettingsViewModelTests
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
                 typeof(Func<AppAccentColorMode, string, bool>),
                 typeof(Action<string>),
+                typeof(Action<string, string, string, string>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -1223,6 +1287,7 @@ public sealed class SettingsViewModelTests
             (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
             null,
             (Action<string>)(_ => { }),
+            (Action<string, string, string, string>)((_, _, _, _) => { }),
         ]));
     }
 
@@ -1251,6 +1316,7 @@ public sealed class SettingsViewModelTests
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
                 typeof(Func<AppAccentColorMode, string, bool>),
                 typeof(Action<string>),
+                typeof(Action<string, string, string, string>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -1273,6 +1339,7 @@ public sealed class SettingsViewModelTests
             checkStartupConflicts,
             null,
             (Action<string>)(_ => { }),
+            (Action<string, string, string, string>)((_, _, _, _) => { }),
         ]));
     }
 
@@ -1301,6 +1368,7 @@ public sealed class SettingsViewModelTests
                 typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
                 typeof(Func<AppAccentColorMode, string, bool>),
                 typeof(Action<string>),
+                typeof(Action<string, string, string, string>),
             ],
             modifiers: null);
         Assert.NotNull(constructor);
@@ -1323,6 +1391,7 @@ public sealed class SettingsViewModelTests
             (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
             isAccentColorRestartPending,
             (Action<string>)(_ => { }),
+            (Action<string, string, string, string>)((_, _, _, _) => { }),
         ]));
     }
 

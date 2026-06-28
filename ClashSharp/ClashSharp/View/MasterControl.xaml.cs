@@ -31,8 +31,21 @@ namespace ClashSharp.View;
 /// </remarks>
 public sealed partial class MasterControl : Page
 {
+    private const double MinInfoTileWidth = 220;
+    private const double PreferredInfoTileWidth = 280;
+    private const double InfoTileHorizontalMargin = 10;
+    private const int MaxInfoTileColumns = 4;
+    private const double RootScrollBarGutter = 18;
+    private const double InfoTileEditorMinWidth = 420;
+    private const double InfoTileEditorPreferredWidth = 620;
+    private const double InfoTileEditorHorizontalChrome = 96;
+    private const double InfoTileEditorMinListHeight = 260;
+    private const double InfoTileEditorVerticalChrome = 260;
+
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
+
+    private double _infoTileItemWidth = PreferredInfoTileWidth;
 
     /// <summary>Initializes the master control page and its view model.</summary>
     public MasterControl()
@@ -231,11 +244,14 @@ public sealed partial class MasterControl : Page
     /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
     private async Task ShowInfoTilesEditorAsync()
     {
+        XamlRoot dialogRoot = GetDialogXamlRoot();
+        double editorWidth = CalculateInfoTilesEditorWidth(dialogRoot);
         SearchableOptionList optionList = new()
         {
             SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText,
             AllowMultiple = true,
-            MaxListHeight = Math.Max(260, XamlRoot.Size.Height - 260),
+            MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot),
+            Width = editorWidth,
         };
         optionList.SetOptions(_viewModel.InfoTiles.Select(tile => new SearchableOptionItem(
             tile.Id,
@@ -249,8 +265,7 @@ public sealed partial class MasterControl : Page
         StackPanel panel = new()
         {
             Spacing = 10,
-            MinWidth = 420,
-            MaxWidth = 620,
+            Width = editorWidth,
         };
         panel.Children.Add(optionList);
 
@@ -261,7 +276,7 @@ public sealed partial class MasterControl : Page
             PrimaryButtonText = LocalizationService.Instance.GetString("Command.Save"),
             CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = GetDialogXamlRoot(),
+            XamlRoot = dialogRoot,
         };
 
         if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
@@ -278,9 +293,68 @@ public sealed partial class MasterControl : Page
         }
     }
 
+    private void InfoTileGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateInfoTileWidths(e.NewSize.Width);
+    }
+
+    private void InfoTileGrid_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        ApplyInfoTileContainerWidth(args.ItemContainer);
+    }
+
+    private void UpdateInfoTileWidths(double availableWidth)
+    {
+        if (availableWidth <= 0)
+        {
+            return;
+        }
+
+        int columns = Math.Clamp((int)Math.Round(availableWidth / PreferredInfoTileWidth), 1, MaxInfoTileColumns);
+        while (columns > 1 && CalculateInfoTileWidth(availableWidth, columns) < MinInfoTileWidth)
+        {
+            columns--;
+        }
+
+        _infoTileItemWidth = Math.Max(MinInfoTileWidth, CalculateInfoTileWidth(availableWidth, columns));
+        foreach (MasterControlInfoTileViewModel tile in _viewModel.InfoTiles)
+        {
+            if (InfoTileGrid.ContainerFromItem(tile) is FrameworkElement item)
+            {
+                ApplyInfoTileContainerWidth(item);
+            }
+        }
+    }
+
+    private void ApplyInfoTileContainerWidth(FrameworkElement item)
+    {
+        item.Width = _infoTileItemWidth;
+    }
+
+    private static double CalculateInfoTileWidth(double availableWidth, int columns)
+    {
+        return Math.Floor((availableWidth / columns) - InfoTileHorizontalMargin);
+    }
+
+    private static double CalculateInfoTilesEditorWidth(XamlRoot dialogRoot)
+    {
+        double availableWidth = dialogRoot.Size.Width > 0
+            ? dialogRoot.Size.Width - InfoTileEditorHorizontalChrome
+            : InfoTileEditorPreferredWidth;
+        return Math.Clamp(availableWidth, InfoTileEditorMinWidth, InfoTileEditorPreferredWidth);
+    }
+
+    private static double CalculateInfoTilesEditorListHeight(XamlRoot dialogRoot)
+    {
+        double availableHeight = dialogRoot.Size.Height > 0
+            ? dialogRoot.Size.Height - InfoTileEditorVerticalChrome
+            : InfoTileEditorMinListHeight;
+        return Math.Max(InfoTileEditorMinListHeight, availableHeight);
+    }
+
     private void RootScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         double horizontalPadding = RootScrollViewer.Padding.Left + RootScrollViewer.Padding.Right;
-        ContentHost.Width = Math.Max(320, e.NewSize.Width - horizontalPadding);
+        ContentHost.Width = Math.Max(320, e.NewSize.Width - horizontalPadding - RootScrollBarGutter);
     }
 }

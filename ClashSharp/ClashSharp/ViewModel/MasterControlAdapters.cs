@@ -184,8 +184,6 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
 
     public CloseBehaviorMode CloseBehaviorMode => _settings.CloseBehaviorMode;
 
-    public bool TrayFadeInactiveIcon => _settings.TrayFadeInactiveIcon;
-
     public bool TrayUseMonochromeInactiveIcon => _settings.TrayUseMonochromeInactiveIcon;
 
     public string TrayVisibleFeatureIds => _settings.TrayVisibleFeatureIds;

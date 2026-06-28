@@ -71,7 +71,8 @@ public sealed partial class Settings : Page
             clearAllData: AppDataMaintenanceService.ClearAllData,
             checkStartupConflicts: StartupConflictDetectionService.Instance.CheckConflicts,
             isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending,
-            notifyConnectionTestTimeout: NotificationService.Instance.NotifyConnectionTestTimeout);
+            notifyConnectionTestTimeout: NotificationService.Instance.NotifyConnectionTestTimeout,
+            appendLog: LogStorageService.Instance.AppendLog);
         InitializeComponent();
         DataContext = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;

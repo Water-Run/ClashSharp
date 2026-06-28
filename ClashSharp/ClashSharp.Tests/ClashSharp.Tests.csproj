@@ -8,6 +8,7 @@
     <IsPackable>false</IsPackable>
     <Platforms>x64</Platforms>
     <LangVersion>14</LangVersion>
+    <DefineConstants>$(DefineConstants);UNIT_TESTS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -76,6 +77,8 @@
     <Compile Include="..\ClashSharp\Service\LogStorageService.cs" Link="Service\LogStorageService.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageServiceFactory.cs" Link="Service\LogStorageServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\TriggerRuntimeEvents.cs" Link="Service\TriggerRuntimeEvents.cs" />
+    <Compile Include="..\ClashSharp\Service\TriggerEvaluationContextFactory.cs" Link="Service\TriggerEvaluationContextFactory.cs" />
+    <Compile Include="..\ClashSharp\Service\TriggerService.cs" Link="Service\TriggerService.cs" />
     <Compile Include="..\ClashSharp\Service\IApplicationActionDispatcher.cs" Link="Service\IApplicationActionDispatcher.cs" />
     <Compile Include="..\ClashSharp\Service\LocalizationService.cs" Link="Service\LocalizationService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />

@@ -38,6 +38,22 @@ public sealed partial class Triggers : Page
         InitializeComponent();
         SelectedTriggerActionsList.ItemsSource = _selectedActionRows;
         DataContext = _viewModel;
+        ShowTriggerEditorStoryboard.Completed += (_, _) =>
+        {
+            TriggerListHost.Visibility = Visibility.Collapsed;
+            TriggerListHost.Opacity = 1;
+            TriggerListHostTranslateTransform.X = 0;
+            TriggerEditorHost.Opacity = 1;
+            TriggerEditorHostTranslateTransform.X = 0;
+        };
+        ShowTriggerListStoryboard.Completed += (_, _) =>
+        {
+            TriggerEditorHost.Visibility = Visibility.Collapsed;
+            TriggerEditorHost.Opacity = 0;
+            TriggerEditorHostTranslateTransform.X = 0;
+            TriggerListHost.Opacity = 1;
+            TriggerListHostTranslateTransform.X = 0;
+        };
     }
 
     private void AddTriggerCardButton_Click(object sender, RoutedEventArgs e)
@@ -141,15 +157,39 @@ public sealed partial class Triggers : Page
             ? CreateDefaultActions()
             : item.Task.Actions);
 
-        TriggerListHost.Visibility = Visibility.Collapsed;
-        TriggerEditorHost.Visibility = Visibility.Visible;
+        BeginShowTriggerEditorTransition();
     }
 
     private void OpenTriggerList()
     {
         _editingItem = null;
-        TriggerEditorHost.Visibility = Visibility.Collapsed;
+        BeginShowTriggerListTransition();
+    }
+
+    private void BeginShowTriggerEditorTransition()
+    {
+        ShowTriggerListStoryboard.Stop();
+        ShowTriggerEditorStoryboard.Stop();
         TriggerListHost.Visibility = Visibility.Visible;
+        TriggerEditorHost.Visibility = Visibility.Visible;
+        TriggerListHost.Opacity = 1;
+        TriggerEditorHost.Opacity = 0;
+        TriggerListHostTranslateTransform.X = 0;
+        TriggerEditorHostTranslateTransform.X = 32;
+        ShowTriggerEditorStoryboard.Begin();
+    }
+
+    private void BeginShowTriggerListTransition()
+    {
+        ShowTriggerEditorStoryboard.Stop();
+        ShowTriggerListStoryboard.Stop();
+        TriggerListHost.Visibility = Visibility.Visible;
+        TriggerEditorHost.Visibility = Visibility.Visible;
+        TriggerListHost.Opacity = 0;
+        TriggerEditorHost.Opacity = 1;
+        TriggerListHostTranslateTransform.X = -24;
+        TriggerEditorHostTranslateTransform.X = 0;
+        ShowTriggerListStoryboard.Begin();
     }
 
     private void CancelTriggerEditButton_Click(object sender, RoutedEventArgs e)

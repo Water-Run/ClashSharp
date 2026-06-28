@@ -94,7 +94,7 @@ public sealed class SystemTrayService : IDisposable
         _safeExit = safeExit ?? throw new ArgumentNullException(nameof(safeExit));
         _applyMode = applyMode ?? throw new ArgumentNullException(nameof(applyMode));
         _setTransparentProxy = setTransparentProxy ?? throw new ArgumentNullException(nameof(setTransparentProxy));
-        _icon = LoadTrayIcon(isInactive: false, useMonochrome: false, fade: false);
+        _icon = LoadTrayIcon(isInactive: false, useMonochrome: false);
         AddTrayIcon();
         RefreshTrayIcon();
     }
@@ -118,8 +118,7 @@ public sealed class SystemTrayService : IDisposable
             item.IsChecked && item.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover);
         DrawingIcon nextIcon = LoadTrayIcon(
             isInactive: !isProxyActive,
-            useMonochrome: AppSettingsService.Instance.TrayUseMonochromeInactiveIcon,
-            fade: AppSettingsService.Instance.TrayFadeInactiveIcon);
+            useMonochrome: AppSettingsService.Instance.TrayUseMonochromeInactiveIcon);
         DrawingIcon previousIcon = _icon;
         _icon = nextIcon;
         NOTIFYICONDATA data = CreateNotifyIconData();
@@ -334,7 +333,7 @@ public sealed class SystemTrayService : IDisposable
     }
 
     /// <summary>Loads the Clash# logo as a tray icon.</summary>
-    private static DrawingIcon LoadTrayIcon(bool isInactive, bool useMonochrome, bool fade)
+    private static DrawingIcon LoadTrayIcon(bool isInactive, bool useMonochrome)
     {
         string logoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Logo.png");
         if (!File.Exists(logoPath))
@@ -343,8 +342,8 @@ public sealed class SystemTrayService : IDisposable
         }
 
         using DrawingBitmap bitmap = new(logoPath);
-        using DrawingBitmap iconBitmap = isInactive && (useMonochrome || fade)
-            ? CreateInactiveBitmap(bitmap, useMonochrome, fade)
+        using DrawingBitmap iconBitmap = isInactive && useMonochrome
+            ? CreateInactiveBitmap(bitmap, useMonochrome)
             : new DrawingBitmap(bitmap);
         nint handle = iconBitmap.GetHicon();
         try
@@ -358,7 +357,7 @@ public sealed class SystemTrayService : IDisposable
         }
     }
 
-    private static DrawingBitmap CreateInactiveBitmap(DrawingBitmap source, bool useMonochrome, bool fade)
+    private static DrawingBitmap CreateInactiveBitmap(DrawingBitmap source, bool useMonochrome)
     {
         DrawingBitmap target = new(source.Width, source.Height);
         for (int y = 0; y < source.Height; y++)
@@ -366,15 +365,10 @@ public sealed class SystemTrayService : IDisposable
             for (int x = 0; x < source.Width; x++)
             {
                 DrawingColor color = source.GetPixel(x, y);
-                int alpha = fade ? (int)(color.A * 0.55d) : color.A;
                 if (useMonochrome)
                 {
                     int gray = (int)((color.R * 0.299d) + (color.G * 0.587d) + (color.B * 0.114d));
-                    color = DrawingColor.FromArgb(alpha, gray, gray, gray);
-                }
-                else
-                {
-                    color = DrawingColor.FromArgb(alpha, color.R, color.G, color.B);
+                    color = DrawingColor.FromArgb(color.A, gray, gray, gray);
                 }
 
                 target.SetPixel(x, y, color);

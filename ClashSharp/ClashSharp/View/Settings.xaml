@@ -272,12 +272,6 @@
             <HyperlinkButton x:Name="ResetTriggerSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetTriggerSettingsButton_Click" />
 
             <TextBlock x:Name="TraySectionTitleText" Text="{Binding TraySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
-            <components:SettingRow x:Name="TrayFadeInactiveIconRow" Title="{Binding TrayFadeInactiveIconTitleText}" Description="{Binding TrayFadeInactiveIconDescriptionText}">
-                <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TrayFadeInactiveIconToggle" MinWidth="0" IsOn="{Binding TrayFadeInactiveIcon, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </components:SettingRow.ActionContent>
-            </components:SettingRow>
-
             <components:SettingRow x:Name="TrayUseMonochromeInactiveIconRow" Title="{Binding TrayUseMonochromeInactiveIconTitleText}" Description="{Binding TrayUseMonochromeInactiveIconDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <ToggleSwitch x:Name="TrayUseMonochromeInactiveIconToggle" MinWidth="0" IsOn="{Binding TrayUseMonochromeInactiveIcon, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TrayUseMonochromeInactiveIconToggle_Toggled" />

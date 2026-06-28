@@ -145,7 +145,8 @@
                     CanDragItems="True"
                     AllowDrop="True"
                     IsItemClickEnabled="False"
-                    >
+                    SizeChanged="InfoTileGrid_SizeChanged"
+                    ContainerContentChanging="InfoTileGrid_ContainerContentChanging">
                     <GridView.Transitions>
                         <TransitionCollection>
                             <ReorderThemeTransition />
@@ -162,7 +163,6 @@
                             <Setter Property="VerticalContentAlignment" Value="Stretch" />
                             <Setter Property="Margin" Value="5,0,5,10" />
                             <Setter Property="MinWidth" Value="220" />
-                            <Setter Property="Width" Value="260" />
                         </Style>
                     </GridView.ItemContainerStyle>
                     <GridView.ItemTemplate>
