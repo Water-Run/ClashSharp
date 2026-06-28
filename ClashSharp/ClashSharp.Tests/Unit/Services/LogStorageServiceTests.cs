@@ -56,6 +56,31 @@ public sealed class LogStorageServiceTests
         Assert.Equal(86, latency);
     }
 
+    /// <summary>Verifies application logs can be searched and filtered by visible log fields.</summary>
+    [Fact]
+    public void GetLogs_FiltersBySourceLevelAndSearchText()
+    {
+        using TempDatabase tempDatabase = new();
+        LogStorageService service = new(tempDatabase.Path, () => "profile-a");
+        service.AppendLog("Info", "Notification", "Notification sent", "Title: Trigger\nMessage: Threshold reached");
+        service.AppendLog("Warning", "Trigger", "Trigger fired", "Task: Daily guard");
+        service.AppendLog("Info", "Settings", "Setting changed: MixedPort", "Previous: 10000\nNew: 12000");
+
+        IReadOnlyList<LogRecord> notificationLogs = service.GetLogs(20, "Notification", "Info", "Threshold");
+        IReadOnlyList<LogRecord> settingLogs = service.GetLogs(20, null, null, "MixedPort");
+        IReadOnlyList<string> sources = service.GetLogSources();
+
+        LogRecord notification = Assert.Single(notificationLogs);
+        Assert.Equal("Notification", notification.Source);
+        Assert.Equal("Info", notification.Level);
+        Assert.Contains("Threshold reached", notification.Detail, StringComparison.Ordinal);
+        LogRecord setting = Assert.Single(settingLogs);
+        Assert.Equal("Settings", setting.Source);
+        Assert.Contains("Notification", sources);
+        Assert.Contains("Settings", sources);
+        Assert.Contains("Trigger", sources);
+    }
+
     private sealed class TempDatabase : IDisposable
     {
         public TempDatabase()

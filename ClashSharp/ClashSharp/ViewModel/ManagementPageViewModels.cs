@@ -12,6 +12,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -379,6 +380,8 @@ internal sealed class LinksViewModel : ObservableObject
 /// </remarks>
 internal sealed class LogsViewModel : ObservableObject
 {
+    private const int VisibleLogLimit = 1000;
+
     /// <summary>Localization resolver used by visible labels.</summary>
     private readonly Func<string, string> _getString;
 
@@ -391,7 +394,13 @@ internal sealed class LogsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="RecentLogs"/>.</summary>
     private IReadOnlyList<LogRecord> _recentLogs = [];
 
-    private string? _sourceFilter;
+    private IReadOnlyList<string> _categoryFilterOptions = [];
+
+    private string _selectedLevelFilter;
+
+    private string _selectedCategoryFilter;
+
+    private string _searchText = string.Empty;
 
     /// <summary>Initializes a logs view model.</summary>
     /// <param name="getString">Localization resolver. Must not be null.</param>
@@ -401,18 +410,20 @@ internal sealed class LogsViewModel : ObservableObject
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));
+        _selectedLevelFilter = AllLevelsText;
+        _selectedCategoryFilter = AllCategoriesText;
         RefreshLogs();
     }
 
     /// <summary>Gets the page title text.</summary>
     /// <value>Localized page title.</value>
-    public string PageTitleText => StringComparer.Ordinal.Equals(_sourceFilter, "Trigger")
+    public string PageTitleText => StringComparer.Ordinal.Equals(EffectiveCategoryFilter, "Trigger")
         ? _getString("Triggers.Logs.Title")
         : _getString("Nav.Logs");
 
     /// <summary>Gets the page description text.</summary>
     /// <value>Localized page description.</value>
-    public string DescriptionText => StringComparer.Ordinal.Equals(_sourceFilter, "Trigger")
+    public string DescriptionText => StringComparer.Ordinal.Equals(EffectiveCategoryFilter, "Trigger")
         ? _getString("Triggers.Logs.Description")
         : _getString("Page.Logs.Description");
 
@@ -423,6 +434,66 @@ internal sealed class LogsViewModel : ObservableObject
     /// <summary>Gets the cleanup command label.</summary>
     /// <value>Localized command label.</value>
     public string CleanupText => _getString("Command.Cleanup");
+
+    public string RefreshText => _getString("Command.Refresh");
+
+    public string SearchPlaceholderText => _getString("Logs.Filter.SearchPlaceholder");
+
+    public string LevelFilterLabelText => _getString("Logs.Filter.Level");
+
+    public string CategoryFilterLabelText => _getString("Logs.Filter.Category");
+
+    public string TimeColumnText => _getString("Logs.Column.Time");
+
+    public string LevelColumnText => _getString("Logs.Column.Level");
+
+    public string CategoryColumnText => _getString("Logs.Column.Category");
+
+    public string ContentColumnText => _getString("Logs.Column.Content");
+
+    public string EmptyText => _getString("Logs.Empty");
+
+    public string SearchText
+    {
+        get => _searchText;
+        set => ApplySearchText(value);
+    }
+
+    public IReadOnlyList<string> LevelFilterOptions => [AllLevelsText, "Info", "Warning", "Error"];
+
+    public IReadOnlyList<string> CategoryFilterOptions
+    {
+        get => _categoryFilterOptions;
+        private set => SetProperty(ref _categoryFilterOptions, value);
+    }
+
+    public string SelectedLevelFilter
+    {
+        get => _selectedLevelFilter;
+        set
+        {
+            string normalized = string.IsNullOrWhiteSpace(value) ? AllLevelsText : value.Trim();
+            if (SetProperty(ref _selectedLevelFilter, normalized))
+            {
+                RefreshLogs();
+            }
+        }
+    }
+
+    public string SelectedCategoryFilter
+    {
+        get => _selectedCategoryFilter;
+        set
+        {
+            string normalized = string.IsNullOrWhiteSpace(value) ? AllCategoriesText : value.Trim();
+            if (SetProperty(ref _selectedCategoryFilter, normalized))
+            {
+                OnPropertyChanged(nameof(PageTitleText));
+                OnPropertyChanged(nameof(DescriptionText));
+                RefreshLogs();
+            }
+        }
+    }
 
     /// <summary>Gets storage usage summary text.</summary>
     /// <value>Formatted storage summary.</value>
@@ -449,14 +520,23 @@ internal sealed class LogsViewModel : ObservableObject
             FormatByteCount(summary.DatabaseSizeBytes),
             summary.LogCount,
             summary.ConnectionCount);
-        RecentLogs = string.IsNullOrWhiteSpace(_sourceFilter)
-            ? _logStorage.GetRecentLogs(100)
-            : _logStorage.GetRecentLogs(_sourceFilter, 100);
+        RefreshCategoryFilterOptions();
+        RecentLogs = _logStorage.GetLogs(VisibleLogLimit, EffectiveCategoryFilter, EffectiveLevelFilter, _searchText);
+    }
+
+    public void ApplySearchText(string? searchText)
+    {
+        string normalized = string.IsNullOrWhiteSpace(searchText) ? string.Empty : searchText.Trim();
+        if (SetProperty(ref _searchText, normalized, nameof(SearchText)))
+        {
+            RefreshLogs();
+        }
     }
 
     public void SetSourceFilter(string? source)
     {
-        _sourceFilter = string.IsNullOrWhiteSpace(source) ? null : source.Trim();
+        string selectedCategory = string.IsNullOrWhiteSpace(source) ? AllCategoriesText : source.Trim();
+        SetProperty(ref _selectedCategoryFilter, selectedCategory, nameof(SelectedCategoryFilter));
         OnPropertyChanged(nameof(PageTitleText));
         OnPropertyChanged(nameof(DescriptionText));
         RefreshLogs();
@@ -517,5 +597,36 @@ internal sealed class LogsViewModel : ObservableObject
         }
 
         return $"{value:N2} {units[unitIndex]}";
+    }
+
+    private string AllLevelsText => _getString("Logs.Filter.AllLevels");
+
+    private string AllCategoriesText => _getString("Logs.Filter.AllCategories");
+
+    private string? EffectiveLevelFilter => StringComparer.Ordinal.Equals(SelectedLevelFilter, AllLevelsText)
+        ? null
+        : SelectedLevelFilter;
+
+    private string? EffectiveCategoryFilter => StringComparer.Ordinal.Equals(SelectedCategoryFilter, AllCategoriesText)
+        ? null
+        : SelectedCategoryFilter;
+
+    private void RefreshCategoryFilterOptions()
+    {
+        List<string> options = [AllCategoriesText];
+        foreach (string source in _logStorage.GetLogSources())
+        {
+            if (!options.Contains(source, StringComparer.Ordinal))
+            {
+                options.Add(source);
+            }
+        }
+
+        if (EffectiveCategoryFilter is string selectedSource && !options.Contains(selectedSource, StringComparer.Ordinal))
+        {
+            options.Add(selectedSource);
+        }
+
+        CategoryFilterOptions = options;
     }
 }

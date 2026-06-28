@@ -177,6 +177,9 @@ public sealed class AppSettingsService
         _localSettings = TryResolveLocalSettings();
     }
 
+    /// <summary>Raised after one persisted setting value is changed or removed.</summary>
+    public event EventHandler<AppSettingChangedEventArgs>? SettingChanged;
+
     /// <summary>Gets or sets the user-selected display language.</summary>
     /// <value>Selected <see cref="AppLanguage"/> value; defaults to <see cref="AppLanguage.AutoDetect"/>.</value>
     public AppLanguage DisplayLanguage
@@ -627,13 +630,21 @@ public sealed class AppSettingsService
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        object? previousValue = GetValue(key);
+        if (Equals(previousValue, value))
+        {
+            return;
+        }
+
         if (_localSettings is not null)
         {
             _localSettings.Values[key] = value;
+            NotifySettingChanged(key, previousValue, value, wasRemoved: false);
             return;
         }
 
         _fallbackValues[key] = value;
+        NotifySettingChanged(key, previousValue, value, wasRemoved: false);
     }
 
     /// <summary>Removes a raw setting value from the preferred backing store.</summary>
@@ -642,12 +653,25 @@ public sealed class AppSettingsService
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        object? previousValue = GetValue(key);
+        if (previousValue is null)
+        {
+            return;
+        }
+
         if (_localSettings is not null)
         {
             _localSettings.Values.Remove(key);
         }
 
         _fallbackValues.Remove(key);
+        NotifySettingChanged(key, previousValue, null, wasRemoved: true);
+    }
+
+    /// <summary>Raises the setting change event for audit subscribers.</summary>
+    private void NotifySettingChanged(string key, object? oldValue, object? newValue, bool wasRemoved)
+    {
+        SettingChanged?.Invoke(this, new AppSettingChangedEventArgs(key, oldValue, newValue, wasRemoved));
     }
 
     /// <summary>Normalizes a user-entered HTTP/HTTPS connection test URL.</summary>
@@ -760,3 +784,10 @@ public sealed class AppSettingsService
         }
     }
 }
+
+/// <summary>Describes one persisted settings change for audit subscribers.</summary>
+/// <param name="Key">Setting storage key.</param>
+/// <param name="OldValue">Value before the write or reset.</param>
+/// <param name="NewValue">Value after the write; null when removed.</param>
+/// <param name="WasRemoved">True when the setting was reset to its default value.</param>
+public readonly record struct AppSettingChangedEventArgs(string Key, object? OldValue, object? NewValue, bool WasRemoved);

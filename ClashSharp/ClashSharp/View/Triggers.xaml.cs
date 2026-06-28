@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using ClashSharp.Components;
 using ClashSharp.Model;
@@ -26,12 +27,16 @@ namespace ClashSharp.View;
 public sealed partial class Triggers : Page
 {
     private readonly TriggersViewModel _viewModel;
+    private readonly ObservableCollection<SearchableOptionItem> _selectedActionRows = [];
     private TriggerTaskItemViewModel? _editingItem;
+    private TriggerCondition _selectedCondition = new(TriggerConditionKind.AppEntered);
+    private IReadOnlyList<TriggerTaskAction> _selectedActions = [];
 
     public Triggers()
     {
         _viewModel = new(LocalizationService.Instance.GetString, TriggerService.Instance);
         InitializeComponent();
+        SelectedTriggerActionsList.ItemsSource = _selectedActionRows;
         DataContext = _viewModel;
     }
 
@@ -131,17 +136,10 @@ public sealed partial class Triggers : Page
         TriggerEditorNameBox.Header = LocalizationService.Instance.GetString("Triggers.Name");
         TriggerEditorNameBox.Text = item?.Name ?? LocalizationService.Instance.GetString("Triggers.DefaultName");
 
-        TriggerConditionKind selectedCondition = item?.Task.Conditions.FirstOrDefault()?.Kind ?? TriggerConditionKind.AppEntered;
-        HashSet<TriggerActionKind> selectedActions = item is null
-            ? [TriggerActionKind.SendNotification]
-            : item.Task.Actions.Select(static action => action.Kind).ToHashSet();
-
-        TriggerConditionList.SearchPlaceholder = LocalizationService.Instance.GetString("Triggers.SearchConditions");
-        TriggerConditionList.AllowMultiple = false;
-        TriggerConditionList.SetOptions(BuildConditionOptions(selectedCondition));
-        TriggerActionList.SearchPlaceholder = LocalizationService.Instance.GetString("Triggers.SearchActions");
-        TriggerActionList.AllowMultiple = true;
-        TriggerActionList.SetOptions(BuildActionOptions(selectedActions));
+        SetSelectedCondition(item?.Task.Conditions.FirstOrDefault() ?? new TriggerCondition(TriggerConditionKind.AppEntered));
+        SetSelectedActions(item is null || item.Task.Actions.Count == 0
+            ? CreateDefaultActions()
+            : item.Task.Actions);
 
         TriggerListHost.Visibility = Visibility.Collapsed;
         TriggerEditorHost.Visibility = Visibility.Visible;
@@ -159,22 +157,25 @@ public sealed partial class Triggers : Page
         OpenTriggerList();
     }
 
+    private void BackToTriggerListButton_Click(object sender, RoutedEventArgs e)
+    {
+        OpenTriggerList();
+    }
+
+    private async void ChooseTriggerConditionButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ShowTriggerConditionPickerAsync();
+    }
+
+    private async void ChooseTriggerActionsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ShowTriggerActionPickerAsync();
+    }
+
     private void SaveTriggerButton_Click(object sender, RoutedEventArgs e)
     {
-        IReadOnlyList<TriggerCondition> conditions = TriggerConditionList.SelectedOptions
-            .Select(static option => option.Payload)
-            .OfType<TriggerCondition>()
-            .Take(1)
-            .ToList();
-        IReadOnlyList<TriggerTaskAction> actions = TriggerActionList.SelectedOptions
-            .Select(static option => option.Payload)
-            .OfType<TriggerTaskAction>()
-            .ToList();
-
-        conditions = conditions.Count == 0 ? [new TriggerCondition(TriggerConditionKind.AppEntered)] : conditions;
-        actions = actions.Count == 0
-            ? [new TriggerTaskAction(TriggerActionKind.SendNotification, LocalizationService.Instance.GetString("Notification.Custom.Message"))]
-            : actions;
+        IReadOnlyList<TriggerCondition> conditions = [_selectedCondition];
+        IReadOnlyList<TriggerTaskAction> actions = _selectedActions.Count == 0 ? CreateDefaultActions() : _selectedActions;
 
         if (_editingItem is TriggerTaskItemViewModel item)
         {
@@ -201,13 +202,94 @@ public sealed partial class Triggers : Page
         return _viewModel.ValidateTriggerName(name);
     }
 
-    private static TextBlock BuildSectionLabel(string key)
+    private async System.Threading.Tasks.Task ShowTriggerConditionPickerAsync()
     {
-        return new TextBlock
+        SearchableOptionList optionList = new()
         {
-            Text = LocalizationService.Instance.GetString(key),
-            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+            SearchPlaceholder = LocalizationService.Instance.GetString("Triggers.SearchConditions"),
+            AllowMultiple = false,
+            MaxListHeight = 320,
         };
+        optionList.SetOptions(BuildConditionOptions(_selectedCondition.Kind));
+
+        ContentDialog dialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("Triggers.Conditions"),
+            Content = optionList,
+            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Save"),
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        TriggerCondition? selectedCondition = optionList.SelectedOptions
+            .Select(static option => option.Payload)
+            .OfType<TriggerCondition>()
+            .FirstOrDefault();
+        if (selectedCondition is not null)
+        {
+            SetSelectedCondition(selectedCondition);
+        }
+    }
+
+    private async System.Threading.Tasks.Task ShowTriggerActionPickerAsync()
+    {
+        HashSet<TriggerActionKind> selectedKinds = _selectedActions.Select(static action => action.Kind).ToHashSet();
+        SearchableOptionList optionList = new()
+        {
+            SearchPlaceholder = LocalizationService.Instance.GetString("Triggers.SearchActions"),
+            AllowMultiple = true,
+            MaxListHeight = 380,
+        };
+        optionList.SetOptions(BuildActionOptions(selectedKinds));
+
+        ContentDialog dialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("Triggers.Actions"),
+            Content = optionList,
+            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Save"),
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        IReadOnlyList<TriggerTaskAction> selectedActions = optionList.SelectedOptions
+            .Select(static option => option.Payload)
+            .OfType<TriggerTaskAction>()
+            .ToList();
+        SetSelectedActions(selectedActions.Count == 0 ? CreateDefaultActions() : selectedActions);
+    }
+
+    private void SetSelectedCondition(TriggerCondition condition)
+    {
+        _selectedCondition = condition;
+        SelectedTriggerConditionText.Text = LocalizationService.Instance.GetString($"Triggers.Condition.{condition.Kind}");
+        SelectedTriggerConditionDescriptionText.Text = LocalizationService.Instance.GetString($"Triggers.Condition.{condition.Kind}.Description");
+    }
+
+    private void SetSelectedActions(IReadOnlyList<TriggerTaskAction> actions)
+    {
+        _selectedActions = actions.Count == 0 ? CreateDefaultActions() : actions.ToList();
+        _selectedActionRows.Clear();
+        foreach (TriggerTaskAction action in _selectedActions)
+        {
+            _selectedActionRows.Add(CreateActionOption(action.Kind, action, GetActionGlyph(action.Kind)));
+        }
+    }
+
+    private static IReadOnlyList<TriggerTaskAction> CreateDefaultActions()
+    {
+        return [new TriggerTaskAction(TriggerActionKind.SendNotification, LocalizationService.Instance.GetString("Notification.Custom.Message"))];
     }
 
     private static IReadOnlyList<SearchableOptionItem> BuildConditionOptions(TriggerConditionKind selectedKind)
@@ -228,11 +310,11 @@ public sealed partial class Triggers : Page
     {
         return
         [
-            CreateActionOption(TriggerActionKind.CloseConnections, new TriggerTaskAction(TriggerActionKind.CloseConnections), "\uE711", selectedKinds.Contains(TriggerActionKind.CloseConnections)),
-            CreateActionOption(TriggerActionKind.SetTransparentProxy, new TriggerTaskAction(TriggerActionKind.SetTransparentProxy, bool.TrueString), "\uE8A7", selectedKinds.Contains(TriggerActionKind.SetTransparentProxy)),
-            CreateActionOption(TriggerActionKind.SwitchProxyMode, new TriggerTaskAction(TriggerActionKind.SwitchProxyMode, ClashSharpMode.RuleTakeover.ToString()), "\uE8AB", selectedKinds.Contains(TriggerActionKind.SwitchProxyMode)),
-            CreateActionOption(TriggerActionKind.ExitApplication, new TriggerTaskAction(TriggerActionKind.ExitApplication), "\uE8BB", selectedKinds.Contains(TriggerActionKind.ExitApplication)),
-            CreateActionOption(TriggerActionKind.SendNotification, new TriggerTaskAction(TriggerActionKind.SendNotification, "Trigger fired"), "\uEA8F", selectedKinds.Contains(TriggerActionKind.SendNotification)),
+            CreateActionOption(TriggerActionKind.CloseConnections, new TriggerTaskAction(TriggerActionKind.CloseConnections), GetActionGlyph(TriggerActionKind.CloseConnections), selectedKinds.Contains(TriggerActionKind.CloseConnections)),
+            CreateActionOption(TriggerActionKind.SetTransparentProxy, new TriggerTaskAction(TriggerActionKind.SetTransparentProxy, bool.TrueString), GetActionGlyph(TriggerActionKind.SetTransparentProxy), selectedKinds.Contains(TriggerActionKind.SetTransparentProxy)),
+            CreateActionOption(TriggerActionKind.SwitchProxyMode, new TriggerTaskAction(TriggerActionKind.SwitchProxyMode, ClashSharpMode.RuleTakeover.ToString()), GetActionGlyph(TriggerActionKind.SwitchProxyMode), selectedKinds.Contains(TriggerActionKind.SwitchProxyMode)),
+            CreateActionOption(TriggerActionKind.ExitApplication, new TriggerTaskAction(TriggerActionKind.ExitApplication), GetActionGlyph(TriggerActionKind.ExitApplication), selectedKinds.Contains(TriggerActionKind.ExitApplication)),
+            CreateActionOption(TriggerActionKind.SendNotification, new TriggerTaskAction(TriggerActionKind.SendNotification, "Trigger fired"), GetActionGlyph(TriggerActionKind.SendNotification), selectedKinds.Contains(TriggerActionKind.SendNotification)),
         ];
     }
 
@@ -258,5 +340,17 @@ public sealed partial class Triggers : Page
             glyph,
             action,
             isChecked);
+    }
+
+    private static string GetActionGlyph(TriggerActionKind kind)
+    {
+        return kind switch
+        {
+            TriggerActionKind.CloseConnections => "\uE711",
+            TriggerActionKind.SetTransparentProxy => "\uE8A7",
+            TriggerActionKind.SwitchProxyMode => "\uE8AB",
+            TriggerActionKind.ExitApplication => "\uE8BB",
+            _ => "\uEA8F",
+        };
     }
 }

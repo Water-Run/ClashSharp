@@ -155,6 +155,35 @@ public sealed class AppSettingsServiceTests
         Assert.True(ReadShowStartupGuideOnStartup());
     }
 
+    /// <summary>Verifies settings writes expose one auditable change event and suppress no-op writes.</summary>
+    [Fact]
+    public void SettingChanged_RaisesForChangedValuesOnly()
+    {
+        ResetSettings();
+        List<AppSettingChangedEventArgs> changes = [];
+        void OnSettingChanged(object? sender, AppSettingChangedEventArgs e)
+        {
+            changes.Add(e);
+        }
+
+        AppSettingsService.Instance.SettingChanged += OnSettingChanged;
+        try
+        {
+            AppSettingsService.Instance.MixedPort = 12001;
+            AppSettingsService.Instance.MixedPort = 12001;
+        }
+        finally
+        {
+            AppSettingsService.Instance.SettingChanged -= OnSettingChanged;
+            ResetSettings();
+        }
+
+        AppSettingChangedEventArgs change = Assert.Single(changes);
+        Assert.Equal("MixedPort", change.Key);
+        Assert.Equal(12001, change.NewValue);
+        Assert.False(change.WasRemoved);
+    }
+
     /// <summary>Restores process-wide application settings before a default-value assertion.</summary>
     private static void ResetSettings()
     {

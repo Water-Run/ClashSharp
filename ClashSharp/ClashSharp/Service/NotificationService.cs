@@ -120,7 +120,14 @@ internal sealed class NotificationService
         string message = error is null
             ? string.Format(CultureInfo.CurrentCulture, messageTemplate, title, detail)
             : string.Format(CultureInfo.CurrentCulture, messageTemplate, title, detail, error);
-        _appendLog(level, "Notification", message, null);
+        _appendLog(level, "Notification", message, BuildNotificationDetail(title, detail, error));
+    }
+
+    private static string BuildNotificationDetail(string title, string message, string? error)
+    {
+        return error is null
+            ? $"Title: {title}{Environment.NewLine}Message: {message}"
+            : $"Title: {title}{Environment.NewLine}Message: {message}{Environment.NewLine}Error: {error}";
     }
 
     private string GetModeLabel(ClashSharpMode mode)

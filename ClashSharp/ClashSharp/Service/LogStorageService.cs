@@ -538,6 +538,84 @@ public sealed partial class LogStorageService
         return GetRecentLogs(limit, source.Trim());
     }
 
+    /// <summary>Returns newest log records matching optional visible-field filters.</summary>
+    /// <param name="limit">Maximum number of records to return; must be greater than zero.</param>
+    /// <param name="source">Optional exact log source/category filter.</param>
+    /// <param name="level">Optional exact log level filter.</param>
+    /// <param name="searchText">Optional text searched across level, source, message, and detail.</param>
+    /// <returns>Matching log records ordered from newest to oldest.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
+    public IReadOnlyList<LogRecord> GetLogs(int limit, string? source = null, string? level = null, string? searchText = null)
+    {
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
+        }
+
+        string? normalizedSource = NormalizeOptionalFilter(source);
+        string? normalizedLevel = NormalizeOptionalFilter(level);
+        string? normalizedSearchText = NormalizeOptionalFilter(searchText);
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            List<string> predicates = [];
+
+            if (normalizedSource is not null)
+            {
+                predicates.Add("Source = $source");
+                command.Parameters.AddWithValue("$source", normalizedSource);
+            }
+
+            if (normalizedLevel is not null)
+            {
+                predicates.Add("Level = $level");
+                command.Parameters.AddWithValue("$level", normalizedLevel);
+            }
+
+            if (normalizedSearchText is not null)
+            {
+                predicates.Add("(Level LIKE $search ESCAPE '\\' OR Source LIKE $search ESCAPE '\\' OR Message LIKE $search ESCAPE '\\' OR Detail LIKE $search ESCAPE '\\')");
+                command.Parameters.AddWithValue("$search", $"%{EscapeLikePattern(normalizedSearchText)}%");
+            }
+
+            string whereClause = predicates.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", predicates);
+            command.CommandText = "SELECT CreatedAtUnixTime, Level, Source, Message, Detail FROM Logs" + whereClause + " ORDER BY CreatedAtUnixTime DESC, Id DESC LIMIT $limit;";
+            command.Parameters.AddWithValue("$limit", limit);
+
+            return ReadLogRecords(command);
+        }
+    }
+
+    /// <summary>Returns all distinct log sources/categories ordered for filter display.</summary>
+    /// <returns>Distinct source names; never null.</returns>
+    public IReadOnlyList<string> GetLogSources()
+    {
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT DISTINCT Source FROM Logs ORDER BY Source COLLATE NOCASE ASC;";
+
+            List<string> sources = [];
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                if (!reader.IsDBNull(0))
+                {
+                    sources.Add(reader.GetString(0));
+                }
+            }
+
+            return sources;
+        }
+    }
+
     private IReadOnlyList<LogRecord> GetRecentLogs(int limit, string? source)
     {
         if (limit <= 0)
@@ -560,20 +638,42 @@ public sealed partial class LogStorageService
                 command.Parameters.AddWithValue("$source", source);
             }
 
-            using SqliteDataReader reader = command.ExecuteReader();
-            List<LogRecord> records = [];
-            while (reader.Read())
-            {
-                records.Add(new LogRecord(
-                    DateTimeOffset.FromUnixTimeSeconds(reader.GetInt64(0)),
-                    reader.GetString(1),
-                    reader.GetString(2),
-                    reader.GetString(3),
-                    reader.IsDBNull(4) ? string.Empty : reader.GetString(4)));
-            }
-
-            return records;
+            return ReadLogRecords(command);
         }
+    }
+
+    /// <summary>Reads log records from a command selecting CreatedAt, Level, Source, Message, and Detail.</summary>
+    /// <param name="command">Prepared command. Must not be null.</param>
+    /// <returns>Read-only log record list.</returns>
+    private static IReadOnlyList<LogRecord> ReadLogRecords(SqliteCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        using SqliteDataReader reader = command.ExecuteReader();
+        List<LogRecord> records = [];
+        while (reader.Read())
+        {
+            records.Add(new LogRecord(
+                DateTimeOffset.FromUnixTimeSeconds(reader.GetInt64(0)),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? string.Empty : reader.GetString(4)));
+        }
+
+        return records;
+    }
+
+    private static string? NormalizeOptionalFilter(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string EscapeLikePattern(string value)
+    {
+        return value.Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace("%", @"\%", StringComparison.Ordinal)
+            .Replace("_", @"\_", StringComparison.Ordinal);
     }
 
     /// <summary>Deletes records older than <paramref name="cutoff"/> and compacts the database.</summary>

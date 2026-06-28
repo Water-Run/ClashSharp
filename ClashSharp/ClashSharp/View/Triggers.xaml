@@ -137,7 +137,7 @@
                             <FontIcon Glyph="&#xE710;" FontSize="20" Width="28" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding AddTriggerText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                <TextBlock Text="{Binding DescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                                <TextBlock Text="{Binding AddDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                         </Grid>
                     </Button>
@@ -152,10 +152,19 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="TriggerEditorTitleText" Text="{Binding AddTriggerText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
-            </StackPanel>
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="BackToTriggerListButton" Click="BackToTriggerListButton_Click" VerticalAlignment="Top">
+                    <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                </Button>
+                <StackPanel Grid.Column="1" Spacing="4">
+                    <TextBlock x:Name="TriggerEditorTitleText" Text="{Binding AddTriggerText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                    <TextBlock Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                </StackPanel>
+            </Grid>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="14">
@@ -171,15 +180,23 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="{Binding ConditionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Text="{Binding ConditionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding ConditionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding ConditionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <Button x:Name="ChooseTriggerConditionButton" Grid.Column="1" Click="ChooseTriggerConditionButton_Click" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE8A1;" FontSize="14" />
+                            </Button>
+                        </Grid>
+                        <StackPanel Grid.Row="1" Spacing="2">
+                            <TextBlock x:Name="SelectedTriggerConditionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
+                            <TextBlock x:Name="SelectedTriggerConditionDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                         </StackPanel>
-                        <components:SearchableOptionList
-                            x:Name="TriggerConditionList"
-                            Grid.Row="1"
-                            SearchPlaceholder="{Binding ConditionSearchPlaceholderText}"
-                            MaxListHeight="280" />
                     </Grid>
 
                     <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
@@ -187,16 +204,40 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="{Binding ActionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Text="{Binding ActionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
-                        </StackPanel>
-                        <components:SearchableOptionList
-                            x:Name="TriggerActionList"
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding ActionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding ActionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <Button x:Name="ChooseTriggerActionsButton" Grid.Column="1" Click="ChooseTriggerActionsButton_Click" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE710;" FontSize="14" />
+                            </Button>
+                        </Grid>
+                        <ListView
+                            x:Name="SelectedTriggerActionsList"
                             Grid.Row="1"
-                            SearchPlaceholder="{Binding ActionSearchPlaceholderText}"
-                            AllowMultiple="True"
-                            MaxListHeight="360" />
+                            SelectionMode="None"
+                            MaxHeight="220">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="0,6" ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="{Binding Glyph}" FontSize="16" Width="24" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Grid.Column="1" Spacing="2">
+                                            <TextBlock Text="{Binding Title}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
+                                            <TextBlock Text="{Binding Description}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
                     </Grid>
                 </StackPanel>
             </ScrollViewer>

@@ -41,6 +41,33 @@ public sealed partial class Logs : Page
         _viewModel.SetSourceFilter(e.Parameter as string);
     }
 
+    private void LogSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is TextBox textBox)
+        {
+            _viewModel.ApplySearchText(textBox.Text);
+        }
+    }
+
+    private void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox { SelectedItem: string selectedLevel } comboBox && ReferenceEquals(comboBox, LevelFilterBox))
+        {
+            _viewModel.SelectedLevelFilter = selectedLevel;
+            return;
+        }
+
+        if (sender is ComboBox { SelectedItem: string selectedCategory } categoryBox && ReferenceEquals(categoryBox, CategoryFilterBox))
+        {
+            _viewModel.SelectedCategoryFilter = selectedCategory;
+        }
+    }
+
+    private void RefreshLogsButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.RefreshLogs();
+    }
+
     /// <summary>Navigates back to the previous page, falling back to statistics.</summary>
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {

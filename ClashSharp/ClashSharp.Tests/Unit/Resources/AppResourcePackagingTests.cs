@@ -1008,8 +1008,8 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("TriggersEnabledSwitch", triggerView, StringComparison.Ordinal);
         Assert.Contains("TriggerListHost", triggerView, StringComparison.Ordinal);
         Assert.Contains("TriggerEditorHost", triggerView, StringComparison.Ordinal);
-        Assert.Contains("TriggerConditionList", triggerView, StringComparison.Ordinal);
-        Assert.Contains("TriggerActionList", triggerView, StringComparison.Ordinal);
+        Assert.Contains("ChooseTriggerConditionButton", triggerView, StringComparison.Ordinal);
+        Assert.Contains("ChooseTriggerActionsButton", triggerView, StringComparison.Ordinal);
         Assert.Contains("ShowTriggerEditorForNewTask", triggerCode, StringComparison.Ordinal);
         Assert.Contains("OpenTriggerList", triggerCode, StringComparison.Ordinal);
         Assert.Contains("ValidateTriggerName", triggerCode, StringComparison.Ordinal);
@@ -1510,9 +1510,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("TriggerLog", triggerService, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", searchableComponent, StringComparison.Ordinal);
         Assert.Contains("SearchBox", searchableComponent, StringComparison.Ordinal);
-        Assert.Contains("components:SearchableOptionList", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"TriggerConditionList\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"TriggerActionList\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("SearchableOptionList", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("ShowTriggerConditionPickerAsync", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("ShowTriggerActionPickerAsync", triggerCode, StringComparison.Ordinal);
         Assert.Contains("MoveUpCommand", triggerViewModel, StringComparison.Ordinal);
         Assert.Contains("MoveDownCommand", triggerViewModel, StringComparison.Ordinal);
         Assert.Contains("CanEditTriggers", triggerView, StringComparison.Ordinal);
@@ -1532,16 +1532,18 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"TriggerListHost\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TriggerEditorHost\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"AddTriggerCardButton\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"BackToTriggerListButton\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TriggerEditorNameBox\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"TriggerConditionList\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"TriggerActionList\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SelectedTriggerConditionText\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SelectedTriggerActionsList\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ChooseTriggerConditionButton\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ChooseTriggerActionsButton\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ConditionDescriptionText}\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ActionDescriptionText}\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("SearchPlaceholder=\"{Binding ConditionSearchPlaceholderText}\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("SearchPlaceholder=\"{Binding ActionSearchPlaceholderText}\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SaveTriggerButton\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("ShowTriggerEditorForNewTask", triggerCode, StringComparison.Ordinal);
         Assert.Contains("OpenTriggerList", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("BackToTriggerListButton_Click", triggerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowTriggerNameStepAsync", triggerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowTriggerConditionStepAsync", triggerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowTriggerActionStepAsync", triggerCode, StringComparison.Ordinal);
@@ -1576,9 +1578,31 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("NotifyConnectionTestTimeout", notificationService, StringComparison.Ordinal);
         Assert.Contains("GetString(\"Notification.ProxyMode.Title\")", notificationService, StringComparison.Ordinal);
         Assert.Contains("AppendNotificationLog", notificationService, StringComparison.Ordinal);
+        Assert.Contains("BuildNotificationDetail", notificationService, StringComparison.Ordinal);
+        Assert.Contains("_appendLog(level, \"Notification\", message, BuildNotificationDetail(title, detail, error))", notificationService, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Clash# proxy mode\"", notificationService, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Clash# trigger fired\"", notificationService, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Clash# URL validation timed out\"", notificationService, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies settings changes are exposed as auditable log records through a startup subscriber.</summary>
+    [Fact]
+    public void SettingsChanges_AreAuditedThroughSettingsChangeEvents()
+    {
+        string appSettingsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.cs");
+        string auditServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsAuditLogService.cs");
+        string appCodePath = FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs");
+
+        string appSettings = File.ReadAllText(appSettingsPath);
+        string auditService = File.ReadAllText(auditServicePath);
+        string appCode = File.ReadAllText(appCodePath);
+
+        Assert.Contains("event EventHandler<AppSettingChangedEventArgs>? SettingChanged", appSettings, StringComparison.Ordinal);
+        Assert.Contains("NotifySettingChanged", appSettings, StringComparison.Ordinal);
+        Assert.Contains("AppSettingChangedEventArgs", appSettings, StringComparison.Ordinal);
+        Assert.Contains("AppSettingsAuditLogService.Instance.Start()", appCode, StringComparison.Ordinal);
+        Assert.Contains("\"Settings\"", auditService, StringComparison.Ordinal);
+        Assert.Contains("AppendLog(\"Info\", \"Settings\"", auditService, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the tray menu exposes a page-navigation submenu backed by localized labels.</summary>
@@ -1872,6 +1896,36 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"BackButton\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("BackButton_Click", logsXaml, StringComparison.Ordinal);
         Assert.Contains("Frame.CanGoBack", logsCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the logs page exposes search, filters, and complete visible log columns.</summary>
+    [Fact]
+    public void LogsXaml_ExposesSearchFiltersAndCompleteColumns()
+    {
+        string logsXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Logs.xaml");
+        string logsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Logs.xaml.cs");
+        string logsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "ManagementPageViewModels.cs");
+        string logStoragePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "LogStorageService.cs");
+
+        string logsXaml = File.ReadAllText(logsXamlPath);
+        string logsCode = File.ReadAllText(logsCodePath);
+        string logsViewModel = File.ReadAllText(logsViewModelPath);
+        string logStorage = File.ReadAllText(logStoragePath);
+
+        Assert.Contains("x:Name=\"LogSearchBox\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"LevelFilterBox\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"CategoryFilterBox\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding CreatedAtDisplay}\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Level}\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Source}\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Message}\"", logsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SummaryDisplay", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("LogSearchBox_TextChanged", logsCode, StringComparison.Ordinal);
+        Assert.Contains("ApplySearchText", logsViewModel, StringComparison.Ordinal);
+        Assert.Contains("SelectedLevelFilter", logsViewModel, StringComparison.Ordinal);
+        Assert.Contains("SelectedCategoryFilter", logsViewModel, StringComparison.Ordinal);
+        Assert.Contains("GetLogs(VisibleLogLimit", logsViewModel, StringComparison.Ordinal);
+        Assert.Contains("GetLogSources", logStorage, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies startup dialogs wait for the content frame to enter the XAML tree.</summary>

@@ -48,6 +48,7 @@ public partial class App : Application
             return;
         }
 
+        AppSettingsAuditLogService.Instance.Start();
         ApplyStartupProxyRecovery();
         _mainWindow = new MainWindow();
         _mainWindow.Activate();

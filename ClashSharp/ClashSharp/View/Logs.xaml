@@ -11,6 +11,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -36,19 +37,73 @@
             <HyperlinkButton x:Name="CleanupButton" Grid.Column="1" Content="{Binding CleanupText}" Click="CleanupButton_Click" />
         </Grid>
 
-        <ListView x:Name="RecentLogsList" ItemsSource="{Binding RecentLogs}" Grid.Row="2">
+        <Grid Grid.Row="2" Style="{StaticResource ClashCardGridStyle}" Margin="0,0,0,18" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="160" />
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox
+                x:Name="LogSearchBox"
+                PlaceholderText="{Binding SearchPlaceholderText}"
+                Text="{Binding SearchText, Mode=TwoWay}"
+                TextChanged="LogSearchBox_TextChanged"
+                VerticalAlignment="Bottom" />
+
+            <ComboBox
+                x:Name="LevelFilterBox"
+                Grid.Column="1"
+                Header="{Binding LevelFilterLabelText}"
+                ItemsSource="{Binding LevelFilterOptions}"
+                SelectedItem="{Binding SelectedLevelFilter, Mode=TwoWay}"
+                SelectionChanged="FilterBox_SelectionChanged"
+                HorizontalAlignment="Stretch" />
+
+            <ComboBox
+                x:Name="CategoryFilterBox"
+                Grid.Column="2"
+                Header="{Binding CategoryFilterLabelText}"
+                ItemsSource="{Binding CategoryFilterOptions}"
+                SelectedItem="{Binding SelectedCategoryFilter, Mode=TwoWay}"
+                SelectionChanged="FilterBox_SelectionChanged"
+                HorizontalAlignment="Stretch" />
+
+            <Button x:Name="RefreshLogsButton" Grid.Column="3" Click="RefreshLogsButton_Click" VerticalAlignment="Bottom" ToolTipService.ToolTip="{Binding RefreshText}">
+                <FontIcon Glyph="&#xE72C;" FontSize="14" />
+            </Button>
+        </Grid>
+
+        <ListView x:Name="RecentLogsList" ItemsSource="{Binding RecentLogs}" Grid.Row="3">
+            <ListView.Header>
+                <Grid Padding="4,0,4,8" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="84" />
+                        <ColumnDefinition Width="120" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding TimeColumnText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="1" Text="{Binding LevelColumnText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="2" Text="{Binding CategoryColumnText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="3" Text="{Binding ContentColumnText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </ListView.Header>
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Grid Padding="4,8" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="150" />
-                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="84" />
+                            <ColumnDefinition Width="120" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding CreatedAtDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="1" Text="{Binding Level}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <StackPanel Grid.Column="2" Spacing="2">
-                            <TextBlock Text="{Binding SummaryDisplay}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="2" Text="{Binding Source}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="3" Spacing="2">
+                            <TextBlock Text="{Binding Message}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                             <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
                     </Grid>
