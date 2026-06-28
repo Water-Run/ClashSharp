@@ -1726,6 +1726,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ITriggerRuntimeEventPublisher", applicationActionService, StringComparison.Ordinal);
         Assert.Contains("_triggerEvents.Publish(new TriggerRuntimeEvent", applicationActionService, StringComparison.Ordinal);
         Assert.DoesNotContain("TriggerService.Instance", applicationActionService, StringComparison.Ordinal);
+        Assert.DoesNotContain("NotificationService.Instance.NotifyProxyModeChanged", appCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("NotificationService.Instance.NotifyProxyModeChanged", File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs")), StringComparison.Ordinal);
+        Assert.DoesNotContain("TriggerEvaluationContextFactory.Create(TriggerEventKind.ProxyStarted)", File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs")), StringComparison.Ordinal);
         Assert.DoesNotContain("TriggerService.Instance", masterControlCode, StringComparison.Ordinal);
         Assert.DoesNotContain("NotificationService.Instance.NotifyProxyModeChanged", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("TriggerService.Instance.Start()", appCode, StringComparison.Ordinal);

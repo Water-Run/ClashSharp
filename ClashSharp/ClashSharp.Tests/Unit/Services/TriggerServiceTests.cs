@@ -15,6 +15,59 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for trigger task evaluation and runtime event dispatch.</summary>
 public sealed class TriggerServiceTests
 {
+    [Fact]
+    public void GetTasks_ReturnsDefensiveCopiesThatCannotMutateStoredTasks()
+    {
+        string storagePath = CreateTempStoragePath();
+        TriggerService service = CreateService(storagePath);
+        service.SaveTasks(
+        [
+            new TriggerTask(
+                "defensive",
+                "Original",
+                true,
+                [new TriggerCondition(TriggerConditionKind.AppEntered)],
+                [new TriggerAction(TriggerActionKind.SendNotification, "original")]),
+        ]);
+
+        TriggerTask task = Assert.Single(service.GetTasks());
+        task.Name = "Mutated";
+        task.IsEnabled = false;
+        task.Conditions = [new TriggerCondition(TriggerConditionKind.Runtime, Threshold: 60)];
+        task.Actions = [new TriggerAction(TriggerActionKind.ExitApplication)];
+        task.LastTriggeredAt = DateTimeOffset.UnixEpoch;
+
+        TriggerTask storedTask = Assert.Single(service.GetTasks());
+        Assert.Equal("Original", storedTask.Name);
+        Assert.True(storedTask.IsEnabled);
+        Assert.Equal(TriggerConditionKind.AppEntered, Assert.Single(storedTask.Conditions).Kind);
+        Assert.Equal(TriggerActionKind.SendNotification, Assert.Single(storedTask.Actions).Kind);
+        Assert.Null(storedTask.LastTriggeredAt);
+    }
+
+    [Fact]
+    public void SaveTasks_CopiesInputTasksBeforeStoring()
+    {
+        string storagePath = CreateTempStoragePath();
+        TriggerService service = CreateService(storagePath);
+        TriggerTask inputTask = new(
+            "input-copy",
+            "Input copy",
+            true,
+            [new TriggerCondition(TriggerConditionKind.AppEntered)],
+            [new TriggerAction(TriggerActionKind.SendNotification, "original")]);
+
+        service.SaveTasks([inputTask]);
+        inputTask.Name = "Mutated";
+        inputTask.IsEnabled = false;
+        inputTask.Actions = [new TriggerAction(TriggerActionKind.ExitApplication)];
+
+        TriggerTask storedTask = Assert.Single(service.GetTasks());
+        Assert.Equal("Input copy", storedTask.Name);
+        Assert.True(storedTask.IsEnabled);
+        Assert.Equal([TriggerActionKind.SendNotification], storedTask.Actions.Select(static action => action.Kind));
+    }
+
     /// <summary>Verifies runtime events raised during an active evaluation are queued instead of dropped.</summary>
     [Fact]
     public async Task RuntimeEvents_WhenEvaluationIsActive_AreQueuedAndEvaluated()

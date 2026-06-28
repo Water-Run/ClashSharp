@@ -270,13 +270,7 @@ public sealed partial class MainWindow : Window
             NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyMode(startupMode);
             settings.CurrentMode = result.Mode;
             LogStorageService.Instance.AppendLog("Info", "Startup", result.Message, null);
-            NotificationService.Instance.NotifyProxyModeChanged(result.Mode);
-            if (result.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
-            {
-                await TriggerService.Instance.EvaluateAsync(
-                    TriggerEvaluationContextFactory.Create(TriggerEventKind.ProxyStarted),
-                    System.Threading.CancellationToken.None);
-            }
+            await ApplicationActionService.Instance.PublishProxyModeAppliedAsync(result.Mode, System.Threading.CancellationToken.None);
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.IO.FileNotFoundException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
@@ -429,13 +423,7 @@ public sealed partial class MainWindow : Window
 
     private static async Task NotifyAndTriggerModeAppliedAsync(ClashSharpMode mode)
     {
-        NotificationService.Instance.NotifyProxyModeChanged(mode);
-        if (mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
-        {
-            await TriggerService.Instance.EvaluateAsync(
-                TriggerEvaluationContextFactory.Create(TriggerEventKind.ProxyStarted),
-                System.Threading.CancellationToken.None);
-        }
+        await ApplicationActionService.Instance.PublishProxyModeAppliedAsync(mode, System.Threading.CancellationToken.None);
     }
 
     /// <summary>Requests safe exit from the tray without showing the close confirmation prompt.</summary>

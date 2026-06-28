@@ -138,7 +138,7 @@ internal sealed class TriggerService
     {
         lock (_syncLock)
         {
-            return [.. _tasks];
+            return _tasks.Select(CloneTask).ToList();
         }
     }
 
@@ -147,7 +147,7 @@ internal sealed class TriggerService
         ArgumentNullException.ThrowIfNull(tasks);
         lock (_syncLock)
         {
-            _tasks = [.. tasks];
+            _tasks = tasks.Select(CloneTask).ToList();
             Save();
         }
 
@@ -159,7 +159,7 @@ internal sealed class TriggerService
         ArgumentNullException.ThrowIfNull(task);
         lock (_syncLock)
         {
-            _tasks.Add(task);
+            _tasks.Add(CloneTask(task));
             Save();
         }
 
@@ -269,7 +269,7 @@ internal sealed class TriggerService
             }
 
             task.LastTriggeredAt = triggeredAt;
-            results.Add(new TriggerExecutionResult(task.Id, task.Name, triggeredAt, task.Actions));
+            results.Add(new TriggerExecutionResult(task.Id, task.Name, triggeredAt, task.Actions.ToArray()));
             _appendLog(
                 "Info",
                 TriggerLog,
@@ -291,16 +291,28 @@ internal sealed class TriggerService
 
         if (results.Count > 0)
         {
-            PersistCurrentTasks();
+            PersistTriggeredAt(results);
         }
 
         return results;
     }
 
-    private void PersistCurrentTasks()
+    private void PersistTriggeredAt(IReadOnlyList<TriggerExecutionResult> results)
     {
+        Dictionary<string, DateTimeOffset> triggeredAtByTaskId = results.ToDictionary(
+            static result => result.TaskId,
+            static result => result.TriggeredAt,
+            StringComparer.Ordinal);
         lock (_syncLock)
         {
+            foreach (TriggerTask task in _tasks)
+            {
+                if (triggeredAtByTaskId.TryGetValue(task.Id, out DateTimeOffset triggeredAt))
+                {
+                    task.LastTriggeredAt = triggeredAt;
+                }
+            }
+
             Save();
         }
     }
@@ -547,12 +559,12 @@ internal sealed class TriggerService
             string json = File.ReadAllText(_storagePath);
             if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
             {
-                _tasks = JsonSerializer.Deserialize<List<TriggerTask>>(json) ?? [];
+                _tasks = (JsonSerializer.Deserialize<List<TriggerTask>>(json) ?? []).Select(CloneTask).ToList();
                 return;
             }
 
             TriggerStoreDocument? document = JsonSerializer.Deserialize<TriggerStoreDocument>(json);
-            _tasks = document?.Tasks is null ? [] : [.. document.Tasks];
+            _tasks = document?.Tasks is null ? [] : document.Tasks.Select(CloneTask).ToList();
         }
     }
 
@@ -569,4 +581,17 @@ internal sealed class TriggerService
     }
 
     private sealed record TriggerStoreDocument(IReadOnlyList<TriggerTask> Tasks);
+
+    private static TriggerTask CloneTask(TriggerTask task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        return new TriggerTask(
+            task.Id,
+            task.Name,
+            task.IsEnabled,
+            task.Conditions.ToArray(),
+            task.Actions.ToArray(),
+            task.LastTriggeredAt);
+    }
 }
