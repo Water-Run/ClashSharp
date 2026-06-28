@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddWindowsService(options => options.ServiceName = "Clash# Mihomo Service");
+builder.Services.AddWindowsService(options => options.ServiceName = "ClashSharpMihomo");
 builder.Services.AddSingleton(MihomoServiceOptions.Parse(args));
 builder.Services.AddHostedService<MihomoWorker>();
 

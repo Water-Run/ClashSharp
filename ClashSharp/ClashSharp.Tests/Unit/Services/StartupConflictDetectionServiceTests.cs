@@ -52,6 +52,22 @@ public sealed class StartupConflictDetectionServiceTests
         Assert.Empty(issues);
     }
 
+    /// <summary>Verifies loopback and target port must belong to the same endpoint before treating a proxy as Clash# owned.</summary>
+    [Fact]
+    public void CheckConflicts_WhenLoopbackAndTargetPortAreOnDifferentEndpoints_ReportsWrongManualProxy()
+    {
+        FakeStartupConflictEnvironment environment = new()
+        {
+            ProxyState = new WindowsProxyState(true, "http=127.0.0.1:18080;https=corp-proxy:10000"),
+        };
+        StartupConflictDetectionService service = new(environment);
+
+        IReadOnlyList<StartupConflictIssue> issues = service.CheckConflicts(10000);
+
+        StartupConflictIssue issue = Assert.Single(issues);
+        Assert.Equal(StartupConflictKind.WindowsProxyWrongPort, issue.Kind);
+    }
+
     /// <summary>Verifies per-issue repair actions update host state and report success or failure.</summary>
     [Fact]
     public async Task RepairAsync_PerIssueActionReportsStatus()

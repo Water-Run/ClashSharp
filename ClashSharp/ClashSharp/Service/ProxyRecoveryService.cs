@@ -75,7 +75,7 @@ public sealed partial class ProxyRecoveryService
             return false;
         }
 
-        return ContainsLoopbackHost(state.ProxyServer) && state.ProxyServer.Contains($":{mixedPort}", StringComparison.OrdinalIgnoreCase);
+        return WindowsProxyEndpointMatcher.ContainsLoopbackEndpointWithPort(state.ProxyServer, mixedPort);
     }
 
     /// <summary>Disables stale Clash# Windows proxy state when detected at startup.</summary>
@@ -112,21 +112,50 @@ public sealed partial class ProxyRecoveryService
         return $"127.0.0.1:{mixedPort}";
     }
 
-    /// <summary>Determines whether <paramref name="proxyServer"/> contains a loopback host token.</summary>
-    /// <param name="proxyServer">Windows proxy server string. Must not be null.</param>
-    /// <returns>True when a loopback host token is present; otherwise false.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="proxyServer"/> is null.</exception>
-    private static bool ContainsLoopbackHost(string proxyServer)
-    {
-        ArgumentNullException.ThrowIfNull(proxyServer);
-
-        return proxyServer.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase)
-            || proxyServer.Contains("localhost", StringComparison.OrdinalIgnoreCase)
-            || proxyServer.Contains("[::1]", StringComparison.OrdinalIgnoreCase);
-    }
-
     private string GetString(string key)
     {
         return _getString(key);
+    }
+}
+
+/// <summary>Parses Windows manual proxy endpoint strings for loopback port ownership checks.</summary>
+internal static class WindowsProxyEndpointMatcher
+{
+    public static bool ContainsLoopbackEndpointWithPort(string proxyServer, int port)
+    {
+        ArgumentNullException.ThrowIfNull(proxyServer);
+
+        foreach (string token in proxyServer.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string endpoint = ExtractEndpoint(token);
+            if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? absoluteUri)
+                && IsLoopbackHost(absoluteUri.Host)
+                && absoluteUri.Port == port)
+            {
+                return true;
+            }
+
+            if (Uri.TryCreate("http://" + endpoint, UriKind.Absolute, out Uri? impliedUri)
+                && IsLoopbackHost(impliedUri.Host)
+                && impliedUri.Port == port)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string ExtractEndpoint(string token)
+    {
+        int equalsIndex = token.IndexOf('=', StringComparison.Ordinal);
+        return equalsIndex >= 0 ? token[(equalsIndex + 1)..].Trim() : token.Trim();
+    }
+
+    private static bool IsLoopbackHost(string host)
+    {
+        return string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(host, "::1", StringComparison.OrdinalIgnoreCase);
     }
 }

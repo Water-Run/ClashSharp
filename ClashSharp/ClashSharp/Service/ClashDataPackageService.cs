@@ -180,21 +180,120 @@ internal sealed partial class ClashDataPackageService
 
         XDocument document = XDocument.Load(packagePath);
         XElement root = ValidatePackageRoot(document);
-        ImportSettings(root.Element("Settings"));
+        IReadOnlyList<ImportFilePayload> files = BuildImportFilePayloads(root.Element("Files"), cancellationToken);
+        ValidateSettings(root.Element("Settings"));
 
-        foreach (XElement fileElement in root.Element("Files")?.Elements("File") ?? [])
+        await WriteImportFilesAsync(files, cancellationToken);
+        ImportSettings(root.Element("Settings"));
+    }
+
+    private IReadOnlyList<ImportFilePayload> BuildImportFilePayloads(XElement? filesElement, CancellationToken cancellationToken)
+    {
+        List<ImportFilePayload> files = [];
+        foreach (XElement fileElement in filesElement?.Elements("File") ?? [])
         {
             cancellationToken.ThrowIfCancellationRequested();
             string relativePath = fileElement.Attribute("Path")?.Value ?? string.Empty;
             string targetPath = ResolveImportFilePath(relativePath);
-            string? targetDirectory = Path.GetDirectoryName(targetPath);
-            if (!string.IsNullOrEmpty(targetDirectory))
+            byte[] content = Convert.FromBase64String(fileElement.Value);
+            files.Add(new ImportFilePayload(targetPath, content));
+        }
+
+        return files;
+    }
+
+    private async Task WriteImportFilesAsync(IReadOnlyList<ImportFilePayload> files, CancellationToken cancellationToken)
+    {
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        string stagingDirectory = Path.Combine(_localDataDirectory, $".import-{Guid.NewGuid():N}");
+        List<StagedImportFile> stagedFiles = [];
+        List<ImportFileBackup> backups = [];
+
+        try
+        {
+            Directory.CreateDirectory(stagingDirectory);
+            foreach (ImportFilePayload file in files)
             {
-                Directory.CreateDirectory(targetDirectory);
+                cancellationToken.ThrowIfCancellationRequested();
+                string stagedPath = Path.Combine(stagingDirectory, Guid.NewGuid().ToString("N"));
+                await File.WriteAllBytesAsync(stagedPath, file.Content, cancellationToken);
+                stagedFiles.Add(new StagedImportFile(file.TargetPath, stagedPath));
             }
 
-            byte[] content = Convert.FromBase64String(fileElement.Value);
-            await File.WriteAllBytesAsync(targetPath, content, cancellationToken);
+            foreach (StagedImportFile file in stagedFiles)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string? targetDirectory = Path.GetDirectoryName(file.TargetPath);
+                if (!string.IsNullOrEmpty(targetDirectory))
+                {
+                    Directory.CreateDirectory(targetDirectory);
+                }
+
+                string? backupPath = null;
+                if (File.Exists(file.TargetPath))
+                {
+                    backupPath = Path.Combine(stagingDirectory, Guid.NewGuid().ToString("N") + ".bak");
+                    File.Move(file.TargetPath, backupPath, overwrite: true);
+                }
+
+                backups.Add(new ImportFileBackup(file.TargetPath, backupPath));
+                File.Move(file.StagedPath, file.TargetPath, overwrite: true);
+            }
+        }
+        catch
+        {
+            RestoreBackups(backups);
+            throw;
+        }
+        finally
+        {
+            TryDeleteDirectory(stagingDirectory);
+        }
+    }
+
+    private static void RestoreBackups(IEnumerable<ImportFileBackup> backups)
+    {
+        foreach (ImportFileBackup backup in backups.Reverse())
+        {
+            try
+            {
+                if (File.Exists(backup.TargetPath))
+                {
+                    File.Delete(backup.TargetPath);
+                }
+
+                if (backup.BackupPath is not null && File.Exists(backup.BackupPath))
+                {
+                    File.Move(backup.BackupPath, backup.TargetPath, overwrite: true);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static void TryDeleteDirectory(string directoryPath)
+    {
+        try
+        {
+            if (Directory.Exists(directoryPath))
+            {
+                Directory.Delete(directoryPath, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
@@ -289,6 +388,30 @@ internal sealed partial class ClashDataPackageService
         }
     }
 
+    private void ValidateSettings(XElement? settingsElement)
+    {
+        if (settingsElement is null)
+        {
+            return;
+        }
+
+        Dictionary<string, string> values = settingsElement
+            .Elements("Setting")
+            .Where(element => element.Attribute("Name") is not null)
+            .ToDictionary(
+                element => element.Attribute("Name")!.Value,
+                element => element.Attribute("Value")?.Value ?? string.Empty,
+                StringComparer.Ordinal);
+
+        foreach (SettingDescriptor descriptor in SettingDescriptors)
+        {
+            if (values.TryGetValue(descriptor.Name, out string? value))
+            {
+                descriptor.Validate(value);
+            }
+        }
+    }
+
     private XElement ValidatePackageRoot(XDocument document)
     {
         XElement root = document.Root
@@ -337,7 +460,7 @@ internal sealed partial class ClashDataPackageService
 
     private static SettingDescriptor StringSetting(string name, Func<IClashDataPackageSettings, string> read, Action<IClashDataPackageSettings, string> write)
     {
-        return new SettingDescriptor(name, read, write);
+        return new SettingDescriptor(name, read, write, _ => { });
     }
 
     private static SettingDescriptor BoolSetting(string name, Func<IClashDataPackageSettings, bool> read, Action<IClashDataPackageSettings, bool> write)
@@ -345,7 +468,8 @@ internal sealed partial class ClashDataPackageService
         return new SettingDescriptor(
             name,
             settings => read(settings).ToString(CultureInfo.InvariantCulture),
-            (settings, value) => write(settings, bool.Parse(value)));
+            (settings, value) => write(settings, bool.Parse(value)),
+            value => _ = bool.Parse(value));
     }
 
     private static SettingDescriptor IntSetting(string name, Func<IClashDataPackageSettings, int> read, Action<IClashDataPackageSettings, int> write)
@@ -353,7 +477,8 @@ internal sealed partial class ClashDataPackageService
         return new SettingDescriptor(
             name,
             settings => read(settings).ToString(CultureInfo.InvariantCulture),
-            (settings, value) => write(settings, int.Parse(value, CultureInfo.InvariantCulture)));
+            (settings, value) => write(settings, int.Parse(value, CultureInfo.InvariantCulture)),
+            value => _ = int.Parse(value, CultureInfo.InvariantCulture));
     }
 
     private static SettingDescriptor EnumSetting<TEnum>(string name, Func<IClashDataPackageSettings, TEnum> read, Action<IClashDataPackageSettings, TEnum> write)
@@ -362,11 +487,19 @@ internal sealed partial class ClashDataPackageService
         return new SettingDescriptor(
             name,
             settings => read(settings).ToString(),
-            (settings, value) => write(settings, Enum.Parse<TEnum>(value)));
+            (settings, value) => write(settings, Enum.Parse<TEnum>(value)),
+            value => _ = Enum.Parse<TEnum>(value));
     }
 
     private readonly record struct SettingDescriptor(
         string Name,
         Func<IClashDataPackageSettings, string> Read,
-        Action<IClashDataPackageSettings, string> Write);
+        Action<IClashDataPackageSettings, string> Write,
+        Action<string> Validate);
+
+    private readonly record struct ImportFilePayload(string TargetPath, byte[] Content);
+
+    private readonly record struct StagedImportFile(string TargetPath, string StagedPath);
+
+    private readonly record struct ImportFileBackup(string TargetPath, string? BackupPath);
 }

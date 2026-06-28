@@ -125,6 +125,43 @@ public sealed class ClashDataPackageServiceTests
             () => service.ImportAsync(packagePath, CancellationToken.None));
     }
 
+    /// <summary>Verifies import validates the whole package before applying settings or writing files.</summary>
+    [Fact]
+    public async Task ImportAsync_WhenFilePayloadIsInvalid_DoesNotApplyPartialSettingsOrFiles()
+    {
+        using TemporaryDirectory directory = new();
+        string packagePath = Path.Combine(directory.Path, "invalid-payload.xml");
+        XDocument document = new(
+            new XElement("ClashSharpDataPackage",
+                new XAttribute("Format", "ClashSharp.XmlDataPackage"),
+                new XAttribute("Version", "1"),
+                new XAttribute("Scope", ClashDataPackageScope.SettingsAndProxyConfiguration.ToString()),
+                new XElement("Settings",
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.DisplayLanguage)),
+                        new XAttribute("Value", AppLanguage.French.ToString())),
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.MixedPort)),
+                        new XAttribute("Value", "12002"))),
+                new XElement("Files",
+                    new XElement("File",
+                        new XAttribute("Path", "mihomo/config.yaml"),
+                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("config"))),
+                    new XElement("File",
+                        new XAttribute("Path", "mihomo/bad.yaml"),
+                        "not-base64"))));
+        await File.WriteAllTextAsync(packagePath, document.ToString(SaveOptions.DisableFormatting));
+        FakeClashDataPackageSettings settings = new();
+        ClashDataPackageService service = new(settings, directory.Path);
+
+        await Assert.ThrowsAsync<FormatException>(
+            () => service.ImportAsync(packagePath, CancellationToken.None));
+
+        Assert.Equal(AppLanguage.AutoDetect, settings.DisplayLanguage);
+        Assert.Equal(10000, settings.MixedPort);
+        Assert.False(File.Exists(Path.Combine(directory.Path, "mihomo", "config.yaml")));
+    }
+
     private static XElement AssertRoot(XDocument document, ClashDataPackageScope scope)
     {
         XElement root = Assert.IsType<XElement>(document.Root);

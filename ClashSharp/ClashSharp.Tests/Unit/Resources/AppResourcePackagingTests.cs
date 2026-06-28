@@ -659,6 +659,18 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies the Windows service host registers with the SCM service name, not the display name.</summary>
+    [Fact]
+    public void MihomoServiceHost_UsesScmServiceName()
+    {
+        string hostPath = FindSourceFile("ClashSharp", "ClashSharp.MihomoService", "Program.cs");
+
+        string hostCode = File.ReadAllText(hostPath);
+
+        Assert.Contains("ServiceName = \"ClashSharpMihomo\"", hostCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ServiceName = \"Clash# Mihomo Service\"", hostCode, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies stale proxy recovery result messages use localization keys.</summary>
     [Fact]
     public void ProxyRecoveryService_UsesLocalizedResultMessages()

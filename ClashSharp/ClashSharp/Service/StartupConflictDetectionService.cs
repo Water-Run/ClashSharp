@@ -175,9 +175,7 @@ internal sealed class StartupConflictDetectionService
 
     private static bool ProxyUsesTargetPort(string proxyServer, int mixedPort)
     {
-        return proxyServer.Contains($":{mixedPort}", StringComparison.OrdinalIgnoreCase)
-            && (proxyServer.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase)
-                || proxyServer.Contains("localhost", StringComparison.OrdinalIgnoreCase));
+        return WindowsProxyEndpointMatcher.ContainsLoopbackEndpointWithPort(proxyServer, mixedPort);
     }
 
 }

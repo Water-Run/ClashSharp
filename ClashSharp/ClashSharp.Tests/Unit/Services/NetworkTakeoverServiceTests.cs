@@ -49,6 +49,39 @@ public sealed class NetworkTakeoverServiceTests
         Assert.Empty(windowsProxy.EnabledServers);
     }
 
+    /// <summary>Verifies a stopped transparent proxy service falls back to system proxy.</summary>
+    [Fact]
+    public void ApplyMode_WhenTransparentProxyServiceInstalledButStopped_FallsBackToSystemProxy()
+    {
+        FakeNetworkTakeoverSettings settings = new()
+        {
+            TransparentProxyEnabled = true,
+            MixedPort = 10002,
+        };
+        FakeNetworkTakeoverCoreConfiguration configuration = new();
+        FakeNetworkTakeoverCore core = new();
+        FakeNetworkTakeoverWindowsProxy windowsProxy = new();
+        FakeNetworkTakeoverMihomoService serviceStatus = new(new MihomoServiceStatus(true, false, "Stopped"));
+        NetworkTakeoverService service = CreateService(
+            settings,
+            configuration,
+            core,
+            windowsProxy,
+            serviceStatus);
+
+        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.FullTakeover);
+
+        Assert.Equal(ClashSharpMode.FullTakeover, result.Mode);
+        Assert.True(result.CoreRunning);
+        Assert.True(result.SystemProxyEnabled);
+        Assert.False(result.TransparentProxyEnabled);
+        Assert.Equal("missing full", result.Message);
+        Assert.Equal([new ConfigurationRequest(ClashSharpMode.FullTakeover, false)], configuration.Requests);
+        Assert.Equal([configuration.State], core.RestartedStates);
+        Assert.Equal(["127.0.0.1:10002"], windowsProxy.EnabledServers);
+        Assert.Equal(0, windowsProxy.DisableCount);
+    }
+
     /// <summary>Verifies missing transparent proxy service falls back to system proxy without clearing the preference.</summary>
     [Fact]
     public void ApplyMode_WhenTransparentProxyEnabledButServiceMissing_FallsBackToSystemProxyWithoutClearingPreference()

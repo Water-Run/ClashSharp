@@ -181,7 +181,7 @@ public sealed partial class NetworkTakeoverService
         }
 
         MihomoServiceStatus serviceStatus = _mihomoService.GetStatus();
-        if (!serviceStatus.IsInstalled)
+        if (!serviceStatus.IsInstalled || !serviceStatus.IsRunning)
         {
             return ApplySystemProxyTakeoverMode(mode, BuildTransparentProxyServiceMissingMessage(mode));
         }

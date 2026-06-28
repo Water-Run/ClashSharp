@@ -55,6 +55,18 @@ public sealed class ProxyRecoveryServiceTests
         Assert.Equal(1, windowsProxy.DisableCount);
     }
 
+    /// <summary>Verifies loopback and target port must belong to the same proxy endpoint.</summary>
+    [Fact]
+    public void IsStaleClashProxy_WhenLoopbackAndTargetPortAreOnDifferentEndpoints_ReturnsFalse()
+    {
+        ProxyRecoveryService service = CreateService();
+        WindowsProxyState state = new(true, "http=127.0.0.1:18080;https=corp-proxy:19090");
+
+        bool isStale = service.IsStaleClashProxy(state, 19090);
+
+        Assert.False(isStale);
+    }
+
     private static ProxyRecoveryService CreateService(
         FakeProxyRecoverySettings? settings = null,
         FakeProxyRecoveryWindowsProxy? windowsProxy = null)
