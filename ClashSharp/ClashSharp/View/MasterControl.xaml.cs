@@ -158,11 +158,9 @@ public sealed partial class MasterControl : Page
     /// <summary>Shows the startup prompt dialog from a functional tile.</summary>
     private async Task ShowStartupPromptDialogAsync()
     {
-        StartupGuideDialog dialog = new()
-        {
-            XamlRoot = GetDialogXamlRoot(),
-        };
-        await dialog.ShowAsync();
+        XamlRoot xamlRoot = GetDialogXamlRoot();
+        StartupGuideDialog dialog = new();
+        await dialog.ShowCenteredAsync(xamlRoot);
     }
 
     /// <summary>Runs startup conflict detection and shows the shared result dialog.</summary>

@@ -137,15 +137,12 @@ public sealed partial class Settings : Page
     /// <summary>Shows the connection test result.</summary>
     private async Task ShowConnectionTestResultAsync(ConnectionTestReport report)
     {
-        ContentDialog dialog = new()
-        {
-            Title = _viewModel.ConnectionTestUrlTitleText,
-            Content = BuildConnectionTestResultPanel(report),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        await dialog.ShowAsync();
+        await CenteredDialogOverlay.ShowAsync(
+            GetDialogXamlRoot(),
+            _viewModel.ConnectionTestUrlTitleText,
+            BuildConnectionTestResultPanel(report),
+            LocalizationService.Instance.GetString("Command.Close"),
+            720);
     }
 
     private StackPanel BuildConnectionTestResultPanel(ConnectionTestReport report)
@@ -583,11 +580,9 @@ public sealed partial class Settings : Page
     /// <summary>Shows the startup prompt immediately.</summary>
     private async void ShowStartupPromptButton_Click(object sender, RoutedEventArgs e)
     {
-        StartupGuideDialog dialog = new()
-        {
-            XamlRoot = GetDialogXamlRoot(),
-        };
-        await dialog.ShowAsync();
+        XamlRoot xamlRoot = GetDialogXamlRoot();
+        StartupGuideDialog dialog = new();
+        await dialog.ShowCenteredAsync(xamlRoot);
     }
 
     /// <summary>Registers the startup restore fallback helper.</summary>

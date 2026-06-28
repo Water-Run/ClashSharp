@@ -320,11 +320,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        StartupGuideDialog dialog = new()
-        {
-            XamlRoot = xamlRoot,
-        };
-        await dialog.ShowAsync();
+        StartupGuideDialog dialog = new();
+        await dialog.ShowCenteredAsync(xamlRoot);
     }
 
     /// <summary>Returns the top-level XAML root so dialogs are centered in the whole app window.</summary>

@@ -49,6 +49,14 @@ internal sealed class TriggersViewModel : ObservableObject
 
     public string AddDescriptionText => _getString("Triggers.Add.Description");
 
+    public string ConditionDescriptionText => _getString("Triggers.Condition.Description");
+
+    public string ActionDescriptionText => _getString("Triggers.Action.Description");
+
+    public string ConditionSearchPlaceholderText => _getString("Triggers.Condition.SearchPlaceholder");
+
+    public string ActionSearchPlaceholderText => _getString("Triggers.Action.SearchPlaceholder");
+
     public string NameText => _getString("Triggers.Name");
 
     public string OpenTriggerLogsText => _getString("Triggers.OpenLogs");

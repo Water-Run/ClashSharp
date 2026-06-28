@@ -25,6 +25,8 @@ namespace ClashSharp.View;
 /// </remarks>
 internal static class StartupConflictDialogPresenter
 {
+    private const double DialogWidth = 420;
+
     /// <summary>Shows the startup conflict dialog for the supplied issue snapshot.</summary>
     /// <param name="xamlRoot">XAML root used to host the dialog. Must not be null.</param>
     /// <param name="issues">Detected conflict issues. Must not be null.</param>
@@ -35,20 +37,12 @@ internal static class StartupConflictDialogPresenter
         ArgumentNullException.ThrowIfNull(xamlRoot);
         ArgumentNullException.ThrowIfNull(issues);
 
-        ContentDialog dialog = new()
-        {
-            Title = LocalizationService.Instance.GetString("StartupConflict.Dialog.Title"),
-            Content = BuildContent(issues, xamlRoot),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
-            Width = 420,
-            MinWidth = 0,
-            MaxWidth = 420,
-            XamlRoot = xamlRoot,
-        };
-        dialog.Resources["ContentDialogMinWidth"] = 360d;
-        dialog.Resources["ContentDialogMaxWidth"] = 420d;
-
-        await dialog.ShowAsync();
+        await CenteredDialogOverlay.ShowAsync(
+            xamlRoot,
+            LocalizationService.Instance.GetString("StartupConflict.Dialog.Title"),
+            BuildContent(issues, xamlRoot),
+            LocalizationService.Instance.GetString("Command.Close"),
+            DialogWidth);
     }
 
     /// <summary>Builds dialog content for either an empty result or a list of repairable issues.</summary>

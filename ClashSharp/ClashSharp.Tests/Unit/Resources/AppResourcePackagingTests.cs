@@ -544,6 +544,8 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("new HttpClient", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpResponseMessage", settingsCode, StringComparison.Ordinal);
         Assert.Contains("RunConnectionTestAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("BuildConnectionTestResultPanel(report)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("CenteredDialogOverlay.ShowAsync", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings code-behind delegates data-maintenance actions to the view model.</summary>
@@ -1088,10 +1090,14 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("x:Class=\"ClashSharp.Components.StartupGuideDialog\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("public sealed partial class StartupGuideDialog : ContentDialog", dialogCode, StringComparison.Ordinal);
-        Assert.Contains("Width=\"520\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("private const double DialogWidth = 520", dialogCode, StringComparison.Ordinal);
+        Assert.Contains("ShowCenteredAsync", dialogCode, StringComparison.Ordinal);
+        Assert.Contains("CenteredDialogOverlay.ShowAsync", dialogCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Width=\"520\"", dialogXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("MaxWidth=\"520\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("MinWidth=\"0\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("MinWidth=\"360\"", dialogXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth=\"520\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">520</x:Double>", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("MaxWidth=\"480\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMinWidth", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMaxWidth", dialogXaml, StringComparison.Ordinal);
@@ -1486,6 +1492,10 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"TriggerEditorNameBox\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TriggerConditionList\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TriggerActionList\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding ConditionDescriptionText}\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding ActionDescriptionText}\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("SearchPlaceholder=\"{Binding ConditionSearchPlaceholderText}\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("SearchPlaceholder=\"{Binding ActionSearchPlaceholderText}\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SaveTriggerButton\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("ShowTriggerEditorForNewTask", triggerCode, StringComparison.Ordinal);
         Assert.Contains("OpenTriggerList", triggerCode, StringComparison.Ordinal);
@@ -1716,11 +1726,10 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Orientation = Orientation.Vertical", presenterCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment = HorizontalAlignment.Right", presenterCode, StringComparison.Ordinal);
         Assert.Contains("statusText.Text = result.Succeeded", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("Width = 420", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("MinWidth = 0", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth = 420", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("ContentDialogMinWidth", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("ContentDialogMaxWidth", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("private const double DialogWidth = 420", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("CenteredDialogOverlay.ShowAsync", presenterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentDialogMinWidth", presenterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentDialogMaxWidth", presenterCode, StringComparison.Ordinal);
         Assert.Contains("MinWidth = 340", presenterCode, StringComparison.Ordinal);
         Assert.Contains("MaxWidth = 380", presenterCode, StringComparison.Ordinal);
         Assert.Contains("Math.Min(320", presenterCode, StringComparison.Ordinal);
@@ -1733,19 +1742,44 @@ public sealed class AppResourcePackagingTests
         string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
         string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
         string guideXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "StartupGuideDialog.xaml");
+        string guideCodePath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "StartupGuideDialog.xaml.cs");
         string presenterPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "StartupConflictDialogPresenter.cs");
+        string overlayPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "CenteredDialogOverlay.cs");
 
         string masterControlCode = File.ReadAllText(masterControlCodePath);
         string settingsCode = File.ReadAllText(settingsCodePath);
         string guideXaml = File.ReadAllText(guideXamlPath);
+        string guideCode = File.ReadAllText(guideCodePath);
         string presenterCode = File.ReadAllText(presenterPath);
+        string overlayCode = File.ReadAllText(overlayPath);
 
         Assert.Contains("GetDialogXamlRoot()", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("App.MainWindow?.Content is FrameworkElement root", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("XamlRoot = GetDialogXamlRoot()", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("XamlRoot = GetDialogXamlRoot()", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
+        Assert.Contains("VerticalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"260\"", guideXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth=\"520\"", guideXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Width=\"520\"", guideXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("MaxWidth=\"520\"", guideXaml, StringComparison.Ordinal);
+        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">520</x:Double>", guideXaml, StringComparison.Ordinal);
+        Assert.Contains("await dialog.ShowCenteredAsync(xamlRoot)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("await dialog.ShowCenteredAsync(xamlRoot)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("await dialog.ShowCenteredAsync(xamlRoot)", File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs")), StringComparison.Ordinal);
+        Assert.Contains("CenteredDialogOverlay.ShowAsync", guideCode, StringComparison.Ordinal);
+        Assert.Contains("private const double DialogWidth = 420", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("CenteredDialogOverlay.ShowAsync", presenterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentDialog dialog = new()", presenterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Popup", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("App.MainWindow?.Content is FrameworkElement root", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("root.ActualWidth", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("Width = overlaySize.Width", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("App.MainWindow?.Content is not Panel rootPanel", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("Canvas.SetZIndex(overlay", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("rootPanel.Children.Add(overlay)", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("rootPanel.Children.Remove(overlay)", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment = HorizontalAlignment.Center", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("VerticalAlignment = VerticalAlignment.Center", overlayCode, StringComparison.Ordinal);
         Assert.Contains("MaxHeight = Math.Min(320", presenterCode, StringComparison.Ordinal);
     }
 

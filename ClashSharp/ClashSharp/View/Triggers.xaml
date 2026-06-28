@@ -173,12 +173,12 @@
                         </Grid.RowDefinitions>
                         <StackPanel Spacing="2">
                             <TextBlock Text="{Binding ConditionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Text="{Binding AddDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                            <TextBlock Text="{Binding ConditionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                         </StackPanel>
                         <components:SearchableOptionList
                             x:Name="TriggerConditionList"
                             Grid.Row="1"
-                            SearchPlaceholder="{Binding DescriptionText}"
+                            SearchPlaceholder="{Binding ConditionSearchPlaceholderText}"
                             MaxListHeight="280" />
                     </Grid>
 
@@ -189,12 +189,12 @@
                         </Grid.RowDefinitions>
                         <StackPanel Spacing="2">
                             <TextBlock Text="{Binding ActionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Text="{Binding AddDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                            <TextBlock Text="{Binding ActionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                         </StackPanel>
                         <components:SearchableOptionList
                             x:Name="TriggerActionList"
                             Grid.Row="1"
-                            SearchPlaceholder="{Binding DescriptionText}"
+                            SearchPlaceholder="{Binding ActionSearchPlaceholderText}"
                             AllowMultiple="True"
                             MaxListHeight="360" />
                     </Grid>

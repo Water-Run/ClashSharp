@@ -7,7 +7,10 @@
  * @date: 2026-06-24
  */
 
+using System;
+using System.Threading.Tasks;
 using ClashSharp.Service;
+using ClashSharp.View;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -23,6 +26,8 @@ namespace ClashSharp.Components;
 /// </remarks>
 public sealed partial class StartupGuideDialog : ContentDialog
 {
+    private const double DialogWidth = 520;
+
     /// <summary>Initializes the startup guide dialog shell with localized text.</summary>
     public StartupGuideDialog()
     {
@@ -31,6 +36,56 @@ public sealed partial class StartupGuideDialog : ContentDialog
         CloseButtonText = LocalizationService.Instance.GetString("Command.Close");
         GuideDescriptionText.Text = LocalizationService.Instance.GetString("Settings.StartupGuide.Description");
         LoadChecks();
+    }
+
+    /// <summary>Shows startup guidance in the app-owned centered overlay.</summary>
+    /// <param name="xamlRoot">Window-level XAML root that hosts the dialog. Not null.</param>
+    /// <returns>A task that completes when the user closes the overlay.</returns>
+    public Task ShowCenteredAsync(XamlRoot xamlRoot)
+    {
+        ArgumentNullException.ThrowIfNull(xamlRoot);
+
+        return CenteredDialogOverlay.ShowAsync(
+            xamlRoot,
+            LocalizationService.Instance.GetString("Settings.StartupGuide.Title"),
+            BuildGuideContent(),
+            LocalizationService.Instance.GetString("Command.Close"),
+            DialogWidth);
+    }
+
+    private static StackPanel BuildGuideContent()
+    {
+        StackPanel panel = new()
+        {
+            MinWidth = 360,
+            MaxWidth = 480,
+            Spacing = 12,
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text = LocalizationService.Instance.GetString("Settings.StartupGuide.Description"),
+            TextWrapping = TextWrapping.WrapWholeWords,
+            Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
+            Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+        });
+
+        StackPanel checksPanel = new()
+        {
+            Spacing = 8,
+        };
+        foreach (StartupCheckItem check in StartupCheckService.Instance.GetChecks())
+        {
+            checksPanel.Children.Add(BuildCheckRow(check));
+        }
+        panel.Children.Add(new ScrollViewer
+        {
+            Content = checksPanel,
+            MaxHeight = 260,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        });
+
+        return panel;
     }
 
     private void LoadChecks()
