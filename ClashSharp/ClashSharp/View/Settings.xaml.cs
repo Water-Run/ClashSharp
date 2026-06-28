@@ -270,7 +270,7 @@ public sealed partial class Settings : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void OpenNetworkRepairButton_Click(object sender, RoutedEventArgs e)
     {
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = _viewModel.WindowsNativeTitleText,
             Content = BuildNetworkRepairPanel(),
@@ -287,6 +287,16 @@ public sealed partial class Settings : Page
     private async void AppAccentColorModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_isLoadingSettings || !_viewModel.IsAppAccentColorRestartPending)
+        {
+            return;
+        }
+
+        await ShowRestartRequiredDialogAsync();
+    }
+
+    private async void LanguageBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingSettings || !_viewModel.IsDisplayLanguageRestartPending)
         {
             return;
         }
@@ -315,7 +325,7 @@ public sealed partial class Settings : Page
         };
         pickerPanel.Children.Add(picker);
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = _viewModel.AppAccentColorTitleText,
             Content = pickerPanel,
@@ -347,7 +357,7 @@ public sealed partial class Settings : Page
         TextBox directUrlBox = new() { Text = _viewModel.ConnectionTestDirectUrl, Width = 360 };
         StackPanel panel = BuildConnectionTestUrlsPanel(proxyUrl1Box, proxyUrl2Box, directUrlBox);
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = _viewModel.ConnectionTestUrlTitleText,
             Content = panel,
@@ -412,7 +422,7 @@ public sealed partial class Settings : Page
     /// <summary>Shows a short prompt explaining that the edited setting applies after restart.</summary>
     private async Task ShowRestartRequiredDialogAsync()
     {
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString("Settings.RestartRequired.Title"),
             Content = LocalizationService.Instance.GetString("Settings.RestartRequired.Message"),
@@ -426,7 +436,7 @@ public sealed partial class Settings : Page
     /// <summary>Confirms a setting change that is persisted now but only applied after restart.</summary>
     private async Task<bool> ConfirmRestartRequiredSettingChangeAsync()
     {
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString("Settings.RestartSettingConfirm.Title"),
             Content = LocalizationService.Instance.GetString("Settings.RestartSettingConfirm.Message"),
@@ -537,7 +547,7 @@ public sealed partial class Settings : Page
             message = $"{message}{Environment.NewLine}{Environment.NewLine}{_viewModel.ResetGroupServiceDeploymentNoteText}";
         }
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = _viewModel.ResetGroupConfirmTitleText,
             Content = message,
@@ -574,7 +584,7 @@ public sealed partial class Settings : Page
             feature.Id,
             selectedIds.Contains(feature.Id))));
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = _viewModel.TrayVisibleFeaturesTitleText,
             Content = optionList,
@@ -710,7 +720,7 @@ public sealed partial class Settings : Page
         });
         panel.Children.Add(optionPanel);
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString("Settings.DataExport.Title"),
             Content = panel,
@@ -820,7 +830,7 @@ public sealed partial class Settings : Page
     /// <summary>Confirms import overwrite behavior in two steps.</summary>
     private async Task<bool> ConfirmDataImportAsync(ClashDataPackageScope? scope)
     {
-        ContentDialog firstDialog = new()
+        ThemedContentDialog firstDialog = new()
         {
             Title = LocalizationService.Instance.GetString("Settings.DataImport.Warning.Title"),
             Content = FormatDataImportWarning(scope),
@@ -835,7 +845,7 @@ public sealed partial class Settings : Page
             return false;
         }
 
-        ContentDialog secondDialog = new()
+        ThemedContentDialog secondDialog = new()
         {
             Title = LocalizationService.Instance.GetString("Settings.DataImport.SecondConfirm.Title"),
             Content = LocalizationService.Instance.GetString("Settings.DataImport.SecondConfirm.Message"),
@@ -1049,7 +1059,7 @@ public sealed partial class Settings : Page
     /// <summary>Shows a destructive-action confirmation dialog.</summary>
     private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText)
     {
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = title,
             Content = content,
@@ -1066,7 +1076,7 @@ public sealed partial class Settings : Page
     private async Task ShowSettingsOperationFailureAsync(string title, Exception exception)
     {
         LogStorageService.Instance.AppendLog("Warning", "Settings", title, exception.Message);
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = title,
             Content = exception.Message,

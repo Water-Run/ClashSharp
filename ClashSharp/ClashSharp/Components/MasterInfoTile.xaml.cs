@@ -8,6 +8,7 @@
  */
 
 using System.Windows.Input;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -62,7 +63,11 @@ public sealed partial class MasterInfoTile : UserControl
     public MasterInfoTile()
     {
         InitializeComponent();
-        Loaded += (_, _) => UpdateVisualState(useTransitions: false);
+        Loaded += (_, _) =>
+        {
+            ProtectedCursor = TileCommand is null ? null : InputSystemCursor.Create(InputSystemCursorShape.Hand);
+            UpdateVisualState(useTransitions: false);
+        };
     }
 
     public string Title
@@ -115,6 +120,32 @@ public sealed partial class MasterInfoTile : UserControl
         }
 
         command.Execute(null);
+    }
+
+    private void TileRoot_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (TileCommand is not null)
+        {
+            _ = VisualStateManager.GoToState(this, "PointerOver", true);
+        }
+    }
+
+    private void TileRoot_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        _ = VisualStateManager.GoToState(this, "Normal", true);
+    }
+
+    private void TileRoot_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (TileCommand is not null)
+        {
+            _ = VisualStateManager.GoToState(this, "Pressed", true);
+        }
+    }
+
+    private void TileRoot_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _ = VisualStateManager.GoToState(this, "PointerOver", true);
     }
 
     private static void OnIsToggleOnChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)

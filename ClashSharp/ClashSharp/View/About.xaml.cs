@@ -53,7 +53,7 @@ public sealed partial class About : Page
     /// <summary>Opens local proxy and core path information in a dialog.</summary>
     private async void OpenProxyInformationButton_Click(object sender, RoutedEventArgs e)
     {
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = _viewModel.ProxyInformationTitleText,
             Content = BuildProxyInformationPanel(),

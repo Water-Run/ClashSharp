@@ -119,7 +119,7 @@ public sealed class LocalizationResourcesTests
 
     /// <summary>Verifies known previously mixed resource values stay in the matching language.</summary>
     [Theory]
-    [InlineData(AppLanguage.SimplifiedChinese, "About.Runtime.Value", "基于.NET 10和WinUI3构建")]
+    [InlineData(AppLanguage.SimplifiedChinese, "About.Runtime.Value", "基于 .NET 10 和 WinUI 3 构建")]
     [InlineData(AppLanguage.SimplifiedChinese, "Settings.ConnectionTest.Succeeded.Format", "连接测试成功，HTTP 状态：{0}。")]
     [InlineData(AppLanguage.TraditionalChinese, "Settings.ConnectionTest.Succeeded.Format", "連線測試成功，HTTP 狀態：{0}。")]
     [InlineData(AppLanguage.TraditionalChinese, "StartupConflict.Mihomo.Title", "另一個 mihomo 核心正在執行")]

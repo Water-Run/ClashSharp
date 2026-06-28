@@ -253,11 +253,63 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
 
     private string FormatCondition(TriggerCondition condition)
     {
-        return _getString($"Triggers.Condition.{condition.Kind}");
+        string title = _getString($"Triggers.Condition.{condition.Kind}");
+        return condition.Kind switch
+        {
+            TriggerConditionKind.TotalTraffic or TriggerConditionKind.TrafficInWindow =>
+                $"{title} >= {FormatBytes(condition.Threshold)}{FormatTrafficScope(condition.Value)}",
+            TriggerConditionKind.Runtime =>
+                $"{title} >= {FormatDuration(condition.Threshold)}",
+            TriggerConditionKind.SystemTime when !string.IsNullOrWhiteSpace(condition.Value) =>
+                $"{title} >= {condition.Value}",
+            TriggerConditionKind.NotificationRaised when !string.IsNullOrWhiteSpace(condition.Value) =>
+                $"{title}: {condition.Value}",
+            _ => title,
+        };
     }
 
     private string FormatAction(TriggerAction action)
     {
         return _getString($"Triggers.Action.{action.Kind}");
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double value = Math.Max(0, bytes);
+        int unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024;
+            unitIndex++;
+        }
+
+        return $"{value:N1} {units[unitIndex]}";
+    }
+
+    private static string FormatDuration(long seconds)
+    {
+        if (seconds >= 3600 && seconds % 3600 == 0)
+        {
+            return $"{seconds / 3600:N0} h";
+        }
+
+        if (seconds >= 60 && seconds % 60 == 0)
+        {
+            return $"{seconds / 60:N0} min";
+        }
+
+        return $"{seconds:N0} s";
+    }
+
+    private static string FormatTrafficScope(string value)
+    {
+        return value switch
+        {
+            "Scheduled" => " · 定时",
+            "Startup" => " · 自启动",
+            "Cumulative" => " · 累计",
+            _ => string.Empty,
+        };
     }
 }

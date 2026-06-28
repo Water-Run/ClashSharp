@@ -13,10 +13,10 @@
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="18" MaxWidth="720" HorizontalAlignment="Center">
             <StackPanel Spacing="8" HorizontalAlignment="Center">
-                <Image Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="96" Height="96" Stretch="Uniform" HorizontalAlignment="Center" />
+                <Image Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="144" Height="144" Stretch="Uniform" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding VersionSummaryText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
-                <TextBlock Text="{Binding RuntimeValueText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding RuntimeValueText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="{Binding AppDescriptionText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" />
             </StackPanel>
 

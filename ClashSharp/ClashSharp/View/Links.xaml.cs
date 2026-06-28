@@ -62,7 +62,7 @@ public sealed partial class Links : Page
         content.Children.Add(nameBox);
         content.Children.Add(uriBox);
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString("Links.Dialog.AddTitle"),
             Content = content,

@@ -89,23 +89,30 @@ public sealed class SettingsViewModelTests
         Assert.Equal("https://direct.example", ReadProperty<string>(viewModel, "ConnectionTestDirectUrl"));
     }
 
-    /// <summary>Verifies language selection persists and notifies the shell language controller.</summary>
+    /// <summary>Verifies language selection persists and is marked for restart instead of applying immediately.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_ValidIndex_PersistsAndNotifiesLanguageChange()
+    public void SetDisplayLanguageIndex_ValidIndex_PersistsAndMarksRestartPending()
     {
         FakeSettingsStore store = new();
+        int applyCount = 0;
         AppLanguage? notifiedLanguage = null;
-        SettingsViewModel viewModel = new(store, language => notifiedLanguage = language, () => { });
+        SettingsViewModel viewModel = new(store, language =>
+        {
+            applyCount++;
+            notifiedLanguage = language;
+        }, () => { });
 
         bool changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.German + 1);
 
         Assert.True(changed);
         Assert.Equal(AppLanguage.German, store.DisplayLanguage);
         Assert.Equal(AppLanguage.German, viewModel.DisplayLanguage);
-        Assert.Equal(AppLanguage.German, notifiedLanguage);
+        Assert.Equal(0, applyCount);
+        Assert.Null(notifiedLanguage);
+        Assert.True(viewModel.HasRestartRequiredSettings);
     }
 
-    /// <summary>Verifies the first language option stores automatic detection.</summary>
+    /// <summary>Verifies the first language option stores automatic detection for next restart.</summary>
     [Fact]
     public void SetDisplayLanguageIndex_Zero_PersistsAutoDetect()
     {
@@ -119,12 +126,13 @@ public sealed class SettingsViewModelTests
         Assert.Equal(AppLanguage.AutoDetect, store.DisplayLanguage);
         Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
         Assert.Equal(0, viewModel.DisplayLanguageIndex);
-        Assert.Equal(AppLanguage.AutoDetect, notifiedLanguage);
+        Assert.Null(notifiedLanguage);
+        Assert.True(viewModel.HasRestartRequiredSettings);
     }
 
-    /// <summary>Verifies language switching keeps a stable, non-empty option source for WinUI ComboBox selection text.</summary>
+    /// <summary>Verifies language switching no longer relocalizes option sources during the current process.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_RefreshesStableLanguageOptions()
+    public void SetDisplayLanguageIndex_DoesNotRelocalizeOptionsBeforeRestart()
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
@@ -147,9 +155,9 @@ public sealed class SettingsViewModelTests
         Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
     }
 
-    /// <summary>Verifies language switching never leaves the bound ComboBox option source empty and reasserts the selected index after relocalizing options.</summary>
+    /// <summary>Verifies language switching only updates the selected index and restart state.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_RelocalizesOptionsWithoutBlankingSelectedInput()
+    public void SetDisplayLanguageIndex_DoesNotMutateLanguageOptionCollection()
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
@@ -167,18 +175,16 @@ public sealed class SettingsViewModelTests
         bool changed = viewModel.SetDisplayLanguageIndex(0);
 
         Assert.True(changed);
-        Assert.DoesNotContain(0, countsDuringRefresh);
-        Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, collectionActions);
-        Assert.True(
-            changedProperties.LastIndexOf(nameof(SettingsViewModel.DisplayLanguageIndex))
-            > changedProperties.LastIndexOf(nameof(SettingsViewModel.DisplayLanguageOptions)));
+        Assert.Empty(countsDuringRefresh);
+        Assert.Empty(collectionActions);
+        Assert.DoesNotContain(nameof(SettingsViewModel.DisplayLanguageOptions), changedProperties);
         Assert.Equal(0, viewModel.DisplayLanguageIndex);
         Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
     }
 
-    /// <summary>Verifies every localized ComboBox option source remains stable and populated after language switching.</summary>
+    /// <summary>Verifies every localized ComboBox option source remains stable and populated after selecting a restart-required language.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_RelocalizesAllSelectorOptionsWithoutReplacingSources()
+    public void SetDisplayLanguageIndex_KeepsSelectorOptionsStableUntilRestart()
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
@@ -250,9 +256,9 @@ public sealed class SettingsViewModelTests
         Assert.Contains(nameof(SettingsViewModel.TransparentProxyEnabled), changedProperties);
     }
 
-    /// <summary>Verifies transparent proxy preference can be enabled even before the mihomo service is deployed.</summary>
+    /// <summary>Verifies transparent proxy cannot be enabled before the mihomo service is deployed.</summary>
     [Fact]
-    public void TransparentProxyEnabled_Setter_WhenMihomoServiceMissing_PersistsPreference()
+    public void TransparentProxyEnabled_Setter_WhenMihomoServiceMissing_DoesNotPersistPreference()
     {
         FakeSettingsStore store = new() { TransparentProxyEnabled = false };
         FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"));
@@ -260,9 +266,9 @@ public sealed class SettingsViewModelTests
 
         viewModel.TransparentProxyEnabled = true;
 
-        Assert.True(store.TransparentProxyEnabled);
-        Assert.True(viewModel.TransparentProxyEnabled);
-        Assert.True(viewModel.CanToggleTransparentProxy);
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
         Assert.Equal("Not installed", viewModel.MihomoServiceStatusText);
     }
 
@@ -287,9 +293,9 @@ public sealed class SettingsViewModelTests
         Assert.True(viewModel.TransparentProxyEnabled);
     }
 
-    /// <summary>Verifies uninstalling the mihomo service preserves the transparent proxy preference.</summary>
+    /// <summary>Verifies uninstalling the mihomo service disables the transparent proxy preference.</summary>
     [Fact]
-    public async Task UninstallMihomoServiceAsync_PreservesTransparentProxyPreference()
+    public async Task UninstallMihomoServiceAsync_DisablesTransparentProxyPreference()
     {
         FakeSettingsStore store = new() { TransparentProxyEnabled = true };
         FakeMihomoServiceController service = new(new MihomoServiceStatus(true, true, "Installed"))
@@ -301,15 +307,15 @@ public sealed class SettingsViewModelTests
         await viewModel.UninstallMihomoServiceAsync(CancellationToken.None);
 
         Assert.True(service.UninstallCalled);
-        Assert.True(viewModel.CanToggleTransparentProxy);
-        Assert.True(store.TransparentProxyEnabled);
-        Assert.True(viewModel.TransparentProxyEnabled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.False(viewModel.TransparentProxyEnabled);
         Assert.Equal("Removed", viewModel.MihomoServiceStatusText);
     }
 
-    /// <summary>Verifies loading settings preserves a stored transparent proxy preference when the service is missing.</summary>
+    /// <summary>Verifies loading settings disables a stale transparent proxy preference when the service is missing.</summary>
     [Fact]
-    public void Load_WhenTransparentProxyPreferenceEnabledAndServiceMissing_PreservesPreference()
+    public void Load_WhenTransparentProxyPreferenceEnabledAndServiceMissing_DisablesPreference()
     {
         FakeSettingsStore store = new() { TransparentProxyEnabled = true };
         FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"));
@@ -317,9 +323,9 @@ public sealed class SettingsViewModelTests
 
         viewModel.Load();
 
-        Assert.True(store.TransparentProxyEnabled);
-        Assert.True(viewModel.TransparentProxyEnabled);
-        Assert.True(viewModel.CanToggleTransparentProxy);
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
     }
 
     /// <summary>Verifies the default mihomo service controller uses injected localization instead of global resources.</summary>
@@ -982,7 +988,7 @@ public sealed class SettingsViewModelTests
         InvokeMethod<object?>(viewModel, "ResetAllSettings", Array.Empty<object>());
 
         Assert.True(resetCalled);
-        Assert.Equal(AppLanguage.English, appliedLanguage);
+        Assert.Null(appliedLanguage);
         Assert.Equal(AppLanguage.English, viewModel.DisplayLanguage);
         Assert.Equal("https://example.com/reset", viewModel.ConnectionTestUrl);
     }
@@ -1012,7 +1018,7 @@ public sealed class SettingsViewModelTests
         InvokeMethod<object?>(viewModel, "ClearAllData", Array.Empty<object>());
 
         Assert.True(clearCalled);
-        Assert.Equal(AppLanguage.AutoDetect, appliedLanguage);
+        Assert.Null(appliedLanguage);
         Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
         Assert.Equal("https://example.com/cleared", viewModel.ConnectionTestUrl);
     }
@@ -1064,7 +1070,7 @@ public sealed class SettingsViewModelTests
         Assert.Equal(AppAccentColorMode.FollowSystem, store.AppAccentColorMode);
         Assert.Equal("#FF0078D4", store.AppAccentColorValue);
         Assert.Equal(CloseBehaviorMode.MinimizeToTray, store.CloseBehaviorMode);
-        Assert.Equal(AppLanguage.AutoDetect, appliedLanguage);
+        Assert.Null(appliedLanguage);
         Assert.Equal(AppThemeMode.FollowSystem, appliedTheme);
 
         InvokeMethod<object?>(viewModel, "ResetStartupSettingsToDefaults", Array.Empty<object>());

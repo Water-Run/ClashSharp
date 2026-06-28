@@ -224,9 +224,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("CommandParameter=\"{Binding}\"", proxiesXaml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies transparent proxy remains a user preference independent from service availability.</summary>
+    /// <summary>Verifies transparent proxy cannot be toggled before the service is available.</summary>
     [Fact]
-    public void TransparentProxyPreference_IsNotClearedWhenUnavailable()
+    public void TransparentProxyPreference_DisabledWhenServiceUnavailable()
     {
         string settingsXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml");
         string takeoverServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "NetworkTakeoverService.cs");
@@ -234,7 +234,7 @@ public sealed class AppResourcePackagingTests
         string settingsXaml = File.ReadAllText(settingsXamlPath);
         string takeoverServiceCode = File.ReadAllText(takeoverServicePath);
 
-        Assert.DoesNotContain("IsEnabled=\"{Binding CanToggleTransparentProxy}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("IsEnabled=\"{Binding CanToggleTransparentProxy}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("AppSettingsService.Instance.TransparentProxyEnabled = false", takeoverServiceCode, StringComparison.Ordinal);
     }
 
@@ -1926,7 +1926,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"CoreStatusText\" Text=\"{Binding CoreStatusText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", masterControl, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TotalTrafficText\" Text=\"{Binding TotalTrafficText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", statistics, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ConditionsSummary}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", triggers, StringComparison.Ordinal);
-        Assert.Contains("Grid.Column=\"1\" Text=\"{Binding Level}\" Style=\"{ThemeResource CaptionTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", logs, StringComparison.Ordinal);
+        Assert.Contains("Grid.Column=\"1\" Text=\"{Binding LevelDisplay}\" Style=\"{ThemeResource CaptionTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", logs, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ActiveProfileText\" Text=\"{Binding ActiveProfileText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", profiles, StringComparison.Ordinal);
     }
 
@@ -2066,8 +2066,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"LevelFilterBox\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"CategoryFilterBox\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding CreatedAtDisplay}\"", logsXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding Level}\"", logsXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding Source}\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding LevelDisplay}\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding SourceDisplay}\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding Message}\"", logsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SummaryDisplay", logsXaml, StringComparison.Ordinal);
         Assert.Contains("LogSearchBox_TextChanged", logsCode, StringComparison.Ordinal);

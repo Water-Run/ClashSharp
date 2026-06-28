@@ -33,7 +33,7 @@
             <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="LanguageBox" Width="180" ItemsSource="{Binding DisplayLanguageOptions}" SelectedIndex="{Binding DisplayLanguageIndex, Mode=TwoWay}" />
+                    <ComboBox x:Name="LanguageBox" Width="180" ItemsSource="{Binding DisplayLanguageOptions}" SelectedIndex="{Binding DisplayLanguageIndex, Mode=TwoWay}" SelectionChanged="LanguageBox_SelectionChanged" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -122,7 +122,7 @@
             <TextBlock x:Name="ProxySectionTitleText" Text="{Binding ProxySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TransparentProxyRow" Title="{Binding TransparentProxyTitleText}" Description="{Binding TransparentProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="TransparentProxyToggle" MinWidth="0" IsEnabled="{Binding CanToggleTransparentProxy}" IsOn="{Binding TransparentProxyEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 

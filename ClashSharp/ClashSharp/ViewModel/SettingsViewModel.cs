@@ -902,6 +902,9 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="DisplayLanguage"/>.</summary>
     private AppLanguage _displayLanguage;
 
+    /// <summary>Display language loaded when this view model was initialized.</summary>
+    private AppLanguage _loadedDisplayLanguage;
+
     /// <summary>Backing field for <see cref="AppThemeMode"/>.</summary>
     private AppThemeMode _appThemeMode;
 
@@ -1124,6 +1127,8 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public bool IsAppAccentColorRestartPending => _isAccentColorRestartPending(AppAccentColorMode, AppAccentColorValue);
 
+    public bool IsDisplayLanguageRestartPending => DisplayLanguage != _loadedDisplayLanguage;
+
     public bool IsMainlandChinaDisplayRestartPending =>
         MainlandChinaFeatureMode != _loadedMainlandChinaFeatureMode
         || MainlandChinaUrlBlockingEnabled != _loadedMainlandChinaUrlBlockingEnabled;
@@ -1133,7 +1138,8 @@ internal sealed class SettingsViewModel : ObservableObject
     public bool IsTrayIconRestartPending => TrayUseMonochromeInactiveIcon != _loadedTrayUseMonochromeInactiveIcon;
 
     public bool HasRestartRequiredSettings =>
-        IsAppAccentColorRestartPending
+        IsDisplayLanguageRestartPending
+        || IsAppAccentColorRestartPending
         || IsMainlandChinaDisplayRestartPending
         || IsTrayIconRestartPending;
 
@@ -1151,7 +1157,7 @@ internal sealed class SettingsViewModel : ObservableObject
         set => SetTransparentProxyEnabled(value);
     }
 
-    public bool CanToggleTransparentProxy => true;
+    public bool CanToggleTransparentProxy => _mihomoServiceStatus.IsInstalled;
 
     public string MihomoServiceStatusText
     {
@@ -1385,7 +1391,8 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Loads the latest persisted settings into the view model properties.</summary>
     public void Load()
     {
-        DisplayLanguage = _settings.DisplayLanguage;
+        _loadedDisplayLanguage = _settings.DisplayLanguage;
+        DisplayLanguage = _loadedDisplayLanguage;
         AppThemeMode = _settings.AppThemeMode;
         AppAccentColorMode = _settings.AppAccentColorMode;
         AppAccentColorValue = _settings.AppAccentColorValue;
@@ -1394,6 +1401,11 @@ internal sealed class SettingsViewModel : ObservableObject
         RaiseAppAccentColorRestartStateChanged();
         SetProperty(ref _launchAtStartupEnabled, _settings.LaunchAtStartupEnabled, nameof(LaunchAtStartupEnabled));
         RefreshMihomoServiceStatus();
+        if (!CanToggleTransparentProxy && _settings.TransparentProxyEnabled)
+        {
+            _settings.TransparentProxyEnabled = false;
+        }
+
         SetProperty(ref _transparentProxyEnabled, _settings.TransparentProxyEnabled, nameof(TransparentProxyEnabled));
         MixedPort = _settings.MixedPort;
         SetProperty(ref _connectionSamplingEnabled, _settings.ConnectionSamplingEnabled, nameof(ConnectionSamplingEnabled));
@@ -1425,6 +1437,7 @@ internal sealed class SettingsViewModel : ObservableObject
         ConnectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
         ConnectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
         RefreshProxyInformation();
+        RaiseDisplayLanguageRestartStateChanged();
     }
 
     /// <summary>Persists a display language selected by combo box index.</summary>
@@ -1459,10 +1472,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
         _settings.DisplayLanguage = language;
         DisplayLanguage = language;
-        _applyLanguage(language);
-        RaiseLocalizedTextChanges();
-        RefreshProxyInformation();
-        ResetDiagnosticStatusText();
+        RaiseDisplayLanguageRestartStateChanged();
         return true;
     }
 
@@ -1527,6 +1537,13 @@ internal sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAppAccentColorRestartPending));
         OnPropertyChanged(nameof(HasRestartRequiredSettings));
         OnPropertyChanged(nameof(AppAccentColorTitleText));
+        OnPropertyChanged(nameof(RestartRequiredNoticeText));
+    }
+
+    private void RaiseDisplayLanguageRestartStateChanged()
+    {
+        OnPropertyChanged(nameof(IsDisplayLanguageRestartPending));
+        OnPropertyChanged(nameof(HasRestartRequiredSettings));
         OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
@@ -1825,6 +1842,12 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <param name="isEnabled">Switch value.</param>
     public void SetTransparentProxyEnabled(bool isEnabled)
     {
+        if (isEnabled && !CanToggleTransparentProxy)
+        {
+            SetProperty(ref _transparentProxyEnabled, false, nameof(TransparentProxyEnabled));
+            return;
+        }
+
         _settings.TransparentProxyEnabled = isEnabled;
         SetProperty(ref _transparentProxyEnabled, isEnabled, nameof(TransparentProxyEnabled));
     }
@@ -1861,6 +1884,12 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         _mihomoServiceStatus = status;
         MihomoServiceStatusText = status.Message;
+        if (!status.IsInstalled && _settings.TransparentProxyEnabled)
+        {
+            _settings.TransparentProxyEnabled = false;
+            SetProperty(ref _transparentProxyEnabled, false, nameof(TransparentProxyEnabled));
+        }
+
         OnPropertyChanged(nameof(CanToggleTransparentProxy));
         DeployMihomoServiceCommand?.NotifyCanExecuteChanged();
         UninstallMihomoServiceCommand?.NotifyCanExecuteChanged();
@@ -2419,7 +2448,7 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         _settings.DisplayLanguage = AppLanguage.AutoDetect;
         DisplayLanguage = AppLanguage.AutoDetect;
-        _applyLanguage(AppLanguage.AutoDetect);
+        RaiseDisplayLanguageRestartStateChanged();
 
         _settings.AppThemeMode = AppThemeMode.FollowSystem;
         AppThemeMode = AppThemeMode.FollowSystem;
@@ -2433,7 +2462,6 @@ internal sealed class SettingsViewModel : ObservableObject
         _settings.CloseBehaviorMode = CloseBehaviorMode.MinimizeToTray;
         CloseBehaviorMode = CloseBehaviorMode.MinimizeToTray;
 
-        RaiseLocalizedTextChanges();
         RaiseSelectorBindingsChanged();
         RefreshProxyInformation();
         ResetDiagnosticStatusText();
@@ -2499,15 +2527,13 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Restores transparent proxy settings to defaults.</summary>
     public void ResetTransparentProxySettingsToDefaults()
     {
-        _settings.TransparentProxyEnabled = true;
-        SetProperty(ref _transparentProxyEnabled, true, nameof(TransparentProxyEnabled));
+        SetTransparentProxyEnabled(CanToggleTransparentProxy);
     }
 
     /// <summary>Restores proxy runtime settings to defaults.</summary>
     public void ResetProxySettingsToDefaults()
     {
-        _settings.TransparentProxyEnabled = true;
-        SetProperty(ref _transparentProxyEnabled, true, nameof(TransparentProxyEnabled));
+        SetTransparentProxyEnabled(CanToggleTransparentProxy);
 
         _settings.MixedPort = DefaultMixedPort;
         MixedPort = DefaultMixedPort;
@@ -2571,7 +2597,6 @@ internal sealed class SettingsViewModel : ObservableObject
 
     private void ReloadAfterMaintenance()
     {
-        _applyLanguage(_settings.DisplayLanguage);
         Load();
         RaiseLocalizedTextChanges();
         RaiseSelectorBindingsChanged();

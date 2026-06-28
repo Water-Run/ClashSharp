@@ -32,6 +32,11 @@ public readonly record struct LogStorageSummary(
     long LogCount,
     long ConnectionCount);
 
+/// <summary>Previews the impact of deleting a filtered set of log records.</summary>
+/// <param name="EntryCount">Number of log entries that match the cleanup filter.</param>
+/// <param name="EstimatedSizeBytes">Estimated storage occupied by matching entries.</param>
+public readonly record struct LogCleanupPreview(long EntryCount, long EstimatedSizeBytes);
+
 /// <summary>Summarizes long-term traffic and aggregation records stored in SQLite.</summary>
 /// <param name="TotalUploadBytes">Total uploaded bytes estimated from connection records.</param>
 /// <param name="TotalDownloadBytes">Total downloaded bytes estimated from connection records.</param>
@@ -608,6 +613,48 @@ public sealed partial class LogStorageService
         }
     }
 
+    /// <summary>Returns a cleanup preview for logs matching optional level and source filters.</summary>
+    public LogCleanupPreview PreviewLogCleanup(string? level = null, string? source = null)
+    {
+        string? normalizedLevel = NormalizeOptionalFilter(level);
+        string? normalizedSource = NormalizeOptionalFilter(source);
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            long matchingCount = CountLogs(connection, normalizedLevel, normalizedSource);
+            long totalLogCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM Logs;");
+            long databaseSize = LogStorageFootprint.CalculateBytes(_databasePath);
+            long estimatedSize = totalLogCount <= 0
+                ? 0
+                : Math.Max(1, (long)Math.Round(databaseSize * (matchingCount / (double)totalLogCount)));
+
+            return new LogCleanupPreview(matchingCount, matchingCount == 0 ? 0 : estimatedSize);
+        }
+    }
+
+    /// <summary>Deletes logs matching optional level and source filters and compacts the database.</summary>
+    public long CleanupLogs(string? level = null, string? source = null)
+    {
+        string? normalizedLevel = NormalizeOptionalFilter(level);
+        string? normalizedSource = NormalizeOptionalFilter(source);
+
+        lock (_syncLock)
+        {
+            EnsureInitialized();
+
+            using SqliteConnection connection = OpenConnection();
+            using SqliteCommand command = connection.CreateCommand();
+            List<string> predicates = AddLogFilterPredicates(command, normalizedLevel, normalizedSource);
+            command.CommandText = "DELETE FROM Logs" + (predicates.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", predicates)) + ";";
+            long deleted = command.ExecuteNonQuery();
+            LogStorageMaintenance.Vacuum(connection);
+            return deleted;
+        }
+    }
+
     /// <summary>Returns all distinct log sources/categories ordered for filter display.</summary>
     /// <returns>Distinct source names; never null.</returns>
     public IReadOnlyList<string> GetLogSources()
@@ -721,6 +768,33 @@ public sealed partial class LogStorageService
     private static string? NormalizeOptionalFilter(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static long CountLogs(SqliteConnection connection, string? level, string? source)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        List<string> predicates = AddLogFilterPredicates(command, level, source);
+        command.CommandText = "SELECT COUNT(*) FROM Logs" + (predicates.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", predicates)) + ";";
+        object? result = command.ExecuteScalar();
+        return result is null || result == DBNull.Value ? 0 : Convert.ToInt64(result, CultureInfo.InvariantCulture);
+    }
+
+    private static List<string> AddLogFilterPredicates(SqliteCommand command, string? level, string? source)
+    {
+        List<string> predicates = [];
+        if (level is not null)
+        {
+            predicates.Add("Level = $level");
+            command.Parameters.AddWithValue("$level", level);
+        }
+
+        if (source is not null)
+        {
+            predicates.Add("Source = $source");
+            command.Parameters.AddWithValue("$source", source);
+        }
+
+        return predicates;
     }
 
     private static string EscapeLikePattern(string value)

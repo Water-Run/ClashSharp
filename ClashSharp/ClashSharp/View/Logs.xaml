@@ -47,6 +47,7 @@
 
             <TextBox
                 x:Name="LogSearchBox"
+                Header="{Binding SearchLabelText}"
                 PlaceholderText="{Binding SearchPlaceholderText}"
                 Text="{Binding SearchText, Mode=TwoWay}"
                 TextChanged="LogSearchBox_TextChanged"
@@ -100,8 +101,8 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding CreatedAtDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="1" Text="{Binding Level}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Grid.Column="2" Text="{Binding Source}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="1" Text="{Binding LevelDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="2" Text="{Binding SourceDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                         <StackPanel Grid.Column="3" Spacing="2">
                             <TextBlock Text="{Binding Message}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                             <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

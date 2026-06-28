@@ -209,10 +209,24 @@
                                 <FontIcon Glyph="&#xE8A1;" FontSize="14" />
                             </Button>
                         </Grid>
-                        <StackPanel Grid.Row="1" Spacing="2">
-                            <TextBlock x:Name="SelectedTriggerConditionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
-                            <TextBlock x:Name="SelectedTriggerConditionDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
-                        </StackPanel>
+                        <Grid Grid.Row="1" ColumnSpacing="18" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="320" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock x:Name="SelectedTriggerConditionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
+                                <TextBlock x:Name="SelectedTriggerConditionDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                                <TextBlock x:Name="TriggerConditionValidationText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="WrapWholeWords" Visibility="Collapsed" />
+                            </StackPanel>
+                            <StackPanel x:Name="TriggerConditionParameterPanel" Grid.Column="1" Spacing="8">
+                                <NumberBox x:Name="TriggerConditionThresholdBox" Header="阈值" Minimum="0" ValueChanged="TriggerConditionThresholdBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                                <ComboBox x:Name="TriggerConditionUnitBox" Header="单位" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
+                                <ComboBox x:Name="TriggerConditionStartBox" Header="统计起点" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
+                                <ComboBox x:Name="TriggerConditionLevelBox" Header="通知级别" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
+                                <TextBox x:Name="TriggerConditionValueBox" Header="条件值" TextChanged="TriggerConditionValueBox_TextChanged" />
+                            </StackPanel>
+                        </Grid>
                     </Grid>
 
                     <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">

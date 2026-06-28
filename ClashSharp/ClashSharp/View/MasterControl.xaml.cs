@@ -144,7 +144,7 @@ public sealed partial class MasterControl : Page
         };
         StackPanel content = BuildLatencyDialogContent(progressText, timeoutBar);
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString("Master.LatencyDialog.Title"),
             Content = content,
@@ -269,7 +269,7 @@ public sealed partial class MasterControl : Page
         };
         panel.Children.Add(optionList);
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = _viewModel.EditInfoTilesText,
             Content = panel,

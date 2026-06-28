@@ -15,8 +15,38 @@
         Style="{StaticResource ClashCardGridStyle}"
         MinHeight="116"
         RowSpacing="10"
-        Tapped="TileRoot_Tapped">
+        Tapped="TileRoot_Tapped"
+        PointerEntered="TileRoot_PointerEntered"
+        PointerExited="TileRoot_PointerExited"
+        PointerPressed="TileRoot_PointerPressed"
+        PointerReleased="TileRoot_PointerReleased">
+        <Grid.RenderTransform>
+            <ScaleTransform x:Name="TileScaleTransform" CenterX="110" CenterY="58" />
+        </Grid.RenderTransform>
         <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="PointerStates">
+                <VisualState x:Name="Normal">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12" />
+                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.12" />
+                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.12" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="PointerOver">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0.08" Duration="0:0:0.12" />
+                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleX" To="1.015" Duration="0:0:0.12" />
+                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleY" To="1.015" Duration="0:0:0.12" />
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="Pressed">
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0.12" Duration="0:0:0.06" />
+                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleX" To="0.99" Duration="0:0:0.06" />
+                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleY" To="0.99" Duration="0:0:0.06" />
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
             <VisualStateGroup x:Name="SwitchStates">
                 <VisualState x:Name="SwitchOff">
                     <Storyboard>
@@ -44,6 +74,13 @@
             Margin="-16"
             CornerRadius="4"
             Background="{ThemeResource AccentFillColorDefaultBrush}"
+            Opacity="0" />
+        <Border
+            x:Name="HoverOverlay"
+            Grid.RowSpan="2"
+            Margin="-16"
+            CornerRadius="4"
+            Background="{ThemeResource ControlFillColorSecondaryBrush}"
             Opacity="0" />
 
         <Grid ColumnSpacing="8">

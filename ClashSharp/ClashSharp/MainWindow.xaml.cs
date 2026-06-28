@@ -351,7 +351,7 @@ public sealed partial class MainWindow : Window
 
         bool proxyTakeoverActive = IsProxyTakeoverActive();
         args.Cancel = true;
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString(proxyTakeoverActive ? "Close.ProxyActive.Title" : "Close.Confirm.Title"),
             Content = LocalizationService.Instance.GetString(proxyTakeoverActive ? "Close.ProxyActive.Message" : "Close.Confirm.Message"),

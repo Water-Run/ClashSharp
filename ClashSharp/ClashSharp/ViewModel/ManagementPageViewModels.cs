@@ -396,6 +396,12 @@ internal sealed class LogsViewModel : ObservableObject
 
     private IReadOnlyList<string> _categoryFilterOptions = [];
 
+    private IReadOnlyList<string> _levelFilterOptions = [];
+
+    private readonly Dictionary<string, string?> _levelFilterValues = new(StringComparer.Ordinal);
+
+    private readonly Dictionary<string, string?> _categoryFilterValues = new(StringComparer.Ordinal);
+
     private string _selectedLevelFilter;
 
     private string _selectedCategoryFilter;
@@ -439,6 +445,8 @@ internal sealed class LogsViewModel : ObservableObject
 
     public string SearchPlaceholderText => _getString("Logs.Filter.SearchPlaceholder");
 
+    public string SearchLabelText => MatchLocalized("搜索", "搜尋", "Search", "Поиск", "Rechercher", "Suchen");
+
     public string LevelFilterLabelText => _getString("Logs.Filter.Level");
 
     public string CategoryFilterLabelText => _getString("Logs.Filter.Category");
@@ -459,7 +467,11 @@ internal sealed class LogsViewModel : ObservableObject
         set => ApplySearchText(value);
     }
 
-    public IReadOnlyList<string> LevelFilterOptions => [AllLevelsText, "Info", "Warning", "Error"];
+    public IReadOnlyList<string> LevelFilterOptions
+    {
+        get => _levelFilterOptions;
+        private set => SetProperty(ref _levelFilterOptions, value);
+    }
 
     public IReadOnlyList<string> CategoryFilterOptions
     {
@@ -505,10 +517,10 @@ internal sealed class LogsViewModel : ObservableObject
 
     /// <summary>Gets recent log records.</summary>
     /// <value>Recent logs; never null.</value>
-    public IReadOnlyList<LogRecord> RecentLogs
+    public IReadOnlyList<LogRecordDisplay> RecentLogs
     {
-        get => _recentLogs;
-        private set => SetProperty(ref _recentLogs, value);
+        get => _recentLogs.Select(CreateDisplayRow).ToList();
+        private set => SetProperty(ref _recentLogs, value.Select(static row => row.Record).ToList());
     }
 
     /// <summary>Refreshes storage usage and recent log rows.</summary>
@@ -520,8 +532,10 @@ internal sealed class LogsViewModel : ObservableObject
             FormatByteCount(summary.DatabaseSizeBytes),
             summary.LogCount,
             summary.ConnectionCount);
+        RefreshLevelFilterOptions();
         RefreshCategoryFilterOptions();
-        RecentLogs = _logStorage.GetLogs(VisibleLogLimit, EffectiveCategoryFilter, EffectiveLevelFilter, _searchText);
+        _recentLogs = _logStorage.GetLogs(VisibleLogLimit, EffectiveCategoryFilter, EffectiveLevelFilter, _searchText);
+        OnPropertyChanged(nameof(RecentLogs));
     }
 
     public void ApplySearchText(string? searchText)
@@ -535,17 +549,22 @@ internal sealed class LogsViewModel : ObservableObject
 
     public void SetSourceFilter(string? source)
     {
-        string selectedCategory = string.IsNullOrWhiteSpace(source) ? AllCategoriesText : source.Trim();
+        string selectedCategory = string.IsNullOrWhiteSpace(source) ? AllCategoriesText : FormatLogCategory(source.Trim());
         SetProperty(ref _selectedCategoryFilter, selectedCategory, nameof(SelectedCategoryFilter));
+        RefreshLogs();
         OnPropertyChanged(nameof(PageTitleText));
         OnPropertyChanged(nameof(DescriptionText));
-        RefreshLogs();
     }
 
     /// <summary>Applies a cleanup mode and refreshes visible log storage state.</summary>
     /// <param name="selectedIndex">Selected cleanup mode index.</param>
     /// <param name="parameterValue">Numeric cleanup parameter value.</param>
     public void ApplyCleanupMode(int selectedIndex, double parameterValue)
+    {
+        ApplyCleanupMode(selectedIndex, parameterValue, SelectedLevelFilter, SelectedCategoryFilter);
+    }
+
+    public void ApplyCleanupMode(int selectedIndex, double parameterValue, string? levelFilter, string? categoryFilter)
     {
         switch (selectedIndex)
         {
@@ -563,9 +582,34 @@ internal sealed class LogsViewModel : ObservableObject
             case 3:
                 _logStorage.ClearAll();
                 break;
+            case 4:
+                _logStorage.CleanupLogs(ResolveLevelFilter(levelFilter), ResolveCategoryFilter(categoryFilter));
+                break;
         }
 
         RefreshLogs();
+    }
+
+    public string GetCleanupPreviewText(int selectedIndex, double parameterValue)
+    {
+        return GetCleanupPreviewText(selectedIndex, parameterValue, SelectedLevelFilter, SelectedCategoryFilter);
+    }
+
+    public string GetCleanupPreviewText(int selectedIndex, double parameterValue, string? levelFilter, string? categoryFilter)
+    {
+        LogCleanupPreview preview = selectedIndex == 4
+            ? _logStorage.PreviewLogCleanup(ResolveLevelFilter(levelFilter), ResolveCategoryFilter(categoryFilter))
+            : EstimateCleanupPreview(selectedIndex, parameterValue);
+        return string.Format(
+            MatchLocalized(
+                "将清理 {0:N0} 个条目 / 约 {1}",
+                "將清理 {0:N0} 個項目 / 約 {1}",
+                "Will clean {0:N0} entries / about {1}",
+                "Будет очищено {0:N0} записей / около {1}",
+                "Nettoiera {0:N0} entrees / environ {1}",
+                "Bereinigt {0:N0} Eintraege / ca. {1}"),
+            preview.EntryCount,
+            FormatByteCount(preview.EstimatedSizeBytes));
     }
 
     /// <summary>Converts a number-box value to a positive integer with fallback.</summary>
@@ -603,30 +647,173 @@ internal sealed class LogsViewModel : ObservableObject
 
     private string AllCategoriesText => _getString("Logs.Filter.AllCategories");
 
-    private string? EffectiveLevelFilter => StringComparer.Ordinal.Equals(SelectedLevelFilter, AllLevelsText)
-        ? null
-        : SelectedLevelFilter;
+    private string? EffectiveLevelFilter => _levelFilterValues.TryGetValue(SelectedLevelFilter, out string? value)
+        ? value
+        : null;
 
-    private string? EffectiveCategoryFilter => StringComparer.Ordinal.Equals(SelectedCategoryFilter, AllCategoriesText)
-        ? null
-        : SelectedCategoryFilter;
+    private string? EffectiveCategoryFilter => _categoryFilterValues.TryGetValue(SelectedCategoryFilter, out string? value)
+        ? value
+        : null;
+
+    private string? ResolveLevelFilter(string? displayValue)
+    {
+        return displayValue is not null && _levelFilterValues.TryGetValue(displayValue, out string? value)
+            ? value
+            : null;
+    }
+
+    private string? ResolveCategoryFilter(string? displayValue)
+    {
+        return displayValue is not null && _categoryFilterValues.TryGetValue(displayValue, out string? value)
+            ? value
+            : null;
+    }
+
+    private void RefreshLevelFilterOptions()
+    {
+        List<string> options =
+        [
+            AllLevelsText,
+            FormatLogLevel("Info"),
+            FormatLogLevel("Warning"),
+            FormatLogLevel("Error"),
+        ];
+
+        _levelFilterValues.Clear();
+        _levelFilterValues[options[0]] = null;
+        _levelFilterValues[options[1]] = "Info";
+        _levelFilterValues[options[2]] = "Warning";
+        _levelFilterValues[options[3]] = "Error";
+        LevelFilterOptions = options;
+        if (!options.Contains(SelectedLevelFilter, StringComparer.Ordinal))
+        {
+            SetProperty(ref _selectedLevelFilter, AllLevelsText, nameof(SelectedLevelFilter));
+        }
+    }
 
     private void RefreshCategoryFilterOptions()
     {
         List<string> options = [AllCategoriesText];
+        _categoryFilterValues.Clear();
+        _categoryFilterValues[AllCategoriesText] = null;
         foreach (string source in _logStorage.GetLogSources())
         {
-            if (!options.Contains(source, StringComparer.Ordinal))
+            string display = FormatLogCategory(source);
+            if (!options.Contains(display, StringComparer.Ordinal))
             {
-                options.Add(source);
+                options.Add(display);
             }
+
+            _categoryFilterValues[display] = source;
         }
 
         if (EffectiveCategoryFilter is string selectedSource && !options.Contains(selectedSource, StringComparer.Ordinal))
         {
-            options.Add(selectedSource);
+            string display = FormatLogCategory(selectedSource);
+            options.Add(display);
+            _categoryFilterValues[display] = selectedSource;
         }
 
         CategoryFilterOptions = options;
     }
+
+    private LogRecordDisplay CreateDisplayRow(LogRecord record)
+    {
+        return new LogRecordDisplay(record, FormatLogLevel(record.Level), FormatLogCategory(record.Source));
+    }
+
+    private string FormatLogLevel(string level)
+    {
+        return level switch
+        {
+            "Info" => MatchLocalized(
+                simplifiedChinese: "信息",
+                traditionalChinese: "資訊",
+                english: "Info",
+                russian: "Информация",
+                french: "Info",
+                german: "Info"),
+            "Warning" => MatchLocalized(
+                simplifiedChinese: "警告",
+                traditionalChinese: "警告",
+                english: "Warning",
+                russian: "Предупреждение",
+                french: "Avertissement",
+                german: "Warnung"),
+            "Error" => MatchLocalized(
+                simplifiedChinese: "错误",
+                traditionalChinese: "錯誤",
+                english: "Error",
+                russian: "Ошибка",
+                french: "Erreur",
+                german: "Fehler"),
+            _ => level,
+        };
+    }
+
+    private string FormatLogCategory(string source)
+    {
+        return source switch
+        {
+            "Settings" => _getString("Nav.Settings"),
+            "Trigger" => _getString("Nav.Triggers"),
+            "Notification" => _getString("Settings.Section.Notification"),
+            "Profiles" => _getString("Nav.Profiles"),
+            "Links" => _getString("Nav.Links"),
+            "Connections" => _getString("Nav.Connections"),
+            "MihomoService" => _getString("About.Mihomo.Title"),
+            "StartupRestoreFallback" => _getString("Settings.StartupRestoreFallback.Title"),
+            _ => source,
+        };
+    }
+
+    private string MatchLocalized(string simplifiedChinese, string traditionalChinese, string english, string russian, string french, string german)
+    {
+        string allLevels = AllLevelsText;
+        if (StringComparer.Ordinal.Equals(allLevels, "全部级别"))
+        {
+            return simplifiedChinese;
+        }
+
+        if (StringComparer.Ordinal.Equals(allLevels, "全部級別"))
+        {
+            return traditionalChinese;
+        }
+
+        if (StringComparer.Ordinal.Equals(allLevels, "Все уровни"))
+        {
+            return russian;
+        }
+
+        if (StringComparer.Ordinal.Equals(allLevels, "Tous les niveaux"))
+        {
+            return french;
+        }
+
+        if (StringComparer.Ordinal.Equals(allLevels, "Alle Ebenen"))
+        {
+            return german;
+        }
+
+        return english;
+    }
+
+    private LogCleanupPreview EstimateCleanupPreview(int selectedIndex, double parameterValue)
+    {
+        LogStorageSummary summary = _logStorage.GetStorageSummary();
+        return selectedIndex switch
+        {
+            3 => new LogCleanupPreview(summary.LogCount + summary.ConnectionCount, summary.DatabaseSizeBytes),
+            _ => new LogCleanupPreview(0, 0),
+        };
+    }
+}
+
+internal sealed record LogRecordDisplay(LogRecord Record, string LevelDisplay, string SourceDisplay)
+{
+    public string CreatedAtDisplay => Record.CreatedAtDisplay;
+
+    public string Message => Record.Message;
+
+    public string Detail => Record.Detail;
 }

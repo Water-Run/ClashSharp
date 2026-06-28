@@ -94,6 +94,7 @@ public sealed partial class Logs : Page
         cleanupModeBox.Items.Add(localization.GetString("Logs.Cleanup.Mode.BySize"));
         cleanupModeBox.Items.Add(localization.GetString("Logs.Cleanup.Mode.ByCount"));
         cleanupModeBox.Items.Add(localization.GetString("Logs.Cleanup.Mode.All"));
+        cleanupModeBox.Items.Add($"{_viewModel.LevelFilterLabelText} / {_viewModel.CategoryFilterLabelText}");
 
         NumberBox parameterBox = new()
         {
@@ -109,20 +110,63 @@ public sealed partial class Logs : Page
             TextWrapping = TextWrapping.Wrap,
             Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
         };
+        ComboBox levelBox = new()
+        {
+            Header = _viewModel.LevelFilterLabelText,
+            ItemsSource = _viewModel.LevelFilterOptions,
+            SelectedItem = _viewModel.SelectedLevelFilter,
+            IsEnabled = false,
+        };
+        ComboBox categoryBox = new()
+        {
+            Header = _viewModel.CategoryFilterLabelText,
+            ItemsSource = _viewModel.CategoryFilterOptions,
+            SelectedItem = _viewModel.SelectedCategoryFilter,
+            IsEnabled = false,
+        };
+        TextBlock previewText = new()
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+        };
         StackPanel content = new()
         {
             Spacing = 12,
+            MinWidth = 520,
+            MaxWidth = 640,
         };
         content.Children.Add(cleanupModeBox);
         content.Children.Add(parameterBox);
+        content.Children.Add(levelBox);
+        content.Children.Add(categoryBox);
         content.Children.Add(descriptionText);
+        content.Children.Add(previewText);
 
-        cleanupModeBox.SelectionChanged += (_, _) => UpdateCleanupParameterEditor(cleanupModeBox.SelectedIndex, parameterBox, descriptionText);
+        void UpdatePreview()
+        {
+            previewText.Text = _viewModel.GetCleanupPreviewText(
+                cleanupModeBox.SelectedIndex,
+                parameterBox.Value,
+                levelBox.SelectedItem as string,
+                categoryBox.SelectedItem as string);
+        }
 
-        ContentDialog dialog = new()
+        cleanupModeBox.SelectionChanged += (_, _) =>
+        {
+            UpdateCleanupParameterEditor(cleanupModeBox.SelectedIndex, parameterBox, descriptionText, levelBox, categoryBox);
+            UpdatePreview();
+        };
+        parameterBox.ValueChanged += (_, _) => UpdatePreview();
+        levelBox.SelectionChanged += (_, _) => UpdatePreview();
+        categoryBox.SelectionChanged += (_, _) => UpdatePreview();
+        UpdatePreview();
+
+        ThemedContentDialog dialog = new()
         {
             Title = localization.GetString("Logs.Cleanup.Title"),
             Content = content,
+            MaxWidth = 720,
             PrimaryButtonText = localization.GetString("Command.Cleanup"),
             CloseButtonText = localization.GetString("Command.Cancel"),
             XamlRoot = XamlRoot,
@@ -134,17 +178,31 @@ public sealed partial class Logs : Page
             return;
         }
 
-        _viewModel.ApplyCleanupMode(cleanupModeBox.SelectedIndex, parameterBox.Value);
+        _viewModel.ApplyCleanupMode(
+            cleanupModeBox.SelectedIndex,
+            parameterBox.Value,
+            levelBox.SelectedItem as string,
+            categoryBox.SelectedItem as string);
     }
 
     /// <summary>Updates the parameter editor to match the selected cleanup mode.</summary>
     /// <param name="selectedIndex">Selected cleanup mode index.</param>
     /// <param name="parameterBox">Numeric parameter editor. Must not be null.</param>
     /// <param name="descriptionText">Cleanup description text. Must not be null.</param>
-    private static void UpdateCleanupParameterEditor(int selectedIndex, NumberBox parameterBox, TextBlock descriptionText)
+    private static void UpdateCleanupParameterEditor(
+        int selectedIndex,
+        NumberBox parameterBox,
+        TextBlock descriptionText,
+        ComboBox levelBox,
+        ComboBox categoryBox)
     {
         ArgumentNullException.ThrowIfNull(parameterBox);
         ArgumentNullException.ThrowIfNull(descriptionText);
+        ArgumentNullException.ThrowIfNull(levelBox);
+        ArgumentNullException.ThrowIfNull(categoryBox);
+
+        levelBox.IsEnabled = selectedIndex == 4;
+        categoryBox.IsEnabled = selectedIndex == 4;
 
         switch (selectedIndex)
         {
@@ -176,6 +234,11 @@ public sealed partial class Logs : Page
                 parameterBox.IsEnabled = false;
                 parameterBox.Header = LocalizationService.Instance.GetString("Logs.Cleanup.Parameter.None");
                 descriptionText.Text = LocalizationService.Instance.GetString("Logs.Cleanup.Description.All");
+                break;
+            case 4:
+                parameterBox.IsEnabled = false;
+                parameterBox.Header = LocalizationService.Instance.GetString("Logs.Cleanup.Parameter.None");
+                descriptionText.Text = $"{LocalizationService.Instance.GetString("Logs.Filter.Level")} / {LocalizationService.Instance.GetString("Logs.Filter.Category")}";
                 break;
         }
     }

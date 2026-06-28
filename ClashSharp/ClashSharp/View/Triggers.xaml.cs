@@ -31,6 +31,7 @@ public sealed partial class Triggers : Page
     private TriggerTaskItemViewModel? _editingItem;
     private TriggerCondition _selectedCondition = new(TriggerConditionKind.AppEntered);
     private IReadOnlyList<TriggerTaskAction> _selectedActions = [];
+    private bool _isUpdatingConditionParameters;
 
     public Triggers()
     {
@@ -107,7 +108,7 @@ public sealed partial class Triggers : Page
             return;
         }
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString("Triggers.Delete.Title"),
             Content = LocalizationService.Instance.GetString("Triggers.Delete.Message"),
@@ -214,7 +215,12 @@ public sealed partial class Triggers : Page
 
     private void SaveTriggerButton_Click(object sender, RoutedEventArgs e)
     {
-        IReadOnlyList<TriggerCondition> conditions = [_selectedCondition];
+        if (!TryBuildSelectedCondition(out TriggerCondition condition))
+        {
+            return;
+        }
+
+        IReadOnlyList<TriggerCondition> conditions = [condition];
         IReadOnlyList<TriggerTaskAction> actions = _selectedActions.Count == 0 ? CreateDefaultActions() : _selectedActions;
 
         if (_editingItem is TriggerTaskItemViewModel item)
@@ -252,7 +258,7 @@ public sealed partial class Triggers : Page
         };
         optionList.SetOptions(BuildConditionOptions(_selectedCondition.Kind));
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString("Triggers.Conditions"),
             Content = optionList,
@@ -288,7 +294,7 @@ public sealed partial class Triggers : Page
         };
         optionList.SetOptions(BuildActionOptions(selectedKinds));
 
-        ContentDialog dialog = new()
+        ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString("Triggers.Actions"),
             Content = optionList,
@@ -315,6 +321,7 @@ public sealed partial class Triggers : Page
         _selectedCondition = condition;
         SelectedTriggerConditionText.Text = LocalizationService.Instance.GetString($"Triggers.Condition.{condition.Kind}");
         SelectedTriggerConditionDescriptionText.Text = LocalizationService.Instance.GetString($"Triggers.Condition.{condition.Kind}.Description");
+        ConfigureConditionParameterEditor(condition);
     }
 
     private void SetSelectedActions(IReadOnlyList<TriggerTaskAction> actions)
@@ -392,5 +399,220 @@ public sealed partial class Triggers : Page
             TriggerActionKind.ExitApplication => "\uE8BB",
             _ => "\uEA8F",
         };
+    }
+
+    private void ConfigureConditionParameterEditor(TriggerCondition condition)
+    {
+        _isUpdatingConditionParameters = true;
+        TriggerConditionValidationText.Visibility = Visibility.Collapsed;
+        TriggerConditionThresholdBox.Visibility = Visibility.Collapsed;
+        TriggerConditionUnitBox.Visibility = Visibility.Collapsed;
+        TriggerConditionStartBox.Visibility = Visibility.Collapsed;
+        TriggerConditionLevelBox.Visibility = Visibility.Collapsed;
+        TriggerConditionValueBox.Visibility = Visibility.Collapsed;
+        TriggerConditionUnitBox.Items.Clear();
+        TriggerConditionStartBox.Items.Clear();
+        TriggerConditionLevelBox.Items.Clear();
+
+        switch (condition.Kind)
+        {
+            case TriggerConditionKind.TotalTraffic:
+            case TriggerConditionKind.TrafficInWindow:
+                TriggerConditionThresholdBox.Visibility = Visibility.Visible;
+                TriggerConditionUnitBox.Visibility = Visibility.Visible;
+                TriggerConditionStartBox.Visibility = Visibility.Visible;
+                AddComboItems(TriggerConditionUnitBox, ["MB", "GB", "TB"]);
+                AddComboItems(TriggerConditionStartBox, ["定时", "自启动", "累计"]);
+                SetTrafficThreshold(condition.Threshold);
+                TriggerConditionStartBox.SelectedIndex = condition.Value switch
+                {
+                    "Scheduled" => 0,
+                    "Startup" => 1,
+                    _ => 2,
+                };
+                break;
+            case TriggerConditionKind.Runtime:
+                TriggerConditionThresholdBox.Visibility = Visibility.Visible;
+                TriggerConditionUnitBox.Visibility = Visibility.Visible;
+                AddComboItems(TriggerConditionUnitBox, ["秒", "分钟", "小时"]);
+                SetRuntimeThreshold(condition.Threshold);
+                break;
+            case TriggerConditionKind.SystemTime:
+                TriggerConditionValueBox.Visibility = Visibility.Visible;
+                TriggerConditionValueBox.Header = "时间";
+                TriggerConditionValueBox.PlaceholderText = "23:00";
+                TriggerConditionValueBox.Text = string.IsNullOrWhiteSpace(condition.Value) ? "23:00" : condition.Value;
+                break;
+            case TriggerConditionKind.NotificationRaised:
+                TriggerConditionLevelBox.Visibility = Visibility.Visible;
+                AddComboItems(TriggerConditionLevelBox, ["默认", "仅严重", "更多"]);
+                TriggerConditionLevelBox.SelectedIndex = Enum.TryParse(condition.Value, out NotificationLevel level)
+                    ? Math.Clamp((int)level, 0, 2)
+                    : 0;
+                break;
+        }
+
+        _isUpdatingConditionParameters = false;
+    }
+
+    private static void AddComboItems(ComboBox comboBox, IReadOnlyList<string> values)
+    {
+        foreach (string value in values)
+        {
+            comboBox.Items.Add(value);
+        }
+
+        comboBox.SelectedIndex = values.Count > 0 ? 0 : -1;
+    }
+
+    private void SetTrafficThreshold(long bytes)
+    {
+        double value = Math.Max(1, bytes);
+        if (value >= 1024d * 1024d * 1024d * 1024d)
+        {
+            TriggerConditionThresholdBox.Value = value / 1024d / 1024d / 1024d / 1024d;
+            TriggerConditionUnitBox.SelectedIndex = 2;
+            return;
+        }
+
+        if (value >= 1024d * 1024d * 1024d)
+        {
+            TriggerConditionThresholdBox.Value = value / 1024d / 1024d / 1024d;
+            TriggerConditionUnitBox.SelectedIndex = 1;
+            return;
+        }
+
+        TriggerConditionThresholdBox.Value = value / 1024d / 1024d;
+        TriggerConditionUnitBox.SelectedIndex = 0;
+    }
+
+    private void SetRuntimeThreshold(long seconds)
+    {
+        if (seconds >= 3600 && seconds % 3600 == 0)
+        {
+            TriggerConditionThresholdBox.Value = seconds / 3600d;
+            TriggerConditionUnitBox.SelectedIndex = 2;
+            return;
+        }
+
+        if (seconds >= 60 && seconds % 60 == 0)
+        {
+            TriggerConditionThresholdBox.Value = seconds / 60d;
+            TriggerConditionUnitBox.SelectedIndex = 1;
+            return;
+        }
+
+        TriggerConditionThresholdBox.Value = Math.Max(1, seconds);
+        TriggerConditionUnitBox.SelectedIndex = 0;
+    }
+
+    private bool TryBuildSelectedCondition(out TriggerCondition condition)
+    {
+        condition = _selectedCondition;
+        TriggerConditionValidationText.Visibility = Visibility.Collapsed;
+
+        switch (_selectedCondition.Kind)
+        {
+            case TriggerConditionKind.TotalTraffic:
+            case TriggerConditionKind.TrafficInWindow:
+                if (!TryReadPositiveNumber(out double trafficValue))
+                {
+                    ShowConditionValidation("请输入大于 0 的流量阈值。");
+                    return false;
+                }
+
+                long bytes = ConvertTrafficThresholdToBytes(trafficValue, TriggerConditionUnitBox.SelectedIndex);
+                string start = TriggerConditionStartBox.SelectedIndex switch
+                {
+                    0 => "Scheduled",
+                    1 => "Startup",
+                    _ => "Cumulative",
+                };
+                condition = _selectedCondition with { Threshold = bytes, Value = start };
+                break;
+            case TriggerConditionKind.Runtime:
+                if (!TryReadPositiveNumber(out double runtimeValue))
+                {
+                    ShowConditionValidation("请输入大于 0 的运行时长。");
+                    return false;
+                }
+
+                condition = _selectedCondition with { Threshold = ConvertRuntimeThresholdToSeconds(runtimeValue, TriggerConditionUnitBox.SelectedIndex) };
+                break;
+            case TriggerConditionKind.SystemTime:
+                if (!TimeOnly.TryParse(TriggerConditionValueBox.Text, out _))
+                {
+                    ShowConditionValidation("请输入 HH:mm 格式的时间。");
+                    return false;
+                }
+
+                condition = _selectedCondition with { Value = TriggerConditionValueBox.Text.Trim() };
+                break;
+            case TriggerConditionKind.NotificationRaised:
+                NotificationLevel level = (NotificationLevel)Math.Clamp(TriggerConditionLevelBox.SelectedIndex, 0, 2);
+                condition = _selectedCondition with { Value = level.ToString() };
+                break;
+        }
+
+        _selectedCondition = condition;
+        SetSelectedCondition(condition);
+        return true;
+    }
+
+    private bool TryReadPositiveNumber(out double value)
+    {
+        value = TriggerConditionThresholdBox.Value;
+        return !double.IsNaN(value) && value > 0;
+    }
+
+    private static long ConvertTrafficThresholdToBytes(double value, int unitIndex)
+    {
+        double multiplier = unitIndex switch
+        {
+            1 => 1024d * 1024d * 1024d,
+            2 => 1024d * 1024d * 1024d * 1024d,
+            _ => 1024d * 1024d,
+        };
+        return Math.Max(1, (long)Math.Round(value * multiplier));
+    }
+
+    private static long ConvertRuntimeThresholdToSeconds(double value, int unitIndex)
+    {
+        double multiplier = unitIndex switch
+        {
+            1 => 60d,
+            2 => 3600d,
+            _ => 1d,
+        };
+        return Math.Max(1, (long)Math.Round(value * multiplier));
+    }
+
+    private void ShowConditionValidation(string message)
+    {
+        TriggerConditionValidationText.Text = message;
+        TriggerConditionValidationText.Visibility = Visibility.Visible;
+    }
+
+    private void TriggerConditionThresholdBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        HideConditionValidationAfterUserEdit();
+    }
+
+    private void TriggerConditionComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        HideConditionValidationAfterUserEdit();
+    }
+
+    private void TriggerConditionValueBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        HideConditionValidationAfterUserEdit();
+    }
+
+    private void HideConditionValidationAfterUserEdit()
+    {
+        if (!_isUpdatingConditionParameters)
+        {
+            TriggerConditionValidationText.Visibility = Visibility.Collapsed;
+        }
     }
 }

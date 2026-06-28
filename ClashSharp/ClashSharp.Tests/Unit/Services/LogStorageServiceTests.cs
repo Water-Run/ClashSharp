@@ -104,6 +104,27 @@ public sealed class LogStorageServiceTests
         Assert.Contains("Trigger", sources);
     }
 
+    /// <summary>Verifies log cleanup can be previewed and applied by level and source without mutating other categories.</summary>
+    [Fact]
+    public void CleanupLogs_WhenLevelAndSourceProvided_DeletesMatchingLogsOnly()
+    {
+        using TempDatabase tempDatabase = new();
+        LogStorageService service = new(tempDatabase.Path, () => "profile-a");
+        service.AppendLog("Info", "Settings", "Setting changed", "detail");
+        service.AppendLog("Warning", "Settings", "Setting failed", "detail");
+        service.AppendLog("Warning", "Trigger", "Trigger fired", "detail");
+
+        LogCleanupPreview preview = service.PreviewLogCleanup("Warning", "Settings");
+        long deleted = service.CleanupLogs("Warning", "Settings");
+
+        Assert.Equal(1, preview.EntryCount);
+        Assert.True(preview.EstimatedSizeBytes > 0);
+        Assert.Equal(1, deleted);
+        Assert.Empty(service.GetLogs(20, "Settings", "Warning"));
+        Assert.Single(service.GetLogs(20, "Settings", "Info"));
+        Assert.Single(service.GetLogs(20, "Trigger", "Warning"));
+    }
+
     /// <summary>Verifies database export produces a readable snapshot that includes recently appended WAL-mode logs.</summary>
     [Fact]
     public void ExportDatabase_CopiesReadableSnapshotWithRecentLogs()
