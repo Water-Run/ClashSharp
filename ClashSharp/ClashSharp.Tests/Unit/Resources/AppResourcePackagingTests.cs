@@ -546,6 +546,13 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("RunConnectionTestAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("BuildConnectionTestResultPanel(report)", settingsCode, StringComparison.Ordinal);
         Assert.Contains("CenteredDialogOverlay.ShowAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("GetConnectionTestSummaryBrush(report.SummaryState)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ConnectionTestSummaryState.AllPassed", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("SystemFillColorSuccessBrush", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ConnectionTestSummaryState.PartialFailed", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("SystemFillColorCautionBrush", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ConnectionTestSummaryState.AllFailed", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("SystemFillColorCriticalBrush", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings code-behind delegates data-maintenance actions to the view model.</summary>
@@ -871,6 +878,37 @@ public sealed class AppResourcePackagingTests
         Assert.True(appThemeIndex >= 0, "Display style row is missing.");
         Assert.True(accentColorIndex > appThemeIndex, "Accent color row must follow display style.");
         Assert.True(startupSectionIndex > accentColorIndex, "Startup section must follow display settings.");
+    }
+
+    /// <summary>Verifies settings groups follow the operational workflow and keep data maintenance last.</summary>
+    [Fact]
+    public void SettingsXaml_OrdersGroupsByOperationalFlowAndKeepsDataLast()
+    {
+        string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
+
+        string settingsXaml = File.ReadAllText(settingsXamlPath);
+
+        string[] sectionNames =
+        [
+            "LanguageSectionTitleText",
+            "StartupSectionTitleText",
+            "ProxySectionTitleText",
+            "WindowsNativeSectionTitleText",
+            "NotificationSectionTitleText",
+            "TriggerSectionTitleText",
+            "TraySectionTitleText",
+            "MainlandChinaSectionTitleText",
+            "DataSectionTitleText",
+        ];
+
+        int previousIndex = -1;
+        foreach (string sectionName in sectionNames)
+        {
+            int sectionIndex = settingsXaml.IndexOf($"x:Name=\"{sectionName}\"", StringComparison.Ordinal);
+            Assert.True(sectionIndex >= 0, $"{sectionName} is missing.");
+            Assert.True(sectionIndex > previousIndex, $"{sectionName} is out of order.");
+            previousIndex = sectionIndex;
+        }
     }
 
     /// <summary>Verifies accent color picker uses centered dialog content and shows a restart-required prompt after changes.</summary>
@@ -1328,6 +1366,11 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"EditConnectionTestUrlsButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("MainlandChinaFeatureModeBox\" Width=\"280\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ConnectionTestButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"MihomoServiceStatusText\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"StartupRestoreFallbackStatusText\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth=\"160\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("TextTrimming=\"CharacterEllipsis\"", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TextWrapping=\"NoWrap\"", settingsXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies connection test URLs are edited through a child dialog with restore-defaults support.</summary>
@@ -1780,6 +1823,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("rootPanel.Children.Remove(overlay)", overlayCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment = HorizontalAlignment.Center", overlayCode, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment = VerticalAlignment.Center", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("SolidBackgroundFillColorBaseBrush", overlayCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Background = ResourceBrush(\"CardBackgroundFillColorDefaultBrush\"", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("TextWrapping = TextWrapping.Wrap", overlayCode, StringComparison.Ordinal);
         Assert.Contains("MaxHeight = Math.Min(320", presenterCode, StringComparison.Ordinal);
     }
 

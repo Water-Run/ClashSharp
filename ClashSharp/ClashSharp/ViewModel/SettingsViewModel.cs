@@ -115,10 +115,19 @@ internal sealed record ConnectionTestTargetResult(
     string LatencyText,
     int? LatencyMilliseconds);
 
+/// <summary>Overall connection-test result used to style the dialog summary.</summary>
+internal enum ConnectionTestSummaryState
+{
+    AllPassed,
+    PartialFailed,
+    AllFailed,
+}
+
 /// <summary>Connection-test report containing all target rows and a localized summary.</summary>
 internal sealed record ConnectionTestReport(
     IReadOnlyList<ConnectionTestTargetResult> Results,
-    string SummaryText);
+    string SummaryText,
+    ConnectionTestSummaryState SummaryState);
 
 /// <summary>Mihomo service control contract required by transparent proxy settings.</summary>
 internal interface IMihomoServiceController
@@ -2372,7 +2381,8 @@ internal sealed class SettingsViewModel : ObservableObject
                 }
             }
 
-            return new ConnectionTestReport(results, BuildConnectionTestSummary(results));
+            ConnectionTestSummaryState summaryState = BuildConnectionTestSummaryState(results);
+            return new ConnectionTestReport(results, BuildConnectionTestSummary(results, summaryState), summaryState);
         }
         finally
         {
@@ -2380,14 +2390,29 @@ internal sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    private string BuildConnectionTestSummary(IReadOnlyList<ConnectionTestTargetResult> results)
+    private static ConnectionTestSummaryState BuildConnectionTestSummaryState(IReadOnlyList<ConnectionTestTargetResult> results)
     {
         if (results.All(static result => result.Succeeded))
+        {
+            return ConnectionTestSummaryState.AllPassed;
+        }
+
+        if (results.All(static result => !result.Succeeded))
+        {
+            return ConnectionTestSummaryState.AllFailed;
+        }
+
+        return ConnectionTestSummaryState.PartialFailed;
+    }
+
+    private string BuildConnectionTestSummary(IReadOnlyList<ConnectionTestTargetResult> results, ConnectionTestSummaryState summaryState)
+    {
+        if (summaryState is ConnectionTestSummaryState.AllPassed)
         {
             return _getString("Settings.ConnectionTest.AllPassed");
         }
 
-        if (results.All(static result => !result.Succeeded))
+        if (summaryState is ConnectionTestSummaryState.AllFailed)
         {
             return _getString("Settings.ConnectionTest.AllFailed");
         }

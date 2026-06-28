@@ -84,7 +84,7 @@ internal static class CenteredDialogOverlay
             Text = title,
             Style = (Style)Application.Current.Resources["TitleTextBlockStyle"],
             Foreground = ResourceBrush("TextFillColorPrimaryBrush", new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255))),
-            TextWrapping = TextWrapping.WrapWholeWords,
+            TextWrapping = TextWrapping.Wrap,
         };
         layout.Children.Add(titleBlock);
 
@@ -121,7 +121,7 @@ internal static class CenteredDialogOverlay
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(1),
             BorderBrush = ResourceBrush("ControlStrokeColorDefaultBrush", new SolidColorBrush(Windows.UI.Color.FromArgb(255, 105, 105, 105))),
-            Background = ResourceBrush("CardBackgroundFillColorDefaultBrush", new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 0, 0))),
+            Background = ResourceBrush("SolidBackgroundFillColorBaseBrush", new SolidColorBrush(Windows.UI.Color.FromArgb(255, 32, 32, 32))),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };

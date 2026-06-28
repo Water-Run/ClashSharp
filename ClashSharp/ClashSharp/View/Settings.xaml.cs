@@ -174,7 +174,7 @@ public sealed partial class Settings : Page
         {
             Text = report.SummaryText,
             Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+            Foreground = GetConnectionTestSummaryBrush(report.SummaryState),
             TextWrapping = TextWrapping.WrapWholeWords,
         });
         return panel;
@@ -220,6 +220,23 @@ public sealed partial class Settings : Page
         AddConnectionTestText(table, rowIndex, 2, result.LatencyText, "BodyTextBlockStyle", "TextFillColorPrimaryBrush");
     }
 
+    private static Brush GetConnectionTestSummaryBrush(ConnectionTestSummaryState summaryState)
+    {
+        return summaryState switch
+        {
+            ConnectionTestSummaryState.AllPassed => ResourceBrush(
+                "SystemFillColorSuccessBrush",
+                new SolidColorBrush(Windows.UI.Color.FromArgb(255, 16, 124, 16))),
+            ConnectionTestSummaryState.PartialFailed => ResourceBrush(
+                "SystemFillColorCautionBrush",
+                new SolidColorBrush(Windows.UI.Color.FromArgb(255, 157, 93, 0))),
+            ConnectionTestSummaryState.AllFailed => ResourceBrush(
+                "SystemFillColorCriticalBrush",
+                new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28))),
+            _ => (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+        };
+    }
+
     private static void AddConnectionTestText(Grid table, int rowIndex, int columnIndex, string text, string styleKey, string brushKey)
     {
         TextBlock textBlock = new()
@@ -234,6 +251,13 @@ public sealed partial class Settings : Page
         Grid.SetRow(textBlock, rowIndex);
         Grid.SetColumn(textBlock, columnIndex);
         table.Children.Add(textBlock);
+    }
+
+    private static Brush ResourceBrush(string key, Brush fallback)
+    {
+        return Application.Current.Resources.TryGetValue(key, out object value) && value is Brush brush
+            ? brush
+            : fallback;
     }
 
     /// <summary>Opens the Windows-native network repair dialog.</summary>

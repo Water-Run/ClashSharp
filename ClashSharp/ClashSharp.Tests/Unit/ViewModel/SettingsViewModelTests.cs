@@ -807,6 +807,7 @@ public sealed class SettingsViewModelTests
         Assert.All(rows, row => Assert.True(ReadObjectProperty<bool>(row, "Succeeded")));
         Assert.All(rows, row => Assert.Equal("HTTP 204", ReadObjectProperty<string>(row, "StatusText")));
         Assert.Equal("Settings.ConnectionTest.AllPassed", ReadObjectProperty<string>(report, "SummaryText"));
+        Assert.Equal("AllPassed", ReadObjectProperty<object>(report, "SummaryState").ToString());
         Assert.Equal(
             ["https://www.google.com/", "https://github.com/", "https://www.baidu.com/"],
             requestedUris.Select(uri => uri.ToString()).ToArray());
@@ -835,9 +836,30 @@ public sealed class SettingsViewModelTests
         Assert.Equal("HTTP 204", ReadObjectProperty<string>(rows[0], "StatusText"));
         Assert.EndsWith(" ms", ReadObjectProperty<string>(rows[0], "LatencyText"), StringComparison.Ordinal);
         Assert.Equal("Settings.ConnectionTest.AllPassed", ReadObjectProperty<string>(report, "SummaryText"));
+        Assert.Equal("AllPassed", ReadObjectProperty<object>(report, "SummaryState").ToString());
         Assert.Equal(
             ["https://www.google.com/", "https://github.com/", "https://www.baidu.com/"],
             requestedUris.Select(uri => uri.ToString()).ToArray());
+        Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
+    }
+
+    /// <summary>Verifies a mixed connection-test result reports a partial-failure summary state.</summary>
+    [Fact]
+    public async Task RunConnectionTestAsync_OneProbeFails_ReturnsPartialSummaryState()
+    {
+        SettingsViewModel viewModel = CreateConnectionTestViewModel(async (uri, _) =>
+        {
+            await Task.Yield();
+            return uri.Host.Contains("github", StringComparison.OrdinalIgnoreCase) ? 500 : 204;
+        });
+
+        object report = await InvokeRunConnectionTestReportAsync(viewModel, CancellationToken.None);
+        IReadOnlyList<object> rows = ReadObjectProperty<IReadOnlyList<object>>(report, "Results");
+
+        Assert.Equal(3, rows.Count);
+        Assert.Equal([true, false, true], rows.Select(row => ReadObjectProperty<bool>(row, "Succeeded")).ToArray());
+        Assert.Equal("2/3", ReadObjectProperty<string>(report, "SummaryText"));
+        Assert.Equal("PartialFailed", ReadObjectProperty<object>(report, "SummaryState").ToString());
         Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
     }
 
@@ -854,6 +876,7 @@ public sealed class SettingsViewModelTests
         Assert.All(rows, row => Assert.False(ReadObjectProperty<bool>(row, "Succeeded")));
         Assert.All(rows, row => Assert.Equal("failed network unavailable", ReadObjectProperty<string>(row, "StatusText")));
         Assert.Equal("Settings.ConnectionTest.AllFailed", ReadObjectProperty<string>(report, "SummaryText"));
+        Assert.Equal("AllFailed", ReadObjectProperty<object>(report, "SummaryState").ToString());
         Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
     }
 
