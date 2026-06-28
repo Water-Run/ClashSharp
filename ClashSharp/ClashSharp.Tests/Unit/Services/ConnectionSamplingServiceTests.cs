@@ -116,6 +116,37 @@ public sealed class ConnectionSamplingServiceTests
         Assert.Equal(60, secondDelta.DownloadBytes);
     }
 
+    /// <summary>Verifies restart does not start a replacement sampling loop while the previous loop is still in-flight.</summary>
+    [Fact]
+    public async Task RestartFromSettings_WhenSampleIsInFlight_WaitsForPreviousLoopBeforeStartingReplacement()
+    {
+        FakeConnectionSamplingSettings settings = new() { IsEnabled = true, IntervalSeconds = 0 };
+        FakeConnectionSamplingSource source = new()
+        {
+            BlockFirstSample = true,
+        };
+        ConnectionSamplingService service = CreateService(settings, source);
+
+        try
+        {
+            service.Start();
+            await source.FirstSampleStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            service.RestartFromSettings();
+            await Task.Delay(80);
+
+            Assert.Equal(1, source.CallCount);
+
+            source.ReleaseFirstSample.TrySetResult(null);
+            await WaitUntilAsync(() => source.CallCount >= 2);
+        }
+        finally
+        {
+            service.Stop();
+            source.ReleaseFirstSample.TrySetResult(null);
+        }
+    }
+
     private static ConnectionSamplingService CreateService(
         FakeConnectionSamplingSettings? settings = null,
         FakeConnectionSamplingSource? source = null,
@@ -148,6 +179,15 @@ public sealed class ConnectionSamplingServiceTests
             DateTimeOffset.UnixEpoch);
     }
 
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
+        while (!condition())
+        {
+            await Task.Delay(20, timeout.Token);
+        }
+    }
+
     private sealed class FakeConnectionSamplingSettings : IConnectionSamplingSettings
     {
         public bool IsEnabled { get; init; }
@@ -161,14 +201,32 @@ public sealed class ConnectionSamplingServiceTests
 
         public IReadOnlyList<ActiveConnection> Connections { get; set; } = [];
 
-        public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+        public bool BlockFirstSample { get; init; }
+
+        public int CallCount { get; private set; }
+
+        public TaskCompletionSource<object?> FirstSampleStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<object?> ReleaseFirstSample { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
         {
+            CallCount++;
+            if (CallCount == 1)
+            {
+                FirstSampleStarted.TrySetResult(null);
+                if (BlockFirstSample)
+                {
+                    await ReleaseFirstSample.Task;
+                }
+            }
+
             if (Exception is not null)
             {
                 throw Exception;
             }
 
-            return Task.FromResult(Connections);
+            return Connections;
         }
     }
 

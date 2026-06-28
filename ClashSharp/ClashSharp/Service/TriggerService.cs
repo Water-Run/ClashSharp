@@ -31,6 +31,7 @@ internal sealed class TriggerService
 {
     private const string TriggerLog = "Trigger";
     private static readonly TimeSpan DefaultPeriodicInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DefaultRepeatedTriggerCooldown = TimeSpan.FromMinutes(5);
 
 #if UNIT_TESTS
     public static TriggerService Instance => throw new NotSupportedException("Use explicit TriggerService dependencies in tests.");
@@ -49,7 +50,9 @@ internal sealed class TriggerService
     private readonly Action<bool> _setTriggersEnabled;
     private readonly Func<bool> _getTriggerNotificationsEnabled;
     private readonly Func<TriggerEvaluationContext> _createPeriodicContext;
+    private readonly Func<DateTimeOffset> _getNow;
     private readonly TimeSpan _periodicInterval;
+    private readonly TimeSpan _repeatedTriggerCooldown;
     private readonly object _syncLock = new();
     private List<TriggerTask> _tasks = [];
     private readonly ConcurrentQueue<TriggerRuntimeEvent> _pendingRuntimeEvents = new();
@@ -71,7 +74,9 @@ internal sealed class TriggerService
         Action<bool>? setTriggersEnabled = null,
         Func<bool>? getTriggerNotificationsEnabled = null,
         TimeSpan? periodicInterval = null,
-        Func<TriggerEvaluationContext>? createPeriodicContext = null)
+        Func<TriggerEvaluationContext>? createPeriodicContext = null,
+        TimeSpan? repeatedTriggerCooldown = null,
+        Func<DateTimeOffset>? getNow = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storagePath);
         _storagePath = Path.GetFullPath(storagePath);
@@ -87,6 +92,8 @@ internal sealed class TriggerService
         _getTriggerNotificationsEnabled = getTriggerNotificationsEnabled ?? (() => true);
         _periodicInterval = periodicInterval ?? DefaultPeriodicInterval;
         _createPeriodicContext = createPeriodicContext ?? (() => TriggerEvaluationContextFactory.Create(TriggerEventKind.Periodic));
+        _repeatedTriggerCooldown = repeatedTriggerCooldown ?? DefaultRepeatedTriggerCooldown;
+        _getNow = getNow ?? (() => DateTimeOffset.Now);
         _runtimeEvents.RuntimeEventRaised += OnRuntimeEventRaised;
         Load();
     }
@@ -231,7 +238,12 @@ internal sealed class TriggerService
                 continue;
             }
 
-            DateTimeOffset triggeredAt = DateTimeOffset.Now;
+            DateTimeOffset triggeredAt = _getNow();
+            if (IsPeriodicCooldownActive(task, context, triggeredAt))
+            {
+                continue;
+            }
+
             bool taskFailed = false;
             foreach (TriggerAction action in task.Actions)
             {
@@ -490,6 +502,14 @@ internal sealed class TriggerService
         }
 
         return true;
+    }
+
+    private bool IsPeriodicCooldownActive(TriggerTask task, TriggerEvaluationContext context, DateTimeOffset now)
+    {
+        return context.EventKind == TriggerEventKind.Periodic
+            && _repeatedTriggerCooldown > TimeSpan.Zero
+            && task.LastTriggeredAt is DateTimeOffset lastTriggeredAt
+            && now - lastTriggeredAt < _repeatedTriggerCooldown;
     }
 
     private static bool Matches(TriggerCondition condition, TriggerEvaluationContext context)

@@ -162,6 +162,71 @@ public sealed class ClashDataPackageServiceTests
         Assert.False(File.Exists(Path.Combine(directory.Path, "mihomo", "config.yaml")));
     }
 
+    /// <summary>Verifies invalid setting ranges are rejected before any package files are written.</summary>
+    [Fact]
+    public async Task ImportAsync_WhenSettingRangeIsInvalid_DoesNotWriteFiles()
+    {
+        using TemporaryDirectory directory = new();
+        string packagePath = Path.Combine(directory.Path, "invalid-setting-range.xml");
+        XDocument document = new(
+            new XElement("ClashSharpDataPackage",
+                new XAttribute("Format", "ClashSharp.XmlDataPackage"),
+                new XAttribute("Version", "1"),
+                new XAttribute("Scope", ClashDataPackageScope.SettingsAndProxyConfiguration.ToString()),
+                new XElement("Settings",
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.MixedPort)),
+                        new XAttribute("Value", "70000"))),
+                new XElement("Files",
+                    new XElement("File",
+                        new XAttribute("Path", "mihomo/config.yaml"),
+                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("config"))))));
+        await File.WriteAllTextAsync(packagePath, document.ToString(SaveOptions.DisableFormatting));
+        FakeClashDataPackageSettings settings = new();
+        ClashDataPackageService service = new(settings, directory.Path);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => service.ImportAsync(packagePath, CancellationToken.None));
+
+        Assert.Equal(10000, settings.MixedPort);
+        Assert.False(File.Exists(Path.Combine(directory.Path, "mihomo", "config.yaml")));
+    }
+
+    /// <summary>Verifies settings already applied during import are restored if a later setting fails.</summary>
+    [Fact]
+    public async Task ImportAsync_WhenSettingApplicationFails_RestoresPreviousSettings()
+    {
+        using TemporaryDirectory directory = new();
+        string packagePath = Path.Combine(directory.Path, "setting-apply-fails.xml");
+        XDocument document = new(
+            new XElement("ClashSharpDataPackage",
+                new XAttribute("Format", "ClashSharp.XmlDataPackage"),
+                new XAttribute("Version", "1"),
+                new XAttribute("Scope", ClashDataPackageScope.Settings.ToString()),
+                new XElement("Settings",
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.DisplayLanguage)),
+                        new XAttribute("Value", AppLanguage.French.ToString())),
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.ActiveProfileId)),
+                        new XAttribute("Value", "throw"))),
+                new XElement("Files")));
+        await File.WriteAllTextAsync(packagePath, document.ToString(SaveOptions.DisableFormatting));
+        ThrowingClashDataPackageSettings settings = new()
+        {
+            DisplayLanguage = AppLanguage.English,
+            ActiveProfileId = "direct",
+            ThrowOnActiveProfileId = "throw",
+        };
+        ClashDataPackageService service = new(settings, directory.Path);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ImportAsync(packagePath, CancellationToken.None));
+
+        Assert.Equal(AppLanguage.English, settings.DisplayLanguage);
+        Assert.Equal("direct", settings.ActiveProfileId);
+    }
+
     private static XElement AssertRoot(XDocument document, ClashDataPackageScope scope)
     {
         XElement root = Assert.IsType<XElement>(document.Root);
@@ -206,6 +271,83 @@ public sealed class ClashDataPackageServiceTests
         public ClashSharpMode CurrentMode { get; set; } = ClashSharpMode.Disabled;
 
         public string ActiveProfileId { get; set; } = "direct";
+
+        public bool TransparentProxyEnabled { get; set; } = true;
+
+        public int MixedPort { get; set; } = 10000;
+
+        public bool ConnectionSamplingEnabled { get; set; } = true;
+
+        public int ConnectionSamplingIntervalSeconds { get; set; } = 30;
+
+        public bool RestoreProxyOnExit { get; set; } = true;
+
+        public bool CheckStaleProxyOnStartup { get; set; } = true;
+
+        public bool StartupConflictCheckEnabled { get; set; } = true;
+
+        public StartupBehaviorMode StartupBehaviorMode { get; set; } = StartupBehaviorMode.LastSetting;
+
+        public bool ShowStartupGuideOnStartup { get; set; } = true;
+
+        public bool TriggersEnabled { get; set; } = true;
+
+        public bool TriggerNotificationsEnabled { get; set; } = true;
+
+        public CloseBehaviorMode CloseBehaviorMode { get; set; } = CloseBehaviorMode.MinimizeToTray;
+
+        public bool TrayUseMonochromeInactiveIcon { get; set; } = true;
+
+        public string TrayVisibleFeatureIds { get; set; } = "status,mode,pages,transparent-proxy,settings,safe-exit";
+
+        public bool NotificationEnabled { get; set; } = true;
+
+        public NotificationLevel NotificationLevel { get; set; } = NotificationLevel.Default;
+
+        public MainlandChinaFeatureMode MainlandChinaFeatureMode { get; set; } = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
+
+        public bool MainlandChinaUrlBlockingEnabled { get; set; }
+
+        public string ConnectionTestUrl { get; set; } = "https://www.google.com/generate_204";
+
+        public string ConnectionTestProxyUrl1 { get; set; } = "https://www.google.com";
+
+        public string ConnectionTestProxyUrl2 { get; set; } = "https://github.com";
+
+        public string ConnectionTestDirectUrl { get; set; } = "https://www.baidu.com";
+    }
+
+    private sealed class ThrowingClashDataPackageSettings : IClashDataPackageSettings
+    {
+        private string _activeProfileId = "direct";
+
+        public string? ThrowOnActiveProfileId { get; init; }
+
+        public AppLanguage DisplayLanguage { get; set; } = AppLanguage.AutoDetect;
+
+        public AppThemeMode AppThemeMode { get; set; } = AppThemeMode.FollowSystem;
+
+        public AppAccentColorMode AppAccentColorMode { get; set; } = AppAccentColorMode.FollowSystem;
+
+        public string AppAccentColorValue { get; set; } = "#FF0078D4";
+
+        public bool LaunchAtStartupEnabled { get; set; }
+
+        public ClashSharpMode CurrentMode { get; set; } = ClashSharpMode.Disabled;
+
+        public string ActiveProfileId
+        {
+            get => _activeProfileId;
+            set
+            {
+                if (StringComparer.Ordinal.Equals(value, ThrowOnActiveProfileId))
+                {
+                    throw new InvalidOperationException("profile rejected");
+                }
+
+                _activeProfileId = value;
+            }
+        }
 
         public bool TransparentProxyEnabled { get; set; } = true;
 

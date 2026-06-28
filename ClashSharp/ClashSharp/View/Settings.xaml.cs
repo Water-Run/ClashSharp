@@ -129,6 +129,10 @@ public sealed partial class Settings : Page
             ConnectionTestReport report = await _viewModel.RunConnectionTestAsync(CancellationToken.None);
             await ShowConnectionTestResultAsync(report);
         }
+        catch (Exception exception)
+        {
+            await ShowSettingsOperationFailureAsync(_viewModel.ConnectionTestUrlTitleText, exception);
+        }
         finally
         {
             ConnectionTestButton.IsEnabled = true;
@@ -624,32 +628,46 @@ public sealed partial class Settings : Page
     /// <summary>Exports a Clash# XML data package with the selected scope.</summary>
     private async void ExportDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
-        DataPackageExportScope? scope = await SelectDataPackageExportScopeAsync();
-        if (scope is DataPackageExportScope selectedScope)
+        try
         {
-            await PickAndExportDataPackageAsync(selectedScope);
+            DataPackageExportScope? scope = await SelectDataPackageExportScopeAsync();
+            if (scope is DataPackageExportScope selectedScope)
+            {
+                await PickAndExportDataPackageAsync(selectedScope);
+            }
+        }
+        catch (Exception exception)
+        {
+            await ShowSettingsOperationFailureAsync(_viewModel.DataExportTitleText, exception);
         }
     }
 
     /// <summary>Imports a Clash# XML data package after two confirmations.</summary>
     private async void ImportDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
-        FileOpenPicker picker = new()
+        try
         {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-        };
-        InitializePickerWithWindow(picker);
-        picker.FileTypeFilter.Add(".xml");
+            FileOpenPicker picker = new()
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            };
+            InitializePickerWithWindow(picker);
+            picker.FileTypeFilter.Add(".xml");
 
-        StorageFile? file = await picker.PickSingleFileAsync();
-        ClashDataPackageScope? scope = ReadPackageScope(file?.Path ?? string.Empty);
-        if (file is null || !IsImportableDataPackageScope(scope) || !await ConfirmDataImportAsync(scope))
-        {
-            return;
+            StorageFile? file = await picker.PickSingleFileAsync();
+            ClashDataPackageScope? scope = ReadPackageScope(file?.Path ?? string.Empty);
+            if (file is null || !IsImportableDataPackageScope(scope) || !await ConfirmDataImportAsync(scope))
+            {
+                return;
+            }
+
+            await ClashDataPackageService.Instance.ImportAsync(file.Path, CancellationToken.None);
+            ApplyImportedSettings();
         }
-
-        await ClashDataPackageService.Instance.ImportAsync(file.Path, CancellationToken.None);
-        ApplyImportedSettings();
+        catch (Exception exception)
+        {
+            await ShowSettingsOperationFailureAsync(_viewModel.ImportText, exception);
+        }
     }
 
     /// <summary>Prompts for the package export scope immediately before saving.</summary>
@@ -1042,6 +1060,21 @@ public sealed partial class Settings : Page
         };
 
         return await dialog.ShowAsync() is ContentDialogResult.Primary;
+    }
+
+    /// <summary>Logs and displays a settings operation failure without escaping the async event handler.</summary>
+    private async Task ShowSettingsOperationFailureAsync(string title, Exception exception)
+    {
+        LogStorageService.Instance.AppendLog("Warning", "Settings", title, exception.Message);
+        ContentDialog dialog = new()
+        {
+            Title = title,
+            Content = exception.Message,
+            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            XamlRoot = GetDialogXamlRoot(),
+        };
+
+        await dialog.ShowAsync();
     }
 
 }

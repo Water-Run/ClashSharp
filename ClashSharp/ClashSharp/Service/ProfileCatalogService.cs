@@ -13,6 +13,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -78,6 +79,9 @@ public sealed partial class ProfileCatalogService
 
     /// <summary>Obsolete preview profile identifier removed from early catalog builds.</summary>
     private const string ObsoleteSampleProfileId = "sample-rule-profile";
+
+    /// <summary>Maximum accepted subscription profile size in bytes.</summary>
+    private const int MaxSubscriptionDownloadBytes = 4 * 1024 * 1024;
 
     /// <summary>Shared HTTP client used for subscription checks and downloads.</summary>
     private static readonly HttpClient HttpClient = CreateHttpClient();
@@ -261,7 +265,7 @@ public sealed partial class ProfileCatalogService
             EnsureLinkHasHttpUri(link);
             TryUpdateSubscriptionLinkStatus(link.Id, GetString("ProfileCatalog.Subscription.Downloading"));
 
-            string configurationText = await HttpClient.GetStringAsync(new Uri(link.Uri), cancellationToken).ConfigureAwait(false);
+            string configurationText = await ReadSubscriptionConfigurationAsync(new Uri(link.Uri), cancellationToken).ConfigureAwait(false);
             string profileId = $"subscription-{link.Id}";
             ProfileImportResult importResult = await _coreConfiguration
                 .ImportProfileConfigurationAsync(profileId, link.Name, configurationText, cancellationToken)
@@ -426,6 +430,41 @@ public sealed partial class ProfileCatalogService
         response.Dispose();
         using HttpRequestMessage fallbackRequest = new(HttpMethod.Get, request.RequestUri);
         return await HttpClient.SendAsync(fallbackRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Reads a subscription profile response with a hard byte limit.</summary>
+    private static async Task<string> ReadSubscriptionConfigurationAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+
+        using HttpRequestMessage request = new(HttpMethod.Get, uri);
+        using HttpResponseMessage response = await HttpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        if (response.Content.Headers.ContentLength is long contentLength
+            && contentLength > MaxSubscriptionDownloadBytes)
+        {
+            throw new InvalidOperationException("Subscription profile is larger than the supported limit.");
+        }
+
+        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using MemoryStream buffer = new();
+        byte[] chunk = new byte[8192];
+        int bytesRead;
+        while ((bytesRead = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            if (buffer.Length + bytesRead > MaxSubscriptionDownloadBytes)
+            {
+                throw new InvalidOperationException("Subscription profile is larger than the supported limit.");
+            }
+
+            buffer.Write(chunk, 0, bytesRead);
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
     /// <summary>Validates that <paramref name="link"/> contains an absolute HTTP or HTTPS URI.</summary>

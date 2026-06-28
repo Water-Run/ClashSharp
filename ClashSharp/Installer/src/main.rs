@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 use clashsharp_installer::metadata::{
@@ -22,6 +23,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const PACKAGE_NAME: &str = "67dc1dc3-13fd-46c5-84f4-2932d94b566f";
 const GITHUB_URL: &str = "https://github.com/Water-Run/ClashSharp";
 const CLASHSHARP_LICENSE: &str = "AGPL-3.0";
+static ACTION_RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// User-requested package operation.
 #[derive(Clone, Copy)]
@@ -456,6 +458,13 @@ fn run_action_async(app_weak: Weak<MainWindow>, action: InstallerAction, text: T
         return;
     };
 
+    if ACTION_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return;
+    }
+
     handle.set_phase(InstallerPhase::Working as i32);
     handle.set_busy(true);
     handle.set_progress(0.04);
@@ -470,6 +479,7 @@ fn run_action_async(app_weak: Weak<MainWindow>, action: InstallerAction, text: T
     thread::spawn(move || {
         let result = run_action(&app_weak, action, text);
         let installed = final_installed_state(action, &result, is_package_installed());
+        ACTION_RUNNING.store(false, Ordering::SeqCst);
 
         app_weak
             .upgrade_in_event_loop(move |handle| {

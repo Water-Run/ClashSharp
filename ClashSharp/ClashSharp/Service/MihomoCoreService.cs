@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -227,12 +228,21 @@ public sealed class MihomoCoreService
     {
         ArgumentNullException.ThrowIfNull(process);
 
-        if (process.HasExited)
+        try
         {
-            return;
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
         }
+        catch (Exception exception) when (IsExpectedProcessTerminationException(exception))
+        {
+        }
+    }
 
-        process.Kill(entireProcessTree: true);
+    private static bool IsExpectedProcessTerminationException(Exception exception)
+    {
+        return exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException;
     }
 
     /// <summary>Appends one captured startup output line to a bounded buffer.</summary>

@@ -8,6 +8,7 @@
  */
 
 using System.Diagnostics;
+using System.ComponentModel;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -116,17 +117,20 @@ internal sealed class MihomoWorker : BackgroundService
     /// <summary>Stops a running process tree.</summary>
     private static void StopProcess(Process process)
     {
-        if (process.HasExited)
-        {
-            return;
-        }
-
         try
         {
-            process.Kill(entireProcessTree: true);
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
         }
-        catch (InvalidOperationException)
+        catch (Exception exception) when (IsExpectedProcessTerminationException(exception))
         {
         }
+    }
+
+    private static bool IsExpectedProcessTerminationException(Exception exception)
+    {
+        return exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException;
     }
 }

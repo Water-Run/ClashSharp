@@ -162,6 +162,50 @@ public sealed class TriggerServiceTests
         }
     }
 
+    /// <summary>Verifies a continuously matching periodic trigger is not dispatched on every timer tick.</summary>
+    [Fact]
+    public async Task Start_WhenPeriodicTriggerRemainsMatched_UsesCooldownBeforeDispatchingAgain()
+    {
+        string storagePath = CreateTempStoragePath();
+        FakeTriggerActions actions = new();
+        TriggerService service = CreateService(
+            storagePath,
+            actions,
+            periodicInterval: TimeSpan.FromMilliseconds(20),
+            repeatedTriggerCooldown: TimeSpan.FromSeconds(1),
+            createPeriodicContext: () => new TriggerEvaluationContext(
+                TriggerEventKind.Periodic,
+                0,
+                0,
+                TimeSpan.FromSeconds(5),
+                TimeOnly.MinValue,
+                NotificationLevel.Default));
+        service.SaveTasks(
+        [
+            new TriggerTask(
+                "periodic-cooldown",
+                "Periodic cooldown trigger",
+                true,
+                [new TriggerCondition(TriggerConditionKind.Runtime, Threshold: 1)],
+                [new TriggerAction(TriggerActionKind.SendNotification, "periodic-cooldown")]),
+        ]);
+
+        try
+        {
+            service.Start();
+
+            await WaitUntilAsync(() => actions.DispatchValues.Count >= 1);
+            await Task.Delay(140);
+
+            Assert.Single(actions.DispatchValues);
+        }
+        finally
+        {
+            service.Stop();
+        }
+    }
+
+
     /// <summary>Verifies enabling triggers at runtime starts periodic evaluation after a disabled startup.</summary>
     [Fact]
     public async Task TriggersEnabled_WhenEnabledAfterDisabledStart_StartsPeriodicEvaluation()
@@ -303,7 +347,8 @@ public sealed class TriggerServiceTests
         TimeSpan? periodicInterval = null,
         Func<TriggerEvaluationContext>? createPeriodicContext = null,
         Func<bool>? getTriggersEnabled = null,
-        Action<bool>? setTriggersEnabled = null)
+        Action<bool>? setTriggersEnabled = null,
+        TimeSpan? repeatedTriggerCooldown = null)
     {
         log ??= new FakeTriggerLog();
         return new TriggerService(
@@ -328,7 +373,8 @@ public sealed class TriggerServiceTests
             getTriggersEnabled,
             setTriggersEnabled,
             periodicInterval: periodicInterval,
-            createPeriodicContext: createPeriodicContext);
+            createPeriodicContext: createPeriodicContext,
+            repeatedTriggerCooldown: repeatedTriggerCooldown);
     }
 
     private static string CreateTempStoragePath()

@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -78,9 +79,24 @@ internal sealed class DefaultStartupConflictEnvironment : IStartupConflictEnviro
     public Task TerminateProcessAsync(int processId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        using Process process = Process.GetProcessById(processId);
-        process.Kill(entireProcessTree: true);
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (Exception exception) when (IsExpectedProcessTerminationException(exception))
+        {
+        }
+
         return Task.CompletedTask;
+    }
+
+    private static bool IsExpectedProcessTerminationException(Exception exception)
+    {
+        return exception is ArgumentException or InvalidOperationException or Win32Exception or UnauthorizedAccessException;
     }
 
     public Task DisableWindowsProxyAsync(CancellationToken cancellationToken)

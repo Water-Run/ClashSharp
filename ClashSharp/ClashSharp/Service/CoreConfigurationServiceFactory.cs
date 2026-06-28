@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -125,9 +126,20 @@ internal sealed class CoreConfigurationValidator : ICoreConfigurationValidator
     {
         ArgumentNullException.ThrowIfNull(process);
 
-        if (!process.HasExited)
+        try
         {
-            process.Kill(entireProcessTree: true);
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
         }
+        catch (Exception exception) when (IsExpectedProcessTerminationException(exception))
+        {
+        }
+    }
+
+    private static bool IsExpectedProcessTerminationException(Exception exception)
+    {
+        return exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException;
     }
 }

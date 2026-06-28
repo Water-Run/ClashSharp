@@ -1459,6 +1459,70 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ClashDataPackageService.Instance", settingsCode, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies user-triggered settings operations surface expected failures instead of letting async event handlers throw.</summary>
+    [Fact]
+    public void SettingsCode_HandlesUserOperationFailures()
+    {
+        string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+
+        string settingsCode = File.ReadAllText(settingsCodePath);
+
+        Assert.Contains("ShowSettingsOperationFailureAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("LogStorageService.Instance.AppendLog(\"Warning\", \"Settings\"", settingsCode, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(settingsCode, "await ShowSettingsOperationFailureAsync(") >= 3);
+    }
+
+    /// <summary>Verifies process termination paths swallow expected exit-race and access-denied exceptions.</summary>
+    [Fact]
+    public void ProcessTerminationHelpers_HandleExpectedRaceAndAccessFailures()
+    {
+        string[] sourcePaths =
+        [
+            FindSourceFile("ClashSharp", "ClashSharp", "Service", "MihomoCoreService.cs"),
+            FindSourceFile("ClashSharp", "ClashSharp", "Service", "CoreConfigurationServiceFactory.cs"),
+            FindSourceFile("ClashSharp", "ClashSharp", "Service", "WindowsNetworkDiagnosticServiceFactory.cs"),
+            FindSourceFile("ClashSharp", "ClashSharp", "Service", "StartupConflictDetectionServiceFactory.cs"),
+            FindSourceFile("ClashSharp", "ClashSharp.MihomoService", "MihomoWorker.cs"),
+        ];
+
+        foreach (string sourcePath in sourcePaths)
+        {
+            string source = File.ReadAllText(sourcePath);
+            Assert.Contains("IsExpectedProcessTerminationException", source, StringComparison.Ordinal);
+            Assert.Contains("InvalidOperationException", source, StringComparison.Ordinal);
+            Assert.Contains("Win32Exception", source, StringComparison.Ordinal);
+            Assert.Contains("UnauthorizedAccessException", source, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Verifies subscription import uses a bounded streaming HTTP read instead of unbounded string download.</summary>
+    [Fact]
+    public void ProfileCatalogService_BoundsSubscriptionDownloads()
+    {
+        string sourcePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProfileCatalogService.cs");
+
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("MaxSubscriptionDownloadBytes", source, StringComparison.Ordinal);
+        Assert.Contains("ReadSubscriptionConfigurationAsync", source, StringComparison.Ordinal);
+        Assert.Contains("HttpCompletionOption.ResponseHeadersRead", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpClient.GetStringAsync(new Uri(link.Uri)", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies installer actions are guarded so repeated clicks cannot launch overlapping package operations.</summary>
+    [Fact]
+    public void InstallerMain_GuardsConcurrentActions()
+    {
+        string sourcePath = FindSourceFile("ClashSharp", "Installer", "src", "main.rs");
+
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("AtomicBool", source, StringComparison.Ordinal);
+        Assert.Contains("ACTION_RUNNING", source, StringComparison.Ordinal);
+        Assert.Contains("compare_exchange", source, StringComparison.Ordinal);
+        Assert.Contains("ACTION_RUNNING.store(false", source, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies the data section is backup/restore oriented and does not duplicate export with a backup button.</summary>
     [Fact]
     public void SettingsXaml_UsesBackupRestoreWithoutBackupButton()

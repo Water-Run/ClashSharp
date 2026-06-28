@@ -73,6 +73,9 @@ public sealed partial class ConnectionSamplingService
     /// <summary>Background sampling task.</summary>
     private Task? _samplingTask;
 
+    /// <summary>Version used to cancel pending restart continuations.</summary>
+    private int _restartGeneration;
+
     /// <summary>Tracks whether the previous sample failed so repeated failures do not flood logs.</summary>
     private bool _lastSampleFailed;
 
@@ -131,23 +134,68 @@ public sealed partial class ConnectionSamplingService
     /// <summary>Stops the background sampling loop.</summary>
     public void Stop()
     {
-        CancellationTokenSource? cancellationTokenSource;
-
-        lock (_syncLock)
-        {
-            cancellationTokenSource = _cancellationTokenSource;
-            _cancellationTokenSource = null;
-            _samplingTask = null;
-        }
-
-        cancellationTokenSource?.Cancel();
-        cancellationTokenSource?.Dispose();
+        Interlocked.Increment(ref _restartGeneration);
+        _ = StopCore();
     }
 
     /// <summary>Restarts the sampling loop using current settings.</summary>
     public void RestartFromSettings()
     {
-        Stop();
+        int generation = Interlocked.Increment(ref _restartGeneration);
+        Task? stoppingTask = StopCore();
+        if (stoppingTask is { IsCompleted: false })
+        {
+            _ = RestartWhenStoppedAsync(stoppingTask, generation);
+            return;
+        }
+
+        StartIfEnabled();
+    }
+
+    private Task? StopCore()
+    {
+        CancellationTokenSource? cancellationTokenSource;
+        Task? samplingTask;
+
+        lock (_syncLock)
+        {
+            cancellationTokenSource = _cancellationTokenSource;
+            samplingTask = _samplingTask;
+            _cancellationTokenSource = null;
+            if (samplingTask is null or { IsCompleted: true })
+            {
+                _samplingTask = null;
+            }
+        }
+
+        cancellationTokenSource?.Cancel();
+        cancellationTokenSource?.Dispose();
+        return samplingTask;
+    }
+
+    private async Task RestartWhenStoppedAsync(Task stoppingTask, int generation)
+    {
+        try
+        {
+            await stoppingTask.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+
+        if (Volatile.Read(ref _restartGeneration) != generation)
+        {
+            return;
+        }
+
+        lock (_syncLock)
+        {
+            if (ReferenceEquals(_samplingTask, stoppingTask))
+            {
+                _samplingTask = null;
+            }
+        }
+
         StartIfEnabled();
     }
 

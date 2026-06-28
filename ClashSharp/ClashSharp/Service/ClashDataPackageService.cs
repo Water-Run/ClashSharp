@@ -108,9 +108,9 @@ internal sealed partial class ClashDataPackageService
         EnumSetting(nameof(IClashDataPackageSettings.CurrentMode), settings => settings.CurrentMode, (settings, value) => settings.CurrentMode = value),
         StringSetting(nameof(IClashDataPackageSettings.ActiveProfileId), settings => settings.ActiveProfileId, (settings, value) => settings.ActiveProfileId = value),
         BoolSetting(nameof(IClashDataPackageSettings.TransparentProxyEnabled), settings => settings.TransparentProxyEnabled, (settings, value) => settings.TransparentProxyEnabled = value),
-        IntSetting(nameof(IClashDataPackageSettings.MixedPort), settings => settings.MixedPort, (settings, value) => settings.MixedPort = value),
+        RangedIntSetting(nameof(IClashDataPackageSettings.MixedPort), settings => settings.MixedPort, (settings, value) => settings.MixedPort = value, 1, 65535),
         BoolSetting(nameof(IClashDataPackageSettings.ConnectionSamplingEnabled), settings => settings.ConnectionSamplingEnabled, (settings, value) => settings.ConnectionSamplingEnabled = value),
-        IntSetting(nameof(IClashDataPackageSettings.ConnectionSamplingIntervalSeconds), settings => settings.ConnectionSamplingIntervalSeconds, (settings, value) => settings.ConnectionSamplingIntervalSeconds = value),
+        RangedIntSetting(nameof(IClashDataPackageSettings.ConnectionSamplingIntervalSeconds), settings => settings.ConnectionSamplingIntervalSeconds, (settings, value) => settings.ConnectionSamplingIntervalSeconds = value, 3, 300),
         BoolSetting(nameof(IClashDataPackageSettings.RestoreProxyOnExit), settings => settings.RestoreProxyOnExit, (settings, value) => settings.RestoreProxyOnExit = value),
         BoolSetting(nameof(IClashDataPackageSettings.CheckStaleProxyOnStartup), settings => settings.CheckStaleProxyOnStartup, (settings, value) => settings.CheckStaleProxyOnStartup = value),
         BoolSetting(nameof(IClashDataPackageSettings.StartupConflictCheckEnabled), settings => settings.StartupConflictCheckEnabled, (settings, value) => settings.StartupConflictCheckEnabled = value),
@@ -182,9 +182,18 @@ internal sealed partial class ClashDataPackageService
         XElement root = ValidatePackageRoot(document);
         IReadOnlyList<ImportFilePayload> files = BuildImportFilePayloads(root.Element("Files"), cancellationToken);
         ValidateSettings(root.Element("Settings"));
+        Dictionary<string, string> settingSnapshot = CaptureSettings();
 
-        await WriteImportFilesAsync(files, cancellationToken);
-        ImportSettings(root.Element("Settings"));
+        try
+        {
+            ImportSettings(root.Element("Settings"));
+            await WriteImportFilesAsync(files, cancellationToken);
+        }
+        catch
+        {
+            RestoreSettings(settingSnapshot);
+            throw;
+        }
     }
 
     private IReadOnlyList<ImportFilePayload> BuildImportFilePayloads(XElement? filesElement, CancellationToken cancellationToken)
@@ -412,6 +421,28 @@ internal sealed partial class ClashDataPackageService
         }
     }
 
+    private Dictionary<string, string> CaptureSettings()
+    {
+        Dictionary<string, string> values = new(StringComparer.Ordinal);
+        foreach (SettingDescriptor descriptor in SettingDescriptors)
+        {
+            values[descriptor.Name] = descriptor.Read(_settings);
+        }
+
+        return values;
+    }
+
+    private void RestoreSettings(IReadOnlyDictionary<string, string> values)
+    {
+        foreach (SettingDescriptor descriptor in SettingDescriptors)
+        {
+            if (values.TryGetValue(descriptor.Name, out string? value))
+            {
+                descriptor.Write(_settings, value);
+            }
+        }
+    }
+
     private XElement ValidatePackageRoot(XDocument document)
     {
         XElement root = document.Root
@@ -479,6 +510,27 @@ internal sealed partial class ClashDataPackageService
             settings => read(settings).ToString(CultureInfo.InvariantCulture),
             (settings, value) => write(settings, int.Parse(value, CultureInfo.InvariantCulture)),
             value => _ = int.Parse(value, CultureInfo.InvariantCulture));
+    }
+
+    private static SettingDescriptor RangedIntSetting(
+        string name,
+        Func<IClashDataPackageSettings, int> read,
+        Action<IClashDataPackageSettings, int> write,
+        int minimum,
+        int maximum)
+    {
+        return new SettingDescriptor(
+            name,
+            settings => read(settings).ToString(CultureInfo.InvariantCulture),
+            (settings, value) => write(settings, int.Parse(value, CultureInfo.InvariantCulture)),
+            value =>
+            {
+                int parsed = int.Parse(value, CultureInfo.InvariantCulture);
+                if (parsed < minimum || parsed > maximum)
+                {
+                    throw new ArgumentOutOfRangeException(name, $"Setting must be in the range [{minimum}, {maximum}].");
+                }
+            });
     }
 
     private static SettingDescriptor EnumSetting<TEnum>(string name, Func<IClashDataPackageSettings, TEnum> read, Action<IClashDataPackageSettings, TEnum> write)

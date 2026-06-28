@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -124,9 +125,20 @@ internal sealed class WindowsDiagnosticProcessRunner : IWindowsDiagnosticProcess
     {
         ArgumentNullException.ThrowIfNull(process);
 
-        if (!process.HasExited)
+        try
         {
-            process.Kill(entireProcessTree: true);
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
         }
+        catch (Exception exception) when (IsExpectedProcessTerminationException(exception))
+        {
+        }
+    }
+
+    private static bool IsExpectedProcessTerminationException(Exception exception)
+    {
+        return exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException;
     }
 }
