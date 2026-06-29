@@ -30,6 +30,23 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("ClashSharp-Installer", script, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies the native Rust installer embeds a Windows executable icon.</summary>
+    [Fact]
+    public void NativeInstallerBuild_EmbedsWindowsExecutableIcon()
+    {
+        string cargoPath = FindSourceFile("ClashSharp", "Installer", "Cargo.toml");
+        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
+        string iconPath = FindSourceFile("ClashSharp", "Installer", "LogoInstaller.ico");
+
+        string cargo = File.ReadAllText(cargoPath);
+        string buildScript = File.ReadAllText(buildScriptPath);
+
+        Assert.Contains("winresource", cargo, StringComparison.Ordinal);
+        Assert.Contains("WindowsResource::new()", buildScript, StringComparison.Ordinal);
+        Assert.Contains("set_icon(\"LogoInstaller.ico\")", buildScript, StringComparison.Ordinal);
+        Assert.EndsWith("LogoInstaller.ico", iconPath, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies installer uninstall removes the app package, bundled service, and startup restore fallback.</summary>
     [Fact]
     public void InstallerUninstall_RemovesPackageServiceAndStartupFallback()

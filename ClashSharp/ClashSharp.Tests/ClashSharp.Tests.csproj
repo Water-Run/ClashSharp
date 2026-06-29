@@ -37,6 +37,7 @@
     <Compile Include="..\ClashSharp\Model\AppThemeMode.cs" Link="Model\AppThemeMode.cs" />
     <Compile Include="..\ClashSharp\Model\AppAccentColorMode.cs" Link="Model\AppAccentColorMode.cs" />
     <Compile Include="..\ClashSharp\Model\ActiveConnection.cs" Link="Model\ActiveConnection.cs" />
+    <Compile Include="..\ClashSharp\Model\RuntimeTrafficRateSnapshot.cs" Link="Model\RuntimeTrafficRateSnapshot.cs" />
     <Compile Include="..\ClashSharp\Model\ClashDataPackageScope.cs" Link="Model\ClashDataPackageScope.cs" />
     <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />
     <Compile Include="..\ClashSharp\Model\ApplicationActionKind.cs" Link="Model\ApplicationActionKind.cs" />
@@ -77,6 +78,8 @@
     <Compile Include="..\ClashSharp\Service\LogStorageService.cs" Link="Service\LogStorageService.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageServiceFactory.cs" Link="Service\LogStorageServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\TriggerRuntimeEvents.cs" Link="Service\TriggerRuntimeEvents.cs" />
+    <Compile Include="..\ClashSharp\Service\RuntimeTrafficRateService.cs" Link="Service\RuntimeTrafficRateService.cs" />
+    <Compile Include="..\ClashSharp\Service\TriggerTaskNormalizer.cs" Link="Service\TriggerTaskNormalizer.cs" />
     <Compile Include="..\ClashSharp\Service\TriggerEvaluationContextFactory.cs" Link="Service\TriggerEvaluationContextFactory.cs" />
     <Compile Include="..\ClashSharp\Service\TriggerService.cs" Link="Service\TriggerService.cs" />
     <Compile Include="..\ClashSharp\Service\NotificationService.cs" Link="Service\NotificationService.cs" />

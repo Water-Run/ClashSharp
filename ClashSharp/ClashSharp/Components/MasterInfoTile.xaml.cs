@@ -12,12 +12,18 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.Foundation;
 
 namespace ClashSharp.Components;
 
 /// <summary>Reusable compact information tile with an optional switch action.</summary>
 public sealed partial class MasterInfoTile : UserControl
 {
+    private const double DragSuppressThreshold = 8;
+
+    private Point? _pressedPoint;
+    private bool _suppressNextTap;
+
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title),
         typeof(string),
@@ -114,6 +120,12 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void TileRoot_Tapped(object sender, TappedRoutedEventArgs e)
     {
+        if (_suppressNextTap)
+        {
+            _suppressNextTap = false;
+            return;
+        }
+
         if (TileCommand is not ICommand command || !command.CanExecute(null))
         {
             return;
@@ -137,14 +149,34 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void TileRoot_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        _pressedPoint = e.GetCurrentPoint(TileRoot).Position;
+        _suppressNextTap = false;
         if (TileCommand is not null)
         {
             _ = VisualStateManager.GoToState(this, "Pressed", true);
         }
     }
 
+    private void TileRoot_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_pressedPoint is not Point pressedPoint)
+        {
+            return;
+        }
+
+        Point currentPoint = e.GetCurrentPoint(TileRoot).Position;
+        double deltaX = currentPoint.X - pressedPoint.X;
+        double deltaY = currentPoint.Y - pressedPoint.Y;
+        if ((deltaX * deltaX) + (deltaY * deltaY) >= DragSuppressThreshold * DragSuppressThreshold)
+        {
+            _suppressNextTap = true;
+            _ = VisualStateManager.GoToState(this, "Normal", true);
+        }
+    }
+
     private void TileRoot_PointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        _pressedPoint = null;
         _ = VisualStateManager.GoToState(this, "PointerOver", true);
     }
 

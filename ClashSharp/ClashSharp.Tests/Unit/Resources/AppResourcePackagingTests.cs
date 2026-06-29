@@ -1360,10 +1360,12 @@ public sealed class AppResourcePackagingTests
         string settingsXaml = File.ReadAllText(settingsXamlPath);
 
         Assert.Contains("x:Name=\"SettingsRestartRequiredNoticeText\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding RestartRequiredNoticeText}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Title=\"{Binding RestartRequiredTitleText}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Message=\"{Binding RestartRequiredNoticeText}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Severity=\"Warning\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("IsClosable=\"False\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("IsOpen=\"{Binding HasRestartRequiredSettings, Mode=OneWay}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{Binding HasRestartRequiredSettings, Converter={StaticResource BooleanToVisibilityConverter}}\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("Foreground=\"{ThemeResource SystemFillColorCriticalBrush}\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("HorizontalAlignment=\"Right\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ResetBasicSettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ResetStartupSettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ResetProxySettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);

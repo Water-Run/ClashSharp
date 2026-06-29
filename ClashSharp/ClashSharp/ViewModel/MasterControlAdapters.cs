@@ -11,7 +11,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -319,6 +321,20 @@ internal sealed class MasterControlRuntimeAdapter : IMasterControlRuntime
             LogStorageService.Instance.GetStorageSummary(),
             LogStorageService.Instance.GetTrafficStatisticsSummary(),
             MihomoServiceManager.Instance.GetStatus(),
-            StartupRestoreFallbackService.Instance.GetStatus());
+            StartupRestoreFallbackService.Instance.GetStatus(),
+            GetRuntimeTrafficSnapshot(),
+            Process.GetCurrentProcess().WorkingSet64);
+    }
+
+    private static RuntimeTrafficRateSnapshot GetRuntimeTrafficSnapshot()
+    {
+        try
+        {
+            return RuntimeTrafficRateService.Instance.GetSnapshotAsync(CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or HttpRequestException or TaskCanceledException)
+        {
+            return RuntimeTrafficRateService.Instance.GetLatestSnapshot();
+        }
     }
 }

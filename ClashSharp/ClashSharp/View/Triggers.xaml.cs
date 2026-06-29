@@ -348,6 +348,10 @@ public sealed partial class Triggers : Page
             CreateConditionOption(TriggerConditionKind.NotificationRaised, new TriggerCondition(TriggerConditionKind.NotificationRaised, 0, NotificationLevel.CriticalOnly.ToString()), "\uEA8F", selectedKind == TriggerConditionKind.NotificationRaised),
             CreateConditionOption(TriggerConditionKind.TotalTraffic, new TriggerCondition(TriggerConditionKind.TotalTraffic, 1024L * 1024L * 1024L), "\uE9D2", selectedKind == TriggerConditionKind.TotalTraffic),
             CreateConditionOption(TriggerConditionKind.TrafficInWindow, new TriggerCondition(TriggerConditionKind.TrafficInWindow, 100L * 1024L * 1024L), "\uE81C", selectedKind == TriggerConditionKind.TrafficInWindow),
+            CreateConditionOption(TriggerConditionKind.UploadRate, new TriggerCondition(TriggerConditionKind.UploadRate, 1024L * 1024L), "\uE898", selectedKind == TriggerConditionKind.UploadRate),
+            CreateConditionOption(TriggerConditionKind.DownloadRate, new TriggerCondition(TriggerConditionKind.DownloadRate, 1024L * 1024L), "\uE896", selectedKind == TriggerConditionKind.DownloadRate),
+            CreateConditionOption(TriggerConditionKind.ActiveConnections, new TriggerCondition(TriggerConditionKind.ActiveConnections, 20), "\uE839", selectedKind == TriggerConditionKind.ActiveConnections),
+            CreateConditionOption(TriggerConditionKind.SessionTraffic, new TriggerCondition(TriggerConditionKind.SessionTraffic, 1024L * 1024L * 1024L), "\uE9D2", selectedKind == TriggerConditionKind.SessionTraffic),
             CreateConditionOption(TriggerConditionKind.Runtime, new TriggerCondition(TriggerConditionKind.Runtime, 3600), "\uE823", selectedKind == TriggerConditionKind.Runtime),
             CreateConditionOption(TriggerConditionKind.SystemTime, new TriggerCondition(TriggerConditionKind.SystemTime, 0, "23:00"), "\uE121", selectedKind == TriggerConditionKind.SystemTime),
         ];
@@ -358,7 +362,9 @@ public sealed partial class Triggers : Page
         return
         [
             CreateActionOption(TriggerActionKind.CloseConnections, new TriggerTaskAction(TriggerActionKind.CloseConnections), GetActionGlyph(TriggerActionKind.CloseConnections), selectedKinds.Contains(TriggerActionKind.CloseConnections)),
+            CreateActionOption(TriggerActionKind.SetLaunchAtStartup, new TriggerTaskAction(TriggerActionKind.SetLaunchAtStartup, bool.TrueString), GetActionGlyph(TriggerActionKind.SetLaunchAtStartup), selectedKinds.Contains(TriggerActionKind.SetLaunchAtStartup)),
             CreateActionOption(TriggerActionKind.SetTransparentProxy, new TriggerTaskAction(TriggerActionKind.SetTransparentProxy, bool.TrueString), GetActionGlyph(TriggerActionKind.SetTransparentProxy), selectedKinds.Contains(TriggerActionKind.SetTransparentProxy)),
+            CreateActionOption(TriggerActionKind.SetConnectionSampling, new TriggerTaskAction(TriggerActionKind.SetConnectionSampling, bool.TrueString), GetActionGlyph(TriggerActionKind.SetConnectionSampling), selectedKinds.Contains(TriggerActionKind.SetConnectionSampling)),
             CreateActionOption(TriggerActionKind.SwitchProxyMode, new TriggerTaskAction(TriggerActionKind.SwitchProxyMode, ClashSharpMode.RuleTakeover.ToString()), GetActionGlyph(TriggerActionKind.SwitchProxyMode), selectedKinds.Contains(TriggerActionKind.SwitchProxyMode)),
             CreateActionOption(TriggerActionKind.ExitApplication, new TriggerTaskAction(TriggerActionKind.ExitApplication), GetActionGlyph(TriggerActionKind.ExitApplication), selectedKinds.Contains(TriggerActionKind.ExitApplication)),
             CreateActionOption(TriggerActionKind.SendNotification, new TriggerTaskAction(TriggerActionKind.SendNotification, "Trigger fired"), GetActionGlyph(TriggerActionKind.SendNotification), selectedKinds.Contains(TriggerActionKind.SendNotification)),
@@ -394,7 +400,9 @@ public sealed partial class Triggers : Page
         return kind switch
         {
             TriggerActionKind.CloseConnections => "\uE711",
+            TriggerActionKind.SetLaunchAtStartup => "\uE7C3",
             TriggerActionKind.SetTransparentProxy => "\uE8A7",
+            TriggerActionKind.SetConnectionSampling => "\uE81C",
             TriggerActionKind.SwitchProxyMode => "\uE8AB",
             TriggerActionKind.ExitApplication => "\uE8BB",
             _ => "\uEA8F",
@@ -418,34 +426,53 @@ public sealed partial class Triggers : Page
         {
             case TriggerConditionKind.TotalTraffic:
             case TriggerConditionKind.TrafficInWindow:
+            case TriggerConditionKind.UploadRate:
+            case TriggerConditionKind.DownloadRate:
+            case TriggerConditionKind.SessionTraffic:
                 TriggerConditionThresholdBox.Visibility = Visibility.Visible;
                 TriggerConditionUnitBox.Visibility = Visibility.Visible;
-                TriggerConditionStartBox.Visibility = Visibility.Visible;
                 AddComboItems(TriggerConditionUnitBox, ["MB", "GB", "TB"]);
-                AddComboItems(TriggerConditionStartBox, ["定时", "自启动", "累计"]);
-                SetTrafficThreshold(condition.Threshold);
-                TriggerConditionStartBox.SelectedIndex = condition.Value switch
+                if (condition.Kind is TriggerConditionKind.TotalTraffic or TriggerConditionKind.TrafficInWindow)
                 {
-                    "Scheduled" => 0,
-                    "Startup" => 1,
-                    _ => 2,
-                };
+                    TriggerConditionStartBox.Visibility = Visibility.Visible;
+                    AddComboItems(TriggerConditionStartBox, [
+                        LocalizationService.Instance.GetString("Triggers.Condition.Scope.Scheduled"),
+                        LocalizationService.Instance.GetString("Triggers.Condition.Scope.Startup"),
+                        LocalizationService.Instance.GetString("Triggers.Condition.Scope.Cumulative")]);
+                    TriggerConditionStartBox.SelectedIndex = condition.Value switch
+                    {
+                        "Scheduled" => 0,
+                        "Startup" => 1,
+                        _ => 2,
+                    };
+                }
+                SetTrafficThreshold(condition.Threshold);
+                break;
+            case TriggerConditionKind.ActiveConnections:
+                TriggerConditionThresholdBox.Visibility = Visibility.Visible;
+                TriggerConditionThresholdBox.Value = Math.Max(1, condition.Threshold);
                 break;
             case TriggerConditionKind.Runtime:
                 TriggerConditionThresholdBox.Visibility = Visibility.Visible;
                 TriggerConditionUnitBox.Visibility = Visibility.Visible;
-                AddComboItems(TriggerConditionUnitBox, ["秒", "分钟", "小时"]);
+                AddComboItems(TriggerConditionUnitBox, [
+                    LocalizationService.Instance.GetString("Triggers.Condition.Unit.Seconds"),
+                    LocalizationService.Instance.GetString("Triggers.Condition.Unit.Minutes"),
+                    LocalizationService.Instance.GetString("Triggers.Condition.Unit.Hours")]);
                 SetRuntimeThreshold(condition.Threshold);
                 break;
             case TriggerConditionKind.SystemTime:
                 TriggerConditionValueBox.Visibility = Visibility.Visible;
-                TriggerConditionValueBox.Header = "时间";
+                TriggerConditionValueBox.Header = LocalizationService.Instance.GetString("Triggers.Condition.Parameter.Time");
                 TriggerConditionValueBox.PlaceholderText = "23:00";
                 TriggerConditionValueBox.Text = string.IsNullOrWhiteSpace(condition.Value) ? "23:00" : condition.Value;
                 break;
             case TriggerConditionKind.NotificationRaised:
                 TriggerConditionLevelBox.Visibility = Visibility.Visible;
-                AddComboItems(TriggerConditionLevelBox, ["默认", "仅严重", "更多"]);
+                AddComboItems(TriggerConditionLevelBox, [
+                    LocalizationService.Instance.GetString("Settings.Notification.Default"),
+                    LocalizationService.Instance.GetString("Settings.Notification.CriticalOnly"),
+                    LocalizationService.Instance.GetString("Settings.Notification.More")]);
                 TriggerConditionLevelBox.SelectedIndex = Enum.TryParse(condition.Value, out NotificationLevel level)
                     ? Math.Clamp((int)level, 0, 2)
                     : 0;
@@ -515,25 +542,39 @@ public sealed partial class Triggers : Page
         {
             case TriggerConditionKind.TotalTraffic:
             case TriggerConditionKind.TrafficInWindow:
+            case TriggerConditionKind.UploadRate:
+            case TriggerConditionKind.DownloadRate:
+            case TriggerConditionKind.SessionTraffic:
                 if (!TryReadPositiveNumber(out double trafficValue))
                 {
-                    ShowConditionValidation("请输入大于 0 的流量阈值。");
+                    ShowConditionValidation(LocalizationService.Instance.GetString("Triggers.Validation.PositiveTraffic"));
                     return false;
                 }
 
                 long bytes = ConvertTrafficThresholdToBytes(trafficValue, TriggerConditionUnitBox.SelectedIndex);
-                string start = TriggerConditionStartBox.SelectedIndex switch
-                {
-                    0 => "Scheduled",
-                    1 => "Startup",
-                    _ => "Cumulative",
-                };
+                string start = _selectedCondition.Kind is TriggerConditionKind.TotalTraffic or TriggerConditionKind.TrafficInWindow
+                    ? TriggerConditionStartBox.SelectedIndex switch
+                    {
+                        0 => "Scheduled",
+                        1 => "Startup",
+                        _ => "Cumulative",
+                    }
+                    : string.Empty;
                 condition = _selectedCondition with { Threshold = bytes, Value = start };
+                break;
+            case TriggerConditionKind.ActiveConnections:
+                if (!TryReadPositiveNumber(out double connectionCount))
+                {
+                    ShowConditionValidation(LocalizationService.Instance.GetString("Triggers.Validation.PositiveCount"));
+                    return false;
+                }
+
+                condition = _selectedCondition with { Threshold = Math.Max(1, (long)Math.Round(connectionCount)) };
                 break;
             case TriggerConditionKind.Runtime:
                 if (!TryReadPositiveNumber(out double runtimeValue))
                 {
-                    ShowConditionValidation("请输入大于 0 的运行时长。");
+                    ShowConditionValidation(LocalizationService.Instance.GetString("Triggers.Validation.PositiveRuntime"));
                     return false;
                 }
 
@@ -542,7 +583,7 @@ public sealed partial class Triggers : Page
             case TriggerConditionKind.SystemTime:
                 if (!TimeOnly.TryParse(TriggerConditionValueBox.Text, out _))
                 {
-                    ShowConditionValidation("请输入 HH:mm 格式的时间。");
+                    ShowConditionValidation(LocalizationService.Instance.GetString("Triggers.Validation.TimeFormat"));
                     return false;
                 }
 

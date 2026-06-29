@@ -215,7 +215,9 @@ internal sealed record MasterControlRuntimeSnapshot(
     LogStorageSummary LogStorage,
     TrafficStatisticsSummary Traffic,
     MihomoServiceStatus MihomoService,
-    StartupRestoreFallbackStatus StartupRestoreFallback)
+    StartupRestoreFallbackStatus StartupRestoreFallback,
+    RuntimeTrafficRateSnapshot RuntimeTraffic = default,
+    long AppWorkingSetBytes = 0)
 {
     public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
         new CoreConfigurationState(string.Empty, string.Empty, false),
@@ -402,6 +404,9 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Information tiles displayed in the lower grid.</summary>
     private readonly ObservableCollection<MasterControlInfoTileViewModel> _infoTiles = [];
 
+    /// <summary>Currently visible information tiles displayed in the lower grid.</summary>
+    private readonly ObservableCollection<MasterControlInfoTileViewModel> _visibleInfoTiles = [];
+
     /// <summary>Initializes a master control view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
     /// <param name="core">Core runtime provider. Must not be null.</param>
@@ -536,6 +541,8 @@ internal sealed class MasterControlViewModel : ObservableObject
     public string VisibleTileText => _localization.GetString("Master.Tile.Visible");
 
     public IReadOnlyList<MasterControlInfoTileViewModel> InfoTiles => _infoTiles;
+
+    public IReadOnlyList<MasterControlInfoTileViewModel> VisibleInfoTiles => _visibleInfoTiles;
 
     /// <summary>Raised when a functional information tile requests page-level UI work.</summary>
     public event EventHandler<MasterControlTileAction>? TileActionRequested;
@@ -752,9 +759,10 @@ internal sealed class MasterControlViewModel : ObservableObject
     private void BuildInfoTiles()
     {
         _infoTiles.Clear();
+        _visibleInfoTiles.Clear();
         foreach (MasterTileDefinition tile in MasterTileCatalog.Create(this))
         {
-            _infoTiles.Add(new MasterControlInfoTileViewModel(
+            MasterControlInfoTileViewModel viewModel = new(
                 tile.Id,
                 tile.Title,
                 string.Empty,
@@ -764,7 +772,16 @@ internal sealed class MasterControlViewModel : ObservableObject
                 tile.TypeText,
                 tile.IsToggleVisible,
                 tile.IsToggleOn,
-                tile.Command));
+                tile.Command)
+            {
+                IsVisible = tile.IsVisibleByDefault,
+            };
+            viewModel.PropertyChanged += OnInfoTilePropertyChanged;
+            _infoTiles.Add(viewModel);
+            if (viewModel.IsVisible)
+            {
+                _visibleInfoTiles.Add(viewModel);
+            }
         }
     }
 
@@ -822,6 +839,17 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("startup-restore-fallback", GetStartupRestoreFallbackStatusText(), CompactPath(_runtimeSnapshot.StartupRestoreFallback.CommandLine));
         SetTile("mihomo-service", GetMihomoServiceStatusText(), string.Empty);
         SetTile("core-config-file", GetCoreConfigurationStatusText(), CompactPath(_runtimeSnapshot.CoreConfiguration.ConfigPath));
+        SetTile("upload-rate", FormatBytesPerSecond(_runtimeSnapshot.RuntimeTraffic.UploadBytesPerSecond), _localization.GetString("Master.Tile.Detail.Realtime"));
+        SetTile("download-rate", FormatBytesPerSecond(_runtimeSnapshot.RuntimeTraffic.DownloadBytesPerSecond), _localization.GetString("Master.Tile.Detail.Realtime"));
+        SetTile("active-connections", FormatNumber(_runtimeSnapshot.RuntimeTraffic.ActiveConnectionCount), _localization.GetString("Master.Tile.Detail.Realtime"));
+        SetTile(
+            "session-traffic",
+            FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionUploadBytes + _runtimeSnapshot.RuntimeTraffic.SessionDownloadBytes),
+            string.Format(
+                _localization.GetString("Statistics.TotalTraffic.Format"),
+                FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionUploadBytes),
+                FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionDownloadBytes)));
+        SetTile("memory-usage", FormatBytes(_runtimeSnapshot.AppWorkingSetBytes), _localization.GetString("Master.Tile.Detail.AppProcess"));
         SetTile("profile-count", FormatNumber(_runtimeSnapshot.ProfileCount), _settings.ActiveProfileId);
         SetTile("subscription-count", FormatNumber(_runtimeSnapshot.SubscriptionCount), string.Empty);
         SetTile("proxy-node-count", FormatNumber(_runtimeSnapshot.ProxyNodeCount), string.Empty);
@@ -863,6 +891,34 @@ internal sealed class MasterControlViewModel : ObservableObject
 
             return;
         }
+    }
+
+    private void OnInfoTilePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MasterControlInfoTileViewModel.IsVisible)
+            || sender is not MasterControlInfoTileViewModel tile)
+        {
+            return;
+        }
+
+        if (tile.IsVisible)
+        {
+            int sourceIndex = _infoTiles.IndexOf(tile);
+            int visibleIndex = _visibleInfoTiles
+                .Select(item => _infoTiles.IndexOf(item))
+                .TakeWhile(index => index < sourceIndex)
+                .Count();
+            if (!_visibleInfoTiles.Contains(tile))
+            {
+                _visibleInfoTiles.Insert(visibleIndex, tile);
+            }
+        }
+        else
+        {
+            _visibleInfoTiles.Remove(tile);
+        }
+
+        OnPropertyChanged(nameof(VisibleInfoTiles));
     }
 
     private void ToggleTransparentProxy()
@@ -1031,6 +1087,11 @@ internal sealed class MasterControlViewModel : ObservableObject
         return string.Format(CultureInfo.CurrentCulture, "{0:0.##} {1}", value, units[unitIndex]);
     }
 
+    private static string FormatBytesPerSecond(long bytes)
+    {
+        return string.Format(CultureInfo.CurrentCulture, "{0}/s", FormatBytes(bytes));
+    }
+
     private static string CompactPath(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1145,6 +1206,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         string TypeText,
         bool IsToggleVisible = false,
         bool IsToggleOn = false,
+        bool IsVisibleByDefault = true,
         RelayCommand? Command = null);
 
     private static class MasterTileCatalog
@@ -1159,26 +1221,31 @@ internal sealed class MasterControlViewModel : ObservableObject
             return
             [
                 owner.CreateTile("core", "Core", "\uE950", infoType),
-                owner.CreateTile("mihomo-version", "MihomoVersion", "\uE950", infoType),
+                owner.CreateTile("upload-rate", "UploadRate", "\uE898", infoType),
+                owner.CreateTile("download-rate", "DownloadRate", "\uE896", infoType),
+                owner.CreateTile("active-connections", "ActiveConnections", "\uE839", infoType),
+                owner.CreateTile("session-traffic", "SessionTraffic", "\uE9D2", infoType),
+                owner.CreateTile("memory-usage", "MemoryUsage", "\uE950", infoType),
+                owner.CreateTile("mihomo-version", "MihomoVersion", "\uE950", infoType, isVisibleByDefault: false),
                 owner.CreateTile("system-proxy", "SystemProxy", "\uE968", infoType),
-                owner.CreateTile("transparent-proxy", "TransparentProxy", "\uE8A7", controllableType, true, owner._settings.TransparentProxyEnabled, owner.ToggleTransparentProxy),
+                owner.CreateTile("transparent-proxy", "TransparentProxy", "\uE8A7", controllableType, true, owner._settings.TransparentProxyEnabled, command: owner.ToggleTransparentProxy),
                 owner.CreateTile("latency", "Latency", "\uEC4A", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.RunLatencyTest)),
-                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, owner.ToggleStartupLaunch),
-                owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, owner.ToggleConnectionSampling),
-                owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, owner.ToggleUrlBlocking),
+                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, command: owner.ToggleStartupLaunch),
+                owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, isVisibleByDefault: false, command: owner.ToggleConnectionSampling),
+                owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, isVisibleByDefault: false, command: owner.ToggleUrlBlocking),
                 owner.CreateTile("active-profile", "ActiveProfile", "\uE8A5", infoType),
-                owner.CreateTile("port", "Port", "\uE839", infoType),
-                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", navigationType),
-                owner.CreateTile("connection-test-proxy-url-1", "ConnectionTestProxyUrl1", "\uE774", infoType),
-                owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", infoType),
-                owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", infoType),
-                owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ShowStartupPrompt)),
+                owner.CreateTile("port", "Port", "\uE839", infoType, isVisibleByDefault: false),
+                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", navigationType, isVisibleByDefault: false),
+                owner.CreateTile("connection-test-proxy-url-1", "ConnectionTestProxyUrl1", "\uE774", infoType, isVisibleByDefault: false),
+                owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", infoType, isVisibleByDefault: false),
+                owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", infoType, isVisibleByDefault: false),
+                owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ShowStartupPrompt)),
                 owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.CheckStartupConflicts)),
-                owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ExportConfiguration)),
-                owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ImportConfiguration)),
-                owner.CreateTile("app-name", "AppName", "\uE946", infoType),
-                owner.CreateTileFromKeys("app-version", "About.Version.Title", "\uE946", "Master.Tile.Description.AppVersion", infoType),
-                owner.CreateTileFromKeys("app-runtime", "About.Runtime.Title", "\uE7F8", "Master.Tile.Description.AppRuntime", infoType),
+                owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ExportConfiguration)),
+                owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ImportConfiguration)),
+                owner.CreateTile("app-name", "AppName", "\uE946", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("app-version", "About.Version.Title", "\uE946", "Master.Tile.Description.AppVersion", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("app-runtime", "About.Runtime.Title", "\uE7F8", "Master.Tile.Description.AppRuntime", infoType, isVisibleByDefault: false),
                 owner.CreateTileFromKeys("current-mode", "Tray.Menu.Mode", "\uE8AB", "Master.Mode.RuleTakeover.Description", infoType),
                 owner.CreateTileFromKeys("current-node", "Tray.Status.Node.Format", "\uE8A5", "Settings.Tray.Feature.Status.Description", infoType),
                 owner.CreateTileFromKeys("notification-enabled", "Settings.Notification.Enabled.Title", "\uE7F4", "Settings.Notification.Enabled.Description", infoType),
@@ -1193,10 +1260,10 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTileFromKeys("display-language", "Settings.Language.Title", "\uE774", "Settings.Language.Description", infoType),
                 owner.CreateTileFromKeys("sampling-interval", "Settings.SamplingInterval.Title", "\uE916", "Settings.SamplingInterval.Description", infoType),
                 owner.CreateTileFromKeys("app-accent", "Settings.AppAccentColor.Title", "\uE790", "Settings.AppAccentColor.Description", infoType),
-                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, owner.ToggleRestoreProxyOnExit),
-                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, owner.ToggleCheckStaleProxyOnStartup),
-                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, owner.ToggleStartupConflictCheck),
-                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, owner.ToggleStartupGuide),
+                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, command: owner.ToggleRestoreProxyOnExit),
+                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, command: owner.ToggleCheckStaleProxyOnStartup),
+                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, command: owner.ToggleStartupConflictCheck),
+                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, command: owner.ToggleStartupGuide),
                 owner.CreateTileFromKeys("mainland-feature-mode", "Settings.MainlandChinaDisplay.Title", "\uE7B5", "Settings.MainlandChinaDisplay.Description", infoType),
                 owner.CreateTileFromKeys("startup-restore-fallback", "Settings.StartupRestoreFallback.Title", "\uE7C3", "Settings.StartupRestoreFallback.Description", infoType),
                 owner.CreateTileFromKeys("mihomo-service", "Settings.TransparentProxy.Service.Title", "\uE95A", "Settings.TransparentProxy.Service.Description", infoType),
@@ -1222,6 +1289,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         string typeText,
         bool isToggleVisible = false,
         bool isToggleOn = false,
+        bool isVisibleByDefault = true,
         Action? command = null)
     {
         return new MasterTileDefinition(
@@ -1232,6 +1300,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             typeText,
             isToggleVisible,
             isToggleOn,
+            isVisibleByDefault,
             command is null ? null : new RelayCommand(command));
     }
 
@@ -1243,6 +1312,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         string typeText,
         bool isToggleVisible = false,
         bool isToggleOn = false,
+        bool isVisibleByDefault = true,
         Action? command = null)
     {
         return new MasterTileDefinition(
@@ -1253,6 +1323,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             typeText,
             isToggleVisible,
             isToggleOn,
+            isVisibleByDefault,
             command is null ? null : new RelayCommand(command));
     }
 

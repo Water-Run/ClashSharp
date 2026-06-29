@@ -139,7 +139,7 @@
             <GridView
                     x:Name="InfoTileGrid"
                     Margin="0"
-                    ItemsSource="{Binding InfoTiles}"
+                    ItemsSource="{Binding VisibleInfoTiles}"
                     SelectionMode="None"
                     CanReorderItems="True"
                     CanDragItems="True"

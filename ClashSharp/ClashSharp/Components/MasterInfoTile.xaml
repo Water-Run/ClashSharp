@@ -19,6 +19,7 @@
         PointerEntered="TileRoot_PointerEntered"
         PointerExited="TileRoot_PointerExited"
         PointerPressed="TileRoot_PointerPressed"
+        PointerMoved="TileRoot_PointerMoved"
         PointerReleased="TileRoot_PointerReleased">
         <Grid.RenderTransform>
             <ScaleTransform x:Name="TileScaleTransform" CenterX="110" CenterY="58" />

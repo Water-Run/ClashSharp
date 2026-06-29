@@ -79,6 +79,16 @@ internal sealed class TriggersViewModel : ObservableObject
 
     public string CancelText => _getString("Command.Cancel");
 
+    public string ConditionThresholdHeaderText => _getString("Triggers.Condition.Parameter.Threshold");
+
+    public string ConditionUnitHeaderText => _getString("Triggers.Condition.Parameter.Unit");
+
+    public string ConditionScopeHeaderText => _getString("Triggers.Condition.Parameter.Scope");
+
+    public string NotificationLevelHeaderText => _getString("Triggers.Condition.Parameter.NotificationLevel");
+
+    public string ConditionValueHeaderText => _getString("Triggers.Condition.Parameter.Value");
+
     public ObservableCollection<TriggerTaskItemViewModel> TriggerTasks { get; } = [];
 
     public RelayCommand MoveUpCommand { get; }
@@ -256,8 +266,12 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
         string title = _getString($"Triggers.Condition.{condition.Kind}");
         return condition.Kind switch
         {
-            TriggerConditionKind.TotalTraffic or TriggerConditionKind.TrafficInWindow =>
+            TriggerConditionKind.TotalTraffic or TriggerConditionKind.TrafficInWindow
+                or TriggerConditionKind.UploadRate or TriggerConditionKind.DownloadRate
+                or TriggerConditionKind.SessionTraffic =>
                 $"{title} >= {FormatBytes(condition.Threshold)}{FormatTrafficScope(condition.Value)}",
+            TriggerConditionKind.ActiveConnections =>
+                $"{title} >= {condition.Threshold:N0}",
             TriggerConditionKind.Runtime =>
                 $"{title} >= {FormatDuration(condition.Threshold)}",
             TriggerConditionKind.SystemTime when !string.IsNullOrWhiteSpace(condition.Value) =>
@@ -302,13 +316,13 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
         return $"{seconds:N0} s";
     }
 
-    private static string FormatTrafficScope(string value)
+    private string FormatTrafficScope(string value)
     {
         return value switch
         {
-            "Scheduled" => " · 定时",
-            "Startup" => " · 自启动",
-            "Cumulative" => " · 累计",
+            "Scheduled" => $" · {_getString("Triggers.Condition.Scope.Scheduled")}",
+            "Startup" => $" · {_getString("Triggers.Condition.Scope.Startup")}",
+            "Cumulative" => $" · {_getString("Triggers.Condition.Scope.Cumulative")}",
             _ => string.Empty,
         };
     }

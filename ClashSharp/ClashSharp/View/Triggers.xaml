@@ -220,11 +220,11 @@
                                 <TextBlock x:Name="TriggerConditionValidationText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="WrapWholeWords" Visibility="Collapsed" />
                             </StackPanel>
                             <StackPanel x:Name="TriggerConditionParameterPanel" Grid.Column="1" Spacing="8">
-                                <NumberBox x:Name="TriggerConditionThresholdBox" Header="阈值" Minimum="0" ValueChanged="TriggerConditionThresholdBox_ValueChanged" SpinButtonPlacementMode="Compact" />
-                                <ComboBox x:Name="TriggerConditionUnitBox" Header="单位" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
-                                <ComboBox x:Name="TriggerConditionStartBox" Header="统计起点" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
-                                <ComboBox x:Name="TriggerConditionLevelBox" Header="通知级别" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
-                                <TextBox x:Name="TriggerConditionValueBox" Header="条件值" TextChanged="TriggerConditionValueBox_TextChanged" />
+                                <NumberBox x:Name="TriggerConditionThresholdBox" Header="{Binding ConditionThresholdHeaderText}" Minimum="0" ValueChanged="TriggerConditionThresholdBox_ValueChanged" SpinButtonPlacementMode="Compact" />
+                                <ComboBox x:Name="TriggerConditionUnitBox" Header="{Binding ConditionUnitHeaderText}" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
+                                <ComboBox x:Name="TriggerConditionStartBox" Header="{Binding ConditionScopeHeaderText}" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
+                                <ComboBox x:Name="TriggerConditionLevelBox" Header="{Binding NotificationLevelHeaderText}" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
+                                <TextBox x:Name="TriggerConditionValueBox" Header="{Binding ConditionValueHeaderText}" TextChanged="TriggerConditionValueBox_TextChanged" />
                             </StackPanel>
                         </Grid>
                     </Grid>

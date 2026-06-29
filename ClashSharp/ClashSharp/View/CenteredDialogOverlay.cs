@@ -8,10 +8,12 @@
  */
 
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 
 namespace ClashSharp.View;
 
@@ -44,15 +46,16 @@ internal static class CenteredDialogOverlay
         }
         Canvas.SetZIndex(overlay, 10_000);
 
-        void CloseOverlay()
+        async Task CloseOverlayAsync()
         {
+            await PlayCloseAnimationAsync(overlay).ConfigureAwait(true);
             rootPanel.Children.Remove(overlay);
             closed.TrySetResult(null);
         }
 
-        closeButton.Click += (_, _) =>
+        closeButton.Click += async (_, _) =>
         {
-            CloseOverlay();
+            await CloseOverlayAsync();
         };
 
         rootPanel.Children.Add(overlay);
@@ -126,7 +129,41 @@ internal static class CenteredDialogOverlay
             Background = ResourceBrush("SolidBackgroundFillColorBaseBrush", new SolidColorBrush(Windows.UI.Color.FromArgb(255, 32, 32, 32))),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
+            RenderTransform = new ScaleTransform { ScaleX = 1, ScaleY = 1 },
+            RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
         };
+    }
+
+    private static Task PlayCloseAnimationAsync(Grid overlay)
+    {
+        TaskCompletionSource<object?> completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (overlay.Children.FirstOrDefault() is not Border card
+            || card.RenderTransform is not ScaleTransform scale)
+        {
+            completed.SetResult(null);
+            return completed.Task;
+        }
+
+        Storyboard storyboard = new();
+        storyboard.Children.Add(CreateDoubleAnimation(overlay, "Opacity", 0, 120));
+        storyboard.Children.Add(CreateDoubleAnimation(scale, "ScaleX", 0.98, 120));
+        storyboard.Children.Add(CreateDoubleAnimation(scale, "ScaleY", 0.98, 120));
+        storyboard.Completed += (_, _) => completed.TrySetResult(null);
+        storyboard.Begin();
+        return completed.Task;
+    }
+
+    private static DoubleAnimation CreateDoubleAnimation(DependencyObject target, string property, double to, double milliseconds)
+    {
+        DoubleAnimation animation = new()
+        {
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(milliseconds)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, property);
+        return animation;
     }
 
     private static (double Width, double Height) ResolveOverlaySize(XamlRoot xamlRoot)

@@ -20,14 +20,13 @@
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="SettingsContentPanel" Spacing="6" HorizontalAlignment="Stretch">
-            <TextBlock
+            <InfoBar
                 x:Name="SettingsRestartRequiredNoticeText"
-                Text="{Binding RestartRequiredNoticeText}"
-                Style="{ThemeResource CaptionTextBlockStyle}"
-                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                FontWeight="SemiBold"
-                HorizontalAlignment="Right"
-                TextWrapping="Wrap"
+                Title="{Binding RestartRequiredTitleText}"
+                Message="{Binding RestartRequiredNoticeText}"
+                Severity="Warning"
+                IsClosable="False"
+                IsOpen="{Binding HasRestartRequiredSettings, Mode=OneWay}"
                 Visibility="{Binding HasRestartRequiredSettings, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />

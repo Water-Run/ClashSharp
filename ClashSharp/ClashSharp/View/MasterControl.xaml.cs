@@ -317,7 +317,7 @@ public sealed partial class MasterControl : Page
         }
 
         _infoTileItemWidth = Math.Max(MinInfoTileWidth, CalculateInfoTileWidth(availableWidth, columns));
-        foreach (MasterControlInfoTileViewModel tile in _viewModel.InfoTiles)
+        foreach (MasterControlInfoTileViewModel tile in _viewModel.VisibleInfoTiles)
         {
             if (InfoTileGrid.ContainerFromItem(tile) is FrameworkElement item)
             {

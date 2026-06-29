@@ -1145,6 +1145,8 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string RestartRequiredNoticeText => _getString("Settings.RestartRequiredNotice");
 
+    public string RestartRequiredTitleText => _getString("Settings.RestartRequired.Title");
+
     public bool LaunchAtStartupEnabled
     {
         get => _launchAtStartupEnabled;
@@ -1537,6 +1539,7 @@ internal sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAppAccentColorRestartPending));
         OnPropertyChanged(nameof(HasRestartRequiredSettings));
         OnPropertyChanged(nameof(AppAccentColorTitleText));
+        OnPropertyChanged(nameof(RestartRequiredTitleText));
         OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
@@ -1544,6 +1547,7 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsDisplayLanguageRestartPending));
         OnPropertyChanged(nameof(HasRestartRequiredSettings));
+        OnPropertyChanged(nameof(RestartRequiredTitleText));
         OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
@@ -1554,6 +1558,7 @@ internal sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasRestartRequiredSettings));
         OnPropertyChanged(nameof(MainlandChinaDisplayTitleText));
         OnPropertyChanged(nameof(MainlandChinaUrlBlockingTitleText));
+        OnPropertyChanged(nameof(RestartRequiredTitleText));
         OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
@@ -1570,6 +1575,7 @@ internal sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsTrayIconRestartPending));
         OnPropertyChanged(nameof(HasRestartRequiredSettings));
         OnPropertyChanged(nameof(TrayUseMonochromeInactiveIconTitleText));
+        OnPropertyChanged(nameof(RestartRequiredTitleText));
         OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
@@ -1700,6 +1706,8 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(AppAccentColorCustomText),
             nameof(AppAccentColorPickText),
             nameof(AppAccentColorModeOptions),
+            nameof(RestartRequiredTitleText),
+            nameof(RestartRequiredNoticeText),
             nameof(LaunchAtStartupTitleText),
             nameof(LaunchAtStartupDescriptionText),
             nameof(StartupSectionTitleText),

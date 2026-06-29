@@ -147,7 +147,7 @@ internal sealed class TriggerService
         ArgumentNullException.ThrowIfNull(tasks);
         lock (_syncLock)
         {
-            _tasks = tasks.Select(CloneTask).ToList();
+            _tasks = tasks.Select(NormalizeAndCloneTask).ToList();
             Save();
         }
 
@@ -159,7 +159,7 @@ internal sealed class TriggerService
         ArgumentNullException.ThrowIfNull(task);
         lock (_syncLock)
         {
-            _tasks.Add(CloneTask(task));
+            _tasks.Add(NormalizeAndCloneTask(task));
             Save();
         }
 
@@ -349,7 +349,9 @@ internal sealed class TriggerService
         ApplicationActionKind kind = action.Kind switch
         {
             TriggerActionKind.CloseConnections => ApplicationActionKind.CloseConnections,
+            TriggerActionKind.SetLaunchAtStartup => ApplicationActionKind.SetLaunchAtStartup,
             TriggerActionKind.SetTransparentProxy => ApplicationActionKind.SetTransparentProxy,
+            TriggerActionKind.SetConnectionSampling => ApplicationActionKind.SetConnectionSampling,
             TriggerActionKind.SwitchProxyMode => ApplicationActionKind.SwitchProxyMode,
             TriggerActionKind.ExitApplication => ApplicationActionKind.ExitApplication,
             TriggerActionKind.SendNotification => ApplicationActionKind.SendNotification,
@@ -534,6 +536,10 @@ internal sealed class TriggerService
                 && context.NotificationLevel >= ParseNotificationLevel(condition.Value),
             TriggerConditionKind.TotalTraffic => context.TotalTrafficBytes >= condition.Threshold,
             TriggerConditionKind.TrafficInWindow => context.WindowTrafficBytes >= condition.Threshold,
+            TriggerConditionKind.UploadRate => context.UploadBytesPerSecond >= condition.Threshold,
+            TriggerConditionKind.DownloadRate => context.DownloadBytesPerSecond >= condition.Threshold,
+            TriggerConditionKind.ActiveConnections => context.ActiveConnectionCount >= condition.Threshold,
+            TriggerConditionKind.SessionTraffic => context.SessionTrafficBytes >= condition.Threshold,
             TriggerConditionKind.Runtime => context.Runtime.TotalSeconds >= condition.Threshold,
             TriggerConditionKind.SystemTime => TimeOnly.TryParse(condition.Value, out TimeOnly targetTime)
                 && context.SystemTime >= targetTime,
@@ -593,5 +599,10 @@ internal sealed class TriggerService
             task.Conditions.ToArray(),
             task.Actions.ToArray(),
             task.LastTriggeredAt);
+    }
+
+    private static TriggerTask NormalizeAndCloneTask(TriggerTask task)
+    {
+        return CloneTask(TriggerTaskNormalizer.Normalize(task).Task);
     }
 }

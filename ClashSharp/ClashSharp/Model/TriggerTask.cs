@@ -29,6 +29,10 @@ internal enum TriggerConditionKind
     NotificationRaised,
     TotalTraffic,
     TrafficInWindow,
+    UploadRate,
+    DownloadRate,
+    ActiveConnections,
+    SessionTraffic,
     Runtime,
     SystemTime,
 }
@@ -37,7 +41,9 @@ internal enum TriggerConditionKind
 internal enum TriggerActionKind
 {
     CloseConnections,
+    SetLaunchAtStartup,
     SetTransparentProxy,
+    SetConnectionSampling,
     SwitchProxyMode,
     ExitApplication,
     SendNotification,
@@ -50,7 +56,11 @@ internal sealed record TriggerEvaluationContext(
     long WindowTrafficBytes,
     TimeSpan Runtime,
     TimeOnly SystemTime,
-    NotificationLevel NotificationLevel);
+    NotificationLevel NotificationLevel,
+    long UploadBytesPerSecond = 0,
+    long DownloadBytesPerSecond = 0,
+    int ActiveConnectionCount = 0,
+    long SessionTrafficBytes = 0);
 
 /// <summary>One trigger condition with a kind and optional scalar value.</summary>
 internal sealed record TriggerCondition(
