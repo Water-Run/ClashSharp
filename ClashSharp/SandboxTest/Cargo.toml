@@ -1,0 +1,13 @@
+[package]
+name = "clashsharp-sandbox-test"
+version = "0.1.0"
+edition = "2024"
+description = "Clash# Windows Sandbox test harness helper"
+
+[lib]
+name = "clashsharp_sandbox_test"
+path = "src/lib.rs"
+
+[[bin]]
+name = "clashsharp-sandbox-test"
+path = "src/main.rs"

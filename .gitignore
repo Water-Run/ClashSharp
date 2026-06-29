@@ -51,6 +51,8 @@ packages/
 
 Installer/target/
 ClashSharp/Installer/target/
+ClashSharp/SandboxTest/target/
+ClashSharp/SandboxTest/.sandbox/
 Installer/payload/*
 ClashSharp/Installer/payload/*
 !Installer/payload/.gitkeep
