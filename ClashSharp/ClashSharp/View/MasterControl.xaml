@@ -42,6 +42,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Logo.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
@@ -49,43 +50,43 @@
                             <TextBlock Text="Clash#" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         </StackPanel>
+                        <HyperlinkButton
+                            x:Name="SetHeroStatusDisplayButton"
+                            Grid.Column="2"
+                            Content="{Binding SetHeroStatusDisplayText}"
+                            Padding="0"
+                            VerticalAlignment="Top"
+                            Click="SetHeroStatusDisplayButton_Click" />
                     </Grid>
 
-                    <Grid Grid.Row="1" ColumnSpacing="10" RowSpacing="10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <StackPanel Spacing="4">
-                            <TextBlock x:Name="CoreStatusTitleText" Text="{Binding CoreStatusTitleText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="CoreStatusText" Text="{Binding CoreStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock x:Name="SystemProxyTitleText" Text="{Binding SystemProxyTitleText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="SystemProxyStatusText" Text="{Binding SystemProxyStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="1" Spacing="4">
-                            <TextBlock x:Name="TransparentProxyTitleText" Text="{Binding TransparentProxyTitleText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="TransparentProxyStatusText" Text="{Binding TransparentProxyStatusText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
-                            <TextBlock Text="{Binding CurrentNodeText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding LatencySummaryText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                <Button x:Name="OpenLatencyDialogButton" Click="OpenLatencyDialogButton_Click" Padding="8,4">
-                                    <FontIcon Glyph="&#xE9D9;" FontSize="14" />
-                                </Button>
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
+                    <GridView
+                        x:Name="HeroStatusItemGrid"
+                        Grid.Row="1"
+                        ItemsSource="{Binding HeroStatusItems}"
+                        SelectionMode="None"
+                        IsItemClickEnabled="False">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" />
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                <Setter Property="Margin" Value="0,0,10,10" />
+                                <Setter Property="MinWidth" Value="220" />
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                        <GridView.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Spacing="4" MinWidth="220">
+                                    <TextBlock Text="{Binding Title}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Value}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
                 </Grid>
 
                 <components:MasterModeButton

@@ -9,6 +9,7 @@
 
 using System;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using Microsoft.UI.Xaml;
@@ -50,9 +51,9 @@ public partial class App : Application
 
         AppSettingsAuditLogService.Instance.Start();
         TriggerService.Instance.Start();
-        ApplyStartupProxyRecovery();
         _mainWindow = new MainWindow();
         _mainWindow.Activate();
+        _ = Task.Run(ApplyStartupProxyRecovery);
         ConnectionSamplingService.Instance.StartIfEnabled();
     }
 
@@ -77,7 +78,7 @@ public partial class App : Application
         }
     }
 
-    /// <summary>Applies startup stale proxy recovery before creating the main window.</summary>
+    /// <summary>Applies startup stale proxy recovery after the main window is shown.</summary>
     /// <remarks>
     /// Recovery is best-effort: failures are persisted to the SQLite log store and do not prevent UI startup.
     /// </remarks>

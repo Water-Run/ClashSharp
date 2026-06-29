@@ -429,6 +429,10 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Callback that clears all local application data.</summary>
     private readonly Action _clearAllData;
 
+    private readonly Action _exitApplication;
+
+    private readonly Action _restartApplication;
+
     /// <summary>Startup conflict checker.</summary>
     private readonly Func<int, IReadOnlyList<StartupConflictIssue>> _checkStartupConflicts;
 
@@ -534,6 +538,50 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending = null,
         Action<string>? notifyConnectionTestTimeout = null,
         Action<string, string, string, string?>? appendLog = null)
+        : this(
+            settings,
+            applyLanguage,
+            applyTheme,
+            restartConnectionSampling,
+            applyLaunchAtStartup,
+            getString,
+            getProxyInformation,
+            diagnosticsViewModel,
+            mihomoServiceController,
+            applyAccentColor,
+            testConnectionAsync,
+            resetAllSettings,
+            clearAllData,
+            checkStartupConflicts,
+            isAccentColorRestartPending,
+            notifyConnectionTestTimeout,
+            appendLog,
+            null,
+            null)
+    {
+    }
+
+    /// <summary>Initializes a new settings view model with localization, theme, startup, lifecycle, and proxy information providers.</summary>
+    private SettingsViewModel(
+        ISettingsStore settings,
+        Action<AppLanguage> applyLanguage,
+        Action<AppThemeMode> applyTheme,
+        Action restartConnectionSampling,
+        Action<bool> applyLaunchAtStartup,
+        Func<string, string> getString,
+        Func<SettingsProxyInformation> getProxyInformation,
+        SettingsDiagnosticsViewModel? diagnosticsViewModel,
+        IMihomoServiceController? mihomoServiceController,
+        Action<AppAccentColorMode, string>? applyAccentColor,
+        Func<Uri, CancellationToken, Task<int>>? testConnectionAsync,
+        Action? resetAllSettings,
+        Action? clearAllData,
+        Func<int, IReadOnlyList<StartupConflictIssue>>? checkStartupConflicts,
+        Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending,
+        Action<string>? notifyConnectionTestTimeout,
+        Action<string, string, string, string?>? appendLog,
+        Action? exitApplication,
+        Action? restartApplication)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
@@ -547,6 +595,8 @@ internal sealed class SettingsViewModel : ObservableObject
         _appendLog = appendLog ?? ((_, _, _, _) => { });
         _resetAllSettings = resetAllSettings ?? (() => { });
         _clearAllData = clearAllData ?? (() => { });
+        _exitApplication = exitApplication ?? ApplicationLifecycleService.Instance.ExitApplication;
+        _restartApplication = restartApplication ?? ApplicationLifecycleService.Instance.RestartApplication;
         _checkStartupConflicts = checkStartupConflicts ?? (_ => []);
         _isAccentColorRestartPending = isAccentColorRestartPending ?? IsAccentColorChangedSinceLoad;
         _diagnosticsViewModel = diagnosticsViewModel;
@@ -555,6 +605,8 @@ internal sealed class SettingsViewModel : ObservableObject
         WindowsDiagnosticCommand = new AsyncRelayCommand(ExecuteWindowsDiagnosticCommandAsync);
         DeployMihomoServiceCommand = new AsyncRelayCommand(DeployMihomoServiceAsync);
         UninstallMihomoServiceCommand = new AsyncRelayCommand(UninstallMihomoServiceAsync);
+        ExitApplicationCommand = new RelayCommand(ExitApplication);
+        RestartApplicationCommand = new RelayCommand(RestartApplication);
         Load();
         ResetDiagnosticStatusText();
     }
@@ -794,6 +846,14 @@ internal sealed class SettingsViewModel : ObservableObject
     public string ResetText => _getString("Command.Reset");
 
     public string CleanupText => _getString("Command.Cleanup");
+
+    public string ExitApplicationText => _getString("Command.CloseApplication");
+
+    public string RestartApplicationText => _getString("Command.RestartApplication");
+
+    public string ApplicationLifecycleTitleText => _getString("Settings.ApplicationLifecycle.Title");
+
+    public string ApplicationLifecycleDescriptionText => _getString("Settings.ApplicationLifecycle.Description");
 
     public string DiagnosticNotRunText => _getString("Diagnostic.NotRun");
 
@@ -1054,6 +1114,10 @@ internal sealed class SettingsViewModel : ObservableObject
     public AsyncRelayCommand DeployMihomoServiceCommand { get; }
 
     public AsyncRelayCommand UninstallMihomoServiceCommand { get; }
+
+    public RelayCommand ExitApplicationCommand { get; }
+
+    public RelayCommand RestartApplicationCommand { get; }
 
     public AppLanguage DisplayLanguage
     {
@@ -1793,6 +1857,10 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(ApplyText),
             nameof(ResetText),
             nameof(CleanupText),
+            nameof(ExitApplicationText),
+            nameof(RestartApplicationText),
+            nameof(ApplicationLifecycleTitleText),
+            nameof(ApplicationLifecycleDescriptionText),
             nameof(DiagnosticNotRunText),
             nameof(WslDiagnosticStatusText),
             nameof(TerminalDiagnosticStatusText),
@@ -2594,6 +2662,16 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         _clearAllData();
         ReloadAfterMaintenance();
+    }
+
+    public void ExitApplication()
+    {
+        _exitApplication();
+    }
+
+    public void RestartApplication()
+    {
+        _restartApplication();
     }
 
     /// <summary>Checks startup conflicts for the currently configured mixed port.</summary>

@@ -52,6 +52,57 @@ public sealed class MasterControlViewModelTests
         Assert.Equal("v1.19.11", viewModel.InfoTiles.Single(tile => tile.Id == "mihomo-version").Value);
     }
 
+    [Fact]
+    public void Constructor_BuildsEightConfigurableHeroStatusItems()
+    {
+        FakeMasterHeroStatusLayoutService layoutService = new();
+        MasterControlViewModel viewModel = CreateViewModel(heroStatusLayout: layoutService);
+
+        Assert.Equal(
+            [
+                MasterHeroStatusItemKind.CoreStatus,
+                MasterHeroStatusItemKind.SystemProxy,
+                MasterHeroStatusItemKind.TransparentProxy,
+                MasterHeroStatusItemKind.CurrentNode,
+                MasterHeroStatusItemKind.UploadRate,
+                MasterHeroStatusItemKind.DownloadRate,
+                MasterHeroStatusItemKind.TotalTraffic,
+                MasterHeroStatusItemKind.Availability,
+            ],
+            viewModel.HeroStatusItems.Select(item => item.Kind));
+        Assert.Equal(8, viewModel.HeroStatusSlots.Count);
+        Assert.Equal(14, viewModel.HeroStatusOptions.Select(option => option.Kind).Distinct().Count());
+        Assert.Equal("Set display", viewModel.SetHeroStatusDisplayText);
+        Assert.Equal("Restore default", viewModel.RestoreDefaultHeroStatusLayoutText);
+    }
+
+    [Fact]
+    public void SetHeroStatusSlot_UpdatesLayoutThroughService()
+    {
+        FakeMasterHeroStatusLayoutService layoutService = new();
+        MasterControlViewModel viewModel = CreateViewModel(heroStatusLayout: layoutService);
+
+        viewModel.SetHeroStatusSlot(4, MasterHeroStatusItemKind.ActiveConnections);
+
+        Assert.Equal(MasterHeroStatusItemKind.ActiveConnections, viewModel.HeroStatusItems[4].Kind);
+        Assert.Equal(MasterHeroStatusItemKind.ActiveConnections, layoutService.SavedLayout[4]);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenLoadedRecently_SkipsHeavyRefresh()
+    {
+        FakeMasterCore core = new();
+        FakeMasterRuntime runtime = new();
+        DateTimeOffset now = new(2026, 6, 29, 10, 0, 0, TimeSpan.Zero);
+        MasterControlViewModel viewModel = CreateViewModel(core: core, runtime: runtime, getNow: () => now);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(1, core.VersionProbeCount);
+        Assert.Equal(1, runtime.SnapshotCount);
+    }
+
     /// <summary>Verifies applying a mode persists the mode, updates statuses, and logs the result.</summary>
     [Fact]
     public async Task ApplyModeAsync_WhenTakeoverSucceeds_UpdatesStateAndLogs()
@@ -194,6 +245,9 @@ public sealed class MasterControlViewModelTests
 
         Assert.True(viewModel.InfoTiles.Count >= 49);
         Assert.Equal(viewModel.InfoTiles.Count, viewModel.InfoTiles.Select(static tile => tile.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(
+            ["core", "upload-rate", "download-rate", "active-connections", "transparent-proxy", "latency", "active-profile", "current-mode"],
+            viewModel.VisibleInfoTiles.Select(tile => tile.Id));
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "edit-tiles");
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "backup");
         Assert.Equal("core", viewModel.InfoTiles[0].Id);
@@ -315,7 +369,9 @@ public sealed class MasterControlViewModelTests
         FakeMasterTakeover? takeover = null,
         FakeMasterLog? log = null,
         FakeMasterTrayStatus? trayStatus = null,
-        FakeMasterRuntime? runtime = null)
+        FakeMasterRuntime? runtime = null,
+        FakeMasterHeroStatusLayoutService? heroStatusLayout = null,
+        Func<DateTimeOffset>? getNow = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -325,7 +381,9 @@ public sealed class MasterControlViewModelTests
             takeover ?? new FakeMasterTakeover(),
             log ?? new FakeMasterLog(),
             trayStatus ?? new FakeMasterTrayStatus(),
-            runtime ?? new FakeMasterRuntime());
+            runtime ?? new FakeMasterRuntime(),
+            heroStatusLayout: heroStatusLayout ?? new FakeMasterHeroStatusLayoutService(),
+            getNow: getNow);
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>
@@ -382,6 +440,30 @@ public sealed class MasterControlViewModelTests
                 "Master.Tile.Visible" => "Visible",
                 "Master.Tile.Edit" => "Edit tiles",
                 "Master.Tile.EditTiles" => "Edit tiles",
+                "Master.Hero.SetDisplay" => "Set display",
+                "Master.Hero.RestoreDefault" => "Restore default",
+                "Master.Hero.Slot.Row1Left" => "Row 1 left",
+                "Master.Hero.Slot.Row1Right" => "Row 1 right",
+                "Master.Hero.Slot.Row2Left" => "Row 2 left",
+                "Master.Hero.Slot.Row2Right" => "Row 2 right",
+                "Master.Hero.Slot.Row3Left" => "Row 3 left",
+                "Master.Hero.Slot.Row3Right" => "Row 3 right",
+                "Master.Hero.Slot.Row4Left" => "Row 4 left",
+                "Master.Hero.Slot.Row4Right" => "Row 4 right",
+                "Master.Hero.Item.CoreStatus" => "Core status",
+                "Master.Hero.Item.SystemProxy" => "System proxy",
+                "Master.Hero.Item.TransparentProxy" => "Transparent proxy",
+                "Master.Hero.Item.CurrentNode" => "Current node",
+                "Master.Hero.Item.Latency" => "Latency",
+                "Master.Hero.Item.UploadRate" => "Upload rate",
+                "Master.Hero.Item.DownloadRate" => "Download rate",
+                "Master.Hero.Item.TotalTraffic" => "Total traffic",
+                "Master.Hero.Item.ActiveConnections" => "Active connections",
+                "Master.Hero.Item.CurrentMode" => "Current mode",
+                "Master.Hero.Item.ActiveProfile" => "Current profile",
+                "Master.Hero.Item.MihomoService" => "Mihomo service",
+                "Master.Hero.Item.StartupLaunch" => "Startup launch",
+                "Master.Hero.Item.Availability" => "Availability",
                 "Master.Tile.SearchPlaceholder" => "Search tiles",
                 "Master.Tile.Description.Core" => "Core status description",
                 "Master.Tile.Description.SystemProxy" => "System proxy description",
@@ -528,11 +610,14 @@ public sealed class MasterControlViewModelTests
         /// <value>Exception thrown when non-null.</value>
         public Exception? ExceptionToThrow { get; set; }
 
+        public int VersionProbeCount { get; private set; }
+
         /// <summary>Gets fake core version text.</summary>
         /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
         /// <returns>Configured version text.</returns>
         public Task<string> GetVersionTextAsync(CancellationToken cancellationToken)
         {
+            VersionProbeCount++;
             return ExceptionToThrow is null
                 ? Task.FromResult(VersionText)
                 : Task.FromException<string>(ExceptionToThrow);
@@ -688,9 +773,44 @@ public sealed class MasterControlViewModelTests
     {
         public MasterControlRuntimeSnapshot Snapshot { get; set; } = MasterControlRuntimeSnapshot.Unavailable;
 
+        public int SnapshotCount { get; private set; }
+
         public MasterControlRuntimeSnapshot GetSnapshot()
         {
+            SnapshotCount++;
             return Snapshot;
+        }
+    }
+
+    private sealed class FakeMasterHeroStatusLayoutService : IMasterHeroStatusLayoutService
+    {
+        public IReadOnlyList<MasterHeroStatusItemKind> SavedLayout { get; private set; } = MasterHeroStatusLayoutService.DefaultLayout;
+
+        public IReadOnlyList<MasterHeroStatusItemKind> GetLayout()
+        {
+            return SavedLayout;
+        }
+
+        public IReadOnlyList<MasterHeroStatusItemKind> GetDefaultLayout()
+        {
+            return MasterHeroStatusLayoutService.DefaultLayout;
+        }
+
+        public IReadOnlyList<MasterHeroStatusItemKind> GetCandidates()
+        {
+            return MasterHeroStatusLayoutService.Candidates;
+        }
+
+        public IReadOnlyList<MasterHeroStatusItemKind> SaveLayout(IEnumerable<MasterHeroStatusItemKind> layout)
+        {
+            SavedLayout = layout.ToArray();
+            return SavedLayout;
+        }
+
+        public IReadOnlyList<MasterHeroStatusItemKind> ResetLayout()
+        {
+            SavedLayout = MasterHeroStatusLayoutService.DefaultLayout;
+            return SavedLayout;
         }
     }
 }

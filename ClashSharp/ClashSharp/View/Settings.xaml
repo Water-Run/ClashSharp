@@ -74,6 +74,25 @@
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
+            <components:SettingRow x:Name="ApplicationLifecycleRow" Title="{Binding ApplicationLifecycleTitleText}" Description="{Binding ApplicationLifecycleDescriptionText}">
+                <components:SettingRow.ActionContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button x:Name="RestartApplicationButton" Command="{Binding RestartApplicationCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE777;" FontSize="14" />
+                                <TextBlock Text="{Binding RestartApplicationText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ExitApplicationButton" Command="{Binding ExitApplicationCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8BB;" FontSize="14" />
+                                <TextBlock Text="{Binding ExitApplicationText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </components:SettingRow.ActionContent>
+            </components:SettingRow>
+
             <HyperlinkButton x:Name="ResetBasicSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetBasicSettingsButton_Click" />
 
             <TextBlock x:Name="StartupSectionTitleText" Text="{Binding StartupSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />

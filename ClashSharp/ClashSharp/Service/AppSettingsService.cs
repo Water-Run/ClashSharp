@@ -20,7 +20,7 @@ namespace ClashSharp.Service;
 /// Thread safety: Public members serialize access through a private lock.
 /// Side effects: Writes setting changes to Windows local settings when available, otherwise to an in-memory fallback.
 /// </remarks>
-public sealed class AppSettingsService
+public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
 {
     /// <summary>Shared singleton instance created once at type initialization.</summary>
     /// <value>A non-null <see cref="AppSettingsService"/> instance.</value>
@@ -116,6 +116,9 @@ public sealed class AppSettingsService
     /// <summary>Storage key for proxy connection-test URL.</summary>
     private const string KeyConnectionTestUrl = "ConnectionTestUrl";
 
+    /// <summary>Storage key for the eight compact master-control hero status slots.</summary>
+    private const string KeyMasterHeroStatusLayout = "MasterHeroStatusLayout";
+
     private const string KeyConnectionTestProxyUrl1 = "ConnectionTestProxyUrl1";
     private const string KeyConnectionTestProxyUrl2 = "ConnectionTestProxyUrl2";
     private const string KeyConnectionTestDirectUrl = "ConnectionTestDirectUrl";
@@ -162,6 +165,7 @@ public sealed class AppSettingsService
         KeyNotificationEnabled,
         KeyNotificationLevel,
         KeyConnectionTestUrl,
+        KeyMasterHeroStatusLayout,
         KeyConnectionTestProxyUrl1,
         KeyConnectionTestProxyUrl2,
         KeyConnectionTestDirectUrl,
@@ -410,6 +414,13 @@ public sealed class AppSettingsService
     {
         get => GetString(KeyConnectionTestUrl, DefaultConnectionTestUrl);
         set => SetString(KeyConnectionTestUrl, NormalizeConnectionTestUrl(value));
+    }
+
+    /// <summary>Gets or sets the comma-separated master hero status slot layout.</summary>
+    public string MasterHeroStatusLayout
+    {
+        get => GetString(KeyMasterHeroStatusLayout, string.Empty);
+        set => SetString(KeyMasterHeroStatusLayout, value);
     }
 
     public string ConnectionTestProxyUrl1

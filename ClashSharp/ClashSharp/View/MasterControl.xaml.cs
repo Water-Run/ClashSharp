@@ -20,6 +20,7 @@ using ClashSharp.Service;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace ClashSharp.View;
 
@@ -86,6 +87,94 @@ public sealed partial class MasterControl : Page
     private async void OpenLatencyDialogButton_Click(object sender, RoutedEventArgs e)
     {
         await ShowLatencyDialogAsync();
+    }
+
+    private void SetHeroStatusDisplayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement anchor)
+        {
+            return;
+        }
+
+        Flyout flyout = new()
+        {
+            Placement = FlyoutPlacementMode.BottomEdgeAlignedRight,
+        };
+        flyout.Content = BuildHeroStatusFlyoutContent(flyout);
+        flyout.ShowAt(anchor);
+    }
+
+    private void HeroStatusSlotComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox { Tag: int slotIndex, SelectedValue: MasterHeroStatusItemKind kind })
+        {
+            return;
+        }
+
+        _viewModel.SetHeroStatusSlot(slotIndex, kind);
+    }
+
+    private StackPanel BuildHeroStatusFlyoutContent(Flyout flyout)
+    {
+        StackPanel root = new()
+        {
+            Width = 320,
+            Spacing = 10,
+        };
+
+        StackPanel slotHost = new()
+        {
+            Spacing = 8,
+        };
+        foreach (MasterHeroStatusSlotViewModel slot in _viewModel.HeroStatusSlots)
+        {
+            Grid row = new()
+            {
+                ColumnSpacing = 12,
+            };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            TextBlock title = new()
+            {
+                Text = slot.Title,
+                Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis,
+            };
+            row.Children.Add(title);
+
+            ComboBox comboBox = new()
+            {
+                MinWidth = 180,
+                ItemsSource = slot.Options,
+                DisplayMemberPath = nameof(MasterHeroStatusOptionViewModel.Title),
+                SelectedValuePath = nameof(MasterHeroStatusOptionViewModel.Kind),
+                SelectedValue = slot.SelectedKind,
+                Tag = slot.Index,
+            };
+            comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged;
+            Grid.SetColumn(comboBox, 1);
+            row.Children.Add(comboBox);
+
+            slotHost.Children.Add(row);
+        }
+
+        root.Children.Add(slotHost);
+        HyperlinkButton restoreDefaultLink = new()
+        {
+            Content = _viewModel.RestoreDefaultHeroStatusLayoutText,
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        restoreDefaultLink.Click += (_, _) =>
+        {
+            _viewModel.ResetHeroStatusLayout();
+            flyout.Content = BuildHeroStatusFlyoutContent(flyout);
+        };
+        root.Children.Add(restoreDefaultLink);
+
+        return root;
     }
 
     /// <summary>Handles functional information-tile actions requested by the view model.</summary>

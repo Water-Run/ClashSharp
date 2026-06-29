@@ -41,6 +41,7 @@
     <Compile Include="..\ClashSharp\Model\ClashDataPackageScope.cs" Link="Model\ClashDataPackageScope.cs" />
     <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />
     <Compile Include="..\ClashSharp\Model\ApplicationActionKind.cs" Link="Model\ApplicationActionKind.cs" />
+    <Compile Include="..\ClashSharp\Model\MasterHeroStatusItemKind.cs" Link="Model\MasterHeroStatusItemKind.cs" />
     <Compile Include="..\ClashSharp\Model\MainlandChinaFeatureMode.cs" Link="Model\MainlandChinaFeatureMode.cs" />
     <Compile Include="..\ClashSharp\Model\NotificationLevel.cs" Link="Model\NotificationLevel.cs" />
     <Compile Include="..\ClashSharp\Model\CloseBehaviorMode.cs" Link="Model\CloseBehaviorMode.cs" />
@@ -65,11 +66,13 @@
     <Compile Include="..\ClashSharp\Model\LogRecord.cs" Link="Model\LogRecord.cs" />
     <Compile Include="..\ClashSharp\Model\TriggerTask.cs" Link="Model\TriggerTask.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.cs" Link="Service\AppSettingsService.cs" />
+    <Compile Include="..\ClashSharp\Service\ApplicationLifecycleService.cs" Link="Service\ApplicationLifecycleService.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageService.cs" Link="Service\ClashDataPackageService.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageServiceFactory.cs" Link="Service\ClashDataPackageServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\AppDataMaintenanceService.cs" Link="Service\AppDataMaintenanceService.cs" />
     <Compile Include="..\ClashSharp\Service\AppDataPathService.cs" Link="Service\AppDataPathService.cs" />
     <Compile Include="..\ClashSharp\Service\ConnectionSamplingService.cs" Link="Service\ConnectionSamplingService.cs" />
+    <Compile Include="..\ClashSharp\Service\ConnectionSamplingServiceFactory.cs" Link="Service\ConnectionSamplingServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationService.cs" Link="Service\CoreConfigurationService.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationServiceFactory.cs" Link="Service\CoreConfigurationServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageFootprint.cs" Link="Service\LogStorageFootprint.cs" />
@@ -87,6 +90,7 @@
     <Compile Include="..\ClashSharp\Service\LocalizationService.cs" Link="Service\LocalizationService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayServiceFactory.cs" Link="Service\MainlandChinaTextDisplayServiceFactory.cs" />
+    <Compile Include="..\ClashSharp\Service\MasterHeroStatusLayoutService.cs" Link="Service\MasterHeroStatusLayoutService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfilePreviewParser.cs" Link="Service\MihomoProfilePreviewParser.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileParserService.cs" Link="Service\MihomoProfileParserService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileParserServiceFactory.cs" Link="Service\MihomoProfileParserServiceFactory.cs" />
@@ -94,6 +98,7 @@
     <Compile Include="..\ClashSharp\Service\RegionDisplayService.cs" Link="Service\RegionDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\RegionDisplayServiceFactory.cs" Link="Service\RegionDisplayServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoControllerClient.cs" Link="Service\MihomoControllerClient.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoConnectionService.cs" Link="Service\MihomoConnectionService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoCoreService.cs" Link="Service\MihomoCoreService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoServiceManager.cs" Link="Service\MihomoServiceManager.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoServiceManagerFactory.cs" Link="Service\MihomoServiceManagerFactory.cs" />
@@ -109,10 +114,12 @@
     <Compile Include="..\ClashSharp\Service\ProxyLatencyService.cs" Link="Service\ProxyLatencyService.cs" />
     <Compile Include="..\ClashSharp\Service\RuleCatalogService.cs" Link="Service\RuleCatalogService.cs" />
     <Compile Include="..\ClashSharp\Service\RuntimeShutdownService.cs" Link="Service\RuntimeShutdownService.cs" />
+    <Compile Include="..\ClashSharp\Service\RuntimeShutdownServiceFactory.cs" Link="Service\RuntimeShutdownServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\StartupBehaviorService.cs" Link="Service\StartupBehaviorService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupCheckService.cs" Link="Service\StartupCheckService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupRestoreFallbackService.cs" Link="Service\StartupRestoreFallbackService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupLaunchService.cs" Link="Service\StartupLaunchService.cs" />
+    <Compile Include="..\ClashSharp\Service\SingleInstanceService.cs" Link="Service\SingleInstanceService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionService.cs" Link="Service\StartupConflictDetectionService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionServiceFactory.cs" Link="Service\StartupConflictDetectionServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\TrayCommandService.cs" Link="Service\TrayCommandService.cs" />

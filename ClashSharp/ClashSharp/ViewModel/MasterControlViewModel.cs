@@ -332,6 +332,74 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
     }
 }
 
+internal sealed class MasterHeroStatusItemViewModel : ObservableObject
+{
+    private MasterHeroStatusItemKind _kind;
+    private string _title;
+    private string _value;
+
+    public MasterHeroStatusItemViewModel(MasterHeroStatusItemKind kind, string title, string value)
+    {
+        _kind = kind;
+        _title = title ?? throw new ArgumentNullException(nameof(title));
+        _value = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    public MasterHeroStatusItemKind Kind
+    {
+        get => _kind;
+        set => SetProperty(ref _kind, value);
+    }
+
+    public string Title
+    {
+        get => _title;
+        set => SetProperty(ref _title, value);
+    }
+
+    public string Value
+    {
+        get => _value;
+        set => SetProperty(ref _value, value);
+    }
+}
+
+internal sealed class MasterHeroStatusOptionViewModel(MasterHeroStatusItemKind kind, string title)
+{
+    public MasterHeroStatusItemKind Kind { get; } = kind;
+
+    public string Title { get; } = title ?? throw new ArgumentNullException(nameof(title));
+}
+
+internal sealed class MasterHeroStatusSlotViewModel : ObservableObject
+{
+    private MasterHeroStatusItemKind _selectedKind;
+
+    public MasterHeroStatusSlotViewModel(
+        int index,
+        string title,
+        MasterHeroStatusItemKind selectedKind,
+        IReadOnlyList<MasterHeroStatusOptionViewModel> options)
+    {
+        Index = index;
+        Title = title ?? throw new ArgumentNullException(nameof(title));
+        _selectedKind = selectedKind;
+        Options = options ?? throw new ArgumentNullException(nameof(options));
+    }
+
+    public int Index { get; }
+
+    public string Title { get; }
+
+    public IReadOnlyList<MasterHeroStatusOptionViewModel> Options { get; }
+
+    public MasterHeroStatusItemKind SelectedKind
+    {
+        get => _selectedKind;
+        set => SetProperty(ref _selectedKind, value);
+    }
+}
+
 /// <summary>Bindable view model for the master control page.</summary>
 /// <remarks>
 /// Invariants: Exactly one primary mode flag is true when <see cref="SelectedMode"/> is not faulted.
@@ -366,6 +434,10 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     /// <summary>Shared application action dispatcher used by functional tiles.</summary>
     private readonly IApplicationActionDispatcher _actions;
+
+    private readonly IMasterHeroStatusLayoutService _heroStatusLayout;
+
+    private readonly Func<DateTimeOffset> _getNow;
 
     /// <summary>Callback invoked after a runtime mode is successfully applied.</summary>
     private readonly Func<ClashSharpMode, Task> _modeApplied;
@@ -407,6 +479,16 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Currently visible information tiles displayed in the lower grid.</summary>
     private readonly ObservableCollection<MasterControlInfoTileViewModel> _visibleInfoTiles = [];
 
+    private readonly ObservableCollection<MasterHeroStatusItemViewModel> _heroStatusItems = [];
+
+    private readonly ObservableCollection<MasterHeroStatusSlotViewModel> _heroStatusSlots = [];
+
+    private readonly IReadOnlyList<MasterHeroStatusOptionViewModel> _heroStatusOptions;
+
+    private DateTimeOffset? _lastHeavyRefreshAt;
+
+    private static readonly TimeSpan LoadRefreshThrottle = TimeSpan.FromSeconds(5);
+
     /// <summary>Initializes a master control view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
     /// <param name="core">Core runtime provider. Must not be null.</param>
@@ -425,7 +507,9 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterControlTrayStatus? trayStatus = null,
         IMasterControlRuntime? runtime = null,
         IApplicationActionDispatcher? actions = null,
-        Func<ClashSharpMode, Task>? modeApplied = null)
+        Func<ClashSharpMode, Task>? modeApplied = null,
+        IMasterHeroStatusLayoutService? heroStatusLayout = null,
+        Func<DateTimeOffset>? getNow = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -436,8 +520,11 @@ internal sealed class MasterControlViewModel : ObservableObject
         _trayStatus = trayStatus ?? UnavailableMasterControlTrayStatus.Instance;
         _runtime = runtime ?? UnavailableMasterControlRuntime.Instance;
         _actions = actions ?? NoMasterControlApplicationActionDispatcher.Instance;
+        _heroStatusLayout = heroStatusLayout ?? MasterHeroStatusLayoutService.Instance;
+        _getNow = getNow ?? (() => DateTimeOffset.Now);
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         _selectedMode = _settings.CurrentMode;
+        _heroStatusOptions = BuildHeroStatusOptions();
 
         DisabledModeCommand = new AsyncRelayCommand(token => ApplyModeAsync(ClashSharpMode.Disabled, token));
         StandbyModeCommand = new AsyncRelayCommand(token => ApplyModeAsync(ClashSharpMode.Standby, token));
@@ -450,6 +537,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         TransparentProxyStatusText = string.Empty;
         CurrentNodeText = _localization.GetString("Master.Status.CurrentNodeUnavailable");
         LatencySummaryText = _localization.GetString("Master.Status.LatencyUnavailable");
+        BuildHeroStatusItems();
         BuildInfoTiles();
         RefreshTileValues();
     }
@@ -543,6 +631,16 @@ internal sealed class MasterControlViewModel : ObservableObject
     public IReadOnlyList<MasterControlInfoTileViewModel> InfoTiles => _infoTiles;
 
     public IReadOnlyList<MasterControlInfoTileViewModel> VisibleInfoTiles => _visibleInfoTiles;
+
+    public IReadOnlyList<MasterHeroStatusItemViewModel> HeroStatusItems => _heroStatusItems;
+
+    public IReadOnlyList<MasterHeroStatusSlotViewModel> HeroStatusSlots => _heroStatusSlots;
+
+    public IReadOnlyList<MasterHeroStatusOptionViewModel> HeroStatusOptions => _heroStatusOptions;
+
+    public string SetHeroStatusDisplayText => _localization.GetString("Master.Hero.SetDisplay");
+
+    public string RestoreDefaultHeroStatusLayoutText => _localization.GetString("Master.Hero.RestoreDefault");
 
     /// <summary>Raised when a functional information tile requests page-level UI work.</summary>
     public event EventHandler<MasterControlTileAction>? TileActionRequested;
@@ -647,6 +745,13 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// </remarks>
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
+        DateTimeOffset now = _getNow();
+        if (_lastHeavyRefreshAt is DateTimeOffset lastRefresh && now - lastRefresh < LoadRefreshThrottle)
+        {
+            RefreshTileValues();
+            return;
+        }
+
         try
         {
             string versionText = CoreVersionDisplayFormatter.Format(await _core.GetVersionTextAsync(cancellationToken));
@@ -668,6 +773,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         RefreshTrayStatus();
         OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
+        _lastHeavyRefreshAt = now;
     }
 
     /// <summary>Applies a selected takeover mode and refreshes visible status.</summary>
@@ -711,6 +817,24 @@ internal sealed class MasterControlViewModel : ObservableObject
 
         OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
+    }
+
+    public void SetHeroStatusSlot(int slotIndex, MasterHeroStatusItemKind kind)
+    {
+        if (slotIndex < 0 || slotIndex >= _heroStatusItems.Count)
+        {
+            return;
+        }
+
+        MasterHeroStatusItemKind[] layout = _heroStatusItems.Select(static item => item.Kind).ToArray();
+        layout[slotIndex] = kind;
+        IReadOnlyList<MasterHeroStatusItemKind> normalized = _heroStatusLayout.SaveLayout(layout);
+        ApplyHeroStatusLayout(normalized);
+    }
+
+    public void ResetHeroStatusLayout()
+    {
+        ApplyHeroStatusLayout(_heroStatusLayout.ResetLayout());
     }
 
     /// <summary>Refreshes visible proxy and transparent-proxy status from current service state.</summary>
@@ -782,6 +906,52 @@ internal sealed class MasterControlViewModel : ObservableObject
             {
                 _visibleInfoTiles.Add(viewModel);
             }
+        }
+    }
+
+    private void BuildHeroStatusItems()
+    {
+        _heroStatusItems.Clear();
+        _heroStatusSlots.Clear();
+        ApplyHeroStatusLayout(_heroStatusLayout.GetLayout());
+    }
+
+    private void ApplyHeroStatusLayout(IReadOnlyList<MasterHeroStatusItemKind> layout)
+    {
+        for (int index = 0; index < layout.Count; index++)
+        {
+            MasterHeroStatusItemKind kind = layout[index];
+            string title = GetHeroStatusTitle(kind);
+            string value = GetHeroStatusValue(kind);
+            if (index < _heroStatusItems.Count)
+            {
+                _heroStatusItems[index].Kind = kind;
+                _heroStatusItems[index].Title = title;
+                _heroStatusItems[index].Value = value;
+            }
+            else
+            {
+                _heroStatusItems.Add(new MasterHeroStatusItemViewModel(kind, title, value));
+            }
+
+            if (index < _heroStatusSlots.Count)
+            {
+                _heroStatusSlots[index].SelectedKind = kind;
+            }
+            else
+            {
+                _heroStatusSlots.Add(new MasterHeroStatusSlotViewModel(index, GetHeroStatusSlotTitle(index), kind, _heroStatusOptions));
+            }
+        }
+
+        while (_heroStatusItems.Count > layout.Count)
+        {
+            _heroStatusItems.RemoveAt(_heroStatusItems.Count - 1);
+        }
+
+        while (_heroStatusSlots.Count > layout.Count)
+        {
+            _heroStatusSlots.RemoveAt(_heroStatusSlots.Count - 1);
         }
     }
 
@@ -866,6 +1036,71 @@ internal sealed class MasterControlViewModel : ObservableObject
                 FormatBytes(_runtimeSnapshot.Traffic.TotalDownloadBytes)));
         SetTile("traffic-snapshots", FormatNumber(_runtimeSnapshot.Traffic.SnapshotCount), string.Empty);
         SetTile("node-health-records", FormatNumber(_runtimeSnapshot.Traffic.NodeHealthCount), FormatNumber(_runtimeSnapshot.Traffic.NodeCount));
+        RefreshHeroStatusValues();
+    }
+
+    private void RefreshHeroStatusValues()
+    {
+        foreach (MasterHeroStatusItemViewModel item in _heroStatusItems)
+        {
+            item.Title = GetHeroStatusTitle(item.Kind);
+            item.Value = GetHeroStatusValue(item.Kind);
+        }
+    }
+
+    private IReadOnlyList<MasterHeroStatusOptionViewModel> BuildHeroStatusOptions()
+    {
+        return _heroStatusLayout
+            .GetCandidates()
+            .Select(kind => new MasterHeroStatusOptionViewModel(kind, GetHeroStatusTitle(kind)))
+            .ToArray();
+    }
+
+    private string GetHeroStatusSlotTitle(int slotIndex)
+    {
+        return slotIndex switch
+        {
+            0 => _localization.GetString("Master.Hero.Slot.Row1Left"),
+            1 => _localization.GetString("Master.Hero.Slot.Row1Right"),
+            2 => _localization.GetString("Master.Hero.Slot.Row2Left"),
+            3 => _localization.GetString("Master.Hero.Slot.Row2Right"),
+            4 => _localization.GetString("Master.Hero.Slot.Row3Left"),
+            5 => _localization.GetString("Master.Hero.Slot.Row3Right"),
+            6 => _localization.GetString("Master.Hero.Slot.Row4Left"),
+            7 => _localization.GetString("Master.Hero.Slot.Row4Right"),
+            _ => string.Empty,
+        };
+    }
+
+    private string GetHeroStatusTitle(MasterHeroStatusItemKind kind)
+    {
+        return _localization.GetString($"Master.Hero.Item.{kind}");
+    }
+
+    private string GetHeroStatusValue(MasterHeroStatusItemKind kind)
+    {
+        return kind switch
+        {
+            MasterHeroStatusItemKind.CoreStatus => GetCoreTileStatusText(),
+            MasterHeroStatusItemKind.SystemProxy => SystemProxyStatusText,
+            MasterHeroStatusItemKind.TransparentProxy => TransparentProxyStatusText,
+            MasterHeroStatusItemKind.CurrentNode => CurrentNodeText,
+            MasterHeroStatusItemKind.Latency => LatencySummaryText,
+            MasterHeroStatusItemKind.UploadRate => FormatBytesPerSecond(_runtimeSnapshot.RuntimeTraffic.UploadBytesPerSecond),
+            MasterHeroStatusItemKind.DownloadRate => FormatBytesPerSecond(_runtimeSnapshot.RuntimeTraffic.DownloadBytesPerSecond),
+            MasterHeroStatusItemKind.TotalTraffic => FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
+            MasterHeroStatusItemKind.ActiveConnections => FormatNumber(_runtimeSnapshot.RuntimeTraffic.ActiveConnectionCount),
+            MasterHeroStatusItemKind.CurrentMode => GetModeTitle(SelectedMode),
+            MasterHeroStatusItemKind.ActiveProfile => _settings.ActiveProfileId,
+            MasterHeroStatusItemKind.MihomoService => GetMihomoServiceStatusText(),
+            MasterHeroStatusItemKind.StartupLaunch => _settings.LaunchAtStartupEnabled
+                ? _localization.GetString("Master.Status.StartupLaunchOn")
+                : _localization.GetString("Master.Status.StartupLaunchOff"),
+            MasterHeroStatusItemKind.Availability => _isCoreAvailable
+                ? _localization.GetString("Master.Status.Available")
+                : _localization.GetString("Master.Status.Unavailable"),
+            _ => string.Empty,
+        };
     }
 
     private string TileDescription(string key)
@@ -1224,13 +1459,13 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTile("upload-rate", "UploadRate", "\uE898", infoType),
                 owner.CreateTile("download-rate", "DownloadRate", "\uE896", infoType),
                 owner.CreateTile("active-connections", "ActiveConnections", "\uE839", infoType),
-                owner.CreateTile("session-traffic", "SessionTraffic", "\uE9D2", infoType),
-                owner.CreateTile("memory-usage", "MemoryUsage", "\uE950", infoType),
+                owner.CreateTile("session-traffic", "SessionTraffic", "\uE9D2", infoType, isVisibleByDefault: false),
+                owner.CreateTile("memory-usage", "MemoryUsage", "\uE950", infoType, isVisibleByDefault: false),
                 owner.CreateTile("mihomo-version", "MihomoVersion", "\uE950", infoType, isVisibleByDefault: false),
-                owner.CreateTile("system-proxy", "SystemProxy", "\uE968", infoType),
+                owner.CreateTile("system-proxy", "SystemProxy", "\uE968", infoType, isVisibleByDefault: false),
                 owner.CreateTile("transparent-proxy", "TransparentProxy", "\uE8A7", controllableType, true, owner._settings.TransparentProxyEnabled, command: owner.ToggleTransparentProxy),
                 owner.CreateTile("latency", "Latency", "\uEC4A", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.RunLatencyTest)),
-                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, command: owner.ToggleStartupLaunch),
+                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, isVisibleByDefault: false, command: owner.ToggleStartupLaunch),
                 owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, isVisibleByDefault: false, command: owner.ToggleConnectionSampling),
                 owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, isVisibleByDefault: false, command: owner.ToggleUrlBlocking),
                 owner.CreateTile("active-profile", "ActiveProfile", "\uE8A5", infoType),
@@ -1240,44 +1475,44 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", infoType, isVisibleByDefault: false),
                 owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", infoType, isVisibleByDefault: false),
                 owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ShowStartupPrompt)),
-                owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.CheckStartupConflicts)),
+                owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.CheckStartupConflicts)),
                 owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ExportConfiguration)),
                 owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ImportConfiguration)),
                 owner.CreateTile("app-name", "AppName", "\uE946", infoType, isVisibleByDefault: false),
                 owner.CreateTileFromKeys("app-version", "About.Version.Title", "\uE946", "Master.Tile.Description.AppVersion", infoType, isVisibleByDefault: false),
                 owner.CreateTileFromKeys("app-runtime", "About.Runtime.Title", "\uE7F8", "Master.Tile.Description.AppRuntime", infoType, isVisibleByDefault: false),
                 owner.CreateTileFromKeys("current-mode", "Tray.Menu.Mode", "\uE8AB", "Master.Mode.RuleTakeover.Description", infoType),
-                owner.CreateTileFromKeys("current-node", "Tray.Status.Node.Format", "\uE8A5", "Settings.Tray.Feature.Status.Description", infoType),
-                owner.CreateTileFromKeys("notification-enabled", "Settings.Notification.Enabled.Title", "\uE7F4", "Settings.Notification.Enabled.Description", infoType),
-                owner.CreateTileFromKeys("notification-level", "Settings.Notification.Title", "\uE7F4", "Settings.Notification.Description", infoType),
-                owner.CreateTileFromKeys("triggers-enabled", "Settings.Triggers.Enabled.Title", "\uE9F5", "Settings.Triggers.Enabled.Description", infoType),
-                owner.CreateTileFromKeys("trigger-notifications", "Settings.Triggers.Notifications.Title", "\uE7F4", "Settings.Triggers.Notifications.Description", infoType),
-                owner.CreateTileFromKeys("tray-visible-features", "Settings.Tray.VisibleFeatures.Title", "\uE8A7", "Settings.Tray.VisibleFeatures.Description", infoType),
-                owner.CreateTileFromKeys("tray-monochrome-icon", "Settings.Tray.MonochromeInactiveIcon.Title", "\uE790", "Settings.Tray.MonochromeInactiveIcon.Description", infoType),
-                owner.CreateTileFromKeys("close-behavior", "Settings.CloseBehavior.Title", "\uE8BB", "Settings.CloseBehavior.Description", infoType),
-                owner.CreateTileFromKeys("startup-behavior", "Settings.StartupBehavior.Title", "\uE7C3", "Settings.StartupBehavior.Description", infoType),
-                owner.CreateTileFromKeys("app-theme", "Settings.AppTheme.Title", "\uE790", "Settings.AppTheme.Description", infoType),
-                owner.CreateTileFromKeys("display-language", "Settings.Language.Title", "\uE774", "Settings.Language.Description", infoType),
-                owner.CreateTileFromKeys("sampling-interval", "Settings.SamplingInterval.Title", "\uE916", "Settings.SamplingInterval.Description", infoType),
-                owner.CreateTileFromKeys("app-accent", "Settings.AppAccentColor.Title", "\uE790", "Settings.AppAccentColor.Description", infoType),
-                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, command: owner.ToggleRestoreProxyOnExit),
-                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, command: owner.ToggleCheckStaleProxyOnStartup),
-                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, command: owner.ToggleStartupConflictCheck),
-                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, command: owner.ToggleStartupGuide),
-                owner.CreateTileFromKeys("mainland-feature-mode", "Settings.MainlandChinaDisplay.Title", "\uE7B5", "Settings.MainlandChinaDisplay.Description", infoType),
-                owner.CreateTileFromKeys("startup-restore-fallback", "Settings.StartupRestoreFallback.Title", "\uE7C3", "Settings.StartupRestoreFallback.Description", infoType),
-                owner.CreateTileFromKeys("mihomo-service", "Settings.TransparentProxy.Service.Title", "\uE95A", "Settings.TransparentProxy.Service.Description", infoType),
-                owner.CreateTileFromKeys("core-config-file", "Master.Status.CoreConfiguration", "\uE8A5", "Settings.ProxyInformation.Description", infoType),
-                owner.CreateTileFromKeys("profile-count", "Nav.Profiles", "\uE8A5", "Page.Profiles.Description", infoType),
-                owner.CreateTileFromKeys("subscription-count", "StartupPrompt.Check.Subscription.Title", "\uE774", "Page.Profiles.Description", infoType),
-                owner.CreateTileFromKeys("proxy-node-count", "Nav.ProxyNodes", "\uE8A5", "Page.ProxyNodes.Description", infoType),
-                owner.CreateTileFromKeys("rule-count", "Nav.Rules", "\uE8D7", "Page.Rules.Description", infoType),
-                owner.CreateTileFromKeys("trigger-count", "Settings.Section.Triggers", "\uE9F5", "Page.Triggers.Description", infoType),
-                owner.CreateTileFromKeys("system-log-count", "Statistics.LogsShortcut.Title", "\uE9D9", "Statistics.LogsShortcut.Description", infoType),
-                owner.CreateTileFromKeys("connection-records", "Nav.Connections", "\uE839", "Page.Connections.Description", infoType),
-                owner.CreateTileFromKeys("traffic-total", "Statistics.Total.Title", "\uE9D2", "Page.Statistics.Description", infoType),
-                owner.CreateTileFromKeys("traffic-snapshots", "Statistics.ByDate.Title", "\uE121", "Page.Statistics.Description", infoType),
-                owner.CreateTileFromKeys("node-health-records", "Statistics.Node.Title", "\uE8A5", "Page.Statistics.Description", infoType),
+                owner.CreateTileFromKeys("current-node", "Tray.Status.Node.Format", "\uE8A5", "Settings.Tray.Feature.Status.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("notification-enabled", "Settings.Notification.Enabled.Title", "\uE7F4", "Settings.Notification.Enabled.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("notification-level", "Settings.Notification.Title", "\uE7F4", "Settings.Notification.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("triggers-enabled", "Settings.Triggers.Enabled.Title", "\uE9F5", "Settings.Triggers.Enabled.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("trigger-notifications", "Settings.Triggers.Notifications.Title", "\uE7F4", "Settings.Triggers.Notifications.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("tray-visible-features", "Settings.Tray.VisibleFeatures.Title", "\uE8A7", "Settings.Tray.VisibleFeatures.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("tray-monochrome-icon", "Settings.Tray.MonochromeInactiveIcon.Title", "\uE790", "Settings.Tray.MonochromeInactiveIcon.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("close-behavior", "Settings.CloseBehavior.Title", "\uE8BB", "Settings.CloseBehavior.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("startup-behavior", "Settings.StartupBehavior.Title", "\uE7C3", "Settings.StartupBehavior.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("app-theme", "Settings.AppTheme.Title", "\uE790", "Settings.AppTheme.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("display-language", "Settings.Language.Title", "\uE774", "Settings.Language.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("sampling-interval", "Settings.SamplingInterval.Title", "\uE916", "Settings.SamplingInterval.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("app-accent", "Settings.AppAccentColor.Title", "\uE790", "Settings.AppAccentColor.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, isVisibleByDefault: false, command: owner.ToggleRestoreProxyOnExit),
+                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, isVisibleByDefault: false, command: owner.ToggleCheckStaleProxyOnStartup),
+                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, isVisibleByDefault: false, command: owner.ToggleStartupConflictCheck),
+                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, isVisibleByDefault: false, command: owner.ToggleStartupGuide),
+                owner.CreateTileFromKeys("mainland-feature-mode", "Settings.MainlandChinaDisplay.Title", "\uE7B5", "Settings.MainlandChinaDisplay.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("startup-restore-fallback", "Settings.StartupRestoreFallback.Title", "\uE7C3", "Settings.StartupRestoreFallback.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("mihomo-service", "Settings.TransparentProxy.Service.Title", "\uE95A", "Settings.TransparentProxy.Service.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("core-config-file", "Master.Status.CoreConfiguration", "\uE8A5", "Settings.ProxyInformation.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("profile-count", "Nav.Profiles", "\uE8A5", "Page.Profiles.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("subscription-count", "StartupPrompt.Check.Subscription.Title", "\uE774", "Page.Profiles.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("proxy-node-count", "Nav.ProxyNodes", "\uE8A5", "Page.ProxyNodes.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("rule-count", "Nav.Rules", "\uE8D7", "Page.Rules.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("trigger-count", "Settings.Section.Triggers", "\uE9F5", "Page.Triggers.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("system-log-count", "Statistics.LogsShortcut.Title", "\uE9D9", "Statistics.LogsShortcut.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("connection-records", "Nav.Connections", "\uE839", "Page.Connections.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("traffic-total", "Statistics.Total.Title", "\uE9D2", "Page.Statistics.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("traffic-snapshots", "Statistics.ByDate.Title", "\uE121", "Page.Statistics.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("node-health-records", "Statistics.Node.Title", "\uE8A5", "Page.Statistics.Description", infoType, isVisibleByDefault: false),
             ];
         }
     }

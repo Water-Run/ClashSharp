@@ -1282,8 +1282,16 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("CanDragItems=\"True\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("AllowDrop=\"True\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ReorderThemeTransition", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"OpenLatencyDialogButton\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("OpenLatencyDialogButton_Click", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeroStatusItemGrid\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding HeroStatusItems}\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SetHeroStatusDisplayButton\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"{Binding SetHeroStatusDisplayText}\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"SetHeroStatusDisplayButton_Click\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Flyout flyout = new()", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("BuildHeroStatusFlyoutContent", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("foreach (MasterHeroStatusSlotViewModel slot in _viewModel.HeroStatusSlots)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.ResetHeroStatusLayout();", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"EditInfoTilesLink\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"{Binding EditInfoTilesText}\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"EditInfoTilesButton_Click\"", masterControlXaml, StringComparison.Ordinal);
@@ -1925,7 +1933,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Text=\"{Binding Title, ElementName=Root}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", settingRow, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding Value, ElementName=Root}\"", masterInfoTile, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", masterInfoTile, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"CoreStatusText\" Text=\"{Binding CoreStatusText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", masterControl, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Value}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", masterControl, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TotalTrafficText\" Text=\"{Binding TotalTrafficText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", statistics, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ConditionsSummary}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", triggers, StringComparison.Ordinal);
         Assert.Contains("Grid.Column=\"1\" Text=\"{Binding LevelDisplay}\" Style=\"{ThemeResource CaptionTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", logs, StringComparison.Ordinal);

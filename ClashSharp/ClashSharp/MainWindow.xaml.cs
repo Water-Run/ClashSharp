@@ -244,11 +244,15 @@ public sealed partial class MainWindow : Window
     private async Task RunStartupFlowAsync()
     {
         AppSettingsService settings = AppSettingsService.Instance;
+        bool skipStartupDialogs = ShouldSkipStartupDialogs();
+        if (!skipStartupDialogs && !await ResolveSingleInstanceConflictAsync())
+        {
+            return;
+        }
+
         await TriggerService.Instance.EvaluateAsync(
             TriggerEvaluationContextFactory.Create(TriggerEventKind.AppEntered),
             System.Threading.CancellationToken.None);
-
-        bool skipStartupDialogs = ShouldSkipStartupDialogs();
 
         if (!skipStartupDialogs && settings.StartupConflictCheckEnabled)
         {
@@ -276,6 +280,46 @@ public sealed partial class MainWindow : Window
         {
             LogStorageService.Instance.AppendLog("Warning", "Startup", LocalizationService.Instance.GetString("Startup.Log.ProxyBehaviorFailed"), exception.Message);
         }
+    }
+
+    private async Task<bool> ResolveSingleInstanceConflictAsync()
+    {
+        SingleInstanceCheckResult result = SingleInstanceService.Instance.CheckForOtherInstance();
+        if (!result.HasOtherInstance)
+        {
+            return true;
+        }
+
+        XamlRoot? xamlRoot = GetDialogXamlRoot();
+        if (xamlRoot is null)
+        {
+            return true;
+        }
+
+        ThemedContentDialog dialog = new()
+        {
+            Title = LocalizationService.Instance.GetString("SingleInstance.Dialog.Title"),
+            Content = LocalizationService.Instance.GetString("SingleInstance.Dialog.Message"),
+            PrimaryButtonText = LocalizationService.Instance.GetString("SingleInstance.Dialog.CloseOther"),
+            CloseButtonText = LocalizationService.Instance.GetString("SingleInstance.Dialog.ExitCurrent"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+
+        ContentDialogResult dialogResult = await dialog.ShowAsync();
+        if (dialogResult == ContentDialogResult.Primary)
+        {
+            SingleInstanceCloseResult closeResult = SingleInstanceService.Instance.CloseOtherInstance(result);
+            if (!closeResult.WasClosed && !string.IsNullOrWhiteSpace(closeResult.ErrorMessage))
+            {
+                LogStorageService.Instance.AppendLog("Warning", "SingleInstance", LocalizationService.Instance.GetString("SingleInstance.CloseFailed"), closeResult.ErrorMessage);
+            }
+
+            return true;
+        }
+
+        ApplicationLifecycleService.Instance.ExitApplication();
+        return false;
     }
 
     private static bool ShouldSkipStartupDialogs()

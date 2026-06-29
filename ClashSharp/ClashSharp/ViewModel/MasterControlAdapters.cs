@@ -13,7 +13,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -328,13 +327,6 @@ internal sealed class MasterControlRuntimeAdapter : IMasterControlRuntime
 
     private static RuntimeTrafficRateSnapshot GetRuntimeTrafficSnapshot()
     {
-        try
-        {
-            return RuntimeTrafficRateService.Instance.GetSnapshotAsync(CancellationToken.None).GetAwaiter().GetResult();
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or HttpRequestException or TaskCanceledException)
-        {
-            return RuntimeTrafficRateService.Instance.GetLatestSnapshot();
-        }
+        return RuntimeTrafficRateService.Instance.GetLatestSnapshot();
     }
 }
