@@ -17,7 +17,8 @@ fn main() {
 
 fn run(args: Vec<String>) -> Result<(), String> {
     let command = args.first().map(String::as_str).unwrap_or("plan");
-    let repo_root = repo_root_from_args(&args[1..])?;
+    let options = CliOptions::parse(&args[1..])?;
+    let repo_root = options.repo_root()?;
     let layout = default_layout(repo_root);
 
     match command {
@@ -26,23 +27,39 @@ fn run(args: Vec<String>) -> Result<(), String> {
             Ok(())
         }
         "emit-wsb" => {
-            fs::create_dir_all(&layout.shared_dir).map_err(|error| {
+            let shared_dir = options
+                .shared_dir
+                .clone()
+                .unwrap_or_else(|| layout.shared_dir.clone());
+            let wsb_file = options
+                .wsb_file
+                .clone()
+                .unwrap_or_else(|| layout.wsb_file.clone());
+
+            fs::create_dir_all(&shared_dir).map_err(|error| {
                 format!(
                     "failed to create shared directory {}: {error}",
-                    layout.shared_dir.display()
+                    shared_dir.display()
                 )
             })?;
+            if let Some(parent) = wsb_file.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    format!(
+                        "failed to create WSB directory {}: {error}",
+                        parent.display()
+                    )
+                })?;
+            }
 
             let config = SandboxConfig {
-                shared_dir: layout.shared_dir,
+                shared_dir,
                 logon_command: SANDBOX_LOGON_COMMAND.to_string(),
             };
 
-            fs::write(&layout.wsb_file, config.render_wsb()).map_err(|error| {
-                format!("failed to write {}: {error}", layout.wsb_file.display())
-            })?;
+            fs::write(&wsb_file, config.render_wsb())
+                .map_err(|error| format!("failed to write {}: {error}", wsb_file.display()))?;
 
-            println!("{}", layout.wsb_file.display());
+            println!("{}", wsb_file.display());
             Ok(())
         }
         "--help" | "-h" | "help" => {
@@ -53,23 +70,54 @@ fn run(args: Vec<String>) -> Result<(), String> {
     }
 }
 
-fn repo_root_from_args(args: &[String]) -> Result<PathBuf, String> {
-    let mut repo_root = None;
-    let mut index = 0;
+#[derive(Debug, Default)]
+struct CliOptions {
+    repo_root: Option<PathBuf>,
+    shared_dir: Option<PathBuf>,
+    wsb_file: Option<PathBuf>,
+}
 
-    while index < args.len() {
-        match args[index].as_str() {
-            "--repo-root" => {
-                let value = args
-                    .get(index + 1)
-                    .ok_or_else(|| String::from("--repo-root requires a path"))?;
-                repo_root = Some(PathBuf::from(value));
-                index += 2;
+impl CliOptions {
+    fn parse(args: &[String]) -> Result<Self, String> {
+        let mut options = Self::default();
+        let mut index = 0;
+
+        while index < args.len() {
+            match args[index].as_str() {
+                "--repo-root" => {
+                    let value = args
+                        .get(index + 1)
+                        .ok_or_else(|| String::from("--repo-root requires a path"))?;
+                    options.repo_root = Some(PathBuf::from(value));
+                    index += 2;
+                }
+                "--shared-dir" => {
+                    let value = args
+                        .get(index + 1)
+                        .ok_or_else(|| String::from("--shared-dir requires a path"))?;
+                    options.shared_dir = Some(PathBuf::from(value));
+                    index += 2;
+                }
+                "--wsb-file" => {
+                    let value = args
+                        .get(index + 1)
+                        .ok_or_else(|| String::from("--wsb-file requires a path"))?;
+                    options.wsb_file = Some(PathBuf::from(value));
+                    index += 2;
+                }
+                unknown => return Err(format!("unknown argument '{unknown}'")),
             }
-            unknown => return Err(format!("unknown argument '{unknown}'")),
         }
+
+        Ok(options)
     }
 
+    fn repo_root(&self) -> Result<PathBuf, String> {
+        repo_root_from_option(self.repo_root.clone())
+    }
+}
+
+fn repo_root_from_option(repo_root: Option<PathBuf>) -> Result<PathBuf, String> {
     if let Some(path) = repo_root {
         return Ok(path);
     }
@@ -86,6 +134,11 @@ fn print_help() {
         "\n",
         "Commands:\n",
         "  plan      Print the dry-run host and Sandbox execution plan.\n",
-        "  emit-wsb  Create .sandbox/shared and write ClashSharpSandbox.wsb.\n"
+        "  emit-wsb  Create the shared directory and write a Windows Sandbox .wsb file.\n",
+        "\n",
+        "Options:\n",
+        "  --repo-root <path>   Repository root. Auto-detected when omitted.\n",
+        "  --shared-dir <path>  Mapped host folder for emit-wsb.\n",
+        "  --wsb-file <path>    Output .wsb path for emit-wsb.\n"
     ));
 }

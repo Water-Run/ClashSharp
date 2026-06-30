@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 description = "Clash# Windows Sandbox test harness helper"
 
+[dependencies]
+serde_json = "1"
+
 [lib]
 name = "clashsharp_sandbox_test"
 path = "src/lib.rs"

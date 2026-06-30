@@ -4,4 +4,6 @@
 
 pub mod paths;
 pub mod plan;
+pub mod report;
 pub mod sandbox;
+pub mod scenario;

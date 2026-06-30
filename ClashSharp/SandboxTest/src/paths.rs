@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use crate::scenario::Scenario;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SandboxLayout {
     pub repo_root: PathBuf,
@@ -7,6 +9,47 @@ pub struct SandboxLayout {
     pub sandbox_dir: PathBuf,
     pub shared_dir: PathBuf,
     pub wsb_file: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScenarioRunLayout {
+    pub scenario: Scenario,
+    pub run_id: String,
+    pub run_dir: PathBuf,
+    pub shared_dir: PathBuf,
+    pub scripts_dir: PathBuf,
+    pub payload_dir: PathBuf,
+    pub reports_dir: PathBuf,
+    pub scenario_plan_file: PathBuf,
+    pub wsb_file: PathBuf,
+}
+
+impl SandboxLayout {
+    pub fn scenario_run(&self, run_id: &str, scenario: Scenario) -> ScenarioRunLayout {
+        let run_dir = self
+            .sandbox_dir
+            .join("runs")
+            .join(run_id)
+            .join(scenario.as_str());
+        let shared_dir = run_dir.join("shared");
+        let scripts_dir = shared_dir.join("scripts");
+        let payload_dir = shared_dir.join("payload");
+        let reports_dir = shared_dir.join("reports");
+        let scenario_plan_file = shared_dir.join("scenario-plan.json");
+        let wsb_file = run_dir.join(format!("ClashSharpSandbox-{}.wsb", scenario.as_str()));
+
+        ScenarioRunLayout {
+            scenario,
+            run_id: run_id.to_string(),
+            run_dir,
+            shared_dir,
+            scripts_dir,
+            payload_dir,
+            reports_dir,
+            scenario_plan_file,
+            wsb_file,
+        }
+    }
 }
 
 pub fn find_repo_root(start: &Path) -> Option<PathBuf> {
