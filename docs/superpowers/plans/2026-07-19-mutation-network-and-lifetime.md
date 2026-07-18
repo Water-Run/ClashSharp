@@ -49,11 +49,11 @@ Keep every checkpoint buildable and independently reviewable:
 - Create: `ClashSharp/ClashSharp.Application/Mutations/FairAsyncMutationGate.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Architecture/MutationAdmissionContractTests.cs`
 
-- [ ] **Step 1: Write RED behavior tests**
+- [x] **Step 1: Write RED behavior tests**
 
 Cover FIFO admission, cancellation before gate entry, closing rejection, drain-before-exclusive acquisition, terminal `ClosedForShutdown`, recovery-only rejection of ordinary work, a single recovery lease, and same-flow nested execution rejection. Use deterministic `TaskCompletionSource` barriers and unique operation IDs; do not use sleeps.
 
-- [ ] **Step 2: Capture RED**
+- [x] **Step 2: Capture RED**
 
 ```powershell
 dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~MutationAdmissionContractTests
@@ -61,11 +61,11 @@ dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release --no-
 
 Expected: compilation fails because the mutation contracts do not exist. Record the failure in Phase 03 evidence.
 
-- [ ] **Step 3: Implement the smallest correct state machines**
+- [x] **Step 3: Implement the smallest correct state machines**
 
 Use an explicit FIFO waiter queue rather than relying on undocumented `SemaphoreSlim` fairness. Lease disposal must be idempotent. State transitions and waiter signaling occur under one short critical section; continuations run asynchronously outside it. `MutationContext` carries operation ID plus an unforgeable coordinator-issued ownership token. Public callers cannot construct a valid context.
 
-- [ ] **Step 4: Prove GREEN and repeat concurrency tests**
+- [x] **Step 4: Prove GREEN and repeat concurrency tests**
 
 Run the focused class ten times. Assert all waiters complete and the observed order is stable on every run.
 
@@ -84,15 +84,15 @@ Run the focused class ten times. Assert all waiters complete and the observed or
 - Modify: `ClashSharp/ClashSharp.Infrastructure/ClashSharp.Infrastructure.csproj`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/FileMutationJournalStoreTests.cs`
 
-- [ ] **Step 1: Write RED persistence and corruption tests**
+- [x] **Step 1: Write RED persistence and corruption tests**
 
 Cover round-trip, schema version, SHA-256 validation, monotonically increasing generation, atomic replacement preserving the previous valid generation on injected write failure, flush-before-return, corrupt/truncated/hash-mismatched input, reparse-point rejection, same-volume validation, and cleanup only after verified completion.
 
-- [ ] **Step 2: Implement the infrastructure adapter**
+- [x] **Step 2: Implement the infrastructure adapter**
 
 Infrastructure references Application and implements the contract under a caller-provided recovery root. Production construction resolves `%LocalAppData%\ClashSharp\Recovery\v1`; tests always use unique temporary roots. Writes use a same-directory temporary file, explicit flush-to-disk, and atomic replacement. Validate path containment and reparse points before every mutation. Apply the current-user/SYSTEM/package-compatible ACL policy on Windows; expose typed policy failures rather than silently weakening protection.
 
-- [ ] **Step 3: Run failure-injection GREEN tests**
+- [x] **Step 3: Run failure-injection GREEN tests**
 
 No test may mutate the real user recovery root. Prove that after every injected cut point the reader returns exactly the old valid journal or the new valid journal, never partial JSON.
 

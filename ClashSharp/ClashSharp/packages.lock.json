@@ -215,6 +215,7 @@
       "clashsharp.infrastructure": {
         "type": "Project",
         "dependencies": {
+          "ClashSharp.Application": "[1.0.0, )",
           "ClashSharp.Core": "[1.0.0, )"
         }
       }
