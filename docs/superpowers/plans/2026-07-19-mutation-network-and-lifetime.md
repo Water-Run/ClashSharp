@@ -215,15 +215,15 @@ Register the real runtime lifecycle coordinator as `IApplicationShutdownCoordina
 - Modify: `ClashSharp/ClashSharp.Tests/Unit/Services/ConnectionSamplingServiceTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Supervision/SupervisedLoopTests.cs`
 
-- [ ] **Step 1: Write fake-clock RED tests**
+- [x] **Step 1: Write fake-clock RED tests**
 
 Assert exact retry delays `1/2/5/10/30/30`, fifth-failure and 60-second degradation, two-success recovery, relapse, production jitter bounds, all health fields, intentional quiesce as `Stopped`, and zero work after awaited stop. Include SQLite, IO, HTTP, JSON, and unexpected exceptions.
 
-- [ ] **Step 2: Implement the reusable supervisor**
+- [x] **Step 2: Implement the reusable supervisor**
 
 The loop owns one tracked task and cancellation source. `StartAsync`, `QuiesceAsync`, `ResumeAsync`, and `StopAsync` are idempotent and await in-flight iteration completion. No fire-and-forget restart continuation remains. Unexpected iteration exceptions update health and cannot fault the supervisor task.
 
-- [ ] **Step 3: Migrate sampling and startup**
+- [x] **Step 3: Migrate sampling and startup**
 
 Sampling becomes an injected runtime participant. The startup step awaits start; lifecycle quiescence/stop awaits it; storage errors participate in backoff rather than silently killing the loop. Remove volatile author/file/date banners while editing these files.
 

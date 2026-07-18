@@ -48,6 +48,16 @@ The lifecycle/application/request tests cover ordered pause/stop, admitted-work 
 
 Awaited lifecycle checkpoint: `059e4c164d27e0702f98dd9f58e9da9aac5c5ba4` (`feat: add awaited runtime shutdown handoff`).
 
+The first supervision-focused test build failed with `CS0234`/`CS0246` because the Application supervision namespace, injected clock, health snapshot, backoff policy, and supervised loop did not exist. The reusable loop now owns exactly one task and cancellation source, serializes idempotent start/quiesce/resume/stop transitions, awaits work in flight, and contains every iteration exception. Its immutable health reports state, consecutive failure/success counts, first/last failure, next attempt, stable error code, and last success. A deterministic-per-service production policy applies bounded plus-or-minus ten percent jitter while fake clocks inject zero jitter.
+
+The fake-clock contract proves the exact `1/2/5/10/30/30` retry sequence, fifth-failure and 60-second degradation, one-success `Recovering`, two-success `Healthy`, immediate degraded relapse with a capped probe, intentional `Stopped`, idempotent lifecycle calls, and zero work after awaited stop. Stable classification covers SQLite, IO, HTTP, JSON, and unexpected exceptions. A quiescence race found during structured review was fixed by republishing `Stopped` after an in-flight iteration finishes, so a cancellation-ignoring iteration cannot overwrite the terminal health state.
+
+Connection sampling is now the directly injected `IRuntimeParticipant` used by both startup and shutdown; its legacy lifecycle adapter, private `Task.Run` loop, detached restart continuation, and narrow exception swallowing were removed. Startup preserves the configured delay before the first sample, settings actions await reconfiguration, and SQLite failures remain supervised rather than killing the loop. Review also found that the old counter baseline advanced before storage commit; sampling now computes a delta plan and commits counters only after SQLite succeeds. A recovery test proves a failed write followed by retry retains the complete 100/200-byte delta.
+
+Release solution build completed with 0 warnings and 0 errors; the complete Release suite passed 751 tests with 0 failed and 0 skipped. The 23 supervision/sampling/architecture tests passed ten consecutive repetitions (230 executions). Format verification and `git diff --check` succeeded.
+
+Runtime supervision checkpoint: `d3e672c1cbbfbaf0e0d1c40e4a8e691378d72ef7` (`feat: supervise connection sampling lifecycle`).
+
 ## Pending evidence
 
-Reusable runtime supervision, safe process execution, trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
+Safe process execution, trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
