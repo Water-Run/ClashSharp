@@ -68,6 +68,14 @@ Release solution build completed with 0 warnings and 0 errors; the complete Rele
 
 Bounded process runner checkpoint: `d00870fb9c875c02990381788d2dece2eb742998` (`feat: add bounded Windows process runner`).
 
+The first concurrent-diagnostic test build failed with `CS0234` because the Application diagnostics namespace and bounded buffer did not exist. `ConcurrentBoundedTextBuffer` now serializes short critical sections, stores complete line values under a fixed character limit, never exposes mutable storage, freezes explicitly, and appends one deterministic `[output truncated]` line after overflow. Oversized inputs cannot overflow length arithmetic, snapshots allocate no more than the configured capacity, and writes are rejected after truncation or completion.
+
+Eight concurrent writers and a continuous snapshot reader stress complete-line and 4,096-character invariants while deterministic tests lock overflow and completion behavior. Mihomo startup now drains both asynchronous process streams with a final parameterless `WaitForExit`, completes the buffer, and only then renders the failure snapshot. A real process-probe test emits stdout and stderr concurrently and proves both final stream markers appear in the thrown startup diagnostic. After the 1.2-second observation window for a still-running core, the completed buffer rejects later diagnostics while the event handlers continue draining pipes.
+
+Release solution build completed with 0 warnings and 0 errors; a separately rebuilt complete Release suite passed 767 tests with 0 failed and 0 skipped. The five buffer/core/source-architecture tests passed ten consecutive repetitions (50 executions). Format verification and `git diff --check` succeeded. Verification was corrected to avoid mixing the solution's `bin/x64` output with stale project-default `bin/Release` output: project tests now build their own selected configuration before the full run.
+
+Bounded startup diagnostic checkpoint: `cd85266a76fa161c4992604d4b34f61a39ff75bc` (`fix: bound concurrent core startup diagnostics`).
+
 ## Pending evidence
 
-Trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
+Tracked async command handling, trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.

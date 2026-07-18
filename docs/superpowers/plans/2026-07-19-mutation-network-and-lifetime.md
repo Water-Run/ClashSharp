@@ -262,11 +262,11 @@ Drain both redirected streams concurrently. Race process completion against the 
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Diagnostics/ConcurrentBoundedTextBufferTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Services/MihomoCoreServiceTests.cs`
 
-- [ ] **Step 1: Write RED concurrency stress tests**
+- [x] **Step 1: Write RED concurrency stress tests**
 
 Run concurrent stdout/stderr writers while another task snapshots the buffer. Assert no exception/corruption, bounded memory, complete-line snapshots, deterministic truncation marker, and no writes accepted after completion.
 
-- [ ] **Step 2: Implement and integrate**
+- [x] **Step 2: Implement and integrate**
 
 Use a small lock or channel-owned buffer; never expose the mutable builder. Mihomo startup waits for stream-drain completion before producing a failure diagnostic and renders only the bounded snapshot.
 
