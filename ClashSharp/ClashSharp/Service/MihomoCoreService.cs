@@ -1,19 +1,10 @@
-/*
- * Mihomo Core Service
- * Provides binary discovery and runtime probing for the bundled mihomo core
- *
- * @author: WaterRun
- * @file: Service/MihomoCoreService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -26,6 +17,10 @@ namespace ClashSharp.Service;
 /// </remarks>
 public sealed class MihomoCoreService
 {
+    private const int StartupDiagnosticCapacity = 4096;
+
+    private static readonly TimeSpan DefaultStartupObservationWindow = TimeSpan.FromMilliseconds(1200);
+
     /// <summary>Shared singleton instance created once at type initialization.</summary>
     /// <value>A non-null <see cref="MihomoCoreService"/> instance.</value>
     public static MihomoCoreService Instance { get; } = new();
@@ -33,13 +28,31 @@ public sealed class MihomoCoreService
     /// <summary>Synchronization object guarding mutable process state for this service lifetime.</summary>
     private readonly object _syncLock = new();
 
+    private readonly int _startupObservationMilliseconds;
+
     /// <summary>Current long-running mihomo process owned by Clash#; null when not started.</summary>
     private Process? _process;
 
     /// <summary>Initializes the core service and resolves the bundled binary path.</summary>
     private MihomoCoreService()
+        : this(
+            Path.Combine(AppContext.BaseDirectory, "Binaries", "mihomo.exe"),
+            DefaultStartupObservationWindow)
     {
-        BinaryPath = Path.Combine(AppContext.BaseDirectory, "Binaries", "mihomo.exe");
+    }
+
+    /// <summary>Initializes a core service with testable process inputs.</summary>
+    internal MihomoCoreService(string binaryPath, TimeSpan startupObservationWindow)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(binaryPath);
+        if (startupObservationWindow <= TimeSpan.Zero
+            || startupObservationWindow.TotalMilliseconds > int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startupObservationWindow));
+        }
+
+        BinaryPath = binaryPath;
+        _startupObservationMilliseconds = checked((int)Math.Ceiling(startupObservationWindow.TotalMilliseconds));
     }
 
     /// <summary>Gets the expected bundled mihomo binary path.</summary>
@@ -164,9 +177,9 @@ public sealed class MihomoCoreService
                 StartInfo = startInfo,
                 EnableRaisingEvents = true,
             };
-            StringBuilder startupOutput = new();
-            process.OutputDataReceived += (_, args) => AppendStartupLine(startupOutput, args.Data);
-            process.ErrorDataReceived += (_, args) => AppendStartupLine(startupOutput, args.Data);
+            ConcurrentBoundedTextBuffer startupOutput = new(StartupDiagnosticCapacity);
+            process.OutputDataReceived += (_, args) => startupOutput.TryAppendLine(args.Data);
+            process.ErrorDataReceived += (_, args) => startupOutput.TryAppendLine(args.Data);
 
             if (!process.Start())
             {
@@ -176,15 +189,18 @@ public sealed class MihomoCoreService
 
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
-            if (process.WaitForExit(1200))
+            if (process.WaitForExit(_startupObservationMilliseconds))
             {
-                string detail = startupOutput.ToString().Trim();
+                process.WaitForExit();
+                startupOutput.Complete();
+                string detail = startupOutput.Snapshot().Trim();
                 process.Dispose();
                 throw new InvalidOperationException(string.IsNullOrWhiteSpace(detail)
                     ? "The bundled mihomo core exited during startup."
                     : $"The bundled mihomo core exited during startup: {detail}");
             }
 
+            startupOutput.Complete();
             _process = process;
         }
     }
@@ -245,18 +261,4 @@ public sealed class MihomoCoreService
         return exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException;
     }
 
-    /// <summary>Appends one captured startup output line to a bounded buffer.</summary>
-    /// <param name="builder">Startup output buffer. Must not be null.</param>
-    /// <param name="line">Captured line; may be null at stream end.</param>
-    private static void AppendStartupLine(StringBuilder builder, string? line)
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        if (string.IsNullOrWhiteSpace(line) || builder.Length > 4096)
-        {
-            return;
-        }
-
-        builder.AppendLine(line);
-    }
 }

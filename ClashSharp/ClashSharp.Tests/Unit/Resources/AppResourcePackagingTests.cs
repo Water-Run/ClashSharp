@@ -687,6 +687,26 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("startInfo.Arguments", runnerCode, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies mihomo startup diagnostics use the bounded concurrent buffer and final stream drain.</summary>
+    [Fact]
+    public void MihomoCoreStartup_UsesBoundedCompletedDiagnosticSnapshot()
+    {
+        string servicePath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Service",
+            "MihomoCoreService.cs");
+
+        string serviceCode = File.ReadAllText(servicePath);
+
+        Assert.Contains("ConcurrentBoundedTextBuffer", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("startupOutput.Complete()", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("startupOutput.Snapshot()", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("process.WaitForExit();", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("StringBuilder", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppendStartupLine", serviceCode, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies the Windows service host registers with the SCM service name, not the display name.</summary>
     [Fact]
     public void MihomoServiceHost_UsesScmServiceName()

@@ -18,6 +18,7 @@ internal static class ProcessProbeProgram
         {
             "emit" => await EmitAsync(args),
             "arguments" => await WriteArgumentsAsync(args),
+            "-d" => await EmitCoreStartupFailureAsync(),
             "spawn-child" => await SpawnChildAsync(),
             "child-hang" => await HangAsync("child-ready"),
             "hang" => await HangAsync("root-ready"),
@@ -64,6 +65,25 @@ internal static class ProcessProbeProgram
 
         await Console.Out.FlushAsync();
         return 0;
+    }
+
+    private static async Task<int> EmitCoreStartupFailureAsync()
+    {
+        Task standardOutput = WriteCoreFailureStreamAsync(Console.Out, "core-out");
+        Task standardError = WriteCoreFailureStreamAsync(Console.Error, "core-err");
+        await Task.WhenAll(standardOutput, standardError);
+        return 23;
+    }
+
+    private static async Task WriteCoreFailureStreamAsync(TextWriter writer, string prefix)
+    {
+        for (int index = 0; index < 20; index++)
+        {
+            await writer.WriteLineAsync($"{prefix}:{index.ToString("D2", CultureInfo.InvariantCulture)}");
+        }
+
+        await writer.WriteLineAsync(prefix + "-final");
+        await writer.FlushAsync();
     }
 
     private static async Task<int> HangAsync(string marker)
