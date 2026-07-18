@@ -183,19 +183,19 @@ Extend the process-independent trace to record fake network/core mutations and p
 - Replace: `ClashSharp/ClashSharp.Tests/Unit/Services/RuntimeShutdownServiceTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/RuntimeLifecycleCoordinatorTests.cs`
 
-- [ ] **Step 1: Write RED quiescence and self-join tests**
+- [x] **Step 1: Write RED quiescence and self-join tests**
 
 Cover ordered quiescence, blocked in-flight work, a trigger action waiting before mutation admission, 30-second timeout, partial pause with reverse resume, resume failure typed as degraded, shutdown from a participant queue worker, and disposal blocked until the shutdown call stack unwinds.
 
-- [ ] **Step 2: Implement awaited lifecycle contracts**
+- [x] **Step 2: Implement awaited lifecycle contracts**
 
 Normal shutdown closes admission, drains leases, quiesces producers, executes the configured network exit policy as one mutation, stops runtime participants, releases mutation resources, and returns `PreparedForHostDisposal`. It never deletes/reset/truncates user data. Recovery-only shutdown freezes the existing journal and skips the exit-policy mutation.
 
-- [ ] **Step 3: Hand exit/restart to the App-owned channel**
+- [x] **Step 3: Hand exit/restart to the App-owned channel**
 
 Trigger/UI services enqueue an exit or restart request and return; they do not call `Environment.Exit`, close a WinUI window from a worker, or dispose AppHost. `App` consumes the request on its dispatcher, awaits host shutdown through `ProcessLifetimeRunner`, launches restart only after preparation succeeds, and then exits. Concurrent close/exit requests collapse into one stop/dispose task.
 
-- [ ] **Step 4: Replace the no-op host shutdown coordinator**
+- [x] **Step 4: Replace the no-op host shutdown coordinator**
 
 Register the real runtime lifecycle coordinator as `IApplicationShutdownCoordinator`. Prove `AppHost.Build` remains side-effect free and host disposal occurs exactly once.
 
