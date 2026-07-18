@@ -30,6 +30,8 @@ The Application project remains platform-neutral at `net10.0`. Locked restore su
 
 The real two-process test creates a unique named Semaphore and shared trace. It starts a primary helper, waits until that process records `host-start`, launches a secondary helper, then proves the trace contains exactly one `host-build`, exactly one `host-start`, exactly one `secondary-redirected`, and no `secondary-mutation`. Every wait is bounded and cleanup kills any surviving helper process. The final verification repeated this process-level regression five consecutive times without a failure or leaked helper.
 
+Implementation checkpoint: `76bea68e71ed08a20f4c4eff17a17b90bac5e6ba` (`refactor: make startup ownership first`).
+
 ## Pending evidence
 
 `P1-01` remains `In Progress`: Phase 03 must route recovery and startup-mode application through the mutation/network coordinator, and a packaged real-app two-instance smoke must confirm the Windows App SDK path against the actual proxy/core state. Static `.Instance` access is now isolated behind startup compatibility steps for this path, but later presentation/runtime phases must remove the remaining service locators and replace the no-op shutdown coordinator with supervised quiescence.

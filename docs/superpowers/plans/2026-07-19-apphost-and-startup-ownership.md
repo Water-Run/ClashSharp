@@ -228,6 +228,6 @@ Confirm through behavior tests plus targeted inspection that:
 
 Record RED/GREEN evidence, full test count, two-process trace, and checkpoint commit. Mark `P1-01` `In Progress` until Phase 03 serializes all network mutations and a packaged real-app two-instance smoke runs; record the Application composition portion of `P3 code size/static singleton debt` as `In Progress`. Do not mark either row `Closed` yet.
 
-- [ ] **Step 5: Review and checkpoint**
+- [x] **Step 5: Review and checkpoint**
 
 Use `superpowers:requesting-code-review`, address Critical/Important findings with `superpowers:receiving-code-review`, rerun the complete verification, mark Phase 02 complete in the roadmap, and commit the implementation and evidence. Preserve the worktree for Phase 03.
