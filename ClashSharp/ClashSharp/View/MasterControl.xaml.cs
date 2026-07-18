@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -309,6 +310,7 @@ public sealed partial class MasterControl : Page
         {
             IReadOnlyList<ProxyNode> testedNodes = await ProxyLatencyService.Instance.TestNodesAsync(nodes, cancellationToken);
             progressText.Text = string.Format(
+                CultureInfo.CurrentCulture,
                 LocalizationService.Instance.GetString("Master.LatencyDialog.Completed.Format"),
                 testedNodes.Count);
             timeoutBar.Value = 100;

@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -92,7 +93,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
                 _appendLog(
                     "Info",
                     "ApplicationAction",
-                    string.Format(_getString("ApplicationAction.UiPickerRequired.Format"), kind),
+                    string.Format(CultureInfo.CurrentCulture, _getString("ApplicationAction.UiPickerRequired.Format"), kind),
                     value);
                 break;
             default:

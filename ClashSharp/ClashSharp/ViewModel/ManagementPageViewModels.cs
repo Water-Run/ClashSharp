@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -528,6 +529,7 @@ internal sealed class LogsViewModel : ObservableObject
     {
         LogStorageSummary summary = _logStorage.GetStorageSummary();
         StorageUsageText = string.Format(
+            CultureInfo.CurrentCulture,
             _getString("Logs.StorageUsage.Format"),
             FormatByteCount(summary.DatabaseSizeBytes),
             summary.LogCount,
@@ -601,6 +603,7 @@ internal sealed class LogsViewModel : ObservableObject
             ? _logStorage.PreviewLogCleanup(ResolveLevelFilter(levelFilter), ResolveCategoryFilter(categoryFilter))
             : EstimateCleanupPreview(selectedIndex, parameterValue);
         return string.Format(
+            CultureInfo.CurrentCulture,
             MatchLocalized(
                 "将清理 {0:N0} 个条目 / 约 {1}",
                 "將清理 {0:N0} 個項目 / 約 {1}",

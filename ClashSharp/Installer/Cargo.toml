@@ -9,8 +9,15 @@ name = "ClashSharp-Installer"
 path = "src/main.rs"
 
 [dependencies]
-slint = "1"
-i-slint-backend-winit = "1"
+slint = { version = "1", default-features = false, features = [
+    "accessibility",
+    "backend-winit",
+    "compat-1-2",
+    "renderer-femtovg",
+    "renderer-software",
+    "std",
+    "system-tray",
+] }
 
 [build-dependencies]
 slint-build = "1"

@@ -7,8 +7,8 @@
  * @date: 2026-06-24
  */
 
-using System.Diagnostics;
 using System.ComponentModel;
+using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +17,18 @@ namespace ClashSharp.MihomoService;
 /// <summary>Starts and supervises mihomo for the Windows service host.</summary>
 internal sealed class MihomoWorker : BackgroundService
 {
+    /// <summary>Writes a structured restart warning without per-call template parsing.</summary>
+    private static readonly Action<ILogger, int, Exception?> LogMihomoExited = LoggerMessage.Define<int>(
+        LogLevel.Warning,
+        new EventId(1, nameof(LogMihomoExited)),
+        "mihomo exited with code {ExitCode}; restarting.");
+
+    /// <summary>Writes a structured process-start message without per-call template parsing.</summary>
+    private static readonly Action<ILogger, Exception?> LogMihomoStarted = LoggerMessage.Define(
+        LogLevel.Information,
+        new EventId(2, nameof(LogMihomoStarted)),
+        "mihomo started as service child process.");
+
     /// <summary>Parsed service options.</summary>
     private readonly MihomoServiceOptions _options;
 
@@ -58,7 +70,7 @@ internal sealed class MihomoWorker : BackgroundService
 
             if (!stoppingToken.IsCancellationRequested)
             {
-                _logger.LogWarning("mihomo exited with code {ExitCode}; restarting.", process.ExitCode);
+                LogMihomoExited(_logger, process.ExitCode, null);
                 await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
             }
         }
@@ -110,7 +122,7 @@ internal sealed class MihomoWorker : BackgroundService
         process.StartInfo.ArgumentList.Add("-f");
         process.StartInfo.ArgumentList.Add(_options.ConfigPath);
         process.Start();
-        _logger.LogInformation("mihomo started as service child process.");
+        LogMihomoStarted(_logger, null);
         return process;
     }
 

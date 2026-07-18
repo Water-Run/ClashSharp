@@ -7,9 +7,9 @@
  * @date: 2026-06-17
  */
 
+using System.Reflection;
 using ClashSharp.Model;
 using ClashSharp.Service;
-using System.Reflection;
 
 namespace ClashSharp.Tests.Unit.Services;
 

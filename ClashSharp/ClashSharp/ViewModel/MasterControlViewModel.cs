@@ -757,6 +757,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             string versionText = CoreVersionDisplayFormatter.Format(await _core.GetVersionTextAsync(cancellationToken));
             _mihomoVersionText = versionText;
             CoreStatusText = string.Format(
+                CultureInfo.CurrentCulture,
                 _localization.GetString("Master.Status.CoreReady.Format"),
                 versionText);
             _isCoreAvailable = true;
@@ -864,7 +865,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             ? _localization.GetString("Master.Status.CurrentNodeUnavailable")
             : snapshot.CurrentNodeName;
         LatencySummaryText = snapshot.LatencyMilliseconds is int latency
-            ? string.Format(_localization.GetString("Master.Status.Latency.Format"), latency)
+            ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Master.Status.Latency.Format"), latency)
             : _localization.GetString("Master.Status.LatencyUnavailable");
     }
 
@@ -982,7 +983,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("export-config", _localization.GetString("Command.Export"), string.Empty);
         SetTile("import-config", _localization.GetString("Command.Import"), string.Empty);
         SetTile("app-name", ApplicationDisplayName, _localization.GetString("About.App.Description"));
-        SetTile("app-version", string.Format(_localization.GetString("About.Version.Value.Format"), ApplicationVersionText), string.Empty);
+        SetTile("app-version", string.Format(CultureInfo.CurrentCulture, _localization.GetString("About.Version.Value.Format"), ApplicationVersionText), string.Empty);
         SetTile("app-runtime", _localization.GetString("About.Runtime.Value"), string.Empty);
         SetTile("current-mode", GetModeTitle(SelectedMode), BasicStatusText);
         SetTile("current-node", CurrentNodeText, LatencySummaryText);
@@ -998,7 +999,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("display-language", GetDisplayLanguageText(_settings.DisplayLanguage), string.Empty);
         SetTile(
             "sampling-interval",
-            string.Format(_localization.GetString("Master.Status.Seconds.Format"), _settings.ConnectionSamplingIntervalSeconds),
+            string.Format(CultureInfo.CurrentCulture, _localization.GetString("Master.Status.Seconds.Format"), _settings.ConnectionSamplingIntervalSeconds),
             FormatSwitch(_settings.ConnectionSamplingEnabled));
         SetTile("app-accent", GetAppAccentColorText(_settings.AppAccentColorMode), _settings.AppAccentColorValue);
         SetTile("restore-proxy-on-exit", FormatSwitch(_settings.RestoreProxyOnExit), string.Empty, _settings.RestoreProxyOnExit);
@@ -1016,6 +1017,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             "session-traffic",
             FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionUploadBytes + _runtimeSnapshot.RuntimeTraffic.SessionDownloadBytes),
             string.Format(
+                CultureInfo.CurrentCulture,
                 _localization.GetString("Statistics.TotalTraffic.Format"),
                 FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionUploadBytes),
                 FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionDownloadBytes)));
@@ -1031,6 +1033,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             "traffic-total",
             FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
             string.Format(
+                CultureInfo.CurrentCulture,
                 _localization.GetString("Statistics.TotalTraffic.Format"),
                 FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes),
                 FormatBytes(_runtimeSnapshot.Traffic.TotalDownloadBytes)));
@@ -1344,7 +1347,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count();
-        return string.Format(_localization.GetString("Settings.Tray.VisibleFeatures.Summary.Format"), count);
+        return string.Format(CultureInfo.CurrentCulture, _localization.GetString("Settings.Tray.VisibleFeatures.Summary.Format"), count);
     }
 
     private string GetModeTitle(ClashSharpMode mode)

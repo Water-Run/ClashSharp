@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Globalization;
 
 namespace ClashSharp.Model;
 
@@ -47,7 +48,7 @@ public readonly record struct TrafficStatisticRow(
 
     /// <summary>Gets a local-time update display.</summary>
     /// <value>Formatted local update time; never null.</value>
-    public string UpdatedAtDisplay => UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    public string UpdatedAtDisplay => UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
 
     /// <summary>Formats a byte count for compact UI display.</summary>
     /// <param name="bytes">Byte count. Must be non-negative.</param>

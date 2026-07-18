@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Globalization;
 using ClashSharp.Service;
 using Microsoft.Data.Sqlite;
 
@@ -92,7 +93,7 @@ public sealed class LogStorageSchemaTests
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $name;";
         command.Parameters.AddWithValue("$name", tableName);
-        return Convert.ToInt64(command.ExecuteScalar()) > 0;
+        return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture) > 0;
     }
 
     /// <summary>Returns whether a SQLite table contains a column.</summary>

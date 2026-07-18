@@ -10,13 +10,14 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
-using ClashSharp.Model;
 using ClashSharp.Components;
+using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
@@ -881,7 +882,7 @@ public sealed partial class Settings : Page
             return message;
         }
 
-        return $"{message}{Environment.NewLine}{string.Format(LocalizationService.Instance.GetString("Settings.DataImport.Warning.Scope.Format"), GetDataPackageScopeText(scope.Value))}";
+        return $"{message}{Environment.NewLine}{string.Format(CultureInfo.CurrentCulture, LocalizationService.Instance.GetString("Settings.DataImport.Warning.Scope.Format"), GetDataPackageScopeText(scope.Value))}";
     }
 
     private string GetDataPackageScopeText(ClashDataPackageScope scope)

@@ -12,6 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
+    <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
@@ -36,7 +41,6 @@
     <Compile Include="..\ClashSharp\Model\AppLanguage.cs" Link="Model\AppLanguage.cs" />
     <Compile Include="..\ClashSharp\Model\AppThemeMode.cs" Link="Model\AppThemeMode.cs" />
     <Compile Include="..\ClashSharp\Model\AppAccentColorMode.cs" Link="Model\AppAccentColorMode.cs" />
-    <Compile Include="..\ClashSharp\Model\ActiveConnection.cs" Link="Model\ActiveConnection.cs" />
     <Compile Include="..\ClashSharp\Model\RuntimeTrafficRateSnapshot.cs" Link="Model\RuntimeTrafficRateSnapshot.cs" />
     <Compile Include="..\ClashSharp\Model\ClashDataPackageScope.cs" Link="Model\ClashDataPackageScope.cs" />
     <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />

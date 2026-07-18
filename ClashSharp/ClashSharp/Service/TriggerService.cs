@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -32,6 +33,7 @@ internal sealed class TriggerService
     private const string TriggerLog = "Trigger";
     private static readonly TimeSpan DefaultPeriodicInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan DefaultRepeatedTriggerCooldown = TimeSpan.FromMinutes(5);
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
 #if UNIT_TESTS
     public static TriggerService Instance => throw new NotSupportedException("Use explicit TriggerService dependencies in tests.");
@@ -163,7 +165,7 @@ internal sealed class TriggerService
             Save();
         }
 
-        _appendLog("Info", TriggerLog, string.Format(GetString("Triggers.Log.Added.Format"), task.Name), task.Id);
+        _appendLog("Info", TriggerLog, string.Format(CultureInfo.CurrentCulture, GetString("Triggers.Log.Added.Format"), task.Name), task.Id);
     }
 
     public void DeleteTask(string id)
@@ -178,7 +180,7 @@ internal sealed class TriggerService
 
         if (deletedName is not null)
         {
-            _appendLog("Info", TriggerLog, string.Format(GetString("Triggers.Log.Deleted.Format"), deletedName), id);
+            _appendLog("Info", TriggerLog, string.Format(CultureInfo.CurrentCulture, GetString("Triggers.Log.Deleted.Format"), deletedName), id);
         }
     }
 
@@ -203,7 +205,7 @@ internal sealed class TriggerService
 
         if (movedName is not null)
         {
-            _appendLog("Info", TriggerLog, string.Format(GetString("Triggers.Log.Moved.Format"), movedName), direction.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            _appendLog("Info", TriggerLog, string.Format(CultureInfo.CurrentCulture, GetString("Triggers.Log.Moved.Format"), movedName), direction.ToString(CultureInfo.InvariantCulture));
         }
     }
 
@@ -273,7 +275,7 @@ internal sealed class TriggerService
             _appendLog(
                 "Info",
                 TriggerLog,
-                string.Format(_getString("Triggers.Log.Fired.Format"), task.Name),
+                string.Format(CultureInfo.CurrentCulture, _getString("Triggers.Log.Fired.Format"), task.Name),
                 string.Join(", ", task.Actions.Select(FormatActionForLog)));
             if (TriggerNotificationsEnabled)
             {
@@ -496,7 +498,7 @@ internal sealed class TriggerService
         _appendLog(
             "Warning",
             TriggerLog,
-            string.Format(GetString("Triggers.Log.ActionFailed.Format"), task.Name),
+            string.Format(CultureInfo.CurrentCulture, GetString("Triggers.Log.ActionFailed.Format"), task.Name),
             $"{FormatActionForLog(action)}: {exception.Message}");
     }
 
@@ -563,7 +565,7 @@ internal sealed class TriggerService
             }
 
             string json = File.ReadAllText(_storagePath);
-            if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
+            if (json.TrimStart().StartsWith('['))
             {
                 _tasks = (JsonSerializer.Deserialize<List<TriggerTask>>(json) ?? []).Select(CloneTask).ToList();
                 return;
@@ -583,7 +585,7 @@ internal sealed class TriggerService
         }
 
         TriggerStoreDocument document = new(_tasks);
-        File.WriteAllText(_storagePath, JsonSerializer.Serialize(document, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(_storagePath, JsonSerializer.Serialize(document, JsonOptions));
     }
 
     private sealed record TriggerStoreDocument(IReadOnlyList<TriggerTask> Tasks);

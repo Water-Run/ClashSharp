@@ -7,12 +7,12 @@
  * @date: 2026-06-17
  */
 
-using ClashSharp.Model;
-using ClashSharp.Service;
-using ClashSharp.ViewModel;
 using System.Collections.Specialized;
 using System.Net.Http;
 using System.Reflection;
+using ClashSharp.Model;
+using ClashSharp.Service;
+using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
 
@@ -881,7 +881,7 @@ public sealed class SettingsViewModelTests
         SettingsViewModel viewModel = CreateConnectionTestViewModel(async (uri, _) =>
         {
             requestedUris.Add(uri);
-            await Task.Delay(5);
+            await Task.Delay(5, CancellationToken.None);
             return uri.Host.Contains("github", StringComparison.OrdinalIgnoreCase) ? 302 : 204;
         });
 
@@ -910,7 +910,7 @@ public sealed class SettingsViewModelTests
         SettingsViewModel viewModel = CreateConnectionTestViewModel(
             async (_, _) =>
             {
-                await Task.Delay(5);
+                await Task.Delay(5, CancellationToken.None);
                 return 204;
             },
             (level, category, message, detail) => logs.Add(new LogEntry(level, category, message, detail)));

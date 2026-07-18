@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Globalization;
 using ClashSharp.Service;
 
 namespace ClashSharp.Model;
@@ -43,9 +44,9 @@ public readonly record struct MihomoProviderResource(
 
     /// <summary>Gets a compact item-count display.</summary>
     /// <value>Item-count display text.</value>
-    public string ItemCountDisplay => ItemCount.ToString("N0");
+    public string ItemCountDisplay => ItemCount.ToString("N0", CultureInfo.CurrentCulture);
 
     /// <summary>Gets update time display text.</summary>
     /// <value>Update time display text.</value>
-    public string UpdatedAtDisplay => UpdatedAt?.ToLocalTime().ToString("g") ?? "-";
+    public string UpdatedAtDisplay => UpdatedAt?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "-";
 }

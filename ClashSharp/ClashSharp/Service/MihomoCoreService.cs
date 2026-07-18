@@ -34,7 +34,7 @@ public sealed class MihomoCoreService
     private readonly object _syncLock = new();
 
     /// <summary>Current long-running mihomo process owned by Clash#; null when not started.</summary>
-    private Process? _process = null;
+    private Process? _process;
 
     /// <summary>Initializes the core service and resolves the bundled binary path.</summary>
     private MihomoCoreService()

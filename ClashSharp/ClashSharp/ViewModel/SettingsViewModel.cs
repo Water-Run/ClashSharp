@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -808,6 +809,7 @@ internal sealed class SettingsViewModel : ObservableObject
     public string TrayVisibleFeaturesDescriptionText => _getString("Settings.Tray.VisibleFeatures.Description");
 
     public string TrayVisibleFeatureSummaryText => string.Format(
+        CultureInfo.CurrentCulture,
         _getString("Settings.Tray.VisibleFeatures.Summary.Format"),
         GetTrayVisibleFeatureDefinitions().Count);
 
@@ -2011,12 +2013,15 @@ internal sealed class SettingsViewModel : ObservableObject
             : _getString("Settings.ProxyInformation.CoreBinary.Missing");
 
         ProxyLocalEntryText = string.Format(
+            CultureInfo.CurrentCulture,
             _getString("Settings.ProxyInformation.LocalEntry.Format"),
             MixedPort);
         ProxyCoreConfigurationText = string.Format(
+            CultureInfo.CurrentCulture,
             _getString("Settings.ProxyInformation.CoreConfig.Format"),
             information.ConfigPath);
         ProxyCoreBinaryText = string.Format(
+            CultureInfo.CurrentCulture,
             _getString("Settings.ProxyInformation.CoreBinary.Format"),
             coreBinaryText);
     }
@@ -2444,7 +2449,7 @@ internal sealed class SettingsViewModel : ObservableObject
                 label,
                 url,
                 succeeded,
-                string.Format(_getString("Settings.ConnectionTest.StatusHttp.Format"), statusCode),
+                string.Format(CultureInfo.CurrentCulture, _getString("Settings.ConnectionTest.StatusHttp.Format"), statusCode),
                 FormatLatency(stopwatch.Elapsed),
                 (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds));
         }
@@ -2467,7 +2472,7 @@ internal sealed class SettingsViewModel : ObservableObject
                 label,
                 url,
                 false,
-                string.Format(_getString("Settings.ConnectionTest.Failed.Format"), exception.Message),
+                string.Format(CultureInfo.CurrentCulture, _getString("Settings.ConnectionTest.Failed.Format"), exception.Message),
                 FormatLatency(stopwatch.Elapsed),
                 null);
         }
@@ -2510,7 +2515,7 @@ internal sealed class SettingsViewModel : ObservableObject
         }
 
         int passed = results.Count(static result => result.Succeeded);
-        return string.Format(_getString("Settings.ConnectionTest.PartialPassed.Format"), passed, results.Count);
+        return string.Format(CultureInfo.CurrentCulture, _getString("Settings.ConnectionTest.PartialPassed.Format"), passed, results.Count);
     }
 
     private static string FormatLatency(TimeSpan elapsed)

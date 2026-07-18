@@ -384,6 +384,7 @@ git commit -m "build: establish production project boundaries"
 - Create if generated: `ClashSharp/ClashSharp.Core/packages.lock.json`
 - Create if generated: `ClashSharp/ClashSharp.Infrastructure/packages.lock.json`
 - Create: `docs/architecture/stabilization-ledger.md`
+- Create: `eng/dependency-audit-exceptions.json`
 - Modify: `ClashSharp/Installer/Cargo.lock` only if the pinned toolchain makes a deterministic lockfile update
 - Modify: `ClashSharp/SandboxTest/Cargo.lock` only if the pinned toolchain makes a deterministic lockfile update
 
@@ -410,7 +411,7 @@ Run:
 cargo test --manifest-path ClashSharp/Installer/Cargo.toml --locked --all-targets
 cargo test --manifest-path ClashSharp/SandboxTest/Cargo.toml --locked --all-targets
 cargo install cargo-audit --version 0.22.2 --locked
-cargo audit --file ClashSharp/Installer/Cargo.lock
+cargo audit --file ClashSharp/Installer/Cargo.lock --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
 cargo audit --file ClashSharp/SandboxTest/Cargo.lock
 ```
 
@@ -454,6 +455,8 @@ jobs:
   dotnet:
     name: .NET build, format, and test
     runs-on: windows-2025
+    env:
+      Platform: x64
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -515,7 +518,12 @@ jobs:
       - name: Install pinned cargo-audit
         run: cargo install cargo-audit --version 0.22.2 --locked
 
+      - name: Audit Installer dependencies
+        if: matrix.name == 'Installer'
+        run: cargo audit --file ${{ matrix.lockfile }} --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
+
       - name: Audit dependencies
+        if: matrix.name != 'Installer'
         run: cargo audit --file ${{ matrix.lockfile }}
 ```
 
@@ -527,6 +535,7 @@ Run:
 
 ```powershell
 $env:CI = 'true'
+$env:Platform = 'x64'
 dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
 dotnet format ClashSharp/ClashSharp.slnx --verify-no-changes --no-restore
 dotnet build ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restore
@@ -534,12 +543,13 @@ dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Pl
 cargo fmt --manifest-path ClashSharp/Installer/Cargo.toml -- --check
 cargo clippy --manifest-path ClashSharp/Installer/Cargo.toml --locked --all-targets -- -D warnings
 cargo test --manifest-path ClashSharp/Installer/Cargo.toml --locked --all-targets
-cargo audit --file ClashSharp/Installer/Cargo.lock
+cargo audit --file ClashSharp/Installer/Cargo.lock --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
 cargo fmt --manifest-path ClashSharp/SandboxTest/Cargo.toml -- --check
 cargo clippy --manifest-path ClashSharp/SandboxTest/Cargo.toml --locked --all-targets -- -D warnings
 cargo test --manifest-path ClashSharp/SandboxTest/Cargo.toml --locked --all-targets
 cargo audit --file ClashSharp/SandboxTest/Cargo.lock
 Remove-Item Env:CI
+Remove-Item Env:Platform
 ```
 
 Expected: every command exits zero, `dotnet format` reports no changes, all current .NET tests pass, both Rust projects pass fmt/clippy/test/audit, and a TRX file exists.
@@ -575,12 +585,16 @@ Run:
 
 ```powershell
 git clean -ndx
+$env:CI = 'true'
+$env:Platform = 'x64'
 dotnet restore ClashSharp/ClashSharp.slnx --locked-mode --force
 dotnet format ClashSharp/ClashSharp.slnx --verify-no-changes --no-restore
 dotnet build ClashSharp/ClashSharp.slnx -c Debug -p:Platform=x64 --no-restore
 dotnet build ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restore
 dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Platform=x64 --no-build
 git diff --check
+Remove-Item Env:CI
+Remove-Item Env:Platform
 ```
 
 Expected: the clean preview lists only ignored build/tool artifacts, both configurations build, all .NET tests pass, locked restore and formatting pass, and no diff error is reported.

@@ -442,6 +442,6 @@ public sealed class MihomoControllerClient
     private static Uri EnsureTrailingSlash(Uri uri)
     {
         string text = uri.AbsoluteUri;
-        return text.EndsWith("/", StringComparison.Ordinal) ? uri : new Uri(text + "/", UriKind.Absolute);
+        return text.EndsWith('/') ? uri : new Uri(text + "/", UriKind.Absolute);
     }
 }

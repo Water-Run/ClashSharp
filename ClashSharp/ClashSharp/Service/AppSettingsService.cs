@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ClashSharp.Model;
 using Windows.Storage;
 
@@ -602,7 +603,7 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
 
         lock (_syncLock)
         {
-            SetValue(key, Convert.ToInt32(value));
+            SetValue(key, Convert.ToInt32(value, CultureInfo.InvariantCulture));
         }
     }
 
@@ -790,4 +791,26 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
 /// <param name="OldValue">Value before the write or reset.</param>
 /// <param name="NewValue">Value after the write; null when removed.</param>
 /// <param name="WasRemoved">True when the setting was reset to its default value.</param>
-public readonly record struct AppSettingChangedEventArgs(string Key, object? OldValue, object? NewValue, bool WasRemoved);
+public sealed class AppSettingChangedEventArgs : EventArgs
+{
+    /// <summary>Initializes a settings-change event payload.</summary>
+    public AppSettingChangedEventArgs(string key, object? oldValue, object? newValue, bool wasRemoved)
+    {
+        Key = key;
+        OldValue = oldValue;
+        NewValue = newValue;
+        WasRemoved = wasRemoved;
+    }
+
+    /// <summary>Gets the setting storage key.</summary>
+    public string Key { get; }
+
+    /// <summary>Gets the value before the write or reset.</summary>
+    public object? OldValue { get; }
+
+    /// <summary>Gets the value after the write, or null when removed.</summary>
+    public object? NewValue { get; }
+
+    /// <summary>Gets whether the setting was reset to its default value.</summary>
+    public bool WasRemoved { get; }
+}

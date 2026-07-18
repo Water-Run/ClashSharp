@@ -86,6 +86,9 @@ public sealed partial class ProfileCatalogService
     /// <summary>Shared HTTP client used for subscription checks and downloads.</summary>
     private static readonly HttpClient HttpClient = CreateHttpClient();
 
+    /// <summary>Shared serializer settings for human-readable catalog persistence.</summary>
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
     /// <summary>Initializes the profile catalog service.</summary>
     internal ProfileCatalogService(
         string catalogPath,
@@ -625,12 +628,7 @@ public sealed partial class ProfileCatalogService
     {
         ArgumentNullException.ThrowIfNull(document);
 
-        JsonSerializerOptions options = new()
-        {
-            WriteIndented = true,
-        };
-
-        string json = JsonSerializer.Serialize(document, options);
+        string json = JsonSerializer.Serialize(document, JsonOptions);
         File.WriteAllText(_catalogPath, json);
         _cachedDocument = document;
     }

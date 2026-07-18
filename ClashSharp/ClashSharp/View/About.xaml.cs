@@ -10,6 +10,7 @@
 #nullable enable
 
 using System;
+using System.Globalization;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
@@ -81,12 +82,15 @@ public sealed partial class About : Page
         };
 
         AddInformationText(panel, string.Format(
+            CultureInfo.CurrentCulture,
             LocalizationService.Instance.GetString("Settings.ProxyInformation.LocalEntry.Format"),
             mixedPort));
         AddInformationText(panel, string.Format(
+            CultureInfo.CurrentCulture,
             LocalizationService.Instance.GetString("Settings.ProxyInformation.CoreConfig.Format"),
             information.ConfigPath));
         AddInformationText(panel, string.Format(
+            CultureInfo.CurrentCulture,
             LocalizationService.Instance.GetString("Settings.ProxyInformation.CoreBinary.Format"),
             coreBinaryText));
 

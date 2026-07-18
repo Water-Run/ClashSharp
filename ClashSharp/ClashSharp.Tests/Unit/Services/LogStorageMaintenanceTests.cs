@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Globalization;
 using ClashSharp.Service;
 using Microsoft.Data.Sqlite;
 
@@ -102,7 +103,7 @@ public sealed class LogStorageMaintenanceTests
 
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM Logs;";
-        return Convert.ToInt64(command.ExecuteScalar());
+        return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
     }
 
     /// <summary>Reads the only remaining timestamp from the test table.</summary>
@@ -114,6 +115,6 @@ public sealed class LogStorageMaintenanceTests
 
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT CreatedAtUnixTime FROM Logs;";
-        return Convert.ToInt64(command.ExecuteScalar());
+        return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
     }
 }

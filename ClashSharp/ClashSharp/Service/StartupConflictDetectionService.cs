@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -110,7 +111,7 @@ internal sealed class StartupConflictDetectionService
             issues.Add(new StartupConflictIssue(
                 StartupConflictKind.ExternalMihomoProcess,
                 _getString("StartupConflict.Mihomo.Title"),
-                string.Format(_getString("StartupConflict.Mihomo.Description"), processes.Count),
+                string.Format(CultureInfo.CurrentCulture, _getString("StartupConflict.Mihomo.Description"), processes.Count),
                 _getString("StartupConflict.Mihomo.Repair"),
                 token => TerminateExternalMihomoProcessesAsync(processes, token)));
         }
@@ -120,7 +121,7 @@ internal sealed class StartupConflictDetectionService
             issues.Add(new StartupConflictIssue(
                 StartupConflictKind.MixedPortOccupied,
                 _getString("StartupConflict.Port.Title"),
-                string.Format(_getString("StartupConflict.Port.Description"), mixedPort),
+                string.Format(CultureInfo.CurrentCulture, _getString("StartupConflict.Port.Description"), mixedPort),
                 _getString("StartupConflict.Port.Repair"),
                 _ => Task.FromResult(new StartupConflictRepairResult(
                     false,
@@ -133,7 +134,7 @@ internal sealed class StartupConflictDetectionService
             issues.Add(new StartupConflictIssue(
                 StartupConflictKind.WindowsProxyWrongPort,
                 _getString("StartupConflict.Proxy.Title"),
-                string.Format(_getString("StartupConflict.Proxy.Description"), proxyState.ProxyServer, mixedPort),
+                string.Format(CultureInfo.CurrentCulture, _getString("StartupConflict.Proxy.Description"), proxyState.ProxyServer, mixedPort),
                 _getString("StartupConflict.Proxy.Repair"),
                 DisableWindowsProxyAsync));
         }

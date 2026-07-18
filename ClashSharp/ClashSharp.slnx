@@ -2,6 +2,8 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
+  <Project Path="ClashSharp.Core/ClashSharp.Core.csproj" />
+  <Project Path="ClashSharp.Infrastructure/ClashSharp.Infrastructure.csproj" />
   <Project Path="ClashSharp.Tests/ClashSharp.Tests.csproj">
     <Platform Project="x64" />
   </Project>

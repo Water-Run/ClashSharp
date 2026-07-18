@@ -2,7 +2,7 @@ root = true
 
 [*]
 charset = utf-8
-end_of_line = crlf
+end_of_line = lf
 indent_style = space
 insert_final_newline = true
 trim_trailing_whitespace = true
@@ -32,6 +32,15 @@ csharp_style_var_elsewhere = false:suggestion
 csharp_style_var_for_built_in_types = false:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 
+# Instance methods preserve dependency-injection seams even when their first implementation has no instance state.
+dotnet_diagnostic.CA1822.severity = suggestion
+
+# Public and internal contracts prefer collection abstractions over concrete containers.
+dotnet_diagnostic.CA1859.severity = suggestion
+
+# Runtime service disposal is tracked by the supervised-lifetime migration in Phase 03.
+dotnet_diagnostic.CA1001.severity = suggestion
+
 dotnet_naming_rule.private_fields_should_be_camel_case.severity = suggestion
 dotnet_naming_rule.private_fields_should_be_camel_case.symbols = private_fields
 dotnet_naming_rule.private_fields_should_be_camel_case.style = camel_case_underscore
@@ -41,3 +50,7 @@ dotnet_naming_symbols.private_fields.applicable_kinds = field
 
 dotnet_naming_style.camel_case_underscore.required_prefix = _
 dotnet_naming_style.camel_case_underscore.capitalization = camel_case
+
+[ClashSharp/ClashSharp.Tests/**/*.cs]
+# Method_Name_Condition is the repository's established executable-specification naming convention.
+dotnet_diagnostic.CA1707.severity = none

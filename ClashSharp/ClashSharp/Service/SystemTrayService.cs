@@ -12,9 +12,9 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using ClashSharp.Model;
-using DrawingIcon = System.Drawing.Icon;
 using DrawingBitmap = System.Drawing.Bitmap;
 using DrawingColor = System.Drawing.Color;
+using DrawingIcon = System.Drawing.Icon;
 using DrawingSystemIcons = System.Drawing.SystemIcons;
 
 namespace ClashSharp.Service;

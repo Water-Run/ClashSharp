@@ -275,7 +275,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         {
             IReadOnlyList<ActiveConnection> connections = await _connectionClient.GetActiveConnectionsAsync(cancellationToken);
             Connections = connections.Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter)).ToArray();
-            ConnectionStatusText = string.Format(_localization.GetString("Connections.Status.Active.Format"), connections.Count);
+            ConnectionStatusText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Connections.Status.Active.Format"), connections.Count);
             return connections;
         }
         catch (Exception exception) when (exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException)
@@ -298,7 +298,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
     {
         IReadOnlyList<ActiveConnection> connections = await RefreshConnectionsAsync(cancellationToken);
         int insertedCount = _log.AppendConnectionSnapshot(connections);
-        ConnectionStatusText = string.Format(_localization.GetString("Connections.Status.Persisted.Format"), insertedCount);
+        ConnectionStatusText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Connections.Status.Persisted.Format"), insertedCount);
         _log.Append("Info", "Connections", ConnectionStatusText, null);
     }
 

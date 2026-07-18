@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dotnet:
+    name: .NET build, format, and test
+    runs-on: windows-2025
+    env:
+      Platform: x64
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Set up pinned .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+
+      - name: Restore locked dependencies
+        run: dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
+
+      - name: Verify formatting
+        run: dotnet format ClashSharp/ClashSharp.slnx --verify-no-changes --no-restore
+
+      - name: Build Release
+        run: dotnet build ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restore
+
+      - name: Run tests
+        run: dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Platform=x64 --no-build --logger "trx;LogFileName=tests.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dotnet-test-results
+          path: ClashSharp/ClashSharp.Tests/TestResults/**/*.trx
+          if-no-files-found: error
+
+  rust:
+    name: Rust ${{ matrix.name }}
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Installer
+            manifest: ClashSharp/Installer/Cargo.toml
+            lockfile: ClashSharp/Installer/Cargo.lock
+          - name: SandboxTest
+            manifest: ClashSharp/SandboxTest/Cargo.toml
+            lockfile: ClashSharp/SandboxTest/Cargo.lock
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Activate pinned Rust toolchain
+        run: rustup show
+
+      - name: Verify formatting
+        run: cargo fmt --manifest-path ${{ matrix.manifest }} -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --manifest-path ${{ matrix.manifest }} --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --manifest-path ${{ matrix.manifest }} --locked --all-targets
+
+      - name: Install pinned cargo-audit
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      - name: Audit Installer dependencies
+        if: matrix.name == 'Installer'
+        run: cargo audit --file ${{ matrix.lockfile }} --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
+
+      - name: Audit dependencies
+        if: matrix.name != 'Installer'
+        run: cargo audit --file ${{ matrix.lockfile }}

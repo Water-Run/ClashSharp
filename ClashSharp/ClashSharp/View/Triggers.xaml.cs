@@ -153,7 +153,9 @@ public sealed partial class Triggers : Page
         TriggerEditorNameBox.Header = LocalizationService.Instance.GetString("Triggers.Name");
         TriggerEditorNameBox.Text = item?.Name ?? LocalizationService.Instance.GetString("Triggers.DefaultName");
 
-        SetSelectedCondition(item?.Task.Conditions.FirstOrDefault() ?? new TriggerCondition(TriggerConditionKind.AppEntered));
+        SetSelectedCondition(item is null || item.Task.Conditions.Count == 0
+            ? new TriggerCondition(TriggerConditionKind.AppEntered)
+            : item.Task.Conditions[0]);
         SetSelectedActions(item is null || item.Task.Actions.Count == 0
             ? CreateDefaultActions()
             : item.Task.Actions);

@@ -1,14 +1,3 @@
-/*
- * Active Connection Model
- * Represents one active mihomo connection row exposed by the external controller
- *
- * @author: WaterRun
- * @file: Model/ActiveConnection.cs
- * @date: 2026-06-15
- */
-
-using System;
-
 namespace ClashSharp.Model;
 
 /// <summary>Represents one active mihomo connection row exposed by the external controller.</summary>

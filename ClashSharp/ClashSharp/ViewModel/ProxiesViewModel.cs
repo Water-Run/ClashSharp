@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -318,7 +319,7 @@ internal sealed class ProxiesViewModel : ObservableObject
         {
             IReadOnlyList<ProxyNode> testedNodes = await _latencyTester.TestNodesAsync(ProxyNodes, cancellationToken);
             ProxyNodes = testedNodes;
-            _log.Append("Info", "ProxyNodes", string.Format(_localization.GetString("Master.LatencyDialog.Completed.Format"), testedNodes.Count), null);
+            _log.Append("Info", "ProxyNodes", string.Format(CultureInfo.CurrentCulture, _localization.GetString("Master.LatencyDialog.Completed.Format"), testedNodes.Count), null);
         }
         catch (Exception exception) when (exception is OperationCanceledException or InvalidOperationException)
         {

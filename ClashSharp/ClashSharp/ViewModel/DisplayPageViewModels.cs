@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -376,14 +377,15 @@ internal sealed class StatisticsViewModel : ObservableObject
     {
         StatisticsSummary summary = _statistics.GetTrafficStatisticsSummary();
         TotalTrafficText = string.Format(
+            CultureInfo.CurrentCulture,
             _localization.GetString("Statistics.TotalTraffic.Format"),
             FormatByteCount(summary.TotalUploadBytes),
             FormatByteCount(summary.TotalDownloadBytes));
-        ConnectionCountText = string.Format(_localization.GetString("Statistics.ConnectionCount.Format"), summary.ConnectionCount);
-        ProfileStatisticText = string.Format(_localization.GetString("Statistics.ProfileCount.Format"), summary.ProfileCount);
-        SnapshotStatisticText = string.Format(_localization.GetString("Statistics.SnapshotCount.Format"), summary.SnapshotCount);
-        NodeStatisticText = string.Format(_localization.GetString("Statistics.NodeCount.Format"), summary.NodeCount, summary.NodeHealthCount);
-        RuleStatisticText = string.Format(_localization.GetString("Statistics.RuleCount.Format"), summary.RuleCount);
+        ConnectionCountText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.ConnectionCount.Format"), summary.ConnectionCount);
+        ProfileStatisticText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.ProfileCount.Format"), summary.ProfileCount);
+        SnapshotStatisticText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.SnapshotCount.Format"), summary.SnapshotCount);
+        NodeStatisticText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.NodeCount.Format"), summary.NodeCount, summary.NodeHealthCount);
+        RuleStatisticText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.RuleCount.Format"), summary.RuleCount);
         ProfileTrafficRows = ResolveProfileTrafficRows(_statistics.GetProfileTrafficRows(10));
         DailyTrafficRows = _statistics.GetDailyTrafficRows(14);
         NodeTrafficRows = _statistics.GetNodeTrafficRows(10);
@@ -489,7 +491,7 @@ internal sealed class AboutViewModel : ObservableObject
 
     /// <summary>Gets the application version summary text.</summary>
     /// <value>Localized version summary.</value>
-    public string VersionSummaryText => string.Format(_localization.GetString("About.Version.Value.Format"), VersionText);
+    public string VersionSummaryText => string.Format(CultureInfo.CurrentCulture, _localization.GetString("About.Version.Value.Format"), VersionText);
 
     /// <summary>Gets the version label text.</summary>
     /// <value>Localized version field label.</value>
@@ -603,7 +605,7 @@ internal sealed class AboutViewModel : ObservableObject
         try
         {
             string versionText = CoreVersionDisplayFormatter.Format(await _core.GetVersionTextAsync(cancellationToken));
-            MihomoStatusText = string.Format(_localization.GetString("About.Mihomo.Available.Format"), versionText);
+            MihomoStatusText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("About.Mihomo.Available.Format"), versionText);
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or OperationCanceledException)
         {

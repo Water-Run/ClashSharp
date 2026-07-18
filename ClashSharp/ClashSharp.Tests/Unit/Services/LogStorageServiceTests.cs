@@ -7,6 +7,7 @@
  * @date: 2026-06-25
  */
 
+using System.Globalization;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using Microsoft.Data.Sqlite;
@@ -140,7 +141,7 @@ public sealed class LogStorageServiceTests
         connection.Open();
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM Logs WHERE Source = 'Export' AND Message = 'Recent log';";
-        Assert.Equal(1L, Convert.ToInt64(command.ExecuteScalar()));
+        Assert.Equal(1L, Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture));
     }
 
     private sealed class TempDatabase : IDisposable

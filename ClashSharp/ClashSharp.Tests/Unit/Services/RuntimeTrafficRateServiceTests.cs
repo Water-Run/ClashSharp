@@ -7,6 +7,7 @@
  * @date: 2026-06-29
  */
 
+using System.Globalization;
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -18,7 +19,7 @@ public sealed class RuntimeTrafficRateServiceTests
     [Fact]
     public async Task GetSnapshotAsync_FirstSample_ReturnsZeroRatesAndCurrentConnectionCount()
     {
-        DateTimeOffset now = DateTimeOffset.Parse("2026-06-29T08:00:00Z");
+        DateTimeOffset now = DateTimeOffset.Parse("2026-06-29T08:00:00Z", CultureInfo.InvariantCulture);
         FakeRuntimeTrafficConnections connections = new()
         {
             Connections =
@@ -41,7 +42,7 @@ public sealed class RuntimeTrafficRateServiceTests
     [Fact]
     public async Task GetSnapshotAsync_SecondSample_ReturnsRatesAndSessionTrafficFromCounterDeltas()
     {
-        DateTimeOffset now = DateTimeOffset.Parse("2026-06-29T08:00:00Z");
+        DateTimeOffset now = DateTimeOffset.Parse("2026-06-29T08:00:00Z", CultureInfo.InvariantCulture);
         FakeRuntimeTrafficConnections connections = new()
         {
             Connections = [CreateConnection("a", uploadBytes: 100, downloadBytes: 200)],
@@ -64,7 +65,7 @@ public sealed class RuntimeTrafficRateServiceTests
     [Fact]
     public async Task GetSnapshotAsync_WhenConnectionCounterResets_UsesCurrentCounterAsDelta()
     {
-        DateTimeOffset now = DateTimeOffset.Parse("2026-06-29T08:00:00Z");
+        DateTimeOffset now = DateTimeOffset.Parse("2026-06-29T08:00:00Z", CultureInfo.InvariantCulture);
         FakeRuntimeTrafficConnections connections = new()
         {
             Connections = [CreateConnection("a", uploadBytes: 100, downloadBytes: 200)],
