@@ -55,6 +55,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(provider => new ApplicationActionService(
                 provider.GetRequiredService<AppSettingsService>(),
                 provider.GetRequiredService<NetworkStateCoordinator>(),
+                provider.GetRequiredService<ConnectionSamplingService>(),
                 MihomoConnectionService.Instance,
                 NotificationService.Instance,
                 TriggerRuntimeEventHub.Instance,
@@ -68,9 +69,8 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<LegacyTriggerRuntimeParticipant>();
             services.AddSingleton<IRuntimeParticipant>(provider =>
                 provider.GetRequiredService<LegacyTriggerRuntimeParticipant>());
-            services.AddSingleton<LegacyConnectionSamplingRuntimeParticipant>();
             services.AddSingleton<IRuntimeParticipant>(provider =>
-                provider.GetRequiredService<LegacyConnectionSamplingRuntimeParticipant>());
+                provider.GetRequiredService<ConnectionSamplingService>());
             services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
                 provider.GetRequiredService<MutationAdmissionBarrier>(),
                 provider.GetRequiredService<IRuntimeShutdownNetworkCoordinator>(),

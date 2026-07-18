@@ -1,15 +1,7 @@
-/*
- * Connection Sampling Service Factory
- * Wires production dependencies for background connection sampling
- *
- * @author: WaterRun
- * @file: Service/ConnectionSamplingServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Supervision;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -31,7 +23,9 @@ internal static class ConnectionSamplingServiceFactory
             new ConnectionSamplingSettingsAdapter(AppSettingsService.Instance),
             new ConnectionSamplingSourceAdapter(MihomoConnectionService.Instance),
             new ConnectionSamplingStorageAdapter(LogStorageService.Instance),
-            LocalizationService.Instance.GetString);
+            LocalizationService.Instance.GetString,
+            SystemSupervisorClock.Instance,
+            SupervisorBackoffPolicy.CreateProduction("connection-sampling"));
     }
 }
 

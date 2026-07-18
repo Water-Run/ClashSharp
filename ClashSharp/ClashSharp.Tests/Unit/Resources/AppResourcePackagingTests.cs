@@ -866,8 +866,14 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("MihomoConnectionService.Instance", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestartWhenStopped", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_samplingTask", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Background connection sampling recovered.\"", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Background connection sampling failed.\"", serviceCode, StringComparison.Ordinal);
+        Assert.Contains(": IRuntimeParticipant", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("SupervisedLoop", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("RestartFromSettingsAsync", serviceCode, StringComparison.Ordinal);
         Assert.Contains("IConnectionSamplingSettings", serviceCode, StringComparison.Ordinal);
         Assert.Contains("IConnectionSamplingSource", serviceCode, StringComparison.Ordinal);
         Assert.Contains("IConnectionSamplingStorage", serviceCode, StringComparison.Ordinal);

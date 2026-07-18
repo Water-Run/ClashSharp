@@ -1,13 +1,13 @@
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Startup;
-using ClashSharp.Hosting.Compatibility;
+using ClashSharp.Service;
 
 namespace ClashSharp.Hosting.Startup;
 
 /// <summary>Starts configured connection sampling after the primary shell exists.</summary>
 internal sealed class ConnectionSamplingStartupStep(
-    LegacyConnectionSamplingRuntimeParticipant sampling) : IStartupStep
+    ConnectionSamplingService sampling) : IStartupStep
 {
     public string Name => "connection-sampling";
 

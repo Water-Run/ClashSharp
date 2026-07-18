@@ -18,6 +18,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
 
     private readonly AppSettingsService _settings;
     private readonly NetworkStateCoordinator _network;
+    private readonly ConnectionSamplingService _sampling;
     private readonly MihomoConnectionService _connections;
     private readonly IApplicationNotificationSink _notifications;
     private readonly ITriggerRuntimeEventPublisher _triggerEvents;
@@ -28,6 +29,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     internal ApplicationActionService(
         AppSettingsService settings,
         NetworkStateCoordinator network,
+        ConnectionSamplingService sampling,
         MihomoConnectionService connections,
         IApplicationNotificationSink notifications,
         ITriggerRuntimeEventPublisher triggerEvents,
@@ -37,6 +39,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _network = network ?? throw new ArgumentNullException(nameof(network));
+        _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _triggerEvents = triggerEvents ?? throw new ArgumentNullException(nameof(triggerEvents));
@@ -63,7 +66,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
                 break;
             case ApplicationActionKind.SetConnectionSampling:
                 _settings.ConnectionSamplingEnabled = ParseBoolean(value);
-                ConnectionSamplingService.Instance.RestartFromSettings();
+                await _sampling.RestartFromSettingsAsync(cancellationToken).ConfigureAwait(false);
                 break;
             case ApplicationActionKind.SwitchProxyMode:
                 ClashSharpMode mode = Enum.TryParse(value, out ClashSharpMode parsedMode)

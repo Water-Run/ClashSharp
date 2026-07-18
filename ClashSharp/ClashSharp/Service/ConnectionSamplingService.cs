@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Net.Http;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Lifecycle;
+using ClashSharp.ApplicationModel.Supervision;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -39,13 +39,13 @@ internal interface IConnectionSamplingStorage
 /// <summary>Periodically reads mihomo active connections and writes SQLite statistics.</summary>
 /// <remarks>
 /// Invariants: Only one sampling loop can run for this service instance.
-/// Thread safety: Start and stop operations serialize state through a private lock.
+/// Thread safety: Lifecycle transitions serialize through the injected supervisor.
 /// Side effects: Performs local mihomo API requests and writes connection snapshots to SQLite.
 /// </remarks>
-public sealed partial class ConnectionSamplingService
+public sealed partial class ConnectionSamplingService : IRuntimeParticipant
 {
-    /// <summary>Synchronization object guarding service lifetime state.</summary>
-    private readonly object _syncLock = new();
+    /// <summary>Synchronization object guarding cumulative connection counters.</summary>
+    private readonly object _counterLock = new();
 
     private readonly IConnectionSamplingSettings _settings;
 
@@ -58,276 +58,122 @@ public sealed partial class ConnectionSamplingService
     /// <summary>Last observed cumulative byte counters keyed by stable active connection identity.</summary>
     private readonly Dictionary<string, ConnectionSampleCounters> _lastCountersByConnection = new(StringComparer.Ordinal);
 
-    /// <summary>Cancellation source for the running sampling loop.</summary>
-    private CancellationTokenSource? _cancellationTokenSource;
+    private readonly SupervisedLoop _supervisor;
 
-    /// <summary>Background sampling task.</summary>
-    private Task? _samplingTask;
+    private SupervisorHealthState _lastLoggedHealthState = SupervisorHealthState.Stopped;
 
-    /// <summary>Version used to cancel pending restart continuations.</summary>
-    private int _restartGeneration;
-
-    /// <summary>Tracks whether the previous sample failed so repeated failures do not flood logs.</summary>
-    private bool _lastSampleFailed;
-
-    /// <summary>False while a lifecycle transition prevents new sampling loops from starting.</summary>
-    private bool _acceptStarts = true;
+    private int _lastInsertedCount;
 
     /// <summary>Initializes the connection sampling service.</summary>
     internal ConnectionSamplingService(
         IConnectionSamplingSettings settings,
         IConnectionSamplingSource source,
         IConnectionSamplingStorage storage,
-        Func<string, string> getString)
+        Func<string, string> getString,
+        ISupervisorClock? clock = null,
+        SupervisorBackoffPolicy? backoff = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        _supervisor = new SupervisedLoop(
+            "connection-sampling",
+            SampleOnceAsync,
+            GetSamplingInterval,
+            clock ?? SystemSupervisorClock.Instance,
+            backoff ?? SupervisorBackoffPolicy.CreateProduction("connection-sampling"),
+            healthChanged: OnHealthChanged,
+            initialDelay: GetSamplingInterval);
     }
+
+    /// <inheritdoc />
+    public string Name => _supervisor.Name;
+
+    /// <summary>Gets the latest sampling supervisor health snapshot.</summary>
+    public SupervisorHealth Health => _supervisor.Health;
 
     /// <summary>Gets whether the background sampling loop is currently running.</summary>
     /// <value>True when the loop is active; otherwise false.</value>
-    public bool IsRunning
-    {
-        get
-        {
-            lock (_syncLock)
-            {
-                return _samplingTask is { IsCompleted: false };
-            }
-        }
-    }
+    public bool IsRunning => _supervisor.IsRunning;
 
-    /// <summary>Starts the background sampling loop when enabled by settings.</summary>
-    public void StartIfEnabled()
+    /// <inheritdoc />
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         if (!_settings.IsEnabled)
         {
-            return;
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
 
-        Start();
+        return _supervisor.StartAsync(cancellationToken);
     }
 
-    /// <summary>Starts the background sampling loop.</summary>
-    public void Start()
+    /// <inheritdoc />
+    public Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken)
     {
-        lock (_syncLock)
-        {
-            if (!_acceptStarts)
-            {
-                return;
-            }
-
-            if (_samplingTask is { IsCompleted: false })
-            {
-                return;
-            }
-
-            CancellationTokenSource cancellationTokenSource = new();
-            CancellationToken loopCancellationToken = cancellationTokenSource.Token;
-            _cancellationTokenSource = cancellationTokenSource;
-            _samplingTask = Task.Run(() => RunSamplingLoopAsync(loopCancellationToken));
-        }
+        return _supervisor.QuiesceAsync(cancellationToken);
     }
 
-    /// <summary>Stops the background sampling loop.</summary>
-    public void Stop()
+    /// <inheritdoc />
+    public Task ResumeAsync(QuiescedState priorState, CancellationToken cancellationToken)
     {
-        _ = StopAsync(CancellationToken.None);
+        if (!_settings.IsEnabled)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        return _supervisor.ResumeAsync(priorState, cancellationToken);
     }
 
-    internal async Task StopAsync(CancellationToken cancellationToken)
+    /// <inheritdoc />
+    public Task StopAsync(CancellationToken cancellationToken)
     {
-        Interlocked.Increment(ref _restartGeneration);
-        Task? stoppingTask = StopCore();
-        if (stoppingTask is null)
-        {
-            return;
-        }
-
-        await stoppingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
-        lock (_syncLock)
-        {
-            if (ReferenceEquals(_samplingTask, stoppingTask))
-            {
-                _samplingTask = null;
-            }
-        }
+        return _supervisor.StopAsync(cancellationToken);
     }
 
-    internal async Task<bool> QuiesceAsync(CancellationToken cancellationToken)
+    /// <summary>Re-evaluates current settings through an awaited stop-and-start transition.</summary>
+    public async Task RestartFromSettingsAsync(CancellationToken cancellationToken)
     {
-        bool wasRunning;
-        lock (_syncLock)
+        await _supervisor.QuiesceAsync(cancellationToken).ConfigureAwait(false);
+        if (_settings.IsEnabled)
         {
-            wasRunning = _samplingTask is { IsCompleted: false };
-            _acceptStarts = false;
-        }
-
-        await StopAsync(cancellationToken).ConfigureAwait(false);
-        return wasRunning;
-    }
-
-    internal void ResumeAfterQuiescence(bool wasRunning)
-    {
-        int generation = Interlocked.Increment(ref _restartGeneration);
-        Task? stoppingTask;
-        lock (_syncLock)
-        {
-            _acceptStarts = true;
-            stoppingTask = _samplingTask;
-            if (stoppingTask is null or { IsCompleted: true })
-            {
-                _samplingTask = null;
-            }
-        }
-
-        if (!wasRunning)
-        {
-            return;
-        }
-
-        if (stoppingTask is { IsCompleted: false })
-        {
-            _ = RestartWhenStoppedAsync(stoppingTask, generation);
-        }
-        else
-        {
-            StartIfEnabled();
+            await _supervisor.StartAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
-    /// <summary>Restarts the sampling loop using current settings.</summary>
+    /// <summary>Synchronously applies sampling settings for legacy property callbacks.</summary>
+    /// <remarks>This compatibility entry point awaits the transition and never detaches background work.</remarks>
     public void RestartFromSettings()
     {
-        int generation = Interlocked.Increment(ref _restartGeneration);
-        Task? stoppingTask = StopCore();
-        if (stoppingTask is { IsCompleted: false })
-        {
-            _ = RestartWhenStoppedAsync(stoppingTask, generation);
-            return;
-        }
-
-        StartIfEnabled();
-    }
-
-    private Task? StopCore()
-    {
-        CancellationTokenSource? cancellationTokenSource;
-        Task? samplingTask;
-
-        lock (_syncLock)
-        {
-            cancellationTokenSource = _cancellationTokenSource;
-            samplingTask = _samplingTask;
-            _cancellationTokenSource = null;
-            if (samplingTask is null or { IsCompleted: true })
-            {
-                _samplingTask = null;
-            }
-        }
-
-        cancellationTokenSource?.Cancel();
-        cancellationTokenSource?.Dispose();
-        return samplingTask;
-    }
-
-    private async Task RestartWhenStoppedAsync(Task stoppingTask, int generation)
-    {
-        try
-        {
-            await stoppingTask.ConfigureAwait(false);
-        }
-        catch
-        {
-        }
-
-        if (Volatile.Read(ref _restartGeneration) != generation)
-        {
-            return;
-        }
-
-        lock (_syncLock)
-        {
-            if (ReferenceEquals(_samplingTask, stoppingTask))
-            {
-                _samplingTask = null;
-            }
-        }
-
-        StartIfEnabled();
-    }
-
-    /// <summary>Runs the sampling loop until canceled.</summary>
-    /// <param name="cancellationToken">Loop cancellation token.</param>
-    private async Task RunSamplingLoopAsync(CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            TimeSpan interval = TimeSpan.FromSeconds(_settings.IntervalSeconds);
-            try
-            {
-                await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-
-            await SampleOnceAsync(cancellationToken).ConfigureAwait(false);
-        }
+        RestartFromSettingsAsync(CancellationToken.None).GetAwaiter().GetResult();
     }
 
     /// <summary>Samples active connections once and writes them to SQLite.</summary>
     /// <param name="cancellationToken">Cancels the sample.</param>
     internal async Task SampleOnceAsync(CancellationToken cancellationToken)
     {
-        try
-        {
-            IReadOnlyList<ActiveConnection> connections = await _source.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
-            IReadOnlyList<ActiveConnection> deltaConnections = CreateDeltaConnections(connections);
-            int insertedCount = _storage.AppendConnectionSnapshot(deltaConnections);
-            if (_lastSampleFailed)
-            {
-                _storage.AppendLog(
-                    "Info",
-                    "ConnectionSampling",
-                    GetString("ConnectionSampling.Recovered"),
-                    FormatString("ConnectionSampling.RecoveredDetail.Format", insertedCount));
-            }
-
-            _lastSampleFailed = false;
-        }
-        catch (Exception exception) when (exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException)
-        {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-
-            if (!_lastSampleFailed)
-            {
-                _storage.AppendLog("Warning", "ConnectionSampling", GetString("ConnectionSampling.Failed"), exception.Message);
-            }
-
-            _lastSampleFailed = true;
-        }
+        IReadOnlyList<ActiveConnection> connections = await _source
+            .GetActiveConnectionsAsync(cancellationToken)
+            .ConfigureAwait(false);
+        ConnectionSamplePlan plan = CreateSamplePlan(connections);
+        int insertedCount = _storage.AppendConnectionSnapshot(plan.DeltaConnections);
+        CommitCounters(plan.NextCounters);
+        _lastInsertedCount = insertedCount;
     }
 
-    /// <summary>Converts cumulative active-connection byte counters into per-sample deltas.</summary>
-    private IReadOnlyList<ActiveConnection> CreateDeltaConnections(IReadOnlyList<ActiveConnection> connections)
+    /// <summary>Builds deltas without advancing counters until persistence succeeds.</summary>
+    private ConnectionSamplePlan CreateSamplePlan(IReadOnlyList<ActiveConnection> connections)
     {
         List<ActiveConnection> deltaConnections = [];
-        HashSet<string> activeKeys = new(StringComparer.Ordinal);
+        Dictionary<string, ConnectionSampleCounters> nextCounters = new(StringComparer.Ordinal);
 
-        lock (_syncLock)
+        lock (_counterLock)
         {
             foreach (ActiveConnection connection in connections)
             {
                 string key = BuildConnectionKey(connection);
-                activeKeys.Add(key);
 
                 long uploadDelta = connection.UploadBytes;
                 long downloadDelta = connection.DownloadBytes;
@@ -341,7 +187,7 @@ public sealed partial class ConnectionSamplingService
                         : connection.DownloadBytes;
                 }
 
-                _lastCountersByConnection[key] = new ConnectionSampleCounters(connection.UploadBytes, connection.DownloadBytes);
+                nextCounters[key] = new ConnectionSampleCounters(connection.UploadBytes, connection.DownloadBytes);
                 if (uploadDelta > 0 || downloadDelta > 0)
                 {
                     deltaConnections.Add(connection with
@@ -351,23 +197,21 @@ public sealed partial class ConnectionSamplingService
                     });
                 }
             }
-
-            List<string> inactiveKeys = [];
-            foreach (string key in _lastCountersByConnection.Keys)
-            {
-                if (!activeKeys.Contains(key))
-                {
-                    inactiveKeys.Add(key);
-                }
-            }
-
-            foreach (string inactiveKey in inactiveKeys)
-            {
-                _lastCountersByConnection.Remove(inactiveKey);
-            }
         }
 
-        return deltaConnections;
+        return new ConnectionSamplePlan(deltaConnections, nextCounters);
+    }
+
+    private void CommitCounters(IReadOnlyDictionary<string, ConnectionSampleCounters> nextCounters)
+    {
+        lock (_counterLock)
+        {
+            _lastCountersByConnection.Clear();
+            foreach ((string key, ConnectionSampleCounters counters) in nextCounters)
+            {
+                _lastCountersByConnection.Add(key, counters);
+            }
+        }
     }
 
     private static string BuildConnectionKey(ActiveConnection connection)
@@ -385,5 +229,40 @@ public sealed partial class ConnectionSamplingService
         return string.Format(CultureInfo.CurrentCulture, GetString(key), args);
     }
 
+    private TimeSpan GetSamplingInterval()
+    {
+        return TimeSpan.FromSeconds(Math.Max(0, _settings.IntervalSeconds));
+    }
+
+    private void OnHealthChanged(SupervisorHealth health)
+    {
+        SupervisorHealthState previous = _lastLoggedHealthState;
+        _lastLoggedHealthState = health.State;
+        if (health.State is SupervisorHealthState.Retrying or SupervisorHealthState.Degraded
+            && previous is not SupervisorHealthState.Retrying and not SupervisorHealthState.Degraded)
+        {
+            _storage.AppendLog(
+                "Warning",
+                "ConnectionSampling",
+                GetString("ConnectionSampling.Failed"),
+                health.ErrorCode);
+            return;
+        }
+
+        if (health.State == SupervisorHealthState.Recovering
+            && previous is SupervisorHealthState.Retrying or SupervisorHealthState.Degraded)
+        {
+            _storage.AppendLog(
+                "Info",
+                "ConnectionSampling",
+                GetString("ConnectionSampling.Recovered"),
+                FormatString("ConnectionSampling.RecoveredDetail.Format", _lastInsertedCount));
+        }
+    }
+
     private readonly record struct ConnectionSampleCounters(long UploadBytes, long DownloadBytes);
+
+    private sealed record ConnectionSamplePlan(
+        IReadOnlyList<ActiveConnection> DeltaConnections,
+        IReadOnlyDictionary<string, ConnectionSampleCounters> NextCounters);
 }

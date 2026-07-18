@@ -1,6 +1,9 @@
 using System.Net.Http;
+using ClashSharp.ApplicationModel.Lifecycle;
+using ClashSharp.ApplicationModel.Supervision;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using Microsoft.Data.Sqlite;
 
 namespace ClashSharp.Tests.Unit.Services;
 
@@ -9,13 +12,14 @@ public sealed class ConnectionSamplingServiceTests
 {
     /// <summary>Verifies disabled sampling settings prevent the background loop from starting.</summary>
     [Fact]
-    public void StartIfEnabled_WhenDisabled_DoesNotStart()
+    public async Task StartAsync_WhenDisabled_DoesNotStart()
     {
         ConnectionSamplingService service = CreateService(new FakeConnectionSamplingSettings { IsEnabled = false });
 
-        service.StartIfEnabled();
+        await service.StartAsync(CancellationToken.None);
 
         Assert.False(service.IsRunning);
+        Assert.Equal(SupervisorHealthState.Stopped, service.Health.State);
     }
 
     /// <summary>Verifies lifecycle quiescence blocks replacement loops until the prior state is resumed.</summary>
@@ -23,44 +27,54 @@ public sealed class ConnectionSamplingServiceTests
     public async Task QuiesceAsync_BlocksStartsUntilResumeRestoresPriorRunningState()
     {
         ConnectionSamplingService service = CreateService();
-        service.Start();
+        await service.StartAsync(CancellationToken.None);
 
-        bool wasRunning = await service.QuiesceAsync(CancellationToken.None);
-        service.Start();
+        QuiescedState priorState = await service.QuiesceAsync(CancellationToken.None);
 
-        Assert.True(wasRunning);
+        Assert.True(priorState.WasRunning);
         Assert.False(service.IsRunning);
+        Assert.Equal(SupervisorHealthState.Stopped, service.Health.State);
 
-        service.ResumeAfterQuiescence(wasRunning);
+        await service.ResumeAsync(priorState, CancellationToken.None);
         Assert.True(service.IsRunning);
         await service.StopAsync(CancellationToken.None);
     }
 
-    /// <summary>Verifies one failed sample logs one localized warning and repeated failures are suppressed.</summary>
+    /// <summary>Verifies source failures are supervised, categorized, and logged without terminating the loop.</summary>
     [Fact]
-    public async Task SampleOnceAsync_WhenRepeatedFailures_LogsWarningOnce()
+    public async Task StartAsync_WhenSourceFails_PublishesRetryHealthAndStableWarning()
     {
+        ControlledSupervisorClock clock = new();
         FakeConnectionSamplingStorage storage = new();
         FakeConnectionSamplingSource source = new()
         {
             Exception = new HttpRequestException("controller unavailable"),
         };
-        ConnectionSamplingService service = CreateService(source: source, storage: storage);
+        ConnectionSamplingService service = CreateService(source: source, storage: storage, clock: clock);
 
-        await service.SampleOnceAsync(CancellationToken.None);
-        await service.SampleOnceAsync(CancellationToken.None);
+        await service.StartAsync(CancellationToken.None);
+        ControlledDelay initialDelay = await clock.TakeDelayAsync();
+        Assert.Equal(TimeSpan.FromSeconds(60), initialDelay.Duration);
+        initialDelay.Complete();
+        ControlledDelay retry = await clock.TakeDelayAsync();
 
         ConnectionSamplingLogEntry entry = Assert.Single(storage.Logs);
         Assert.Equal("Warning", entry.Level);
         Assert.Equal("ConnectionSampling", entry.Category);
         Assert.Equal("localized failed", entry.Message);
-        Assert.Equal("controller unavailable", entry.Detail);
+        Assert.Equal("supervisor.http", entry.Detail);
+        Assert.Equal(TimeSpan.FromSeconds(1), retry.Duration);
+        Assert.Equal(SupervisorHealthState.Retrying, service.Health.State);
+        Assert.True(service.IsRunning);
+
+        await service.StopAsync(CancellationToken.None);
     }
 
-    /// <summary>Verifies recovery after a failed sample logs a localized info message with inserted row count detail.</summary>
+    /// <summary>Verifies recovery is logged after a successful supervised probe.</summary>
     [Fact]
-    public async Task SampleOnceAsync_WhenFailureRecovers_LogsRecovery()
+    public async Task StartAsync_WhenFailureRecovers_LogsRecovery()
     {
+        ControlledSupervisorClock clock = new();
         FakeConnectionSamplingStorage storage = new()
         {
             InsertedCount = 12,
@@ -69,16 +83,61 @@ public sealed class ConnectionSamplingServiceTests
         {
             Exception = new HttpRequestException("controller unavailable"),
         };
-        ConnectionSamplingService service = CreateService(source: source, storage: storage);
+        ConnectionSamplingService service = CreateService(source: source, storage: storage, clock: clock);
 
-        await service.SampleOnceAsync(CancellationToken.None);
+        await service.StartAsync(CancellationToken.None);
+        ControlledDelay initialDelay = await clock.TakeDelayAsync();
+        Assert.Equal(TimeSpan.FromSeconds(60), initialDelay.Duration);
+        initialDelay.Complete();
+        ControlledDelay retry = await clock.TakeDelayAsync();
         source.Exception = null;
-        await service.SampleOnceAsync(CancellationToken.None);
+        retry.Complete();
+        _ = await clock.TakeDelayAsync();
 
         Assert.Equal(2, storage.Logs.Count);
         Assert.Equal("localized failed", storage.Logs[0].Message);
         Assert.Equal("localized recovered", storage.Logs[1].Message);
         Assert.Equal("12 rows", storage.Logs[1].Detail);
+        Assert.Equal(SupervisorHealthState.Recovering, service.Health.State);
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>Verifies SQLite persistence failures participate in supervisor backoff.</summary>
+    [Fact]
+    public async Task StartAsync_WhenStorageFails_PublishesSqliteHealthAndRetries()
+    {
+        ControlledSupervisorClock clock = new();
+        FakeConnectionSamplingStorage storage = new()
+        {
+            Exception = new SqliteException("database busy", 5),
+        };
+        FakeConnectionSamplingSource source = new()
+        {
+            Connections = [CreateConnection("connection-1", 100, 200)],
+        };
+        ConnectionSamplingService service = CreateService(source: source, storage: storage, clock: clock);
+
+        await service.StartAsync(CancellationToken.None);
+        ControlledDelay initialDelay = await clock.TakeDelayAsync();
+        Assert.Equal(TimeSpan.FromSeconds(60), initialDelay.Duration);
+        initialDelay.Complete();
+        ControlledDelay retry = await clock.TakeDelayAsync();
+
+        Assert.Equal("supervisor.sqlite", service.Health.ErrorCode);
+        Assert.Equal(SupervisorHealthState.Retrying, service.Health.State);
+        Assert.Equal(TimeSpan.FromSeconds(1), retry.Duration);
+
+        storage.Exception = null;
+        retry.Complete();
+        _ = await clock.TakeDelayAsync();
+
+        ActiveConnection recoveredDelta = Assert.Single(Assert.Single(storage.Snapshots));
+        Assert.Equal(100, recoveredDelta.UploadBytes);
+        Assert.Equal(200, recoveredDelta.DownloadBytes);
+        Assert.Equal(SupervisorHealthState.Recovering, service.Health.State);
+
+        await service.StopAsync(CancellationToken.None);
     }
 
     /// <summary>Verifies cumulative mihomo byte counters are not persisted twice when a connection remains active.</summary>
@@ -138,28 +197,31 @@ public sealed class ConnectionSamplingServiceTests
 
         try
         {
-            service.Start();
+            await service.StartAsync(CancellationToken.None);
             await source.FirstSampleStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-            service.RestartFromSettings();
+            Task restarting = service.RestartFromSettingsAsync(CancellationToken.None);
             await Task.Delay(80);
 
             Assert.Equal(1, source.CallCount);
+            Assert.False(restarting.IsCompleted);
 
             source.ReleaseFirstSample.TrySetResult(null);
+            await restarting;
             await WaitUntilAsync(() => source.CallCount >= 2);
         }
         finally
         {
-            service.Stop();
             source.ReleaseFirstSample.TrySetResult(null);
+            await service.StopAsync(CancellationToken.None);
         }
     }
 
     private static ConnectionSamplingService CreateService(
         FakeConnectionSamplingSettings? settings = null,
         FakeConnectionSamplingSource? source = null,
-        FakeConnectionSamplingStorage? storage = null)
+        FakeConnectionSamplingStorage? storage = null,
+        ISupervisorClock? clock = null)
     {
         return new ConnectionSamplingService(
             settings ?? new FakeConnectionSamplingSettings { IsEnabled = true, IntervalSeconds = 60 },
@@ -171,7 +233,9 @@ public sealed class ConnectionSamplingServiceTests
                 "ConnectionSampling.Recovered" => "localized recovered",
                 "ConnectionSampling.RecoveredDetail.Format" => "{0:N0} rows",
                 _ => key,
-            });
+            },
+            clock,
+            new SupervisorBackoffPolicy(() => 0d));
     }
 
     private static ActiveConnection CreateConnection(string id, long uploadBytes, long downloadBytes)
@@ -199,9 +263,9 @@ public sealed class ConnectionSamplingServiceTests
 
     private sealed class FakeConnectionSamplingSettings : IConnectionSamplingSettings
     {
-        public bool IsEnabled { get; init; }
+        public bool IsEnabled { get; set; }
 
-        public int IntervalSeconds { get; init; } = 60;
+        public int IntervalSeconds { get; set; } = 60;
     }
 
     private sealed class FakeConnectionSamplingSource : IConnectionSamplingSource
@@ -243,12 +307,19 @@ public sealed class ConnectionSamplingServiceTests
     {
         public int InsertedCount { get; init; }
 
+        public Exception? Exception { get; set; }
+
         public List<ConnectionSamplingLogEntry> Logs { get; } = [];
 
         public List<IReadOnlyList<ActiveConnection>> Snapshots { get; } = [];
 
         public int AppendConnectionSnapshot(IReadOnlyList<ActiveConnection> connections)
         {
+            if (Exception is not null)
+            {
+                throw Exception;
+            }
+
             Snapshots.Add([.. connections]);
             return InsertedCount;
         }
@@ -256,6 +327,68 @@ public sealed class ConnectionSamplingServiceTests
         public void AppendLog(string level, string category, string message, string? detail)
         {
             Logs.Add(new ConnectionSamplingLogEntry(level, category, message, detail));
+        }
+    }
+
+    private sealed class ControlledSupervisorClock : ISupervisorClock
+    {
+        private readonly SemaphoreSlim _available = new(0);
+        private readonly Queue<ControlledDelay> _delays = new();
+        private readonly object _sync = new();
+
+        public DateTimeOffset UtcNow { get; private set; } = DateTimeOffset.UnixEpoch;
+
+        public Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+        {
+            ControlledDelay controlled = new(delay, Advance, cancellationToken);
+            lock (_sync)
+            {
+                _delays.Enqueue(controlled);
+            }
+
+            _available.Release();
+            return controlled.Task;
+        }
+
+        public async Task<ControlledDelay> TakeDelayAsync()
+        {
+            bool available = await _available.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(available, "A supervised delay was not scheduled before the test timeout.");
+            lock (_sync)
+            {
+                return _delays.Dequeue();
+            }
+        }
+
+        private void Advance(TimeSpan duration)
+        {
+            UtcNow += duration;
+        }
+    }
+
+    private sealed class ControlledDelay
+    {
+        private readonly TimeSpan _duration;
+        private readonly Action<TimeSpan> _advance;
+        private readonly TaskCompletionSource<object?> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly CancellationTokenRegistration _cancellationRegistration;
+
+        public ControlledDelay(TimeSpan duration, Action<TimeSpan> advance, CancellationToken cancellationToken)
+        {
+            _duration = duration;
+            _advance = advance;
+            _cancellationRegistration = cancellationToken.Register(() => _completion.TrySetCanceled(cancellationToken));
+        }
+
+        public TimeSpan Duration => _duration;
+
+        public Task Task => _completion.Task;
+
+        public void Complete()
+        {
+            _advance(_duration);
+            _cancellationRegistration.Dispose();
+            _completion.TrySetResult(null);
         }
     }
 

@@ -87,6 +87,40 @@ public sealed class RepositoryTopologyTests
         Assert.False(File.Exists(legacyServicePath));
     }
 
+    /// <summary>Verifies sampling lifecycle ownership is direct and the legacy adapter cannot return.</summary>
+    [Fact]
+    public void AppHost_RegistersSamplingAsItsDirectRuntimeParticipant()
+    {
+        string hostPath = Path.Combine(
+            RepositoryRoot,
+            "ClashSharp",
+            "ClashSharp",
+            "AppHost",
+            "ClashSharpAppHostFactory.cs");
+        string compatibilityPath = Path.Combine(
+            RepositoryRoot,
+            "ClashSharp",
+            "ClashSharp",
+            "AppHost",
+            "Compatibility",
+            "LegacyRuntimeParticipants.cs");
+        string startupPath = Path.Combine(
+            RepositoryRoot,
+            "ClashSharp",
+            "ClashSharp",
+            "AppHost",
+            "Startup",
+            "ConnectionSamplingStartupStep.cs");
+        string host = File.ReadAllText(hostPath);
+        string compatibility = File.ReadAllText(compatibilityPath);
+        string startup = File.ReadAllText(startupPath);
+
+        Assert.Contains("GetRequiredService<ConnectionSamplingService>()", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("LegacyConnectionSamplingRuntimeParticipant", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("LegacyConnectionSamplingRuntimeParticipant", compatibility, StringComparison.Ordinal);
+        Assert.Contains("ConnectionSamplingService sampling", startup, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies workflow actions are immutable and workflow permissions are read-only.</summary>
     [Fact]
     public void ContinuousIntegration_UsesImmutableActionsAndReadOnlyPermissions()
