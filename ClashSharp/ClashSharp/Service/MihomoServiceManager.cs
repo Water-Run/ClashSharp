@@ -1,29 +1,11 @@
-/*
- * Mihomo Service Manager
- * Manages the optional Windows service used as transparent proxy prerequisite
- *
- * @author: WaterRun
- * @file: Service/MihomoServiceManager.cs
- * @date: 2026-06-24
- */
-
 using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Processes;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
-
-/// <summary>Runs Windows service-control commands for the mihomo service manager.</summary>
-internal interface IMihomoServiceCommandRunner
-{
-    /// <summary>Runs sc.exe without elevation.</summary>
-    MihomoServiceCommandResult RunSc(params string[] arguments);
-
-    /// <summary>Runs sc.exe with elevation.</summary>
-    Task<MihomoServiceCommandResult> RunScElevatedAsync(CancellationToken cancellationToken, params string[] arguments);
-}
 
 /// <summary>Provides deployment paths and configuration for the mihomo Windows service.</summary>
 internal interface IMihomoServiceDeploymentContext
@@ -37,11 +19,6 @@ internal interface IMihomoServiceDeploymentContext
     /// <summary>Ensures a TUN-enabled runtime configuration exists for the service.</summary>
     CoreConfigurationState EnsureTransparentProxyConfiguration();
 }
-
-/// <summary>Small command result record.</summary>
-/// <param name="ExitCode">Process exit code.</param>
-/// <param name="Output">Captured output text; never null.</param>
-internal readonly record struct MihomoServiceCommandResult(int ExitCode, string Output);
 
 /// <summary>Manages the optional Windows service used as transparent proxy prerequisite.</summary>
 /// <remarks>
@@ -57,7 +34,11 @@ public sealed partial class MihomoServiceManager
     /// <summary>Windows service display name.</summary>
     private const string ServiceDisplayName = "Clash# Mihomo Service";
 
-    private readonly IMihomoServiceCommandRunner _commandRunner;
+    private static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(5);
+
+    private static readonly TimeSpan ElevatedOperationTimeout = TimeSpan.FromSeconds(30);
+
+    private readonly IProcessRunner _processRunner;
 
     private readonly IMihomoServiceDeploymentContext _deploymentContext;
 
@@ -65,11 +46,11 @@ public sealed partial class MihomoServiceManager
 
     /// <summary>Initializes the service manager.</summary>
     internal MihomoServiceManager(
-        IMihomoServiceCommandRunner commandRunner,
+        IProcessRunner processRunner,
         IMihomoServiceDeploymentContext deploymentContext,
         Func<string, string> getString)
     {
-        _commandRunner = commandRunner ?? throw new ArgumentNullException(nameof(commandRunner));
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _deploymentContext = deploymentContext ?? throw new ArgumentNullException(nameof(deploymentContext));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
@@ -78,19 +59,35 @@ public sealed partial class MihomoServiceManager
     /// <returns>Service deployment status.</returns>
     public MihomoServiceStatus GetStatus()
     {
-        MihomoServiceCommandResult result = _commandRunner.RunSc("query", ServiceName);
-        if (result.ExitCode != 0)
+        return QueryStatus().Status;
+    }
+
+    private ServiceQueryResult QueryStatus()
+    {
+        ProcessRunResult result = RunSc("query", ServiceName);
+        if (result.Outcome == ProcessRunOutcome.Completed && result.ExitCode == 1060)
         {
-            return new MihomoServiceStatus(false, false, GetString("MihomoService.Status.NotDeployed"));
+            return new ServiceQueryResult(
+                true,
+                new MihomoServiceStatus(false, false, GetString("MihomoService.Status.NotDeployed")));
         }
 
-        bool isRunning = result.Output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
-        return new MihomoServiceStatus(
+        if (result.Outcome != ProcessRunOutcome.Completed || result.ExitCode != 0)
+        {
+            return new ServiceQueryResult(
+                false,
+                new MihomoServiceStatus(false, false, GetString("MihomoService.Status.NotDeployed")));
+        }
+
+        bool isRunning = result.CombinedOutput.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
+        return new ServiceQueryResult(
             true,
-            isRunning,
-            isRunning
-                ? GetString("MihomoService.Status.DeployedRunning")
-                : GetString("MihomoService.Status.Deployed"));
+            new MihomoServiceStatus(
+                true,
+                isRunning,
+                isRunning
+                    ? GetString("MihomoService.Status.DeployedRunning")
+                    : GetString("MihomoService.Status.Deployed")));
     }
 
     /// <summary>Deploys the Windows service when a service host is available.</summary>
@@ -98,7 +95,13 @@ public sealed partial class MihomoServiceManager
     /// <returns>Updated service status or failure status.</returns>
     public async Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
     {
-        MihomoServiceStatus current = GetStatus();
+        ServiceQueryResult currentQuery = QueryStatus();
+        if (!currentQuery.IsConclusive)
+        {
+            return new MihomoServiceStatus(false, false, GetString("MihomoService.Status.DeploymentFailed"));
+        }
+
+        MihomoServiceStatus current = currentQuery.Status;
         if (current.IsInstalled)
         {
             return current;
@@ -118,7 +121,7 @@ public sealed partial class MihomoServiceManager
             + " --config " + Quote(configPath)
             + " --workdir " + Quote(workDirectory);
 
-        MihomoServiceCommandResult createResult = await _commandRunner.RunScElevatedAsync(
+        ProcessRunResult createResult = await RunScElevatedAsync(
             cancellationToken,
             "create",
             ServiceName,
@@ -128,13 +131,20 @@ public sealed partial class MihomoServiceManager
             "demand",
             "DisplayName=",
             ServiceDisplayName).ConfigureAwait(false);
+        ServiceQueryResult observedQuery = QueryStatus();
+        ThrowIfCancelled(createResult, cancellationToken);
 
-        if (createResult.ExitCode != 0)
+        if (observedQuery.IsConclusive && observedQuery.Status.IsInstalled)
+        {
+            return observedQuery.Status;
+        }
+
+        if (createResult.Outcome != ProcessRunOutcome.Completed || createResult.ExitCode != 0)
         {
             return new MihomoServiceStatus(false, false, GetString("MihomoService.Status.DeploymentFailed"));
         }
 
-        return GetStatus();
+        return new MihomoServiceStatus(false, false, GetString("MihomoService.Status.DeploymentFailed"));
     }
 
     /// <summary>Uninstalls the Windows service.</summary>
@@ -142,20 +152,89 @@ public sealed partial class MihomoServiceManager
     /// <returns>Updated service status.</returns>
     public async Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
     {
-        MihomoServiceStatus current = GetStatus();
+        ServiceQueryResult currentQuery = QueryStatus();
+        if (!currentQuery.IsConclusive)
+        {
+            return CreateRemovalFailed(currentQuery.Status);
+        }
+
+        MihomoServiceStatus current = currentQuery.Status;
         if (!current.IsInstalled)
         {
             return current;
         }
 
-        await _commandRunner.RunScElevatedAsync(cancellationToken, "stop", ServiceName).ConfigureAwait(false);
-        MihomoServiceCommandResult deleteResult = await _commandRunner.RunScElevatedAsync(cancellationToken, "delete", ServiceName).ConfigureAwait(false);
-        if (deleteResult.ExitCode != 0)
+        ProcessRunResult stopResult = await RunScElevatedAsync(
+            cancellationToken,
+            "stop",
+            ServiceName).ConfigureAwait(false);
+        ServiceQueryResult afterStopQuery = QueryStatus();
+        ThrowIfCancelled(stopResult, cancellationToken);
+        if (!afterStopQuery.IsConclusive)
         {
-            return new MihomoServiceStatus(true, current.IsRunning, GetString("MihomoService.Status.RemovalFailed"));
+            return CreateRemovalFailed(current);
         }
 
-        return GetStatus();
+        MihomoServiceStatus afterStop = afterStopQuery.Status;
+        if (!afterStop.IsInstalled)
+        {
+            return afterStop;
+        }
+
+        if (stopResult.Outcome is ProcessRunOutcome.TimedOut or ProcessRunOutcome.StartFailed)
+        {
+            return CreateRemovalFailed(afterStop);
+        }
+
+        ProcessRunResult deleteResult = await RunScElevatedAsync(
+            cancellationToken,
+            "delete",
+            ServiceName).ConfigureAwait(false);
+        ServiceQueryResult afterDeleteQuery = QueryStatus();
+        ThrowIfCancelled(deleteResult, cancellationToken);
+        if (!afterDeleteQuery.IsConclusive)
+        {
+            return CreateRemovalFailed(afterStop);
+        }
+
+        MihomoServiceStatus afterDelete = afterDeleteQuery.Status;
+        return afterDelete.IsInstalled
+            ? CreateRemovalFailed(afterDelete)
+            : afterDelete;
+    }
+
+    private ProcessRunResult RunSc(params string[] arguments)
+    {
+        ProcessRequest request = new("sc.exe", arguments, QueryTimeout);
+        return _processRunner.RunAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    private Task<ProcessRunResult> RunScElevatedAsync(
+        CancellationToken cancellationToken,
+        params string[] arguments)
+    {
+        ProcessRequest request = new(
+            "sc.exe",
+            arguments,
+            ElevatedOperationTimeout,
+            runElevated: true);
+        return _processRunner.RunAsync(request, cancellationToken);
+    }
+
+    private MihomoServiceStatus CreateRemovalFailed(MihomoServiceStatus observed)
+    {
+        return new MihomoServiceStatus(
+            observed.IsInstalled,
+            observed.IsRunning,
+            GetString("MihomoService.Status.RemovalFailed"));
+    }
+
+    private static void ThrowIfCancelled(ProcessRunResult result, CancellationToken cancellationToken)
+    {
+        if (result.Outcome == ProcessRunOutcome.Cancelled)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
     }
 
     /// <summary>Quotes one command-line path or value for sc.exe binPath.</summary>
@@ -168,4 +247,6 @@ public sealed partial class MihomoServiceManager
     {
         return _getString(key);
     }
+
+    private readonly record struct ServiceQueryResult(bool IsConclusive, MihomoServiceStatus Status);
 }

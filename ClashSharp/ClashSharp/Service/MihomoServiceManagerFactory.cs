@@ -1,18 +1,6 @@
-/*
- * Mihomo Service Manager Factory
- * Wires production dependencies for transparent-proxy Windows service management
- *
- * @author: WaterRun
- * @file: Service/MihomoServiceManagerFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
+using ClashSharp.Infrastructure.Processes;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -32,7 +20,7 @@ internal static class MihomoServiceManagerFactory
     public static MihomoServiceManager CreateDefault()
     {
         return new MihomoServiceManager(
-            new MihomoServiceCommandRunner(),
+            new WindowsProcessRunner(),
             new MihomoServiceDeploymentContext(
                 AppSettingsService.Instance,
                 CoreConfigurationService.Instance,
@@ -70,66 +58,5 @@ internal sealed class MihomoServiceDeploymentContext(
     public CoreConfigurationState EnsureTransparentProxyConfiguration()
     {
         return configuration.EnsureConfiguration(settings.CurrentMode, transparentProxyEnabled: true);
-    }
-}
-
-internal sealed class MihomoServiceCommandRunner : IMihomoServiceCommandRunner
-{
-    public MihomoServiceCommandResult RunSc(params string[] arguments)
-    {
-        try
-        {
-            using Process process = new()
-            {
-                StartInfo = BuildScStartInfo(useShellExecute: false, verb: null, arguments),
-            };
-            process.Start();
-            string output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
-            process.WaitForExit(5000);
-            return new MihomoServiceCommandResult(process.ExitCode, output);
-        }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
-        {
-            return new MihomoServiceCommandResult(-1, exception.Message);
-        }
-    }
-
-    public async Task<MihomoServiceCommandResult> RunScElevatedAsync(CancellationToken cancellationToken, params string[] arguments)
-    {
-        try
-        {
-            using Process process = new()
-            {
-                StartInfo = BuildScStartInfo(useShellExecute: true, verb: "runas", arguments),
-            };
-            process.Start();
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            return new MihomoServiceCommandResult(process.ExitCode, string.Empty);
-        }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or OperationCanceledException)
-        {
-            return new MihomoServiceCommandResult(-1, exception.Message);
-        }
-    }
-
-    /// <summary>Builds sc.exe process start info.</summary>
-    private static ProcessStartInfo BuildScStartInfo(bool useShellExecute, string? verb, string[] arguments)
-    {
-        ProcessStartInfo startInfo = new()
-        {
-            FileName = "sc.exe",
-            UseShellExecute = useShellExecute,
-            Verb = verb ?? string.Empty,
-            CreateNoWindow = !useShellExecute,
-            RedirectStandardOutput = !useShellExecute,
-            RedirectStandardError = !useShellExecute,
-        };
-
-        foreach (string argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        return startInfo;
     }
 }

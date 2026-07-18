@@ -643,7 +643,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the mihomo service manager uses injected command, deployment, and localization dependencies.</summary>
+    /// <summary>Verifies the mihomo service manager uses the shared typed process boundary.</summary>
     [Fact]
     public void MihomoServiceManager_UsesInjectedDependencies()
     {
@@ -656,9 +656,35 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("CoreConfigurationService.Instance", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("MihomoCoreService.Instance", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("new Process", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IMihomoServiceCommandRunner", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IMihomoServiceCommandRunner", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProcessStartInfo", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("WaitForExit", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IProcessRunner", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ProcessRunOutcome", serviceCode, StringComparison.Ordinal);
         Assert.Contains("IMihomoServiceDeploymentContext", serviceCode, StringComparison.Ordinal);
         Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies the shared Windows runner uses argument lists, parallel drains, and tree termination.</summary>
+    [Fact]
+    public void WindowsProcessRunner_UsesSafeBoundedExecutionPrimitives()
+    {
+        string runnerPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Infrastructure",
+            "Processes",
+            "WindowsProcessRunner.cs");
+
+        string runnerCode = File.ReadAllText(runnerPath);
+
+        Assert.Contains("ArgumentList.Add", runnerCode, StringComparison.Ordinal);
+        Assert.Contains("StandardOutput.ReadToEndAsync", runnerCode, StringComparison.Ordinal);
+        Assert.Contains("StandardError.ReadToEndAsync", runnerCode, StringComparison.Ordinal);
+        Assert.Contains("Task.WhenAny", runnerCode, StringComparison.Ordinal);
+        Assert.Contains("Kill(entireProcessTree: true)", runnerCode, StringComparison.Ordinal);
+        Assert.Contains("WaitForExitAsync", runnerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("string.Join", runnerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("startInfo.Arguments", runnerCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the Windows service host registers with the SCM service name, not the display name.</summary>
