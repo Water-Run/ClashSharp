@@ -1,12 +1,3 @@
-/*
- * Connection Sampling Service Tests
- * Verifies background connection sampling orchestration through injected dependencies
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/ConnectionSamplingServiceTests.cs
- * @date: 2026-06-25
- */
-
 using System.Net.Http;
 using ClashSharp.Model;
 using ClashSharp.Service;
@@ -25,6 +16,24 @@ public sealed class ConnectionSamplingServiceTests
         service.StartIfEnabled();
 
         Assert.False(service.IsRunning);
+    }
+
+    /// <summary>Verifies lifecycle quiescence blocks replacement loops until the prior state is resumed.</summary>
+    [Fact]
+    public async Task QuiesceAsync_BlocksStartsUntilResumeRestoresPriorRunningState()
+    {
+        ConnectionSamplingService service = CreateService();
+        service.Start();
+
+        bool wasRunning = await service.QuiesceAsync(CancellationToken.None);
+        service.Start();
+
+        Assert.True(wasRunning);
+        Assert.False(service.IsRunning);
+
+        service.ResumeAfterQuiescence(wasRunning);
+        Assert.True(service.IsRunning);
+        await service.StopAsync(CancellationToken.None);
     }
 
     /// <summary>Verifies one failed sample logs one localized warning and repeated failures are suppressed.</summary>

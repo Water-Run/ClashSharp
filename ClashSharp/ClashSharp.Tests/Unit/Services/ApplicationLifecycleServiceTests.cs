@@ -1,12 +1,4 @@
-/*
- * Application Lifecycle Service Tests
- * Verifies Settings uses a service boundary for exit and restart commands
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/ApplicationLifecycleServiceTests.cs
- * @date: 2026-06-29
- */
-
+using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.Service;
 
 namespace ClashSharp.Tests.Unit.Services;
@@ -14,57 +6,37 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class ApplicationLifecycleServiceTests
 {
     [Fact]
-    public void ExitApplication_ShutsDownRuntimeBeforeExiting()
+    public void ExitApplication_EnqueuesOuterLifetimeRequestAndReturns()
     {
-        List<string> calls = [];
-        ApplicationLifecycleService service = CreateService(calls);
+        FakeLifetimeRequestSink sink = new();
+        ApplicationLifecycleService service = new(sink);
 
         service.ExitApplication();
 
-        Assert.Equal(["shutdown", "exit"], calls);
+        ApplicationLifetimeRequest request = Assert.Single(sink.Requests);
+        Assert.Equal(ApplicationLifetimeRequestKind.Exit, request.Kind);
     }
 
     [Fact]
-    public void RestartApplication_ShutsDownStartsCurrentExecutableThenExits()
+    public void RestartApplication_EnqueuesRestartWithoutLaunchingAProcessInline()
     {
-        List<string> calls = [];
-        ApplicationLifecycleService service = CreateService(calls);
+        FakeLifetimeRequestSink sink = new();
+        ApplicationLifecycleService service = new(sink);
 
         service.RestartApplication();
 
-        Assert.Equal(["shutdown", @"start:C:\Apps\ClashSharp.exe", "exit"], calls);
+        ApplicationLifetimeRequest request = Assert.Single(sink.Requests);
+        Assert.Equal(ApplicationLifetimeRequestKind.Restart, request.Kind);
     }
 
-    private static ApplicationLifecycleService CreateService(List<string> calls)
+    private sealed class FakeLifetimeRequestSink : IApplicationLifetimeRequestSink
     {
-        return new ApplicationLifecycleService(
-            new FakeRuntimeShutdown(calls),
-            new FakeProcessLauncher(calls),
-            new FakeApplicationExit(calls),
-            () => @"C:\Apps\ClashSharp.exe");
-    }
+        public List<ApplicationLifetimeRequest> Requests { get; } = [];
 
-    private sealed class FakeRuntimeShutdown(List<string> calls) : IApplicationLifecycleRuntimeShutdown
-    {
-        public void Shutdown()
+        public bool TryRequest(ApplicationLifetimeRequest request)
         {
-            calls.Add("shutdown");
-        }
-    }
-
-    private sealed class FakeProcessLauncher(List<string> calls) : IApplicationLifecycleProcessLauncher
-    {
-        public void Start(string executablePath)
-        {
-            calls.Add($"start:{executablePath}");
-        }
-    }
-
-    private sealed class FakeApplicationExit(List<string> calls) : IApplicationLifecycleExit
-    {
-        public void Exit()
-        {
-            calls.Add("exit");
+            Requests.Add(request);
+            return true;
         }
     }
 }

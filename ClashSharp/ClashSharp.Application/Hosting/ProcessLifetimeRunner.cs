@@ -55,9 +55,23 @@ public sealed class ProcessLifetimeRunner
             }
 
             IApplicationHost host = _host;
-            _host = null;
-            _stopTask = StopAndDisposeAsync(host, cancellationToken);
+            _stopTask = StopAttachedAndDisposeAsync(host, cancellationToken);
             return _stopTask;
+        }
+    }
+
+    private async Task StopAttachedAndDisposeAsync(
+        IApplicationHost host,
+        CancellationToken cancellationToken)
+    {
+        await host.StopAsync(cancellationToken).ConfigureAwait(false);
+        await host.DisposeAsync().ConfigureAwait(false);
+        lock (_syncLock)
+        {
+            if (ReferenceEquals(_host, host))
+            {
+                _host = null;
+            }
         }
     }
 

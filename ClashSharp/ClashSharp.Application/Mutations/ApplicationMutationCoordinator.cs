@@ -1,7 +1,19 @@
 namespace ClashSharp.ApplicationModel.Mutations;
 
+internal interface IAdmittedApplicationMutationCoordinator
+{
+    Task<MutationResult<T>> ExecuteAdmittedAsync<T>(
+        MutationAdmissionLease admissionLease,
+        MutationRequest request,
+        Func<MutationContext, CancellationToken, Task<MutationPlan>> planFactory,
+        Func<MutationContext, CancellationToken, Task<T>> resultFactory,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Executes top-level mutations through admission, a fair gate, durable phases, and bounded recovery.</summary>
-public sealed class ApplicationMutationCoordinator : IApplicationMutationCoordinator
+public sealed class ApplicationMutationCoordinator :
+    IApplicationMutationCoordinator,
+    IAdmittedApplicationMutationCoordinator
 {
     private readonly MutationAdmissionBarrier _admissionBarrier;
     private readonly FairAsyncMutationGate _mutationGate;
@@ -122,6 +134,57 @@ public sealed class ApplicationMutationCoordinator : IApplicationMutationCoordin
         if (recoveryReady is not null)
         {
             await recoveryReady.ConfigureAwait(false);
+        }
+
+        return execution.Result;
+    }
+
+    async Task<MutationResult<T>> IAdmittedApplicationMutationCoordinator.ExecuteAdmittedAsync<T>(
+        MutationAdmissionLease admissionLease,
+        MutationRequest request,
+        Func<MutationContext, CancellationToken, Task<MutationPlan>> planFactory,
+        Func<MutationContext, CancellationToken, Task<T>> resultFactory,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(admissionLease);
+        ValidateRequest(request);
+        ArgumentNullException.ThrowIfNull(planFactory);
+        ArgumentNullException.ThrowIfNull(resultFactory);
+        if (!admissionLease.IsOwnedBy(_admissionBarrier)
+            || !admissionLease.IsExclusive
+            || _admissionBarrier.State != MutationAdmissionState.Closing)
+        {
+            throw new InvalidOperationException(
+                "An admitted mutation requires the active drained destructive admission lease.");
+        }
+
+        ExecutionEnvelope<T> execution;
+        try
+        {
+            execution = await _mutationGate.ExecuteAsync(
+                request.OperationId,
+                async (context, gateToken) =>
+                {
+                    ExecutionEnvelope<T> result = await ExecutePlannedMutationAsync(
+                        request,
+                        planFactory,
+                        resultFactory,
+                        context,
+                        gateToken).ConfigureAwait(false);
+                    if (result.RetainRecovery)
+                    {
+                        _ = _admissionBarrier.BeginRecoveryOnlyTransition(admissionLease);
+                    }
+
+                    return result;
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            execution = new ExecutionEnvelope<T>(
+                CreateResult<T>(request.OperationId, MutationOutcome.Cancelled, default, "mutation-cancelled"),
+                RetainRecovery: false);
         }
 
         return execution.Result;

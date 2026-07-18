@@ -12,6 +12,7 @@ internal sealed class WindowShellStartupStep(
     Action<Window> attachWindow,
     TriggerService triggers,
     ApplicationActionService actions,
+    ApplicationLifecycleService lifecycle,
     TrayCommandService trayCommands,
     StartupConflictSnapshot startupConflicts) : IStartupStep
 {
@@ -22,7 +23,7 @@ internal sealed class WindowShellStartupStep(
     public Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        MainWindow window = new(triggers, actions, trayCommands, startupConflicts);
+        MainWindow window = new(triggers, actions, lifecycle, trayCommands, startupConflicts);
         attachWindow(window);
         window.Activate();
         return Task.FromResult(StartupStepResult.Succeeded());

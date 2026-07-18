@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Hosting;
+using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Hosting;
 using Microsoft.UI.Dispatching;
@@ -22,8 +23,10 @@ public partial class App : Microsoft.UI.Xaml.Application
     private static Window? _mainWindow;
 
     private readonly ProcessLifetimeRunner _lifetimeRunner = new();
+    private readonly ApplicationLifetimeRequestChannel _lifetimeRequests = new();
     private WindowsPrimaryInstanceBootstrap? _primaryInstanceBootstrap;
     private Task? _shutdownTask;
+    private Task? _lifetimeRequestConsumer;
     private bool _activationPending;
 
     /// <summary>Gets the primary application window instance for global access.</summary>
@@ -47,20 +50,23 @@ public partial class App : Microsoft.UI.Xaml.Application
             _primaryInstanceBootstrap = new WindowsPrimaryInstanceBootstrap(dispatcherQueue, BringPrimaryWindowToFront);
             ApplicationBootstrapper bootstrapper = new(
                 _primaryInstanceBootstrap,
-                () => ClashSharpAppHostFactory.Build(AttachMainWindow),
+                () => ClashSharpAppHostFactory.Build(AttachMainWindow, _lifetimeRequests),
                 _lifetimeRunner);
             ApplicationLaunchResult result = await bootstrapper.LaunchAsync(
                 new AppLaunchRequest(args.Arguments),
                 CancellationToken.None);
             if (result.Disposition != ApplicationLaunchDisposition.Running)
             {
-                await StopAndExitAsync();
+                await StopAndExitAsync(restart: false);
+                return;
             }
+
+            _lifetimeRequestConsumer = ConsumeLifetimeRequestAsync(dispatcherQueue);
         }
         catch (Exception exception)
         {
             Debug.WriteLine($"ClashSharp startup failed: {exception}");
-            await StopAndExitAsync();
+            await StopAndExitAsync(restart: false);
         }
     }
 
@@ -92,7 +98,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         _mainWindow.Activate();
     }
 
-    private async void OnMainWindowClosed(object sender, WindowEventArgs args)
+    private void OnMainWindowClosed(object sender, WindowEventArgs args)
     {
         if (_mainWindow is not null)
         {
@@ -100,16 +106,54 @@ public partial class App : Microsoft.UI.Xaml.Application
             _mainWindow = null;
         }
 
-        await StopAndExitAsync();
+        _lifetimeRequests.TryRequest(ApplicationLifetimeRequest.Exit("main-window"));
     }
 
-    private Task StopAndExitAsync()
+    private Task StopAndExitAsync(bool restart)
     {
-        return _shutdownTask ??= StopAndExitCoreAsync();
+        return _shutdownTask ??= StopAndExitCoreAsync(restart);
     }
 
-    private async Task StopAndExitCoreAsync()
+    private async Task ConsumeLifetimeRequestAsync(DispatcherQueue dispatcherQueue)
     {
+        ApplicationLifetimeRequest request = await _lifetimeRequests
+            .ReadAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        TaskCompletionSource<object?> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dispatcherQueue.TryEnqueue(() => ProcessLifetimeRequestOnDispatcher(request, completion)))
+        {
+            completion.TrySetException(new InvalidOperationException(
+                "The UI dispatcher rejected the application lifetime request."));
+        }
+
+        try
+        {
+            await completion.Task.ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"ClashSharp lifetime request failed: {exception}");
+        }
+    }
+
+    private async void ProcessLifetimeRequestOnDispatcher(
+        ApplicationLifetimeRequest request,
+        TaskCompletionSource<object?> completion)
+    {
+        try
+        {
+            await StopAndExitAsync(request.Kind == ApplicationLifetimeRequestKind.Restart);
+            completion.TrySetResult(null);
+        }
+        catch (Exception exception)
+        {
+            completion.TrySetException(exception);
+        }
+    }
+
+    private async Task StopAndExitCoreAsync(bool restart)
+    {
+        string? executablePath = restart ? ResolveExecutablePath() : null;
         try
         {
             await _lifetimeRunner.StopAsync(CancellationToken.None);
@@ -117,22 +161,45 @@ public partial class App : Microsoft.UI.Xaml.Application
         catch (Exception exception)
         {
             Debug.WriteLine($"ClashSharp shutdown failed: {exception}");
+            return;
+        }
+
+        try
+        {
+            _primaryInstanceBootstrap?.Dispose();
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"ClashSharp instance cleanup failed: {exception}");
         }
         finally
         {
+            _primaryInstanceBootstrap = null;
+        }
+
+        if (executablePath is not null)
+        {
             try
             {
-                _primaryInstanceBootstrap?.Dispose();
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = executablePath,
+                    UseShellExecute = true,
+                });
             }
             catch (Exception exception)
             {
-                Debug.WriteLine($"ClashSharp instance cleanup failed: {exception}");
-            }
-            finally
-            {
-                _primaryInstanceBootstrap = null;
-                Exit();
+                Debug.WriteLine($"ClashSharp restart failed: {exception}");
             }
         }
+
+        Exit();
+    }
+
+    private static string ResolveExecutablePath()
+    {
+        return Environment.ProcessPath
+            ?? Process.GetCurrentProcess().MainModule?.FileName
+            ?? "ClashSharp.exe";
     }
 }

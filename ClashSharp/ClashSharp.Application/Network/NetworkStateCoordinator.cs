@@ -1,9 +1,10 @@
+using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 
 namespace ClashSharp.ApplicationModel.Network;
 
 /// <summary>Routes every network transition through the process-wide mutation owner.</summary>
-public sealed class NetworkStateCoordinator
+public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
 {
     /// <summary>Stable journal operation type used by network recovery.</summary>
     public const string OperationType = "network.transition";
@@ -56,6 +57,46 @@ public sealed class NetworkStateCoordinator
             cancellationToken);
     }
 
+    /// <inheritdoc />
+    public Task<MutationResult<NetworkTransitionResult>> ApplyShutdownAsync(
+        NetworkIntent intent,
+        MutationAdmissionLease admissionLease,
+        CancellationToken cancellationToken)
+    {
+        NetworkIntent.Validate(intent);
+        if (intent.Kind != NetworkIntentKind.Shutdown)
+        {
+            throw new ArgumentException("The runtime shutdown path requires a shutdown network intent.", nameof(intent));
+        }
+
+        if (_mutations is not IAdmittedApplicationMutationCoordinator admittedMutations)
+        {
+            throw new InvalidOperationException(
+                "The configured mutation coordinator does not support pre-drained shutdown admission.");
+        }
+
+        NetworkMutationParticipant? participant = null;
+        MutationRequest request = MutationRequest.Create(OperationType);
+        return admittedMutations.ExecuteAdmittedAsync(
+            admissionLease,
+            request,
+            async (context, token) =>
+            {
+                NetworkPlan plan = await PlanAsync(context, intent, token).ConfigureAwait(false);
+                participant = new NetworkMutationParticipant(_adapter, plan);
+                return NetworkMutationPlanFactory.Create(participant, _committer);
+            },
+            (context, token) =>
+            {
+                _mutations.EnsureContextOwnership(context);
+                token.ThrowIfCancellationRequested();
+                return Task.FromResult(
+                    participant?.CreateResult()
+                    ?? throw new InvalidOperationException("The shutdown network participant was not created."));
+            },
+            cancellationToken);
+    }
+
     /// <summary>Builds a network plan only while the owning mutation context is active.</summary>
     /// <param name="context">Active context issued by the owning mutation coordinator.</param>
     /// <param name="intent">Validated desired network state.</param>
@@ -102,7 +143,10 @@ public sealed class NetworkMutationRecoveryPlanResolver : IMutationRecoveryPlanR
 
         NetworkPlan plan = await _adapter.RestorePlanAsync(journal, cancellationToken).ConfigureAwait(false);
         NetworkMutationPlanFactory.Validate(plan, plan.Intent);
-        NetworkMutationParticipant participant = new(_adapter, plan);
+        NetworkMutationParticipant participant = new(
+            _adapter,
+            plan,
+            preferDesiredWhenEquivalent: journal.HasCommitMarker);
         return NetworkMutationPlanFactory.Create(participant, _committer);
     }
 }
@@ -146,9 +190,11 @@ internal static class NetworkMutationPlanFactory
 
 internal sealed class NetworkMutationParticipant(
     INetworkStateAdapter adapter,
-    NetworkPlan plan) : IApplicationMutationParticipant
+    NetworkPlan plan,
+    bool preferDesiredWhenEquivalent = false) : IApplicationMutationParticipant
 {
     private NetworkStateSnapshot? _verifiedState;
+    private bool _applied = preferDesiredWhenEquivalent;
 
     public string Name => "network-state";
 
@@ -166,12 +212,31 @@ internal sealed class NetworkMutationParticipant(
             return MutationProbeState.Unknown;
         }
 
-        if (string.Equals(state.StateHash, plan.Baseline.StateHash, StringComparison.Ordinal))
+        bool matchesBaseline = string.Equals(
+            state.StateHash,
+            plan.Baseline.StateHash,
+            StringComparison.Ordinal);
+        bool matchesDesired = string.Equals(
+            state.StateHash,
+            plan.Desired.StateHash,
+            StringComparison.Ordinal);
+        if (matchesBaseline && matchesDesired)
+        {
+            if (_applied)
+            {
+                _verifiedState = state;
+                return MutationProbeState.Desired;
+            }
+
+            return MutationProbeState.Baseline;
+        }
+
+        if (matchesBaseline)
         {
             return MutationProbeState.Baseline;
         }
 
-        if (string.Equals(state.StateHash, plan.Desired.StateHash, StringComparison.Ordinal))
+        if (matchesDesired)
         {
             _verifiedState = state;
             return MutationProbeState.Desired;
@@ -190,9 +255,10 @@ internal sealed class NetworkMutationParticipant(
         return adapter.StageAsync(plan, cancellationToken);
     }
 
-    public Task ApplyAsync(MutationContext context, CancellationToken cancellationToken)
+    public async Task ApplyAsync(MutationContext context, CancellationToken cancellationToken)
     {
-        return adapter.ApplyAsync(plan, cancellationToken);
+        await adapter.ApplyAsync(plan, cancellationToken).ConfigureAwait(false);
+        _applied = true;
     }
 
     public async Task VerifyAsync(MutationContext context, CancellationToken cancellationToken)
@@ -204,10 +270,11 @@ internal sealed class NetworkMutationParticipant(
         }
     }
 
-    public Task CompensateAsync(MutationContext context, CancellationToken cancellationToken)
+    public async Task CompensateAsync(MutationContext context, CancellationToken cancellationToken)
     {
         _verifiedState = null;
-        return adapter.CompensateAsync(plan, cancellationToken);
+        await adapter.CompensateAsync(plan, cancellationToken).ConfigureAwait(false);
+        _applied = false;
     }
 
     public Task ActivateAsync(MutationContext context, CancellationToken cancellationToken)

@@ -120,6 +120,51 @@ public sealed class NetworkMutationConcurrencyTests
         Assert.Equal(planCount, fixture.Adapter.PlanCount);
     }
 
+    /// <summary>Verifies shutdown reuses a drained lease instead of attempting nested ordinary admission.</summary>
+    [Fact]
+    public async Task ApplyShutdownAsync_DrainedAdmission_ExecutesOneJournaledNetworkMutation()
+    {
+        Fixture fixture = new();
+        MutationAdmissionLease lease = await fixture.Barrier.CloseAndDrainAsync(
+            MutationAdmissionClosure.Destructive,
+            CancellationToken.None);
+
+        MutationResult<NetworkTransitionResult> result = await fixture.Network.ApplyShutdownAsync(
+            NetworkIntent.Shutdown(ClashSharpMode.Disabled, false, 7890),
+            lease,
+            CancellationToken.None);
+        lease.CommitShutdown();
+        await lease.DisposeAsync();
+
+        Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, fixture.Barrier.State);
+        Assert.Null(fixture.Store.Current);
+        Assert.Equal(1, fixture.Adapter.PlanCount);
+    }
+
+    /// <summary>Verifies committed shutdown can become terminal while preserving its forward-recovery journal.</summary>
+    [Fact]
+    public async Task ApplyShutdownAsync_CommittedCleanupFails_TerminalShutdownPreservesJournal()
+    {
+        Fixture fixture = new();
+        fixture.Adapter.CleanupException = new InvalidOperationException("cleanup failed");
+        MutationAdmissionLease lease = await fixture.Barrier.CloseAndDrainAsync(
+            MutationAdmissionClosure.Destructive,
+            CancellationToken.None);
+
+        MutationResult<NetworkTransitionResult> result = await fixture.Network.ApplyShutdownAsync(
+            NetworkIntent.Shutdown(ClashSharpMode.Standby, false, 7890),
+            lease,
+            CancellationToken.None);
+        lease.CommitShutdown();
+        await lease.DisposeAsync();
+
+        Assert.Equal(MutationOutcome.CommittedRecoveryRequired, result.Outcome);
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, fixture.Barrier.State);
+        Assert.NotNull(fixture.Store.Current);
+        Assert.True(fixture.Store.Current.Journal.HasCommitMarker);
+    }
+
     private sealed class Fixture
     {
         public Fixture()
@@ -162,6 +207,8 @@ public sealed class NetworkMutationConcurrencyTests
         public NetworkStateSnapshot Current { get; private set; } = CreateState(ClashSharpMode.Disabled, false, 7890);
 
         public Exception? ApplyException { get; set; }
+
+        public Exception? CleanupException { get; set; }
 
         public TaskCompletionSource<object?>? FirstStageEntered { get; set; }
 
@@ -252,7 +299,9 @@ public sealed class NetworkMutationConcurrencyTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             trace.Add($"cleanup:{plan.Intent.Mode}");
-            return Task.CompletedTask;
+            return CleanupException is null
+                ? Task.CompletedTask
+                : Task.FromException(CleanupException);
         }
 
         private static NetworkStateSnapshot CreateState(ClashSharpMode mode, bool transparentProxyEnabled, int mixedPort)

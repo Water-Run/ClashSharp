@@ -1,12 +1,3 @@
-/*
- * Trigger Service
- * Stores, orders, evaluates, and executes user-defined trigger tasks
- *
- * @author: WaterRun
- * @file: Service/TriggerService.cs
- * @date: 2026-06-26
- */
-
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -63,6 +54,8 @@ internal sealed class TriggerService
     private int _runtimeEventDrainActive;
     private int _periodicEvaluationActive;
     private int _triggerGeneratedNotificationSuppressionDepth;
+    private int _acceptRuntimeWork = 1;
+    private int _evaluationActive;
 
     public TriggerService(
         string storagePath,
@@ -100,21 +93,40 @@ internal sealed class TriggerService
         Load();
     }
 
-    /// <summary>Ensures the singleton instance has been constructed and subscribed to runtime events.</summary>
+    /// <summary>Enables runtime-event and periodic trigger scheduling.</summary>
     public void Start()
     {
         lock (_syncLock)
         {
+            Volatile.Write(ref _acceptRuntimeWork, 1);
             _periodicStartRequested = true;
         }
 
         StartPeriodicTimerIfEnabled();
     }
 
-    /// <summary>Stops periodic trigger evaluation for this service instance.</summary>
+    /// <summary>Prevents new runtime-event and periodic trigger evaluation.</summary>
     public void Stop()
     {
+        lock (_syncLock)
+        {
+            Volatile.Write(ref _acceptRuntimeWork, 0);
+        }
+
         StopPeriodicTimer(keepStartRequested: false);
+    }
+
+    internal bool IsAcceptingRuntimeWork => Volatile.Read(ref _acceptRuntimeWork) == 1;
+
+    internal async Task QuiesceAsync(CancellationToken cancellationToken)
+    {
+        Stop();
+        while (Volatile.Read(ref _evaluationActive) != 0
+            || Volatile.Read(ref _runtimeEventDrainActive) != 0
+            || Volatile.Read(ref _periodicEvaluationActive) != 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public bool TriggersEnabled
@@ -226,77 +238,103 @@ internal sealed class TriggerService
 
     public async Task<IReadOnlyList<TriggerExecutionResult>> EvaluateAsync(TriggerEvaluationContext context, CancellationToken cancellationToken)
     {
-        if (!TriggersEnabled)
+        if (!TryBeginEvaluation())
         {
             return [];
         }
 
-        List<TriggerExecutionResult> results = [];
-        foreach (TriggerTask task in GetTasks())
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!task.IsEnabled || !Matches(task, context))
+            if (!TriggersEnabled)
             {
-                continue;
+                return [];
             }
 
-            DateTimeOffset triggeredAt = _getNow();
-            if (IsPeriodicCooldownActive(task, context, triggeredAt))
+            List<TriggerExecutionResult> results = [];
+            foreach (TriggerTask task in GetTasks())
             {
-                continue;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!task.IsEnabled || !Matches(task, context))
+                {
+                    continue;
+                }
+
+                DateTimeOffset triggeredAt = _getNow();
+                if (IsPeriodicCooldownActive(task, context, triggeredAt))
+                {
+                    continue;
+                }
+
+                bool taskFailed = false;
+                foreach (TriggerAction action in task.Actions)
+                {
+                    try
+                    {
+                        await ExecuteActionAsync(action, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        taskFailed = true;
+                        AppendActionFailureLog(task, action, exception);
+                        break;
+                    }
+                }
+
+                if (taskFailed)
+                {
+                    continue;
+                }
+
+                task.LastTriggeredAt = triggeredAt;
+                results.Add(new TriggerExecutionResult(task.Id, task.Name, triggeredAt, task.Actions.ToArray()));
+                _appendLog(
+                    "Info",
+                    TriggerLog,
+                    string.Format(CultureInfo.CurrentCulture, _getString("Triggers.Log.Fired.Format"), task.Name),
+                    string.Join(", ", task.Actions.Select(FormatActionForLog)));
+                if (TriggerNotificationsEnabled)
+                {
+                    try
+                    {
+                        Interlocked.Increment(ref _triggerGeneratedNotificationSuppressionDepth);
+                        _notifications.NotifyTriggerFired(task.Name);
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref _triggerGeneratedNotificationSuppressionDepth);
+                    }
+                }
             }
 
-            bool taskFailed = false;
-            foreach (TriggerAction action in task.Actions)
+            if (results.Count > 0)
             {
-                try
-                {
-                    await ExecuteActionAsync(action, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception exception)
-                {
-                    taskFailed = true;
-                    AppendActionFailureLog(task, action, exception);
-                    break;
-                }
+                PersistTriggeredAt(results);
             }
 
-            if (taskFailed)
-            {
-                continue;
-            }
-
-            task.LastTriggeredAt = triggeredAt;
-            results.Add(new TriggerExecutionResult(task.Id, task.Name, triggeredAt, task.Actions.ToArray()));
-            _appendLog(
-                "Info",
-                TriggerLog,
-                string.Format(CultureInfo.CurrentCulture, _getString("Triggers.Log.Fired.Format"), task.Name),
-                string.Join(", ", task.Actions.Select(FormatActionForLog)));
-            if (TriggerNotificationsEnabled)
-            {
-                try
-                {
-                    Interlocked.Increment(ref _triggerGeneratedNotificationSuppressionDepth);
-                    _notifications.NotifyTriggerFired(task.Name);
-                }
-                finally
-                {
-                    Interlocked.Decrement(ref _triggerGeneratedNotificationSuppressionDepth);
-                }
-            }
+            return results;
         }
-
-        if (results.Count > 0)
+        finally
         {
-            PersistTriggeredAt(results);
+            Interlocked.Decrement(ref _evaluationActive);
         }
+    }
 
-        return results;
+    private bool TryBeginEvaluation()
+    {
+        lock (_syncLock)
+        {
+            if (Volatile.Read(ref _acceptRuntimeWork) == 0)
+            {
+                return false;
+            }
+
+            Interlocked.Increment(ref _evaluationActive);
+            return true;
+        }
     }
 
     private void PersistTriggeredAt(IReadOnlyList<TriggerExecutionResult> results)
@@ -365,14 +403,25 @@ internal sealed class TriggerService
 
     private void OnRuntimeEventRaised(object? sender, TriggerRuntimeEvent triggerEvent)
     {
-        if (triggerEvent.EventKind == TriggerEventKind.NotificationRaised
-            && Volatile.Read(ref _triggerGeneratedNotificationSuppressionDepth) > 0)
+        bool startDrain;
+        lock (_syncLock)
         {
-            return;
+            if (Volatile.Read(ref _acceptRuntimeWork) == 0
+                || (triggerEvent.EventKind == TriggerEventKind.NotificationRaised
+                    && Volatile.Read(ref _triggerGeneratedNotificationSuppressionDepth) > 0))
+            {
+                return;
+            }
+
+            _pendingRuntimeEvents.Enqueue(triggerEvent);
+            startDrain = _runtimeEventDrainActive == 0;
+            if (startDrain)
+            {
+                _runtimeEventDrainActive = 1;
+            }
         }
 
-        _pendingRuntimeEvents.Enqueue(triggerEvent);
-        if (Interlocked.Exchange(ref _runtimeEventDrainActive, 1) == 1)
+        if (!startDrain)
         {
             return;
         }
@@ -399,9 +448,19 @@ internal sealed class TriggerService
         }
         finally
         {
-            Volatile.Write(ref _runtimeEventDrainActive, 0);
-            if (!_pendingRuntimeEvents.IsEmpty
-                && Interlocked.Exchange(ref _runtimeEventDrainActive, 1) == 0)
+            bool restartDrain;
+            lock (_syncLock)
+            {
+                _runtimeEventDrainActive = 0;
+                restartDrain = Volatile.Read(ref _acceptRuntimeWork) == 1
+                    && !_pendingRuntimeEvents.IsEmpty;
+                if (restartDrain)
+                {
+                    _runtimeEventDrainActive = 1;
+                }
+            }
+
+            if (restartDrain)
             {
                 _ = DrainRuntimeEventsAsync();
             }
@@ -410,9 +469,16 @@ internal sealed class TriggerService
 
     private void OnPeriodicTimer(object? state)
     {
-        if (!TriggersEnabled || Interlocked.Exchange(ref _periodicEvaluationActive, 1) == 1)
+        lock (_syncLock)
         {
-            return;
+            if (Volatile.Read(ref _acceptRuntimeWork) == 0
+                || !TriggersEnabled
+                || _periodicEvaluationActive == 1)
+            {
+                return;
+            }
+
+            _periodicEvaluationActive = 1;
         }
 
         _ = EvaluatePeriodicAsync();

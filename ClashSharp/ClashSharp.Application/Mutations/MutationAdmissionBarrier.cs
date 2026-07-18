@@ -44,6 +44,14 @@ public sealed class MutationAdmissionLease : IDisposable, IAsyncDisposable
         return ReferenceEquals(_owner, barrier);
     }
 
+    /// <summary>Atomically makes a drained destructive lease terminal after shutdown commits.</summary>
+    public void CommitShutdown()
+    {
+        MutationAdmissionBarrier owner = _owner
+            ?? throw new ObjectDisposedException(nameof(MutationAdmissionLease));
+        owner.CommitShutdown(this, _kind);
+    }
+
     /// <summary>Completes the sole recovery attempt and atomically chooses open, retained, or shutdown admission.</summary>
     /// <param name="journalPresent">Whether a replay-capable journal remains durable.</param>
     /// <param name="verifiedSuccess">Whether recovery verified its permitted final state.</param>
@@ -353,6 +361,31 @@ public sealed class MutationAdmissionBarrier
         }
 
         shutdownSignal?.TrySetResult(null);
+    }
+
+    internal void CommitShutdown(
+        MutationAdmissionLease lease,
+        MutationAdmissionLeaseKind kind)
+    {
+        TaskCompletionSource<object?>? recoverySignal;
+        lock (_syncLock)
+        {
+            if (kind != MutationAdmissionLeaseKind.Destructive
+                || !lease.IsOwnedBy(this)
+                || !_exclusiveLeaseActive
+                || _state != MutationAdmissionState.Closing)
+            {
+                throw new InvalidOperationException("Only the active drained destructive lease can commit shutdown.");
+            }
+
+            _pendingRecoveryOnly = false;
+            recoverySignal = _recoveryReadySignal;
+            _recoveryReadySignal = null;
+            _pendingClosure = MutationAdmissionClosure.Shutdown;
+            _state = MutationAdmissionState.ClosedForShutdown;
+        }
+
+        recoverySignal?.TrySetResult(null);
     }
 
     private async Task<MutationAdmissionLease> WaitForDrainAsync(

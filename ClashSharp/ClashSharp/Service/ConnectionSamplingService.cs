@@ -1,12 +1,3 @@
-/*
- * Connection Sampling Service
- * Periodically reads mihomo active connections and writes SQLite statistics
- *
- * @author: WaterRun
- * @file: Service/ConnectionSamplingService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -79,6 +70,9 @@ public sealed partial class ConnectionSamplingService
     /// <summary>Tracks whether the previous sample failed so repeated failures do not flood logs.</summary>
     private bool _lastSampleFailed;
 
+    /// <summary>False while a lifecycle transition prevents new sampling loops from starting.</summary>
+    private bool _acceptStarts = true;
+
     /// <summary>Initializes the connection sampling service.</summary>
     internal ConnectionSamplingService(
         IConnectionSamplingSettings settings,
@@ -121,21 +115,88 @@ public sealed partial class ConnectionSamplingService
     {
         lock (_syncLock)
         {
+            if (!_acceptStarts)
+            {
+                return;
+            }
+
             if (_samplingTask is { IsCompleted: false })
             {
                 return;
             }
 
-            _cancellationTokenSource = new CancellationTokenSource();
-            _samplingTask = Task.Run(() => RunSamplingLoopAsync(_cancellationTokenSource.Token));
+            CancellationTokenSource cancellationTokenSource = new();
+            CancellationToken loopCancellationToken = cancellationTokenSource.Token;
+            _cancellationTokenSource = cancellationTokenSource;
+            _samplingTask = Task.Run(() => RunSamplingLoopAsync(loopCancellationToken));
         }
     }
 
     /// <summary>Stops the background sampling loop.</summary>
     public void Stop()
     {
+        _ = StopAsync(CancellationToken.None);
+    }
+
+    internal async Task StopAsync(CancellationToken cancellationToken)
+    {
         Interlocked.Increment(ref _restartGeneration);
-        _ = StopCore();
+        Task? stoppingTask = StopCore();
+        if (stoppingTask is null)
+        {
+            return;
+        }
+
+        await stoppingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+        lock (_syncLock)
+        {
+            if (ReferenceEquals(_samplingTask, stoppingTask))
+            {
+                _samplingTask = null;
+            }
+        }
+    }
+
+    internal async Task<bool> QuiesceAsync(CancellationToken cancellationToken)
+    {
+        bool wasRunning;
+        lock (_syncLock)
+        {
+            wasRunning = _samplingTask is { IsCompleted: false };
+            _acceptStarts = false;
+        }
+
+        await StopAsync(cancellationToken).ConfigureAwait(false);
+        return wasRunning;
+    }
+
+    internal void ResumeAfterQuiescence(bool wasRunning)
+    {
+        int generation = Interlocked.Increment(ref _restartGeneration);
+        Task? stoppingTask;
+        lock (_syncLock)
+        {
+            _acceptStarts = true;
+            stoppingTask = _samplingTask;
+            if (stoppingTask is null or { IsCompleted: true })
+            {
+                _samplingTask = null;
+            }
+        }
+
+        if (!wasRunning)
+        {
+            return;
+        }
+
+        if (stoppingTask is { IsCompleted: false })
+        {
+            _ = RestartWhenStoppedAsync(stoppingTask, generation);
+        }
+        else
+        {
+            StartIfEnabled();
+        }
     }
 
     /// <summary>Restarts the sampling loop using current settings.</summary>

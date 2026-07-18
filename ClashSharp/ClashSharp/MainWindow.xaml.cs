@@ -1,12 +1,3 @@
-/*
- * Main Application Window
- * Hosts the native WinUI navigation shell, enforces minimum window dimensions, and coordinates localization updates
- *
- * @author: WaterRun
- * @file: MainWindow.xaml.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -66,6 +57,8 @@ public sealed partial class MainWindow : Window
 
     private readonly ApplicationActionService _applicationActions;
 
+    private readonly ApplicationLifecycleService _applicationLifecycle;
+
     private readonly StartupConflictSnapshot _startupConflicts;
 
     /// <summary>Current app window used for close interception.</summary>
@@ -74,8 +67,11 @@ public sealed partial class MainWindow : Window
     /// <summary>Native system tray integration.</summary>
     private SystemTrayService? _trayService;
 
-    /// <summary>True after the user confirms a proxy-active close prompt.</summary>
-    private bool _isCloseConfirmed;
+    /// <summary>True after window or tray UI has handed exit to the App-owned lifetime.</summary>
+    private bool _exitRequested;
+
+    /// <summary>Prevents reentrant native closing events from opening duplicate confirmation dialogs.</summary>
+    private bool _closePromptActive;
 
     /// <summary>True after startup conflict checks and startup behavior have been scheduled.</summary>
     private bool _startupFlowStarted;
@@ -84,11 +80,13 @@ public sealed partial class MainWindow : Window
     internal MainWindow(
         TriggerService triggerService,
         ApplicationActionService applicationActions,
+        ApplicationLifecycleService applicationLifecycle,
         TrayCommandService trayCommandService,
         StartupConflictSnapshot startupConflicts)
     {
         _triggerService = triggerService ?? throw new ArgumentNullException(nameof(triggerService));
         _applicationActions = applicationActions ?? throw new ArgumentNullException(nameof(applicationActions));
+        _applicationLifecycle = applicationLifecycle ?? throw new ArgumentNullException(nameof(applicationLifecycle));
         _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
         _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
         _viewModel = new MainWindowViewModel(
@@ -229,7 +227,6 @@ public sealed partial class MainWindow : Window
         }
 
         _viewModel.Dispose();
-        RuntimeShutdownService.Shutdown();
 
         if (_hWnd != 0 && _oldWndProc != 0)
         {
@@ -329,8 +326,9 @@ public sealed partial class MainWindow : Window
     /// <param name="args">Closing event arguments. Not null.</param>
     private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
-        if (_isCloseConfirmed)
+        if (_exitRequested)
         {
+            args.Cancel = true;
             return;
         }
 
@@ -344,11 +342,19 @@ public sealed partial class MainWindow : Window
 
         if (closeBehavior == CloseBehaviorMode.ExitWithoutConfirmation)
         {
+            args.Cancel = true;
+            RequestApplicationExit("main-window");
             return;
         }
 
         bool proxyTakeoverActive = IsProxyTakeoverActive();
         args.Cancel = true;
+        if (_closePromptActive)
+        {
+            return;
+        }
+
+        _closePromptActive = true;
         ThemedContentDialog dialog = new()
         {
             Title = LocalizationService.Instance.GetString(proxyTakeoverActive ? "Close.ProxyActive.Title" : "Close.Confirm.Title"),
@@ -359,10 +365,16 @@ public sealed partial class MainWindow : Window
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        if (await dialog.ShowAsync() is ContentDialogResult.Primary)
+        try
         {
-            _isCloseConfirmed = true;
-            Close();
+            if (await dialog.ShowAsync() is ContentDialogResult.Primary)
+            {
+                RequestApplicationExit("main-window-confirmation");
+            }
+        }
+        finally
+        {
+            _closePromptActive = false;
         }
     }
 
@@ -431,8 +443,13 @@ public sealed partial class MainWindow : Window
     /// <summary>Requests safe exit from the tray without showing the close confirmation prompt.</summary>
     private void RequestSafeExitFromTray()
     {
-        _isCloseConfirmed = true;
-        Close();
+        RequestApplicationExit("system-tray");
+    }
+
+    private void RequestApplicationExit(string source)
+    {
+        _exitRequested = true;
+        _applicationLifecycle.RequestExit(source);
     }
 
     /// <summary>Creates the navigation tag to page-type mapping used by the shell view model.</summary>

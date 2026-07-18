@@ -1,5 +1,6 @@
 using System;
 using ClashSharp.ApplicationModel.Hosting;
+using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Startup;
@@ -15,13 +16,18 @@ namespace ClashSharp.Hosting;
 /// <summary>Registers ClashSharp startup services without resolving them.</summary>
 internal static class ClashSharpAppHostFactory
 {
-    public static AppHost Build(Action<Window> attachWindow)
+    public static AppHost Build(
+        Action<Window> attachWindow,
+        IApplicationLifetimeRequestSink lifetimeRequests)
     {
         ArgumentNullException.ThrowIfNull(attachWindow);
+        ArgumentNullException.ThrowIfNull(lifetimeRequests);
         return AppHost.Build(services =>
         {
             services.AddSingleton(attachWindow);
+            services.AddSingleton(lifetimeRequests);
             services.AddSingleton(_ => AppSettingsService.Instance);
+            services.AddSingleton(_ => ConnectionSamplingService.Instance);
             services.AddSingleton(_ => NetworkTakeoverService.Instance);
             services.AddSingleton(_ => WindowsProxyService.Instance);
             services.AddSingleton(_ => MihomoCoreService.Instance);
@@ -40,7 +46,12 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IApplicationMutationCoordinator>(provider =>
                 provider.GetRequiredService<ApplicationMutationCoordinator>());
             services.AddSingleton<NetworkStateCoordinator>();
+            services.AddSingleton<IRuntimeShutdownNetworkCoordinator>(provider =>
+                provider.GetRequiredService<NetworkStateCoordinator>());
             services.AddSingleton<LegacyNetworkIntentSource>();
+            services.AddSingleton(provider => new ApplicationLifecycleService(
+                lifetimeRequests,
+                installAsPrimaryInstance: true));
             services.AddSingleton(provider => new ApplicationActionService(
                 provider.GetRequiredService<AppSettingsService>(),
                 provider.GetRequiredService<NetworkStateCoordinator>(),
@@ -49,11 +60,24 @@ internal static class ClashSharpAppHostFactory
                 TriggerRuntimeEventHub.Instance,
                 LogStorageService.Instance.AppendLog,
                 LocalizationService.Instance.GetString,
-                () => App.MainWindow?.Close()));
+                provider.GetRequiredService<ApplicationLifecycleService>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton(provider => TriggerService.CreateDefault(
                 provider.GetRequiredService<IApplicationActionDispatcher>()));
+            services.AddSingleton<LegacyTriggerRuntimeParticipant>();
+            services.AddSingleton<IRuntimeParticipant>(provider =>
+                provider.GetRequiredService<LegacyTriggerRuntimeParticipant>());
+            services.AddSingleton<LegacyConnectionSamplingRuntimeParticipant>();
+            services.AddSingleton<IRuntimeParticipant>(provider =>
+                provider.GetRequiredService<LegacyConnectionSamplingRuntimeParticipant>());
+            services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
+                provider.GetRequiredService<MutationAdmissionBarrier>(),
+                provider.GetRequiredService<IRuntimeShutdownNetworkCoordinator>(),
+                provider.GetRequiredService<LegacyNetworkIntentSource>().CreateShutdown,
+                provider.GetServices<IRuntimeParticipant>()));
+            services.AddSingleton<IApplicationShutdownCoordinator>(provider =>
+                provider.GetRequiredService<RuntimeLifecycleCoordinator>());
             services.AddSingleton(provider => TrayCommandServiceFactory.CreateDefault(
                 provider.GetRequiredService<ApplicationActionService>()));
             services.AddSingleton(_ => StartupConflictDetectionService.Instance);

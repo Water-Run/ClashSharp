@@ -1,14 +1,7 @@
-/*
- * Application Data Maintenance Service Factory
- * Wires production dependencies for destructive local data maintenance
- *
- * @author: WaterRun
- * @file: Service/AppDataMaintenanceServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
+using System.ComponentModel;
 using System.IO;
+using System.Threading;
 
 namespace ClashSharp.Service;
 
@@ -39,7 +32,13 @@ internal static class AppDataMaintenanceServiceFactory
         AppDataMaintenanceLogStorageAdapter logStorage = new(LogStorageService.Instance);
         return new AppDataMaintenanceService(
             new AppDataMaintenanceSettingsAdapter(AppSettingsService.Instance),
-            new AppDataMaintenanceRuntimeAdapter(),
+            new AppDataMaintenanceRuntimeAdapter(
+                ConnectionSamplingService.Instance,
+                MihomoCoreService.Instance,
+                AppSettingsService.Instance,
+                WindowsProxyService.Instance,
+                LogStorageService.Instance,
+                LocalizationService.Instance.GetString),
             logStorage,
             new AppDataMaintenanceLocalDataStore(logStorage, LocalizationService.Instance.GetString),
             new AppDataMaintenanceProfileCatalogAdapter(ProfileCatalogService.Instance),
@@ -55,11 +54,39 @@ internal sealed class AppDataMaintenanceSettingsAdapter(AppSettingsService setti
     }
 }
 
-internal sealed class AppDataMaintenanceRuntimeAdapter : IAppDataMaintenanceRuntime
+internal sealed class AppDataMaintenanceRuntimeAdapter(
+    ConnectionSamplingService sampling,
+    MihomoCoreService core,
+    AppSettingsService settings,
+    WindowsProxyService windowsProxy,
+    LogStorageService logStorage,
+    Func<string, string> getString) : IAppDataMaintenanceRuntime
 {
     public void Shutdown()
     {
-        RuntimeShutdownService.Shutdown();
+        TryCleanup(() => sampling.StopAsync(CancellationToken.None).GetAwaiter().GetResult());
+        TryCleanup(core.Stop);
+        if (settings.RestoreProxyOnExit)
+        {
+            TryCleanup(windowsProxy.DisableProxy);
+        }
+    }
+
+    private void TryCleanup(Action cleanup)
+    {
+        try
+        {
+            cleanup();
+        }
+        catch (Exception exception) when (exception is
+            InvalidOperationException or Win32Exception or UnauthorizedAccessException)
+        {
+            logStorage.AppendLog(
+                "Warning",
+                "Maintenance",
+                getString("Maintenance.RuntimeCleanupFailed"),
+                exception.Message);
+        }
     }
 }
 

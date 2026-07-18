@@ -1,21 +1,20 @@
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Startup;
-using ClashSharp.Service;
+using ClashSharp.Hosting.Compatibility;
 
 namespace ClashSharp.Hosting.Startup;
 
 /// <summary>Starts trigger scheduling only in the owned primary pipeline.</summary>
-internal sealed class TriggerSupervisorStartupStep(TriggerService triggers) : IStartupStep
+internal sealed class TriggerSupervisorStartupStep(LegacyTriggerRuntimeParticipant triggers) : IStartupStep
 {
     public string Name => "trigger-supervisor";
 
     public int Order => 500;
 
-    public Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
+    public async Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        triggers.Start();
-        return Task.FromResult(StartupStepResult.Succeeded());
+        await triggers.StartAsync(cancellationToken);
+        return StartupStepResult.Succeeded();
     }
 }

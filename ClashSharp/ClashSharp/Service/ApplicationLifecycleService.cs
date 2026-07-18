@@ -1,101 +1,61 @@
-/*
- * Application Lifecycle Service
- * Provides service-bound exit and restart commands for UI surfaces
- *
- * @author: WaterRun
- * @file: Service/ApplicationLifecycleService.cs
- * @date: 2026-06-29
- */
-
 using System;
-using System.Diagnostics;
+using System.Threading;
+using ClashSharp.ApplicationModel.Lifecycle;
 
 namespace ClashSharp.Service;
 
-internal interface IApplicationLifecycleRuntimeShutdown
-{
-    void Shutdown();
-}
-
-internal interface IApplicationLifecycleProcessLauncher
-{
-    void Start(string executablePath);
-}
-
-internal interface IApplicationLifecycleExit
-{
-    void Exit();
-}
-
+/// <summary>Hands UI lifetime commands to the App-owned process lifetime without stopping host services inline.</summary>
 internal sealed class ApplicationLifecycleService
 {
-    private readonly IApplicationLifecycleRuntimeShutdown _runtimeShutdown;
-    private readonly IApplicationLifecycleProcessLauncher _processLauncher;
-    private readonly IApplicationLifecycleExit _applicationExit;
-    private readonly Func<string> _getExecutablePath;
+    private static ApplicationLifecycleService? _instance;
+    private readonly IApplicationLifetimeRequestSink _requests;
 
     public ApplicationLifecycleService(
-        IApplicationLifecycleRuntimeShutdown runtimeShutdown,
-        IApplicationLifecycleProcessLauncher processLauncher,
-        IApplicationLifecycleExit applicationExit,
-        Func<string> getExecutablePath)
+        IApplicationLifetimeRequestSink requests,
+        bool installAsPrimaryInstance = false)
     {
-        _runtimeShutdown = runtimeShutdown ?? throw new ArgumentNullException(nameof(runtimeShutdown));
-        _processLauncher = processLauncher ?? throw new ArgumentNullException(nameof(processLauncher));
-        _applicationExit = applicationExit ?? throw new ArgumentNullException(nameof(applicationExit));
-        _getExecutablePath = getExecutablePath ?? throw new ArgumentNullException(nameof(getExecutablePath));
+        _requests = requests ?? throw new ArgumentNullException(nameof(requests));
+        if (installAsPrimaryInstance
+            && Interlocked.CompareExchange(ref _instance, this, null) is not null)
+        {
+            throw new InvalidOperationException("The primary application lifecycle service is already configured.");
+        }
     }
 
-    public static ApplicationLifecycleService Instance { get; } = new(
-        new RuntimeShutdownAdapter(),
-        new ProcessLauncher(),
-        new EnvironmentApplicationExit(),
-        ResolveExecutablePath);
+#if UNIT_TESTS
+    public static ApplicationLifecycleService Instance { get; } = new(new IgnoringLifetimeRequestSink());
+#else
+    public static ApplicationLifecycleService Instance => Volatile.Read(ref _instance)
+        ?? throw new InvalidOperationException("Application lifecycle requests are unavailable before primary host startup.");
+#endif
 
     public void ExitApplication()
     {
-        _runtimeShutdown.Shutdown();
-        _applicationExit.Exit();
+        RequestExit("settings");
     }
 
     public void RestartApplication()
     {
-        string executablePath = _getExecutablePath();
-        _runtimeShutdown.Shutdown();
-        _processLauncher.Start(executablePath);
-        _applicationExit.Exit();
+        RequestRestart("settings");
     }
 
-    private static string ResolveExecutablePath()
+    internal void RequestExit(string source)
     {
-        return Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "ClashSharp.exe";
+        _requests.TryRequest(ApplicationLifetimeRequest.Exit(source));
     }
 
-    private sealed class RuntimeShutdownAdapter : IApplicationLifecycleRuntimeShutdown
+    internal void RequestRestart(string source)
     {
-        public void Shutdown()
+        _requests.TryRequest(ApplicationLifetimeRequest.Restart(source));
+    }
+
+#if UNIT_TESTS
+    private sealed class IgnoringLifetimeRequestSink : IApplicationLifetimeRequestSink
+    {
+        public bool TryRequest(ApplicationLifetimeRequest request)
         {
-            RuntimeShutdownService.Shutdown();
+            return true;
         }
     }
-
-    private sealed class ProcessLauncher : IApplicationLifecycleProcessLauncher
-    {
-        public void Start(string executablePath)
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = executablePath,
-                UseShellExecute = true,
-            });
-        }
-    }
-
-    private sealed class EnvironmentApplicationExit : IApplicationLifecycleExit
-    {
-        public void Exit()
-        {
-            Environment.Exit(0);
-        }
-    }
+#endif
 }

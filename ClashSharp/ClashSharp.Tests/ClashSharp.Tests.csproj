@@ -116,8 +116,6 @@
     <Compile Include="..\ClashSharp\Service\ProxyRecoveryServiceFactory.cs" Link="Service\ProxyRecoveryServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyLatencyService.cs" Link="Service\ProxyLatencyService.cs" />
     <Compile Include="..\ClashSharp\Service\RuleCatalogService.cs" Link="Service\RuleCatalogService.cs" />
-    <Compile Include="..\ClashSharp\Service\RuntimeShutdownService.cs" Link="Service\RuntimeShutdownService.cs" />
-    <Compile Include="..\ClashSharp\Service\RuntimeShutdownServiceFactory.cs" Link="Service\RuntimeShutdownServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\StartupBehaviorService.cs" Link="Service\StartupBehaviorService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupCheckService.cs" Link="Service\StartupCheckService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupRestoreFallbackService.cs" Link="Service\StartupRestoreFallbackService.cs" />

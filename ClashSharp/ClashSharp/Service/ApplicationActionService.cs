@@ -1,12 +1,3 @@
-/*
- * Application Action Service
- * Coordinates shared application actions requested by tiles, triggers, and traditional UI entry points
- *
- * @author: WaterRun
- * @file: Service/ApplicationActionService.cs
- * @date: 2026-06-26
- */
-
 using System;
 using System.Globalization;
 using System.Threading;
@@ -32,7 +23,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly ITriggerRuntimeEventPublisher _triggerEvents;
     private readonly Action<string, string, string, string?> _appendLog;
     private readonly Func<string, string> _getString;
-    private readonly Action _exitApplication;
+    private readonly ApplicationLifecycleService _lifecycle;
 
     internal ApplicationActionService(
         AppSettingsService settings,
@@ -42,7 +33,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         ITriggerRuntimeEventPublisher triggerEvents,
         Action<string, string, string, string?> appendLog,
         Func<string, string> getString,
-        Action exitApplication)
+        ApplicationLifecycleService lifecycle)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _network = network ?? throw new ArgumentNullException(nameof(network));
@@ -51,7 +42,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _triggerEvents = triggerEvents ?? throw new ArgumentNullException(nameof(triggerEvents));
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
-        _exitApplication = exitApplication ?? throw new ArgumentNullException(nameof(exitApplication));
+        _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
         if (Interlocked.CompareExchange(ref _instance, this, null) is not null)
         {
             throw new InvalidOperationException("The primary application action service is already configured.");
@@ -90,7 +81,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
                 _notifications.NotifyCustom(value);
                 break;
             case ApplicationActionKind.ExitApplication:
-                _exitApplication();
+                _lifecycle.RequestExit("application-action");
                 break;
             case ApplicationActionKind.ExportConfiguration:
             case ApplicationActionKind.ImportConfiguration:

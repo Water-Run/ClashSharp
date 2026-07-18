@@ -157,6 +157,25 @@ public sealed class ApplicationStartupContractTests
         Assert.False(lifetime.HasAttachedHost);
     }
 
+    /// <summary>Verifies an unprepared host remains owned and is never disposed underneath active services.</summary>
+    [Fact]
+    public async Task StopAsync_HostStopFails_DoesNotDisposeOrReleaseHostOwnership()
+    {
+        List<string> trace = [];
+        FakeApplicationHost host = new(trace)
+        {
+            StopException = new InvalidOperationException("not prepared"),
+        };
+        ProcessLifetimeRunner lifetime = new();
+        lifetime.AttachHost(host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => lifetime.StopAsync(CancellationToken.None));
+
+        Assert.Equal(["host-stop"], trace);
+        Assert.True(lifetime.HasAttachedHost);
+    }
+
     private sealed class FakePrimaryInstanceBootstrap(
         PrimaryInstanceOwnership ownership,
         ICollection<string> trace) : IPrimaryInstanceBootstrap
@@ -173,6 +192,8 @@ public sealed class ApplicationStartupContractTests
     {
         public Exception? StartException { get; init; }
 
+        public Exception? StopException { get; init; }
+
         public Task<StartupStepResult> StartAsync(AppLaunchRequest request, CancellationToken cancellationToken)
         {
             trace.Add("host-start");
@@ -184,7 +205,9 @@ public sealed class ApplicationStartupContractTests
         public Task StopAsync(CancellationToken cancellationToken)
         {
             trace.Add("host-stop");
-            return Task.CompletedTask;
+            return StopException is null
+                ? Task.CompletedTask
+                : Task.FromException(StopException);
         }
 
         public ValueTask DisposeAsync()

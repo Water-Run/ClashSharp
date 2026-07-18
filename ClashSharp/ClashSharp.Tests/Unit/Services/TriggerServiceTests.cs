@@ -1,12 +1,3 @@
-/*
- * Trigger Service Tests
- * Verifies trigger evaluation, runtime event dispatch, and failure isolation
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/TriggerServiceTests.cs
- * @date: 2026-06-28
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -94,6 +85,37 @@ public sealed class TriggerServiceTests
 
         await WaitUntilAsync(() => actions.DispatchValues.Count == 2);
         Assert.Equal(["queued", "queued"], actions.DispatchValues);
+    }
+
+    /// <summary>Verifies quiescence rejects new events and awaits the action already running.</summary>
+    [Fact]
+    public async Task QuiesceAsync_ActionInFlight_WaitsForReleaseAndRejectsLaterEvents()
+    {
+        string storagePath = CreateTempStoragePath();
+        FakeTriggerActions actions = new() { BlockFirstDispatch = true };
+        FakeTriggerRuntimeEvents runtimeEvents = new();
+        TriggerService service = CreateService(storagePath, actions, runtimeEvents);
+        service.SaveTasks(
+        [
+            new TriggerTask(
+                "exit",
+                "Exit trigger",
+                true,
+                [new TriggerCondition(TriggerConditionKind.AppEntered)],
+                [new TriggerAction(TriggerActionKind.ExitApplication, "exit")]),
+        ]);
+
+        runtimeEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.AppEntered));
+        await actions.FirstDispatchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Task quiescence = service.QuiesceAsync(CancellationToken.None);
+
+        Assert.False(quiescence.IsCompleted);
+        actions.ReleaseFirstDispatch.TrySetResult(null);
+        await quiescence.WaitAsync(TimeSpan.FromSeconds(2));
+        runtimeEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.AppEntered));
+        await Task.Delay(50);
+
+        Assert.Equal(["exit"], actions.DispatchValues);
     }
 
     /// <summary>Verifies one failing trigger action is logged and does not prevent later matching triggers from running.</summary>

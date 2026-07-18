@@ -759,27 +759,43 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("StartupStepResult.Fatal", startupBehaviorStep, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies runtime shutdown cleanup composes dependencies and localized warning text through injected boundaries.</summary>
+    /// <summary>Verifies process shutdown is owned by the awaited lifecycle and outer request channel.</summary>
     [Fact]
-    public void RuntimeShutdownService_UsesInjectedDependencies()
+    public void RuntimeShutdown_UsesAwaitedCoordinatorWithoutWindowOrServiceBypasses()
     {
-        string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "RuntimeShutdownService.cs");
+        string application = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs"));
+        string mainWindow = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs"));
+        string lifecycle = File.ReadAllText(FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Application",
+            "Lifecycle",
+            "RuntimeLifecycleCoordinator.cs"));
+        string hostFactory = File.ReadAllText(FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "AppHost",
+            "ClashSharpAppHostFactory.cs"));
+        string applicationActions = File.ReadAllText(FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Service",
+            "ApplicationActionService.cs"));
 
-        string serviceCode = File.ReadAllText(servicePath);
-
-        Assert.DoesNotContain("ConnectionSamplingService.Instance", serviceCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("MihomoCoreService.Instance", serviceCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("WindowsProxyService.Instance", serviceCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("LogStorageService.Instance", serviceCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"Runtime shutdown cleanup failed.\"", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IRuntimeShutdownSampling", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IRuntimeShutdownCore", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IRuntimeShutdownSettings", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IRuntimeShutdownWindowsProxy", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IRuntimeShutdownLog", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("RuntimeShutdown.CleanupFailed", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ApplicationLifetimeRequestChannel", application, StringComparison.Ordinal);
+        Assert.Contains("ProcessLifetimeRunner", application, StringComparison.Ordinal);
+        Assert.Contains("RuntimeLifecycleCoordinator", lifecycle, StringComparison.Ordinal);
+        Assert.Contains("PreparedForHostDisposal", lifecycle, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.Delete", lifecycle, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResetAll", lifecycle, StringComparison.Ordinal);
+        Assert.DoesNotContain("RuntimeShutdownService", application, StringComparison.Ordinal);
+        Assert.DoesNotContain("RuntimeShutdownService", mainWindow, StringComparison.Ordinal);
+        Assert.DoesNotContain("Environment.Exit", application, StringComparison.Ordinal);
+        Assert.DoesNotContain("Close();", mainWindow, StringComparison.Ordinal);
+        Assert.Contains("_applicationLifecycle.RequestExit", mainWindow, StringComparison.Ordinal);
+        Assert.Contains("IApplicationShutdownCoordinator", hostFactory, StringComparison.Ordinal);
+        Assert.Contains("RuntimeLifecycleCoordinator", hostFactory, StringComparison.Ordinal);
+        Assert.DoesNotContain("App.MainWindow?.Close", hostFactory, StringComparison.Ordinal);
+        Assert.Contains("_lifecycle.RequestExit", applicationActions, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies startup launch synchronization composes Windows startup task and logging through injected boundaries.</summary>

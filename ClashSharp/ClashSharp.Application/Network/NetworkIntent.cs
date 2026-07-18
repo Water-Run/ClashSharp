@@ -74,6 +74,21 @@ public sealed record NetworkIntent(
             mixedPort);
     }
 
+    /// <summary>Creates a validated process-shutdown network policy intent.</summary>
+    public static NetworkIntent Shutdown(
+        ClashSharpMode mode,
+        bool transparentProxyEnabled,
+        int mixedPort)
+    {
+        ValidateMode(mode);
+        ValidatePort(mixedPort);
+        return new NetworkIntent(
+            NetworkIntentKind.Shutdown,
+            mode,
+            transparentProxyEnabled,
+            mixedPort);
+    }
+
     internal static void Validate(NetworkIntent intent)
     {
         ArgumentNullException.ThrowIfNull(intent);

@@ -29,6 +29,17 @@ internal sealed class LegacyNetworkIntentSource(AppSettingsService settings)
         return CreateModeTransition(mode);
     }
 
+    public NetworkIntent CreateShutdown()
+    {
+        ClashSharpMode mode = settings.RestoreProxyOnExit
+            ? ClashSharpMode.Disabled
+            : GetSupportedCurrentMode();
+        return NetworkIntent.Shutdown(
+            mode,
+            settings.TransparentProxyEnabled,
+            settings.MixedPort);
+    }
+
     private ClashSharpMode GetSupportedCurrentMode()
     {
         ClashSharpMode mode = settings.CurrentMode;
