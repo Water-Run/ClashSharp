@@ -23,6 +23,8 @@ public sealed record MutationJournalStep(
 /// <param name="DesiredHash">Hash of the planned durable and external target state.</param>
 /// <param name="HasCommitMarker">Whether the point-of-no-return marker is durable.</param>
 /// <param name="Steps">Ordered participant steps and compensation material.</param>
+/// <param name="PhaseIntentRecorded">Whether the current operation-level phase intent is durable.</param>
+/// <param name="PhaseCompleted">Whether the current operation-level phase completion is durable.</param>
 public sealed record MutationJournal(
     int SchemaVersion,
     Guid OperationId,
@@ -32,7 +34,9 @@ public sealed record MutationJournal(
     string BaselineHash,
     string DesiredHash,
     bool HasCommitMarker,
-    IReadOnlyList<MutationJournalStep> Steps)
+    IReadOnlyList<MutationJournalStep> Steps,
+    bool PhaseIntentRecorded = false,
+    bool PhaseCompleted = false)
 {
     /// <summary>Gets the only journal document schema supported by this build.</summary>
     public const int CurrentSchemaVersion = 1;

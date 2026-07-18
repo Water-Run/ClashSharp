@@ -237,7 +237,11 @@ public sealed class FileMutationJournalStore : IMutationJournalStore
             || string.IsNullOrWhiteSpace(journal.BaselineHash)
             || string.IsNullOrWhiteSpace(journal.DesiredHash)
             || journal.Steps is null
-            || journal.Steps.Any(step => string.IsNullOrWhiteSpace(step.Name)))
+            || journal.PhaseCompleted && !journal.PhaseIntentRecorded
+            || journal.Steps.Any(step => string.IsNullOrWhiteSpace(step.Name) || step.Completed && !step.IntentRecorded)
+            || journal.Steps.Select(step => step.Name).Distinct(StringComparer.Ordinal).Count() != journal.Steps.Count
+            || journal.HasCommitMarker && journal.Phase is not (MutationJournalPhase.Committed or MutationJournalPhase.CleaningUp or MutationJournalPhase.Recovering)
+            || !journal.HasCommitMarker && journal.Phase == MutationJournalPhase.CleaningUp)
         {
             throw CreateCorruptException("The mutation journal contains invalid required fields.");
         }

@@ -185,6 +185,28 @@ public sealed class MutationAdmissionContractTests
             async () => await barrier.AcquireRecoveryAsync(CancellationToken.None));
     }
 
+    /// <summary>Verifies shutdown pending during recovery wins atomically over a successful completion.</summary>
+    [Fact]
+    public async Task AdmissionBarrier_ShutdownDuringRecovery_CompletionCannotReopenAdmission()
+    {
+        MutationAdmissionBarrier barrier = new();
+        barrier.EnterRecoveryOnly();
+        await using MutationAdmissionLease recovery = await barrier.AcquireRecoveryAsync(CancellationToken.None);
+
+        Task shutdown = barrier.RequestRecoveryShutdownAsync(CancellationToken.None);
+        Assert.Equal(MutationAdmissionState.RecoveryClosing, barrier.State);
+        Assert.False(shutdown.IsCompleted);
+
+        recovery.CompleteRecoveryAttempt(journalPresent: false, verifiedSuccess: true);
+        await shutdown;
+
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+        await Assert.ThrowsAsync<MutationAdmissionRejectedException>(
+            async () => await barrier.AcquireOrdinaryAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<MutationAdmissionRejectedException>(
+            async () => await barrier.AcquireRecoveryAsync(CancellationToken.None));
+    }
+
     private static TaskCompletionSource<object?> CreateSignal()
     {
         return new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);

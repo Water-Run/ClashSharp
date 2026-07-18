@@ -110,15 +110,15 @@ No test may mutate the real user recovery root. Prove that after every injected 
 - Create: `ClashSharp/ClashSharp.Application/Mutations/MutationDeadlines.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/ApplicationMutationCoordinatorTests.cs`
 
-- [ ] **Step 1: Specify RED transition matrices**
+- [x] **Step 1: Specify RED transition matrices**
 
 Cover ordinary success; planning failure before journaling; cancellation before the first side effect; cancellation after it; apply/verify failure with reverse compensation; compensation failure retaining `RecoveryOnly`; post-commit activation/cleanup failure returning committed recovery required; stale recovery handle/generation rejection; failed first same-process retry followed by successful second retry; unrelated operation rejection while recovery remains; and shutdown-pending winning over recovery completion.
 
-- [ ] **Step 2: Implement journal-driven execution**
+- [x] **Step 2: Implement journal-driven execution**
 
 Participants expose idempotent `ProbeAsync`, `StageAsync`, `ApplyAsync`, `VerifyAsync`, and `CompensateAsync`. The coordinator writes phase intent before each external call and phase completion afterward. It commits the verified durable target hash before the point-of-no-return marker. It publishes no normal completion result until locks are released. The default per-step recovery deadline is 30 seconds and total deadline is two minutes through an injectable timeout/clock policy.
 
-- [ ] **Step 3: Prove pairwise serialization and lock order**
+- [x] **Step 3: Prove pairwise serialization and lock order**
 
 Interleave two ordinary operations, ordinary/destructive, ordinary/recovery, destructive/shutdown, and retry/shutdown at each deterministic barrier. Assert one gate owner, FIFO ordinary order, no stale rollback overwrite, no nested gate acquisition, and no transition out of terminal shutdown.
 
