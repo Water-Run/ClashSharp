@@ -243,11 +243,11 @@ Sampling becomes an injected runtime participant. The startup step awaits start;
 - Create: `ClashSharp/ClashSharp.Tests/Integration/WindowsProcessRunnerTests.cs`
 - Create helper project if needed: `ClashSharp/ClashSharp.ProcessProbe/`
 
-- [ ] **Step 1: Write RED real-process tests**
+- [x] **Step 1: Write RED real-process tests**
 
 Use a controlled helper to emit stdout/stderr concurrently, hang, spawn a child, and exit with a selected code. Prove complete output, typed timeout/cancellation, process-tree termination, bounded completion, and no helper leak.
 
-- [ ] **Step 2: Implement and migrate**
+- [x] **Step 2: Implement and migrate**
 
 Drain both redirected streams concurrently. Race process completion against the injected timeout and caller token. On timeout/cancellation kill the entire process tree and await final exit/drain. `sc.exe` callers always re-query SCM state after elevated operations; cancellation is not represented as an unexplained exit code.
 

@@ -58,6 +58,16 @@ Release solution build completed with 0 warnings and 0 errors; the complete Rele
 
 Runtime supervision checkpoint: `d3e672c1cbbfbaf0e0d1c40e4a8e691378d72ef7` (`feat: supervise connection sampling lifecycle`).
 
+The first real-process runner test build failed with `CS0234`/`CS0246` because the Application process contracts and Infrastructure Windows runner did not exist. A dedicated framework-dependent process probe now emits large stdout/stderr streams concurrently, preserves complex argument boundaries, exits with a selected code, hangs, and spawns a hanging child. The immutable request copies an `ArgumentList`, requires a finite timeout, and selects direct or elevated execution. Results distinguish natural completion (including non-zero exit), timeout, caller cancellation, and start failure without inventing an exit code.
+
+`WindowsProcessRunner` starts both stream drains before waiting, races natural exit against timeout and caller cancellation, kills the entire process tree on timeout/cancellation, waits a bounded five seconds for final exit, and drains available output before returning. Real tests preserve 12,000 lines on each stream, retain spaces/quotes/trailing slashes/empty arguments, type a missing executable as `StartFailed`, and prove both root and child PIDs exit after timeout and cancellation. Ten repeated runs left zero process-probe command lines in the Windows process table.
+
+Mihomo service control now uses this shared runner; the local blocking process implementation and synthetic `-1` result were removed. Every elevated create/stop/delete is followed by a non-elevated SCM query. Cancellation remains a typed cancellation after that query, a non-zero operation exit cannot override a verified final SCM state, and service disappearance is idempotent. Structured review separated explicit SCM `1060` absence from timeout/start-failure uncertainty at initial and final queries, so unknown state neither launches an unsafe elevated operation nor reports deployment/removal success.
+
+Release solution build completed with 0 warnings and 0 errors; the complete Release suite passed 762 tests with 0 failed and 0 skipped. The 16 process/service/architecture tests passed ten consecutive repetitions (160 executions). Format verification, `git diff --check`, and the zero-leaked-probe process-table check succeeded.
+
+Bounded process runner checkpoint: `d00870fb9c875c02990381788d2dece2eb742998` (`feat: add bounded Windows process runner`).
+
 ## Pending evidence
 
-Safe process execution, trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
+Trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
