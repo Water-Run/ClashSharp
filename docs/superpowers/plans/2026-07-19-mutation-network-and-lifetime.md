@@ -122,7 +122,7 @@ Participants expose idempotent `ProbeAsync`, `StageAsync`, `ApplyAsync`, `Verify
 
 Interleave two ordinary operations, ordinary/destructive, ordinary/recovery, destructive/shutdown, and retry/shutdown at each deterministic barrier. Assert one gate owner, FIFO ordinary order, no stale rollback overwrite, no nested gate acquisition, and no transition out of terminal shutdown.
 
-- [ ] **Step 4: Checkpoint contracts and engine**
+- [x] **Step 4: Checkpoint contracts and engine**
 
 Run Application/Infrastructure builds plus focused tests, update evidence, review the diff, and commit a buildable checkpoint.
 
