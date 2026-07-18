@@ -30,6 +30,7 @@ artifacts/
 
 .vscode/
 .idea/
+.worktrees/
 _ReSharper*/
 *.DotSettings.user
 
