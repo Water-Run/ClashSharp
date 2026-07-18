@@ -27,7 +27,7 @@
 - Create: `ClashSharp/ClashSharp.Tests/Architecture/RepositoryTopologyTests.cs`
 - Test: `ClashSharp/ClashSharp.Tests/Architecture/RepositoryTopologyTests.cs`
 
-- [ ] **Step 1: Write the failing contract tests**
+- [x] **Step 1: Write the failing contract tests**
 
 Create `RepositoryTopologyTests` with a local `FindRepositoryRoot` helper. The tests must assert:
 
@@ -130,7 +130,7 @@ public sealed class RepositoryTopologyTests
 
 This test intentionally will not compile yet because the production projects and `ClashSharp.Infrastructure` namespace do not exist.
 
-- [ ] **Step 2: Run the focused test and verify the RED state**
+- [x] **Step 2: Run the focused test and verify the RED state**
 
 Run:
 
@@ -140,7 +140,7 @@ dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Debug --filte
 
 Expected: compilation fails with missing `ClashSharp.Infrastructure`/`InfrastructureAssemblyMarker` and missing project artifacts. Do not weaken or conditionally skip the assertions.
 
-- [ ] **Step 3: Commit the test-only RED state only if the repository permits non-building commits**
+- [x] **Step 3: Commit the test-only RED state only if the repository permits non-building commits**
 
 Do not commit this deliberately non-building state in this repository. Continue to Task 2 and include the test with the first passing implementation commit.
 
@@ -155,7 +155,7 @@ Do not commit this deliberately non-building state in this repository. Continue 
 - Modify: `.editorconfig`
 - Replace: `CodingStyle.md`
 
-- [ ] **Step 1: Pin the .NET and Rust toolchains**
+- [x] **Step 1: Pin the .NET and Rust toolchains**
 
 Create `global.json`:
 
@@ -187,7 +187,7 @@ Create `eng/tool-versions.json`:
 }
 ```
 
-- [ ] **Step 2: Make LF and binary classification authoritative**
+- [x] **Step 2: Make LF and binary classification authoritative**
 
 Create `.gitattributes`:
 
@@ -214,7 +214,7 @@ Create `.gitattributes`:
 
 Change `.editorconfig` from `end_of_line = crlf` to `end_of_line = lf`. Preserve all other existing rules.
 
-- [ ] **Step 3: Add build-enforced shared policy**
+- [x] **Step 3: Add build-enforced shared policy**
 
 Create `Directory.Build.props`:
 
@@ -237,7 +237,7 @@ Create `Directory.Build.props`:
 </Project>
 ```
 
-- [ ] **Step 4: Replace prose-only coding rules with repository-aligned rules**
+- [x] **Step 4: Replace prose-only coding rules with repository-aligned rules**
 
 Replace `CodingStyle.md` with a concise policy that states:
 
@@ -271,7 +271,7 @@ Avoid `async void` except platform event handlers. Cancellable I/O accepts a fin
 Repository text uses UTF-8, LF, final newlines, and trimmed trailing whitespace. `dotnet format --verify-no-changes` is the formatting contract. Prefer readable modern C# syntax and extract named steps when a LINQ or fluent chain becomes difficult to audit.
 ```
 
-- [ ] **Step 5: Normalize tracked text and verify tool selection**
+- [x] **Step 5: Normalize tracked text and verify tool selection**
 
 Run:
 
@@ -298,7 +298,7 @@ Expected: `dotnet --version` is exactly `10.0.201`; `rustc --version` begins `ru
 - Modify: `ClashSharp/ClashSharp.slnx`
 - Test: `ClashSharp/ClashSharp.Tests/Architecture/RepositoryTopologyTests.cs`
 
-- [ ] **Step 1: Create platform-neutral Core**
+- [x] **Step 1: Create platform-neutral Core**
 
 Create `ClashSharp.Core.csproj`:
 
@@ -316,7 +316,7 @@ Create `ClashSharp.Core.csproj`:
 
 Move `ActiveConnection` to `Domain/Connections/ActiveConnection.cs`, preserve its namespace and API, remove the volatile banner and redundant `using System;`, and keep its existing public XML documentation.
 
-- [ ] **Step 2: Create Windows Infrastructure boundary**
+- [x] **Step 2: Create Windows Infrastructure boundary**
 
 Create `ClashSharp.Infrastructure.csproj`:
 
@@ -347,7 +347,7 @@ public static class InfrastructureAssemblyMarker
 }
 ```
 
-- [ ] **Step 3: Wire the solution and production references**
+- [x] **Step 3: Wire the solution and production references**
 
 Add Core and Infrastructure project entries to `ClashSharp.slnx`. Add ordinary `ProjectReference` entries from both `ClashSharp.csproj` and `ClashSharp.Tests.csproj` to both new projects. Remove only this source-link entry from the test project:
 
@@ -357,7 +357,7 @@ Add Core and Infrastructure project entries to `ClashSharp.slnx`. Add ordinary `
 
 Do not alter other compatibility source links in this task.
 
-- [ ] **Step 4: Run the topology contract and relevant behavior tests**
+- [x] **Step 4: Run the topology contract and relevant behavior tests**
 
 Run:
 
@@ -368,7 +368,7 @@ dotnet build ClashSharp/ClashSharp.slnx -c Debug -p:Platform=x64
 
 Expected: the topology contract passes; connection behavior is unchanged; the complete solution builds with `ActiveConnection` emitted only by `ClashSharp.Core.dll`.
 
-- [ ] **Step 5: Commit the first passing architecture slice**
+- [x] **Step 5: Commit the first passing architecture slice**
 
 ```powershell
 git add .gitattributes .editorconfig global.json Directory.Build.props CodingStyle.md rust-toolchain.toml eng/tool-versions.json ClashSharp/ClashSharp.slnx ClashSharp/ClashSharp.Core ClashSharp/ClashSharp.Infrastructure ClashSharp/ClashSharp/ClashSharp.csproj ClashSharp/ClashSharp/Model/ActiveConnection.cs ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj ClashSharp/ClashSharp.Tests/Architecture/RepositoryTopologyTests.cs
@@ -388,7 +388,7 @@ git commit -m "build: establish production project boundaries"
 - Modify: `ClashSharp/Installer/Cargo.lock` only if the pinned toolchain makes a deterministic lockfile update
 - Modify: `ClashSharp/SandboxTest/Cargo.lock` only if the pinned toolchain makes a deterministic lockfile update
 
-- [ ] **Step 1: Generate and validate .NET lock files**
+- [x] **Step 1: Generate and validate .NET lock files**
 
 Run:
 
@@ -399,11 +399,11 @@ dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
 
 Expected: lock files are created for projects with resolved packages; the second restore exits zero without changing them. Do not hand-edit generated lock files.
 
-- [ ] **Step 2: Create the stabilization ledger**
+- [x] **Step 2: Create the stabilization ledger**
 
 Create `docs/architecture/stabilization-ledger.md` with columns `ID`, `Severity`, `Owner`, `Status`, `Plan task`, `Evidence`, `Closure commit`, `Reviewer`, and `Closure date`. Add one row for every ID in the normative traceability table. Mark `P1-11`, `P2-QA-01`, and `P3 nullable/docs/analyzer/header drift` as `In Progress` with this plan path; all other rows start `Open`. Use `—` for evidence/closure fields until a real artifact exists; never mark a row `Closed` without evidence and a commit.
 
-- [ ] **Step 3: Verify Rust locks and audit the resolved dependency graphs**
+- [x] **Step 3: Verify Rust locks and audit the resolved dependency graphs**
 
 Run:
 
@@ -417,7 +417,7 @@ cargo audit --file ClashSharp/SandboxTest/Cargo.lock
 
 Expected: tests and both audits exit zero. If an advisory is present, stop this task and fix or explicitly document the affected dependency before creating CI; do not add an ignore merely to obtain green output.
 
-- [ ] **Step 4: Commit locks and the ledger**
+- [x] **Step 4: Commit locks and the ledger**
 
 ```powershell
 git add ClashSharp/*/packages.lock.json ClashSharp/Installer/Cargo.lock ClashSharp/SandboxTest/Cargo.lock docs/architecture/stabilization-ledger.md
@@ -431,7 +431,7 @@ git commit -m "build: lock dependency resolution and track stabilization"
 - Modify: `docs/architecture/stabilization-ledger.md`
 - Test: `ClashSharp/ClashSharp.Tests/Architecture/RepositoryTopologyTests.cs`
 
-- [ ] **Step 1: Create least-privilege pinned CI**
+- [x] **Step 1: Create least-privilege pinned CI**
 
 Create `.github/workflows/ci.yml` exactly as follows. The pinned revisions correspond to official `actions/checkout` v7.0.0, `actions/setup-dotnet` v6.0.0, and `actions/upload-artifact` v7.0.1 releases verified on 2026-07-19.
 
@@ -529,7 +529,7 @@ jobs:
 
 Do not add caches, write permissions, secrets, `pull_request_target`, mutable action tags, or network downloads beyond package/tool restore in this baseline workflow.
 
-- [ ] **Step 2: Run every CI command locally in the same order**
+- [x] **Step 2: Run every CI command locally in the same order**
 
 Run:
 
@@ -554,11 +554,11 @@ Remove-Item Env:Platform
 
 Expected: every command exits zero, `dotnet format` reports no changes, all current .NET tests pass, both Rust projects pass fmt/clippy/test/audit, and a TRX file exists.
 
-- [ ] **Step 3: Update ledger evidence without overstating closure**
+- [x] **Step 3: Update ledger evidence without overstating closure**
 
 Record the topology test, workflow path, local TRX, format output, locked restore, and Rust outputs as evidence. Set `P2-QA-01` to `Evidence Pending` until the workflow has run on GitHub. Keep `P1-11` `In Progress` because most test source links and `UNIT_TESTS` still exist. Keep the nullable/header row `In Progress` because legacy volatile headers remain inventoried debt.
 
-- [ ] **Step 4: Review the complete phase diff and commit**
+- [x] **Step 4: Review the complete phase diff and commit**
 
 Run:
 
@@ -579,7 +579,7 @@ Expected: no whitespace errors, only intentional phase files/normalization are p
 - Modify: `docs/superpowers/plans/2026-07-19-repository-foundation-and-project-topology.md`
 - Modify: `docs/superpowers/plans/2026-07-19-architecture-stabilization-roadmap.md`
 
-- [ ] **Step 1: Run final clean-tree verification from scratch**
+- [x] **Step 1: Run final clean-tree verification from scratch**
 
 Run:
 
@@ -599,7 +599,7 @@ Remove-Item Env:Platform
 
 Expected: the clean preview lists only ignored build/tool artifacts, both configurations build, all .NET tests pass, locked restore and formatting pass, and no diff error is reported.
 
-- [ ] **Step 2: Inspect dependency direction and migration proof**
+- [x] **Step 2: Inspect dependency direction and migration proof**
 
 Confirm:
 
@@ -611,7 +611,7 @@ rg -n "ProjectReference" ClashSharp/ClashSharp.Core ClashSharp/ClashSharp.Infras
 
 Expected: Core reports `net10.0`; the only production definition is under Core; tests have no ActiveConnection source link; dependency direction is Infrastructure → Core and App/Tests → Core + Infrastructure.
 
-- [ ] **Step 3: Mark plan state and obtain task-scoped code review**
+- [x] **Step 3: Mark plan state and obtain task-scoped code review**
 
 Check off completed items in this plan and Phase 01 in the roadmap. Use `superpowers:requesting-code-review`, address findings with `superpowers:receiving-code-review`, rerun final verification, then commit plan-state/evidence updates with:
 
@@ -620,6 +620,6 @@ git add -f docs/superpowers/plans/2026-07-19-repository-foundation-and-project-t
 git commit -m "docs: record repository foundation evidence"
 ```
 
-- [ ] **Step 4: Begin Phase 02 only after this checkpoint is green**
+- [x] **Step 4: Begin Phase 02 only after this checkpoint is green**
 
 Create the Phase 02 detailed plan against the actual post-Phase-01 topology. Do not create empty future projects or move runtime services speculatively in this phase.
