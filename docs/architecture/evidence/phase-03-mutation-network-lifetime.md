@@ -36,6 +36,8 @@ Structured review found and fixed three important races or policy errors: the le
 
 The strengthened real two-process probe records fake `RuleTakeover`, core-start, and system-proxy mutations with process identity. The test proves all three belong to the primary PID and the redirected secondary performs none. The network/engine/admission focused suite passed 22 tests ten consecutive times (220 executions). The complete Release suite passed 724 tests, 0 failed, and 0 skipped; the Release solution build completed with 0 warnings and 0 errors; format verification and `git diff --check` succeeded.
 
+Network routing checkpoint: `9ef543b` (`feat: route network state through durable mutations`).
+
 ## Pending evidence
 
 Runtime supervision, process execution, lifecycle handoff, final repeated concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
