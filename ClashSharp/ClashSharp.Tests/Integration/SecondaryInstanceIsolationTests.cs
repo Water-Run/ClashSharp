@@ -5,7 +5,7 @@ namespace ClashSharp.Tests.Integration;
 /// <summary>Verifies cross-process arbitration prevents secondary host and shared-state side effects.</summary>
 public sealed class SecondaryInstanceIsolationTests
 {
-    /// <summary>Starts two helper processes and proves only the primary constructs and starts a host.</summary>
+    /// <summary>Starts two helper processes and proves only the primary applies the fake RuleTakeover state.</summary>
     [Fact]
     public async Task SecondaryProcess_DoesNotConstructHostOrWriteMutationMarker()
     {
@@ -16,15 +16,25 @@ public sealed class SecondaryInstanceIsolationTests
 #else
             "Release";
 #endif
-        string probePath = Path.Combine(
+        bool usesPlatformOutput = AppContext.BaseDirectory
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)
+            .Contains("x64", StringComparer.OrdinalIgnoreCase);
+        List<string> probePathParts =
+        [
             repositoryRoot,
             "ClashSharp",
             "ClashSharp.StartupProbe",
             "bin",
-            "x64",
-            configuration,
-            "net10.0",
-            "ClashSharp.StartupProbe.dll");
+        ];
+        if (usesPlatformOutput)
+        {
+            probePathParts.Add("x64");
+        }
+
+        probePathParts.Add(configuration);
+        probePathParts.Add("net10.0");
+        probePathParts.Add("ClashSharp.StartupProbe.dll");
+        string probePath = Path.Combine([.. probePathParts]);
         Assert.True(File.Exists(probePath), $"Startup probe was not built: {probePath}");
 
         string testRoot = Path.Combine(Path.GetTempPath(), "ClashSharp", "StartupIsolation", Guid.NewGuid().ToString("N"));
@@ -55,7 +65,25 @@ public sealed class SecondaryInstanceIsolationTests
             Assert.Single(trace, line => line.StartsWith("host-build:", StringComparison.Ordinal));
             Assert.Single(trace, line => line.StartsWith("host-start:", StringComparison.Ordinal));
             Assert.Single(trace, line => line.StartsWith("secondary-redirected:", StringComparison.Ordinal));
-            Assert.DoesNotContain(trace, line => line.StartsWith("secondary-mutation:", StringComparison.Ordinal));
+            string primaryProcessId = trace.Single(
+                line => line.StartsWith("host-start:", StringComparison.Ordinal)).Split(':')[1];
+            string secondaryProcessId = trace.Single(
+                line => line.StartsWith("secondary-redirected:", StringComparison.Ordinal)).Split(':')[1];
+            foreach (string mutation in new[]
+            {
+                "network-mode-rule-takeover",
+                "core-start",
+                "system-proxy-enable",
+            })
+            {
+                string mutationLine = Assert.Single(
+                    trace,
+                    line => line.StartsWith(mutation + ":", StringComparison.Ordinal));
+                Assert.EndsWith(":" + primaryProcessId, mutationLine, StringComparison.Ordinal);
+                Assert.False(
+                    mutationLine.EndsWith(":" + secondaryProcessId, StringComparison.Ordinal),
+                    $"Secondary process unexpectedly wrote mutation trace '{mutationLine}'.");
+            }
         }
         finally
         {

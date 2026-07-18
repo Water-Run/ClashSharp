@@ -19,30 +19,24 @@ public sealed class NetworkTakeoverServiceTests
     [Fact]
     public void ApplyMode_WhenTransparentProxyEnabledAndServiceInstalled_UsesTransparentProxy()
     {
-        FakeNetworkTakeoverSettings settings = new()
-        {
-            TransparentProxyEnabled = true,
-            MixedPort = 19090,
-        };
         FakeNetworkTakeoverCoreConfiguration configuration = new();
         FakeNetworkTakeoverCore core = new();
         FakeNetworkTakeoverWindowsProxy windowsProxy = new();
         FakeNetworkTakeoverMihomoService serviceStatus = new(new MihomoServiceStatus(true, true, "Installed"));
         NetworkTakeoverService service = CreateService(
-            settings,
-            configuration,
-            core,
-            windowsProxy,
-            serviceStatus);
+            configuration: configuration,
+            core: core,
+            windowsProxy: windowsProxy,
+            serviceStatus: serviceStatus);
 
-        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.FullTakeover);
+        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.FullTakeover, true, 19090);
 
         Assert.Equal(ClashSharpMode.FullTakeover, result.Mode);
         Assert.True(result.CoreRunning);
         Assert.False(result.SystemProxyEnabled);
         Assert.True(result.TransparentProxyEnabled);
         Assert.Equal("transparent full", result.Message);
-        Assert.Equal([new ConfigurationRequest(ClashSharpMode.FullTakeover, true)], configuration.Requests);
+        Assert.Equal([new ConfigurationRequest(ClashSharpMode.FullTakeover, true, 19090)], configuration.Requests);
         Assert.Equal([configuration.State], core.RestartedStates);
         Assert.False(core.Stopped);
         Assert.Equal(1, windowsProxy.DisableCount);
@@ -53,64 +47,51 @@ public sealed class NetworkTakeoverServiceTests
     [Fact]
     public void ApplyMode_WhenTransparentProxyServiceInstalledButStopped_FallsBackToSystemProxy()
     {
-        FakeNetworkTakeoverSettings settings = new()
-        {
-            TransparentProxyEnabled = true,
-            MixedPort = 10002,
-        };
         FakeNetworkTakeoverCoreConfiguration configuration = new();
         FakeNetworkTakeoverCore core = new();
         FakeNetworkTakeoverWindowsProxy windowsProxy = new();
         FakeNetworkTakeoverMihomoService serviceStatus = new(new MihomoServiceStatus(true, false, "Stopped"));
         NetworkTakeoverService service = CreateService(
-            settings,
-            configuration,
-            core,
-            windowsProxy,
-            serviceStatus);
+            configuration: configuration,
+            core: core,
+            windowsProxy: windowsProxy,
+            serviceStatus: serviceStatus);
 
-        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.FullTakeover);
+        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.FullTakeover, true, 10002);
 
         Assert.Equal(ClashSharpMode.FullTakeover, result.Mode);
         Assert.True(result.CoreRunning);
         Assert.True(result.SystemProxyEnabled);
         Assert.False(result.TransparentProxyEnabled);
         Assert.Equal("missing full", result.Message);
-        Assert.Equal([new ConfigurationRequest(ClashSharpMode.FullTakeover, false)], configuration.Requests);
+        Assert.Equal([new ConfigurationRequest(ClashSharpMode.FullTakeover, false, 10002)], configuration.Requests);
         Assert.Equal([configuration.State], core.RestartedStates);
         Assert.Equal(["127.0.0.1:10002"], windowsProxy.EnabledServers);
         Assert.Equal(0, windowsProxy.DisableCount);
     }
 
-    /// <summary>Verifies missing transparent proxy service falls back to system proxy without clearing the preference.</summary>
+    /// <summary>Verifies missing transparent proxy service falls back to system proxy.</summary>
     [Fact]
-    public void ApplyMode_WhenTransparentProxyEnabledButServiceMissing_FallsBackToSystemProxyWithoutClearingPreference()
+    public void ApplyMode_WhenTransparentProxyEnabledButServiceMissing_FallsBackToSystemProxy()
     {
-        FakeNetworkTakeoverSettings settings = new()
-        {
-            TransparentProxyEnabled = true,
-            MixedPort = 10001,
-        };
         FakeNetworkTakeoverCoreConfiguration configuration = new();
         FakeNetworkTakeoverCore core = new();
         FakeNetworkTakeoverWindowsProxy windowsProxy = new();
         FakeNetworkTakeoverMihomoService serviceStatus = new(new MihomoServiceStatus(false, false, "Missing"));
         NetworkTakeoverService service = CreateService(
-            settings,
-            configuration,
-            core,
-            windowsProxy,
-            serviceStatus);
+            configuration: configuration,
+            core: core,
+            windowsProxy: windowsProxy,
+            serviceStatus: serviceStatus);
 
-        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.RuleTakeover);
+        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.RuleTakeover, true, 10001);
 
         Assert.Equal(ClashSharpMode.RuleTakeover, result.Mode);
         Assert.True(result.CoreRunning);
         Assert.True(result.SystemProxyEnabled);
         Assert.False(result.TransparentProxyEnabled);
-        Assert.True(settings.TransparentProxyEnabled);
         Assert.Equal("missing rule", result.Message);
-        Assert.Equal([new ConfigurationRequest(ClashSharpMode.RuleTakeover, false)], configuration.Requests);
+        Assert.Equal([new ConfigurationRequest(ClashSharpMode.RuleTakeover, false, 10001)], configuration.Requests);
         Assert.Equal([configuration.State], core.RestartedStates);
         Assert.Equal(["127.0.0.1:10001"], windowsProxy.EnabledServers);
         Assert.Equal(0, windowsProxy.DisableCount);
@@ -125,7 +106,7 @@ public sealed class NetworkTakeoverServiceTests
         FakeNetworkTakeoverWindowsProxy windowsProxy = new();
         NetworkTakeoverService service = CreateService(configuration: configuration, core: core, windowsProxy: windowsProxy);
 
-        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.Disabled);
+        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.Disabled, false, 7890);
 
         Assert.Equal(ClashSharpMode.Disabled, result.Mode);
         Assert.False(result.CoreRunning);
@@ -139,8 +120,28 @@ public sealed class NetworkTakeoverServiceTests
         Assert.Empty(windowsProxy.EnabledServers);
     }
 
+    /// <summary>Verifies journaled parameters win over settings that changed after planning.</summary>
+    [Fact]
+    public void ApplyMode_WithExplicitPlan_UsesFrozenTunAndPortValues()
+    {
+        FakeNetworkTakeoverCoreConfiguration configuration = new();
+        FakeNetworkTakeoverWindowsProxy windowsProxy = new();
+        NetworkTakeoverService service = CreateService(
+            configuration: configuration,
+            windowsProxy: windowsProxy);
+
+        NetworkTakeoverResult result = service.ApplyMode(
+            ClashSharpMode.RuleTakeover,
+            transparentProxyEnabled: false,
+            mixedPort: 12000);
+
+        Assert.True(result.SystemProxyEnabled);
+        Assert.False(result.TransparentProxyEnabled);
+        Assert.Equal([new ConfigurationRequest(ClashSharpMode.RuleTakeover, false, 12000)], configuration.Requests);
+        Assert.Equal(["127.0.0.1:12000"], windowsProxy.EnabledServers);
+    }
+
     private static NetworkTakeoverService CreateService(
-        FakeNetworkTakeoverSettings? settings = null,
         FakeNetworkTakeoverCoreConfiguration? configuration = null,
         FakeNetworkTakeoverCore? core = null,
         FakeNetworkTakeoverWindowsProxy? windowsProxy = null,
@@ -148,7 +149,6 @@ public sealed class NetworkTakeoverServiceTests
         FakeNetworkTakeoverProxyRecovery? proxyRecovery = null)
     {
         return new NetworkTakeoverService(
-            settings ?? new FakeNetworkTakeoverSettings(),
             configuration ?? new FakeNetworkTakeoverCoreConfiguration(),
             core ?? new FakeNetworkTakeoverCore(),
             windowsProxy ?? new FakeNetworkTakeoverWindowsProxy(),
@@ -169,22 +169,18 @@ public sealed class NetworkTakeoverServiceTests
             });
     }
 
-    private sealed class FakeNetworkTakeoverSettings : INetworkTakeoverSettings
-    {
-        public bool TransparentProxyEnabled { get; set; }
-
-        public int MixedPort { get; set; } = 7890;
-    }
-
     private sealed class FakeNetworkTakeoverCoreConfiguration : INetworkTakeoverCoreConfiguration
     {
         public CoreConfigurationState State { get; } = new(@"C:\mihomo", @"C:\mihomo\config.yaml", true);
 
         public List<ConfigurationRequest> Requests { get; } = [];
 
-        public CoreConfigurationState EnsureConfiguration(ClashSharpMode mode, bool transparentProxyEnabled)
+        public CoreConfigurationState EnsureConfiguration(
+            ClashSharpMode mode,
+            bool transparentProxyEnabled,
+            int mixedPort)
         {
-            Requests.Add(new ConfigurationRequest(mode, transparentProxyEnabled));
+            Requests.Add(new ConfigurationRequest(mode, transparentProxyEnabled, mixedPort));
             return State;
         }
     }
@@ -239,5 +235,8 @@ public sealed class NetworkTakeoverServiceTests
         }
     }
 
-    private readonly record struct ConfigurationRequest(ClashSharpMode Mode, bool TransparentProxyEnabled);
+    private readonly record struct ConfigurationRequest(
+        ClashSharpMode Mode,
+        bool TransparentProxyEnabled,
+        int MixedPort);
 }

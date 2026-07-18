@@ -116,6 +116,8 @@ internal static class StartupProbeProgram
         public async Task<StartupStepResult> StartAsync(AppLaunchRequest request, CancellationToken cancellationToken)
         {
             AppendTrace(tracePath, "host-start");
+            ProbeNetworkRuntime network = new(tracePath);
+            network.ApplyRuleTakeover();
             await File.WriteAllTextAsync(readyPath, "ready", cancellationToken);
             using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutSource.CancelAfter(TimeSpan.FromSeconds(20));
@@ -137,6 +139,16 @@ internal static class StartupProbeProgram
         {
             AppendTrace(tracePath, "host-dispose");
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class ProbeNetworkRuntime(string tracePath)
+    {
+        public void ApplyRuleTakeover()
+        {
+            AppendTrace(tracePath, "network-mode-rule-takeover");
+            AppendTrace(tracePath, "core-start");
+            AppendTrace(tracePath, "system-proxy-enable");
         }
     }
 }

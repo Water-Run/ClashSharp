@@ -60,6 +60,8 @@ public sealed class RepositoryTopologyTests
     public void MigratedTypes_AreLoadedFromProductionAssemblies()
     {
         Assert.Equal("ClashSharp.Core", typeof(ActiveConnection).Assembly.GetName().Name);
+        Assert.Equal("ClashSharp.Core", typeof(ClashSharpMode).Assembly.GetName().Name);
+        Assert.Equal("ClashSharp.Core", typeof(NetworkTakeoverResult).Assembly.GetName().Name);
         Assert.Equal("ClashSharp.Infrastructure", typeof(InfrastructureAssemblyMarker).Assembly.GetName().Name);
         Assert.Equal("ClashSharp.Application", typeof(ApplicationBootstrapper).Assembly.GetName().Name);
     }

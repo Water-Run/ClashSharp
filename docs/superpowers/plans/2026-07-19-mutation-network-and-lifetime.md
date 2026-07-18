@@ -145,19 +145,19 @@ Run Application/Infrastructure builds plus focused tests, update evidence, revie
 - Modify: `ClashSharp/ClashSharp.Tests/Unit/Services/NetworkTakeoverServiceTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/NetworkMutationConcurrencyTests.cs`
 
-- [ ] **Step 1: Write RED ownership and rollback tests**
+- [x] **Step 1: Write RED ownership and rollback tests**
 
 Prove network participants reject a missing/foreign/stale `MutationContext`; planning captures baseline and desired mode/TUN/port; apply failure compensates and verifies baseline; success reports observed runtime/proxy state; two mode/port/TUN requests serialize; and no participant persists settings or publishes UI events.
 
-- [ ] **Step 2: Route startup recovery through the mutation coordinator**
+- [x] **Step 2: Route startup recovery through the mutation coordinator**
 
 The startup probe only decides whether recovery is required. Recovery itself is one top-level mutation after durable-journal recovery and before window construction. Remove `Task.Run` and direct `ProxyRecoveryService.Instance` access from the startup step. Keep the compatibility bridge internal and constructor-injected.
 
-- [ ] **Step 3: Route shared application actions through the coordinator**
+- [x] **Step 3: Route shared application actions through the coordinator**
 
 `SwitchProxyMode` submits one intent and persists/publishes only the verified result after the coordinator returns and locks are released. Failed/cancelled operations preserve the displayed/applied baseline. TUN and port UI setters remain explicitly pending until Phase 05 wires their settings transaction; they may not claim runtime application.
 
-- [ ] **Step 4: Strengthen the real two-process test**
+- [x] **Step 4: Strengthen the real two-process test**
 
 Extend the process-independent trace to record fake network/core mutations and prove secondary launch changes none while the primary owns RuleTakeover. A packaged real-app smoke remains required before closing `P1-01`.
 

@@ -101,8 +101,10 @@ internal sealed class DefaultStartupConflictEnvironment : IStartupConflictEnviro
 
     public Task DisableWindowsProxyAsync(CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        WindowsProxyService.Instance.DisableProxy();
-        return Task.CompletedTask;
+#if UNIT_TESTS
+        throw new NotSupportedException("Use an injected startup conflict environment in tests.");
+#else
+        return ApplicationActionService.Instance.DisableWindowsProxyAsync(cancellationToken);
+#endif
     }
 }

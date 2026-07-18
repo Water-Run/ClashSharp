@@ -2,12 +2,18 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Startup;
+using ClashSharp.Service;
 using Microsoft.UI.Xaml;
 
 namespace ClashSharp.Hosting.Startup;
 
 /// <summary>Creates and activates the one primary application window.</summary>
-internal sealed class WindowShellStartupStep(Action<Window> attachWindow) : IStartupStep
+internal sealed class WindowShellStartupStep(
+    Action<Window> attachWindow,
+    TriggerService triggers,
+    ApplicationActionService actions,
+    TrayCommandService trayCommands,
+    StartupConflictSnapshot startupConflicts) : IStartupStep
 {
     public string Name => "window-shell";
 
@@ -16,7 +22,7 @@ internal sealed class WindowShellStartupStep(Action<Window> attachWindow) : ISta
     public Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        MainWindow window = new();
+        MainWindow window = new(triggers, actions, trayCommands, startupConflicts);
         attachWindow(window);
         window.Activate();
         return Task.FromResult(StartupStepResult.Succeeded());

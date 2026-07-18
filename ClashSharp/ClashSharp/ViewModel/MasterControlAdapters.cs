@@ -224,7 +224,7 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
     public string AppAccentColorValue => _settings.AppAccentColorValue;
 }
 
-/// <summary>Adapts <see cref="NetworkTakeoverService"/> to master-control mode application.</summary>
+/// <summary>Adapts shared application actions to master-control mode application.</summary>
 /// <remarks>
 /// Invariants: Wraps a non-null takeover service for the adapter lifetime.
 /// Thread safety: Matches the wrapped service.
@@ -232,23 +232,26 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
 /// </remarks>
 internal sealed class MasterControlTakeoverAdapter : IMasterControlTakeover
 {
-    /// <summary>Wrapped takeover service.</summary>
-    private readonly NetworkTakeoverService _takeover;
+    /// <summary>Shared durable application action service.</summary>
+    private readonly ApplicationActionService _actions;
 
     /// <summary>Initializes a master-control takeover adapter.</summary>
-    /// <param name="takeover">Takeover service. Must not be null.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="takeover"/> is null.</exception>
-    public MasterControlTakeoverAdapter(NetworkTakeoverService takeover)
+    /// <param name="actions">Application actions. Must not be null.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="actions"/> is null.</exception>
+    public MasterControlTakeoverAdapter(ApplicationActionService actions)
     {
-        _takeover = takeover ?? throw new ArgumentNullException(nameof(takeover));
+        _actions = actions ?? throw new ArgumentNullException(nameof(actions));
     }
 
     /// <summary>Applies a master takeover mode.</summary>
     /// <param name="mode">Mode to apply.</param>
-    /// <returns>Result describing the applied runtime state.</returns>
-    public NetworkTakeoverResult ApplyMode(ClashSharpMode mode)
+    /// <param name="cancellationToken">Cancels admission or pre-side-effect work.</param>
+    /// <returns>Verified result describing the applied runtime state.</returns>
+    public Task<NetworkTakeoverResult> ApplyModeAsync(
+        ClashSharpMode mode,
+        CancellationToken cancellationToken)
     {
-        return _takeover.ApplyMode(mode);
+        return _actions.ApplyNetworkModeAsync(mode, cancellationToken);
     }
 }
 

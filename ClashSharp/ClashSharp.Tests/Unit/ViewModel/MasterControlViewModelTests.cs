@@ -103,7 +103,7 @@ public sealed class MasterControlViewModelTests
         Assert.Equal(1, runtime.SnapshotCount);
     }
 
-    /// <summary>Verifies applying a mode persists the mode, updates statuses, and logs the result.</summary>
+    /// <summary>Verifies applying a mode updates presentation state without persisting from the view model.</summary>
     [Fact]
     public async Task ApplyModeAsync_WhenTakeoverSucceeds_UpdatesStateAndLogs()
     {
@@ -117,7 +117,7 @@ public sealed class MasterControlViewModelTests
 
         await viewModel.ApplyModeAsync(ClashSharpMode.FullTakeover, CancellationToken.None);
 
-        Assert.Equal(ClashSharpMode.FullTakeover, settings.CurrentMode);
+        Assert.Equal(ClashSharpMode.Disabled, settings.CurrentMode);
         Assert.True(viewModel.IsFullTakeoverModeSelected);
         Assert.Equal("Running", viewModel.CoreStatusText);
         Assert.Equal("On", viewModel.SystemProxyStatusText);
@@ -126,9 +126,9 @@ public sealed class MasterControlViewModelTests
         Assert.Equal("Active", viewModel.BasicStatusText);
     }
 
-    /// <summary>Verifies takeover fallback results are persisted instead of the originally requested mode.</summary>
+    /// <summary>Verifies takeover fallback results update selection without a second settings write.</summary>
     [Fact]
-    public async Task ApplyModeAsync_WhenTakeoverReturnsDifferentMode_PersistsResultMode()
+    public async Task ApplyModeAsync_WhenTakeoverReturnsDifferentMode_UsesVerifiedResultMode()
     {
         FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.Disabled };
         FakeMasterTakeover takeover = new()
@@ -152,7 +152,7 @@ public sealed class MasterControlViewModelTests
 
         await viewModel.ApplyModeAsync(ClashSharpMode.FullTakeover, CancellationToken.None);
 
-        Assert.Equal(ClashSharpMode.Standby, settings.CurrentMode);
+        Assert.Equal(ClashSharpMode.Disabled, settings.CurrentMode);
         Assert.Equal(ClashSharpMode.Standby, viewModel.SelectedMode);
         Assert.Equal(ClashSharpMode.Standby, notifiedMode);
     }
@@ -187,9 +187,9 @@ public sealed class MasterControlViewModelTests
         Assert.True(viewModel.IsDisabledModeSelected);
     }
 
-    /// <summary>Verifies expected takeover failures move the view model to a faulted state and log an error.</summary>
+    /// <summary>Verifies expected takeover failures preserve displayed baseline state and log an error.</summary>
     [Fact]
-    public async Task ApplyModeAsync_WhenTakeoverFails_SetsFaultedStateAndLogs()
+    public async Task ApplyModeAsync_WhenTakeoverFails_PreservesBaselineAndLogs()
     {
         FakeMasterTakeover takeover = new()
         {
@@ -200,9 +200,8 @@ public sealed class MasterControlViewModelTests
 
         await viewModel.ApplyModeAsync(ClashSharpMode.Standby, CancellationToken.None);
 
-        Assert.Equal(ClashSharpMode.Faulted, viewModel.SelectedMode);
-        Assert.Equal("Core failed", viewModel.CoreStatusText);
-        Assert.Equal("Unavailable", viewModel.BasicStatusText);
+        Assert.Equal(ClashSharpMode.Disabled, viewModel.SelectedMode);
+        Assert.Equal(string.Empty, viewModel.CoreStatusText);
         Assert.Contains(log.Entries, entry => entry.Level == "Error" && entry.Detail == "missing core");
     }
 
@@ -719,17 +718,19 @@ public sealed class MasterControlViewModelTests
         /// <returns>Configured takeover result using the requested mode when the result has default disabled mode.</returns>
         public int ApplyCount { get; private set; }
 
-        public NetworkTakeoverResult ApplyMode(ClashSharpMode mode)
+        public Task<NetworkTakeoverResult> ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ApplyCount++;
             if (ExceptionToThrow is not null)
             {
                 throw ExceptionToThrow;
             }
 
-            return Result.Mode == ClashSharpMode.Disabled && mode != ClashSharpMode.Disabled
+            NetworkTakeoverResult result = Result.Mode == ClashSharpMode.Disabled && mode != ClashSharpMode.Disabled
                 ? Result with { Mode = mode }
                 : Result;
+            return Task.FromResult(result);
         }
     }
 

@@ -14,21 +14,14 @@ using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
-/// <summary>Provides user settings required to apply network takeover modes.</summary>
-internal interface INetworkTakeoverSettings
-{
-    /// <summary>Gets whether TUN transparent proxy is preferred for takeover modes.</summary>
-    bool TransparentProxyEnabled { get; }
-
-    /// <summary>Gets the local mixed HTTP/SOCKS port used by system proxy takeover.</summary>
-    int MixedPort { get; }
-}
-
 /// <summary>Ensures the mihomo runtime configuration matches the desired takeover mode.</summary>
 internal interface INetworkTakeoverCoreConfiguration
 {
     /// <summary>Ensures runtime configuration for <paramref name="mode"/> and transparent proxy state.</summary>
-    CoreConfigurationState EnsureConfiguration(ClashSharpMode mode, bool transparentProxyEnabled);
+    CoreConfigurationState EnsureConfiguration(
+        ClashSharpMode mode,
+        bool transparentProxyEnabled,
+        int mixedPort);
 }
 
 /// <summary>Controls the owned mihomo core process.</summary>
@@ -76,8 +69,6 @@ public sealed partial class NetworkTakeoverService
     /// <summary>Synchronization object guarding runtime mode transitions for this service lifetime.</summary>
     private readonly object _syncLock = new();
 
-    private readonly INetworkTakeoverSettings _settings;
-
     private readonly INetworkTakeoverCoreConfiguration _configuration;
 
     private readonly INetworkTakeoverCore _core;
@@ -92,7 +83,6 @@ public sealed partial class NetworkTakeoverService
 
     /// <summary>Initializes a new network takeover service instance.</summary>
     internal NetworkTakeoverService(
-        INetworkTakeoverSettings settings,
         INetworkTakeoverCoreConfiguration configuration,
         INetworkTakeoverCore core,
         INetworkTakeoverWindowsProxy windowsProxy,
@@ -100,7 +90,6 @@ public sealed partial class NetworkTakeoverService
         INetworkTakeoverProxyRecovery proxyRecovery,
         Func<string, string> getString)
     {
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _core = core ?? throw new ArgumentNullException(nameof(core));
         _windowsProxy = windowsProxy ?? throw new ArgumentNullException(nameof(windowsProxy));
@@ -109,40 +98,27 @@ public sealed partial class NetworkTakeoverService
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
-    /// <summary>Applies <paramref name="mode"/> to the core process and Windows system proxy.</summary>
-    /// <param name="mode">Selected master takeover mode to apply.</param>
-    /// <returns>A <see cref="NetworkTakeoverResult"/> describing the applied runtime state.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a supported runtime mode.</exception>
-    /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
-    /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
-    /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
-    public NetworkTakeoverResult ApplyMode(ClashSharpMode mode)
+    /// <summary>Applies one immutable planned mode without rereading mutable TUN or port settings.</summary>
+    internal NetworkTakeoverResult ApplyMode(
+        ClashSharpMode mode,
+        bool transparentProxyEnabled,
+        int mixedPort)
     {
+        if (mixedPort is < 1 or > 65535)
+        {
+            throw new ArgumentOutOfRangeException(nameof(mixedPort), "Port must be in the range [1, 65535].");
+        }
+
         lock (_syncLock)
         {
             return mode switch
             {
                 ClashSharpMode.Disabled => ApplyDisabledMode(),
-                ClashSharpMode.Standby => ApplyStandbyMode(),
-                ClashSharpMode.RuleTakeover => ApplyTakeoverMode(mode),
-                ClashSharpMode.FullTakeover => ApplyTakeoverMode(mode),
+                ClashSharpMode.Standby => ApplyStandbyMode(mixedPort),
+                ClashSharpMode.RuleTakeover => ApplyTakeoverMode(mode, transparentProxyEnabled, mixedPort),
+                ClashSharpMode.FullTakeover => ApplyTakeoverMode(mode, transparentProxyEnabled, mixedPort),
                 _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported Clash# runtime mode."),
             };
-        }
-    }
-
-    /// <summary>Restores a system-proxy takeover after stale Clash# proxy state is detected on startup.</summary>
-    /// <returns>The resulting system-proxy takeover state.</returns>
-    /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
-    /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
-    /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
-    public NetworkTakeoverResult ApplyStartupSystemProxyRecovery()
-    {
-        lock (_syncLock)
-        {
-            return ApplySystemProxyTakeoverMode(
-                ClashSharpMode.RuleTakeover,
-                GetString("NetworkTakeover.StartupRecovered"));
         }
     }
 
@@ -160,9 +136,9 @@ public sealed partial class NetworkTakeoverService
     /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
     /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
     /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
-    private NetworkTakeoverResult ApplyStandbyMode()
+    private NetworkTakeoverResult ApplyStandbyMode(int mixedPort)
     {
-        RestartCore(ClashSharpMode.Standby, transparentProxyEnabled: false);
+        RestartCore(ClashSharpMode.Standby, transparentProxyEnabled: false, mixedPort);
         _windowsProxy.DisableProxy();
         return new NetworkTakeoverResult(ClashSharpMode.Standby, true, false, false, GetString("NetworkTakeover.Standby"));
     }
@@ -173,20 +149,26 @@ public sealed partial class NetworkTakeoverService
     /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
     /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
     /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
-    private NetworkTakeoverResult ApplyTakeoverMode(ClashSharpMode mode)
+    private NetworkTakeoverResult ApplyTakeoverMode(
+        ClashSharpMode mode,
+        bool transparentProxyEnabled,
+        int mixedPort)
     {
-        if (!_settings.TransparentProxyEnabled)
+        if (!transparentProxyEnabled)
         {
-            return ApplySystemProxyTakeoverMode(mode, BuildSystemProxyMessage(mode));
+            return ApplySystemProxyTakeoverMode(mode, mixedPort, BuildSystemProxyMessage(mode));
         }
 
         MihomoServiceStatus serviceStatus = _mihomoService.GetStatus();
         if (!serviceStatus.IsInstalled || !serviceStatus.IsRunning)
         {
-            return ApplySystemProxyTakeoverMode(mode, BuildTransparentProxyServiceMissingMessage(mode));
+            return ApplySystemProxyTakeoverMode(
+                mode,
+                mixedPort,
+                BuildTransparentProxyServiceMissingMessage(mode));
         }
 
-        RestartCore(mode, transparentProxyEnabled: true);
+        RestartCore(mode, transparentProxyEnabled: true, mixedPort);
         _windowsProxy.DisableProxy();
         return new NetworkTakeoverResult(mode, true, false, true, BuildTransparentProxyMessage(mode));
     }
@@ -195,12 +177,14 @@ public sealed partial class NetworkTakeoverService
     /// <param name="mode">Takeover mode that should enable Windows proxy.</param>
     /// <param name="message">Human-readable outcome message. Must not be null.</param>
     /// <returns>The resulting takeover state.</returns>
-    private NetworkTakeoverResult ApplySystemProxyTakeoverMode(ClashSharpMode mode, string message)
+    private NetworkTakeoverResult ApplySystemProxyTakeoverMode(
+        ClashSharpMode mode,
+        int mixedPort,
+        string message)
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        RestartCore(mode, transparentProxyEnabled: false);
-        int mixedPort = _settings.MixedPort;
+        RestartCore(mode, transparentProxyEnabled: false, mixedPort);
         string proxyServer = _proxyRecovery.BuildLoopbackProxyServer(mixedPort);
         _windowsProxy.EnableProxy(proxyServer);
         return new NetworkTakeoverResult(mode, true, true, false, message);
@@ -211,9 +195,15 @@ public sealed partial class NetworkTakeoverService
     /// <param name="transparentProxyEnabled">True to enable mihomo TUN transparent proxy configuration.</param>
     /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
     /// <exception cref="InvalidOperationException">The core process cannot be started.</exception>
-    private void RestartCore(ClashSharpMode mode, bool transparentProxyEnabled)
+    private void RestartCore(
+        ClashSharpMode mode,
+        bool transparentProxyEnabled,
+        int mixedPort)
     {
-        CoreConfigurationState configurationState = _configuration.EnsureConfiguration(mode, transparentProxyEnabled);
+        CoreConfigurationState configurationState = _configuration.EnsureConfiguration(
+            mode,
+            transparentProxyEnabled,
+            mixedPort);
         _core.Restart(configurationState);
     }
 

@@ -4,6 +4,7 @@ namespace ClashSharp.ApplicationModel.Mutations;
 public sealed class MutationContext
 {
     private readonly object _ownershipToken;
+    private int _active = 1;
 
     internal MutationContext(Guid operationId, object ownershipToken)
     {
@@ -16,9 +17,14 @@ public sealed class MutationContext
 
     internal void EnsureOwnedBy(object ownershipToken)
     {
-        if (!ReferenceEquals(_ownershipToken, ownershipToken))
+        if (!ReferenceEquals(_ownershipToken, ownershipToken) || Volatile.Read(ref _active) == 0)
         {
-            throw new InvalidOperationException("The mutation context does not belong to this coordinator.");
+            throw new InvalidOperationException("The mutation context is foreign or no longer active.");
         }
+    }
+
+    internal void Invalidate()
+    {
+        Interlocked.Exchange(ref _active, 0);
     }
 }

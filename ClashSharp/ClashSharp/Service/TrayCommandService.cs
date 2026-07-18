@@ -10,6 +10,8 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -22,16 +24,10 @@ internal interface ITrayCommandSettings
     bool TransparentProxyEnabled { get; set; }
 }
 
-/// <summary>Mihomo service status contract required by <see cref="TrayCommandService"/>.</summary>
-internal interface ITrayCommandMihomoService
-{
-    MihomoServiceStatus GetStatus();
-}
-
 /// <summary>Network takeover contract required by <see cref="TrayCommandService"/>.</summary>
 internal interface ITrayCommandTakeover
 {
-    NetworkTakeoverResult ApplyMode(ClashSharpMode mode);
+    Task<NetworkTakeoverResult> ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken);
 }
 
 /// <summary>Logging contract required by <see cref="TrayCommandService"/>.</summary>
@@ -46,51 +42,41 @@ internal sealed class TrayCommandService
     private const string LogCategory = "Tray";
 
     private readonly ITrayCommandSettings _settings;
-    private readonly ITrayCommandMihomoService _mihomoService;
     private readonly ITrayCommandTakeover _takeover;
     private readonly ITrayCommandLog _log;
 
     public TrayCommandService(
         ITrayCommandSettings settings,
-        ITrayCommandMihomoService mihomoService,
         ITrayCommandTakeover takeover,
         ITrayCommandLog log)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _mihomoService = mihomoService ?? throw new ArgumentNullException(nameof(mihomoService));
         _takeover = takeover ?? throw new ArgumentNullException(nameof(takeover));
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
-    public bool ApplyMode(ClashSharpMode mode)
+    public Task<bool> ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
     {
-        return TryApplyMode(mode, "Tray mode change failed.");
+        return TryApplyModeAsync(mode, "Tray mode change failed.", cancellationToken);
     }
 
-    public bool SetTransparentProxyEnabled(bool isEnabled)
+    public Task<bool> SetTransparentProxyEnabledAsync(bool isEnabled, CancellationToken cancellationToken)
     {
-        MihomoServiceStatus serviceStatus = _mihomoService.GetStatus();
-        if (isEnabled && !serviceStatus.IsInstalled)
-        {
-            _settings.TransparentProxyEnabled = true;
-            return false;
-        }
-
+        cancellationToken.ThrowIfCancellationRequested();
         _settings.TransparentProxyEnabled = isEnabled;
-        if (_settings.CurrentMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
-        {
-            return TryApplyMode(_settings.CurrentMode, "Tray transparent proxy change failed.");
-        }
-
-        return false;
+        return Task.FromResult(false);
     }
 
-    private bool TryApplyMode(ClashSharpMode mode, string failureMessage)
+    private async Task<bool> TryApplyModeAsync(
+        ClashSharpMode mode,
+        string failureMessage,
+        CancellationToken cancellationToken)
     {
         try
         {
-            NetworkTakeoverResult result = _takeover.ApplyMode(mode);
-            _settings.CurrentMode = result.Mode;
+            NetworkTakeoverResult result = await _takeover
+                .ApplyModeAsync(mode, cancellationToken)
+                .ConfigureAwait(false);
             _log.Append("Info", LogCategory, result.Message, null);
             return true;
         }

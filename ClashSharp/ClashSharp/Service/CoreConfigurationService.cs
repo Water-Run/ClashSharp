@@ -124,11 +124,20 @@ public sealed partial class CoreConfigurationService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> cannot be mapped to a mihomo mode.</exception>
     public CoreConfigurationState EnsureConfiguration(ClashSharpMode mode, bool transparentProxyEnabled)
     {
+        return EnsureConfiguration(mode, transparentProxyEnabled, _settings.MixedPort);
+    }
+
+    /// <summary>Ensures the managed configuration matches immutable planned mode, TUN, and port values.</summary>
+    public CoreConfigurationState EnsureConfiguration(
+        ClashSharpMode mode,
+        bool transparentProxyEnabled,
+        int mixedPort)
+    {
         lock (_syncLock)
         {
             Directory.CreateDirectory(_configurationDirectoryPath);
 
-            string configText = BuildRuntimeConfiguration(_settings.MixedPort, mode, transparentProxyEnabled);
+            string configText = BuildRuntimeConfiguration(mixedPort, mode, transparentProxyEnabled);
             File.WriteAllText(_configurationFilePath, configText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             return GetState();

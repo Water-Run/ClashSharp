@@ -38,7 +38,7 @@ internal sealed class TriggerService
 #if UNIT_TESTS
     public static TriggerService Instance => throw new NotSupportedException("Use explicit TriggerService dependencies in tests.");
 #else
-    public static TriggerService Instance { get; } = CreateDefault();
+    public static TriggerService Instance => throw new NotSupportedException("Use the AppHost-owned TriggerService instance.");
 #endif
 
     private readonly string _storagePath;
@@ -319,12 +319,11 @@ internal sealed class TriggerService
         }
     }
 
-#if !UNIT_TESTS
-    private static TriggerService CreateDefault()
+    internal static TriggerService CreateDefault(IApplicationActionDispatcher actions)
     {
         return new TriggerService(
             Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "Triggers.json"),
-            ApplicationActionService.Instance,
+            actions,
             NotificationService.Instance,
             TriggerRuntimeEventHub.Instance,
             LogStorageService.Instance.AppendLog,
@@ -334,7 +333,6 @@ internal sealed class TriggerService
             value => AppSettingsService.Instance.TriggersEnabled = value,
             () => AppSettingsService.Instance.TriggerNotificationsEnabled);
     }
-#endif
 
     private string FormatActionForLog(TriggerAction action)
     {

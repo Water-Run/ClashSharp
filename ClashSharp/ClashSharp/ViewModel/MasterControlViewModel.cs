@@ -163,20 +163,21 @@ internal enum MasterControlTileAction
 
 /// <summary>Network takeover contract required by <see cref="MasterControlViewModel"/>.</summary>
 /// <remarks>
-/// Invariants: Implementations either return the applied mode result or throw an expected runtime exception.
+/// Invariants: Implementations return only a verified mode result or throw an expected runtime exception.
 /// Thread safety: Determined by the concrete implementation.
-/// Side effects: May start or stop the core and mutate Windows proxy state.
+/// Side effects: Submits a durable network mutation through the application layer.
 /// </remarks>
 internal interface IMasterControlTakeover
 {
     /// <summary>Applies a master takeover mode.</summary>
     /// <param name="mode">Mode to apply.</param>
-    /// <returns>Result describing the applied runtime state.</returns>
+    /// <param name="cancellationToken">Cancels admission or pre-side-effect work.</param>
+    /// <returns>Verified result describing the applied runtime state.</returns>
     /// <exception cref="FileNotFoundException">Required runtime files are missing.</exception>
     /// <exception cref="InvalidOperationException">Runtime state cannot be applied.</exception>
     /// <exception cref="Win32Exception">Windows rejects proxy notification.</exception>
     /// <exception cref="UnauthorizedAccessException">Windows proxy state cannot be changed.</exception>
-    NetworkTakeoverResult ApplyMode(ClashSharpMode mode);
+    Task<NetworkTakeoverResult> ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken);
 }
 
 /// <summary>Logging contract required by <see cref="MasterControlViewModel"/>.</summary>
@@ -420,7 +421,7 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Settings store used for persisted mode and transparent-proxy state.</summary>
     private readonly IMasterControlSettings _settings;
 
-    /// <summary>Takeover service used to apply selected modes.</summary>
+    /// <summary>Durable network action used to apply selected modes.</summary>
     private readonly IMasterControlTakeover _takeover;
 
     /// <summary>Log sink used by mode application.</summary>
@@ -779,10 +780,10 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     /// <summary>Applies a selected takeover mode and refreshes visible status.</summary>
     /// <param name="mode">Mode to apply.</param>
-    /// <param name="cancellationToken">Cancellation token accepted for command consistency; not observed by the synchronous takeover service.</param>
-    /// <returns>A completed task after the synchronous mode transition finishes.</returns>
+    /// <param name="cancellationToken">Cancels admission or pre-side-effect work.</param>
+    /// <returns>A task that completes after verified success or baseline restoration.</returns>
     /// <remarks>
-    /// Cancellation semantics: Cancellation is accepted for command-shape consistency but does not cancel synchronous mode application.
+    /// Cancellation semantics: Cancellation is propagated to the durable network coordinator.
     /// Thread / reentrancy: Not guarded; callers should use mode commands for UI invocation.
     /// </remarks>
     public async Task ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
@@ -792,11 +793,16 @@ internal sealed class MasterControlViewModel : ObservableObject
             return;
         }
 
+        ClashSharpMode baselineMode = SelectedMode;
+        string baselineCoreStatus = CoreStatusText;
+        string baselineSystemProxyStatus = SystemProxyStatusText;
+        string baselineTransparentProxyStatus = TransparentProxyStatusText;
+        bool baselineCoreAvailable = _isCoreAvailable;
         try
         {
-            NetworkTakeoverResult result = _takeover.ApplyMode(mode);
+            NetworkTakeoverResult result = await _takeover
+                .ApplyModeAsync(mode, cancellationToken);
             SelectedMode = result.Mode;
-            _settings.CurrentMode = result.Mode;
             CoreStatusText = result.CoreRunning
                 ? _localization.GetString("Master.Status.Running")
                 : _localization.GetString("Master.Status.NotRunning");
@@ -810,9 +816,11 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
-            SelectedMode = ClashSharpMode.Faulted;
-            CoreStatusText = _localization.GetString("Master.Status.CoreStartFailed");
-            _isCoreAvailable = false;
+            SelectedMode = baselineMode;
+            CoreStatusText = baselineCoreStatus;
+            SystemProxyStatusText = baselineSystemProxyStatus;
+            TransparentProxyStatusText = baselineTransparentProxyStatus;
+            _isCoreAvailable = baselineCoreAvailable;
             _log.Append("Error", "MasterControl", _localization.GetString("Master.Log.ApplyModeFailed"), exception.Message);
         }
 

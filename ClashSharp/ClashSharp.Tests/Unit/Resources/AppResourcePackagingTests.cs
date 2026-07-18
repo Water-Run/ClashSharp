@@ -202,9 +202,11 @@ public sealed class AppResourcePackagingTests
             Assert.DoesNotContain(singletonAccess, serviceCode, StringComparison.Ordinal);
         }
 
-        Assert.Contains("INetworkTakeoverSettings", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("INetworkTakeoverSettings", serviceCode, StringComparison.Ordinal);
         Assert.Contains("INetworkTakeoverCoreConfiguration", serviceCode, StringComparison.Ordinal);
         Assert.Contains("INetworkTakeoverWindowsProxy", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("bool transparentProxyEnabled", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("int mixedPort", serviceCode, StringComparison.Ordinal);
         Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
     }
 
@@ -671,9 +673,9 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("ServiceName = \"Clash# Mihomo Service\"", hostCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies stale proxy recovery result messages use localization keys.</summary>
+    /// <summary>Verifies startup recovery failure reporting uses a localization key.</summary>
     [Fact]
-    public void ProxyRecoveryService_UsesLocalizedResultMessages()
+    public void ProxyRecoveryStartupStep_UsesLocalizedFailureMessage()
     {
         string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProxyRecoveryService.cs");
         string recoveryStepPath = FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Startup", "ProxyRecoveryStartupStep.cs");
@@ -694,15 +696,12 @@ public sealed class AppResourcePackagingTests
             Assert.DoesNotContain(literal, recoveryStepCode, StringComparison.Ordinal);
         }
 
-        Assert.Contains("ProxyRecovery.CheckDisabled", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("ProxyRecovery.NoStaleProxy", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("ProxyRecovery.Disabled", serviceCode, StringComparison.Ordinal);
         Assert.Contains("ProxyRecovery.StartupFailed", recoveryStepCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies stale proxy recovery composes platform dependencies through injected boundaries.</summary>
+    /// <summary>Verifies stale proxy inspection remains read-only outside the mutation coordinator.</summary>
     [Fact]
-    public void ProxyRecoveryService_UsesInjectedDependencies()
+    public void ProxyRecoveryService_IsReadOnlyProbe()
     {
         string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProxyRecoveryService.cs");
 
@@ -711,9 +710,53 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("AppSettingsService.Instance", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("WindowsProxyService.Instance", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("NetworkTakeoverService.Instance", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IProxyRecoverySettings", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IProxyRecoveryWindowsProxy", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplyStartupRecoveryIfNeeded", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("DisableProxy", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("IsStaleClashProxy", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("BuildLoopbackProxyServer", serviceCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies every primary network entry point delegates to the durable network coordinator.</summary>
+    [Fact]
+    public void PrimaryNetworkEntryPoints_UseDurableCoordinator()
+    {
+        string mainWindow = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs"));
+        string proxyRecoveryStep = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Startup", "ProxyRecoveryStartupStep.cs"));
+        string fallbackStep = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Startup", "StartupRestoreFallbackStep.cs"));
+        string startupBehaviorStep = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Startup", "StartupNetworkBehaviorStep.cs"));
+        string startupConflictStep = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Startup", "StartupConflictProbeStep.cs"));
+        string applicationActions = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "Service", "ApplicationActionService.cs"));
+        string masterControl = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs"));
+        string trayFactory = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "Service", "TrayCommandServiceFactory.cs"));
+        string startupConflictFactory = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "Service", "StartupConflictDetectionServiceFactory.cs"));
+
+        foreach (string source in new[]
+        {
+            mainWindow,
+            proxyRecoveryStep,
+            fallbackStep,
+            applicationActions,
+            masterControl,
+            trayFactory,
+            startupConflictFactory,
+        })
+        {
+            Assert.DoesNotContain("NetworkTakeoverService.Instance", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("ProxyRecoveryService.Instance", source, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("Task.Run", proxyRecoveryStep, StringComparison.Ordinal);
+        Assert.Contains("NetworkStateCoordinator", proxyRecoveryStep, StringComparison.Ordinal);
+        Assert.Contains("NetworkStateCoordinator", fallbackStep, StringComparison.Ordinal);
+        Assert.Contains("NetworkStateCoordinator", applicationActions, StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowsProxyService.Instance.DisableProxy", startupConflictFactory, StringComparison.Ordinal);
+        Assert.Contains("DisableWindowsProxyAsync", applicationActions, StringComparison.Ordinal);
+        Assert.Contains("NetworkTransitionFailedException", startupBehaviorStep, StringComparison.Ordinal);
+        Assert.Contains("HasBlockingConflicts", startupBehaviorStep, StringComparison.Ordinal);
+        Assert.Contains("Capture", startupConflictStep, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartupConflictDetectionService.Instance.CheckConflicts", mainWindow, StringComparison.Ordinal);
+        Assert.Contains("MutationOutcome.RecoveryRequired", startupBehaviorStep, StringComparison.Ordinal);
+        Assert.Contains("StartupStepResult.Fatal", startupBehaviorStep, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies runtime shutdown cleanup composes dependencies and localized warning text through injected boundaries.</summary>

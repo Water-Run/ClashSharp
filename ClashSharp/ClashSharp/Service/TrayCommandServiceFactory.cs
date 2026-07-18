@@ -7,6 +7,8 @@
  * @date: 2026-06-25
  */
 
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -14,12 +16,11 @@ namespace ClashSharp.Service;
 /// <summary>Creates application-wired tray command services.</summary>
 internal static class TrayCommandServiceFactory
 {
-    public static TrayCommandService CreateDefault()
+    public static TrayCommandService CreateDefault(ApplicationActionService actions)
     {
         return new TrayCommandService(
             new TrayCommandSettingsAdapter(AppSettingsService.Instance),
-            new TrayCommandMihomoServiceAdapter(MihomoServiceManager.Instance),
-            new TrayCommandTakeoverAdapter(NetworkTakeoverService.Instance),
+            new TrayCommandTakeoverAdapter(actions),
             new TrayCommandLogAdapter(LogStorageService.Instance));
     }
 }
@@ -40,21 +41,14 @@ internal sealed class TrayCommandSettingsAdapter(AppSettingsService settings) : 
     }
 }
 
-/// <summary>Adapts mihomo service manager to tray command service status.</summary>
-internal sealed class TrayCommandMihomoServiceAdapter(MihomoServiceManager serviceManager) : ITrayCommandMihomoService
-{
-    public MihomoServiceStatus GetStatus()
-    {
-        return serviceManager.GetStatus();
-    }
-}
-
 /// <summary>Adapts network takeover service to tray commands.</summary>
-internal sealed class TrayCommandTakeoverAdapter(NetworkTakeoverService takeover) : ITrayCommandTakeover
+internal sealed class TrayCommandTakeoverAdapter(ApplicationActionService actions) : ITrayCommandTakeover
 {
-    public NetworkTakeoverResult ApplyMode(ClashSharpMode mode)
+    public Task<NetworkTakeoverResult> ApplyModeAsync(
+        ClashSharpMode mode,
+        CancellationToken cancellationToken)
     {
-        return takeover.ApplyMode(mode);
+        return actions.ApplyNetworkModeAsync(mode, cancellationToken);
     }
 }
 

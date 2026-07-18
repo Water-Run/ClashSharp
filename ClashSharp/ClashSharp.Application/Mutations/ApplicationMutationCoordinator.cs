@@ -41,14 +41,29 @@ public sealed class ApplicationMutationCoordinator : IApplicationMutationCoordin
     }
 
     /// <inheritdoc />
-    public async Task<MutationResult<T>> ExecuteAsync<T>(
+    public Task<MutationResult<T>> ExecuteAsync<T>(
         MutationRequest request,
         MutationPlan plan,
         Func<MutationContext, CancellationToken, Task<T>> resultFactory,
         CancellationToken cancellationToken)
     {
-        ValidateRequest(request);
         ArgumentNullException.ThrowIfNull(plan);
+        return ExecuteAsync(
+            request,
+            (_, _) => Task.FromResult(plan),
+            resultFactory,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<MutationResult<T>> ExecuteAsync<T>(
+        MutationRequest request,
+        Func<MutationContext, CancellationToken, Task<MutationPlan>> planFactory,
+        Func<MutationContext, CancellationToken, Task<T>> resultFactory,
+        CancellationToken cancellationToken)
+    {
+        ValidateRequest(request);
+        ArgumentNullException.ThrowIfNull(planFactory);
         ArgumentNullException.ThrowIfNull(resultFactory);
 
         MutationAdmissionLease? admissionLease;
@@ -76,9 +91,9 @@ public sealed class ApplicationMutationCoordinator : IApplicationMutationCoordin
                     request.OperationId,
                     async (context, _) =>
                     {
-                        ExecutionEnvelope<T> result = await ExecuteNewMutationAsync(
+                        ExecutionEnvelope<T> result = await ExecutePlannedMutationAsync(
                             request,
-                            plan,
+                            planFactory,
                             resultFactory,
                             context,
                             admittedCancellation.Token).ConfigureAwait(false);
@@ -110,6 +125,12 @@ public sealed class ApplicationMutationCoordinator : IApplicationMutationCoordin
         }
 
         return execution.Result;
+    }
+
+    /// <inheritdoc />
+    public void EnsureContextOwnership(MutationContext context)
+    {
+        _mutationGate.EnsureContextOwnership(context);
     }
 
     /// <inheritdoc />
@@ -355,6 +376,35 @@ public sealed class ApplicationMutationCoordinator : IApplicationMutationCoordin
                 exception,
                 recoveryDeadline.Token).ConfigureAwait(false);
         }
+    }
+
+    private async Task<ExecutionEnvelope<T>> ExecutePlannedMutationAsync<T>(
+        MutationRequest request,
+        Func<MutationContext, CancellationToken, Task<MutationPlan>> planFactory,
+        Func<MutationContext, CancellationToken, Task<T>> resultFactory,
+        MutationContext context,
+        CancellationToken callerToken)
+    {
+        MutationPlan plan;
+        try
+        {
+            plan = await planFactory(context, callerToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The mutation plan factory returned null.");
+        }
+        catch (OperationCanceledException) when (callerToken.IsCancellationRequested)
+        {
+            return new ExecutionEnvelope<T>(
+                CreateResult<T>(request.OperationId, MutationOutcome.Cancelled, default, "mutation-cancelled"),
+                RetainRecovery: false);
+        }
+        catch (Exception)
+        {
+            return new ExecutionEnvelope<T>(
+                CreateResult<T>(request.OperationId, MutationOutcome.Failed, default, "mutation-plan-failed"),
+                RetainRecovery: false);
+        }
+
+        return await ExecuteNewMutationAsync(request, plan, resultFactory, context, callerToken).ConfigureAwait(false);
     }
 
     private async Task<ExecutionEnvelope<T>> CompensateFailedMutationAsync<T>(

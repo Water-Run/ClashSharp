@@ -57,7 +57,7 @@ public sealed partial class MasterControl : Page
             new MasterControlCoreAdapter(MihomoCoreService.Instance),
             new MasterControlWindowsProxyAdapter(WindowsProxyService.Instance),
             new MasterControlSettingsAdapter(AppSettingsService.Instance),
-            new MasterControlTakeoverAdapter(NetworkTakeoverService.Instance),
+            new MasterControlTakeoverAdapter(ApplicationActionService.Instance),
             new MasterControlLogAdapter(LogStorageService.Instance),
             new MasterControlTrayStatusAdapter(TrayStatusService.Instance),
             new MasterControlRuntimeAdapter(),

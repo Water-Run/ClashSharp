@@ -21,12 +21,11 @@ public sealed partial class NetworkTakeoverService
 /// <summary>Creates network takeover service instances with production dependencies.</summary>
 internal static class NetworkTakeoverServiceFactory
 {
-    /// <summary>Creates the default service used by application UI and background startup flows.</summary>
-    /// <returns>A network takeover service wired to persistent settings, mihomo, Windows proxy, and localization resources.</returns>
+    /// <summary>Creates the compatibility service used only by the durable network adapter.</summary>
+    /// <returns>A network takeover service wired to mihomo, Windows proxy, and localization resources.</returns>
     public static NetworkTakeoverService CreateDefault()
     {
         return new NetworkTakeoverService(
-            new NetworkTakeoverSettingsAdapter(AppSettingsService.Instance),
             new NetworkTakeoverCoreConfigurationAdapter(CoreConfigurationService.Instance),
             new NetworkTakeoverCoreAdapter(MihomoCoreService.Instance),
             new NetworkTakeoverWindowsProxyAdapter(WindowsProxyService.Instance),
@@ -36,18 +35,14 @@ internal static class NetworkTakeoverServiceFactory
     }
 }
 
-internal sealed class NetworkTakeoverSettingsAdapter(AppSettingsService settings) : INetworkTakeoverSettings
-{
-    public bool TransparentProxyEnabled => settings.TransparentProxyEnabled;
-
-    public int MixedPort => settings.MixedPort;
-}
-
 internal sealed class NetworkTakeoverCoreConfigurationAdapter(CoreConfigurationService configuration) : INetworkTakeoverCoreConfiguration
 {
-    public CoreConfigurationState EnsureConfiguration(ClashSharpMode mode, bool transparentProxyEnabled)
+    public CoreConfigurationState EnsureConfiguration(
+        ClashSharpMode mode,
+        bool transparentProxyEnabled,
+        int mixedPort)
     {
-        return configuration.EnsureConfiguration(mode, transparentProxyEnabled);
+        return configuration.EnsureConfiguration(mode, transparentProxyEnabled, mixedPort);
     }
 }
 

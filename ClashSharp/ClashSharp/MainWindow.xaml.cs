@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using ClashSharp.Components;
+using ClashSharp.Hosting.Startup;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.View;
@@ -61,6 +62,12 @@ public sealed partial class MainWindow : Window
     /// <summary>Coordinates tray commands without coupling behavior to WinUI callbacks.</summary>
     private readonly TrayCommandService _trayCommandService;
 
+    private readonly TriggerService _triggerService;
+
+    private readonly ApplicationActionService _applicationActions;
+
+    private readonly StartupConflictSnapshot _startupConflicts;
+
     /// <summary>Current app window used for close interception.</summary>
     private AppWindow? _appWindow;
 
@@ -74,13 +81,20 @@ public sealed partial class MainWindow : Window
     private bool _startupFlowStarted;
 
     /// <summary>Initializes the main window, applies minimum size constraints, configures the title bar, and sets up navigation.</summary>
-    public MainWindow()
+    internal MainWindow(
+        TriggerService triggerService,
+        ApplicationActionService applicationActions,
+        TrayCommandService trayCommandService,
+        StartupConflictSnapshot startupConflicts)
     {
+        _triggerService = triggerService ?? throw new ArgumentNullException(nameof(triggerService));
+        _applicationActions = applicationActions ?? throw new ArgumentNullException(nameof(applicationActions));
+        _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
+        _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
         _viewModel = new MainWindowViewModel(
             new ShellLocalizationAdapter(LocalizationService.Instance),
             CreatePageMap(),
             new ShellRestartStateAdapter(RestartRequiredStateService.Instance));
-        _trayCommandService = TrayCommandServiceFactory.CreateDefault();
         AppThemeService.ApplyAccentColor(
             AppSettingsService.Instance.AppAccentColorMode,
             AppSettingsService.Instance.AppAccentColorValue);
@@ -246,17 +260,13 @@ public sealed partial class MainWindow : Window
         AppSettingsService settings = AppSettingsService.Instance;
         bool skipStartupDialogs = ShouldSkipStartupDialogs();
 
-        await TriggerService.Instance.EvaluateAsync(
+        await _triggerService.EvaluateAsync(
             TriggerEvaluationContextFactory.Create(TriggerEventKind.AppEntered),
             System.Threading.CancellationToken.None);
 
-        if (!skipStartupDialogs && settings.StartupConflictCheckEnabled)
+        if (!skipStartupDialogs && _startupConflicts.Issues.Count > 0)
         {
-            IReadOnlyList<StartupConflictIssue> issues = StartupConflictDetectionService.Instance.CheckConflicts(settings.MixedPort);
-            if (issues.Count > 0)
-            {
-                await ShowStartupConflictDialogAsync(issues);
-            }
+            await ShowStartupConflictDialogAsync(_startupConflicts.Issues);
         }
 
         if (!skipStartupDialogs && settings.ShowStartupGuideOnStartup)
@@ -264,18 +274,6 @@ public sealed partial class MainWindow : Window
             await ShowStartupPromptDialogAsync();
         }
 
-        ClashSharpMode startupMode = StartupBehaviorService.ResolveStartupMode(settings.StartupBehaviorMode, settings.CurrentMode);
-        try
-        {
-            NetworkTakeoverResult result = NetworkTakeoverService.Instance.ApplyMode(startupMode);
-            settings.CurrentMode = result.Mode;
-            LogStorageService.Instance.AppendLog("Info", "Startup", result.Message, null);
-            await ApplicationActionService.Instance.PublishProxyModeAppliedAsync(result.Mode, System.Threading.CancellationToken.None);
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or System.IO.FileNotFoundException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
-        {
-            LogStorageService.Instance.AppendLog("Warning", "Startup", LocalizationService.Instance.GetString("Startup.Log.ProxyBehaviorFailed"), exception.Message);
-        }
     }
 
     private static bool ShouldSkipStartupDialogs()
@@ -390,14 +388,16 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Applies a mode requested from the tray menu.</summary>
-    private void ApplyModeFromTray(ClashSharpMode mode)
+    private async void ApplyModeFromTray(ClashSharpMode mode)
     {
         if (mode == AppSettingsService.Instance.CurrentMode)
         {
             return;
         }
 
-        if (_trayCommandService.ApplyMode(mode))
+        if (await _trayCommandService.ApplyModeAsync(
+            mode,
+            System.Threading.CancellationToken.None))
         {
             _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
         }
@@ -406,14 +406,16 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Sets transparent proxy preference from the tray menu.</summary>
-    private void SetTransparentProxyFromTray(bool isEnabled)
+    private async void SetTransparentProxyFromTray(bool isEnabled)
     {
         if (isEnabled == AppSettingsService.Instance.TransparentProxyEnabled)
         {
             return;
         }
 
-        if (_trayCommandService.SetTransparentProxyEnabled(isEnabled))
+        if (await _trayCommandService.SetTransparentProxyEnabledAsync(
+            isEnabled,
+            System.Threading.CancellationToken.None))
         {
             _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
         }
@@ -421,9 +423,9 @@ public sealed partial class MainWindow : Window
         _trayService?.RefreshMenu();
     }
 
-    private static async Task NotifyAndTriggerModeAppliedAsync(ClashSharpMode mode)
+    private async Task NotifyAndTriggerModeAppliedAsync(ClashSharpMode mode)
     {
-        await ApplicationActionService.Instance.PublishProxyModeAppliedAsync(mode, System.Threading.CancellationToken.None);
+        await _applicationActions.PublishProxyModeAppliedAsync(mode, System.Threading.CancellationToken.None);
     }
 
     /// <summary>Requests safe exit from the tray without showing the close confirmation prompt.</summary>

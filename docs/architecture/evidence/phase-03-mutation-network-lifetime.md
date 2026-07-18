@@ -26,6 +26,16 @@ The coordinator was split before checkpointing: `ApplicationMutationCoordinator`
 
 Mutation engine checkpoint: `0ff078b10254a97c3e8e94116c65c503e5901816` (`feat: add journal-driven mutation engine`).
 
+The first `NetworkMutationConcurrencyTests` build failed with `CS0234`/`CS0246` because the application network namespace and coordinator contracts did not exist. The network vertical slice now plans only while holding an active mutation context, captures immutable mode/TUN/port intent and a classified baseline, serializes concurrent requests through the fair gate before planning, verifies observed external state, and restores both external and durable baseline state after apply failure. Foreign and expired contexts are rejected before adapter access.
+
+The WinUI compatibility boundary is the only remaining caller of the legacy takeover mutator. Startup journal recovery runs first, stale-proxy recovery is a top-level mutation, and configured startup behavior is applied through the same coordinator. `ProxyRecoveryService` is now a read-only endpoint probe; its direct mutation API and obsolete result model were removed. A pre-network startup conflict snapshot prevents an occupied port or external mihomo process from being ignored and prevents the later window dialog from misclassifying the newly started owned core. Explicit proxy-conflict repair also enters the durable coordinator.
+
+Shared trigger, tray, master-control, and startup mode actions await the coordinator and publish only its verified result. The presentation layer no longer writes `CurrentMode`; the durable committer owns that promotion. A failed mode request restores the previously displayed state instead of showing an optimistic `Faulted` mode. TUN preference actions intentionally persist preference only and return no runtime-applied claim until the Phase 05 settings transaction is available.
+
+Structured review found and fixed three important races or policy errors: the legacy executor reread live TUN/port settings after journaling, recovery-required startup behavior was initially downgraded to a warning, and the startup conflict dialog could inspect the process after startup had created its own core. Execution now receives frozen plan values, recovery obligations are fatal startup outcomes, and conflicts are probed once before startup mode application. Aggregate validation also rejects a settings or external-state baseline change before journal creation.
+
+The strengthened real two-process probe records fake `RuleTakeover`, core-start, and system-proxy mutations with process identity. The test proves all three belong to the primary PID and the redirected secondary performs none. The network/engine/admission focused suite passed 22 tests ten consecutive times (220 executions). The complete Release suite passed 724 tests, 0 failed, and 0 skipped; the Release solution build completed with 0 warnings and 0 errors; format verification and `git diff --check` succeeded.
+
 ## Pending evidence
 
-Network routing, runtime supervision, process execution, lifecycle handoff, final repeated concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
+Runtime supervision, process execution, lifecycle handoff, final repeated concurrency verification, and ledger closure evidence remain pending as the phase proceeds.

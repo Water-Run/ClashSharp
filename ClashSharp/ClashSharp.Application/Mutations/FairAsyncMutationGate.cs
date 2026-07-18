@@ -94,14 +94,16 @@ public sealed class FairAsyncMutationGate
         await AcquireAsync(cancellationToken).ConfigureAwait(false);
         Guid? previousOwner = _logicalOwner.Value;
         _logicalOwner.Value = operationId;
+        MutationContext? context = null;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            MutationContext context = new(operationId, _ownershipToken);
+            context = new MutationContext(operationId, _ownershipToken);
             return await operation(context, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
+            context?.Invalidate();
             _logicalOwner.Value = previousOwner;
             Release();
         }

@@ -11,6 +11,8 @@ using System;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -18,18 +20,13 @@ namespace ClashSharp.Service;
 /// <summary>Default shared dispatcher for non-picker application actions.</summary>
 internal sealed class ApplicationActionService : IApplicationActionDispatcher
 {
-    public static ApplicationActionService Instance { get; } = new(
-        AppSettingsService.Instance,
-        NetworkTakeoverService.Instance,
-        MihomoConnectionService.Instance,
-        NotificationService.Instance,
-        TriggerRuntimeEventHub.Instance,
-        LogStorageService.Instance.AppendLog,
-        LocalizationService.Instance.GetString,
-        () => App.MainWindow?.Close());
+    private static ApplicationActionService? _instance;
+
+    public static ApplicationActionService Instance => Volatile.Read(ref _instance)
+        ?? throw new InvalidOperationException("Application actions are unavailable before primary host startup.");
 
     private readonly AppSettingsService _settings;
-    private readonly NetworkTakeoverService _takeover;
+    private readonly NetworkStateCoordinator _network;
     private readonly MihomoConnectionService _connections;
     private readonly IApplicationNotificationSink _notifications;
     private readonly ITriggerRuntimeEventPublisher _triggerEvents;
@@ -39,7 +36,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
 
     internal ApplicationActionService(
         AppSettingsService settings,
-        NetworkTakeoverService takeover,
+        NetworkStateCoordinator network,
         MihomoConnectionService connections,
         IApplicationNotificationSink notifications,
         ITriggerRuntimeEventPublisher triggerEvents,
@@ -48,13 +45,17 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         Action exitApplication)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _takeover = takeover ?? throw new ArgumentNullException(nameof(takeover));
+        _network = network ?? throw new ArgumentNullException(nameof(network));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _triggerEvents = triggerEvents ?? throw new ArgumentNullException(nameof(triggerEvents));
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _exitApplication = exitApplication ?? throw new ArgumentNullException(nameof(exitApplication));
+        if (Interlocked.CompareExchange(ref _instance, this, null) is not null)
+        {
+            throw new InvalidOperationException("The primary application action service is already configured.");
+        }
     }
 
     public async Task DispatchAsync(ApplicationActionKind kind, string value, CancellationToken cancellationToken)
@@ -74,9 +75,12 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
                 ConnectionSamplingService.Instance.RestartFromSettings();
                 break;
             case ApplicationActionKind.SwitchProxyMode:
-                ClashSharpMode mode = Enum.TryParse(value, out ClashSharpMode parsedMode) ? parsedMode : _settings.CurrentMode;
-                NetworkTakeoverResult result = _takeover.ApplyMode(mode);
-                _settings.CurrentMode = result.Mode;
+                ClashSharpMode mode = Enum.TryParse(value, out ClashSharpMode parsedMode)
+                    && Enum.IsDefined(parsedMode)
+                    && parsedMode != ClashSharpMode.Faulted
+                        ? parsedMode
+                        : GetSupportedCurrentMode();
+                NetworkTakeoverResult result = await ApplyNetworkModeAsync(mode, cancellationToken).ConfigureAwait(false);
                 await PublishProxyModeAppliedAsync(result.Mode, cancellationToken).ConfigureAwait(false);
                 break;
             case ApplicationActionKind.CloseConnections:
@@ -101,6 +105,48 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         }
     }
 
+    /// <summary>Applies and verifies a mode through the sole durable network mutation coordinator.</summary>
+    public async Task<NetworkTakeoverResult> ApplyNetworkModeAsync(
+        ClashSharpMode mode,
+        CancellationToken cancellationToken)
+    {
+        NetworkIntent intent = NetworkIntent.ChangeMode(
+            mode,
+            _settings.TransparentProxyEnabled,
+            _settings.MixedPort);
+        MutationResult<NetworkTransitionResult> mutation = await _network
+            .ApplyAsync(intent, cancellationToken)
+            .ConfigureAwait(false);
+        if (mutation.Outcome != MutationOutcome.Succeeded || mutation.Value is null)
+        {
+            throw new NetworkTransitionFailedException(mutation.Outcome, mutation.ErrorCode);
+        }
+
+        NetworkTransitionResult state = mutation.Value;
+        return new NetworkTakeoverResult(
+            state.Mode,
+            state.CoreRunning,
+            state.SystemProxyEnabled,
+            state.TransparentProxyEnabled,
+            GetNetworkResultMessage(state));
+    }
+
+    /// <summary>Disables an explicitly confirmed conflicting Windows proxy through durable mutation.</summary>
+    public async Task DisableWindowsProxyAsync(CancellationToken cancellationToken)
+    {
+        NetworkIntent intent = NetworkIntent.DisableConflictingProxy(
+            GetSupportedCurrentMode(),
+            _settings.TransparentProxyEnabled,
+            _settings.MixedPort);
+        MutationResult<NetworkTransitionResult> mutation = await _network
+            .ApplyAsync(intent, cancellationToken)
+            .ConfigureAwait(false);
+        if (mutation.Outcome != MutationOutcome.Succeeded)
+        {
+            throw new NetworkTransitionFailedException(mutation.Outcome, mutation.ErrorCode);
+        }
+    }
+
     public Task PublishProxyModeAppliedAsync(ClashSharpMode mode, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -117,4 +163,42 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     {
         return bool.TryParse(value, out bool parsed) && parsed;
     }
+
+    private string GetNetworkResultMessage(NetworkTransitionResult state)
+    {
+        string key = state.Mode switch
+        {
+            ClashSharpMode.Disabled => "NetworkTakeover.Disabled",
+            ClashSharpMode.Standby => "NetworkTakeover.Standby",
+            ClashSharpMode.FullTakeover when state.TransparentProxyEnabled => "NetworkTakeover.TransparentProxy.Full",
+            ClashSharpMode.RuleTakeover when state.TransparentProxyEnabled => "NetworkTakeover.TransparentProxy.Rule",
+            ClashSharpMode.FullTakeover => "NetworkTakeover.SystemProxy.Full",
+            ClashSharpMode.RuleTakeover => "NetworkTakeover.SystemProxy.Rule",
+            _ => throw new InvalidOperationException("The verified network transition returned an unsupported mode."),
+        };
+        return _getString(key);
+    }
+
+    private ClashSharpMode GetSupportedCurrentMode()
+    {
+        ClashSharpMode mode = _settings.CurrentMode;
+        return Enum.IsDefined(mode) && mode != ClashSharpMode.Faulted
+            ? mode
+            : ClashSharpMode.Disabled;
+    }
+}
+
+/// <summary>Preserves the durable mutation classification for UI and startup policy decisions.</summary>
+internal sealed class NetworkTransitionFailedException : InvalidOperationException
+{
+    public NetworkTransitionFailedException(MutationOutcome outcome, string? errorCode)
+        : base($"Network transition failed with outcome '{outcome}' and code '{errorCode}'.")
+    {
+        Outcome = outcome;
+        ErrorCode = errorCode;
+    }
+
+    public MutationOutcome Outcome { get; }
+
+    public string? ErrorCode { get; }
 }

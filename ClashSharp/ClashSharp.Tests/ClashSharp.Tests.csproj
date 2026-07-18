@@ -45,7 +45,6 @@
     <Compile Include="..\ClashSharp\Model\AppAccentColorMode.cs" Link="Model\AppAccentColorMode.cs" />
     <Compile Include="..\ClashSharp\Model\RuntimeTrafficRateSnapshot.cs" Link="Model\RuntimeTrafficRateSnapshot.cs" />
     <Compile Include="..\ClashSharp\Model\ClashDataPackageScope.cs" Link="Model\ClashDataPackageScope.cs" />
-    <Compile Include="..\ClashSharp\Model\ClashSharpMode.cs" Link="Model\ClashSharpMode.cs" />
     <Compile Include="..\ClashSharp\Model\ApplicationActionKind.cs" Link="Model\ApplicationActionKind.cs" />
     <Compile Include="..\ClashSharp\Model\MasterHeroStatusItemKind.cs" Link="Model\MasterHeroStatusItemKind.cs" />
     <Compile Include="..\ClashSharp\Model\MainlandChinaFeatureMode.cs" Link="Model\MainlandChinaFeatureMode.cs" />
@@ -55,8 +54,6 @@
     <Compile Include="..\ClashSharp\Model\ConfigurationProfile.cs" Link="Model\ConfigurationProfile.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileImportResult.cs" Link="Model\ProfileImportResult.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileSubscriptionLink.cs" Link="Model\ProfileSubscriptionLink.cs" />
-    <Compile Include="..\ClashSharp\Model\NetworkTakeoverResult.cs" Link="Model\NetworkTakeoverResult.cs" />
-    <Compile Include="..\ClashSharp\Model\ProxyRecoveryResult.cs" Link="Model\ProxyRecoveryResult.cs" />
     <Compile Include="..\ClashSharp\Model\StartupBehaviorMode.cs" Link="Model\StartupBehaviorMode.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsProxyState.cs" Link="Model\WindowsProxyState.cs" />
     <Compile Include="..\ClashSharp\Model\MihomoProviderKind.cs" Link="Model\MihomoProviderKind.cs" />

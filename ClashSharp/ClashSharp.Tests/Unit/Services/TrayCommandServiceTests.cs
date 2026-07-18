@@ -17,7 +17,7 @@ public sealed class TrayCommandServiceTests
 {
     /// <summary>Verifies tray mode commands apply and persist the resulting mode.</summary>
     [Fact]
-    public void ApplyMode_WhenTakeoverSucceeds_PersistsResultModeAndLogs()
+    public async Task ApplyModeAsync_WhenTakeoverSucceeds_LeavesPersistenceToCoordinatorAndLogs()
     {
         FakeTraySettings settings = new() { CurrentMode = ClashSharpMode.Disabled };
         FakeTrayTakeover takeover = new()
@@ -27,43 +27,41 @@ public sealed class TrayCommandServiceTests
         FakeTrayLog log = new();
         TrayCommandService service = CreateService(settings, takeover: takeover, log: log);
 
-        service.ApplyMode(ClashSharpMode.FullTakeover);
+        await service.ApplyModeAsync(ClashSharpMode.FullTakeover, CancellationToken.None);
 
-        Assert.Equal(ClashSharpMode.FullTakeover, settings.CurrentMode);
+        Assert.Equal(ClashSharpMode.Disabled, settings.CurrentMode);
         Assert.Equal([ClashSharpMode.FullTakeover], takeover.AppliedModes);
         Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Category == "Tray" && entry.Message == "applied");
     }
 
-    /// <summary>Verifies changing transparent proxy while a takeover mode is active reapplies the current mode.</summary>
+    /// <summary>Verifies changing transparent proxy records intent without claiming a runtime transition.</summary>
     [Theory]
     [InlineData(ClashSharpMode.RuleTakeover)]
     [InlineData(ClashSharpMode.FullTakeover)]
-    public void SetTransparentProxyEnabled_WhenTakeoverModeIsActive_ReappliesCurrentMode(ClashSharpMode currentMode)
+    public async Task SetTransparentProxyEnabledAsync_WhenTakeoverModeIsActive_DoesNotApplyRuntime(ClashSharpMode currentMode)
     {
         FakeTraySettings settings = new()
         {
             CurrentMode = currentMode,
             TransparentProxyEnabled = true,
         };
-        FakeTrayTakeover takeover = new()
-        {
-            Result = new NetworkTakeoverResult(currentMode, true, true, false, "reapplied"),
-        };
+        FakeTrayTakeover takeover = new();
         FakeTrayLog log = new();
         TrayCommandService service = CreateService(settings, takeover: takeover, log: log);
 
-        service.SetTransparentProxyEnabled(false);
+        bool modeApplied = await service.SetTransparentProxyEnabledAsync(false, CancellationToken.None);
 
         Assert.False(settings.TransparentProxyEnabled);
-        Assert.Equal([currentMode], takeover.AppliedModes);
-        Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Category == "Tray" && entry.Message == "reapplied");
+        Assert.Empty(takeover.AppliedModes);
+        Assert.Empty(log.Entries);
+        Assert.False(modeApplied);
     }
 
     /// <summary>Verifies changing transparent proxy outside active takeover modes only changes the preference.</summary>
     [Theory]
     [InlineData(ClashSharpMode.Disabled)]
     [InlineData(ClashSharpMode.Standby)]
-    public void SetTransparentProxyEnabled_WhenTakeoverModeIsInactive_DoesNotApplyMode(ClashSharpMode currentMode)
+    public async Task SetTransparentProxyEnabledAsync_WhenTakeoverModeIsInactive_DoesNotApplyMode(ClashSharpMode currentMode)
     {
         FakeTraySettings settings = new()
         {
@@ -73,15 +71,15 @@ public sealed class TrayCommandServiceTests
         FakeTrayTakeover takeover = new();
         TrayCommandService service = CreateService(settings, takeover: takeover);
 
-        service.SetTransparentProxyEnabled(false);
+        await service.SetTransparentProxyEnabledAsync(false, CancellationToken.None);
 
         Assert.False(settings.TransparentProxyEnabled);
         Assert.Empty(takeover.AppliedModes);
     }
 
-    /// <summary>Verifies enabling transparent proxy without the service preserves the preference and does not apply a mode.</summary>
+    /// <summary>Verifies enabling transparent proxy records the preference without applying a mode.</summary>
     [Fact]
-    public void SetTransparentProxyEnabled_WhenServiceMissing_PreservesPreferenceWithoutApplyingMode()
+    public async Task SetTransparentProxyEnabledAsync_RecordsPreferenceWithoutApplyingMode()
     {
         FakeTraySettings settings = new()
         {
@@ -89,12 +87,9 @@ public sealed class TrayCommandServiceTests
             TransparentProxyEnabled = false,
         };
         FakeTrayTakeover takeover = new();
-        TrayCommandService service = CreateService(
-            settings,
-            new FakeTrayServiceStatus(new MihomoServiceStatus(false, false, "Not installed")),
-            takeover);
+        TrayCommandService service = CreateService(settings, takeover);
 
-        bool modeApplied = service.SetTransparentProxyEnabled(true);
+        bool modeApplied = await service.SetTransparentProxyEnabledAsync(true, CancellationToken.None);
 
         Assert.True(settings.TransparentProxyEnabled);
         Assert.Empty(takeover.AppliedModes);
@@ -103,7 +98,7 @@ public sealed class TrayCommandServiceTests
 
     /// <summary>Verifies failed tray mode application reports failure to callers that own notifications.</summary>
     [Fact]
-    public void ApplyMode_WhenTakeoverFails_ReturnsFalse()
+    public async Task ApplyModeAsync_WhenTakeoverFails_ReturnsFalse()
     {
         FakeTrayTakeover takeover = new()
         {
@@ -111,7 +106,7 @@ public sealed class TrayCommandServiceTests
         };
         TrayCommandService service = CreateService(takeover: takeover);
 
-        bool modeApplied = service.ApplyMode(ClashSharpMode.FullTakeover);
+        bool modeApplied = await service.ApplyModeAsync(ClashSharpMode.FullTakeover, CancellationToken.None);
 
         Assert.False(modeApplied);
     }
@@ -119,13 +114,11 @@ public sealed class TrayCommandServiceTests
     /// <summary>Creates a tray command service with test doubles.</summary>
     private static TrayCommandService CreateService(
         FakeTraySettings? settings = null,
-        FakeTrayServiceStatus? serviceStatus = null,
         FakeTrayTakeover? takeover = null,
         FakeTrayLog? log = null)
     {
         return new TrayCommandService(
             settings ?? new FakeTraySettings(),
-            serviceStatus ?? new FakeTrayServiceStatus(new MihomoServiceStatus(true, true, "Installed")),
             takeover ?? new FakeTrayTakeover(),
             log ?? new FakeTrayLog());
     }
@@ -138,17 +131,6 @@ public sealed class TrayCommandServiceTests
         public bool TransparentProxyEnabled { get; set; }
     }
 
-    /// <summary>Fake mihomo service status provider for tray command tests.</summary>
-    private sealed class FakeTrayServiceStatus(MihomoServiceStatus status) : ITrayCommandMihomoService
-    {
-        public MihomoServiceStatus Status { get; set; } = status;
-
-        public MihomoServiceStatus GetStatus()
-        {
-            return Status;
-        }
-    }
-
     /// <summary>Fake takeover service for tray command tests.</summary>
     private sealed class FakeTrayTakeover : ITrayCommandTakeover
     {
@@ -158,12 +140,14 @@ public sealed class TrayCommandServiceTests
 
         public List<ClashSharpMode> AppliedModes { get; } = [];
 
-        public NetworkTakeoverResult ApplyMode(ClashSharpMode mode)
+        public Task<NetworkTakeoverResult> ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             AppliedModes.Add(mode);
-            return ExceptionToThrow is null
+            NetworkTakeoverResult result = ExceptionToThrow is null
                 ? Result with { Mode = mode }
                 : throw ExceptionToThrow;
+            return Task.FromResult(result);
         }
     }
 

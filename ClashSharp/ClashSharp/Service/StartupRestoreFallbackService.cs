@@ -10,7 +10,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using ClashSharp.Model;
 using Microsoft.Win32;
 
 namespace ClashSharp.Service;
@@ -22,7 +21,7 @@ public readonly record struct StartupRestoreFallbackStatus(bool IsRegistered, st
 /// <remarks>
 /// Invariants: Registration is stored only under HKCU Run.
 /// Thread safety: Public registry writes are serialized.
-/// Side effects: Writes or removes one HKCU Run value and can execute startup proxy recovery.
+/// Side effects: Writes or removes one HKCU Run value.
 /// </remarks>
 public sealed class StartupRestoreFallbackService
 {
@@ -74,12 +73,6 @@ public sealed class StartupRestoreFallbackService
             using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
             key?.DeleteValue(RunValueName, throwOnMissingValue: false);
         }
-    }
-
-    /// <summary>Runs stale proxy recovery once for the helper process.</summary>
-    public ProxyRecoveryResult RunRestoreOnce()
-    {
-        return ProxyRecoveryService.Instance.ApplyStartupRecoveryIfNeeded();
     }
 
     private static string ResolveExecutablePath()
