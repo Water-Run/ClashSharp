@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Infrastructure;
 using ClashSharp.Model;
 
@@ -43,8 +44,10 @@ public sealed class RepositoryTopologyTests
 
         AssertProjectReference(testProject, "ClashSharp.Core");
         AssertProjectReference(testProject, "ClashSharp.Infrastructure");
+        AssertProjectReference(testProject, "ClashSharp.Application");
         AssertProjectReference(appProject, "ClashSharp.Core");
         AssertProjectReference(appProject, "ClashSharp.Infrastructure");
+        AssertProjectReference(appProject, "ClashSharp.Application");
 
         IEnumerable<string> compileIncludes = testProject.Descendants("Compile")
             .Select(element => (string?)element.Attribute("Include"))
@@ -58,6 +61,28 @@ public sealed class RepositoryTopologyTests
     {
         Assert.Equal("ClashSharp.Core", typeof(ActiveConnection).Assembly.GetName().Name);
         Assert.Equal("ClashSharp.Infrastructure", typeof(InfrastructureAssemblyMarker).Assembly.GetName().Name);
+        Assert.Equal("ClashSharp.Application", typeof(ApplicationBootstrapper).Assembly.GetName().Name);
+    }
+
+    /// <summary>Verifies WinUI launch delegates startup ownership to the production bootstrap pipeline.</summary>
+    [Fact]
+    public void WinUiLaunch_UsesOwnershipFirstCompositionWithoutLegacyDuplicateProcessFlow()
+    {
+        string appPath = Path.Combine(RepositoryRoot, "ClashSharp", "ClashSharp", "App.xaml.cs");
+        string mainWindowPath = Path.Combine(RepositoryRoot, "ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
+        string legacyServicePath = Path.Combine(RepositoryRoot, "ClashSharp", "ClashSharp", "Service", "SingleInstanceService.cs");
+        string app = File.ReadAllText(appPath);
+        string mainWindow = File.ReadAllText(mainWindowPath);
+
+        Assert.Contains("ApplicationBootstrapper", app, StringComparison.Ordinal);
+        Assert.Contains("WindowsPrimaryInstanceBootstrap", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("new MainWindow", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run(ApplyStartupProxyRecovery", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("TriggerService.Instance.Start", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppSettingsAuditLogService.Instance.Start", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConnectionSamplingService.Instance.StartIfEnabled", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("SingleInstanceService", mainWindow, StringComparison.Ordinal);
+        Assert.False(File.Exists(legacyServicePath));
     }
 
     /// <summary>Verifies workflow actions are immutable and workflow permissions are read-only.</summary>

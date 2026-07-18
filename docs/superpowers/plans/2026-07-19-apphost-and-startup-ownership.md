@@ -30,11 +30,11 @@
 - Modify: `ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj`
 - Modify: `ClashSharp/ClashSharp.slnx`
 
-- [ ] **Step 1: Create the Application project shell and references**
+- [x] **Step 1: Create the Application project shell and references**
 
 Create a `net10.0` project that references Core, generates XML documentation, and treats `CS1591` as an error. Add `Microsoft.Extensions.DependencyInjection` 10.0.0. Reference Application from the app and tests and add it to the solution. Do not add WinUI or Windows targeting to Application.
 
-- [ ] **Step 2: Write RED tests against missing production contracts**
+- [x] **Step 2: Write RED tests against missing production contracts**
 
 Tests must require these production types and behaviors:
 
@@ -47,7 +47,7 @@ Tests must require these production types and behaviors:
 - ordered startup steps use `(Order, Name)` determinism and stop after `ExitRequested` or `Fatal`;
 - `ProcessLifetimeRunner.StopAsync` calls host stop before dispose exactly once under concurrent callers.
 
-- [ ] **Step 3: Run the focused suite and capture RED**
+- [x] **Step 3: Run the focused suite and capture RED**
 
 Run:
 
@@ -75,23 +75,23 @@ Expected: compilation fails because the Application startup contracts do not exi
 - Create: `ClashSharp/ClashSharp.Application/Hosting/AppHost.cs`
 - Create: `ClashSharp/ClashSharp.Application/Hosting/ProcessLifetimeRunner.cs`
 
-- [ ] **Step 1: Implement typed ownership and launch results**
+- [x] **Step 1: Implement typed ownership and launch results**
 
 Use explicit `Primary` and `Redirected` results. `IPrimaryInstanceBootstrap.AcquireAsync` owns redirection; `ApplicationBootstrapper` only decides whether the lazy host factory may run. Validate all injected arguments and propagate cancellation before host startup.
 
-- [ ] **Step 2: Implement side-effect-free AppHost construction**
+- [x] **Step 2: Implement side-effect-free AppHost construction**
 
 `AppHost.Build(Action<IServiceCollection>)` may allocate the collection/provider but must not call `GetService`, enumerate startup steps, or instantiate registered implementations. `StartAsync` resolves `StartupCoordinator` lazily. `StopAsync` delegates to an optional/no-op shutdown coordinator and is idempotent. Async disposal follows stop and is idempotent.
 
-- [ ] **Step 3: Implement ordered typed startup steps**
+- [x] **Step 3: Implement ordered typed startup steps**
 
 Each step has stable `Name` and integer `Order`. Reject duplicate `(Order, Name)` registrations, order by `Order` then ordinal `Name`, and execute sequentially. Continue on `Succeeded`/`Warning`, return immediately for `ExitRequested`/`Fatal`, and convert no unexpected exception to apparent success.
 
-- [ ] **Step 4: Implement the App-owned lifetime runner**
+- [x] **Step 4: Implement the App-owned lifetime runner**
 
 Allow exactly one host attachment. Concurrent `StopAsync` callers await the same task. The runner calls host `StopAsync` and then `DisposeAsync`; attach-after-stop and second-host attachment fail deterministically. A host startup exception is disposed directly by `ApplicationBootstrapper` before it can be attached.
 
-- [ ] **Step 5: Run GREEN tests and the Application build**
+- [x] **Step 5: Run GREEN tests and the Application build**
 
 ```powershell
 $env:Platform = 'x64'
@@ -110,15 +110,15 @@ Expected: all focused tests pass and Application remains platform-neutral.
 - Create: `ClashSharp/ClashSharp/AppHost/ClashSharpAppHostFactory.cs`
 - Modify: `ClashSharp/ClashSharp/App.xaml.cs`
 
-- [ ] **Step 1: Wrap Windows App SDK AppInstance**
+- [x] **Step 1: Wrap Windows App SDK AppInstance**
 
 Use `AppInstance.FindOrRegisterForKey` with one stable application key. For a secondary instance, obtain the current activation arguments, await `RedirectActivationToAsync`, and return `Redirected`. For the primary, subscribe to `AppInstance.Activated` and marshal the bring-to-front callback onto the WinUI dispatcher. The adapter constructor must not register, read LocalData, or resolve services.
 
-- [ ] **Step 2: Make App.OnLaunched ownership-first**
+- [x] **Step 2: Make App.OnLaunched ownership-first**
 
 `OnLaunched` may be `async void` only as the framework event override. It creates the outer runner and adapter, awaits `ApplicationBootstrapper.LaunchAsync`, exits immediately for `Redirected` or helper-completed outcomes, and never calls AppHost construction directly before ownership. Catch startup failures at this boundary, stop/dispose any attached host, report through one safe diagnostic path, and exit without an unobserved task.
 
-- [ ] **Step 3: Handle redirected activation without a second window**
+- [x] **Step 3: Handle redirected activation without a second window**
 
 Store the primary `Window` only after the window startup step creates it. A redirected activation activates that window on its dispatcher; if activation arrives before window creation, retain one pending bring-to-front request and consume it after attachment.
 
@@ -135,19 +135,19 @@ Store the primary `Window` only after the window startup step creates it. A redi
 - Modify: `ClashSharp/ClashSharp/App.xaml.cs`
 - Modify: `ClashSharp/ClashSharp/MainWindow.xaml.cs`
 
-- [ ] **Step 1: Register startup steps by implementation type**
+- [x] **Step 1: Register startup steps by implementation type**
 
 The factory registers types/factories only; it does not dereference any legacy `.Instance` property while building the provider. Compatibility steps may resolve a legacy singleton only inside `ExecuteAsync`, after primary ownership.
 
-- [ ] **Step 2: Await proxy recovery before constructing the window**
+- [x] **Step 2: Await proxy recovery before constructing the window**
 
 Move fallback and ordinary recovery logic out of `App`. Recovery remains best-effort and logged, but its task is tracked and awaited. Complete recovery before `WindowShellStartupStep`; this removes the existing `Task.Run(ApplyStartupProxyRecovery)` versus `MainWindow.ApplyMode` race without prematurely implementing Phase 03's network transaction model.
 
-- [ ] **Step 3: Start owned services only in the primary pipeline**
+- [x] **Step 3: Start owned services only in the primary pipeline**
 
 Start audit, trigger runtime, window shell, and sampling through explicit ordered steps. Helper launch returns `ExitRequested` before audit/trigger/window/sampling. Normal launch cannot reach any of these steps from the secondary path.
 
-- [ ] **Step 4: Remove MainWindow single-instance UI and process killing**
+- [x] **Step 4: Remove MainWindow single-instance UI and process killing**
 
 Delete `ResolveSingleInstanceConflictAsync`, the process-enumeration service and tests, and the obsolete localization dialog keys. Keep startup prompts/conflict diagnostics after the shell becomes available. Update source-contract tests so they no longer require direct service starts in `App.xaml.cs`.
 
@@ -160,11 +160,11 @@ Delete `ResolveSingleInstanceConflictAsync`, the process-enumeration service and
 - Modify: `ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj`
 - Modify: `ClashSharp/ClashSharp.slnx`
 
-- [ ] **Step 1: Build a process-independent arbitration probe**
+- [x] **Step 1: Build a process-independent arbitration probe**
 
-The helper uses a unique named mutex as its injected primary-instance boundary and `ApplicationBootstrapper` from the production Application assembly. Its host factory appends to a unique shared marker only when invoked. The primary holds until a release file appears; the secondary redirects logically and exits.
+The helper uses a unique named Semaphore as its injected primary-instance boundary and `ApplicationBootstrapper` from the production Application assembly. Its host factory appends to a unique shared marker only when invoked. The primary holds until a release file appears; the secondary redirects logically and exits.
 
-- [ ] **Step 2: Write and run the two-process test**
+- [x] **Step 2: Write and run the two-process test**
 
 Start the primary, wait for its readiness marker, start and await the secondary, release the primary, and assert exactly one host-build/start marker and zero secondary shared-state markers. Bound every wait and kill both helpers in test cleanup.
 
@@ -187,7 +187,7 @@ Expected: the two-process test passes repeatedly and never leaves a helper proce
 - Modify: `docs/superpowers/plans/2026-07-19-architecture-stabilization-roadmap.md`
 - Modify: this plan
 
-- [ ] **Step 1: Generate and validate locked restores**
+- [x] **Step 1: Generate and validate locked restores**
 
 ```powershell
 dotnet restore ClashSharp/ClashSharp.slnx --force-evaluate
@@ -196,7 +196,7 @@ dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
 
 Commit every generated project lock file and ensure the CI solution restore covers the two new projects.
 
-- [ ] **Step 2: Run clean final verification**
+- [x] **Step 2: Run clean final verification**
 
 ```powershell
 $env:CI = 'true'
@@ -213,7 +213,7 @@ git diff --check
 
 Expected: zero warnings/errors, all existing and new tests pass, and formatting/locked restore remain clean.
 
-- [ ] **Step 3: Prove ordering and forbidden old paths**
+- [x] **Step 3: Prove ordering and forbidden old paths**
 
 Confirm through behavior tests plus targeted inspection that:
 
@@ -224,7 +224,7 @@ Confirm through behavior tests plus targeted inspection that:
 - `MainWindow.xaml.cs` contains no single-instance check/process close path;
 - no untracked `Task.Run(ApplyStartupProxyRecovery)` remains.
 
-- [ ] **Step 4: Update evidence without overstating closure**
+- [x] **Step 4: Update evidence without overstating closure**
 
 Record RED/GREEN evidence, full test count, two-process trace, and checkpoint commit. Mark `P1-01` `In Progress` until Phase 03 serializes all network mutations and a packaged real-app two-instance smoke runs; record the Application composition portion of `P3 code size/static singleton debt` as `In Progress`. Do not mark either row `Closed` yet.
 

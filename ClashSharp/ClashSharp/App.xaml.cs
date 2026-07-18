@@ -1,34 +1,33 @@
-/*
- * Application Entry Point
- * Bootstraps the Clash# proxy management application, creates the main window, and manages its lifetime
- *
- * @author: WaterRun
- * @file: App.xaml.cs
- * @date: 2026-06-15
- */
-
 using System;
-using System.ComponentModel;
+using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
-using ClashSharp.Model;
-using ClashSharp.Service;
+using ClashSharp.ApplicationModel.Hosting;
+using ClashSharp.ApplicationModel.Startup;
+using ClashSharp.Hosting;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
 namespace ClashSharp;
 
 /// <summary>Application root class responsible for lifecycle management and global window access.</summary>
 /// <remarks>
-/// Invariants: <see cref="MainWindow"/> is assigned exactly once during <see cref="OnLaunched"/> and remains non-null thereafter.
+/// Invariants: A secondary process never constructs a host or window; a primary window is published only while it is alive.
 /// Thread safety: All access occurs on the UI thread.
-/// Side effects: Creates and activates the primary application window.
+/// Side effects: Arbitrates process ownership, starts the primary host, and owns awaited host disposal.
 /// </remarks>
-public partial class App : Application
+public partial class App : Microsoft.UI.Xaml.Application
 {
     /// <summary>Backing field for the singleton main window reference.</summary>
     private static Window? _mainWindow;
 
+    private readonly ProcessLifetimeRunner _lifetimeRunner = new();
+    private WindowsPrimaryInstanceBootstrap? _primaryInstanceBootstrap;
+    private Task? _shutdownTask;
+    private bool _activationPending;
+
     /// <summary>Gets the primary application window instance for global access.</summary>
-    /// <value>The <see cref="Window"/> instance created during launch; null before <see cref="OnLaunched"/> completes.</value>
+    /// <value>The live primary <see cref="Window"/>; null before attachment, in a secondary process, and after close.</value>
     public static Window? MainWindow => _mainWindow;
 
     /// <summary>Initializes the singleton application object and its XAML resources.</summary>
@@ -39,66 +38,101 @@ public partial class App : Application
 
     /// <summary>Creates the main window and activates it when the application is launched.</summary>
     /// <param name="args">Launch activation details provided by the platform. Not null.</param>
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        LocalizationService.Instance.CurrentLanguage = AppSettingsService.Instance.DisplayLanguage;
-        if (args.Arguments.Contains(StartupRestoreFallbackService.HelperArgument, StringComparison.OrdinalIgnoreCase))
+        try
         {
-            ApplyStartupRestoreFallback();
-            Exit();
+            DispatcherQueue dispatcherQueue = DispatcherQueue.GetForCurrentThread()
+                ?? throw new InvalidOperationException("The WinUI dispatcher is unavailable during launch.");
+            _primaryInstanceBootstrap = new WindowsPrimaryInstanceBootstrap(dispatcherQueue, BringPrimaryWindowToFront);
+            ApplicationBootstrapper bootstrapper = new(
+                _primaryInstanceBootstrap,
+                () => ClashSharpAppHostFactory.Build(AttachMainWindow),
+                _lifetimeRunner);
+            ApplicationLaunchResult result = await bootstrapper.LaunchAsync(
+                new AppLaunchRequest(args.Arguments),
+                CancellationToken.None);
+            if (result.Disposition != ApplicationLaunchDisposition.Running)
+            {
+                await StopAndExitAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"ClashSharp startup failed: {exception}");
+            await StopAndExitAsync();
+        }
+    }
+
+    private void AttachMainWindow(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (_mainWindow is not null)
+        {
+            throw new InvalidOperationException("The primary window is already attached.");
+        }
+
+        _mainWindow = window;
+        _mainWindow.Closed += OnMainWindowClosed;
+        if (_activationPending)
+        {
+            _activationPending = false;
+            _mainWindow.Activate();
+        }
+    }
+
+    private void BringPrimaryWindowToFront()
+    {
+        if (_mainWindow is null)
+        {
+            _activationPending = true;
             return;
         }
 
-        AppSettingsAuditLogService.Instance.Start();
-        TriggerService.Instance.Start();
-        _mainWindow = new MainWindow();
         _mainWindow.Activate();
-        _ = Task.Run(ApplyStartupProxyRecovery);
-        ConnectionSamplingService.Instance.StartIfEnabled();
     }
 
-    /// <summary>Runs the lightweight login fallback helper path and exits without showing UI.</summary>
-    private static void ApplyStartupRestoreFallback()
+    private async void OnMainWindowClosed(object sender, WindowEventArgs args)
+    {
+        if (_mainWindow is not null)
+        {
+            _mainWindow.Closed -= OnMainWindowClosed;
+            _mainWindow = null;
+        }
+
+        await StopAndExitAsync();
+    }
+
+    private Task StopAndExitAsync()
+    {
+        return _shutdownTask ??= StopAndExitCoreAsync();
+    }
+
+    private async Task StopAndExitCoreAsync()
     {
         try
         {
-            ProxyRecoveryResult result = StartupRestoreFallbackService.Instance.RunRestoreOnce();
-            if (result.WasApplied)
+            await _lifetimeRunner.StopAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"ClashSharp shutdown failed: {exception}");
+        }
+        finally
+        {
+            try
             {
-                LogStorageService.Instance.AppendLog("Info", "StartupRestoreFallback", result.Message, null);
+                _primaryInstanceBootstrap?.Dispose();
             }
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
-        {
-            LogStorageService.Instance.AppendLog(
-                "Warning",
-                "StartupRestoreFallback",
-                LocalizationService.Instance.GetString("ProxyRecovery.StartupFailed"),
-                exception.Message);
-        }
-    }
-
-    /// <summary>Applies startup stale proxy recovery after the main window is shown.</summary>
-    /// <remarks>
-    /// Recovery is best-effort: failures are persisted to the SQLite log store and do not prevent UI startup.
-    /// </remarks>
-    private static void ApplyStartupProxyRecovery()
-    {
-        try
-        {
-            ProxyRecoveryResult result = ProxyRecoveryService.Instance.ApplyStartupRecoveryIfNeeded();
-            if (result.WasApplied)
+            catch (Exception exception)
             {
-                LogStorageService.Instance.AppendLog("Info", "ProxyRecovery", result.Message, null);
+                Debug.WriteLine($"ClashSharp instance cleanup failed: {exception}");
             }
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
-        {
-            LogStorageService.Instance.AppendLog(
-                "Warning",
-                "ProxyRecovery",
-                LocalizationService.Instance.GetString("ProxyRecovery.StartupFailed"),
-                exception.Message);
+            finally
+            {
+                _primaryInstanceBootstrap = null;
+                Exit();
+            }
         }
     }
 }

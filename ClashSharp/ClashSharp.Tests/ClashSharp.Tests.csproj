@@ -12,8 +12,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
+    <ProjectReference Include="..\ClashSharp.StartupProbe\ClashSharp.StartupProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -123,7 +125,6 @@
     <Compile Include="..\ClashSharp\Service\StartupCheckService.cs" Link="Service\StartupCheckService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupRestoreFallbackService.cs" Link="Service\StartupRestoreFallbackService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupLaunchService.cs" Link="Service\StartupLaunchService.cs" />
-    <Compile Include="..\ClashSharp\Service\SingleInstanceService.cs" Link="Service\SingleInstanceService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionService.cs" Link="Service\StartupConflictDetectionService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionServiceFactory.cs" Link="Service\StartupConflictDetectionServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\TrayCommandService.cs" Link="Service\TrayCommandService.cs" />

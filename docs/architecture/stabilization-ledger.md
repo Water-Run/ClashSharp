@@ -4,7 +4,7 @@ The architecture stabilization design and its audit traceability table are norma
 
 | ID | Severity | Owner | Status | Plan task | Evidence | Closure commit | Reviewer | Closure date |
 |---|---|---|---|---|---|---|---|---|
-| P1-01 | P1 | Application | Open | Phase 02 | — | — | — | — |
+| P1-01 | P1 | Application | In Progress | Phases 02 and 03 | `ApplicationStartupContractTests`; `SecondaryInstanceIsolationTests`; `docs/architecture/evidence/phase-02-apphost-startup.md` | — | — | — |
 | P1-02 | P1 | Runtime | Open | Phase 04 | — | — | — | — |
 | P1-03 | P1 | Runtime | Open | Phase 04 | — | — | — | — |
 | P1-04 | P1 | Presentation | Open | Phase 04 | — | — | — | — |
@@ -43,7 +43,7 @@ The architecture stabilization design and its audit traceability table are norma
 | Additional: disabled Profiles/Links commands | Additional | Presentation | Open | Phase 07 | — | — | — | — |
 | Additional: work-area/overlay sizing | Additional | Presentation | Open | Phase 09 | — | — | — | — |
 | P3 log-storage global lock | P3 | Runtime | Open | Phase 11 | — | — | — | — |
-| P3 code size/static singleton debt | P3 | Presentation | Open | Phases 02, 07, and 12 | — | — | — | — |
+| P3 code size/static singleton debt | P3 | Presentation | In Progress | Phases 02, 07, and 12 | `ClashSharp.Application`; `ClashSharp/ClashSharp/AppHost`; `docs/architecture/evidence/phase-02-apphost-startup.md` | — | — | — |
 | P3 nullable/docs/analyzer/header drift | P3 | Application | In Progress | Phase 01 Task 2; Phase 12 | `CodingStyle.md`; `Directory.Build.props`; `.gitattributes`; Phase 01 zero-warning build | — | — | — |
 | P3 source-text-heavy tests/no parallelism | P3 | Release | Open | Phase 12 | — | — | — | — |
 | P3 debt owner/status tracking | P3 | Release | In Progress | Phases 01 and 13 | `docs/architecture/stabilization-ledger.md` | — | — | — |

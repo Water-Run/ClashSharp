@@ -676,10 +676,10 @@ public sealed class AppResourcePackagingTests
     public void ProxyRecoveryService_UsesLocalizedResultMessages()
     {
         string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProxyRecoveryService.cs");
-        string appPath = FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs");
+        string recoveryStepPath = FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Startup", "ProxyRecoveryStartupStep.cs");
 
         string serviceCode = File.ReadAllText(servicePath);
-        string appCode = File.ReadAllText(appPath);
+        string recoveryStepCode = File.ReadAllText(recoveryStepPath);
 
         foreach (string literal in new[]
         {
@@ -691,13 +691,13 @@ public sealed class AppResourcePackagingTests
         })
         {
             Assert.DoesNotContain(literal, serviceCode, StringComparison.Ordinal);
-            Assert.DoesNotContain(literal, appCode, StringComparison.Ordinal);
+            Assert.DoesNotContain(literal, recoveryStepCode, StringComparison.Ordinal);
         }
 
         Assert.Contains("ProxyRecovery.CheckDisabled", serviceCode, StringComparison.Ordinal);
         Assert.Contains("ProxyRecovery.NoStaleProxy", serviceCode, StringComparison.Ordinal);
         Assert.Contains("ProxyRecovery.Disabled", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("ProxyRecovery.StartupFailed", appCode, StringComparison.Ordinal);
+        Assert.Contains("ProxyRecovery.StartupFailed", recoveryStepCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies stale proxy recovery composes platform dependencies through injected boundaries.</summary>
@@ -1741,7 +1741,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("TriggerEvaluationContextFactory.Create(TriggerEventKind.ProxyStarted)", File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs")), StringComparison.Ordinal);
         Assert.DoesNotContain("TriggerService.Instance", masterControlCode, StringComparison.Ordinal);
         Assert.DoesNotContain("NotificationService.Instance.NotifyProxyModeChanged", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("TriggerService.Instance.Start()", appCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TriggerService.Instance.Start()", appCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings changes are exposed as auditable log records through a startup subscriber.</summary>
@@ -1750,16 +1750,16 @@ public sealed class AppResourcePackagingTests
     {
         string appSettingsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.cs");
         string auditServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsAuditLogService.cs");
-        string appCodePath = FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs");
+        string auditStartupStepPath = FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Startup", "AppSettingsAuditStartupStep.cs");
 
         string appSettings = File.ReadAllText(appSettingsPath);
         string auditService = File.ReadAllText(auditServicePath);
-        string appCode = File.ReadAllText(appCodePath);
+        string auditStartupStep = File.ReadAllText(auditStartupStepPath);
 
         Assert.Contains("event EventHandler<AppSettingChangedEventArgs>? SettingChanged", appSettings, StringComparison.Ordinal);
         Assert.Contains("NotifySettingChanged", appSettings, StringComparison.Ordinal);
         Assert.Contains("AppSettingChangedEventArgs", appSettings, StringComparison.Ordinal);
-        Assert.Contains("AppSettingsAuditLogService.Instance.Start()", appCode, StringComparison.Ordinal);
+        Assert.Contains("AppSettingsAuditLogService.Instance.Start()", auditStartupStep, StringComparison.Ordinal);
         Assert.Contains("\"Settings\"", auditService, StringComparison.Ordinal);
         Assert.Contains("AppendLog(\"Info\", \"Settings\"", auditService, StringComparison.Ordinal);
     }
@@ -2104,6 +2104,8 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("XamlRoot? xamlRoot = ContentFrame.XamlRoot", mainWindowCode, StringComparison.Ordinal);
         Assert.Contains("SkipStartupDialogsArgument", mainWindowCode, StringComparison.Ordinal);
         Assert.Contains("ShouldSkipStartupDialogs()", mainWindowCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("SingleInstanceService", mainWindowCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolveSingleInstanceConflictAsync", mainWindowCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Activated += OnWindowActivated", mainWindowCode, StringComparison.Ordinal);
     }
 
