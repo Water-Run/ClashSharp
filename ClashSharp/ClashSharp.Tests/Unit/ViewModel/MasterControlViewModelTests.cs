@@ -860,9 +860,10 @@ public sealed class MasterControlViewModelTests
     {
         public TrayStatusSnapshot Snapshot { get; set; } = TrayStatusSnapshot.Unavailable;
 
-        public TrayStatusSnapshot GetSnapshot()
+        public Task<TrayStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
         {
-            return Snapshot;
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Snapshot);
         }
     }
 

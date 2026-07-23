@@ -28,12 +28,12 @@ public sealed class AppDataMaintenanceServiceTests
 
     /// <summary>Verifies clearing all data performs shutdown, reset, storage cleanup, local deletion, and cache resets in order.</summary>
     [Fact]
-    public void ClearData_RunsMaintenanceStepsInOrder()
+    public async Task ClearDataAsync_RunsMaintenanceStepsInOrder()
     {
         List<string> calls = [];
         AppDataMaintenanceService service = CreateService(calls);
 
-        service.ClearData();
+        await service.ClearDataAsync(CancellationToken.None);
 
         Assert.Equal(
             [
@@ -49,7 +49,7 @@ public sealed class AppDataMaintenanceServiceTests
 
     /// <summary>Verifies log-storage clear failures are localized and do not stop data deletion.</summary>
     [Fact]
-    public void ClearData_WhenLogClearFails_LogsWarningAndContinues()
+    public async Task ClearDataAsync_WhenLogClearFails_LogsWarningAndContinues()
     {
         List<string> calls = [];
         FakeAppDataMaintenanceLogStorage logStorage = new(calls)
@@ -58,7 +58,7 @@ public sealed class AppDataMaintenanceServiceTests
         };
         AppDataMaintenanceService service = CreateService(calls, logStorage: logStorage);
 
-        service.ClearData();
+        await service.ClearDataAsync(CancellationToken.None);
 
         Assert.Contains("local.clear", calls);
         AppDataMaintenanceLogEntry entry = Assert.Single(logStorage.Entries);
@@ -68,13 +68,30 @@ public sealed class AppDataMaintenanceServiceTests
         Assert.Equal("database locked", entry.Detail);
     }
 
+    /// <summary>Verifies cancellation after runtime shutdown still protects persisted user data from deletion.</summary>
+    [Fact]
+    public async Task ClearDataAsync_WhenCancelledAfterShutdown_DoesNotDeleteData()
+    {
+        List<string> calls = [];
+        using CancellationTokenSource cancellation = new();
+        AppDataMaintenanceService service = CreateService(
+            calls,
+            runtime: new CancellingAppDataMaintenanceRuntime(calls, cancellation));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ClearDataAsync(cancellation.Token));
+
+        Assert.Equal(["runtime.shutdown"], calls);
+    }
+
     private static AppDataMaintenanceService CreateService(
         List<string> calls,
-        FakeAppDataMaintenanceLogStorage? logStorage = null)
+        FakeAppDataMaintenanceLogStorage? logStorage = null,
+        IAppDataMaintenanceRuntime? runtime = null)
     {
         return new AppDataMaintenanceService(
             new FakeAppDataMaintenanceSettings(calls),
-            new FakeAppDataMaintenanceRuntime(calls),
+            runtime ?? new FakeAppDataMaintenanceRuntime(calls),
             logStorage ?? new FakeAppDataMaintenanceLogStorage(calls),
             new FakeAppDataMaintenanceLocalData(calls),
             new FakeAppDataMaintenanceProfileCatalog(calls),
@@ -91,9 +108,23 @@ public sealed class AppDataMaintenanceServiceTests
 
     private sealed class FakeAppDataMaintenanceRuntime(List<string> calls) : IAppDataMaintenanceRuntime
     {
-        public void Shutdown()
+        public Task ShutdownAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            calls.Add("runtime.shutdown");
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CancellingAppDataMaintenanceRuntime(
+        List<string> calls,
+        CancellationTokenSource cancellation) : IAppDataMaintenanceRuntime
+    {
+        public Task ShutdownAsync(CancellationToken cancellationToken)
         {
             calls.Add("runtime.shutdown");
+            cancellation.Cancel();
+            return Task.CompletedTask;
         }
     }
 

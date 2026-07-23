@@ -295,9 +295,9 @@ internal sealed class MasterControlTrayStatusAdapter : IMasterControlTrayStatus
         _trayStatus = trayStatus ?? throw new ArgumentNullException(nameof(trayStatus));
     }
 
-    public TrayStatusSnapshot GetSnapshot()
+    public Task<TrayStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
-        return _trayStatus.GetSnapshot();
+        return _trayStatus.GetSnapshotAsync(cancellationToken);
     }
 }
 
@@ -322,7 +322,7 @@ internal sealed class MasterControlRuntimeAdapter : IMasterControlRuntime
             triggerTasks.Count(static task => task.IsEnabled),
             LogStorageService.Instance.GetStorageSummary(),
             LogStorageService.Instance.GetTrafficStatisticsSummary(),
-            MihomoServiceManager.Instance.GetStatus(),
+            MihomoServiceManager.Instance.GetLatestStatus(),
             StartupRestoreFallbackService.Instance.GetStatus(),
             GetRuntimeTrafficSnapshot(),
             Process.GetCurrentProcess().WorkingSet64);

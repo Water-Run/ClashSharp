@@ -121,6 +121,66 @@ public sealed class RepositoryTopologyTests
         Assert.Contains("ConnectionSamplingService sampling", startup, StringComparison.Ordinal);
     }
 
+    /// <summary>Freezes presentation service-locator debt by file so migration can only reduce it.</summary>
+    [Fact]
+    public void PresentationServiceLocatorDebt_DoesNotIncrease()
+    {
+        Dictionary<string, int> maximumOccurrencesByFile = new(StringComparer.Ordinal)
+        {
+            ["View/About.xaml.cs"] = 8,
+            ["View/Connections.xaml.cs"] = 4,
+            ["View/Links.xaml.cs"] = 9,
+            ["View/Logs.xaml.cs"] = 14,
+            ["View/MasterControl.xaml.cs"] = 20,
+            ["View/Profiles.xaml.cs"] = 5,
+            ["View/Proxies.xaml.cs"] = 5,
+            ["View/Rules.xaml.cs"] = 2,
+            ["View/Settings.xaml.cs"] = 60,
+            ["View/StartupConflictDialogPresenter.cs"] = 8,
+            ["View/Statistics.xaml.cs"] = 3,
+            ["View/Triggers.xaml.cs"] = 40,
+            ["ViewModel/AsyncRelayCommand.cs"] = 1,
+            ["ViewModel/MainWindowViewModel.cs"] = 1,
+            ["ViewModel/ManagementPageViewModels.cs"] = 1,
+            ["ViewModel/MasterControlAdapters.cs"] = 11,
+            ["ViewModel/MasterControlViewModel.cs"] = 5,
+            ["ViewModel/ProxiesViewModel.cs"] = 1,
+            ["ViewModel/SettingsAdapters.cs"] = 3,
+            ["ViewModel/SettingsViewModel.cs"] = 7,
+        };
+        string presentationRoot = Path.Combine(RepositoryRoot, "ClashSharp", "ClashSharp");
+        Dictionary<string, int> actualOccurrencesByFile = Directory
+            .EnumerateFiles(presentationRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path =>
+            {
+                string relative = Path.GetRelativePath(presentationRoot, path).Replace('\\', '/');
+                return !relative.StartsWith("obj/", StringComparison.Ordinal)
+                    && !relative.StartsWith("bin/", StringComparison.Ordinal)
+                    && (relative.StartsWith("View/", StringComparison.Ordinal)
+                        || relative.StartsWith("ViewModel/", StringComparison.Ordinal));
+            })
+            .Select(path => new
+            {
+                RelativePath = Path.GetRelativePath(presentationRoot, path).Replace('\\', '/'),
+                Count = Regex.Count(File.ReadAllText(path), @"\.Instance\b"),
+            })
+            .Where(static item => item.Count > 0)
+            .ToDictionary(static item => item.RelativePath, static item => item.Count, StringComparer.Ordinal);
+
+        Assert.True(
+            actualOccurrencesByFile.Values.Sum() <= 208,
+            "Presentation service-locator debt exceeded the 208-reference Phase 03 baseline.");
+        Assert.All(actualOccurrencesByFile, occurrence =>
+        {
+            Assert.True(
+                maximumOccurrencesByFile.TryGetValue(occurrence.Key, out int maximum),
+                $"New presentation service-locator file: {occurrence.Key}");
+            Assert.True(
+                occurrence.Value <= maximum,
+                $"Presentation service-locator debt increased in {occurrence.Key}: {occurrence.Value} > {maximum}.");
+        });
+    }
+
     /// <summary>Verifies workflow actions are immutable and workflow permissions are read-only.</summary>
     [Fact]
     public void ContinuousIntegration_UsesImmutableActionsAndReadOnlyPermissions()

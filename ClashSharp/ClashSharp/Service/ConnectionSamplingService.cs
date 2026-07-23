@@ -143,13 +143,6 @@ public sealed partial class ConnectionSamplingService : IRuntimeParticipant
         }
     }
 
-    /// <summary>Synchronously applies sampling settings for legacy property callbacks.</summary>
-    /// <remarks>This compatibility entry point awaits the transition and never detaches background work.</remarks>
-    public void RestartFromSettings()
-    {
-        RestartFromSettingsAsync(CancellationToken.None).GetAwaiter().GetResult();
-    }
-
     /// <summary>Samples active connections once and writes them to SQLite.</summary>
     /// <param name="cancellationToken">Cancels the sample.</param>
     internal async Task SampleOnceAsync(CancellationToken cancellationToken)

@@ -71,7 +71,7 @@ public sealed partial class Settings : Page
             new MihomoServiceControllerAdapter(MihomoServiceManager.Instance),
             AppThemeService.ApplyAccentColor,
             resetAllSettings: AppDataMaintenanceService.ResetAllSettings,
-            clearAllData: AppDataMaintenanceService.ClearAllData,
+            clearAllDataAsync: AppDataMaintenanceService.ClearAllDataAsync,
             checkStartupConflicts: StartupConflictDetectionService.Instance.CheckConflicts,
             isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending,
             notifyConnectionTestTimeout: NotificationService.Instance.NotifyConnectionTestTimeout,
@@ -81,6 +81,7 @@ public sealed partial class Settings : Page
             errorSink: ApplicationErrorSink.CreateDefault());
         InitializeComponent();
         DataContext = _viewModel;
+        _viewModel.RefreshMihomoServiceStatusCommand.Execute(null);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Unloaded += OnUnloaded;
         LoadSettings();
@@ -1058,7 +1059,16 @@ public sealed partial class Settings : Page
             return;
         }
 
-        _viewModel.ClearAllData();
+        try
+        {
+            await _viewModel.ClearAllDataAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            await ShowSettingsOperationFailureAsync(
+                _viewModel.ClearAllDataTitleText,
+                exception);
+        }
     }
 
     /// <summary>Shows a destructive-action confirmation dialog.</summary>

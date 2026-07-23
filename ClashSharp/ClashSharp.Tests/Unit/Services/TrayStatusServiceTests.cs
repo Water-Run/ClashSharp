@@ -17,7 +17,7 @@ public sealed class TrayStatusServiceTests
 {
     /// <summary>Verifies the primary runtime proxy group contributes current node and health latency.</summary>
     [Fact]
-    public void GetSnapshot_UsesPrimaryProxyGroupAndStoredLatency()
+    public async Task GetSnapshotAsync_UsesPrimaryProxyGroupAndStoredLatency()
     {
         FakeRuntime runtime = new()
         {
@@ -30,7 +30,7 @@ public sealed class TrayStatusServiceTests
         FakeHealthStorage healthStorage = new() { LatencyMilliseconds = 42 };
         TrayStatusService service = new(runtime, healthStorage, text => $"display:{text}");
 
-        TrayStatusSnapshot snapshot = service.GetSnapshot();
+        TrayStatusSnapshot snapshot = await service.GetSnapshotAsync(CancellationToken.None);
 
         Assert.Equal("display:Node A", snapshot.CurrentNodeName);
         Assert.Equal("Node A", healthStorage.RequestedNodeName);
@@ -39,30 +39,54 @@ public sealed class TrayStatusServiceTests
 
     /// <summary>Verifies runtime failures produce an unavailable status snapshot.</summary>
     [Fact]
-    public void GetSnapshot_WhenRuntimeUnavailable_ReturnsUnavailable()
+    public async Task GetSnapshotAsync_WhenRuntimeUnavailable_ReturnsUnavailable()
     {
         TrayStatusService service = new(new ThrowingRuntime(), new FakeHealthStorage(), text => text);
 
-        TrayStatusSnapshot snapshot = service.GetSnapshot();
+        TrayStatusSnapshot snapshot = await service.GetSnapshotAsync(CancellationToken.None);
 
         Assert.Equal(TrayStatusSnapshot.Unavailable, snapshot);
+    }
+
+    /// <summary>Verifies caller cancellation is not converted into an unavailable snapshot.</summary>
+    [Fact]
+    public async Task GetSnapshotAsync_WhenCallerCancels_PropagatesCancellation()
+    {
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        TrayStatusService service = new(new CancelledRuntime(), new FakeHealthStorage(), text => text);
+
+        OperationCanceledException exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.GetSnapshotAsync(cancellation.Token));
+
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
     }
 
     private sealed class FakeRuntime : ITrayStatusRuntime
     {
         public IReadOnlyList<MihomoProxyGroup> Groups { get; init; } = [];
 
-        public IReadOnlyList<MihomoProxyGroup> GetProxyGroups()
+        public Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken)
         {
-            return Groups;
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Groups);
         }
     }
 
     private sealed class ThrowingRuntime : ITrayStatusRuntime
     {
-        public IReadOnlyList<MihomoProxyGroup> GetProxyGroups()
+        public Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken)
         {
-            throw new InvalidOperationException("runtime unavailable");
+            return Task.FromException<IReadOnlyList<MihomoProxyGroup>>(
+                new InvalidOperationException("runtime unavailable"));
+        }
+    }
+
+    private sealed class CancelledRuntime : ITrayStatusRuntime
+    {
+        public Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromCanceled<IReadOnlyList<MihomoProxyGroup>>(cancellationToken);
         }
     }
 

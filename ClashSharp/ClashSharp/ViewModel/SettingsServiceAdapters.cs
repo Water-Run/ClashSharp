@@ -28,9 +28,14 @@ internal sealed class MihomoServiceControllerAdapter : IMihomoServiceController
         _manager = manager ?? throw new ArgumentNullException(nameof(manager));
     }
 
-    public MihomoServiceStatus GetStatus()
+    public MihomoServiceStatus GetLatestStatus()
     {
-        return _manager.GetStatus();
+        return _manager.GetLatestStatus();
+    }
+
+    public Task<MihomoServiceStatus> RefreshStatusAsync(CancellationToken cancellationToken)
+    {
+        return _manager.GetStatusAsync(cancellationToken);
     }
 
     public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)

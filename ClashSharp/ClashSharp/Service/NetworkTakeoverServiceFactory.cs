@@ -7,6 +7,8 @@
  * @date: 2026-06-25
  */
 
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -74,9 +76,9 @@ internal sealed class NetworkTakeoverWindowsProxyAdapter(WindowsProxyService win
 
 internal sealed class NetworkTakeoverMihomoServiceAdapter(MihomoServiceManager serviceManager) : INetworkTakeoverMihomoService
 {
-    public MihomoServiceStatus GetStatus()
+    public Task<MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
-        return serviceManager.GetStatus();
+        return serviceManager.GetStatusAsync(cancellationToken);
     }
 }
 

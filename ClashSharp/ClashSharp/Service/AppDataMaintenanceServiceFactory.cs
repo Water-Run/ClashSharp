@@ -1,7 +1,8 @@
 using System;
-using System.ComponentModel;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
+using ClashSharp.Hosting.Compatibility;
 
 namespace ClashSharp.Service;
 
@@ -17,9 +18,9 @@ internal sealed partial class AppDataMaintenanceService
     }
 
     /// <summary>Clears all user data including settings, logs, profiles, and generated mihomo configuration.</summary>
-    public static void ClearAllData()
+    public static Task ClearAllDataAsync(CancellationToken cancellationToken)
     {
-        Instance.ClearData();
+        return Instance.ClearDataAsync(cancellationToken);
     }
 }
 
@@ -32,7 +33,7 @@ internal static class AppDataMaintenanceServiceFactory
         AppDataMaintenanceLogStorageAdapter logStorage = new(LogStorageService.Instance);
         return new AppDataMaintenanceService(
             new AppDataMaintenanceSettingsAdapter(AppSettingsService.Instance),
-            new AppDataMaintenanceRuntimeAdapter(
+            new LegacyAppDataMaintenanceRuntimeAdapter(
                 ConnectionSamplingService.Instance,
                 MihomoCoreService.Instance,
                 AppSettingsService.Instance,
@@ -51,42 +52,6 @@ internal sealed class AppDataMaintenanceSettingsAdapter(AppSettingsService setti
     public void ResetAllSettings()
     {
         settings.ResetAllSettings();
-    }
-}
-
-internal sealed class AppDataMaintenanceRuntimeAdapter(
-    ConnectionSamplingService sampling,
-    MihomoCoreService core,
-    AppSettingsService settings,
-    WindowsProxyService windowsProxy,
-    LogStorageService logStorage,
-    Func<string, string> getString) : IAppDataMaintenanceRuntime
-{
-    public void Shutdown()
-    {
-        TryCleanup(() => sampling.StopAsync(CancellationToken.None).GetAwaiter().GetResult());
-        TryCleanup(core.Stop);
-        if (settings.RestoreProxyOnExit)
-        {
-            TryCleanup(windowsProxy.DisableProxy);
-        }
-    }
-
-    private void TryCleanup(Action cleanup)
-    {
-        try
-        {
-            cleanup();
-        }
-        catch (Exception exception) when (exception is
-            InvalidOperationException or Win32Exception or UnauthorizedAccessException)
-        {
-            logStorage.AppendLog(
-                "Warning",
-                "Maintenance",
-                getString("Maintenance.RuntimeCleanupFailed"),
-                exception.Message);
-        }
     }
 }
 

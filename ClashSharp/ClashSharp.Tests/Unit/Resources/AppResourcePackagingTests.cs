@@ -581,7 +581,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("AppDataMaintenanceService.ClearAllData()", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("AppSettingsService.Instance.DisplayLanguage", settingsCode, StringComparison.Ordinal);
         Assert.Contains("_viewModel.ResetAllSettings()", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("_viewModel.ClearAllData()", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("await _viewModel.ClearAllDataAsync(CancellationToken.None)", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings code-behind delegates startup conflict detection to the view model.</summary>

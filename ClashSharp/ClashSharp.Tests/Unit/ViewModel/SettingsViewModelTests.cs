@@ -340,7 +340,7 @@ public sealed class SettingsViewModelTests
             _ => key,
         });
 
-        MihomoServiceStatus status = controller.GetStatus();
+        MihomoServiceStatus status = controller.GetLatestStatus();
         MihomoServiceStatus uninstallStatus = await controller.UninstallAsync(CancellationToken.None);
 
         Assert.Equal("localized deployed", status.Message);
@@ -404,6 +404,26 @@ public sealed class SettingsViewModelTests
         ApplicationError error = Assert.Single(errorSink.Errors);
         Assert.Equal("settings-launch-at-startup", error.OperationName);
         Assert.Same(failure, error.Exception);
+    }
+
+    /// <summary>Verifies cancellation restores applied state without presenting cancellation as a runtime failure.</summary>
+    [Fact]
+    public async Task ApplyLaunchAtStartupCommand_WhenCancelled_RestoresStateWithoutOperationError()
+    {
+        FakeSettingsStore store = new() { LaunchAtStartupEnabled = false };
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            applyLaunchAtStartupAsync: (_, token) => Task.FromCanceled(token));
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            viewModel.ApplyLaunchAtStartupCommand.ExecuteAsync(null, cancellation.Token));
+
+        Assert.False(store.LaunchAtStartupEnabled);
+        Assert.False(viewModel.LaunchAtStartupEnabled);
+        Assert.False(viewModel.HasOperationError);
+        Assert.Equal(string.Empty, viewModel.OperationErrorText);
     }
 
     /// <summary>Verifies invalid language indexes are ignored.</summary>
@@ -1096,7 +1116,7 @@ public sealed class SettingsViewModelTests
 
     /// <summary>Verifies clear-all data delegates maintenance work and reloads the current settings snapshot.</summary>
     [Fact]
-    public void ClearAllData_RunsInjectedMaintenanceAndReloadsSettings()
+    public async Task ClearAllDataAsync_RunsInjectedMaintenanceAndReloadsSettings()
     {
         FakeSettingsStore store = new()
         {
@@ -1116,7 +1136,7 @@ public sealed class SettingsViewModelTests
                 store.ConnectionTestUrl = "https://example.com/cleared";
             });
 
-        InvokeMethod<object?>(viewModel, "ClearAllData", Array.Empty<object>());
+        await viewModel.ClearAllDataAsync(CancellationToken.None);
 
         Assert.True(clearCalled);
         Assert.Null(appliedLanguage);
@@ -1511,9 +1531,15 @@ public sealed class SettingsViewModelTests
 
         /// <summary>Gets current fake service status.</summary>
         /// <returns>Current fake status.</returns>
-        public MihomoServiceStatus GetStatus()
+        public MihomoServiceStatus GetLatestStatus()
         {
             return CurrentStatus;
+        }
+
+        public Task<MihomoServiceStatus> RefreshStatusAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(CurrentStatus);
         }
 
         /// <summary>Deploys the fake service.</summary>

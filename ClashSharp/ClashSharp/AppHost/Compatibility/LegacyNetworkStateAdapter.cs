@@ -46,7 +46,7 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
         _proxyRecovery = proxyRecovery ?? throw new ArgumentNullException(nameof(proxyRecovery));
     }
 
-    public Task<NetworkPlan> PlanAsync(NetworkIntent intent, CancellationToken cancellationToken)
+    public async Task<NetworkPlan> PlanAsync(NetworkIntent intent, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ObservedNetworkState observed = Observe();
@@ -55,7 +55,8 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
             throw new InvalidOperationException("The current network baseline cannot be classified safely.");
         }
 
-        NetworkStateSnapshot desired = BuildDesired(intent, observed);
+        bool useTransparentProxy = await ShouldUseTransparentProxyAsync(intent, cancellationToken).ConfigureAwait(false);
+        NetworkStateSnapshot desired = BuildDesired(intent, observed, useTransparentProxy);
         string desiredProxyServer = DetermineDesiredProxyServer(intent, observed, desired);
         string baselineHash = ComputeAggregateHash(
             observed.Snapshot.StateHash,
@@ -76,13 +77,13 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
             observed.ProxyServer,
             desiredProxyServer,
             _settings.CurrentMode);
-        return Task.FromResult(new NetworkPlan(
+        return new NetworkPlan(
             intent,
             observed.Snapshot,
             desired,
             baselineHash,
             desiredHash,
-            compensationData));
+            compensationData);
     }
 
     public Task<NetworkPlan> RestorePlanAsync(MutationJournal journal, CancellationToken cancellationToken)
@@ -119,9 +120,25 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
         return Task.CompletedTask;
     }
 
-    public Task ApplyAsync(NetworkPlan plan, CancellationToken cancellationToken)
+    public async Task ApplyAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
-        return RunLegacyAsync(() => Apply(plan), cancellationToken);
+        switch (plan.Intent.Kind)
+        {
+            case NetworkIntentKind.ModeTransition:
+            case NetworkIntentKind.Shutdown:
+                await _takeover.ApplyModeAsync(
+                    plan.Intent.Mode,
+                    plan.Intent.TransparentProxyEnabled,
+                    plan.Intent.MixedPort,
+                    cancellationToken).ConfigureAwait(false);
+                break;
+            case NetworkIntentKind.StartupProxyRecovery:
+            case NetworkIntentKind.ProxyConflictRepair:
+                await RunLegacyAsync(() => ApplyProxyRecovery(plan), cancellationToken).ConfigureAwait(false);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(plan), plan.Intent.Kind, "Unsupported network intent.");
+        }
     }
 
     public Task<NetworkStateSnapshot> ProbeAsync(NetworkPlan plan, CancellationToken cancellationToken)
@@ -130,9 +147,30 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
         return Task.FromResult(Observe().Snapshot);
     }
 
-    public Task CompensateAsync(NetworkPlan plan, CancellationToken cancellationToken)
+    public async Task CompensateAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
-        return RunLegacyAsync(() => Compensate(plan), cancellationToken);
+        LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted =
+            LegacyNetworkPlanPersistence.Deserialize(plan.CompensationData);
+        if (plan.Intent.Kind is not (NetworkIntentKind.StartupProxyRecovery
+            or NetworkIntentKind.ProxyConflictRepair))
+        {
+            if (persisted.Baseline.CoreRunning)
+            {
+                await _takeover.ApplyModeAsync(
+                    persisted.Baseline.Mode,
+                    persisted.Baseline.TransparentProxyEnabled,
+                    persisted.Baseline.MixedPort,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await RunLegacyAsync(_core.Stop, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        await RunLegacyAsync(
+            () => RestoreProxy(persisted.Baseline.SystemProxyEnabled, persisted.BaselineProxyServer),
+            cancellationToken).ConfigureAwait(false);
     }
 
     public Task ActivateAsync(NetworkPlan plan, CancellationToken cancellationToken)
@@ -147,17 +185,10 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
         return Task.CompletedTask;
     }
 
-    private void Apply(NetworkPlan plan)
+    private void ApplyProxyRecovery(NetworkPlan plan)
     {
         switch (plan.Intent.Kind)
         {
-            case NetworkIntentKind.ModeTransition:
-            case NetworkIntentKind.Shutdown:
-                _takeover.ApplyMode(
-                    plan.Intent.Mode,
-                    plan.Intent.TransparentProxyEnabled,
-                    plan.Intent.MixedPort);
-                break;
             case NetworkIntentKind.StartupProxyRecovery:
             case NetworkIntentKind.ProxyConflictRepair:
                 if (plan.Desired.SystemProxyEnabled)
@@ -176,30 +207,10 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
         }
     }
 
-    private void Compensate(NetworkPlan plan)
-    {
-        LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted =
-            LegacyNetworkPlanPersistence.Deserialize(plan.CompensationData);
-        if (plan.Intent.Kind is not (NetworkIntentKind.StartupProxyRecovery
-            or NetworkIntentKind.ProxyConflictRepair))
-        {
-            if (persisted.Baseline.CoreRunning)
-            {
-                _takeover.ApplyMode(
-                    persisted.Baseline.Mode,
-                    persisted.Baseline.TransparentProxyEnabled,
-                    persisted.Baseline.MixedPort);
-            }
-            else
-            {
-                _core.Stop();
-            }
-        }
-
-        RestoreProxy(persisted.Baseline.SystemProxyEnabled, persisted.BaselineProxyServer);
-    }
-
-    private NetworkStateSnapshot BuildDesired(NetworkIntent intent, ObservedNetworkState observed)
+    private NetworkStateSnapshot BuildDesired(
+        NetworkIntent intent,
+        ObservedNetworkState observed,
+        bool useTransparentProxy)
     {
         if (intent.Kind is NetworkIntentKind.StartupProxyRecovery
             or NetworkIntentKind.ProxyConflictRepair)
@@ -221,7 +232,7 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
         }
 
         bool coreRunning = intent.Mode != ClashSharpMode.Disabled;
-        bool transparentProxy = ShouldUseTransparentProxy(intent);
+        bool transparentProxy = useTransparentProxy;
         bool systemProxy = intent.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
             && !transparentProxy;
         int effectivePort = intent.MixedPort;
@@ -238,7 +249,9 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
             isKnown: true);
     }
 
-    private bool ShouldUseTransparentProxy(NetworkIntent intent)
+    private async Task<bool> ShouldUseTransparentProxyAsync(
+        NetworkIntent intent,
+        CancellationToken cancellationToken)
     {
         if (!intent.TransparentProxyEnabled
             || intent.Mode is not (ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover))
@@ -246,7 +259,9 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
             return false;
         }
 
-        MihomoServiceStatus status = _mihomoService.GetStatus();
+        MihomoServiceStatus status = await _mihomoService
+            .GetStatusAsync(cancellationToken)
+            .ConfigureAwait(false);
         return status.IsInstalled && status.IsRunning;
     }
 

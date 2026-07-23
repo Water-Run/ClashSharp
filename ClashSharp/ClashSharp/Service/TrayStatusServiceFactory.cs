@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -37,10 +38,13 @@ internal sealed class TrayStatusRuntimeAdapter(MihomoControllerClient controller
 {
     private static readonly TimeSpan RuntimeStatusTimeout = TimeSpan.FromMilliseconds(800);
 
-    public IReadOnlyList<MihomoProxyGroup> GetProxyGroups()
+    public async Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken)
     {
-        using CancellationTokenSource cancellation = new(RuntimeStatusTimeout);
-        return controllerClient.GetProxyGroupsAsync(cancellation.Token).GetAwaiter().GetResult();
+        using CancellationTokenSource timeout = new(RuntimeStatusTimeout);
+        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeout.Token);
+        return await controllerClient.GetProxyGroupsAsync(linked.Token).ConfigureAwait(false);
     }
 }
 

@@ -9,6 +9,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -17,7 +19,7 @@ namespace ClashSharp.Service;
 internal interface ITrayStatusRuntime
 {
     /// <summary>Gets current runtime proxy groups.</summary>
-    IReadOnlyList<MihomoProxyGroup> GetProxyGroups();
+    Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Node health contract required by <see cref="TrayStatusService"/>.</summary>
@@ -41,6 +43,10 @@ public sealed partial class TrayStatusService
 
     private readonly Func<string, string> _filterText;
 
+    private readonly object _snapshotLock = new();
+
+    private TrayStatusSnapshot _latestSnapshot = TrayStatusSnapshot.Unavailable;
+
     /// <summary>Initializes a tray status service.</summary>
     internal TrayStatusService(
         ITrayStatusRuntime runtime,
@@ -54,25 +60,49 @@ public sealed partial class TrayStatusService
 
     /// <summary>Gets a best-effort snapshot of current tray status details.</summary>
     /// <returns>Current status, or <see cref="TrayStatusSnapshot.Unavailable"/> when runtime state is unavailable.</returns>
-    public TrayStatusSnapshot GetSnapshot()
+    public async Task<TrayStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
+        TrayStatusSnapshot snapshot;
         try
         {
-            IReadOnlyList<MihomoProxyGroup> groups = _runtime.GetProxyGroups();
+            IReadOnlyList<MihomoProxyGroup> groups = await _runtime
+                .GetProxyGroupsAsync(cancellationToken)
+                .ConfigureAwait(false);
             MihomoProxyGroup? primaryGroup = SelectPrimaryGroup(groups);
             if (primaryGroup is not MihomoProxyGroup group || string.IsNullOrWhiteSpace(group.CurrentSelection))
             {
-                return TrayStatusSnapshot.Unavailable;
+                snapshot = TrayStatusSnapshot.Unavailable;
             }
-
-            string nodeName = group.CurrentSelection.Trim();
-            return new TrayStatusSnapshot(
-                _filterText(nodeName),
-                _healthStorage.GetNodeLatencyMilliseconds(nodeName));
+            else
+            {
+                string nodeName = group.CurrentSelection.Trim();
+                snapshot = new TrayStatusSnapshot(
+                    _filterText(nodeName),
+                    _healthStorage.GetNodeLatencyMilliseconds(nodeName));
+            }
         }
-        catch (Exception exception) when (exception is InvalidOperationException or TimeoutException or System.Net.Http.HttpRequestException or System.Text.Json.JsonException or OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return TrayStatusSnapshot.Unavailable;
+            snapshot = TrayStatusSnapshot.Unavailable;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or TimeoutException or System.Net.Http.HttpRequestException or System.Text.Json.JsonException)
+        {
+            snapshot = TrayStatusSnapshot.Unavailable;
+        }
+
+        lock (_snapshotLock)
+        {
+            _latestSnapshot = snapshot;
+            return snapshot;
+        }
+    }
+
+    /// <summary>Gets the latest completed snapshot without performing controller I/O.</summary>
+    public TrayStatusSnapshot GetLatestSnapshot()
+    {
+        lock (_snapshotLock)
+        {
+            return _latestSnapshot;
         }
     }
 

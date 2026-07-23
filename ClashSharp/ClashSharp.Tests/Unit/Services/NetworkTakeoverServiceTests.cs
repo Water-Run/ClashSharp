@@ -17,7 +17,7 @@ public sealed class NetworkTakeoverServiceTests
 {
     /// <summary>Verifies an installed transparent proxy service keeps Windows proxy disabled and starts TUN mode.</summary>
     [Fact]
-    public void ApplyMode_WhenTransparentProxyEnabledAndServiceInstalled_UsesTransparentProxy()
+    public async Task ApplyModeAsync_WhenTransparentProxyEnabledAndServiceInstalled_UsesTransparentProxy()
     {
         FakeNetworkTakeoverCoreConfiguration configuration = new();
         FakeNetworkTakeoverCore core = new();
@@ -29,7 +29,11 @@ public sealed class NetworkTakeoverServiceTests
             windowsProxy: windowsProxy,
             serviceStatus: serviceStatus);
 
-        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.FullTakeover, true, 19090);
+        NetworkTakeoverResult result = await service.ApplyModeAsync(
+            ClashSharpMode.FullTakeover,
+            true,
+            19090,
+            CancellationToken.None);
 
         Assert.Equal(ClashSharpMode.FullTakeover, result.Mode);
         Assert.True(result.CoreRunning);
@@ -45,7 +49,7 @@ public sealed class NetworkTakeoverServiceTests
 
     /// <summary>Verifies a stopped transparent proxy service falls back to system proxy.</summary>
     [Fact]
-    public void ApplyMode_WhenTransparentProxyServiceInstalledButStopped_FallsBackToSystemProxy()
+    public async Task ApplyModeAsync_WhenTransparentProxyServiceInstalledButStopped_FallsBackToSystemProxy()
     {
         FakeNetworkTakeoverCoreConfiguration configuration = new();
         FakeNetworkTakeoverCore core = new();
@@ -57,7 +61,11 @@ public sealed class NetworkTakeoverServiceTests
             windowsProxy: windowsProxy,
             serviceStatus: serviceStatus);
 
-        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.FullTakeover, true, 10002);
+        NetworkTakeoverResult result = await service.ApplyModeAsync(
+            ClashSharpMode.FullTakeover,
+            true,
+            10002,
+            CancellationToken.None);
 
         Assert.Equal(ClashSharpMode.FullTakeover, result.Mode);
         Assert.True(result.CoreRunning);
@@ -72,7 +80,7 @@ public sealed class NetworkTakeoverServiceTests
 
     /// <summary>Verifies missing transparent proxy service falls back to system proxy.</summary>
     [Fact]
-    public void ApplyMode_WhenTransparentProxyEnabledButServiceMissing_FallsBackToSystemProxy()
+    public async Task ApplyModeAsync_WhenTransparentProxyEnabledButServiceMissing_FallsBackToSystemProxy()
     {
         FakeNetworkTakeoverCoreConfiguration configuration = new();
         FakeNetworkTakeoverCore core = new();
@@ -84,7 +92,11 @@ public sealed class NetworkTakeoverServiceTests
             windowsProxy: windowsProxy,
             serviceStatus: serviceStatus);
 
-        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.RuleTakeover, true, 10001);
+        NetworkTakeoverResult result = await service.ApplyModeAsync(
+            ClashSharpMode.RuleTakeover,
+            true,
+            10001,
+            CancellationToken.None);
 
         Assert.Equal(ClashSharpMode.RuleTakeover, result.Mode);
         Assert.True(result.CoreRunning);
@@ -99,14 +111,18 @@ public sealed class NetworkTakeoverServiceTests
 
     /// <summary>Verifies disabled mode stops mihomo and disables Windows system proxy through dependencies.</summary>
     [Fact]
-    public void ApplyMode_WhenDisabled_StopsCoreAndDisablesSystemProxy()
+    public async Task ApplyModeAsync_WhenDisabled_StopsCoreAndDisablesSystemProxy()
     {
         FakeNetworkTakeoverCoreConfiguration configuration = new();
         FakeNetworkTakeoverCore core = new();
         FakeNetworkTakeoverWindowsProxy windowsProxy = new();
         NetworkTakeoverService service = CreateService(configuration: configuration, core: core, windowsProxy: windowsProxy);
 
-        NetworkTakeoverResult result = service.ApplyMode(ClashSharpMode.Disabled, false, 7890);
+        NetworkTakeoverResult result = await service.ApplyModeAsync(
+            ClashSharpMode.Disabled,
+            false,
+            7890,
+            CancellationToken.None);
 
         Assert.Equal(ClashSharpMode.Disabled, result.Mode);
         Assert.False(result.CoreRunning);
@@ -122,7 +138,7 @@ public sealed class NetworkTakeoverServiceTests
 
     /// <summary>Verifies journaled parameters win over settings that changed after planning.</summary>
     [Fact]
-    public void ApplyMode_WithExplicitPlan_UsesFrozenTunAndPortValues()
+    public async Task ApplyModeAsync_WithExplicitPlan_UsesFrozenTunAndPortValues()
     {
         FakeNetworkTakeoverCoreConfiguration configuration = new();
         FakeNetworkTakeoverWindowsProxy windowsProxy = new();
@@ -130,10 +146,11 @@ public sealed class NetworkTakeoverServiceTests
             configuration: configuration,
             windowsProxy: windowsProxy);
 
-        NetworkTakeoverResult result = service.ApplyMode(
+        NetworkTakeoverResult result = await service.ApplyModeAsync(
             ClashSharpMode.RuleTakeover,
             transparentProxyEnabled: false,
-            mixedPort: 12000);
+            mixedPort: 12000,
+            CancellationToken.None);
 
         Assert.True(result.SystemProxyEnabled);
         Assert.False(result.TransparentProxyEnabled);
@@ -141,11 +158,37 @@ public sealed class NetworkTakeoverServiceTests
         Assert.Equal(["127.0.0.1:12000"], windowsProxy.EnabledServers);
     }
 
+    [Fact]
+    public async Task ApplyModeAsync_CancelledAfterServiceQuery_DoesNotMutateNetworkState()
+    {
+        using CancellationTokenSource cancellation = new();
+        FakeNetworkTakeoverCoreConfiguration configuration = new();
+        FakeNetworkTakeoverCore core = new();
+        FakeNetworkTakeoverWindowsProxy windowsProxy = new();
+        NetworkTakeoverService service = CreateService(
+            configuration: configuration,
+            core: core,
+            windowsProxy: windowsProxy,
+            serviceStatus: new CancellingNetworkTakeoverMihomoService(cancellation));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.ApplyModeAsync(
+            ClashSharpMode.RuleTakeover,
+            transparentProxyEnabled: true,
+            mixedPort: 12000,
+            cancellation.Token));
+
+        Assert.Empty(configuration.Requests);
+        Assert.Empty(core.RestartedStates);
+        Assert.False(core.Stopped);
+        Assert.Empty(windowsProxy.EnabledServers);
+        Assert.Equal(0, windowsProxy.DisableCount);
+    }
+
     private static NetworkTakeoverService CreateService(
         FakeNetworkTakeoverCoreConfiguration? configuration = null,
         FakeNetworkTakeoverCore? core = null,
         FakeNetworkTakeoverWindowsProxy? windowsProxy = null,
-        FakeNetworkTakeoverMihomoService? serviceStatus = null,
+        INetworkTakeoverMihomoService? serviceStatus = null,
         FakeNetworkTakeoverProxyRecovery? proxyRecovery = null)
     {
         return new NetworkTakeoverService(
@@ -221,9 +264,20 @@ public sealed class NetworkTakeoverServiceTests
 
     private sealed class FakeNetworkTakeoverMihomoService(MihomoServiceStatus status) : INetworkTakeoverMihomoService
     {
-        public MihomoServiceStatus GetStatus()
+        public Task<MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken)
         {
-            return status;
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(status);
+        }
+    }
+
+    private sealed class CancellingNetworkTakeoverMihomoService(CancellationTokenSource cancellation)
+        : INetworkTakeoverMihomoService
+    {
+        public Task<MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken)
+        {
+            cancellation.Cancel();
+            return Task.FromResult(new MihomoServiceStatus(true, true, "running"));
         }
     }
 

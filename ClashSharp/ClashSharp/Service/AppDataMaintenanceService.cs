@@ -9,6 +9,8 @@
 
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ClashSharp.Service;
 
@@ -23,7 +25,7 @@ internal interface IAppDataMaintenanceSettings
 internal interface IAppDataMaintenanceRuntime
 {
     /// <summary>Stops owned runtime services.</summary>
-    void Shutdown();
+    Task ShutdownAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Clears and resets log storage during data maintenance.</summary>
@@ -96,9 +98,10 @@ internal sealed partial class AppDataMaintenanceService
     }
 
     /// <summary>Clears all user data including settings, logs, profiles, and generated mihomo configuration.</summary>
-    public void ClearData()
+    public async Task ClearDataAsync(CancellationToken cancellationToken)
     {
-        _runtime.Shutdown();
+        await _runtime.ShutdownAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         _settings.ResetAllSettings();
         TryClearLogStorage();
         _localData.ClearAll();

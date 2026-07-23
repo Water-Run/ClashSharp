@@ -9,13 +9,13 @@ public sealed class MihomoServiceManagerTests
 {
     /// <summary>Verifies a failed sc.exe query maps to a localized not-deployed status.</summary>
     [Fact]
-    public void GetStatus_WhenScQueryFails_ReturnsLocalizedNotDeployedStatus()
+    public async Task GetStatusAsync_WhenScQueryFails_ReturnsLocalizedNotDeployedStatus()
     {
         FakeProcessRunner runner = new();
         runner.Results.Enqueue(Completed(1060, standardOutput: "service does not exist"));
         MihomoServiceManager manager = CreateManager(runner);
 
-        MihomoServiceStatus status = manager.GetStatus();
+        MihomoServiceStatus status = await manager.GetStatusAsync(CancellationToken.None);
 
         Assert.False(status.IsInstalled);
         Assert.False(status.IsRunning);
@@ -28,17 +28,33 @@ public sealed class MihomoServiceManagerTests
 
     /// <summary>Verifies a running service query maps to a localized running status.</summary>
     [Fact]
-    public void GetStatus_WhenScQueryReportsRunning_ReturnsLocalizedRunningStatus()
+    public async Task GetStatusAsync_WhenScQueryReportsRunning_ReturnsLocalizedRunningStatus()
     {
         FakeProcessRunner runner = new();
         runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
         MihomoServiceManager manager = CreateManager(runner);
 
-        MihomoServiceStatus status = manager.GetStatus();
+        MihomoServiceStatus status = await manager.GetStatusAsync(CancellationToken.None);
 
         Assert.True(status.IsInstalled);
         Assert.True(status.IsRunning);
         Assert.Equal("running", status.Message);
+    }
+
+    /// <summary>Verifies query cancellation is propagated instead of being misreported as service absence.</summary>
+    [Fact]
+    public async Task GetStatusAsync_WhenRunnerReturnsCancellation_PropagatesCancellation()
+    {
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Result(ProcessRunOutcome.Cancelled));
+        MihomoServiceManager manager = CreateManager(runner);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        OperationCanceledException exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => manager.GetStatusAsync(cancellation.Token));
+
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
     }
 
     /// <summary>Verifies deployment trusts the mandatory final SCM query even after a non-zero command exit.</summary>
@@ -74,13 +90,37 @@ public sealed class MihomoServiceManagerTests
         runner.Results.Enqueue(Result(ProcessRunOutcome.Cancelled));
         runner.Results.Enqueue(Completed(1060));
         MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\service.exe");
+        using CancellationTokenSource cancellation = new();
+        runner.OnRequest = requestCount =>
+        {
+            if (requestCount == 2)
+            {
+                cancellation.Cancel();
+            }
+        };
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            manager.DeployAsync(new CancellationToken(canceled: true)));
+            manager.DeployAsync(cancellation.Token));
 
         Assert.Equal(3, runner.Requests.Count);
         Assert.False(runner.Requests[2].RunElevated);
         Assert.Equal(["query", MihomoServiceManager.ServiceName], runner.Requests[2].Arguments);
+    }
+
+    /// <summary>Verifies cancellation before the initial query cannot reach an elevated mutation.</summary>
+    [Fact]
+    public async Task DeployAsync_WhenAlreadyCancelled_DoesNotRunElevatedCommand()
+    {
+        FakeProcessRunner runner = new() { ObserveCancellation = true };
+        MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\service.exe");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            manager.DeployAsync(cancellation.Token));
+
+        ProcessRequest request = Assert.Single(runner.Requests);
+        Assert.False(request.RunElevated);
     }
 
     /// <summary>Verifies an inconclusive initial query prevents an unsafe deployment attempt.</summary>
@@ -214,6 +254,10 @@ public sealed class MihomoServiceManagerTests
 
     private sealed class FakeProcessRunner : IProcessRunner
     {
+        public bool ObserveCancellation { get; init; }
+
+        public Action<int>? OnRequest { get; set; }
+
         public Queue<ProcessRunResult> Results { get; } = [];
 
         public List<ProcessRequest> Requests { get; } = [];
@@ -221,6 +265,12 @@ public sealed class MihomoServiceManagerTests
         public Task<ProcessRunResult> RunAsync(ProcessRequest request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
+            OnRequest?.Invoke(Requests.Count);
+            if (ObserveCancellation && cancellationToken.IsCancellationRequested)
+            {
+                return Task.FromResult(Result(ProcessRunOutcome.Cancelled));
+            }
+
             return Task.FromResult(Results.Dequeue());
         }
     }

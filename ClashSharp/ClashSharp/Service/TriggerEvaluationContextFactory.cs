@@ -8,9 +8,6 @@
  */
 
 using System;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -27,7 +24,7 @@ internal static class TriggerEvaluationContextFactory
     {
         TrafficStatisticsSummary summary = LogStorageService.Instance.GetTrafficStatisticsSummary();
         long windowTrafficBytes = LogStorageService.Instance.GetTrafficBytesSince(DateTimeOffset.UtcNow - RecentTrafficWindow);
-        RuntimeTrafficRateSnapshot runtimeTraffic = GetRuntimeTrafficSnapshot();
+        RuntimeTrafficRateSnapshot runtimeTraffic = RuntimeTrafficRateService.Instance.GetLatestSnapshot();
         return new TriggerEvaluationContext(
             eventKind,
             summary.TotalUploadBytes + summary.TotalDownloadBytes,
@@ -41,15 +38,4 @@ internal static class TriggerEvaluationContextFactory
             runtimeTraffic.SessionUploadBytes + runtimeTraffic.SessionDownloadBytes);
     }
 
-    private static RuntimeTrafficRateSnapshot GetRuntimeTrafficSnapshot()
-    {
-        try
-        {
-            return RuntimeTrafficRateService.Instance.GetSnapshotAsync(CancellationToken.None).GetAwaiter().GetResult();
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or HttpRequestException or TaskCanceledException)
-        {
-            return RuntimeTrafficRateService.Instance.GetLatestSnapshot();
-        }
-    }
 }

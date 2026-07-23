@@ -203,7 +203,7 @@ internal interface IMasterControlLog
 internal interface IMasterControlTrayStatus
 {
     /// <summary>Gets current node and latency status.</summary>
-    TrayStatusSnapshot GetSnapshot();
+    Task<TrayStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Runtime counters and storage summaries shown by master-control information tiles.</summary>
@@ -258,9 +258,10 @@ internal sealed class UnavailableMasterControlTrayStatus : IMasterControlTraySta
 {
     public static UnavailableMasterControlTrayStatus Instance { get; } = new();
 
-    public TrayStatusSnapshot GetSnapshot()
+    public Task<TrayStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
-        return TrayStatusSnapshot.Unavailable;
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(TrayStatusSnapshot.Unavailable);
     }
 }
 
@@ -825,7 +826,7 @@ internal sealed class MasterControlViewModel : ObservableObject
 
         RefreshRuntimeSnapshot();
         RefreshProxyStatus();
-        RefreshTrayStatus();
+        await RefreshTrayStatusAsync(cancellationToken);
         OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
         _lastHeavyRefreshAt = now;
@@ -959,9 +960,9 @@ internal sealed class MasterControlViewModel : ObservableObject
             : _localization.GetString("Master.Status.Off");
     }
 
-    private void RefreshTrayStatus()
+    private async Task RefreshTrayStatusAsync(CancellationToken cancellationToken)
     {
-        TrayStatusSnapshot snapshot = _trayStatus.GetSnapshot();
+        TrayStatusSnapshot snapshot = await _trayStatus.GetSnapshotAsync(cancellationToken);
         CurrentNodeText = string.IsNullOrWhiteSpace(snapshot.CurrentNodeName)
             ? _localization.GetString("Master.Status.CurrentNodeUnavailable")
             : snapshot.CurrentNodeName;
@@ -1276,12 +1277,14 @@ internal sealed class MasterControlViewModel : ObservableObject
                 ? _localization.GetString("Master.Status.Standby")
                 : _localization.GetString("Master.Status.Off");
         }
+        catch (OperationCanceledException)
+        {
+            RestoreTransparentProxySetting(baseline);
+            throw;
+        }
         catch
         {
-            _settings.TransparentProxyEnabled = baseline;
-            TransparentProxyStatusText = baseline
-                ? _localization.GetString("Master.Status.Standby")
-                : _localization.GetString("Master.Status.Off");
+            RestoreTransparentProxySetting(baseline);
             OperationErrorText = _localization.GetString("Application.UnexpectedError");
             throw;
         }
@@ -1289,6 +1292,14 @@ internal sealed class MasterControlViewModel : ObservableObject
         {
             RefreshTileValues();
         }
+    }
+
+    private void RestoreTransparentProxySetting(bool baseline)
+    {
+        _settings.TransparentProxyEnabled = baseline;
+        TransparentProxyStatusText = baseline
+            ? _localization.GetString("Master.Status.Standby")
+            : _localization.GetString("Master.Status.Off");
     }
 
     private async Task ToggleStartupLaunchAsync(CancellationToken cancellationToken)
@@ -1322,6 +1333,11 @@ internal sealed class MasterControlViewModel : ObservableObject
         {
             await _actions.DispatchAsync(kind, desired.ToString(), cancellationToken);
             setValue(desired);
+        }
+        catch (OperationCanceledException)
+        {
+            setValue(baseline);
+            throw;
         }
         catch
         {

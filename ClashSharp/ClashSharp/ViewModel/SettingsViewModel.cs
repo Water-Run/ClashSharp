@@ -134,7 +134,10 @@ internal interface IMihomoServiceController
 {
     /// <summary>Gets current service status.</summary>
     /// <returns>Current service status.</returns>
-    MihomoServiceStatus GetStatus();
+    MihomoServiceStatus GetLatestStatus();
+
+    /// <summary>Refreshes current service status asynchronously.</summary>
+    Task<MihomoServiceStatus> RefreshStatusAsync(CancellationToken cancellationToken);
 
     /// <summary>Deploys the mihomo Windows service.</summary>
     /// <param name="cancellationToken">Cancels deployment wait when requested.</param>
@@ -160,14 +163,20 @@ internal sealed class AlwaysAvailableMihomoServiceController : IMihomoServiceCon
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
-    public MihomoServiceStatus GetStatus()
+    public MihomoServiceStatus GetLatestStatus()
     {
         return new MihomoServiceStatus(true, false, _getString("MihomoService.Status.Deployed"));
     }
 
     public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
     {
-        return Task.FromResult(GetStatus());
+        return Task.FromResult(GetLatestStatus());
+    }
+
+    public Task<MihomoServiceStatus> RefreshStatusAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetLatestStatus());
     }
 
     public Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
@@ -438,7 +447,7 @@ internal sealed class SettingsViewModel : ObservableObject
     private readonly Action _resetAllSettings;
 
     /// <summary>Callback that clears all local application data.</summary>
-    private readonly Action _clearAllData;
+    private readonly Func<CancellationToken, Task> _clearAllDataAsync;
 
     private readonly Action _exitApplication;
 
@@ -551,7 +560,8 @@ internal sealed class SettingsViewModel : ObservableObject
         Action<string, string, string, string?>? appendLog = null,
         Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
-        IApplicationErrorSink? errorSink = null)
+        IApplicationErrorSink? errorSink = null,
+        Func<CancellationToken, Task>? clearAllDataAsync = null)
         : this(
             settings,
             applyLanguage,
@@ -573,6 +583,7 @@ internal sealed class SettingsViewModel : ObservableObject
             restartConnectionSamplingAsync,
             applyLaunchAtStartupAsync,
             errorSink,
+            clearAllDataAsync,
             null,
             null)
     {
@@ -600,6 +611,7 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<CancellationToken, Task>? restartConnectionSamplingAsync,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync,
         IApplicationErrorSink? errorSink,
+        Func<CancellationToken, Task>? clearAllDataAsync,
         Action? exitApplication,
         Action? restartApplication)
     {
@@ -626,7 +638,12 @@ internal sealed class SettingsViewModel : ObservableObject
         _notifyConnectionTestTimeout = notifyConnectionTestTimeout ?? (_ => { });
         _appendLog = appendLog ?? ((_, _, _, _) => { });
         _resetAllSettings = resetAllSettings ?? (() => { });
-        _clearAllData = clearAllData ?? (() => { });
+        _clearAllDataAsync = clearAllDataAsync ?? (cancellationToken =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            clearAllData?.Invoke();
+            return Task.CompletedTask;
+        });
         _exitApplication = exitApplication ?? ApplicationLifecycleService.Instance.ExitApplication;
         _restartApplication = restartApplication ?? ApplicationLifecycleService.Instance.RestartApplication;
         _checkStartupConflicts = checkStartupConflicts ?? (_ => []);
@@ -651,6 +668,10 @@ internal sealed class SettingsViewModel : ObservableObject
             UninstallMihomoServiceAsync,
             errorSink: commandErrors,
             operationName: "settings-uninstall-mihomo-service");
+        RefreshMihomoServiceStatusCommand = new AsyncRelayCommand(
+            RefreshMihomoServiceStatusAsync,
+            errorSink: commandErrors,
+            operationName: "settings-refresh-mihomo-service");
         ApplyLaunchAtStartupCommand = new AsyncRelayCommand(
             SynchronizeLaunchAtStartupAsync,
             errorSink: commandErrors,
@@ -1171,6 +1192,8 @@ internal sealed class SettingsViewModel : ObservableObject
     public AsyncRelayCommand DeployMihomoServiceCommand { get; }
 
     public AsyncRelayCommand UninstallMihomoServiceCommand { get; }
+
+    public AsyncRelayCommand RefreshMihomoServiceStatusCommand { get; }
 
     public AsyncRelayCommand ApplyLaunchAtStartupCommand { get; }
 
@@ -2008,9 +2031,22 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <returns>A task that completes after service status is refreshed.</returns>
     public async Task DeployMihomoServiceAsync(CancellationToken cancellationToken)
     {
-        MihomoServiceStatus status = await _mihomoServiceController.DeployAsync(cancellationToken);
-        SetMihomoServiceStatus(status);
-        _appendLog(status.IsInstalled ? "Info" : "Warning", "MihomoService", status.Message, null);
+        OperationErrorText = string.Empty;
+        try
+        {
+            MihomoServiceStatus status = await _mihomoServiceController.DeployAsync(cancellationToken);
+            SetMihomoServiceStatus(status);
+            _appendLog(status.IsInstalled ? "Info" : "Warning", "MihomoService", status.Message, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            OperationErrorText = _getString("Application.UnexpectedError");
+            throw;
+        }
     }
 
     /// <summary>Uninstalls the mihomo Windows service and preserves transparent proxy preference.</summary>
@@ -2018,15 +2054,47 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <returns>A task that completes after service status is refreshed.</returns>
     public async Task UninstallMihomoServiceAsync(CancellationToken cancellationToken)
     {
-        MihomoServiceStatus status = await _mihomoServiceController.UninstallAsync(cancellationToken);
-        SetMihomoServiceStatus(status);
-        _appendLog(status.IsInstalled ? "Warning" : "Info", "MihomoService", status.Message, null);
+        OperationErrorText = string.Empty;
+        try
+        {
+            MihomoServiceStatus status = await _mihomoServiceController.UninstallAsync(cancellationToken);
+            SetMihomoServiceStatus(status);
+            _appendLog(status.IsInstalled ? "Warning" : "Info", "MihomoService", status.Message, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            OperationErrorText = _getString("Application.UnexpectedError");
+            throw;
+        }
     }
 
     /// <summary>Refreshes the cached mihomo service status.</summary>
     private void RefreshMihomoServiceStatus()
     {
-        SetMihomoServiceStatus(_mihomoServiceController.GetStatus());
+        SetMihomoServiceStatus(_mihomoServiceController.GetLatestStatus());
+    }
+
+    private async Task RefreshMihomoServiceStatusAsync(CancellationToken cancellationToken)
+    {
+        OperationErrorText = string.Empty;
+        try
+        {
+            MihomoServiceStatus status = await _mihomoServiceController.RefreshStatusAsync(cancellationToken);
+            SetMihomoServiceStatus(status);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            OperationErrorText = _getString("Application.UnexpectedError");
+            throw;
+        }
     }
 
     /// <summary>Sets the cached mihomo service status and dependent bindable values.</summary>
@@ -2067,11 +2135,14 @@ internal sealed class SettingsViewModel : ObservableObject
             {
                 await _applyLaunchAtStartupAsync(desiredState, cancellationToken);
             }
+            catch (OperationCanceledException)
+            {
+                RestoreAppliedLaunchAtStartup();
+                throw;
+            }
             catch
             {
-                _pendingLaunchAtStartup = _appliedLaunchAtStartup;
-                _settings.LaunchAtStartupEnabled = _appliedLaunchAtStartup;
-                SetProperty(ref _launchAtStartupEnabled, _appliedLaunchAtStartup, nameof(LaunchAtStartupEnabled));
+                RestoreAppliedLaunchAtStartup();
                 OperationErrorText = _getString("Application.UnexpectedError");
                 throw;
             }
@@ -2082,6 +2153,13 @@ internal sealed class SettingsViewModel : ObservableObject
                 return;
             }
         }
+    }
+
+    private void RestoreAppliedLaunchAtStartup()
+    {
+        _pendingLaunchAtStartup = _appliedLaunchAtStartup;
+        _settings.LaunchAtStartupEnabled = _appliedLaunchAtStartup;
+        SetProperty(ref _launchAtStartupEnabled, _appliedLaunchAtStartup, nameof(LaunchAtStartupEnabled));
     }
 
     /// <summary>Persists a mixed proxy port from number-box input.</summary>
@@ -2244,15 +2322,14 @@ internal sealed class SettingsViewModel : ObservableObject
             {
                 await _restartConnectionSamplingAsync(cancellationToken);
             }
+            catch (OperationCanceledException)
+            {
+                RestoreAppliedConnectionSampling();
+                throw;
+            }
             catch
             {
-                _settings.ConnectionSamplingEnabled = _appliedConnectionSamplingEnabled;
-                _settings.ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
-                SetProperty(
-                    ref _connectionSamplingEnabled,
-                    _appliedConnectionSamplingEnabled,
-                    nameof(ConnectionSamplingEnabled));
-                ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
+                RestoreAppliedConnectionSampling();
                 OperationErrorText = _getString("Application.UnexpectedError");
                 throw;
             }
@@ -2264,6 +2341,17 @@ internal sealed class SettingsViewModel : ObservableObject
                 return;
             }
         }
+    }
+
+    private void RestoreAppliedConnectionSampling()
+    {
+        _settings.ConnectionSamplingEnabled = _appliedConnectionSamplingEnabled;
+        _settings.ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
+        SetProperty(
+            ref _connectionSamplingEnabled,
+            _appliedConnectionSamplingEnabled,
+            nameof(ConnectionSamplingEnabled));
+        ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
     }
 
     /// <summary>Persists the startup conflict check switch.</summary>
@@ -2814,9 +2902,9 @@ internal sealed class SettingsViewModel : ObservableObject
     }
 
     /// <summary>Clears all local application data through the injected maintenance action and reloads the view model.</summary>
-    public void ClearAllData()
+    public async Task ClearAllDataAsync(CancellationToken cancellationToken)
     {
-        _clearAllData();
+        await _clearAllDataAsync(cancellationToken);
         ReloadAfterMaintenance();
     }
 

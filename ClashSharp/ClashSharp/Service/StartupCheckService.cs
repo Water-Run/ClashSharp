@@ -72,7 +72,7 @@ public sealed class StartupCheckService
 
         try
         {
-            MihomoServiceStatus status = MihomoServiceManager.Instance.GetStatus();
+            MihomoServiceStatus status = MihomoServiceManager.Instance.GetLatestStatus();
             return new StartupCheckItem(
                 status.IsInstalled,
                 getString("StartupPrompt.Check.TransparentProxy.Title"),

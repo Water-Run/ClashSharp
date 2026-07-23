@@ -10,6 +10,8 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -48,7 +50,7 @@ internal interface INetworkTakeoverWindowsProxy
 internal interface INetworkTakeoverMihomoService
 {
     /// <summary>Returns the current mihomo service status.</summary>
-    MihomoServiceStatus GetStatus();
+    Task<MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Builds loopback system proxy endpoints.</summary>
@@ -61,13 +63,13 @@ internal interface INetworkTakeoverProxyRecovery
 /// <summary>Applies Clash# master takeover modes to the local core process and Windows system proxy.</summary>
 /// <remarks>
 /// Invariants: Disabled and standby modes leave Windows system proxy disabled; rule and full takeover modes prefer TUN when enabled and otherwise enable system proxy.
-/// Thread safety: Public mode application is serialized through a private lock.
+/// Thread safety: Public mode application is serialized through an asynchronous gate.
 /// Side effects: Starts or stops mihomo and mutates Windows system proxy state through injected dependencies.
 /// </remarks>
 public sealed partial class NetworkTakeoverService
 {
     /// <summary>Synchronization object guarding runtime mode transitions for this service lifetime.</summary>
-    private readonly object _syncLock = new();
+    private readonly SemaphoreSlim _transitionGate = new(1, 1);
 
     private readonly INetworkTakeoverCoreConfiguration _configuration;
 
@@ -99,26 +101,41 @@ public sealed partial class NetworkTakeoverService
     }
 
     /// <summary>Applies one immutable planned mode without rereading mutable TUN or port settings.</summary>
-    internal NetworkTakeoverResult ApplyMode(
+    internal async Task<NetworkTakeoverResult> ApplyModeAsync(
         ClashSharpMode mode,
         bool transparentProxyEnabled,
-        int mixedPort)
+        int mixedPort,
+        CancellationToken cancellationToken)
     {
         if (mixedPort is < 1 or > 65535)
         {
             throw new ArgumentOutOfRangeException(nameof(mixedPort), "Port must be in the range [1, 65535].");
         }
 
-        lock (_syncLock)
+        await _transitionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return mode switch
             {
                 ClashSharpMode.Disabled => ApplyDisabledMode(),
                 ClashSharpMode.Standby => ApplyStandbyMode(mixedPort),
-                ClashSharpMode.RuleTakeover => ApplyTakeoverMode(mode, transparentProxyEnabled, mixedPort),
-                ClashSharpMode.FullTakeover => ApplyTakeoverMode(mode, transparentProxyEnabled, mixedPort),
+                ClashSharpMode.RuleTakeover => await ApplyTakeoverModeAsync(
+                    mode,
+                    transparentProxyEnabled,
+                    mixedPort,
+                    cancellationToken).ConfigureAwait(false),
+                ClashSharpMode.FullTakeover => await ApplyTakeoverModeAsync(
+                    mode,
+                    transparentProxyEnabled,
+                    mixedPort,
+                    cancellationToken).ConfigureAwait(false),
                 _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported Clash# runtime mode."),
             };
+        }
+        finally
+        {
+            _transitionGate.Release();
         }
     }
 
@@ -149,17 +166,21 @@ public sealed partial class NetworkTakeoverService
     /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
     /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
     /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
-    private NetworkTakeoverResult ApplyTakeoverMode(
+    private async Task<NetworkTakeoverResult> ApplyTakeoverModeAsync(
         ClashSharpMode mode,
         bool transparentProxyEnabled,
-        int mixedPort)
+        int mixedPort,
+        CancellationToken cancellationToken)
     {
         if (!transparentProxyEnabled)
         {
             return ApplySystemProxyTakeoverMode(mode, mixedPort, BuildSystemProxyMessage(mode));
         }
 
-        MihomoServiceStatus serviceStatus = _mihomoService.GetStatus();
+        MihomoServiceStatus serviceStatus = await _mihomoService
+            .GetStatusAsync(cancellationToken)
+            .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         if (!serviceStatus.IsInstalled || !serviceStatus.IsRunning)
         {
             return ApplySystemProxyTakeoverMode(

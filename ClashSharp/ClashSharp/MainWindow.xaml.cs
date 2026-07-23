@@ -389,12 +389,12 @@ public sealed partial class MainWindow : Window
     /// <summary>Builds current tray menu state.</summary>
     private static TrayMenuState BuildTrayMenuState()
     {
-        MihomoServiceStatus serviceStatus = MihomoServiceManager.Instance.GetStatus();
+        MihomoServiceStatus serviceStatus = MihomoServiceManager.Instance.GetLatestStatus();
         return TrayMenuStateBuilder.Build(
             AppSettingsService.Instance.CurrentMode,
             AppSettingsService.Instance.TransparentProxyEnabled,
             serviceStatus.IsInstalled,
-            TrayStatusService.Instance.GetSnapshot(),
+            TrayStatusService.Instance.GetLatestSnapshot(),
             AppSettingsService.Instance.TrayVisibleFeatureIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             LocalizationService.Instance.GetString);
     }
@@ -411,7 +411,7 @@ public sealed partial class MainWindow : Window
             mode,
             System.Threading.CancellationToken.None))
         {
-            _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
+            await NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
         }
 
         _trayService?.RefreshMenu();
@@ -429,7 +429,7 @@ public sealed partial class MainWindow : Window
             isEnabled,
             System.Threading.CancellationToken.None))
         {
-            _ = NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
+            await NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
         }
 
         _trayService?.RefreshMenu();
