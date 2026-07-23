@@ -257,8 +257,8 @@ public sealed partial class MainWindow : Window
         AppSettingsService settings = AppSettingsService.Instance;
         bool skipStartupDialogs = ShouldSkipStartupDialogs();
 
-        await _triggerService.EvaluateAsync(
-            TriggerEvaluationContextFactory.Create(TriggerEventKind.AppEntered),
+        await _triggerService.EvaluateEventAsync(
+            new TriggerRuntimeEvent(TriggerEventKind.AppEntered),
             System.Threading.CancellationToken.None);
 
         if (!skipStartupDialogs && _startupConflicts.Issues.Count > 0)

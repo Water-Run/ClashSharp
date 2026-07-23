@@ -208,19 +208,19 @@ Run migration/crash tests repeatedly and commit `feat: migrate legacy trigger st
 - Modify: `ClashSharp/ClashSharp/Service/TriggerEvaluationContextFactory.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Triggers/TriggerContextProviderTests.cs`
 
-- [ ] **Step 1: Write RED context tests**
+- [x] **Step 1: Write RED context tests**
 
 Prove disabled triggers short-circuit before provider invocation. For enabled work, cover controller timeout, malformed JSON, SQLite busy/error, IO failure, caller cancellation, partial field degradation, and a typed unsound-decision failure. Use completion barriers to prove methods remain asynchronous and the calling thread is not blocked.
 
-- [ ] **Step 2: Implement platform-neutral result semantics**
+- [x] **Step 2: Implement platform-neutral result semantics**
 
 Each field is available or unavailable with a stable reason. The provider may return a degraded context when affected conditions safely evaluate false; missing data required for a sound state transition returns a typed failure. Preserve caller cancellation.
 
-- [ ] **Step 3: Replace cached/synchronous context reads**
+- [x] **Step 3: Replace cached/synchronous context reads**
 
 Await controller/storage APIs and remove the static synchronous factory. Keep any unavoidable legacy access inside a host-registered compatibility adapter, not View/ViewModel.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Run context/disabled-path tests, Release build, format, and commit `feat: acquire trigger context asynchronously`.
 

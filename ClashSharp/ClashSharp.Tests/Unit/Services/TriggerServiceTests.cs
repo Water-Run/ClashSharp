@@ -87,6 +87,49 @@ public sealed class TriggerServiceTests
         Assert.Equal(["queued", "queued"], actions.DispatchValues);
     }
 
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task EvaluateEventAsync_DisabledGlobalOrTaskSkipsContextAcquisition(
+        bool triggersEnabled,
+        bool taskEnabled)
+    {
+        string storagePath = CreateTempStoragePath();
+        int acquisitions = 0;
+        TriggerService service = CreateService(
+            storagePath,
+            getTriggersEnabled: () => triggersEnabled,
+            createEvaluationContext: (triggerEvent, _) =>
+            {
+                acquisitions++;
+                return Task.FromResult(
+                    TriggerEvaluationContextCreationResult.Succeeded(
+                        new TriggerEvaluationContext(
+                            triggerEvent.EventKind,
+                            0,
+                            0,
+                            TimeSpan.Zero,
+                            TimeOnly.MinValue,
+                            triggerEvent.NotificationLevel)));
+            });
+        service.SaveTasks(
+        [
+            new TriggerTask(
+                "disabled",
+                "Disabled",
+                taskEnabled,
+                [new TriggerCondition(TriggerConditionKind.AppEntered)],
+                [new TriggerAction(TriggerActionKind.SendNotification, "disabled")]),
+        ]);
+
+        IReadOnlyList<TriggerExecutionResult> results = await service.EvaluateEventAsync(
+            new TriggerRuntimeEvent(TriggerEventKind.AppEntered),
+            CancellationToken.None);
+
+        Assert.Empty(results);
+        Assert.Equal(0, acquisitions);
+    }
+
     /// <summary>Verifies quiescence rejects new events and awaits the action already running.</summary>
     [Fact]
     public async Task QuiesceAsync_ActionInFlight_WaitsForReleaseAndRejectsLaterEvents()
@@ -423,9 +466,18 @@ public sealed class TriggerServiceTests
         Func<TriggerEvaluationContext>? createPeriodicContext = null,
         Func<bool>? getTriggersEnabled = null,
         Action<bool>? setTriggersEnabled = null,
-        TimeSpan? repeatedTriggerCooldown = null)
+        TimeSpan? repeatedTriggerCooldown = null,
+        Func<
+            TriggerRuntimeEvent,
+            CancellationToken,
+            Task<TriggerEvaluationContextCreationResult>>? createEvaluationContext = null)
     {
         log ??= new FakeTriggerLog();
+        Func<CancellationToken, Task<TriggerEvaluationContextCreationResult>>? periodicFactory =
+            createPeriodicContext is null
+                ? null
+                : _ => Task.FromResult(
+                    TriggerEvaluationContextCreationResult.Succeeded(createPeriodicContext()));
         return new TriggerService(
             storagePath,
             actions ?? new FakeTriggerActions(),
@@ -438,17 +490,19 @@ public sealed class TriggerServiceTests
                 "Triggers.Log.ActionFailed.Format" => "Trigger action failed: {0}",
                 _ => key,
             },
-            triggerEvent => new TriggerEvaluationContext(
-                triggerEvent.EventKind,
-                0,
-                0,
-                TimeSpan.Zero,
-                TimeOnly.MinValue,
-                triggerEvent.NotificationLevel),
+            createEvaluationContext ?? ((triggerEvent, _) => Task.FromResult(
+                TriggerEvaluationContextCreationResult.Succeeded(
+                    new TriggerEvaluationContext(
+                        triggerEvent.EventKind,
+                        0,
+                        0,
+                        TimeSpan.Zero,
+                        TimeOnly.MinValue,
+                        triggerEvent.NotificationLevel)))),
             getTriggersEnabled,
             setTriggersEnabled,
             periodicInterval: periodicInterval,
-            createPeriodicContext: createPeriodicContext,
+            createPeriodicContext: periodicFactory,
             repeatedTriggerCooldown: repeatedTriggerCooldown);
     }
 

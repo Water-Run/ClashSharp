@@ -38,11 +38,16 @@ internal sealed class TriggerService
     private readonly ITriggerRuntimeEventSource _runtimeEvents;
     private readonly Action<string, string, string, string?> _appendLog;
     private readonly Func<string, string> _getString;
-    private readonly Func<TriggerRuntimeEvent, TriggerEvaluationContext> _createEvaluationContext;
+    private readonly Func<
+        TriggerRuntimeEvent,
+        CancellationToken,
+        Task<TriggerEvaluationContextCreationResult>> _createEvaluationContext;
     private readonly Func<bool> _getTriggersEnabled;
     private readonly Action<bool> _setTriggersEnabled;
     private readonly Func<bool> _getTriggerNotificationsEnabled;
-    private readonly Func<TriggerEvaluationContext> _createPeriodicContext;
+    private readonly Func<
+        CancellationToken,
+        Task<TriggerEvaluationContextCreationResult>> _createPeriodicContext;
     private readonly Func<DateTimeOffset> _getNow;
     private readonly TimeSpan _periodicInterval;
     private readonly TimeSpan _repeatedTriggerCooldown;
@@ -63,13 +68,18 @@ internal sealed class TriggerService
         ITriggerNotificationSink notifications,
         ITriggerRuntimeEventSource runtimeEvents,
         Action<string, string, string, string?> appendLog,
-        Func<string, string>? getString = null,
-        Func<TriggerRuntimeEvent, TriggerEvaluationContext>? createEvaluationContext = null,
+        Func<string, string> getString,
+        Func<
+            TriggerRuntimeEvent,
+            CancellationToken,
+            Task<TriggerEvaluationContextCreationResult>> createEvaluationContext,
         Func<bool>? getTriggersEnabled = null,
         Action<bool>? setTriggersEnabled = null,
         Func<bool>? getTriggerNotificationsEnabled = null,
         TimeSpan? periodicInterval = null,
-        Func<TriggerEvaluationContext>? createPeriodicContext = null,
+        Func<
+            CancellationToken,
+            Task<TriggerEvaluationContextCreationResult>>? createPeriodicContext = null,
         TimeSpan? repeatedTriggerCooldown = null,
         Func<DateTimeOffset>? getNow = null)
     {
@@ -79,14 +89,17 @@ internal sealed class TriggerService
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _runtimeEvents = runtimeEvents ?? throw new ArgumentNullException(nameof(runtimeEvents));
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
-        _getString = getString ?? (key => key);
+        _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _createEvaluationContext = createEvaluationContext
-            ?? (triggerEvent => TriggerEvaluationContextFactory.Create(triggerEvent.EventKind, triggerEvent.NotificationLevel));
+            ?? throw new ArgumentNullException(nameof(createEvaluationContext));
         _getTriggersEnabled = getTriggersEnabled ?? (() => true);
         _setTriggersEnabled = setTriggersEnabled ?? (_ => { });
         _getTriggerNotificationsEnabled = getTriggerNotificationsEnabled ?? (() => true);
         _periodicInterval = periodicInterval ?? DefaultPeriodicInterval;
-        _createPeriodicContext = createPeriodicContext ?? (() => TriggerEvaluationContextFactory.Create(TriggerEventKind.Periodic));
+        _createPeriodicContext = createPeriodicContext
+            ?? (token => _createEvaluationContext(
+                new TriggerRuntimeEvent(TriggerEventKind.Periodic),
+                token));
         _repeatedTriggerCooldown = repeatedTriggerCooldown ?? DefaultRepeatedTriggerCooldown;
         _getNow = getNow ?? (() => DateTimeOffset.Now);
         _runtimeEvents.RuntimeEventRaised += OnRuntimeEventRaised;
@@ -323,6 +336,22 @@ internal sealed class TriggerService
         }
     }
 
+    internal async Task<IReadOnlyList<TriggerExecutionResult>> EvaluateEventAsync(
+        TriggerRuntimeEvent triggerEvent,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(triggerEvent);
+        if (!ShouldAcquireContext())
+        {
+            return [];
+        }
+
+        TriggerEvaluationContextCreationResult creation = await _createEvaluationContext(
+            triggerEvent,
+            cancellationToken).ConfigureAwait(false);
+        return await EvaluateCreatedContextAsync(creation, cancellationToken).ConfigureAwait(false);
+    }
+
     private bool TryBeginEvaluation()
     {
         lock (_syncLock)
@@ -357,8 +386,11 @@ internal sealed class TriggerService
         }
     }
 
-    internal static TriggerService CreateDefault(IApplicationActionDispatcher actions)
+    internal static TriggerService CreateDefault(
+        IApplicationActionDispatcher actions,
+        TriggerEvaluationContextFactory contextFactory)
     {
+        ArgumentNullException.ThrowIfNull(contextFactory);
         return new TriggerService(
             Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "Triggers.json"),
             actions,
@@ -366,10 +398,17 @@ internal sealed class TriggerService
             TriggerRuntimeEventHub.Instance,
             LogStorageService.Instance.AppendLog,
             LocalizationService.Instance.GetString,
-            triggerEvent => TriggerEvaluationContextFactory.Create(triggerEvent.EventKind, triggerEvent.NotificationLevel),
+            (triggerEvent, token) => contextFactory.CreateAsync(
+                triggerEvent.EventKind,
+                triggerEvent.NotificationLevel,
+                token),
             () => AppSettingsService.Instance.TriggersEnabled,
             value => AppSettingsService.Instance.TriggersEnabled = value,
-            () => AppSettingsService.Instance.TriggerNotificationsEnabled);
+            () => AppSettingsService.Instance.TriggerNotificationsEnabled,
+            createPeriodicContext: token => contextFactory.CreateAsync(
+                TriggerEventKind.Periodic,
+                NotificationLevel.Default,
+                token));
     }
 
     private string FormatActionForLog(TriggerAction action)
@@ -403,6 +442,11 @@ internal sealed class TriggerService
 
     private void OnRuntimeEventRaised(object? sender, TriggerRuntimeEvent triggerEvent)
     {
+        if (!ShouldAcquireContext())
+        {
+            return;
+        }
+
         bool startDrain;
         lock (_syncLock)
         {
@@ -437,8 +481,9 @@ internal sealed class TriggerService
             {
                 try
                 {
-                    TriggerEvaluationContext context = _createEvaluationContext(triggerEvent);
-                    await EvaluateAsync(context, CancellationToken.None).ConfigureAwait(false);
+                    await EvaluateEventAsync(
+                        triggerEvent,
+                        CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception exception)
                 {
@@ -523,8 +568,16 @@ internal sealed class TriggerService
     {
         try
         {
-            TriggerEvaluationContext context = _createPeriodicContext();
-            await EvaluateAsync(context, CancellationToken.None).ConfigureAwait(false);
+            if (!ShouldAcquireContext())
+            {
+                return;
+            }
+
+            TriggerEvaluationContextCreationResult creation = await _createPeriodicContext(
+                CancellationToken.None).ConfigureAwait(false);
+            await EvaluateCreatedContextAsync(
+                creation,
+                CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -533,6 +586,38 @@ internal sealed class TriggerService
         finally
         {
             Volatile.Write(ref _periodicEvaluationActive, 0);
+        }
+    }
+
+    private async Task<IReadOnlyList<TriggerExecutionResult>> EvaluateCreatedContextAsync(
+        TriggerEvaluationContextCreationResult creation,
+        CancellationToken cancellationToken)
+    {
+        if (creation.Context is null)
+        {
+            _appendLog(
+                "Warning",
+                TriggerLog,
+                GetString("Triggers.Log.RuntimeEventFailed"),
+                creation.DiagnosticCode ?? "trigger.context.unavailable");
+            return [];
+        }
+
+        return await EvaluateAsync(
+            creation.Context,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private bool ShouldAcquireContext()
+    {
+        if (!TriggersEnabled || Volatile.Read(ref _acceptRuntimeWork) == 0)
+        {
+            return false;
+        }
+
+        lock (_syncLock)
+        {
+            return _tasks.Any(static task => task.IsEnabled);
         }
     }
 

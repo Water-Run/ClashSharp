@@ -4,6 +4,7 @@ using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Startup;
+using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Hosting.Startup;
 using ClashSharp.Infrastructure.Recovery;
@@ -64,8 +65,19 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<ApplicationLifecycleService>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
+            services.AddSingleton<ITriggerContextProvider>(_ =>
+            {
+                TimeProvider timeProvider = TimeProvider.System;
+                return new TriggerContextProviderAdapter(
+                    new SqliteTriggerTrafficContextSource(LogStorageService.Instance.DatabasePath),
+                    new RuntimeTriggerContextSource(RuntimeTrafficRateService.Instance),
+                    timeProvider,
+                    timeProvider.GetUtcNow());
+            });
+            services.AddSingleton<TriggerEvaluationContextFactory>();
             services.AddSingleton(provider => TriggerService.CreateDefault(
-                provider.GetRequiredService<IApplicationActionDispatcher>()));
+                provider.GetRequiredService<IApplicationActionDispatcher>(),
+                provider.GetRequiredService<TriggerEvaluationContextFactory>()));
             services.AddSingleton<LegacyTriggerRuntimeParticipant>();
             services.AddSingleton<IRuntimeParticipant>(provider =>
                 provider.GetRequiredService<LegacyTriggerRuntimeParticipant>());
