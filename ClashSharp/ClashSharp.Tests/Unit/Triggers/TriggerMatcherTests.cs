@@ -168,7 +168,11 @@ public sealed class TriggerMatcherTests
             TriggerConditionKind.Traffic,
             new TrafficConditionParameters(TriggerTrafficScope.AllTime, 1000));
         TriggerTaskDefinition revisionOne = Definition(revision: 1, conditions: [condition]);
-        TriggerTaskState state = TriggerTaskState.CreateInitial(revisionOne, version: 9);
+        DateTimeOffset lastTriggeredAt = new(2026, 7, 22, 10, 11, 12, TimeSpan.Zero);
+        TriggerTaskState state = TriggerTaskState.CreateInitial(
+            revisionOne,
+            version: 9,
+            lastTriggeredAt);
 
         TriggerMatchDecision first = TriggerMatcher.Evaluate(revisionOne, state, Context(allTimeTraffic: 1000));
         TriggerMatchDecision duplicate = TriggerMatcher.Evaluate(revisionOne, first.NextState, Context(allTimeTraffic: 2000));
@@ -182,6 +186,7 @@ public sealed class TriggerMatcherTests
         Assert.Equal(2, edited.NextState.TaskRevision);
         Assert.Equal(2, edited.NextState.ConditionStates["all-time"].ConsumedRevision);
         Assert.Equal(9, edited.ExpectedStateVersion);
+        Assert.Equal(lastTriggeredAt, edited.NextState.LastTriggeredAt);
     }
 
     [Fact]

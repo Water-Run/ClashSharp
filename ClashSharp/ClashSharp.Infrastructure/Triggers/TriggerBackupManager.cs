@@ -23,6 +23,8 @@ internal sealed class TriggerBackupManager
 
     public async Task CreateAsync(CancellationToken cancellationToken)
     {
+        using FileStream operationLease = AcquireOperationLease();
+        DeleteOrphanedTemporaryFiles(_backupPath + ".tmp.");
         await _faultInjector.InjectAsync(
             TriggerPersistenceFaultPoint.BeforeBackup,
             cancellationToken).ConfigureAwait(false);
@@ -56,6 +58,9 @@ internal sealed class TriggerBackupManager
 
     public async Task RestoreAsync(CancellationToken cancellationToken)
     {
+        using FileStream operationLease = AcquireOperationLease();
+        DeleteOrphanedTemporaryFiles(_backupPath + ".tmp.");
+        DeleteOrphanedTemporaryFiles(_databasePath + ".restore.tmp.");
         string temporaryPath = _databasePath + ".restore.tmp." + Guid.NewGuid().ToString("N");
         try
         {
@@ -102,12 +107,15 @@ internal sealed class TriggerBackupManager
     {
         await using SqliteConnection connection = new(CreateConnectionString(
             databasePath,
-            SqliteOpenMode.ReadOnly));
+            SqliteOpenMode.ReadWrite));
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using SqliteCommand timeout = connection.CreateCommand();
         timeout.CommandText = $"PRAGMA busy_timeout = {_busyTimeoutMilliseconds};";
         await timeout.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        await TriggerDatabaseSchema.ValidateAsync(connection, cancellationToken).ConfigureAwait(false);
+        await TriggerDatabaseSchema.PrepareExistingAsync(
+            connection,
+            enableWal: false,
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static string CreateConnectionString(string path, SqliteOpenMode mode)
@@ -149,6 +157,28 @@ internal sealed class TriggerBackupManager
         DeleteIfExists(path);
         DeleteIfExists(path + "-wal");
         DeleteIfExists(path + "-shm");
+    }
+
+    private FileStream AcquireOperationLease()
+    {
+        return new FileStream(
+            _backupPath + ".lock",
+            FileMode.OpenOrCreate,
+            FileAccess.ReadWrite,
+            FileShare.None,
+            bufferSize: 1,
+            FileOptions.WriteThrough);
+    }
+
+    private static void DeleteOrphanedTemporaryFiles(string pathPrefix)
+    {
+        string directory = Path.GetDirectoryName(pathPrefix)
+            ?? throw new InvalidDataException("Trigger backup directory is missing.");
+        string pattern = Path.GetFileName(pathPrefix) + "*";
+        foreach (string path in Directory.EnumerateFiles(directory, pattern, SearchOption.TopDirectoryOnly))
+        {
+            File.Delete(path);
+        }
     }
 
     private static void DeleteIfExists(string path)

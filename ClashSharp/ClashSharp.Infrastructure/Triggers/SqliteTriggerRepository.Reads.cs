@@ -237,10 +237,15 @@ public sealed partial class SqliteTriggerRepository
     {
         long taskRevision;
         long version;
+        DateTimeOffset? lastTriggeredAt;
         await using (SqliteCommand command = CreateCommand(
             connection,
             transaction,
-            "SELECT task_revision, version FROM trigger_states WHERE task_id = $taskId;"))
+            """
+            SELECT task_revision, version, last_triggered_at
+            FROM trigger_states
+            WHERE task_id = $taskId;
+            """))
         {
             command.Parameters.AddWithValue("$taskId", definition.Id);
             await using SqliteDataReader reader =
@@ -252,6 +257,7 @@ public sealed partial class SqliteTriggerRepository
 
             taskRevision = reader.GetInt64(0);
             version = reader.GetInt64(1);
+            lastTriggeredAt = reader.IsDBNull(2) ? null : ParseTimestamp(reader.GetString(2));
         }
 
         Dictionary<string, TriggerConditionState> conditionStates = new(StringComparer.Ordinal);
@@ -283,7 +289,12 @@ public sealed partial class SqliteTriggerRepository
             }
         }
 
-        return new TriggerTaskState(definition.Id, taskRevision, version, conditionStates);
+        return new TriggerTaskState(
+            definition.Id,
+            taskRevision,
+            version,
+            conditionStates,
+            lastTriggeredAt);
     }
 
     private static async Task<List<TriggerDiagnostic>> ReadDiagnosticsAsync(

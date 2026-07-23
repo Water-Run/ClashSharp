@@ -87,6 +87,40 @@ public sealed class TriggerBackupRecoveryTests
     }
 
     [Fact]
+    public async Task OpenAsync_CorruptPrimaryUpgradesVersionOneBackupBeforePromotion()
+    {
+        using TemporaryTriggerDirectory directory = new();
+        SqliteTriggerRepository repository = directory.CreateRepository();
+        await OpenRequiredAsync(repository);
+        await ReplaceRequiredAsync(repository, 0, [Definition("legacy-backup", 1)]);
+        Assert.True((await repository.CreateBackupAsync(CancellationToken.None)).IsSucceeded);
+        await using (SqliteConnection backup = await OpenConnectionAsync(directory.BackupPath))
+        {
+            await ExecuteNonQueryAsync(
+                backup,
+                """
+                ALTER TABLE trigger_states DROP COLUMN last_triggered_at;
+                UPDATE trigger_metadata SET value = '1' WHERE key = 'schema_version';
+                """);
+        }
+
+        directory.Corrupt(directory.DatabasePath);
+        TriggerPersistenceResult<TriggerRepositorySnapshot> reopened =
+            await directory.CreateRepository().OpenAsync(CancellationToken.None);
+
+        Assert.True(reopened.IsSucceeded, reopened.Diagnostic?.Code);
+        TriggerRepositorySnapshot snapshot = Assert.IsType<TriggerRepositorySnapshot>(reopened.Value);
+        Assert.Equal(TriggerDatabaseSchema.CurrentVersion, snapshot.SchemaVersion);
+        Assert.Equal("legacy-backup", Assert.Single(snapshot.Tasks).Definition.Id);
+        Assert.Null(snapshot.Tasks[0].State.LastTriggeredAt);
+        Assert.Equal(
+            TriggerDatabaseSchema.CurrentVersion.ToString(CultureInfo.InvariantCulture),
+            await ReadScalarStringAsync(
+                directory.DatabasePath,
+                "SELECT value FROM trigger_metadata WHERE key = 'schema_version';"));
+    }
+
+    [Fact]
     public async Task OpenAsync_CorruptPrimaryAndBackupCreatesDiagnosedSafeEmptyDatabase()
     {
         using TemporaryTriggerDirectory directory = new();
@@ -292,6 +326,20 @@ public sealed class TriggerBackupRecoveryTests
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = commandText;
         await command.ExecuteNonQueryAsync(CancellationToken.None);
+    }
+
+    private static async Task<SqliteConnection> OpenConnectionAsync(string databasePath)
+    {
+        SqliteConnection connection = new(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            Cache = SqliteCacheMode.Private,
+            ForeignKeys = true,
+            Pooling = false,
+        }.ToString());
+        await connection.OpenAsync(CancellationToken.None);
+        return connection;
     }
 
     private sealed class TemporaryTriggerDirectory : IDisposable

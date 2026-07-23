@@ -37,7 +37,7 @@ public static class TriggerMatcher
 
         TriggerTaskState effectiveState = state.TaskRevision == definition.Revision
             ? state
-            : TriggerTaskState.CreateInitial(definition, state.Version);
+            : TriggerTaskState.CreateInitial(definition, state.Version, state.LastTriggeredAt);
         Dictionary<string, TriggerConditionState> nextConditions = definition.Conditions.ToDictionary(
             static condition => condition.Id,
             condition => effectiveState.ConditionStates.TryGetValue(condition.Id, out TriggerConditionState? conditionState)
@@ -87,7 +87,8 @@ public static class TriggerMatcher
             definition.Id,
             definition.Revision,
             state.Version,
-            nextConditions);
+            nextConditions,
+            effectiveState.LastTriggeredAt);
         return new TriggerMatchDecision(
             outcome,
             state.Version,

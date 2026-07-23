@@ -7,6 +7,83 @@ namespace ClashSharp.Infrastructure.Triggers;
 
 public sealed partial class SqliteTriggerRepository
 {
+    private async Task<TriggerPersistenceResult> TryImportMigrationCoreAsync(
+        TriggerMigrationImportRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteConnection connection = await OpenConnectionAsync(
+            SqliteOpenMode.ReadWrite,
+            cancellationToken).ConfigureAwait(false);
+        using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
+        string? existingSourceHash = await ReadMetadataValueAsync(
+            connection,
+            transaction,
+            "legacy_migration_source_hash",
+            cancellationToken).ConfigureAwait(false);
+        if (StringComparer.Ordinal.Equals(existingSourceHash, request.SourceHash))
+        {
+            return TriggerPersistenceResult.Succeeded();
+        }
+
+        TriggerRepositorySnapshot current = await ReadSnapshotCoreAsync(
+            connection,
+            transaction,
+            cancellationToken).ConfigureAwait(false);
+        if (current.DefinitionGeneration != request.ExpectedGeneration
+            || current.Tasks.Count != 0)
+        {
+            return TriggerPersistenceResult.Conflict();
+        }
+
+        foreach (TriggerTaskRecord record in request.Tasks)
+        {
+            await InsertDefinitionAsync(
+                connection,
+                transaction,
+                record.Definition,
+                record.State,
+                record.Order,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (TriggerDiagnostic diagnostic in request.Diagnostics)
+        {
+            await InsertDiagnosticAsync(
+                connection,
+                transaction,
+                diagnostic,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (SqliteCommand command = CreateCommand(
+            connection,
+            transaction,
+            """
+            UPDATE trigger_metadata
+            SET value = $generation
+            WHERE key = 'definition_generation';
+            INSERT INTO trigger_metadata(key, value)
+            VALUES ('legacy_migration_source_hash', $sourceHash)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+            """))
+        {
+            command.Parameters.AddWithValue(
+                "$generation",
+                checked(current.DefinitionGeneration + 1).ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$sourceHash", request.SourceHash);
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await _faultInjector.InjectAsync(
+            TriggerPersistenceFaultPoint.BeforeMigrationCommit,
+            cancellationToken).ConfigureAwait(false);
+        transaction.Commit();
+        await _faultInjector.InjectAsync(
+            TriggerPersistenceFaultPoint.AfterMigrationCommit,
+            cancellationToken).ConfigureAwait(false);
+        return TriggerPersistenceResult.Succeeded();
+    }
+
     private async Task<TriggerPersistenceResult> ReplaceDefinitionsCoreAsync(
         TriggerDefinitionWriteRequest request,
         CancellationToken cancellationToken)
@@ -55,10 +132,13 @@ public sealed partial class SqliteTriggerRepository
         for (int order = 0; order < request.Definitions.Count; order++)
         {
             TriggerTaskDefinition definition = request.Definitions[order];
-            TriggerTaskState state = currentById.TryGetValue(definition.Id, out TriggerTaskRecord? existing)
+            currentById.TryGetValue(definition.Id, out TriggerTaskRecord? existing);
+            TriggerTaskState state = existing is not null
                 && definition.Revision == existing.Definition.Revision
                     ? existing.State
-                    : TriggerTaskState.CreateInitial(definition);
+                    : TriggerTaskState.CreateInitial(
+                        definition,
+                        lastTriggeredAt: existing?.State.LastTriggeredAt);
             await InsertDefinitionAsync(
                 connection,
                 transaction,
@@ -154,13 +234,18 @@ public sealed partial class SqliteTriggerRepository
             connection,
             transaction,
             """
-            INSERT INTO trigger_states(task_id, task_revision, version)
-            VALUES ($taskId, $revision, $version);
+            INSERT INTO trigger_states(task_id, task_revision, version, last_triggered_at)
+            VALUES ($taskId, $revision, $version, $lastTriggeredAt);
             """))
         {
             command.Parameters.AddWithValue("$taskId", state.TaskId);
             command.Parameters.AddWithValue("$revision", state.TaskRevision);
             command.Parameters.AddWithValue("$version", state.Version);
+            command.Parameters.AddWithValue(
+                "$lastTriggeredAt",
+                state.LastTriggeredAt is DateTimeOffset lastTriggeredAt
+                    ? FormatTimestamp(lastTriggeredAt)
+                    : DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -203,6 +288,42 @@ public sealed partial class SqliteTriggerRepository
             "$consumedRevision",
             state.ConsumedRevision ?? (object)DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task InsertDiagnosticAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TriggerDiagnostic diagnostic,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = CreateCommand(
+            connection,
+            transaction,
+            """
+            INSERT INTO trigger_diagnostics(code, severity, task_id, detail, occurred_at)
+            VALUES ($code, $severity, $taskId, $detail, $occurredAt);
+            """);
+        command.Parameters.AddWithValue("$code", diagnostic.Code);
+        command.Parameters.AddWithValue("$severity", (int)diagnostic.Severity);
+        command.Parameters.AddWithValue("$taskId", diagnostic.TaskId ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("$detail", diagnostic.Detail);
+        command.Parameters.AddWithValue("$occurredAt", FormatTimestamp(diagnostic.OccurredAt));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<string?> ReadMetadataValueAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = CreateCommand(
+            connection,
+            transaction,
+            "SELECT value FROM trigger_metadata WHERE key = $key;");
+        command.Parameters.AddWithValue("$key", key);
+        object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value as string;
     }
 
     private static bool DefinitionsEqual(

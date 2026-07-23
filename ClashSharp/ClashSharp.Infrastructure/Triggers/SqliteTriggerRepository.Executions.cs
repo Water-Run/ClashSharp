@@ -45,7 +45,8 @@ public sealed partial class SqliteTriggerRepository
             transaction,
             """
             UPDATE trigger_states
-            SET version = version + 1
+            SET version = version + 1,
+                last_triggered_at = $triggeredAt
             WHERE task_id = $taskId
               AND task_revision = $revision
               AND version = $expectedVersion;
@@ -54,6 +55,7 @@ public sealed partial class SqliteTriggerRepository
             command.Parameters.AddWithValue("$taskId", request.Definition.Id);
             command.Parameters.AddWithValue("$revision", request.Definition.Revision);
             command.Parameters.AddWithValue("$expectedVersion", request.ExpectedStateVersion);
+            command.Parameters.AddWithValue("$triggeredAt", FormatTimestamp(request.TriggeredAt));
             if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
             {
                 return TriggerPersistenceResult.Conflict<TriggerExecution>();

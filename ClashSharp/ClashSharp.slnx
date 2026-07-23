@@ -21,4 +21,7 @@
   <Project Path="ClashSharp.ProcessProbe/ClashSharp.ProcessProbe.csproj">
     <Platform Project="x64" />
   </Project>
+  <Project Path="ClashSharp.TriggerProbe/ClashSharp.TriggerProbe.csproj">
+    <Platform Project="x64" />
+  </Project>
 </Solution>

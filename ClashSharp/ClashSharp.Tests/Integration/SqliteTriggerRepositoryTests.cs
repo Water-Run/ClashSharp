@@ -43,6 +43,38 @@ public sealed class SqliteTriggerRepositoryTests
     }
 
     [Fact]
+    public async Task OpenAsync_VersionOneDatabaseUpgradesWithoutLosingDefinitions()
+    {
+        using TemporaryTriggerDirectory directory = new();
+        SqliteTriggerRepository repository = directory.CreateRepository();
+        await OpenRequiredAsync(repository);
+        await ReplaceRequiredAsync(repository, 0, [FirstDefinition()]);
+        await using (SqliteConnection connection = await directory.OpenConnectionAsync())
+        {
+            await ExecuteNonQueryAsync(
+                connection,
+                """
+                ALTER TABLE trigger_states DROP COLUMN last_triggered_at;
+                UPDATE trigger_metadata SET value = '1' WHERE key = 'schema_version';
+                """);
+        }
+
+        SqliteTriggerRepository upgradedRepository = directory.CreateRepository();
+        TriggerPersistenceResult<TriggerRepositorySnapshot> opened =
+            await upgradedRepository.OpenAsync(CancellationToken.None);
+
+        Assert.True(opened.IsSucceeded, opened.Diagnostic?.Code);
+        TriggerRepositorySnapshot snapshot = Assert.IsType<TriggerRepositorySnapshot>(opened.Value);
+        Assert.Equal(TriggerDatabaseSchema.CurrentVersion, snapshot.SchemaVersion);
+        Assert.Equal("first", Assert.Single(snapshot.Tasks).Definition.Id);
+        Assert.Null(snapshot.Tasks[0].State.LastTriggeredAt);
+        await using SqliteConnection verified = await directory.OpenConnectionAsync();
+        Assert.Contains(
+            "last_triggered_at",
+            await ReadColumnNamesAsync(verified, "trigger_states"));
+    }
+
+    [Fact]
     public async Task ReplaceDefinitionsAsync_RoundTripsOrderTypesAndOptimisticGeneration()
     {
         using TemporaryTriggerDirectory directory = new();
@@ -94,6 +126,52 @@ public sealed class SqliteTriggerRepositoryTests
         Assert.True(removed.IsSucceeded);
         Assert.Equal(3, thirdSnapshot.DefinitionGeneration);
         AssertDefinitionEqual(first, Assert.Single(thirdSnapshot.Tasks).Definition);
+    }
+
+    [Fact]
+    public async Task ReplaceDefinitionsAsync_NewRevisionPreservesTriggerHistoryWhileResettingLatches()
+    {
+        using TemporaryTriggerDirectory directory = new();
+        SqliteTriggerRepository repository = directory.CreateRepository();
+        await OpenRequiredAsync(repository);
+        TriggerTaskDefinition original = FirstDefinition();
+        await ReplaceRequiredAsync(repository, 0, [original]);
+        TriggerTaskState initialState = (await ReadRequiredAsync(repository)).Tasks[0].State;
+        DateTimeOffset triggeredAt = new(2026, 7, 23, 13, 14, 15, TimeSpan.Zero);
+        TriggerPersistenceResult<TriggerExecution> committed =
+            await repository.TryCommitExecutionAsync(
+                new TriggerExecutionCommitRequest(
+                    Guid.NewGuid(),
+                    original,
+                    initialState.Version,
+                    initialState,
+                    triggeredAt,
+                    Guid.NewGuid()),
+                CancellationToken.None);
+        TriggerTaskDefinition revised = new(
+            original.Id,
+            original.Revision + 1,
+            "Revised",
+            original.IsEnabled,
+            original.Conditions,
+            original.Actions);
+
+        TriggerPersistenceResult replaced = await repository.ReplaceDefinitionsAsync(
+            new TriggerDefinitionWriteRequest(1, [revised]),
+            CancellationToken.None);
+        TriggerTaskState state = (await ReadRequiredAsync(repository)).Tasks[0].State;
+
+        Assert.True(committed.IsSucceeded, committed.Diagnostic?.Code);
+        Assert.True(replaced.IsSucceeded, replaced.Diagnostic?.Code);
+        Assert.Equal(revised.Revision, state.TaskRevision);
+        Assert.Equal(0, state.Version);
+        Assert.Equal(triggeredAt, state.LastTriggeredAt);
+        Assert.All(state.ConditionStates.Values, condition =>
+        {
+            Assert.True(condition.IsArmed);
+            Assert.Null(condition.ConsumedDate);
+            Assert.Null(condition.ConsumedRevision);
+        });
     }
 
     [Fact]
@@ -630,6 +708,24 @@ public sealed class SqliteTriggerRepositoryTests
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText =
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'trigger_%' ORDER BY name;";
+        List<string> names = [];
+        await using SqliteDataReader reader =
+            await command.ExecuteReaderAsync(CancellationToken.None);
+        while (await reader.ReadAsync(CancellationToken.None))
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        return names.ToArray();
+    }
+
+    private static async Task<string[]> ReadColumnNamesAsync(
+        SqliteConnection connection,
+        string tableName)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT name FROM pragma_table_info($tableName) ORDER BY cid;";
+        command.Parameters.AddWithValue("$tableName", tableName);
         List<string> names = [];
         await using SqliteDataReader reader =
             await command.ExecuteReaderAsync(CancellationToken.None);

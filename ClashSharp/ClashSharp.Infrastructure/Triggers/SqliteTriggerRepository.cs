@@ -19,6 +19,8 @@ public sealed partial class SqliteTriggerRepository : ITriggerRepository
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private volatile bool _isOpen;
 
+    internal string DatabasePath => _databasePath;
+
     /// <summary>Initializes a trigger repository rooted at one database path.</summary>
     /// <param name="databasePath">Absolute or relative path to <c>Triggers.db</c>.</param>
     /// <param name="faultInjector">Optional deterministic persistence fault injector.</param>
@@ -140,6 +142,55 @@ public sealed partial class SqliteTriggerRepository : ITriggerRepository
         {
             _writeGate.Release();
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<TriggerPersistenceResult> TryImportMigrationAsync(
+        TriggerMigrationImportRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!_isOpen)
+        {
+            return TriggerPersistenceResult.Invalid(CreateNotOpenDiagnostic());
+        }
+
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await TryImportMigrationCoreAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedStorageFailure(exception))
+        {
+            return TriggerPersistenceResult.Unavailable(
+                CreateDiagnostic("trigger.storage.write_failed", "import_migration", exception));
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    internal async Task<string?> ReadLegacyMigrationSourceHashAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!_isOpen)
+        {
+            return null;
+        }
+
+        await using SqliteConnection connection = await OpenConnectionAsync(
+            SqliteOpenMode.ReadWrite,
+            cancellationToken).ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT value FROM trigger_metadata WHERE key = 'legacy_migration_source_hash';";
+        object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value as string;
     }
 
     /// <inheritdoc />
@@ -363,10 +414,15 @@ public sealed partial class SqliteTriggerRepository : ITriggerRepository
             cancellationToken).ConfigureAwait(false);
         if (existingDatabase)
         {
-            await TriggerDatabaseSchema.ValidateAsync(connection, cancellationToken).ConfigureAwait(false);
+            await TriggerDatabaseSchema.PrepareExistingAsync(
+                connection,
+                enableWal: true,
+                cancellationToken).ConfigureAwait(false);
         }
-
-        await TriggerDatabaseSchema.InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
+        else
+        {
+            await TriggerDatabaseSchema.InitializeAsync(connection, cancellationToken).ConfigureAwait(false);
+        }
         return await ReadVerifiedSnapshotCoreAsync(
             connection,
             cancellationToken).ConfigureAwait(false);

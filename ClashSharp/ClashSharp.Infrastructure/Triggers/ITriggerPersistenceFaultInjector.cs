@@ -23,6 +23,12 @@ public enum TriggerPersistenceFaultPoint
 
     /// <summary>Immediately after backup promotion.</summary>
     AfterBackupPromotion = 6,
+
+    /// <summary>Immediately before a legacy migration transaction commits.</summary>
+    BeforeMigrationCommit = 7,
+
+    /// <summary>Immediately after a legacy migration transaction commits.</summary>
+    AfterMigrationCommit = 8,
 }
 
 /// <summary>Injects deterministic failures at durable trigger persistence boundaries.</summary>

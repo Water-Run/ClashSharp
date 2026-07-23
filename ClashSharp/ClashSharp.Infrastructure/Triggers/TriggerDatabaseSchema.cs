@@ -6,7 +6,7 @@ namespace ClashSharp.Infrastructure.Triggers;
 public static class TriggerDatabaseSchema
 {
     /// <summary>Gets the only schema version understood by this build.</summary>
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     internal static async Task InitializeAsync(
         SqliteConnection connection,
@@ -58,6 +58,7 @@ public static class TriggerDatabaseSchema
                 task_id TEXT NOT NULL PRIMARY KEY,
                 task_revision INTEGER NOT NULL CHECK (task_revision > 0),
                 version INTEGER NOT NULL CHECK (version >= 0),
+                last_triggered_at TEXT NULL,
                 FOREIGN KEY (task_id) REFERENCES trigger_tasks(task_id) ON DELETE CASCADE
             ) STRICT;
 
@@ -124,7 +125,7 @@ public static class TriggerDatabaseSchema
                 ON trigger_outbox(state, execution_id, action_index);
 
             INSERT OR IGNORE INTO trigger_metadata(key, value)
-                VALUES ('schema_version', '1');
+                VALUES ('schema_version', '2');
             INSERT OR IGNORE INTO trigger_metadata(key, value)
                 VALUES ('definition_generation', '0');
             """,
@@ -141,7 +142,69 @@ public static class TriggerDatabaseSchema
         }
     }
 
+    internal static async Task PrepareExistingAsync(
+        SqliteConnection connection,
+        bool enableWal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        await ExecuteNonQueryAsync(
+            connection,
+            null,
+            enableWal
+                ? "PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;"
+                : "PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;",
+            cancellationToken).ConfigureAwait(false);
+        await ValidateIntegrityAndTablesAsync(connection, cancellationToken).ConfigureAwait(false);
+        string versionText = await ExecuteScalarStringAsync(
+            connection,
+            null,
+            "SELECT value FROM trigger_metadata WHERE key = 'schema_version';",
+            cancellationToken).ConfigureAwait(false);
+        if (!int.TryParse(versionText, out int version))
+        {
+            throw new InvalidDataException("Trigger schema version is malformed.");
+        }
+
+        if (version == 1)
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
+            await ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                """
+                ALTER TABLE trigger_states ADD COLUMN last_triggered_at TEXT NULL;
+                UPDATE trigger_metadata SET value = '2' WHERE key = 'schema_version';
+                """,
+                cancellationToken).ConfigureAwait(false);
+            transaction.Commit();
+        }
+        else if (version != CurrentVersion)
+        {
+            throw new InvalidDataException($"Unsupported trigger schema version '{versionText}'.");
+        }
+
+        await ValidateAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
     internal static async Task ValidateAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await ValidateIntegrityAndTablesAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        string version = await ExecuteScalarStringAsync(
+            connection,
+            null,
+            "SELECT value FROM trigger_metadata WHERE key = 'schema_version';",
+            cancellationToken).ConfigureAwait(false);
+        if (!int.TryParse(version, out int parsedVersion) || parsedVersion != CurrentVersion)
+        {
+            throw new InvalidDataException($"Unsupported trigger schema version '{version}'.");
+        }
+    }
+
+    private static async Task ValidateIntegrityAndTablesAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)
     {
@@ -170,16 +233,6 @@ public static class TriggerDatabaseSchema
         if (tableCount != 10)
         {
             throw new InvalidDataException("Trigger database schema is incomplete.");
-        }
-
-        string version = await ExecuteScalarStringAsync(
-            connection,
-            null,
-            "SELECT value FROM trigger_metadata WHERE key = 'schema_version';",
-            cancellationToken).ConfigureAwait(false);
-        if (!int.TryParse(version, out int parsedVersion) || parsedVersion != CurrentVersion)
-        {
-            throw new InvalidDataException($"Unsupported trigger schema version '{version}'.");
         }
     }
 

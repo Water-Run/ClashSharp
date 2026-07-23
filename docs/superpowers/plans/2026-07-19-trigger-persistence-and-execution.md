@@ -175,23 +175,23 @@ Update locks intentionally, then run locked restore, Infrastructure/Integration 
 - Modify: `ClashSharp/ClashSharp.slnx`
 - Modify: `ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj`
 
-- [ ] **Step 1: Write RED compatibility fixtures**
+- [x] **Step 1: Write RED compatibility fixtures**
 
 Cover legacy array and document shapes, all kinds/scopes/actions, multiple conditions/actions, IDs/names/enabled/order, duplicate normalization diagnostics, undefined enums, invalid parameters, truncated/malformed JSON, denied IO, a valid existing database taking precedence, and idempotent repeated launch.
 
-- [ ] **Step 2: Implement deterministic timestamp migration**
+- [x] **Step 2: Implement deterministic timestamp migration**
 
 Map legacy `Scheduled` to a five-minute `RollingWindow`, `Startup` to `CurrentSession`, and `Cumulative` to `AllTime`. Convert `LastTriggeredAt` to daily consumption, revision-1 all-time consumption, disarmed edge state, or event history exactly as the design specifies. Never invent a completed outbox action.
 
-- [ ] **Step 3: Quarantine safely**
+- [x] **Step 3: Quarantine safely**
 
 Quarantine invalid whole documents or only invalid tasks as applicable, retain stable diagnostics, import valid data in one SQLite transaction, and retain a timestamped source backup until a later successful launch. No static initializer may touch storage.
 
-- [ ] **Step 4: Add real crash-cut tests**
+- [x] **Step 4: Add real crash-cut tests**
 
 Use the framework-dependent Trigger probe to terminate migration before commit and around backup promotion. Restart against the same unique temporary root and prove the authority is either the untouched legacy source/old valid database or the complete new database—never a partial mix.
 
-- [ ] **Step 5: Review and checkpoint**
+- [x] **Step 5: Review and checkpoint**
 
 Run migration/crash tests repeatedly and commit `feat: migrate legacy trigger storage`.
 

@@ -101,6 +101,11 @@ public interface ITriggerRepository
         TriggerDefinitionWriteRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>Atomically imports migrated definitions, latch history, diagnostics, and source identity.</summary>
+    Task<TriggerPersistenceResult> TryImportMigrationAsync(
+        TriggerMigrationImportRequest request,
+        CancellationToken cancellationToken);
+
     /// <summary>Atomically commits the proposed latch state, execution, and complete outbox.</summary>
     Task<TriggerPersistenceResult<TriggerExecution>> TryCommitExecutionAsync(
         TriggerExecutionCommitRequest request,

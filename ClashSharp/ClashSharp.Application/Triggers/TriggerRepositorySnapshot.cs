@@ -111,3 +111,51 @@ public sealed class TriggerDefinitionWriteRequest
     /// <summary>Gets the complete ordered replacement definitions.</summary>
     public ReadOnlyCollection<TriggerTaskDefinition> Definitions { get; }
 }
+
+/// <summary>Immutable request to import one verified legacy trigger snapshot atomically.</summary>
+public sealed class TriggerMigrationImportRequest
+{
+    /// <summary>Initializes a validated legacy import request.</summary>
+    /// <param name="expectedGeneration">Generation that must still be authoritative.</param>
+    /// <param name="sourceHash">Lowercase SHA-256 hash of the captured legacy source.</param>
+    /// <param name="tasks">Complete ordered migrated task and latch records.</param>
+    /// <param name="diagnostics">Stable migration diagnostics to persist with the import.</param>
+    public TriggerMigrationImportRequest(
+        long expectedGeneration,
+        string sourceHash,
+        IEnumerable<TriggerTaskRecord> tasks,
+        IEnumerable<TriggerDiagnostic> diagnostics)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(expectedGeneration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceHash);
+        ArgumentNullException.ThrowIfNull(tasks);
+        ArgumentNullException.ThrowIfNull(diagnostics);
+        if (sourceHash.Length != 64
+            || sourceHash.Any(character => !char.IsAsciiHexDigitLower(character)))
+        {
+            throw new ArgumentException(
+                "Source hash must be a lowercase SHA-256 hexadecimal value.",
+                nameof(sourceHash));
+        }
+
+        TriggerTaskRecord[] taskArray = tasks.ToArray();
+        TriggerDiagnostic[] diagnosticArray = diagnostics.ToArray();
+        _ = new TriggerRepositorySnapshot(1, expectedGeneration, taskArray, diagnosticArray);
+        ExpectedGeneration = expectedGeneration;
+        SourceHash = sourceHash;
+        Tasks = Array.AsReadOnly(taskArray);
+        Diagnostics = Array.AsReadOnly(diagnosticArray);
+    }
+
+    /// <summary>Gets the generation that must still be authoritative.</summary>
+    public long ExpectedGeneration { get; }
+
+    /// <summary>Gets the lowercase SHA-256 hash of the captured legacy source.</summary>
+    public string SourceHash { get; }
+
+    /// <summary>Gets complete ordered migrated task and latch records.</summary>
+    public ReadOnlyCollection<TriggerTaskRecord> Tasks { get; }
+
+    /// <summary>Gets stable migration diagnostics to persist with the import.</summary>
+    public ReadOnlyCollection<TriggerDiagnostic> Diagnostics { get; }
+}
