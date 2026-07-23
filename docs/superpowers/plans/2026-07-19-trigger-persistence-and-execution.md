@@ -112,19 +112,19 @@ Commit `feat: define deterministic trigger matching` after addressing all Critic
 - Create: `ClashSharp/ClashSharp.Application/Triggers/TriggerPersistenceResult.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Architecture/TriggerContractTests.cs`
 
-- [ ] **Step 1: Write RED contract tests**
+- [x] **Step 1: Write RED contract tests**
 
 Require schema version, task revision/order, latch version, execution ID, action index, deterministic idempotency key, desired effect, `Pending/Running/HandedOff/Succeeded/Failed/Uncertain`, process epoch, typed diagnostics, optimistic expected-state input, and cancellation-aware async APIs.
 
-- [ ] **Step 2: Implement narrow application contracts**
+- [x] **Step 2: Implement narrow application contracts**
 
 Separate definition CRUD/snapshots from atomic match-and-enqueue and outbox transition/recovery. The repository transaction API must accept the expected task revision/latch version and either commit the proposed state plus full outbox or report a typed conflict; callers may not partially create an execution.
 
-- [ ] **Step 3: Add lifecycle handoff records without implementation shortcuts**
+- [x] **Step 3: Add lifecycle handoff records without implementation shortcuts**
 
 Represent handoff insertion, release acknowledgement, shutdown start, completion/failure, and process epoch explicitly. Do not overload ordinary action failure strings.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Run Application tests/build and commit `feat: define durable trigger contracts`.
 
