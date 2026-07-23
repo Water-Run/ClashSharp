@@ -81,19 +81,19 @@ Use the requesting/receiving-code-review checklists, rerun focused tests, and co
 - Create: `ClashSharp/ClashSharp.Core/Domain/Triggers/TriggerMatcher.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Triggers/TriggerMatcherTests.cs`
 
-- [ ] **Step 1: Write RED matcher tests**
+- [x] **Step 1: Write RED matcher tests**
 
 Prove all conditions are ANDed; event conditions match only their exact event; `SystemTime` fires once per supplied local date at or after the target; rate/window/runtime/connection/session thresholds fire on false-to-true and re-arm after false; all-time traffic fires once per task revision; editing the threshold increments revision and re-arms; disabled/empty tasks do not fire. Inject time/date and never read process clocks in the matcher.
 
-- [ ] **Step 2: Implement a pure transition function**
+- [x] **Step 2: Implement a pure transition function**
 
 Return both the decision and complete proposed next state without I/O. Distinguish unavailable condition data from false data. A sound-decision failure must be typed, not represented as a default zero.
 
-- [ ] **Step 3: Verify deterministic semantics**
+- [x] **Step 3: Verify deterministic semantics**
 
 Run the matcher suite repeatedly, Core Release build, format verification, and diff check.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Commit `feat: define deterministic trigger matching` after addressing all Critical/Important review findings.
 
