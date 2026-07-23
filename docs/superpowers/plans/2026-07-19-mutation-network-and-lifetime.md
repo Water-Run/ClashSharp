@@ -281,11 +281,11 @@ Use a small lock or channel-owned buffer; never expose the mutable builder. Miho
 - Create: `ClashSharp/ClashSharp/ApplicationErrorSink.cs` or equivalent injected presentation adapter
 - Modify only the Phase 03 action paths in `MasterControlViewModel` and `SettingsViewModel`
 
-- [ ] **Step 1: Write RED command/error-state tests**
+- [x] **Step 1: Write RED command/error-state tests**
 
 Prove `Execute` observes completion through one error sink, `ExecuteAsync` preserves cancellation, busy state is reset in `finally`, reentrancy remains blocked, and a failed network transition restores applied/displayed state rather than showing optimistic success.
 
-- [ ] **Step 2: Implement the bounded migration**
+- [x] **Step 2: Implement the bounded migration**
 
 Do not globally rewrite presentation in this phase. Fix command infrastructure and the mode/port/TUN/startup-task paths touched by mutation/lifecycle work. Record remaining View/ViewModel `.Instance` and optimistic-command debt against Phases 05 and 07; `P2-RUN-03` remains `In Progress` until those phases finish.
 

@@ -76,6 +76,22 @@ Release solution build completed with 0 warnings and 0 errors; a separately rebu
 
 Bounded startup diagnostic checkpoint: `cd85266a76fa161c4992604d4b34f61a39ff75bc` (`fix: bound concurrent core startup diagnostics`).
 
+The first tracked-command test build failed with `CS0234` because the new presentation error namespace did not yet exist. `AsyncRelayCommand` now atomically admits one execution, preserves the original caller cancellation and exception semantics for explicit execution, tracks the `ICommand` task, resets busy state in `finally`, and reports unexpected `ICommand` failures once through an injected `IApplicationErrorSink`. The production sink writes a stable operation name and exception detail to the localized application log.
+
+The Phase 03 Master and Settings action paths now await mode, transparent-proxy preference, startup registration, and sampling transitions. They promote displayed/persisted state only after success or restore the last applied state after failure. Startup and sampling changes made during an in-flight transition are coalesced; a repeated command invocation cannot replace the tracked task. Import re-application uses the same commands, and both pages display localized error `InfoBar` state instead of leaving failures only in diagnostics.
+
+Structured self-review found and fixed three additional presentation races or truthfulness defects. Reentrant `ICommand.Execute` initially replaced `ExecutionTask` with an immediately completed blocked call; admission now occurs before task publication. Error state initially existed only in the view model; both touched pages now bind it visibly. Finally, a mode transition whose verified apply succeeded but whose result publication failed could retain optimistic selected/status state; every cancellation or unexpected failure now restores the captured presentation baseline before propagation.
+
+The settings page no longer adds direct runtime service lookup for these paths. Its temporary lookup is contained in `AppHost/Compatibility/SettingsRuntimeMutationAdapter`; removal remains part of constructor-composed presentation migration. Release solution build completed with 0 warnings and 0 errors, including WinUI XAML compilation. A separately rebuilt complete Release suite passed 776 tests with 0 failed and 0 skipped. The 88 command/Master/Settings tests passed ten consecutive repetitions (880 executions). Format verification changed 0 of 416 files, and `git diff --check` succeeded.
+
+Tracked presentation mutation checkpoint: `14669bd0fc5be4d1d294bb07a0d9ac0d8b0c878d` (`fix: track presentation mutations and failures`).
+
+Retained debt is explicit rather than implied closure:
+
+- Phase 05 still owns verified settings generations and transactions for mixed-port changes, transparent-proxy preference, import/reset/clear, and multi-setting rollback. This keeps `P1-06` and `P1-08` incomplete.
+- Phase 07 still owns page-by-page constructor composition and removal of presentation service locators/code-behind orchestration. The current source has 203 `.Instance` lines across View/ViewModel (173 View, 30 ViewModel), down from the 204-line pre-checkpoint baseline, plus 35 `async void` event boundaries. These counts are debt inventory, not closure evidence.
+- `P2-RUN-03` therefore remains `In Progress`; this checkpoint closes only the Phase 03 command infrastructure and mutation paths named by Task 9.
+
 ## Pending evidence
 
-Tracked async command handling, trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
+Trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
