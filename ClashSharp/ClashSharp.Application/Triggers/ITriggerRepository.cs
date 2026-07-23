@@ -3,6 +3,49 @@ using ClashSharp.Model.Triggers;
 
 namespace ClashSharp.ApplicationModel.Triggers;
 
+/// <summary>Immutable request to commit one non-firing latch transition optimistically.</summary>
+public sealed class TriggerStateCommitRequest
+{
+    /// <summary>Initializes one validated state-only commit request.</summary>
+    /// <param name="definition">Validated source definition.</param>
+    /// <param name="expectedStateVersion">State version that must still be authoritative.</param>
+    /// <param name="nextState">Complete proposed next latch state.</param>
+    public TriggerStateCommitRequest(
+        TriggerTaskDefinition definition,
+        long expectedStateVersion,
+        TriggerTaskState nextState)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentOutOfRangeException.ThrowIfNegative(expectedStateVersion);
+        ArgumentNullException.ThrowIfNull(nextState);
+        if (!TriggerDefinitionValidator.Validate(definition).IsValid
+            || !StringComparer.Ordinal.Equals(definition.Id, nextState.TaskId)
+            || definition.Revision != nextState.TaskRevision
+            || expectedStateVersion != nextState.Version
+            || definition.Conditions.Count != nextState.ConditionStates.Count
+            || definition.Conditions.Any(
+                condition => !nextState.ConditionStates.ContainsKey(condition.Id)))
+        {
+            throw new ArgumentException(
+                "Definition, expected state version, and next state must describe one valid task revision.",
+                nameof(nextState));
+        }
+
+        Definition = definition;
+        ExpectedStateVersion = expectedStateVersion;
+        NextState = nextState;
+    }
+
+    /// <summary>Gets the validated source definition.</summary>
+    public TriggerTaskDefinition Definition { get; }
+
+    /// <summary>Gets the state version that must still be authoritative.</summary>
+    public long ExpectedStateVersion { get; }
+
+    /// <summary>Gets the complete proposed next latch state.</summary>
+    public TriggerTaskState NextState { get; }
+}
+
 /// <summary>Immutable request to commit a match state and its complete ordered action outbox atomically.</summary>
 public sealed class TriggerExecutionCommitRequest
 {
@@ -104,6 +147,11 @@ public interface ITriggerRepository
     /// <summary>Atomically imports migrated definitions, latch history, diagnostics, and source identity.</summary>
     Task<TriggerPersistenceResult> TryImportMigrationAsync(
         TriggerMigrationImportRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Optimistically commits a non-firing latch transition without creating an execution.</summary>
+    Task<TriggerPersistenceResult> TryCommitStateAsync(
+        TriggerStateCommitRequest request,
         CancellationToken cancellationToken);
 
     /// <summary>Atomically commits the proposed latch state, execution, and complete outbox.</summary>

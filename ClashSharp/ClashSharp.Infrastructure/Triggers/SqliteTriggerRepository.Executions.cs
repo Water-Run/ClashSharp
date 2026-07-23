@@ -6,6 +6,61 @@ namespace ClashSharp.Infrastructure.Triggers;
 
 public sealed partial class SqliteTriggerRepository
 {
+    private async Task<TriggerPersistenceResult> TryCommitStateCoreAsync(
+        TriggerStateCommitRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!StateMatchesDefinition(request.Definition, request.NextState))
+        {
+            return TriggerPersistenceResult.Invalid(new TriggerDiagnostic(
+                "trigger.state.invalid",
+                TriggerDiagnosticSeverity.Error,
+                request.Definition.Id,
+                "commit:condition_state_mismatch",
+                DateTimeOffset.UtcNow));
+        }
+
+        await using SqliteConnection connection = await OpenConnectionAsync(
+            SqliteOpenMode.ReadWrite,
+            cancellationToken).ConfigureAwait(false);
+        using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
+        (long Revision, long Version, DateTimeOffset? LastTriggeredAt)? current =
+            await ReadTaskVersionAsync(
+            connection,
+            transaction,
+            request.Definition.Id,
+            cancellationToken).ConfigureAwait(false);
+        if (current is null)
+        {
+            return TriggerPersistenceResult.NotFound();
+        }
+
+        if (current.Value.Revision != request.Definition.Revision
+            || current.Value.Version != request.ExpectedStateVersion
+            || current.Value.LastTriggeredAt != request.NextState.LastTriggeredAt
+            || !await TryWriteTaskStateAsync(
+                connection,
+                transaction,
+                request.Definition,
+                request.ExpectedStateVersion,
+                request.NextState,
+                request.NextState.LastTriggeredAt,
+                updateLastTriggeredAt: false,
+                cancellationToken).ConfigureAwait(false))
+        {
+            return TriggerPersistenceResult.Conflict();
+        }
+
+        await _faultInjector.InjectAsync(
+            TriggerPersistenceFaultPoint.BeforeStateCommit,
+            cancellationToken).ConfigureAwait(false);
+        transaction.Commit();
+        await _faultInjector.InjectAsync(
+            TriggerPersistenceFaultPoint.AfterStateCommit,
+            cancellationToken).ConfigureAwait(false);
+        return TriggerPersistenceResult.Succeeded();
+    }
+
     private async Task<TriggerPersistenceResult<TriggerExecution>> TryCommitExecutionCoreAsync(
         TriggerExecutionCommitRequest request,
         CancellationToken cancellationToken)
@@ -24,7 +79,8 @@ public sealed partial class SqliteTriggerRepository
             SqliteOpenMode.ReadWrite,
             cancellationToken).ConfigureAwait(false);
         using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
-        (long Revision, long Version)? current = await ReadTaskVersionAsync(
+        (long Revision, long Version, DateTimeOffset? LastTriggeredAt)? current =
+            await ReadTaskVersionAsync(
             connection,
             transaction,
             request.Definition.Id,
@@ -40,46 +96,17 @@ public sealed partial class SqliteTriggerRepository
             return TriggerPersistenceResult.Conflict<TriggerExecution>();
         }
 
-        await using (SqliteCommand command = CreateCommand(
+        if (!await TryWriteTaskStateAsync(
             connection,
             transaction,
-            """
-            UPDATE trigger_states
-            SET version = version + 1,
-                last_triggered_at = $triggeredAt
-            WHERE task_id = $taskId
-              AND task_revision = $revision
-              AND version = $expectedVersion;
-            """))
+            request.Definition,
+            request.ExpectedStateVersion,
+            request.NextState,
+            request.TriggeredAt,
+            updateLastTriggeredAt: true,
+            cancellationToken).ConfigureAwait(false))
         {
-            command.Parameters.AddWithValue("$taskId", request.Definition.Id);
-            command.Parameters.AddWithValue("$revision", request.Definition.Revision);
-            command.Parameters.AddWithValue("$expectedVersion", request.ExpectedStateVersion);
-            command.Parameters.AddWithValue("$triggeredAt", FormatTimestamp(request.TriggeredAt));
-            if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
-            {
-                return TriggerPersistenceResult.Conflict<TriggerExecution>();
-            }
-        }
-
-        await using (SqliteCommand command = CreateCommand(
-            connection,
-            transaction,
-            "DELETE FROM trigger_condition_states WHERE task_id = $taskId;"))
-        {
-            command.Parameters.AddWithValue("$taskId", request.Definition.Id);
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-        foreach ((string conditionId, TriggerConditionState conditionState) in
-            request.NextState.ConditionStates)
-        {
-            await InsertConditionStateAsync(
-                connection,
-                transaction,
-                request.Definition.Id,
-                conditionId,
-                conditionState,
-                cancellationToken).ConfigureAwait(false);
+            return TriggerPersistenceResult.Conflict<TriggerExecution>();
         }
 
         TriggerExecution execution = new(
@@ -111,6 +138,70 @@ public sealed partial class SqliteTriggerRepository
             TriggerPersistenceFaultPoint.AfterExecutionCommit,
             cancellationToken).ConfigureAwait(false);
         return TriggerPersistenceResult.Succeeded(execution);
+    }
+
+    private static async Task<bool> TryWriteTaskStateAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TriggerTaskDefinition definition,
+        long expectedStateVersion,
+        TriggerTaskState nextState,
+        DateTimeOffset? lastTriggeredAt,
+        bool updateLastTriggeredAt,
+        CancellationToken cancellationToken)
+    {
+        await using (SqliteCommand command = CreateCommand(
+            connection,
+            transaction,
+            """
+            UPDATE trigger_states
+            SET version = version + 1,
+                last_triggered_at = CASE
+                    WHEN $updateLastTriggeredAt = 1 THEN $lastTriggeredAt
+                    ELSE last_triggered_at
+                END
+            WHERE task_id = $taskId
+              AND task_revision = $revision
+              AND version = $expectedVersion;
+            """))
+        {
+            command.Parameters.AddWithValue("$taskId", definition.Id);
+            command.Parameters.AddWithValue("$revision", definition.Revision);
+            command.Parameters.AddWithValue("$expectedVersion", expectedStateVersion);
+            command.Parameters.AddWithValue("$updateLastTriggeredAt", updateLastTriggeredAt ? 1 : 0);
+            command.Parameters.AddWithValue(
+                "$lastTriggeredAt",
+                lastTriggeredAt is DateTimeOffset timestamp
+                    ? FormatTimestamp(timestamp)
+                    : DBNull.Value);
+            if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            {
+                return false;
+            }
+        }
+
+        await using (SqliteCommand command = CreateCommand(
+            connection,
+            transaction,
+            "DELETE FROM trigger_condition_states WHERE task_id = $taskId;"))
+        {
+            command.Parameters.AddWithValue("$taskId", definition.Id);
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach ((string conditionId, TriggerConditionState conditionState) in
+            nextState.ConditionStates)
+        {
+            await InsertConditionStateAsync(
+                connection,
+                transaction,
+                definition.Id,
+                conditionId,
+                conditionState,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return true;
     }
 
     private async Task<TriggerPersistenceResult<TriggerOutboxAction>> TransitionOutboxCoreAsync(
@@ -313,7 +404,8 @@ public sealed partial class SqliteTriggerRepository
             transition.LastError));
     }
 
-    private static async Task<(long Revision, long Version)?> ReadTaskVersionAsync(
+    private static async Task<(long Revision, long Version, DateTimeOffset? LastTriggeredAt)?>
+        ReadTaskVersionAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         string taskId,
@@ -322,12 +414,19 @@ public sealed partial class SqliteTriggerRepository
         await using SqliteCommand command = CreateCommand(
             connection,
             transaction,
-            "SELECT task_revision, version FROM trigger_states WHERE task_id = $taskId;");
+            """
+            SELECT task_revision, version, last_triggered_at
+            FROM trigger_states
+            WHERE task_id = $taskId;
+            """);
         command.Parameters.AddWithValue("$taskId", taskId);
         await using SqliteDataReader reader =
             await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
-            ? (reader.GetInt64(0), reader.GetInt64(1))
+            ? (
+                reader.GetInt64(0),
+                reader.GetInt64(1),
+                reader.IsDBNull(2) ? null : ParseTimestamp(reader.GetString(2)))
             : null;
     }
 

@@ -236,19 +236,19 @@ Run context/disabled-path tests, Release build, format, and commit `feat: acquir
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Triggers/TriggerExecutionGateTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/TriggerEvaluationConcurrencyTests.cs`
 
-- [ ] **Step 1: Write RED concurrency tests**
+- [x] **Step 1: Write RED concurrency tests**
 
 Interleave periodic and runtime events for the same task with deterministic barriers. Prove one execution, no lost re-arm, no duplicate outbox, no task-level concurrency, different tasks may progress independently, and definition revision conflicts trigger a safe reload rather than stale state overwrite.
 
-- [ ] **Step 2: Implement evaluation orchestration**
+- [x] **Step 2: Implement evaluation orchestration**
 
 Acquire a per-task gate, reload definition/state, obtain only the context fields required by enabled tasks, run the pure matcher, and atomically commit proposed state plus the complete action outbox before dispatch. Release repository leases before external actions when possible.
 
-- [ ] **Step 3: Integrate mutation admission**
+- [x] **Step 3: Integrate mutation admission**
 
 Trigger actions waiting to submit mutations use ordinary admission and remain durably pending if cancellation occurs before mutation-gate entry. Never reacquire the mutation gate from a participant that already owns it.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Run concurrency tests ten times and commit `feat: serialize trigger evaluation`.
 

@@ -29,6 +29,12 @@ public enum TriggerPersistenceFaultPoint
 
     /// <summary>Immediately after a legacy migration transaction commits.</summary>
     AfterMigrationCommit = 8,
+
+    /// <summary>Immediately before a state-only latch transaction commits.</summary>
+    BeforeStateCommit = 9,
+
+    /// <summary>Immediately after a state-only latch transaction commits.</summary>
+    AfterStateCommit = 10,
 }
 
 /// <summary>Injects deterministic failures at durable trigger persistence boundaries.</summary>

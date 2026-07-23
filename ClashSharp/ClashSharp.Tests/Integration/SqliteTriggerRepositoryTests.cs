@@ -297,6 +297,88 @@ public sealed class SqliteTriggerRepositoryTests
     }
 
     [Fact]
+    public async Task TryCommitStateAsync_AdvancesLatchWithoutCreatingExecution()
+    {
+        using TemporaryTriggerDirectory directory = new();
+        SqliteTriggerRepository repository = directory.CreateRepository();
+        await OpenRequiredAsync(repository);
+        TriggerTaskDefinition definition = FirstDefinition();
+        await ReplaceRequiredAsync(repository, 0, [definition]);
+        TriggerTaskState initial = (await ReadRequiredAsync(repository)).Tasks[0].State;
+        TriggerTaskState next = new(
+            definition.Id,
+            definition.Revision,
+            initial.Version,
+            initial.ConditionStates.ToDictionary(
+                static pair => pair.Key,
+                static _ => new TriggerConditionState(IsArmed: false),
+                StringComparer.Ordinal),
+            initial.LastTriggeredAt);
+
+        TriggerPersistenceResult committed = await repository.TryCommitStateAsync(
+            new TriggerStateCommitRequest(definition, initial.Version, next),
+            CancellationToken.None);
+        TriggerPersistenceResult stale = await repository.TryCommitStateAsync(
+            new TriggerStateCommitRequest(definition, initial.Version, next),
+            CancellationToken.None);
+        TriggerTaskState stored = (await ReadRequiredAsync(repository)).Tasks[0].State;
+        TriggerTaskState changedHistory = new(
+            definition.Id,
+            definition.Revision,
+            stored.Version,
+            stored.ConditionStates,
+            new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero));
+        TriggerPersistenceResult historyConflict = await repository.TryCommitStateAsync(
+            new TriggerStateCommitRequest(definition, stored.Version, changedHistory),
+            CancellationToken.None);
+
+        Assert.True(committed.IsSucceeded, committed.Diagnostic?.Code);
+        Assert.Equal(TriggerPersistenceStatus.Conflict, stale.Status);
+        Assert.Equal(TriggerPersistenceStatus.Conflict, historyConflict.Status);
+        Assert.Equal(initial.Version + 1, stored.Version);
+        Assert.Null(stored.LastTriggeredAt);
+        Assert.All(stored.ConditionStates.Values, state => Assert.False(state.IsArmed));
+        Assert.Empty(await ReadRecoverableRequiredAsync(repository));
+    }
+
+    [Theory]
+    [InlineData(TriggerPersistenceFaultPoint.BeforeStateCommit, 0, true)]
+    [InlineData(TriggerPersistenceFaultPoint.AfterStateCommit, 1, false)]
+    public async Task TryCommitStateAsync_FaultBoundaryIsAtomicAndRecoverable(
+        TriggerPersistenceFaultPoint faultPoint,
+        long expectedVersion,
+        bool expectedArmed)
+    {
+        using TemporaryTriggerDirectory directory = new();
+        SqliteTriggerRepository setupRepository = directory.CreateRepository();
+        await OpenRequiredAsync(setupRepository);
+        TriggerTaskDefinition definition = FirstDefinition();
+        await ReplaceRequiredAsync(setupRepository, 0, [definition]);
+        TriggerTaskState initial = (await ReadRequiredAsync(setupRepository)).Tasks[0].State;
+        TriggerTaskState next = new(
+            definition.Id,
+            definition.Revision,
+            initial.Version,
+            initial.ConditionStates.ToDictionary(
+                static pair => pair.Key,
+                static _ => new TriggerConditionState(IsArmed: false),
+                StringComparer.Ordinal));
+        SqliteTriggerRepository faultedRepository = directory.CreateRepository(
+            new ThrowingFaultInjector(faultPoint));
+        await OpenRequiredAsync(faultedRepository);
+
+        TriggerPersistenceResult result = await faultedRepository.TryCommitStateAsync(
+            new TriggerStateCommitRequest(definition, initial.Version, next),
+            CancellationToken.None);
+        TriggerTaskState stored = (await ReadRequiredAsync(setupRepository)).Tasks[0].State;
+
+        Assert.Equal(TriggerPersistenceStatus.Unavailable, result.Status);
+        Assert.Equal(expectedVersion, stored.Version);
+        Assert.All(stored.ConditionStates.Values, state => Assert.Equal(expectedArmed, state.IsArmed));
+        Assert.Empty(await ReadRecoverableRequiredAsync(setupRepository));
+    }
+
+    [Fact]
     public async Task TryCommitExecutionAsync_FailureBeforeCommitLeavesNoPartialState()
     {
         using TemporaryTriggerDirectory directory = new();

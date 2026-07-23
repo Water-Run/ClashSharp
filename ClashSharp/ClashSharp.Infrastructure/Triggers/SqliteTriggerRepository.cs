@@ -194,6 +194,37 @@ public sealed partial class SqliteTriggerRepository : ITriggerRepository
     }
 
     /// <inheritdoc />
+    public async Task<TriggerPersistenceResult> TryCommitStateAsync(
+        TriggerStateCommitRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!_isOpen)
+        {
+            return TriggerPersistenceResult.Invalid(CreateNotOpenDiagnostic());
+        }
+
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await TryCommitStateCoreAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedStorageFailure(exception))
+        {
+            return TriggerPersistenceResult.Unavailable(
+                CreateDiagnostic("trigger.storage.commit_failed", "commit_state", exception));
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<TriggerPersistenceResult<TriggerExecution>> TryCommitExecutionAsync(
         TriggerExecutionCommitRequest request,
         CancellationToken cancellationToken)

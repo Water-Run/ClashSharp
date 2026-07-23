@@ -240,6 +240,34 @@ public sealed class TriggerContractTests
     }
 
     [Fact]
+    public void StateCommitRequest_RequiresOneMatchingDefinitionVersionAndCompleteState()
+    {
+        TriggerTaskDefinition definition = Definition();
+        TriggerTaskState state = TriggerTaskState.CreateInitial(definition, version: 2);
+
+        TriggerStateCommitRequest request = new(definition, 2, state);
+
+        Assert.Same(definition, request.Definition);
+        Assert.Same(state, request.NextState);
+        Assert.Equal(2, request.ExpectedStateVersion);
+        Assert.Throws<ArgumentException>(() => new TriggerStateCommitRequest(
+            definition,
+            1,
+            state));
+        Assert.Throws<ArgumentException>(() => new TriggerStateCommitRequest(
+            definition,
+            2,
+            new TriggerTaskState(
+                definition.Id,
+                definition.Revision,
+                2,
+                new Dictionary<string, TriggerConditionState>
+                {
+                    ["unexpected"] = new TriggerConditionState(),
+                })));
+    }
+
+    [Fact]
     public void TriggerOutboxState_ContainsRequiredDurableStates()
     {
         Assert.Equal(

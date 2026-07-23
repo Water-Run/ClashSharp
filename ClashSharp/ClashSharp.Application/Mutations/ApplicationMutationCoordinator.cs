@@ -2,6 +2,7 @@ namespace ClashSharp.ApplicationModel.Mutations;
 
 internal interface IAdmittedApplicationMutationCoordinator
 {
+    /// <summary>Executes without reacquiring an ordinary or drained-destructive admission lease.</summary>
     Task<MutationResult<T>> ExecuteAdmittedAsync<T>(
         MutationAdmissionLease admissionLease,
         MutationRequest request,
@@ -150,12 +151,18 @@ public sealed class ApplicationMutationCoordinator :
         ValidateRequest(request);
         ArgumentNullException.ThrowIfNull(planFactory);
         ArgumentNullException.ThrowIfNull(resultFactory);
-        if (!admissionLease.IsOwnedBy(_admissionBarrier)
-            || !admissionLease.IsExclusive
-            || _admissionBarrier.State != MutationAdmissionState.Closing)
+        bool validAdmission = admissionLease.Kind switch
+        {
+            MutationAdmissionLeaseKind.Ordinary =>
+                _admissionBarrier.State == MutationAdmissionState.Open,
+            MutationAdmissionLeaseKind.Destructive =>
+                _admissionBarrier.State == MutationAdmissionState.Closing,
+            _ => false,
+        };
+        if (!admissionLease.IsOwnedBy(_admissionBarrier) || !validAdmission)
         {
             throw new InvalidOperationException(
-                "An admitted mutation requires the active drained destructive admission lease.");
+                "An admitted mutation requires an active ordinary or drained destructive admission lease.");
         }
 
         ExecutionEnvelope<T> execution;
