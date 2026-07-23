@@ -301,11 +301,11 @@ Do not globally rewrite presentation in this phase. Fix command infrastructure a
 - Modify: `docs/architecture/stabilization-ledger.md`
 - Modify: `docs/superpowers/plans/2026-07-19-architecture-stabilization-roadmap.md`
 
-- [ ] **Step 1: Add executable architecture gates**
+- [x] **Step 1: Add executable architecture gates**
 
 Reject direct network mutation outside registered compatibility/infrastructure participants, unowned `Task.Run`, sync-over-async, old synchronous `Stop`/`RestartFromSettings` sampling calls, `Environment.Exit` below App, and new service `.Instance` access in View/ViewModel. Prefer behavior tests; source contracts are allowed only for dependency/layer artifacts with a documented reason.
 
-- [ ] **Step 2: Run clean final verification**
+- [x] **Step 2: Run clean final verification**
 
 ```powershell
 $env:CI = 'true'
@@ -321,14 +321,14 @@ git diff --check
 
 If the installed test runner does not support `--repeat`, invoke the filtered command ten times from PowerShell and fail on the first non-zero exit.
 
-- [ ] **Step 3: Run platform and process smoke**
+- [x] **Step 3: Run platform and process smoke**
 
 Run the helper two-process zero-side-effect test repeatedly, the process-tree timeout/cancellation suite, and a packaged primary/secondary RuleTakeover smoke when the local package harness is available. Missing packaged evidence keeps `P1-01` `In Progress`; it does not block closing the implemented Phase 03 contracts.
 
-- [ ] **Step 4: Update ledger precisely**
+- [x] **Step 4: Update ledger precisely**
 
 Close only rows whose required evidence is complete. Expected Phase 03 outcome: `P2-RUN-01`, `P2-RUN-02`, and `P2-RUN-04` can close; `P2-RUN-03`, `P1-06`, and `P1-08` remain `In Progress` for presentation/settings phases; `P1-01` closes only with the packaged real-app proof. Record checkpoint commit, reviewer method, date, test counts, repetitions, and any retained compatibility bridges.
 
-- [ ] **Step 5: Review and checkpoint**
+- [x] **Step 5: Review and checkpoint**
 
 Use `superpowers:requesting-code-review`, address Critical/Important findings with `superpowers:receiving-code-review`, rerun the complete verification, mark Phase 03 complete in the roadmap, and commit implementation plus evidence. Preserve the worktree for Phase 04.

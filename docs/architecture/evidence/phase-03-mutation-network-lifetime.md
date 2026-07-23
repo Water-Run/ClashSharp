@@ -1,6 +1,6 @@
 # Phase 03 Mutation, Network, and Lifetime Evidence
 
-**Date:** 2026-07-19
+**Date:** 2026-07-19 through 2026-07-23
 
 **Branch:** `codex/architecture-stabilization-phase-01`
 
@@ -92,6 +92,20 @@ Retained debt is explicit rather than implied closure:
 - Phase 07 still owns page-by-page constructor composition and removal of presentation service locators/code-behind orchestration. The current source has 203 `.Instance` lines across View/ViewModel (173 View, 30 ViewModel), down from the 204-line pre-checkpoint baseline, plus 35 `async void` event boundaries. These counts are debt inventory, not closure evidence.
 - `P2-RUN-03` therefore remains `In Progress`; this checkpoint closes only the Phase 03 command infrastructure and mutation paths named by Task 9.
 
-## Pending evidence
+## Architecture gates and asynchronous compatibility closure
 
-Trigger runtime replacement, final phase-wide concurrency verification, and ledger closure evidence remain pending as the phase proceeds.
+The first `MutationLifetimeArchitectureTests` run failed against the remaining blocking service/status reads and synchronous sampling compatibility entry points. The executable gate now rejects sync-over-async, obsolete synchronous sampling lifecycle APIs, unowned `Task.Run`, new detached async continuations outside the three explicitly retained Phase 04 trigger bridges, direct network mutation outside registered compatibility/infrastructure paths, and process termination below the application root. `RepositoryTopologyTests` additionally freezes presentation service-locator debt per file at 208 `.Instance` occurrences so later work can only reduce it or fail visibly.
+
+The final blocking paths were converted rather than allowlisted. SCM status, tray status, network takeover planning/apply, application-data shutdown, and Settings service refresh now flow through awaited APIs with cached read-only snapshots for synchronous presentation. Connection sampling no longer exposes the old synchronous `Stop`/`RestartFromSettings` entry points. The compatibility adapters own their `Task.Run` work, and `MainWindow` awaits tray mode notifications. Cancellation is rechecked immediately before network or destructive-data side effects; an already-cancelled SCM operation cannot reach an elevated command, while an elevated operation that has begun still performs its mandatory final SCM query before propagating cancellation.
+
+RED review regressions proved three cancellation/failure windows before fixes: cancellation immediately after transparent-service status lookup still mutated network state, cancellation immediately after runtime shutdown still deleted data, and pre-cancelled service deployment could continue toward elevation. A structured self-review using the requesting/receiving-code-review checklists also found an escaping clear-data `async void` exception, cancellation being rendered as an unexpected Settings/Master error, and stale thread-safety documentation. All Critical/Important findings were addressed before the final matrix; no known Critical/Important finding remains.
+
+Asynchronous boundary checkpoint: `bd9d0ae3b1fd6bd0b2436977424e7f39aa5772fd` (`refactor: enforce asynchronous runtime boundaries`).
+
+## Final verification and closure
+
+On 2026-07-23, with `CI=true` and `Platform=x64`, locked forced restore succeeded; solution format verification changed no files; Debug and Release solution builds each completed with 0 warnings and 0 errors; and the complete Release suite passed 788 tests with 0 failed and 0 skipped. The phase-wide mutation/lifecycle/supervision/process filter passed 70 tests in each of ten consecutive runs (700 executions). `git diff --check` succeeded.
+
+The combined real `SecondaryInstanceIsolationTests` and `WindowsProcessRunnerTests` smoke passed 6 tests in each of ten consecutive runs (60 executions). This repeatedly proves secondary-instance zero mutation plus timeout/cancellation process-tree cleanup; a precise Windows process-table check found no `ClashSharp.ProcessProbe` or `ClashSharp.StartupProbe` residue. The available `SandboxTest` is explicitly only a dry orchestration framework and states that no real install, launch, proxy, or service checks run yet. Therefore the packaged primary/secondary RuleTakeover proof is still missing and `P1-01` remains `In Progress`.
+
+Phase 03 closes `P2-RUN-01`, `P2-RUN-02`, and `P2-RUN-04`. `P1-06` and `P1-08` remain `In Progress` until Phase 05 supplies verified settings generations and the reset/import/live-transition matrix. `P2-RUN-03` remains `In Progress` until Phase 07 removes presentation orchestration debt. The retained inventory is 208 `.Instance` occurrences on 203 View/ViewModel source lines, 35 `async void` UI boundaries, the constructor-composed `SettingsRuntimeMutationAdapter`, `LegacyNetworkStateAdapter`, `LegacyAppDataMaintenanceRuntimeAdapter`, and three TriggerService detached continuations reserved for Phase 04.

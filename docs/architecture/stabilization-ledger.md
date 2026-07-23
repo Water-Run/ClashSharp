@@ -4,14 +4,14 @@ The architecture stabilization design and its audit traceability table are norma
 
 | ID | Severity | Owner | Status | Plan task | Evidence | Closure commit | Reviewer | Closure date |
 |---|---|---|---|---|---|---|---|---|
-| P1-01 | P1 | Application | In Progress | Phases 02 and 03 | `ApplicationStartupContractTests`; `SecondaryInstanceIsolationTests`; `docs/architecture/evidence/phase-02-apphost-startup.md` | — | — | — |
+| P1-01 | P1 | Application | In Progress | Phases 02 and 03 | `ApplicationStartupContractTests`; `SecondaryInstanceIsolationTests` (10 repeated real two-process runs); `docs/architecture/evidence/phase-02-apphost-startup.md`; `docs/architecture/evidence/phase-03-mutation-network-lifetime.md`; packaged real-app smoke pending | — | structured self-review | — |
 | P1-02 | P1 | Runtime | Open | Phase 04 | — | — | — | — |
 | P1-03 | P1 | Runtime | Open | Phase 04 | — | — | — | — |
 | P1-04 | P1 | Presentation | Open | Phase 04 | — | — | — | — |
 | P1-05 | P1 | Runtime | Open | Phase 04 | — | — | — | — |
-| P1-06 | P1 | Application | Open | Phases 03 and 05 | — | — | — | — |
+| P1-06 | P1 | Application | In Progress | Phases 03 and 05 | `ApplicationMutationCoordinatorTests`; `RuntimeLifecycleCoordinatorTests`; `AppDataMaintenanceServiceTests`; `docs/architecture/evidence/phase-03-mutation-network-lifetime.md`; Phase 05 settings transaction matrix pending | — | structured self-review | — |
 | P1-07 | P1 | Application | Open | Phase 05 | — | — | — | — |
-| P1-08 | P1 | Runtime | Open | Phases 03 and 05 | — | — | — | — |
+| P1-08 | P1 | Runtime | In Progress | Phases 03 and 05 | `NetworkMutationConcurrencyTests`; `NetworkTakeoverServiceTests`; Master/Settings rollback tests; `docs/architecture/evidence/phase-03-mutation-network-lifetime.md`; Phase 05 verified settings generation pending | — | structured self-review | — |
 | P1-09 | P1 | Presentation | Open | Phase 06 | — | — | — | — |
 | P1-10 | P1 | Release | Open | Phase 10 | — | — | — | — |
 | P1-11 | P1 | Release | In Progress | Phase 01 Task 3; Phase 12 | `RepositoryTopologyTests`; `docs/architecture/evidence/phase-01-repository-foundation.md` | — | — | — |
@@ -22,10 +22,10 @@ The architecture stabilization design and its audit traceability table are norma
 | P2-SET-01 | P2 | Application | Open | Phase 05 | — | — | — | — |
 | P2-SET-02 | P2 | Application | Open | Phase 05 | — | — | — | — |
 | P2-SET-03 | P2 | Presentation | Open | Phase 05 | — | — | — | — |
-| P2-RUN-01 | P2 | Runtime | Open | Phase 03 | — | — | — | — |
-| P2-RUN-02 | P2 | Runtime | Open | Phase 03 | — | — | — | — |
-| P2-RUN-03 | P2 | Presentation | Open | Phases 03 and 07 | — | — | — | — |
-| P2-RUN-04 | P2 | Runtime | Open | Phase 03 | — | — | — | — |
+| P2-RUN-01 | P2 | Runtime | Closed | Phase 03 | `SupervisedLoopTests`; `ConnectionSamplingServiceTests`; `docs/architecture/evidence/phase-03-mutation-network-lifetime.md` | `bd9d0ae3b1fd6bd0b2436977424e7f39aa5772fd` | structured self-review | 2026-07-23 |
+| P2-RUN-02 | P2 | Runtime | Closed | Phase 03 | `WindowsProcessRunnerTests`; `MihomoServiceManagerTests`; 10 repeated process-tree/cancellation smoke runs with zero residue; `docs/architecture/evidence/phase-03-mutation-network-lifetime.md` | `bd9d0ae3b1fd6bd0b2436977424e7f39aa5772fd` | structured self-review | 2026-07-23 |
+| P2-RUN-03 | P2 | Presentation | In Progress | Phases 03 and 07 | `AsyncRelayCommandTests`; Master/Settings pending-applied-rollback tests; presentation `.Instance` freeze gate; `docs/architecture/evidence/phase-03-mutation-network-lifetime.md`; full Phase 07 migration pending | — | structured self-review | — |
+| P2-RUN-04 | P2 | Runtime | Closed | Phase 03 | `ConcurrentBoundedTextBufferTests`; real concurrent stdout/stderr core diagnostic test; `docs/architecture/evidence/phase-03-mutation-network-lifetime.md` | `bd9d0ae3b1fd6bd0b2436977424e7f39aa5772fd` | structured self-review | 2026-07-23 |
 | P2-UI-01 | P2 | Presentation | Open | Phase 09 | — | — | — | — |
 | P2-UI-02 | P2 | Presentation | Open | Phase 09 | — | — | — | — |
 | P2-UI-03 | P2 | Presentation | Open | Phase 09 | — | — | — | — |
