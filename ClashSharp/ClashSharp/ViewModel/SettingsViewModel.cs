@@ -16,6 +16,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -402,12 +403,21 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Callback invoked when the display style changes.</summary>
     private readonly Action<AppThemeMode> _applyTheme;
 
-    /// <summary>Callback invoked when the application accent color changes.</summary>
     /// <summary>Callback invoked when launch-at-startup changes.</summary>
-    private readonly Action<bool> _applyLaunchAtStartup;
+    private readonly Func<bool, CancellationToken, Task> _applyLaunchAtStartupAsync;
 
     /// <summary>Callback invoked when background connection sampling settings change.</summary>
-    private readonly Action _restartConnectionSampling;
+    private readonly Func<CancellationToken, Task> _restartConnectionSamplingAsync;
+
+    private bool _appliedLaunchAtStartup;
+
+    private bool _pendingLaunchAtStartup;
+
+    private bool _appliedConnectionSamplingEnabled;
+
+    private int _appliedConnectionSamplingIntervalSeconds;
+
+    private int _connectionSamplingRevision;
 
     /// <summary>Localization resolver used by bindable settings labels.</summary>
     private readonly Func<string, string> _getString;
@@ -538,7 +548,10 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<int, IReadOnlyList<StartupConflictIssue>>? checkStartupConflicts = null,
         Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending = null,
         Action<string>? notifyConnectionTestTimeout = null,
-        Action<string, string, string, string?>? appendLog = null)
+        Action<string, string, string, string?>? appendLog = null,
+        Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
+        Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
+        IApplicationErrorSink? errorSink = null)
         : this(
             settings,
             applyLanguage,
@@ -557,6 +570,9 @@ internal sealed class SettingsViewModel : ObservableObject
             isAccentColorRestartPending,
             notifyConnectionTestTimeout,
             appendLog,
+            restartConnectionSamplingAsync,
+            applyLaunchAtStartupAsync,
+            errorSink,
             null,
             null)
     {
@@ -581,14 +597,29 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending,
         Action<string>? notifyConnectionTestTimeout,
         Action<string, string, string, string?>? appendLog,
+        Func<CancellationToken, Task>? restartConnectionSamplingAsync,
+        Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync,
+        IApplicationErrorSink? errorSink,
         Action? exitApplication,
         Action? restartApplication)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
         _applyTheme = applyTheme ?? throw new ArgumentNullException(nameof(applyTheme));
-        _applyLaunchAtStartup = applyLaunchAtStartup ?? throw new ArgumentNullException(nameof(applyLaunchAtStartup));
-        _restartConnectionSampling = restartConnectionSampling ?? throw new ArgumentNullException(nameof(restartConnectionSampling));
+        ArgumentNullException.ThrowIfNull(applyLaunchAtStartup);
+        ArgumentNullException.ThrowIfNull(restartConnectionSampling);
+        _applyLaunchAtStartupAsync = applyLaunchAtStartupAsync ?? ((isEnabled, cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            applyLaunchAtStartup(isEnabled);
+            return Task.CompletedTask;
+        });
+        _restartConnectionSamplingAsync = restartConnectionSamplingAsync ?? (cancellationToken =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            restartConnectionSampling();
+            return Task.CompletedTask;
+        });
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _getProxyInformation = getProxyInformation ?? throw new ArgumentNullException(nameof(getProxyInformation));
         _testConnectionAsync = testConnectionAsync ?? TestConnectionAsync;
@@ -602,10 +633,32 @@ internal sealed class SettingsViewModel : ObservableObject
         _isAccentColorRestartPending = isAccentColorRestartPending ?? IsAccentColorChangedSinceLoad;
         _diagnosticsViewModel = diagnosticsViewModel;
         _mihomoServiceController = mihomoServiceController ?? AlwaysAvailableMihomoServiceController.Instance;
+        _appliedLaunchAtStartup = _settings.LaunchAtStartupEnabled;
+        _pendingLaunchAtStartup = _appliedLaunchAtStartup;
+        _appliedConnectionSamplingEnabled = _settings.ConnectionSamplingEnabled;
+        _appliedConnectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
+        IApplicationErrorSink commandErrors = errorSink ?? NullApplicationErrorSink.Instance;
         RefreshSelectorOptions();
-        WindowsDiagnosticCommand = new AsyncRelayCommand(ExecuteWindowsDiagnosticCommandAsync);
-        DeployMihomoServiceCommand = new AsyncRelayCommand(DeployMihomoServiceAsync);
-        UninstallMihomoServiceCommand = new AsyncRelayCommand(UninstallMihomoServiceAsync);
+        WindowsDiagnosticCommand = new AsyncRelayCommand(
+            ExecuteWindowsDiagnosticCommandAsync,
+            errorSink: commandErrors,
+            operationName: "settings-windows-diagnostic");
+        DeployMihomoServiceCommand = new AsyncRelayCommand(
+            DeployMihomoServiceAsync,
+            errorSink: commandErrors,
+            operationName: "settings-deploy-mihomo-service");
+        UninstallMihomoServiceCommand = new AsyncRelayCommand(
+            UninstallMihomoServiceAsync,
+            errorSink: commandErrors,
+            operationName: "settings-uninstall-mihomo-service");
+        ApplyLaunchAtStartupCommand = new AsyncRelayCommand(
+            SynchronizeLaunchAtStartupAsync,
+            errorSink: commandErrors,
+            operationName: "settings-launch-at-startup");
+        RestartConnectionSamplingCommand = new AsyncRelayCommand(
+            SynchronizeConnectionSamplingAsync,
+            errorSink: commandErrors,
+            operationName: "settings-connection-sampling");
         ExitApplicationCommand = new RelayCommand(ExitApplication);
         RestartApplicationCommand = new RelayCommand(RestartApplication);
         Load();
@@ -1111,11 +1164,31 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="StoreDiagnosticStatusText"/>.</summary>
     private string _storeDiagnosticStatusText = string.Empty;
 
+    private string _operationErrorText = string.Empty;
+
     public AsyncRelayCommand WindowsDiagnosticCommand { get; }
 
     public AsyncRelayCommand DeployMihomoServiceCommand { get; }
 
     public AsyncRelayCommand UninstallMihomoServiceCommand { get; }
+
+    public AsyncRelayCommand ApplyLaunchAtStartupCommand { get; }
+
+    public AsyncRelayCommand RestartConnectionSamplingCommand { get; }
+
+    public string OperationErrorText
+    {
+        get => _operationErrorText;
+        private set
+        {
+            if (SetProperty(ref _operationErrorText, value))
+            {
+                OnPropertyChanged(nameof(HasOperationError));
+            }
+        }
+    }
+
+    public bool HasOperationError => !string.IsNullOrWhiteSpace(OperationErrorText);
 
     public RelayCommand ExitApplicationCommand { get; }
 
@@ -1977,9 +2050,38 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <param name="isEnabled">Switch value.</param>
     public void SetLaunchAtStartupEnabled(bool isEnabled)
     {
+        _pendingLaunchAtStartup = isEnabled;
         _settings.LaunchAtStartupEnabled = isEnabled;
         SetProperty(ref _launchAtStartupEnabled, isEnabled, nameof(LaunchAtStartupEnabled));
-        _applyLaunchAtStartup(isEnabled);
+        ApplyLaunchAtStartupCommand.Execute(null);
+    }
+
+    /// <summary>Applies the latest requested startup registration and coalesces changes made while an update is running.</summary>
+    private async Task SynchronizeLaunchAtStartupAsync(CancellationToken cancellationToken)
+    {
+        OperationErrorText = string.Empty;
+        while (true)
+        {
+            bool desiredState = _pendingLaunchAtStartup;
+            try
+            {
+                await _applyLaunchAtStartupAsync(desiredState, cancellationToken);
+            }
+            catch
+            {
+                _pendingLaunchAtStartup = _appliedLaunchAtStartup;
+                _settings.LaunchAtStartupEnabled = _appliedLaunchAtStartup;
+                SetProperty(ref _launchAtStartupEnabled, _appliedLaunchAtStartup, nameof(LaunchAtStartupEnabled));
+                OperationErrorText = _getString("Application.UnexpectedError");
+                throw;
+            }
+
+            _appliedLaunchAtStartup = desiredState;
+            if (desiredState == _pendingLaunchAtStartup)
+            {
+                return;
+            }
+        }
     }
 
     /// <summary>Persists a mixed proxy port from number-box input.</summary>
@@ -2088,7 +2190,7 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         _settings.ConnectionSamplingEnabled = isEnabled;
         SetProperty(ref _connectionSamplingEnabled, isEnabled, nameof(ConnectionSamplingEnabled));
-        _restartConnectionSampling();
+        RequestConnectionSamplingRestart();
     }
 
     /// <summary>Persists a background sampling interval from number-box input.</summary>
@@ -2109,8 +2211,59 @@ internal sealed class SettingsViewModel : ObservableObject
 
         _settings.ConnectionSamplingIntervalSeconds = intervalSeconds;
         ConnectionSamplingIntervalSeconds = intervalSeconds;
-        _restartConnectionSampling();
+        RequestConnectionSamplingRestart();
         return true;
+    }
+
+    /// <summary>Re-applies imported settings that affect external application services.</summary>
+    public void ReapplyRuntimeSettings()
+    {
+        _pendingLaunchAtStartup = _settings.LaunchAtStartupEnabled;
+        ApplyLaunchAtStartupCommand.Execute(null);
+        RequestConnectionSamplingRestart();
+    }
+
+    /// <summary>Queues a coalesced sampling restart for the latest persisted sampling settings.</summary>
+    private void RequestConnectionSamplingRestart()
+    {
+        Interlocked.Increment(ref _connectionSamplingRevision);
+        RestartConnectionSamplingCommand.Execute(null);
+    }
+
+    /// <summary>Applies the latest sampling settings and restores the last applied values when the restart fails.</summary>
+    private async Task SynchronizeConnectionSamplingAsync(CancellationToken cancellationToken)
+    {
+        OperationErrorText = string.Empty;
+        while (true)
+        {
+            int requestedRevision = Volatile.Read(ref _connectionSamplingRevision);
+            bool desiredEnabled = _settings.ConnectionSamplingEnabled;
+            int desiredIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
+
+            try
+            {
+                await _restartConnectionSamplingAsync(cancellationToken);
+            }
+            catch
+            {
+                _settings.ConnectionSamplingEnabled = _appliedConnectionSamplingEnabled;
+                _settings.ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
+                SetProperty(
+                    ref _connectionSamplingEnabled,
+                    _appliedConnectionSamplingEnabled,
+                    nameof(ConnectionSamplingEnabled));
+                ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
+                OperationErrorText = _getString("Application.UnexpectedError");
+                throw;
+            }
+
+            _appliedConnectionSamplingEnabled = desiredEnabled;
+            _appliedConnectionSamplingIntervalSeconds = desiredIntervalSeconds;
+            if (requestedRevision == Volatile.Read(ref _connectionSamplingRevision))
+            {
+                return;
+            }
+        }
     }
 
     /// <summary>Persists the startup conflict check switch.</summary>
@@ -2562,9 +2715,7 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Restores startup settings to defaults.</summary>
     public void ResetStartupSettingsToDefaults()
     {
-        _settings.LaunchAtStartupEnabled = false;
-        SetProperty(ref _launchAtStartupEnabled, false, nameof(LaunchAtStartupEnabled));
-        _applyLaunchAtStartup(false);
+        SetLaunchAtStartupEnabled(false);
 
         _settings.StartupConflictCheckEnabled = true;
         SetProperty(ref _startupConflictCheckEnabled, true, nameof(StartupConflictCheckEnabled));
@@ -2629,7 +2780,7 @@ internal sealed class SettingsViewModel : ObservableObject
         ConnectionTestUrl = _settings.ConnectionTestUrl;
         ResetConnectionTestUrlsToDefaults();
 
-        _restartConnectionSampling();
+        RequestConnectionSamplingRestart();
         RefreshProxyInformation();
     }
 

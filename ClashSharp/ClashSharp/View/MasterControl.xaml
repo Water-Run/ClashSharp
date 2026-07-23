@@ -20,6 +20,13 @@
         HorizontalScrollBarVisibility="Disabled"
         SizeChanged="RootScrollViewer_SizeChanged">
         <StackPanel x:Name="ContentHost" Spacing="14">
+            <InfoBar
+                Message="{Binding OperationErrorText}"
+                Severity="Error"
+                IsClosable="False"
+                IsOpen="{Binding HasOperationError, Mode=OneWay}"
+                Visibility="{Binding HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
             <Grid x:Name="HeroAndModeGrid" ColumnSpacing="12" RowSpacing="10" MinHeight="342">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

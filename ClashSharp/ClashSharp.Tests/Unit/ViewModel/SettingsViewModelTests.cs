@@ -10,6 +10,7 @@
 using System.Collections.Specialized;
 using System.Net.Http;
 using System.Reflection;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -377,6 +378,34 @@ public sealed class SettingsViewModelTests
         Assert.True(appliedValue);
     }
 
+    /// <summary>Verifies failed startup registration restores the last externally applied state and reports the error.</summary>
+    [Fact]
+    public async Task LaunchAtStartupEnabled_WhenRegistrationFails_RestoresAppliedState()
+    {
+        FakeSettingsStore store = new() { LaunchAtStartupEnabled = false };
+        FakeApplicationErrorSink errorSink = new();
+        InvalidOperationException failure = new("startup registration failed");
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            applyLaunchAtStartupAsync: async (_, _) =>
+            {
+                await Task.Yield();
+                throw failure;
+            },
+            errorSink: errorSink);
+
+        viewModel.LaunchAtStartupEnabled = true;
+        await Assert.IsAssignableFrom<Task>(viewModel.ApplyLaunchAtStartupCommand.ExecutionTask);
+
+        Assert.False(store.LaunchAtStartupEnabled);
+        Assert.False(viewModel.LaunchAtStartupEnabled);
+        Assert.True(viewModel.HasOperationError);
+        Assert.Equal("Application.UnexpectedError", viewModel.OperationErrorText);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Equal("settings-launch-at-startup", error.OperationName);
+        Assert.Same(failure, error.Exception);
+    }
+
     /// <summary>Verifies invalid language indexes are ignored.</summary>
     [Theory]
     [InlineData(-1)]
@@ -440,6 +469,78 @@ public sealed class SettingsViewModelTests
         Assert.Equal(60, store.ConnectionSamplingIntervalSeconds);
         Assert.True(intervalChanged);
         Assert.Equal(2, restartCount);
+    }
+
+    /// <summary>Verifies failed sampling restart restores both persisted and displayed applied settings.</summary>
+    [Fact]
+    public async Task SamplingSettings_WhenRestartFails_RestoreAppliedSettings()
+    {
+        FakeSettingsStore store = new()
+        {
+            ConnectionSamplingEnabled = true,
+            ConnectionSamplingIntervalSeconds = 30,
+        };
+        FakeApplicationErrorSink errorSink = new();
+        InvalidOperationException failure = new("sampling restart failed");
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            restartConnectionSamplingAsync: async _ =>
+            {
+                await Task.Yield();
+                throw failure;
+            },
+            errorSink: errorSink);
+
+        viewModel.SetConnectionSamplingEnabled(false);
+        await Assert.IsAssignableFrom<Task>(viewModel.RestartConnectionSamplingCommand.ExecutionTask);
+
+        Assert.True(store.ConnectionSamplingEnabled);
+        Assert.Equal(30, store.ConnectionSamplingIntervalSeconds);
+        Assert.True(viewModel.ConnectionSamplingEnabled);
+        Assert.Equal(30, viewModel.ConnectionSamplingIntervalSeconds);
+        Assert.True(viewModel.HasOperationError);
+        Assert.Equal("Application.UnexpectedError", viewModel.OperationErrorText);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Equal("settings-connection-sampling", error.OperationName);
+        Assert.Same(failure, error.Exception);
+    }
+
+    /// <summary>Verifies sampling changes made during restart are coalesced without losing the tracked task.</summary>
+    [Fact]
+    public async Task SamplingSettings_WhileRestartRuns_CoalesceLatestSettings()
+    {
+        FakeSettingsStore store = new()
+        {
+            ConnectionSamplingEnabled = true,
+            ConnectionSamplingIntervalSeconds = 30,
+        };
+        TaskCompletionSource firstRestartStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseFirstRestart = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        List<(bool Enabled, int IntervalSeconds)> appliedSettings = [];
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            restartConnectionSamplingAsync: async _ =>
+            {
+                appliedSettings.Add((store.ConnectionSamplingEnabled, store.ConnectionSamplingIntervalSeconds));
+                if (appliedSettings.Count == 1)
+                {
+                    firstRestartStarted.TrySetResult();
+                    await releaseFirstRestart.Task;
+                }
+            });
+
+        viewModel.SetConnectionSamplingEnabled(false);
+        Task trackedRestart = Assert.IsAssignableFrom<Task>(viewModel.RestartConnectionSamplingCommand.ExecutionTask);
+        await firstRestartStarted.Task;
+        viewModel.SetConnectionSamplingIntervalSeconds(60);
+
+        Assert.Same(trackedRestart, viewModel.RestartConnectionSamplingCommand.ExecutionTask);
+        releaseFirstRestart.TrySetResult();
+        await trackedRestart;
+
+        Assert.Equal([(false, 30), (false, 60)], appliedSettings);
+        Assert.False(store.ConnectionSamplingEnabled);
+        Assert.Equal(60, store.ConnectionSamplingIntervalSeconds);
     }
 
     /// <summary>Verifies startup behavior selection persists only valid enum indexes.</summary>
@@ -1200,40 +1301,13 @@ public sealed class SettingsViewModelTests
         Func<Uri, CancellationToken, Task<int>> testConnectionAsync,
         Action<string, string, string, string?>? appendLog = null)
     {
-        ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            types:
-            [
-                typeof(ISettingsStore),
-                typeof(Action<AppLanguage>),
-                typeof(Action<AppThemeMode>),
-                typeof(Action),
-                typeof(Action<bool>),
-                typeof(Func<string, string>),
-                typeof(Func<SettingsProxyInformation>),
-                typeof(SettingsDiagnosticsViewModel),
-                typeof(IMihomoServiceController),
-                typeof(Action<AppAccentColorMode, string>),
-                typeof(Func<Uri, CancellationToken, Task<int>>),
-                typeof(Action),
-                typeof(Action),
-                typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
-                typeof(Func<AppAccentColorMode, string, bool>),
-                typeof(Action<string>),
-                typeof(Action<string, string, string, string>),
-            ],
-            modifiers: null);
-        Assert.NotNull(constructor);
-
-        return Assert.IsType<SettingsViewModel>(constructor.Invoke(
-        [
+        return new SettingsViewModel(
             new FakeSettingsStore(),
-            (Action<AppLanguage>)(_ => { }),
-            (Action<AppThemeMode>)(_ => { }),
+            _ => { },
+            _ => { },
             () => { },
-            (Action<bool>)(_ => { }),
-            (Func<string, string>)(key => key switch
+            _ => { },
+            key => key switch
             {
                 "Settings.ConnectionTest.Succeeded.Format" => "success {0}",
                 "Settings.ConnectionTest.Failed.Format" => "failed {0}",
@@ -1242,22 +1316,48 @@ public sealed class SettingsViewModelTests
                 "Settings.ConnectionTest.AllFailed" => "Settings.ConnectionTest.AllFailed",
                 "Settings.ConnectionTest.PartialPassed.Format" => "{0}/{1}",
                 _ => key,
-            }),
+            },
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
-            null,
-            null,
-            null,
-            testConnectionAsync,
-            (Action)(() => { }),
-            (Action)(() => { }),
-            (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
-            null,
-            (Action<string>)(_ => { }),
-            appendLog ?? ((_, _, _, _) => { }),
-        ]));
+            testConnectionAsync: testConnectionAsync,
+            resetAllSettings: () => { },
+            clearAllData: () => { },
+            checkStartupConflicts: _ => [],
+            notifyConnectionTestTimeout: _ => { },
+            appendLog: appendLog ?? ((_, _, _, _) => { }));
     }
 
     private sealed record LogEntry(string Level, string Category, string Message, string? Detail);
+
+    private static SettingsViewModel CreateRuntimeMutationViewModel(
+        FakeSettingsStore store,
+        Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
+        Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
+        IApplicationErrorSink? errorSink = null)
+    {
+        return new SettingsViewModel(
+            store,
+            _ => { },
+            _ => { },
+            () => { },
+            _ => { },
+            key => key,
+            () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            restartConnectionSamplingAsync: restartConnectionSamplingAsync,
+            applyLaunchAtStartupAsync: applyLaunchAtStartupAsync,
+            errorSink: errorSink);
+    }
+
+    private sealed class FakeApplicationErrorSink : IApplicationErrorSink
+    {
+        public List<ApplicationError> Errors { get; } = [];
+
+        public Task ReportAsync(ApplicationError applicationError, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Errors.Add(applicationError);
+            return Task.CompletedTask;
+        }
+    }
 
     private static SettingsViewModel CreateMaintenanceViewModel(
         FakeSettingsStore store,
@@ -1265,156 +1365,61 @@ public sealed class SettingsViewModelTests
         Action resetAllSettings,
         Action clearAllData)
     {
-        ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            types:
-            [
-                typeof(ISettingsStore),
-                typeof(Action<AppLanguage>),
-                typeof(Action<AppThemeMode>),
-                typeof(Action),
-                typeof(Action<bool>),
-                typeof(Func<string, string>),
-                typeof(Func<SettingsProxyInformation>),
-                typeof(SettingsDiagnosticsViewModel),
-                typeof(IMihomoServiceController),
-                typeof(Action<AppAccentColorMode, string>),
-                typeof(Func<Uri, CancellationToken, Task<int>>),
-                typeof(Action),
-                typeof(Action),
-                typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
-                typeof(Func<AppAccentColorMode, string, bool>),
-                typeof(Action<string>),
-                typeof(Action<string, string, string, string>),
-            ],
-            modifiers: null);
-        Assert.NotNull(constructor);
-
-        return Assert.IsType<SettingsViewModel>(constructor.Invoke(
-        [
+        return new SettingsViewModel(
             store,
             applyLanguage,
-            (Action<AppThemeMode>)(_ => { }),
+            _ => { },
             () => { },
-            (Action<bool>)(_ => { }),
-            (Func<string, string>)(key => key),
+            _ => { },
+            key => key,
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
-            null,
-            null,
-            null,
-            (Func<Uri, CancellationToken, Task<int>>)((_, _) => Task.FromResult(204)),
-            resetAllSettings,
-            clearAllData,
-            (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
-            null,
-            (Action<string>)(_ => { }),
-            (Action<string, string, string, string>)((_, _, _, _) => { }),
-        ]));
+            testConnectionAsync: (_, _) => Task.FromResult(204),
+            resetAllSettings: resetAllSettings,
+            clearAllData: clearAllData,
+            checkStartupConflicts: _ => [],
+            notifyConnectionTestTimeout: _ => { },
+            appendLog: (_, _, _, _) => { });
     }
 
     private static SettingsViewModel CreateStartupConflictViewModel(
         FakeSettingsStore store,
         Func<int, IReadOnlyList<StartupConflictIssue>> checkStartupConflicts)
     {
-        ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            types:
-            [
-                typeof(ISettingsStore),
-                typeof(Action<AppLanguage>),
-                typeof(Action<AppThemeMode>),
-                typeof(Action),
-                typeof(Action<bool>),
-                typeof(Func<string, string>),
-                typeof(Func<SettingsProxyInformation>),
-                typeof(SettingsDiagnosticsViewModel),
-                typeof(IMihomoServiceController),
-                typeof(Action<AppAccentColorMode, string>),
-                typeof(Func<Uri, CancellationToken, Task<int>>),
-                typeof(Action),
-                typeof(Action),
-                typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
-                typeof(Func<AppAccentColorMode, string, bool>),
-                typeof(Action<string>),
-                typeof(Action<string, string, string, string>),
-            ],
-            modifiers: null);
-        Assert.NotNull(constructor);
-
-        return Assert.IsType<SettingsViewModel>(constructor.Invoke(
-        [
+        return new SettingsViewModel(
             store,
-            (Action<AppLanguage>)(_ => { }),
-            (Action<AppThemeMode>)(_ => { }),
+            _ => { },
+            _ => { },
             () => { },
-            (Action<bool>)(_ => { }),
-            (Func<string, string>)(key => key),
+            _ => { },
+            key => key,
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
-            null,
-            null,
-            null,
-            (Func<Uri, CancellationToken, Task<int>>)((_, _) => Task.FromResult(204)),
-            (Action)(() => { }),
-            (Action)(() => { }),
-            checkStartupConflicts,
-            null,
-            (Action<string>)(_ => { }),
-            (Action<string, string, string, string>)((_, _, _, _) => { }),
-        ]));
+            testConnectionAsync: (_, _) => Task.FromResult(204),
+            resetAllSettings: () => { },
+            clearAllData: () => { },
+            checkStartupConflicts: checkStartupConflicts,
+            notifyConnectionTestTimeout: _ => { },
+            appendLog: (_, _, _, _) => { });
     }
 
     private static SettingsViewModel CreateAccentRestartViewModel(
         FakeSettingsStore store,
         Func<AppAccentColorMode, string, bool> isAccentColorRestartPending)
     {
-        ConstructorInfo? constructor = typeof(SettingsViewModel).GetConstructor(
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            types:
-            [
-                typeof(ISettingsStore),
-                typeof(Action<AppLanguage>),
-                typeof(Action<AppThemeMode>),
-                typeof(Action),
-                typeof(Action<bool>),
-                typeof(Func<string, string>),
-                typeof(Func<SettingsProxyInformation>),
-                typeof(SettingsDiagnosticsViewModel),
-                typeof(IMihomoServiceController),
-                typeof(Action<AppAccentColorMode, string>),
-                typeof(Func<Uri, CancellationToken, Task<int>>),
-                typeof(Action),
-                typeof(Action),
-                typeof(Func<int, IReadOnlyList<StartupConflictIssue>>),
-                typeof(Func<AppAccentColorMode, string, bool>),
-                typeof(Action<string>),
-                typeof(Action<string, string, string, string>),
-            ],
-            modifiers: null);
-        Assert.NotNull(constructor);
-
-        return Assert.IsType<SettingsViewModel>(constructor.Invoke(
-        [
+        return new SettingsViewModel(
             store,
-            (Action<AppLanguage>)(_ => { }),
-            (Action<AppThemeMode>)(_ => { }),
+            _ => { },
+            _ => { },
             () => { },
-            (Action<bool>)(_ => { }),
-            (Func<string, string>)(key => key),
+            _ => { },
+            key => key,
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
-            null,
-            null,
-            null,
-            (Func<Uri, CancellationToken, Task<int>>)((_, _) => Task.FromResult(204)),
-            (Action)(() => { }),
-            (Action)(() => { }),
-            (Func<int, IReadOnlyList<StartupConflictIssue>>)(_ => []),
-            isAccentColorRestartPending,
-            (Action<string>)(_ => { }),
-            (Action<string, string, string, string>)((_, _, _, _) => { }),
-        ]));
+            testConnectionAsync: (_, _) => Task.FromResult(204),
+            resetAllSettings: () => { },
+            clearAllData: () => { },
+            checkStartupConflicts: _ => [],
+            isAccentColorRestartPending: isAccentColorRestartPending,
+            notifyConnectionTestTimeout: _ => { },
+            appendLog: (_, _, _, _) => { });
     }
 
     /// <summary>Reads a view model property by name so the red test can specify a new binding contract before implementation.</summary>

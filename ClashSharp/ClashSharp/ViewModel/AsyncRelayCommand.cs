@@ -1,123 +1,181 @@
-/*
- * Async Relay Command
- * Provides shared asynchronous command routing for MVVM view models
- *
- * @author: WaterRun
- * @file: ViewModel/AsyncRelayCommand.cs
- * @date: 2026-06-17
- */
-
 #nullable enable
 
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using ClashSharp.ApplicationModel.Presentation;
 
 namespace ClashSharp.ViewModel;
 
-/// <summary>Command implementation that executes one asynchronous operation at a time.</summary>
+/// <summary>Command implementation that tracks one asynchronous operation at a time.</summary>
 /// <remarks>
-/// Invariants: At most one execution is active per command instance.
-/// Thread safety: Not thread-safe; intended for UI-thread command invocation.
-/// Side effects: Executes the supplied asynchronous delegate and raises command availability notifications.
+/// Explicit execution propagates failures to its caller. ICommand execution records unexpected
+/// failures and reports them through the injected application error sink.
 /// </remarks>
 internal sealed class AsyncRelayCommand : ObservableObject, ICommand
 {
-    /// <summary>Asynchronous execution callback invoked by <see cref="ExecuteAsync"/>.</summary>
     private readonly Func<object?, CancellationToken, Task> _executeAsync;
-
-    /// <summary>Optional availability predicate invoked by <see cref="CanExecute"/>.</summary>
     private readonly Func<bool>? _canExecute;
+    private readonly IApplicationErrorSink _errorSink;
+    private readonly string _operationName;
 
-    /// <summary>Tracks whether an asynchronous operation is currently running.</summary>
-    private bool _isRunning;
+    private int _executionState;
+    private Task? _executionTask;
+    private Exception? _lastError;
 
     /// <summary>Initializes an asynchronous relay command.</summary>
-    /// <param name="executeAsync">Asynchronous execution callback. Must not be null.</param>
-    /// <param name="canExecute">Optional availability predicate; null means only running state controls availability.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="executeAsync"/> is null.</exception>
-    public AsyncRelayCommand(Func<CancellationToken, Task> executeAsync, Func<bool>? canExecute = null)
-        : this((_, cancellationToken) => executeAsync(cancellationToken), canExecute)
+    public AsyncRelayCommand(
+        Func<CancellationToken, Task> executeAsync,
+        Func<bool>? canExecute = null,
+        IApplicationErrorSink? errorSink = null,
+        string? operationName = null)
+        : this(
+            (_, cancellationToken) => executeAsync(cancellationToken),
+            canExecute,
+            errorSink,
+            operationName)
     {
         ArgumentNullException.ThrowIfNull(executeAsync);
     }
 
     /// <summary>Initializes an asynchronous relay command with command-parameter support.</summary>
-    /// <param name="executeAsync">Asynchronous execution callback that receives the command parameter. Must not be null.</param>
-    /// <param name="canExecute">Optional availability predicate; null means only running state controls availability.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="executeAsync"/> is null.</exception>
-    public AsyncRelayCommand(Func<object?, CancellationToken, Task> executeAsync, Func<bool>? canExecute = null)
+    public AsyncRelayCommand(
+        Func<object?, CancellationToken, Task> executeAsync,
+        Func<bool>? canExecute = null,
+        IApplicationErrorSink? errorSink = null,
+        string? operationName = null)
     {
         _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
         _canExecute = canExecute;
+        _errorSink = errorSink ?? NullApplicationErrorSink.Instance;
+        _operationName = string.IsNullOrWhiteSpace(operationName)
+            ? "async-command"
+            : operationName;
     }
 
     /// <summary>Occurs when command availability may have changed.</summary>
-    /// <remarks>
-    /// The event fires synchronously on the caller's thread before and after asynchronous execution.
-    /// Reentrancy is possible when subscribers query command state from the handler.
-    /// Subscribers should unsubscribe when their lifetime is shorter than the command lifetime.
-    /// </remarks>
     public event EventHandler? CanExecuteChanged;
 
-    /// <summary>Gets whether the command is currently executing.</summary>
-    /// <value>True while an asynchronous operation is active; false by default and after completion.</value>
-    public bool IsRunning
+    /// <summary>Gets whether an asynchronous operation is active.</summary>
+    public bool IsRunning => Volatile.Read(ref _executionState) != 0;
+
+    /// <summary>Gets whether an asynchronous operation is active.</summary>
+    public bool IsBusy => IsRunning;
+
+    /// <summary>Gets the task created by the most recent ICommand invocation.</summary>
+    public Task? ExecutionTask
     {
-        get => _isRunning;
-        private set
-        {
-            if (SetProperty(ref _isRunning, value))
-            {
-                NotifyCanExecuteChanged();
-            }
-        }
+        get => _executionTask;
+        private set => SetProperty(ref _executionTask, value);
     }
 
-    /// <summary>Determines whether the command can execute.</summary>
-    /// <param name="parameter">Command parameter; ignored and may be null.</param>
-    /// <returns>True when no execution is running and the optional predicate allows execution; otherwise false.</returns>
+    /// <summary>Gets the most recent unexpected ICommand failure.</summary>
+    public Exception? LastError
+    {
+        get => _lastError;
+        private set => SetProperty(ref _lastError, value);
+    }
+
+    /// <inheritdoc />
     public bool CanExecute(object? parameter)
     {
         return !IsRunning && (_canExecute?.Invoke() ?? true);
     }
 
-    /// <summary>Starts command execution without awaiting completion.</summary>
-    /// <param name="parameter">Command parameter; ignored and may be null.</param>
+    /// <inheritdoc />
     public void Execute(object? parameter)
     {
-        _ = ExecuteAsync(parameter);
-    }
-
-    /// <summary>Executes the asynchronous command callback when the command is available.</summary>
-    /// <param name="parameter">Command parameter; ignored and may be null.</param>
-    /// <returns>A task that completes after the callback completes or immediately when execution is blocked.</returns>
-    /// <remarks>
-    /// Cancellation semantics: Uses <see cref="CancellationToken.None"/> because WinUI command invocation does not provide a token.
-    /// Thread / reentrancy: Reentrant calls complete immediately while an execution is active.
-    /// </remarks>
-    public async Task ExecuteAsync(object? parameter)
-    {
-        if (!CanExecute(parameter))
+        if (!TryBeginExecution())
         {
             return;
         }
 
+        LastError = null;
+        ExecutionTask = ExecuteObservedAsync(parameter);
+    }
+
+    /// <summary>Executes explicitly without caller cancellation.</summary>
+    public Task ExecuteAsync(object? parameter)
+    {
+        return ExecuteAsync(parameter, CancellationToken.None);
+    }
+
+    /// <summary>Executes explicitly and preserves callback failure and cancellation for the caller.</summary>
+    public Task ExecuteAsync(object? parameter, CancellationToken cancellationToken)
+    {
+        if (!TryBeginExecution())
+        {
+            return Task.CompletedTask;
+        }
+
+        return ExecuteStartedAsync(parameter, cancellationToken);
+    }
+
+    private async Task ExecuteStartedAsync(object? parameter, CancellationToken cancellationToken)
+    {
         try
         {
-            IsRunning = true;
-            await _executeAsync(parameter, CancellationToken.None);
+            await _executeAsync(parameter, cancellationToken);
         }
         finally
         {
-            IsRunning = false;
+            Interlocked.Exchange(ref _executionState, 0);
+            NotifyExecutionStateChanged();
         }
     }
 
-    /// <summary>Raises <see cref="CanExecuteChanged"/> to refresh command availability in bound controls.</summary>
+    /// <summary>Raises the command availability event.</summary>
     public void NotifyCanExecuteChanged()
     {
         CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task ExecuteObservedAsync(object? parameter)
+    {
+        try
+        {
+            await ExecuteStartedAsync(parameter, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            LastError = exception;
+            try
+            {
+                await _errorSink.ReportAsync(
+                    new ApplicationError(_operationName, exception),
+                    CancellationToken.None);
+            }
+            catch (Exception sinkException)
+            {
+                LastError = new AggregateException(exception, sinkException);
+            }
+        }
+    }
+
+    private bool TryBeginExecution()
+    {
+        if (_canExecute is not null && !_canExecute())
+        {
+            return false;
+        }
+
+        if (Interlocked.CompareExchange(ref _executionState, 1, 0) != 0)
+        {
+            return false;
+        }
+
+        NotifyExecutionStateChanged();
+        return true;
+    }
+
+    private void NotifyExecutionStateChanged()
+    {
+        OnPropertyChanged(nameof(IsRunning));
+        OnPropertyChanged(nameof(IsBusy));
+        NotifyCanExecuteChanged();
     }
 }

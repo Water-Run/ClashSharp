@@ -19,6 +19,8 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Input;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -280,7 +282,7 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
         string typeText,
         bool isToggleVisible = false,
         bool isToggleOn = false,
-        RelayCommand? tileCommand = null)
+        ICommand? tileCommand = null)
     {
         Id = id ?? throw new ArgumentNullException(nameof(id));
         Title = title ?? throw new ArgumentNullException(nameof(title));
@@ -306,7 +308,7 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
 
     public bool IsToggleVisible { get; }
 
-    public RelayCommand? TileCommand { get; }
+    public ICommand? TileCommand { get; }
 
     public string Value
     {
@@ -436,6 +438,12 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Shared application action dispatcher used by functional tiles.</summary>
     private readonly IApplicationActionDispatcher _actions;
 
+    private readonly AsyncRelayCommand _toggleTransparentProxyCommand;
+
+    private readonly AsyncRelayCommand _toggleStartupLaunchCommand;
+
+    private readonly AsyncRelayCommand _toggleConnectionSamplingCommand;
+
     private readonly IMasterHeroStatusLayoutService _heroStatusLayout;
 
     private readonly Func<DateTimeOffset> _getNow;
@@ -454,6 +462,8 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="TransparentProxyStatusText"/>.</summary>
     private string _transparentProxyStatusText = string.Empty;
+
+    private string _operationErrorText = string.Empty;
 
     /// <summary>Backing field for <see cref="CurrentNodeText"/>.</summary>
     private string _currentNodeText = string.Empty;
@@ -510,7 +520,8 @@ internal sealed class MasterControlViewModel : ObservableObject
         IApplicationActionDispatcher? actions = null,
         Func<ClashSharpMode, Task>? modeApplied = null,
         IMasterHeroStatusLayoutService? heroStatusLayout = null,
-        Func<DateTimeOffset>? getNow = null)
+        Func<DateTimeOffset>? getNow = null,
+        IApplicationErrorSink? errorSink = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -526,12 +537,40 @@ internal sealed class MasterControlViewModel : ObservableObject
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         _selectedMode = _settings.CurrentMode;
         _heroStatusOptions = BuildHeroStatusOptions();
+        IApplicationErrorSink commandErrors = errorSink ?? NullApplicationErrorSink.Instance;
 
-        DisabledModeCommand = new AsyncRelayCommand(token => ApplyModeAsync(ClashSharpMode.Disabled, token));
-        StandbyModeCommand = new AsyncRelayCommand(token => ApplyModeAsync(ClashSharpMode.Standby, token));
-        RuleTakeoverModeCommand = new AsyncRelayCommand(token => ApplyModeAsync(ClashSharpMode.RuleTakeover, token));
-        FullTakeoverModeCommand = new AsyncRelayCommand(token => ApplyModeAsync(ClashSharpMode.FullTakeover, token));
-        LoadCommand = new AsyncRelayCommand(LoadAsync);
+        DisabledModeCommand = new AsyncRelayCommand(
+            token => ApplyModeAsync(ClashSharpMode.Disabled, token),
+            errorSink: commandErrors,
+            operationName: "master-mode-disabled");
+        StandbyModeCommand = new AsyncRelayCommand(
+            token => ApplyModeAsync(ClashSharpMode.Standby, token),
+            errorSink: commandErrors,
+            operationName: "master-mode-standby");
+        RuleTakeoverModeCommand = new AsyncRelayCommand(
+            token => ApplyModeAsync(ClashSharpMode.RuleTakeover, token),
+            errorSink: commandErrors,
+            operationName: "master-mode-rule-takeover");
+        FullTakeoverModeCommand = new AsyncRelayCommand(
+            token => ApplyModeAsync(ClashSharpMode.FullTakeover, token),
+            errorSink: commandErrors,
+            operationName: "master-mode-full-takeover");
+        LoadCommand = new AsyncRelayCommand(
+            LoadAsync,
+            errorSink: commandErrors,
+            operationName: "master-load");
+        _toggleTransparentProxyCommand = new AsyncRelayCommand(
+            ToggleTransparentProxyAsync,
+            errorSink: commandErrors,
+            operationName: "master-transparent-proxy-setting");
+        _toggleStartupLaunchCommand = new AsyncRelayCommand(
+            ToggleStartupLaunchAsync,
+            errorSink: commandErrors,
+            operationName: "master-startup-launch-setting");
+        _toggleConnectionSamplingCommand = new AsyncRelayCommand(
+            ToggleConnectionSamplingAsync,
+            errorSink: commandErrors,
+            operationName: "master-connection-sampling-setting");
 
         CoreStatusText = string.Empty;
         SystemProxyStatusText = string.Empty;
@@ -705,6 +744,20 @@ internal sealed class MasterControlViewModel : ObservableObject
         private set => SetProperty(ref _transparentProxyStatusText, value);
     }
 
+    public string OperationErrorText
+    {
+        get => _operationErrorText;
+        private set
+        {
+            if (SetProperty(ref _operationErrorText, value))
+            {
+                OnPropertyChanged(nameof(HasOperationError));
+            }
+        }
+    }
+
+    public bool HasOperationError => !string.IsNullOrWhiteSpace(OperationErrorText);
+
     public string CurrentNodeText
     {
         get => _currentNodeText;
@@ -798,6 +851,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         string baselineSystemProxyStatus = SystemProxyStatusText;
         string baselineTransparentProxyStatus = TransparentProxyStatusText;
         bool baselineCoreAvailable = _isCoreAvailable;
+        OperationErrorText = string.Empty;
         try
         {
             NetworkTakeoverResult result = await _takeover
@@ -816,16 +870,55 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
-            SelectedMode = baselineMode;
-            CoreStatusText = baselineCoreStatus;
-            SystemProxyStatusText = baselineSystemProxyStatus;
-            TransparentProxyStatusText = baselineTransparentProxyStatus;
-            _isCoreAvailable = baselineCoreAvailable;
+            RestoreModePresentation(
+                baselineMode,
+                baselineCoreStatus,
+                baselineSystemProxyStatus,
+                baselineTransparentProxyStatus,
+                baselineCoreAvailable);
+            OperationErrorText = _localization.GetString("Master.Log.ApplyModeFailed");
             _log.Append("Error", "MasterControl", _localization.GetString("Master.Log.ApplyModeFailed"), exception.Message);
         }
+        catch (OperationCanceledException)
+        {
+            RestoreModePresentation(
+                baselineMode,
+                baselineCoreStatus,
+                baselineSystemProxyStatus,
+                baselineTransparentProxyStatus,
+                baselineCoreAvailable);
+            throw;
+        }
+        catch
+        {
+            RestoreModePresentation(
+                baselineMode,
+                baselineCoreStatus,
+                baselineSystemProxyStatus,
+                baselineTransparentProxyStatus,
+                baselineCoreAvailable);
+            OperationErrorText = _localization.GetString("Application.UnexpectedError");
+            throw;
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(BasicStatusText));
+            RefreshTileValues();
+        }
+    }
 
-        OnPropertyChanged(nameof(BasicStatusText));
-        RefreshTileValues();
+    private void RestoreModePresentation(
+        ClashSharpMode mode,
+        string coreStatus,
+        string systemProxyStatus,
+        string transparentProxyStatus,
+        bool isCoreAvailable)
+    {
+        SelectedMode = mode;
+        CoreStatusText = coreStatus;
+        SystemProxyStatusText = systemProxyStatus;
+        TransparentProxyStatusText = transparentProxyStatus;
+        _isCoreAvailable = isCoreAvailable;
     }
 
     public void SetHeroStatusSlot(int slotIndex, MasterHeroStatusItemKind kind)
@@ -1167,31 +1260,79 @@ internal sealed class MasterControlViewModel : ObservableObject
         OnPropertyChanged(nameof(VisibleInfoTiles));
     }
 
-    private void ToggleTransparentProxy()
+    private async Task ToggleTransparentProxyAsync(CancellationToken cancellationToken)
     {
-        bool nextValue = !_settings.TransparentProxyEnabled;
-        _settings.TransparentProxyEnabled = nextValue;
-        _ = _actions.DispatchAsync(ApplicationActionKind.SetTransparentProxy, nextValue.ToString(), CancellationToken.None);
-        TransparentProxyStatusText = _settings.TransparentProxyEnabled
-            ? _localization.GetString("Master.Status.Standby")
-            : _localization.GetString("Master.Status.Off");
-        RefreshTileValues();
+        bool baseline = _settings.TransparentProxyEnabled;
+        bool desired = !baseline;
+        OperationErrorText = string.Empty;
+        try
+        {
+            await _actions.DispatchAsync(
+                ApplicationActionKind.SetTransparentProxy,
+                desired.ToString(),
+                cancellationToken);
+            _settings.TransparentProxyEnabled = desired;
+            TransparentProxyStatusText = desired
+                ? _localization.GetString("Master.Status.Standby")
+                : _localization.GetString("Master.Status.Off");
+        }
+        catch
+        {
+            _settings.TransparentProxyEnabled = baseline;
+            TransparentProxyStatusText = baseline
+                ? _localization.GetString("Master.Status.Standby")
+                : _localization.GetString("Master.Status.Off");
+            OperationErrorText = _localization.GetString("Application.UnexpectedError");
+            throw;
+        }
+        finally
+        {
+            RefreshTileValues();
+        }
     }
 
-    private void ToggleStartupLaunch()
+    private async Task ToggleStartupLaunchAsync(CancellationToken cancellationToken)
     {
-        bool nextValue = !_settings.LaunchAtStartupEnabled;
-        _settings.LaunchAtStartupEnabled = nextValue;
-        _ = _actions.DispatchAsync(ApplicationActionKind.SetLaunchAtStartup, nextValue.ToString(), CancellationToken.None);
-        RefreshTileValues();
+        await ToggleSettingAsync(
+            ApplicationActionKind.SetLaunchAtStartup,
+            () => _settings.LaunchAtStartupEnabled,
+            value => _settings.LaunchAtStartupEnabled = value,
+            cancellationToken);
     }
 
-    private void ToggleConnectionSampling()
+    private async Task ToggleConnectionSamplingAsync(CancellationToken cancellationToken)
     {
-        bool nextValue = !_settings.ConnectionSamplingEnabled;
-        _settings.ConnectionSamplingEnabled = nextValue;
-        _ = _actions.DispatchAsync(ApplicationActionKind.SetConnectionSampling, nextValue.ToString(), CancellationToken.None);
-        RefreshTileValues();
+        await ToggleSettingAsync(
+            ApplicationActionKind.SetConnectionSampling,
+            () => _settings.ConnectionSamplingEnabled,
+            value => _settings.ConnectionSamplingEnabled = value,
+            cancellationToken);
+    }
+
+    private async Task ToggleSettingAsync(
+        ApplicationActionKind kind,
+        Func<bool> getValue,
+        Action<bool> setValue,
+        CancellationToken cancellationToken)
+    {
+        bool baseline = getValue();
+        bool desired = !baseline;
+        OperationErrorText = string.Empty;
+        try
+        {
+            await _actions.DispatchAsync(kind, desired.ToString(), cancellationToken);
+            setValue(desired);
+        }
+        catch
+        {
+            setValue(baseline);
+            OperationErrorText = _localization.GetString("Application.UnexpectedError");
+            throw;
+        }
+        finally
+        {
+            RefreshTileValues();
+        }
     }
 
     private void ToggleUrlBlocking()
@@ -1453,7 +1594,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         bool IsToggleVisible = false,
         bool IsToggleOn = false,
         bool IsVisibleByDefault = true,
-        RelayCommand? Command = null);
+        ICommand? Command = null);
 
     private static class MasterTileCatalog
     {
@@ -1474,10 +1615,10 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTile("memory-usage", "MemoryUsage", "\uE950", infoType, isVisibleByDefault: false),
                 owner.CreateTile("mihomo-version", "MihomoVersion", "\uE950", infoType, isVisibleByDefault: false),
                 owner.CreateTile("system-proxy", "SystemProxy", "\uE968", infoType, isVisibleByDefault: false),
-                owner.CreateTile("transparent-proxy", "TransparentProxy", "\uE8A7", controllableType, true, owner._settings.TransparentProxyEnabled, command: owner.ToggleTransparentProxy),
+                owner.CreateTile("transparent-proxy", "TransparentProxy", "\uE8A7", controllableType, true, owner._settings.TransparentProxyEnabled, trackedCommand: owner._toggleTransparentProxyCommand),
                 owner.CreateTile("latency", "Latency", "\uEC4A", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.RunLatencyTest)),
-                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, isVisibleByDefault: false, command: owner.ToggleStartupLaunch),
-                owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, isVisibleByDefault: false, command: owner.ToggleConnectionSampling),
+                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, isVisibleByDefault: false, trackedCommand: owner._toggleStartupLaunchCommand),
+                owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, isVisibleByDefault: false, trackedCommand: owner._toggleConnectionSamplingCommand),
                 owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, isVisibleByDefault: false, command: owner.ToggleUrlBlocking),
                 owner.CreateTile("active-profile", "ActiveProfile", "\uE8A5", infoType),
                 owner.CreateTile("port", "Port", "\uE839", infoType, isVisibleByDefault: false),
@@ -1536,7 +1677,8 @@ internal sealed class MasterControlViewModel : ObservableObject
         bool isToggleVisible = false,
         bool isToggleOn = false,
         bool isVisibleByDefault = true,
-        Action? command = null)
+        Action? command = null,
+        ICommand? trackedCommand = null)
     {
         return new MasterTileDefinition(
             id,
@@ -1547,7 +1689,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             isToggleVisible,
             isToggleOn,
             isVisibleByDefault,
-            command is null ? null : new RelayCommand(command));
+            trackedCommand ?? (command is null ? null : new RelayCommand(command)));
     }
 
     private MasterTileDefinition CreateTileFromKeys(

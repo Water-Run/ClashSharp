@@ -17,6 +17,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using ClashSharp.Components;
+using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -53,6 +54,7 @@ public sealed partial class Settings : Page
     /// <summary>Initializes the settings page and applies localized text.</summary>
     public Settings()
     {
+        SettingsRuntimeMutationAdapter runtimeMutations = SettingsRuntimeMutationAdapter.CreateDefault();
         SettingsDiagnosticsViewModel diagnosticsViewModel = new(
             new WindowsDiagnosticsClient(WindowsNetworkDiagnosticService.Instance),
             new DiagnosticsLog(LogStorageService.Instance),
@@ -61,8 +63,8 @@ public sealed partial class Settings : Page
             new AppSettingsStore(AppSettingsService.Instance),
             language => LocalizationService.Instance.CurrentLanguage = language,
             AppThemeService.Apply,
-            ConnectionSamplingService.Instance.RestartFromSettings,
-            isEnabled => _ = StartupLaunchService.Instance.SetEnabledAsync(isEnabled),
+            () => { },
+            _ => { },
             LocalizationService.Instance.GetString,
             SettingsProxyInformationAdapter.CreateSnapshot,
             diagnosticsViewModel,
@@ -73,7 +75,10 @@ public sealed partial class Settings : Page
             checkStartupConflicts: StartupConflictDetectionService.Instance.CheckConflicts,
             isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending,
             notifyConnectionTestTimeout: NotificationService.Instance.NotifyConnectionTestTimeout,
-            appendLog: LogStorageService.Instance.AppendLog);
+            appendLog: LogStorageService.Instance.AppendLog,
+            restartConnectionSamplingAsync: runtimeMutations.RestartConnectionSamplingAsync,
+            applyLaunchAtStartupAsync: runtimeMutations.ApplyLaunchAtStartupAsync,
+            errorSink: ApplicationErrorSink.CreateDefault());
         InitializeComponent();
         DataContext = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -902,9 +907,8 @@ public sealed partial class Settings : Page
         LocalizationService.Instance.CurrentLanguage = settings.DisplayLanguage;
         AppThemeService.Apply(settings.AppThemeMode);
         AppThemeService.ApplyAccentColor(settings.AppAccentColorMode, settings.AppAccentColorValue);
-        _ = StartupLaunchService.Instance.SetEnabledAsync(settings.LaunchAtStartupEnabled);
-        ConnectionSamplingService.Instance.RestartFromSettings();
         _viewModel.Load();
+        _viewModel.ReapplyRuntimeSettings();
     }
 
     /// <summary>Associates a WinUI picker with the application window so it can be shown from unpackaged desktop context.</summary>

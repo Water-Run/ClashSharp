@@ -7,6 +7,7 @@
  * @date: 2026-06-17
  */
 
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -202,7 +203,38 @@ public sealed class MasterControlViewModelTests
 
         Assert.Equal(ClashSharpMode.Disabled, viewModel.SelectedMode);
         Assert.Equal(string.Empty, viewModel.CoreStatusText);
+        Assert.Equal("Mode failed", viewModel.OperationErrorText);
         Assert.Contains(log.Entries, entry => entry.Level == "Error" && entry.Detail == "missing core");
+    }
+
+    /// <summary>Verifies post-apply publication failures cannot leave optimistic mode presentation behind.</summary>
+    [Fact]
+    public async Task ModeCommand_WhenResultPublicationFails_RestoresPresentationAndReportsError()
+    {
+        FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.Disabled };
+        FakeMasterTakeover takeover = new()
+        {
+            Result = new NetworkTakeoverResult(ClashSharpMode.FullTakeover, true, true, true, "applied"),
+        };
+        HttpRequestException failure = new("publication failed");
+        FakeApplicationErrorSink errorSink = new();
+        MasterControlViewModel viewModel = CreateViewModel(
+            settings: settings,
+            takeover: takeover,
+            modeApplied: _ => Task.FromException(failure),
+            errorSink: errorSink);
+
+        viewModel.FullTakeoverModeCommand.Execute(null);
+        await Assert.IsAssignableFrom<Task>(viewModel.FullTakeoverModeCommand.ExecutionTask);
+
+        Assert.Equal(ClashSharpMode.Disabled, viewModel.SelectedMode);
+        Assert.Equal(string.Empty, viewModel.CoreStatusText);
+        Assert.Equal(string.Empty, viewModel.SystemProxyStatusText);
+        Assert.Equal(string.Empty, viewModel.TransparentProxyStatusText);
+        Assert.Equal("Unexpected error", viewModel.OperationErrorText);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Equal("master-mode-full-takeover", error.OperationName);
+        Assert.Same(failure, error.Exception);
     }
 
     /// <summary>Verifies the redesigned master control exposes information tiles without mixing in editor commands.</summary>
@@ -324,17 +356,46 @@ public sealed class MasterControlViewModelTests
 
     /// <summary>Verifies the transparent-proxy tile toggle persists through the settings boundary.</summary>
     [Fact]
-    public void ToggleTransparentProxyCommand_UpdatesSettingsAndTile()
+    public async Task ToggleTransparentProxyCommand_UpdatesSettingsAndTile()
     {
         FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
         MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "transparent-proxy");
 
         tile.TileCommand?.Execute(null);
+        await Assert.IsAssignableFrom<AsyncRelayCommand>(tile.TileCommand).ExecutionTask!;
 
         Assert.False(settings.TransparentProxyEnabled);
         Assert.False(tile.IsToggleOn);
         Assert.Equal("Off", viewModel.TransparentProxyStatusText);
+    }
+
+    /// <summary>Verifies failed tile mutations restore the applied setting and surface one tracked error.</summary>
+    [Fact]
+    public async Task ToggleTransparentProxyCommand_WhenDispatchFails_RestoresAppliedState()
+    {
+        FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
+        InvalidOperationException failure = new("dispatch failed");
+        FakeApplicationActionDispatcher actions = new() { ExceptionToThrow = failure };
+        FakeApplicationErrorSink errorSink = new();
+        MasterControlViewModel viewModel = CreateViewModel(
+            settings: settings,
+            actions: actions,
+            errorSink: errorSink);
+        MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "transparent-proxy");
+        AsyncRelayCommand command = Assert.IsAssignableFrom<AsyncRelayCommand>(tile.TileCommand);
+
+        command.Execute(null);
+        await Assert.IsAssignableFrom<Task>(command.ExecutionTask);
+
+        Assert.True(settings.TransparentProxyEnabled);
+        Assert.True(tile.IsToggleOn);
+        Assert.Equal("Standby", viewModel.TransparentProxyStatusText);
+        Assert.Equal("Unexpected error", viewModel.OperationErrorText);
+        Assert.True(viewModel.HasOperationError);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Equal("master-transparent-proxy-setting", error.OperationName);
+        Assert.Same(failure, error.Exception);
     }
 
     /// <summary>Verifies functional tiles request page-level actions without directly owning dialogs.</summary>
@@ -370,7 +431,10 @@ public sealed class MasterControlViewModelTests
         FakeMasterTrayStatus? trayStatus = null,
         FakeMasterRuntime? runtime = null,
         FakeMasterHeroStatusLayoutService? heroStatusLayout = null,
-        Func<DateTimeOffset>? getNow = null)
+        Func<DateTimeOffset>? getNow = null,
+        IApplicationActionDispatcher? actions = null,
+        IApplicationErrorSink? errorSink = null,
+        Func<ClashSharpMode, Task>? modeApplied = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -381,8 +445,11 @@ public sealed class MasterControlViewModelTests
             log ?? new FakeMasterLog(),
             trayStatus ?? new FakeMasterTrayStatus(),
             runtime ?? new FakeMasterRuntime(),
+            actions: actions,
+            modeApplied: modeApplied,
             heroStatusLayout: heroStatusLayout ?? new FakeMasterHeroStatusLayoutService(),
-            getNow: getNow);
+            getNow: getNow,
+            errorSink: errorSink);
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>
@@ -593,8 +660,37 @@ public sealed class MasterControlViewModelTests
                 "Master.Status.CoreStartFailed" => "Core failed",
                 "Master.Status.Unavailable" => "Unavailable",
                 "Master.Status.Standby" => "Standby",
+                "Application.UnexpectedError" => "Unexpected error",
                 _ => key,
             };
+        }
+    }
+
+    private sealed class FakeApplicationActionDispatcher : IApplicationActionDispatcher
+    {
+        public Exception? ExceptionToThrow { get; set; }
+
+        public Task DispatchAsync(
+            ApplicationActionKind kind,
+            string value,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ExceptionToThrow is null
+                ? Task.CompletedTask
+                : Task.FromException(ExceptionToThrow);
+        }
+    }
+
+    private sealed class FakeApplicationErrorSink : IApplicationErrorSink
+    {
+        public List<ApplicationError> Errors { get; } = [];
+
+        public Task ReportAsync(ApplicationError applicationError, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Errors.Add(applicationError);
+            return Task.CompletedTask;
         }
     }
 

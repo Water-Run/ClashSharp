@@ -62,7 +62,8 @@ public sealed partial class MasterControl : Page
             new MasterControlTrayStatusAdapter(TrayStatusService.Instance),
             new MasterControlRuntimeAdapter(),
             ApplicationActionService.Instance,
-            OnModeAppliedAsync);
+            OnModeAppliedAsync,
+            errorSink: ApplicationErrorSink.CreateDefault());
 
         InitializeComponent();
         DataContext = _viewModel;

@@ -21,6 +21,13 @@
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="SettingsContentPanel" Spacing="6" HorizontalAlignment="Stretch">
             <InfoBar
+                Message="{Binding OperationErrorText}"
+                Severity="Error"
+                IsClosable="False"
+                IsOpen="{Binding HasOperationError, Mode=OneWay}"
+                Visibility="{Binding HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+            <InfoBar
                 x:Name="SettingsRestartRequiredNoticeText"
                 Title="{Binding RestartRequiredTitleText}"
                 Message="{Binding RestartRequiredNoticeText}"
