@@ -366,6 +366,46 @@ public sealed partial class SqliteTriggerRepository
         return new ReadOnlyCollection<TriggerOutboxAction>(actions);
     }
 
+    private static async Task<IReadOnlyList<TriggerOutboxAction>> ReadExecutionActionsCoreAsync(
+        SqliteConnection connection,
+        Guid executionId,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = CreateCommand(
+            connection,
+            null,
+            """
+            SELECT task_revision, action_index, idempotency_key,
+                   action_kind, parameters_json, state, attempt_count, last_error
+            FROM trigger_outbox
+            WHERE execution_id = $executionId
+            ORDER BY action_index;
+            """);
+        command.Parameters.AddWithValue("$executionId", executionId.ToString("N"));
+        List<TriggerOutboxAction> actions = [];
+        await using SqliteDataReader reader =
+            await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            TriggerActionKind actionKind = (TriggerActionKind)reader.GetInt32(3);
+            actions.Add(new TriggerOutboxAction(
+                executionId,
+                reader.GetInt64(0),
+                reader.GetInt32(1),
+                reader.GetString(2),
+                new TriggerAction(
+                    actionKind,
+                    TriggerDefinitionCodec.DeserializeActionParameters(
+                        actionKind,
+                        reader.GetString(4))),
+                (TriggerOutboxState)reader.GetInt32(5),
+                reader.GetInt32(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7)));
+        }
+
+        return new ReadOnlyCollection<TriggerOutboxAction>(actions);
+    }
+
     private static async Task ValidateDurableRowsAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,

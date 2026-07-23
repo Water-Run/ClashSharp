@@ -18,7 +18,7 @@ namespace ClashSharp.Hosting.Compatibility;
 /// Adapts the existing synchronous network services to the staged durable network contract.
 /// This is the sole compatibility boundary allowed to call the legacy takeover implementation.
 /// </summary>
-internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
+internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetworkStateObserver
 {
     private readonly AppSettingsService _settings;
     private readonly NetworkTakeoverService _takeover;
@@ -84,6 +84,12 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter
             baselineHash,
             desiredHash,
             compensationData);
+    }
+
+    public Task<NetworkStateSnapshot> ObserveAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Observe().Snapshot);
     }
 
     public Task<NetworkPlan> RestorePlanAsync(MutationJournal journal, CancellationToken cancellationToken)

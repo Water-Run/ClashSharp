@@ -41,6 +41,8 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IMutationJournalStore>(_ => new FileMutationJournalStore(
                 RecoveryRootPolicy.GetDefaultRootPath()));
             services.AddSingleton<INetworkStateAdapter, LegacyNetworkStateAdapter>();
+            services.AddSingleton<INetworkStateObserver>(provider =>
+                (INetworkStateObserver)provider.GetRequiredService<INetworkStateAdapter>());
             services.AddSingleton<INetworkStateCommitter, LegacyNetworkStateCommitter>();
             services.AddSingleton<IMutationRecoveryPlanResolver, NetworkMutationRecoveryPlanResolver>();
             services.AddSingleton<ApplicationMutationCoordinator>();

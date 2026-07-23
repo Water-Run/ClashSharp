@@ -272,7 +272,13 @@ public sealed partial class SqliteTriggerRepository
             transaction,
             transition.ExecutionId,
             cancellationToken).ConfigureAwait(false);
+        await _faultInjector.InjectAsync(
+            TriggerPersistenceFaultPoint.BeforeOutboxTransitionCommit,
+            cancellationToken).ConfigureAwait(false);
         transaction.Commit();
+        await _faultInjector.InjectAsync(
+            TriggerPersistenceFaultPoint.AfterOutboxTransitionCommit,
+            cancellationToken).ConfigureAwait(false);
         return TriggerPersistenceResult.Succeeded(new TriggerOutboxAction(
             current.ExecutionId,
             current.TaskRevision,

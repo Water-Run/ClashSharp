@@ -57,6 +57,28 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
             cancellationToken);
     }
 
+    /// <summary>Executes a non-shutdown network transition using an already-owned ordinary admission lease.</summary>
+    /// <param name="intent">Validated desired network state.</param>
+    /// <param name="admissionLease">Active ordinary admission lease owned by the process mutation barrier.</param>
+    /// <param name="cancellationToken">Cancels pre-side-effect work or mutation-gate waiting.</param>
+    /// <returns>A durable mutation outcome containing verified effective state on success.</returns>
+    public Task<MutationResult<NetworkTransitionResult>> ApplyAdmittedAsync(
+        NetworkIntent intent,
+        MutationAdmissionLease admissionLease,
+        CancellationToken cancellationToken)
+    {
+        NetworkIntent.Validate(intent);
+        ArgumentNullException.ThrowIfNull(admissionLease);
+        if (intent.Kind == NetworkIntentKind.Shutdown)
+        {
+            throw new ArgumentException(
+                "Shutdown network intents require the drained shutdown path.",
+                nameof(intent));
+        }
+
+        return ApplyWithAdmissionAsync(intent, admissionLease, cancellationToken);
+    }
+
     /// <inheritdoc />
     public Task<MutationResult<NetworkTransitionResult>> ApplyShutdownAsync(
         NetworkIntent intent,
@@ -69,10 +91,18 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
             throw new ArgumentException("The runtime shutdown path requires a shutdown network intent.", nameof(intent));
         }
 
+        return ApplyWithAdmissionAsync(intent, admissionLease, cancellationToken);
+    }
+
+    private Task<MutationResult<NetworkTransitionResult>> ApplyWithAdmissionAsync(
+        NetworkIntent intent,
+        MutationAdmissionLease admissionLease,
+        CancellationToken cancellationToken)
+    {
         if (_mutations is not IAdmittedApplicationMutationCoordinator admittedMutations)
         {
             throw new InvalidOperationException(
-                "The configured mutation coordinator does not support pre-drained shutdown admission.");
+                "The configured mutation coordinator does not support pre-owned mutation admission.");
         }
 
         NetworkMutationParticipant? participant = null;
@@ -92,7 +122,7 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
                 token.ThrowIfCancellationRequested();
                 return Task.FromResult(
                     participant?.CreateResult()
-                    ?? throw new InvalidOperationException("The shutdown network participant was not created."));
+                    ?? throw new InvalidOperationException("The network mutation participant was not created."));
             },
             cancellationToken);
     }

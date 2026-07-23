@@ -266,19 +266,19 @@ Run concurrency tests ten times and commit `feat: serialize trigger evaluation`.
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Triggers/TriggerActionExecutorTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/TriggerOutboxRecoveryTests.cs`
 
-- [ ] **Step 1: Write RED action-state tests**
+- [x] **Step 1: Write RED action-state tests**
 
 Cover every current action and every legal state transition. State-setting actions probe desired final state before retry; connection close is safe to repeat; notifications deduplicate by execution/action ID; a failed retry remains diagnosable; `Uncertain` blocks later actions; an unsupported non-idempotent action is rejected at definition validation.
 
-- [ ] **Step 2: Implement ordered outbox processing**
+- [x] **Step 2: Implement ordered outbox processing**
 
 Transition `Pending → Running` before dispatch and commit a verified terminal state afterward. On startup, reconcile `Pending/Running` against external final state before retry. Continue only after `Succeeded`; stop on `Failed`, `HandedOff`, or `Uncertain` according to the typed policy.
 
-- [ ] **Step 3: Add crash-cut coverage**
+- [x] **Step 3: Add crash-cut coverage**
 
 Terminate before dispatch, after external effect, and before/after each action-state commit. Restart and prove no duplicate effective notification/state change and no silently lost later action.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Run outbox recovery repeatedly and commit `feat: reconcile trigger action outbox`.
 

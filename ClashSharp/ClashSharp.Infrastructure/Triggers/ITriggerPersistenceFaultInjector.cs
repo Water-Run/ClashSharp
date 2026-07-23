@@ -35,6 +35,12 @@ public enum TriggerPersistenceFaultPoint
 
     /// <summary>Immediately after a state-only latch transaction commits.</summary>
     AfterStateCommit = 10,
+
+    /// <summary>Immediately before an outbox-state transition transaction commits.</summary>
+    BeforeOutboxTransitionCommit = 11,
+
+    /// <summary>Immediately after an outbox-state transition transaction commits.</summary>
+    AfterOutboxTransitionCommit = 12,
 }
 
 /// <summary>Injects deterministic failures at durable trigger persistence boundaries.</summary>

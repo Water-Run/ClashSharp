@@ -163,6 +163,11 @@ public interface ITriggerRepository
     Task<TriggerPersistenceResult<IReadOnlyList<TriggerOutboxAction>>> ReadRecoverableActionsAsync(
         CancellationToken cancellationToken);
 
+    /// <summary>Reads the complete ordered outbox, including terminal actions, for one execution.</summary>
+    Task<TriggerPersistenceResult<IReadOnlyList<TriggerOutboxAction>>> ReadExecutionActionsAsync(
+        Guid executionId,
+        CancellationToken cancellationToken);
+
     /// <summary>Optimistically transitions one durable outbox action.</summary>
     Task<TriggerPersistenceResult<TriggerOutboxAction>> TransitionOutboxAsync(
         TriggerOutboxTransition transition,

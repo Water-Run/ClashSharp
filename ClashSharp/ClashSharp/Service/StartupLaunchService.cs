@@ -9,6 +9,7 @@
 
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ClashSharp.Service;
@@ -75,6 +76,24 @@ internal sealed partial class StartupLaunchService
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
+    /// <summary>Reads the actual packaged startup-task state for durable action reconciliation.</summary>
+    /// <returns>The observed state, or null when the platform state cannot be established.</returns>
+    public async Task<StartupLaunchTaskState?> TryGetStateAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            IStartupLaunchTask startupTask = await _taskProvider.GetAsync(TaskId).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return startupTask.State;
+        }
+        catch (Exception exception) when (IsPlatformFailure(exception))
+        {
+            AppendUpdateFailure(exception);
+            return null;
+        }
+    }
+
     /// <summary>Requests the startup task state to match <paramref name="isEnabled"/>.</summary>
     public async Task SetEnabledAsync(bool isEnabled)
     {
@@ -96,10 +115,23 @@ internal sealed partial class StartupLaunchService
                 startupTask.Disable();
             }
         }
-        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException or ArgumentException or COMException)
+        catch (Exception exception) when (IsPlatformFailure(exception))
         {
-            _log.AppendLog("Warning", "StartupLaunch", GetString("StartupLaunch.UpdateFailed"), exception.Message);
+            AppendUpdateFailure(exception);
         }
+    }
+
+    private static bool IsPlatformFailure(Exception exception)
+    {
+        return exception is InvalidOperationException or
+            UnauthorizedAccessException or
+            ArgumentException or
+            COMException;
+    }
+
+    private void AppendUpdateFailure(Exception exception)
+    {
+        _log.AppendLog("Warning", "StartupLaunch", GetString("StartupLaunch.UpdateFailed"), exception.Message);
     }
 
     private string GetString(string key)

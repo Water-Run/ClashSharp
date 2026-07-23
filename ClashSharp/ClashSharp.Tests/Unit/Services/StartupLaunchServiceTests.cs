@@ -14,6 +14,36 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for launch-at-startup synchronization.</summary>
 public sealed class StartupLaunchServiceTests
 {
+    /// <summary>Verifies reconciliation can inspect the actual packaged startup-task state.</summary>
+    [Theory]
+    [InlineData((int)StartupLaunchTaskState.Disabled)]
+    [InlineData((int)StartupLaunchTaskState.Enabled)]
+    [InlineData((int)StartupLaunchTaskState.Other)]
+    public async Task TryGetStateAsync_ReturnsObservedPlatformState(int stateValue)
+    {
+        StartupLaunchTaskState state = (StartupLaunchTaskState)stateValue;
+        StartupLaunchService service = CreateService(new FakeStartupLaunchTask(state));
+
+        StartupLaunchTaskState? observed = await service.TryGetStateAsync(CancellationToken.None);
+
+        Assert.Equal(state, observed);
+    }
+
+    /// <summary>Verifies an unavailable startup API is represented as unknown and remains diagnosable.</summary>
+    [Fact]
+    public async Task TryGetStateAsync_WhenProviderFails_ReturnsUnknownAndLogsWarning()
+    {
+        FakeStartupLaunchLog log = new();
+        StartupLaunchService service = CreateService(
+            exception: new InvalidOperationException("startup task unavailable"),
+            log: log);
+
+        StartupLaunchTaskState? observed = await service.TryGetStateAsync(CancellationToken.None);
+
+        Assert.Null(observed);
+        Assert.Equal("startup task unavailable", Assert.Single(log.Entries).Detail);
+    }
+
     /// <summary>Verifies enabling launch-at-startup requests enablement only when the task is disabled.</summary>
     [Fact]
     public async Task SetEnabledAsync_WhenEnabledRequestedAndTaskDisabled_RequestsEnable()

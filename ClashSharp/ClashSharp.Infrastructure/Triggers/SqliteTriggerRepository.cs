@@ -292,6 +292,47 @@ public sealed partial class SqliteTriggerRepository : ITriggerRepository
     }
 
     /// <inheritdoc />
+    public async Task<TriggerPersistenceResult<IReadOnlyList<TriggerOutboxAction>>>
+        ReadExecutionActionsAsync(
+            Guid executionId,
+            CancellationToken cancellationToken)
+    {
+        if (executionId == Guid.Empty)
+        {
+            throw new ArgumentException("Execution identity must be nonempty.", nameof(executionId));
+        }
+
+        if (!_isOpen)
+        {
+            return TriggerPersistenceResult.Invalid<IReadOnlyList<TriggerOutboxAction>>(
+                CreateNotOpenDiagnostic());
+        }
+
+        try
+        {
+            await using SqliteConnection connection = await OpenConnectionAsync(
+                SqliteOpenMode.ReadWrite,
+                cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<TriggerOutboxAction> actions = await ReadExecutionActionsCoreAsync(
+                connection,
+                executionId,
+                cancellationToken).ConfigureAwait(false);
+            return actions.Count == 0
+                ? TriggerPersistenceResult.NotFound<IReadOnlyList<TriggerOutboxAction>>()
+                : TriggerPersistenceResult.Succeeded(actions);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedStorageFailure(exception))
+        {
+            return TriggerPersistenceResult.Unavailable<IReadOnlyList<TriggerOutboxAction>>(
+                CreateDiagnostic("trigger.storage.read_failed", "read_execution_outbox", exception));
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<TriggerPersistenceResult<TriggerOutboxAction>> TransitionOutboxAsync(
         TriggerOutboxTransition transition,
         CancellationToken cancellationToken)

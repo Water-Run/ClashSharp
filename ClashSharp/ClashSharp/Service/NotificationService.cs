@@ -8,8 +8,15 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
+using Windows.Storage;
 #if !UNIT_TESTS
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
@@ -30,8 +37,32 @@ internal interface IApplicationNotificationSink
 /// <summary>Win11 notification display boundary used by <see cref="NotificationService"/>.</summary>
 internal interface IWin11NotificationPlatform
 {
+    /// <summary>Checks whether a notification with the stable trigger identity is still registered.</summary>
+    Task<bool> ContainsAsync(string idempotencyKey, CancellationToken cancellationToken);
+
     /// <summary>Shows one Win11 notification.</summary>
-    void Show(string title, string message);
+    void Show(string title, string message, string? idempotencyKey = null);
+}
+
+/// <summary>Durable receipt boundary used to bridge notification display and outbox commit.</summary>
+internal interface ITriggerNotificationReceiptStore
+{
+    bool Contains(string idempotencyKey);
+
+    void Record(string idempotencyKey);
+}
+
+/// <summary>Idempotent notification operations required by the durable trigger runtime.</summary>
+internal interface IIdempotentTriggerNotificationSink
+{
+    Task<bool> IsTriggerNotificationDeliveredAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken);
+
+    Task DeliverTriggerNotificationAsync(
+        string idempotencyKey,
+        string message,
+        CancellationToken cancellationToken);
 }
 
 #if !UNIT_TESTS
@@ -44,19 +75,48 @@ internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform
     {
     }
 
-    public void Show(string title, string message)
+    public async Task<bool> ContainsAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        (string tag, string group) = CreateIdentity(idempotencyKey);
+        IList<AppNotification> notifications = await AppNotificationManager.Default.GetAllAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        return notifications.Any(notification =>
+            StringComparer.Ordinal.Equals(notification.Tag, tag)
+            && StringComparer.Ordinal.Equals(notification.Group, group));
+    }
+
+    public void Show(string title, string message, string? idempotencyKey = null)
     {
         AppNotification notification = new AppNotificationBuilder()
             .AddText(title)
             .AddText(message)
             .BuildNotification();
+        if (idempotencyKey is not null)
+        {
+            (notification.Tag, notification.Group) = CreateIdentity(idempotencyKey);
+        }
+
         AppNotificationManager.Default.Show(notification);
+    }
+
+    private static (string Tag, string Group) CreateIdentity(string idempotencyKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(idempotencyKey)))
+            .ToLowerInvariant();
+        return (hash[..16], hash[16..32]);
     }
 }
 #endif
 
 /// <summary>Win11 notification gateway with policy filtering.</summary>
-internal sealed class NotificationService : ITriggerNotificationSink, IApplicationNotificationSink
+internal sealed class NotificationService :
+    ITriggerNotificationSink,
+    IApplicationNotificationSink,
+    IIdempotentTriggerNotificationSink
 {
     public static NotificationService Instance { get; } = new(
         () => AppSettingsService.Instance.NotificationEnabled,
@@ -76,6 +136,7 @@ internal sealed class NotificationService : ITriggerNotificationSink, IApplicati
     private readonly Action<string, string, string, string?> _appendLog;
     private readonly ITriggerRuntimeEventPublisher _triggerEvents;
     private readonly IWin11NotificationPlatform _platform;
+    private readonly ITriggerNotificationReceiptStore _triggerReceipts;
 
     internal NotificationService(
         Func<bool> getEnabled,
@@ -83,7 +144,8 @@ internal sealed class NotificationService : ITriggerNotificationSink, IApplicati
         Func<string, string> getString,
         Action<string, string, string, string?> appendLog,
         ITriggerRuntimeEventPublisher triggerEvents,
-        IWin11NotificationPlatform platform)
+        IWin11NotificationPlatform platform,
+        ITriggerNotificationReceiptStore? triggerReceipts = null)
     {
         _getEnabled = getEnabled ?? throw new ArgumentNullException(nameof(getEnabled));
         _getLevel = getLevel ?? throw new ArgumentNullException(nameof(getLevel));
@@ -91,6 +153,7 @@ internal sealed class NotificationService : ITriggerNotificationSink, IApplicati
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
         _triggerEvents = triggerEvents ?? throw new ArgumentNullException(nameof(triggerEvents));
         _platform = platform ?? throw new ArgumentNullException(nameof(platform));
+        _triggerReceipts = triggerReceipts ?? new LocalTriggerNotificationReceiptStore();
     }
 
     public void NotifyProxyModeChanged(ClashSharpMode mode)
@@ -123,6 +186,62 @@ internal sealed class NotificationService : ITriggerNotificationSink, IApplicati
             NotificationLevel.Default,
             GetString("Notification.Custom.Title"),
             string.IsNullOrWhiteSpace(message) ? GetString("Notification.Custom.Message") : message.Trim());
+    }
+
+    public async Task<bool> IsTriggerNotificationDeliveredAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_triggerReceipts.Contains(idempotencyKey))
+        {
+            return true;
+        }
+
+        bool registered = await _platform.ContainsAsync(idempotencyKey, cancellationToken).ConfigureAwait(false);
+        if (registered)
+        {
+            _triggerReceipts.Record(idempotencyKey);
+        }
+
+        return registered;
+    }
+
+    public async Task DeliverTriggerNotificationAsync(
+        string idempotencyKey,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (await IsTriggerNotificationDeliveredAsync(idempotencyKey, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        string title = GetString("Notification.Custom.Title");
+        string detail = string.IsNullOrWhiteSpace(message)
+            ? GetString("Notification.Custom.Message")
+            : message.Trim();
+        if (!ShouldShow(NotificationLevel.Default))
+        {
+            AppendNotificationLog("Info", GetString("Notification.Log.Suppressed"), title, detail);
+            _triggerReceipts.Record(idempotencyKey);
+            return;
+        }
+
+        try
+        {
+            _platform.Show(title, detail, idempotencyKey);
+            _triggerReceipts.Record(idempotencyKey);
+            AppendNotificationLog("Info", GetString("Notification.Log.Shown"), title, detail);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            AppendNotificationLog("Warning", GetString("Notification.Log.Failed"), title, detail, exception.Message);
+            throw;
+        }
     }
 
     public void Show(NotificationLevel minimumLevel, string title, string message)
@@ -196,9 +315,99 @@ internal sealed class NotificationService : ITriggerNotificationSink, IApplicati
 #if UNIT_TESTS
 internal sealed class ThrowingTestNotificationPlatform : IWin11NotificationPlatform
 {
-    public void Show(string title, string message)
+    public Task<bool> ContainsAsync(string idempotencyKey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(false);
+    }
+
+    public void Show(string title, string message, string? idempotencyKey = null)
     {
         throw new NotSupportedException("Tests must inject a notification platform.");
     }
 }
 #endif
+
+/// <summary>Persists bounded recent notification receipts in Windows local settings.</summary>
+internal sealed class LocalTriggerNotificationReceiptStore : ITriggerNotificationReceiptStore
+{
+    private const string KeyPrefix = "TriggerNotificationReceiptV1.";
+    private const int MaximumReceipts = 2048;
+    private const int PruneCount = 256;
+    private readonly object _syncLock = new();
+    private readonly Dictionary<string, long> _fallback = new(StringComparer.Ordinal);
+    private readonly ApplicationDataContainer? _settings;
+
+    public LocalTriggerNotificationReceiptStore()
+    {
+        try
+        {
+            _settings = ApplicationData.Current.LocalSettings;
+        }
+        catch (InvalidOperationException)
+        {
+            _settings = null;
+        }
+    }
+
+    public bool Contains(string idempotencyKey)
+    {
+        string key = CreateStorageKey(idempotencyKey);
+        lock (_syncLock)
+        {
+            return _settings?.Values.ContainsKey(key) ?? _fallback.ContainsKey(key);
+        }
+    }
+
+    public void Record(string idempotencyKey)
+    {
+        string key = CreateStorageKey(idempotencyKey);
+        long timestamp = DateTimeOffset.UtcNow.UtcTicks;
+        lock (_syncLock)
+        {
+            if (_settings is null)
+            {
+                _fallback[key] = timestamp;
+                PruneFallback();
+                return;
+            }
+
+            _settings.Values[key] = timestamp;
+            List<(string Key, long Timestamp)> receipts = _settings.Values
+                .Where(pair => pair.Key.StartsWith(KeyPrefix, StringComparison.Ordinal))
+                .Select(pair => (pair.Key, pair.Value is long value ? value : 0L))
+                .OrderBy(static pair => pair.Item2)
+                .ToList();
+            int removalCount = receipts.Count > MaximumReceipts
+                ? receipts.Count - MaximumReceipts + PruneCount
+                : 0;
+            foreach ((string staleKey, _) in receipts.Take(removalCount))
+            {
+                _settings.Values.Remove(staleKey);
+            }
+        }
+    }
+
+    private void PruneFallback()
+    {
+        int removalCount = _fallback.Count > MaximumReceipts
+            ? _fallback.Count - MaximumReceipts + PruneCount
+            : 0;
+        foreach (string staleKey in _fallback
+                     .OrderBy(static pair => pair.Value)
+                     .Take(removalCount)
+                     .Select(static pair => pair.Key)
+                     .ToArray())
+        {
+            _fallback.Remove(staleKey);
+        }
+    }
+
+    private static string CreateStorageKey(string idempotencyKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(idempotencyKey)))
+            .ToLowerInvariant();
+        return KeyPrefix + hash;
+    }
+}

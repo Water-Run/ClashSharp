@@ -90,6 +90,7 @@
     <Compile Include="..\ClashSharp\Service\TriggerTaskNormalizer.cs" Link="Service\TriggerTaskNormalizer.cs" />
     <Compile Include="..\ClashSharp\Service\TriggerEvaluationContextFactory.cs" Link="Service\TriggerEvaluationContextFactory.cs" />
     <Compile Include="..\ClashSharp\Service\TriggerContextProviderAdapter.cs" Link="Service\TriggerContextProviderAdapter.cs" />
+    <Compile Include="..\ClashSharp\Service\TriggerActionRuntimeAdapter.cs" Link="Service\TriggerActionRuntimeAdapter.cs" />
     <Compile Include="..\ClashSharp\Service\TriggerService.cs" Link="Service\TriggerService.cs" />
     <Compile Include="..\ClashSharp\Service\NotificationService.cs" Link="Service\NotificationService.cs" />
     <Compile Include="..\ClashSharp\Service\IApplicationActionDispatcher.cs" Link="Service\IApplicationActionDispatcher.cs" />

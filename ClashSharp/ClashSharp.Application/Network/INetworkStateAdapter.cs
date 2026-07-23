@@ -2,6 +2,13 @@ using ClashSharp.ApplicationModel.Mutations;
 
 namespace ClashSharp.ApplicationModel.Network;
 
+/// <summary>Reads the complete current external network state without creating a mutation plan.</summary>
+public interface INetworkStateObserver
+{
+    /// <summary>Observes mihomo, service, TUN, and Windows proxy state.</summary>
+    Task<NetworkStateSnapshot> ObserveAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>Plans, probes, and applies staged mihomo, service, TUN, and Windows proxy state.</summary>
 public interface INetworkStateAdapter
 {

@@ -86,12 +86,96 @@ public sealed class NotificationServiceTests
         Assert.Contains("Error: toast unavailable", entry.Detail, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task DeliverTriggerNotificationAsync_RepeatedIdentity_HasOneEffectiveDelivery()
+    {
+        FakeWin11NotificationPlatform platform = new();
+        FakeTriggerRuntimeEvents triggerEvents = new();
+        FakeNotificationLog log = new();
+        FakeTriggerNotificationReceiptStore receipts = new();
+        NotificationService service = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            platform,
+            triggerEvents,
+            log,
+            receipts);
+
+        await service.DeliverTriggerNotificationAsync("execution:1:0", "Body", CancellationToken.None);
+        await service.DeliverTriggerNotificationAsync("execution:1:0", "Body", CancellationToken.None);
+
+        NotificationRequest request = Assert.Single(platform.Requests);
+        Assert.Equal("execution:1:0", request.IdempotencyKey);
+        Assert.True(await service.IsTriggerNotificationDeliveredAsync(
+            "execution:1:0",
+            CancellationToken.None));
+        Assert.Empty(triggerEvents.Events);
+    }
+
+    [Fact]
+    public async Task DeliverTriggerNotificationAsync_Suppressed_IsDurablyCompleteWithoutPlatformCall()
+    {
+        FakeWin11NotificationPlatform platform = new();
+        FakeTriggerNotificationReceiptStore receipts = new();
+        NotificationService service = CreateService(
+            enabled: false,
+            configuredLevel: NotificationLevel.Default,
+            platform,
+            new FakeTriggerRuntimeEvents(),
+            new FakeNotificationLog(),
+            receipts);
+
+        await service.DeliverTriggerNotificationAsync("execution:2:0", "Body", CancellationToken.None);
+
+        Assert.Empty(platform.Requests);
+        Assert.True(receipts.Contains("execution:2:0"));
+    }
+
+    [Fact]
+    public async Task IsTriggerNotificationDeliveredAsync_AfterReceiptCommitCrash_RecoversFromPlatformIdentity()
+    {
+        FakeWin11NotificationPlatform platform = new();
+        FakeTriggerNotificationReceiptStore failingReceipts = new()
+        {
+            RecordException = new IOException("receipt write failed"),
+        };
+        NotificationService interrupted = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            platform,
+            new FakeTriggerRuntimeEvents(),
+            new FakeNotificationLog(),
+            failingReceipts);
+
+        await Assert.ThrowsAsync<IOException>(() => interrupted.DeliverTriggerNotificationAsync(
+            "execution:3:0",
+            "Body",
+            CancellationToken.None));
+
+        FakeTriggerNotificationReceiptStore recoveredReceipts = new();
+        NotificationService recovered = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            platform,
+            new FakeTriggerRuntimeEvents(),
+            new FakeNotificationLog(),
+            recoveredReceipts);
+        Assert.True(await recovered.IsTriggerNotificationDeliveredAsync(
+            "execution:3:0",
+            CancellationToken.None));
+        await recovered.DeliverTriggerNotificationAsync("execution:3:0", "Body", CancellationToken.None);
+
+        Assert.Single(platform.Requests);
+        Assert.True(recoveredReceipts.Contains("execution:3:0"));
+    }
+
     private static NotificationService CreateService(
         bool enabled,
         NotificationLevel configuredLevel,
         FakeWin11NotificationPlatform platform,
         FakeTriggerRuntimeEvents triggerEvents,
-        FakeNotificationLog log)
+        FakeNotificationLog log,
+        ITriggerNotificationReceiptStore? receiptStore = null)
     {
         return new NotificationService(
             () => enabled,
@@ -117,7 +201,8 @@ public sealed class NotificationServiceTests
             },
             log.Append,
             triggerEvents,
-            platform);
+            platform,
+            receiptStore);
     }
 
     private sealed class FakeWin11NotificationPlatform : IWin11NotificationPlatform
@@ -126,14 +211,43 @@ public sealed class NotificationServiceTests
 
         public Exception? ExceptionToThrow { get; init; }
 
-        public void Show(string title, string message)
+        public Task<bool> ContainsAsync(string idempotencyKey, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Requests.Any(request =>
+                StringComparer.Ordinal.Equals(request.IdempotencyKey, idempotencyKey)));
+        }
+
+        public void Show(string title, string message, string? idempotencyKey = null)
         {
             if (ExceptionToThrow is not null)
             {
                 throw ExceptionToThrow;
             }
 
-            Requests.Add(new NotificationRequest(title, message));
+            Requests.RemoveAll(request =>
+                idempotencyKey is not null
+                && StringComparer.Ordinal.Equals(request.IdempotencyKey, idempotencyKey));
+            Requests.Add(new NotificationRequest(title, message, idempotencyKey));
+        }
+    }
+
+    private sealed class FakeTriggerNotificationReceiptStore : ITriggerNotificationReceiptStore
+    {
+        private readonly HashSet<string> _receipts = new(StringComparer.Ordinal);
+
+        public Exception? RecordException { get; init; }
+
+        public bool Contains(string idempotencyKey) => _receipts.Contains(idempotencyKey);
+
+        public void Record(string idempotencyKey)
+        {
+            if (RecordException is not null)
+            {
+                throw RecordException;
+            }
+
+            _receipts.Add(idempotencyKey);
         }
     }
 
@@ -157,7 +271,7 @@ public sealed class NotificationServiceTests
         }
     }
 
-    private sealed record NotificationRequest(string Title, string Message);
+    private sealed record NotificationRequest(string Title, string Message, string? IdempotencyKey = null);
 
     private sealed record LogEntry(string Level, string Category, string Message, string Detail);
 }

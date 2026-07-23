@@ -142,6 +142,25 @@ public sealed class NetworkMutationConcurrencyTests
         Assert.Equal(1, fixture.Adapter.PlanCount);
     }
 
+    /// <summary>Verifies an ordinary caller can reuse its admission lease without nested admission.</summary>
+    [Fact]
+    public async Task ApplyAdmittedAsync_OrdinaryAdmission_ExecutesOneJournaledNetworkMutation()
+    {
+        Fixture fixture = new();
+        await using MutationAdmissionLease lease = await fixture.Barrier.AcquireOrdinaryAsync(
+            CancellationToken.None);
+
+        MutationResult<NetworkTransitionResult> result = await fixture.Network.ApplyAdmittedAsync(
+            NetworkIntent.ChangeMode(ClashSharpMode.RuleTakeover, false, 7890),
+            lease,
+            CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
+        Assert.Equal(MutationAdmissionState.Open, fixture.Barrier.State);
+        Assert.Null(fixture.Store.Current);
+        Assert.Equal(1, fixture.Adapter.PlanCount);
+    }
+
     /// <summary>Verifies committed shutdown can become terminal while preserving its forward-recovery journal.</summary>
     [Fact]
     public async Task ApplyShutdownAsync_CommittedCleanupFails_TerminalShutdownPreservesJournal()
