@@ -223,6 +223,20 @@ public sealed class TriggerContractTests
             state,
             DateTimeOffset.UtcNow,
             Guid.Empty));
+        Assert.Throws<ArgumentException>(() => new TriggerExecutionCommitRequest(
+            Guid.NewGuid(),
+            definition,
+            2,
+            new TriggerTaskState(
+                definition.Id,
+                definition.Revision,
+                2,
+                new Dictionary<string, TriggerConditionState>
+                {
+                    ["unexpected"] = new TriggerConditionState(),
+                }),
+            DateTimeOffset.UtcNow,
+            Guid.NewGuid()));
     }
 
     [Fact]

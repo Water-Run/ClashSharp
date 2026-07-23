@@ -216,7 +216,9 @@
         "type": "Project",
         "dependencies": {
           "ClashSharp.Application": "[1.0.0, )",
-          "ClashSharp.Core": "[1.0.0, )"
+          "ClashSharp.Core": "[1.0.0, )",
+          "Microsoft.Data.Sqlite": "[10.0.0, )",
+          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.3, )"
         }
       }
     },

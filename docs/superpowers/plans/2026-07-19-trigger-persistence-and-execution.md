@@ -144,19 +144,19 @@ Run Application tests/build and commit `feat: define durable trigger contracts`.
 - Create: `ClashSharp/ClashSharp.Tests/Integration/SqliteTriggerRepositoryTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/TriggerBackupRecoveryTests.cs`
 
-- [ ] **Step 1: Write RED repository tests**
+- [x] **Step 1: Write RED repository tests**
 
 Cover empty initialization, schema/version metadata, WAL mode, ordered immutable definition round-trip, transactional replace/delete/reorder, atomic latch+execution+all-actions enqueue, optimistic conflict, legal outbox transitions, restart recovery, corrupt primary with valid backup, corrupt primary and backup safe-empty diagnostic, busy/denied IO, and independent concurrent reads.
 
-- [ ] **Step 2: Implement the normalized schema**
+- [x] **Step 2: Implement the normalized schema**
 
 Store definitions, typed condition/action payloads, task/condition latches, executions, ordered outbox actions, lifecycle handoffs, process epochs, and diagnostics. Use transactions and foreign keys. Never expose a live connection or mutable entity collection.
 
-- [ ] **Step 3: Implement safe backup and promotion**
+- [x] **Step 3: Implement safe backup and promotion**
 
 Use SQLite Backup into a same-volume temporary database, open/validate it, flush the file, then atomically promote. Fault-inject before backup, after backup, after validation, and before/after promotion. Never copy `-wal` or `-shm` files.
 
-- [ ] **Step 4: Verify package locks and checkpoint**
+- [x] **Step 4: Verify package locks and checkpoint**
 
 Update locks intentionally, then run locked restore, Infrastructure/Integration tests, Release build, format, diff check, review, and commit `feat: persist triggers transactionally`.
 

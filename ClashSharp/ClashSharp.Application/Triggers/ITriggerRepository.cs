@@ -32,7 +32,10 @@ public sealed class TriggerExecutionCommitRequest
         if (!TriggerDefinitionValidator.Validate(definition).IsValid
             || !StringComparer.Ordinal.Equals(definition.Id, nextState.TaskId)
             || definition.Revision != nextState.TaskRevision
-            || expectedStateVersion != nextState.Version)
+            || expectedStateVersion != nextState.Version
+            || definition.Conditions.Count != nextState.ConditionStates.Count
+            || definition.Conditions.Any(
+                condition => !nextState.ConditionStates.ContainsKey(condition.Id)))
         {
             throw new ArgumentException(
                 "Definition, expected state version, and next state must describe one valid task revision.",

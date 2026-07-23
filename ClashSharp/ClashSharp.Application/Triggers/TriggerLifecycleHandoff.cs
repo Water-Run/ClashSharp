@@ -92,10 +92,14 @@ public sealed record TriggerLifecycleHandoffTransition
             throw new ArgumentException("Process epoch must be nonempty.", nameof(processEpoch));
         }
 
-        if ((expectedState is not null && !Enum.IsDefined(expectedState.Value))
-            || !Enum.IsDefined(nextState))
+        if (expectedState is not null && !Enum.IsDefined(expectedState.Value))
         {
             throw new ArgumentOutOfRangeException(nameof(expectedState));
+        }
+
+        if (!Enum.IsDefined(nextState))
+        {
+            throw new ArgumentOutOfRangeException(nameof(nextState));
         }
 
         ExecutionId = executionId;
