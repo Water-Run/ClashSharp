@@ -406,6 +406,62 @@ public sealed partial class SqliteTriggerRepository
         return new ReadOnlyCollection<TriggerOutboxAction>(actions);
     }
 
+    private static async Task<TriggerExecution?> ReadExecutionCoreAsync(
+        SqliteConnection connection,
+        Guid executionId,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = CreateCommand(
+            connection,
+            null,
+            """
+            SELECT task_id, task_revision, triggered_at, process_epoch, state
+            FROM trigger_executions
+            WHERE execution_id = $executionId;
+            """);
+        command.Parameters.AddWithValue("$executionId", executionId.ToString("N"));
+        await using SqliteDataReader reader =
+            await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? new TriggerExecution(
+                executionId,
+                reader.GetString(0),
+                reader.GetInt64(1),
+                ParseTimestamp(reader.GetString(2)),
+                Guid.ParseExact(reader.GetString(3), "N"),
+                (TriggerExecutionState)reader.GetInt32(4))
+            : null;
+    }
+
+    private static async Task<TriggerLifecycleHandoff?> ReadLifecycleHandoffCoreAsync(
+        SqliteConnection connection,
+        Guid executionId,
+        int actionIndex,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = CreateCommand(
+            connection,
+            null,
+            """
+            SELECT process_epoch, state, updated_at, last_error
+            FROM trigger_lifecycle_handoffs
+            WHERE execution_id = $executionId AND action_index = $actionIndex;
+            """);
+        command.Parameters.AddWithValue("$executionId", executionId.ToString("N"));
+        command.Parameters.AddWithValue("$actionIndex", actionIndex);
+        await using SqliteDataReader reader =
+            await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? new TriggerLifecycleHandoff(
+                executionId,
+                actionIndex,
+                Guid.ParseExact(reader.GetString(0), "N"),
+                (TriggerLifecycleHandoffState)reader.GetInt32(1),
+                ParseTimestamp(reader.GetString(2)),
+                reader.IsDBNull(3) ? null : reader.GetString(3))
+            : null;
+    }
+
     private static async Task ValidateDurableRowsAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,

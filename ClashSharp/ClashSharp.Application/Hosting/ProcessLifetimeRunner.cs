@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using ClashSharp.ApplicationModel.Lifecycle;
 
 namespace ClashSharp.ApplicationModel.Hosting;
 
@@ -58,6 +59,104 @@ public sealed class ProcessLifetimeRunner
             _stopTask = StopAttachedAndDisposeAsync(host, cancellationToken);
             return _stopTask;
         }
+    }
+
+    /// <summary>Processes one accepted lifetime request after its producer releases all owned work.</summary>
+    public Task ProcessAsync(
+        ApplicationLifetimeRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (_syncLock)
+        {
+            if (_stopTask is not null)
+            {
+                return _stopTask;
+            }
+
+            if (_host is null)
+            {
+                _stopTask = request.Handoff is null
+                    ? Task.CompletedTask
+                    : Task.FromException(new InvalidOperationException(
+                        "A durable lifetime handoff cannot be processed without an attached host."));
+                return _stopTask;
+            }
+
+            IApplicationHost host = _host;
+            _stopTask = ProcessAttachedRequestAsync(host, request, cancellationToken);
+            return _stopTask;
+        }
+    }
+
+    private async Task ProcessAttachedRequestAsync(
+        IApplicationHost host,
+        ApplicationLifetimeRequest request,
+        CancellationToken cancellationToken)
+    {
+        IApplicationLifetimeHandoff? handoff = request.Handoff;
+        if (handoff is not null)
+        {
+            await handoff.WaitForReleaseAsync(cancellationToken).ConfigureAwait(false);
+            await handoff.MarkShutdownStartedAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception stopException)
+        {
+            if (handoff is not null)
+            {
+                (ApplicationLifetimeShutdownFailureKind failureKind, string diagnosticCode) =
+                    ClassifyShutdownFailure(stopException);
+                try
+                {
+                    await handoff.MarkShutdownFailedAsync(
+                        failureKind,
+                        diagnosticCode,
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception handoffException)
+                {
+                    throw new AggregateException(stopException, handoffException);
+                }
+            }
+
+            throw;
+        }
+
+        if (handoff is not null)
+        {
+            await handoff.MarkShutdownSucceededAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+
+        await host.DisposeAsync().ConfigureAwait(false);
+        lock (_syncLock)
+        {
+            if (ReferenceEquals(_host, host))
+            {
+                _host = null;
+            }
+        }
+    }
+
+    private static (ApplicationLifetimeShutdownFailureKind Kind, string DiagnosticCode)
+        ClassifyShutdownFailure(Exception exception)
+    {
+        return exception switch
+        {
+            RuntimeShutdownNotPreparedException notPrepared => (
+                ApplicationLifetimeShutdownFailureKind.Failed,
+                notPrepared.Result.ErrorCode ?? "trigger.handoff.shutdown_not_prepared"),
+            OperationCanceledException => (
+                ApplicationLifetimeShutdownFailureKind.Uncertain,
+                "trigger.handoff.shutdown_cancelled"),
+            _ => (
+                ApplicationLifetimeShutdownFailureKind.Uncertain,
+                "trigger.handoff.shutdown_unexpected"),
+        };
     }
 
     private async Task StopAttachedAndDisposeAsync(

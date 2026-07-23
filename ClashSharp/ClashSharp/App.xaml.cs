@@ -109,9 +109,11 @@ public partial class App : Microsoft.UI.Xaml.Application
         _lifetimeRequests.TryRequest(ApplicationLifetimeRequest.Exit("main-window"));
     }
 
-    private Task StopAndExitAsync(bool restart)
+    private Task StopAndExitAsync(
+        bool restart,
+        ApplicationLifetimeRequest? lifetimeRequest = null)
     {
-        return _shutdownTask ??= StopAndExitCoreAsync(restart);
+        return _shutdownTask ??= StopAndExitCoreAsync(restart, lifetimeRequest);
     }
 
     private async Task ConsumeLifetimeRequestAsync(DispatcherQueue dispatcherQueue)
@@ -142,7 +144,9 @@ public partial class App : Microsoft.UI.Xaml.Application
     {
         try
         {
-            await StopAndExitAsync(request.Kind == ApplicationLifetimeRequestKind.Restart);
+            await StopAndExitAsync(
+                request.Kind == ApplicationLifetimeRequestKind.Restart,
+                request);
             completion.TrySetResult(null);
         }
         catch (Exception exception)
@@ -151,12 +155,21 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
     }
 
-    private async Task StopAndExitCoreAsync(bool restart)
+    private async Task StopAndExitCoreAsync(
+        bool restart,
+        ApplicationLifetimeRequest? lifetimeRequest)
     {
         string? executablePath = restart ? ResolveExecutablePath() : null;
         try
         {
-            await _lifetimeRunner.StopAsync(CancellationToken.None);
+            if (lifetimeRequest is null)
+            {
+                await _lifetimeRunner.StopAsync(CancellationToken.None);
+            }
+            else
+            {
+                await _lifetimeRunner.ProcessAsync(lifetimeRequest, CancellationToken.None);
+            }
         }
         catch (Exception exception)
         {

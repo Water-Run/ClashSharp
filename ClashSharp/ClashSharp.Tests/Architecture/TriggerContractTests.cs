@@ -135,6 +135,7 @@ public sealed class TriggerContractTests
     public void IdempotencyKey_IsCultureInvariantAndValidatesComponents()
     {
         Guid executionId = Guid.Parse("db8f8a47-844d-4396-b675-9c91db0f5fa0");
+        Guid processEpoch = Guid.Parse("64a5076a-355f-4f7d-8dc4-5a35c62c1193");
         CultureInfo originalCulture = CultureInfo.CurrentCulture;
         try
         {
@@ -143,6 +144,9 @@ public sealed class TriggerContractTests
             Assert.Equal(
                 "db8f8a47844d4396b6759c91db0f5fa0:1234:5",
                 TriggerIdempotencyKey.Create(executionId, 1234, 5));
+            Assert.Equal(
+                "trigger-exit:db8f8a47844d4396b6759c91db0f5fa0:5:64a5076a355f4f7d8dc45a35c62c1193",
+                TriggerLifecycleHandoffIdentity.CreateKey(executionId, 5, processEpoch));
         }
         finally
         {
@@ -152,6 +156,12 @@ public sealed class TriggerContractTests
         Assert.Throws<ArgumentException>(() => TriggerIdempotencyKey.Create(Guid.Empty, 1, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => TriggerIdempotencyKey.Create(executionId, 0, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => TriggerIdempotencyKey.Create(executionId, 1, -1));
+        Assert.Throws<ArgumentException>(() =>
+            TriggerLifecycleHandoffIdentity.CreateKey(Guid.Empty, 0, processEpoch));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TriggerLifecycleHandoffIdentity.CreateKey(executionId, -1, processEpoch));
+        Assert.Throws<ArgumentException>(() =>
+            TriggerLifecycleHandoffIdentity.CreateKey(executionId, 0, Guid.Empty));
     }
 
     [Fact]

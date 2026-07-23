@@ -333,6 +333,87 @@ public sealed partial class SqliteTriggerRepository : ITriggerRepository
     }
 
     /// <inheritdoc />
+    public async Task<TriggerPersistenceResult<TriggerExecution>> ReadExecutionAsync(
+        Guid executionId,
+        CancellationToken cancellationToken)
+    {
+        if (executionId == Guid.Empty)
+        {
+            throw new ArgumentException("Execution identity must be nonempty.", nameof(executionId));
+        }
+
+        if (!_isOpen)
+        {
+            return TriggerPersistenceResult.Invalid<TriggerExecution>(CreateNotOpenDiagnostic());
+        }
+
+        try
+        {
+            await using SqliteConnection connection = await OpenConnectionAsync(
+                SqliteOpenMode.ReadWrite,
+                cancellationToken).ConfigureAwait(false);
+            TriggerExecution? execution = await ReadExecutionCoreAsync(
+                connection,
+                executionId,
+                cancellationToken).ConfigureAwait(false);
+            return execution is null
+                ? TriggerPersistenceResult.NotFound<TriggerExecution>()
+                : TriggerPersistenceResult.Succeeded(execution);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedStorageFailure(exception))
+        {
+            return TriggerPersistenceResult.Unavailable<TriggerExecution>(
+                CreateDiagnostic("trigger.storage.read_failed", "read_execution", exception));
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<TriggerPersistenceResult<TriggerLifecycleHandoff>> ReadLifecycleHandoffAsync(
+        Guid executionId,
+        int actionIndex,
+        CancellationToken cancellationToken)
+    {
+        if (executionId == Guid.Empty)
+        {
+            throw new ArgumentException("Execution identity must be nonempty.", nameof(executionId));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(actionIndex);
+        if (!_isOpen)
+        {
+            return TriggerPersistenceResult.Invalid<TriggerLifecycleHandoff>(CreateNotOpenDiagnostic());
+        }
+
+        try
+        {
+            await using SqliteConnection connection = await OpenConnectionAsync(
+                SqliteOpenMode.ReadWrite,
+                cancellationToken).ConfigureAwait(false);
+            TriggerLifecycleHandoff? handoff = await ReadLifecycleHandoffCoreAsync(
+                connection,
+                executionId,
+                actionIndex,
+                cancellationToken).ConfigureAwait(false);
+            return handoff is null
+                ? TriggerPersistenceResult.NotFound<TriggerLifecycleHandoff>()
+                : TriggerPersistenceResult.Succeeded(handoff);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedStorageFailure(exception))
+        {
+            return TriggerPersistenceResult.Unavailable<TriggerLifecycleHandoff>(
+                CreateDiagnostic("trigger.storage.read_failed", "read_lifecycle_handoff", exception));
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<TriggerPersistenceResult<TriggerOutboxAction>> TransitionOutboxAsync(
         TriggerOutboxTransition transition,
         CancellationToken cancellationToken)

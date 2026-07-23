@@ -81,9 +81,13 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
                 continue;
             }
 
-            if (action.State is TriggerOutboxState.Failed or
-                TriggerOutboxState.Uncertain or
-                TriggerOutboxState.HandedOff)
+            if (action.State == TriggerOutboxState.HandedOff)
+            {
+                results.Add(await ReconcileHandedOffAsync(action, cancellationToken).ConfigureAwait(false));
+                break;
+            }
+
+            if (action.State is TriggerOutboxState.Failed or TriggerOutboxState.Uncertain)
             {
                 results.Add(ToTerminalResult(action));
                 break;
@@ -119,6 +123,15 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
                     action,
                     TriggerOutboxState.Succeeded,
                     null,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            if (recoveryProbe.Status == TriggerActionProbeStatus.Unknown)
+            {
+                return await CommitTerminalAsync(
+                    action,
+                    TriggerOutboxState.Uncertain,
+                    recoveryProbe.DiagnosticCode,
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -162,15 +175,73 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
                 TriggerOutboxState.Uncertain,
                 applied.DiagnosticCode,
                 cancellationToken).ConfigureAwait(false),
-            TriggerActionApplyStatus.HandedOff => await CommitTerminalAsync(
+            TriggerActionApplyStatus.HandedOff => await ReadOrCommitHandedOffAsync(
                 action,
-                TriggerOutboxState.HandedOff,
-                null,
                 cancellationToken).ConfigureAwait(false),
             TriggerActionApplyStatus.Applied => await VerifyAppliedAsync(
                 action,
                 cancellationToken).ConfigureAwait(false),
             _ => throw new InvalidOperationException("Undefined trigger action application status."),
+        };
+    }
+
+    private async Task<TriggerActionResult> ReconcileHandedOffAsync(
+        TriggerOutboxAction action,
+        CancellationToken cancellationToken)
+    {
+        TriggerActionProbeResult probe = await _runtime.ProbeAsync(
+            action,
+            cancellationToken).ConfigureAwait(false);
+        if (probe.Status != TriggerActionProbeStatus.Desired)
+        {
+            return ToTerminalResult(action);
+        }
+
+        TriggerOutboxAction current = await ReadActionRequiredAsync(
+            action.ExecutionId,
+            action.ActionIndex,
+            cancellationToken).ConfigureAwait(false);
+        return current.State switch
+        {
+            TriggerOutboxState.Succeeded => new TriggerActionResult(
+                current,
+                TriggerOutboxState.Succeeded,
+                null),
+            TriggerOutboxState.HandedOff => await CommitTerminalAsync(
+                current,
+                TriggerOutboxState.Succeeded,
+                null,
+                cancellationToken).ConfigureAwait(false),
+            _ => throw new InvalidOperationException(
+                "A reconciled lifecycle handoff did not reach a valid durable state."),
+        };
+    }
+
+    private async Task<TriggerActionResult> ReadOrCommitHandedOffAsync(
+        TriggerOutboxAction action,
+        CancellationToken cancellationToken)
+    {
+        TriggerOutboxAction current = await ReadActionRequiredAsync(
+            action.ExecutionId,
+            action.ActionIndex,
+            cancellationToken).ConfigureAwait(false);
+        return current.State switch
+        {
+            TriggerOutboxState.HandedOff => new TriggerActionResult(
+                current,
+                TriggerOutboxState.HandedOff,
+                null),
+            TriggerOutboxState.Running => await CommitTerminalAsync(
+                current,
+                TriggerOutboxState.HandedOff,
+                null,
+                cancellationToken).ConfigureAwait(false),
+            TriggerOutboxState.Succeeded => new TriggerActionResult(
+                current,
+                TriggerOutboxState.Succeeded,
+                null),
+            _ => throw new InvalidOperationException(
+                "The lifecycle handoff returned without a compatible durable outbox state."),
         };
     }
 
@@ -234,6 +305,25 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
             ? updated
             : throw new InvalidOperationException(
                 result.Diagnostic?.Code ?? "trigger.outbox.transition_conflict");
+    }
+
+    private async Task<TriggerOutboxAction> ReadActionRequiredAsync(
+        Guid executionId,
+        int actionIndex,
+        CancellationToken cancellationToken)
+    {
+        TriggerPersistenceResult<IReadOnlyList<TriggerOutboxAction>> read =
+            await _repository.ReadExecutionActionsAsync(
+                executionId,
+                cancellationToken).ConfigureAwait(false);
+        if (!read.IsSucceeded || read.Value is not IReadOnlyList<TriggerOutboxAction> actions)
+        {
+            throw new InvalidOperationException(
+                read.Diagnostic?.Code ?? "trigger.outbox.read_unavailable");
+        }
+
+        return actions.FirstOrDefault(candidate => candidate.ActionIndex == actionIndex)
+            ?? throw new InvalidDataException("The lifecycle handoff outbox action is missing.");
     }
 
     private static void ValidateOrderedActions(

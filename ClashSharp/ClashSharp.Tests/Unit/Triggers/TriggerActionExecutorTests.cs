@@ -108,6 +108,37 @@ public sealed class TriggerActionExecutorTests
             repository.Transitions);
     }
 
+    [Theory]
+    [MemberData(nameof(RepeatableActions))]
+    public async Task ExecuteAsync_RunningUnknownActionBecomesUncertainWithoutReapplying(
+        TriggerAction action)
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(
+            execution,
+            [Outbox(execution, 0, action, TriggerOutboxState.Running, attemptCount: 1)]);
+        FakeTriggerActionRuntime runtime = new(
+            [TriggerActionProbeResult.Unknown("trigger.action.probe_unavailable")],
+            []);
+        TriggerActionExecutor executor = new(repository, runtime);
+        MutationAdmissionBarrier admission = new();
+        await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
+            CancellationToken.None);
+
+        IReadOnlyList<TriggerActionResult> results = await executor.ExecuteAsync(
+            execution,
+            lease,
+            CancellationToken.None);
+
+        TriggerActionResult result = Assert.Single(results);
+        Assert.Equal(TriggerOutboxState.Uncertain, result.FinalState);
+        Assert.Equal("trigger.action.probe_unavailable", result.DiagnosticCode);
+        Assert.Equal(0, runtime.ApplyCount);
+        Assert.Equal(
+            [(TriggerOutboxState.Running, TriggerOutboxState.Uncertain)],
+            repository.Transitions);
+    }
+
     [Fact]
     public async Task ExecuteAsync_ConclusiveFailureRemainsDiagnosableAndBlocksLaterActions()
     {
@@ -227,13 +258,18 @@ public sealed class TriggerActionExecutorTests
     {
         TriggerOutboxState state = (TriggerOutboxState)stateValue;
         TriggerExecution execution = Execution();
+        TriggerAction blockingAction = state == TriggerOutboxState.HandedOff
+            ? new TriggerAction(TriggerActionKind.ExitApplication, new NoActionParameters())
+            : NotificationAction();
         InMemoryTriggerRepository repository = new(
             execution,
             [
-                Outbox(execution, 0, NotificationAction(), state, lastError: diagnosticCode),
+                Outbox(execution, 0, blockingAction, state, lastError: diagnosticCode),
                 Outbox(execution, 1, NotificationAction()),
             ]);
-        FakeTriggerActionRuntime runtime = new([], []);
+        FakeTriggerActionRuntime runtime = state == TriggerOutboxState.HandedOff
+            ? new([TriggerActionProbeResult.NotDesired()], [])
+            : new([], []);
         TriggerActionExecutor executor = new(repository, runtime);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
@@ -441,6 +477,15 @@ public sealed class TriggerActionExecutorTests
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<TriggerPersistenceResult<IReadOnlyList<TriggerOutboxAction>>> ReadRecoverableActionsAsync(
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<TriggerPersistenceResult<TriggerExecution>> ReadExecutionAsync(
+            Guid executionId,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<TriggerPersistenceResult<TriggerLifecycleHandoff>> ReadLifecycleHandoffAsync(
+            Guid executionId,
+            int actionIndex,
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<TriggerPersistenceResult<TriggerLifecycleHandoff>> TransitionLifecycleHandoffAsync(

@@ -41,6 +41,12 @@ public enum TriggerPersistenceFaultPoint
 
     /// <summary>Immediately after an outbox-state transition transaction commits.</summary>
     AfterOutboxTransitionCommit = 12,
+
+    /// <summary>Immediately before a lifecycle-handoff transaction commits.</summary>
+    BeforeLifecycleHandoffCommit = 13,
+
+    /// <summary>Immediately after a lifecycle-handoff transaction commits.</summary>
+    AfterLifecycleHandoffCommit = 14,
 }
 
 /// <summary>Injects deterministic failures at durable trigger persistence boundaries.</summary>

@@ -358,7 +358,10 @@ public sealed partial class SqliteTriggerRepository
                 return TriggerPersistenceResult.Conflict<TriggerLifecycleHandoff>();
             }
 
-            if (!IsLegalHandoffTransition(current.State, transition.NextState))
+            if (!IsLegalHandoffTransition(
+                    current.State,
+                    transition.NextState,
+                    transition.RecoveryProcessEpoch))
             {
                 return TriggerPersistenceResult.Invalid<TriggerLifecycleHandoff>(new TriggerDiagnostic(
                     "trigger.handoff.transition.invalid",
@@ -400,7 +403,13 @@ public sealed partial class SqliteTriggerRepository
             transaction,
             transition.ExecutionId,
             cancellationToken).ConfigureAwait(false);
+        await _faultInjector.InjectAsync(
+            TriggerPersistenceFaultPoint.BeforeLifecycleHandoffCommit,
+            cancellationToken).ConfigureAwait(false);
         transaction.Commit();
+        await _faultInjector.InjectAsync(
+            TriggerPersistenceFaultPoint.AfterLifecycleHandoffCommit,
+            cancellationToken).ConfigureAwait(false);
         return TriggerPersistenceResult.Succeeded(new TriggerLifecycleHandoff(
             transition.ExecutionId,
             transition.ActionIndex,
@@ -699,14 +708,23 @@ public sealed partial class SqliteTriggerRepository
 
     private static bool IsLegalHandoffTransition(
         TriggerLifecycleHandoffState current,
-        TriggerLifecycleHandoffState next)
+        TriggerLifecycleHandoffState next,
+        Guid? recoveryProcessEpoch)
     {
+        if (recoveryProcessEpoch is not null)
+        {
+            return next == TriggerLifecycleHandoffState.Succeeded
+                && current is TriggerLifecycleHandoffState.HandedOff
+                    or TriggerLifecycleHandoffState.ReleaseAcknowledged
+                    or TriggerLifecycleHandoffState.ShutdownStarted
+                    or TriggerLifecycleHandoffState.Failed
+                    or TriggerLifecycleHandoffState.Uncertain;
+        }
+
         return (current, next) switch
         {
             (TriggerLifecycleHandoffState.HandedOff,
                 TriggerLifecycleHandoffState.ReleaseAcknowledged) => true,
-            (TriggerLifecycleHandoffState.HandedOff,
-                TriggerLifecycleHandoffState.Succeeded) => true,
             (TriggerLifecycleHandoffState.ReleaseAcknowledged,
                 TriggerLifecycleHandoffState.ShutdownStarted) => true,
             (TriggerLifecycleHandoffState.ShutdownStarted,

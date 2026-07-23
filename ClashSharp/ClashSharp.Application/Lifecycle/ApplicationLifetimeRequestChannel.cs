@@ -12,24 +12,40 @@ public sealed class ApplicationLifetimeRequestChannel : IApplicationLifetimeRequ
             SingleReader = true,
             SingleWriter = false,
         });
-    private int _accepted;
+    private readonly object _syncLock = new();
+    private ApplicationLifetimeRequest? _acceptedRequest;
+
+    /// <summary>Gets whether this process lifetime already accepted a winner.</summary>
+    public bool HasAcceptedRequest
+    {
+        get
+        {
+            lock (_syncLock)
+            {
+                return _acceptedRequest is not null;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public bool TryRequest(ApplicationLifetimeRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (Interlocked.CompareExchange(ref _accepted, 1, 0) != 0)
+        lock (_syncLock)
         {
-            return false;
+            if (_acceptedRequest is not null)
+            {
+                return IsSameDurableHandoff(_acceptedRequest, request);
+            }
+
+            if (_channel.Writer.TryWrite(request))
+            {
+                _acceptedRequest = request;
+                _channel.Writer.TryComplete();
+                return true;
+            }
         }
 
-        if (_channel.Writer.TryWrite(request))
-        {
-            _channel.Writer.TryComplete();
-            return true;
-        }
-
-        Volatile.Write(ref _accepted, 0);
         return false;
     }
 
@@ -37,5 +53,16 @@ public sealed class ApplicationLifetimeRequestChannel : IApplicationLifetimeRequ
     public ValueTask<ApplicationLifetimeRequest> ReadAsync(CancellationToken cancellationToken)
     {
         return _channel.Reader.ReadAsync(cancellationToken);
+    }
+
+    private static bool IsSameDurableHandoff(
+        ApplicationLifetimeRequest accepted,
+        ApplicationLifetimeRequest proposed)
+    {
+        return accepted.Handoff is not null
+            && proposed.Handoff is not null
+            && StringComparer.Ordinal.Equals(
+                accepted.Handoff.IdempotencyKey,
+                proposed.Handoff.IdempotencyKey);
     }
 }

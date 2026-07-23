@@ -168,6 +168,17 @@ public interface ITriggerRepository
         Guid executionId,
         CancellationToken cancellationToken);
 
+    /// <summary>Reads one durable execution and its process epoch.</summary>
+    Task<TriggerPersistenceResult<TriggerExecution>> ReadExecutionAsync(
+        Guid executionId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads one durable lifecycle handoff by execution and action identity.</summary>
+    Task<TriggerPersistenceResult<TriggerLifecycleHandoff>> ReadLifecycleHandoffAsync(
+        Guid executionId,
+        int actionIndex,
+        CancellationToken cancellationToken);
+
     /// <summary>Optimistically transitions one durable outbox action.</summary>
     Task<TriggerPersistenceResult<TriggerOutboxAction>> TransitionOutboxAsync(
         TriggerOutboxTransition transition,

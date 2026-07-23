@@ -295,19 +295,19 @@ Run outbox recovery repeatedly and commit `feat: reconcile trigger action outbox
 - Modify: `ClashSharp/ClashSharp/Service/ApplicationLifecycleService.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/TriggerExitHandoffTests.cs`
 
-- [ ] **Step 1: Write RED handoff barriers**
+- [x] **Step 1: Write RED handoff barriers**
 
 Prove durable `HandedOff` insertion, publication keyed by execution/action/process epoch, release acknowledgement only after repository pin/execution gate/supervisor lease release, shutdown starting from the App-owned runner, `ShutdownAsync` unwinding before host stop/disposal, shutdown failure classification, idempotent duplicate publication, and prior-epoch recovery marking success without exiting the new process.
 
-- [ ] **Step 2: Implement non-owned lifetime publication**
+- [x] **Step 2: Implement non-owned lifetime publication**
 
 The trigger participant returns after handoff and never awaits host shutdown. The outer runner waits for explicit release acknowledgement, then invokes lifecycle shutdown and records completion/failure through a safe non-self-owned channel.
 
-- [ ] **Step 3: Add recovery-only and crash boundaries**
+- [x] **Step 3: Add recovery-only and crash boundaries**
 
 Cover uncommitted/committed `RecoveryOnly`, handoff-before-release, release-before-shutdown-start, shutdown-start-before-disposal, and process termination after durable handoff. No case may create a competing journal or exit the next process epoch.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Run lifecycle/trigger tests ten times and commit `feat: hand off trigger exit safely`.
 

@@ -14,14 +14,6 @@ using TriggerActionKind = ClashSharp.Model.Triggers.TriggerActionKind;
 
 namespace ClashSharp.Service;
 
-/// <summary>Temporary boundary replaced by the epoch-safe application-layer handoff in trigger phase 9.</summary>
-internal interface ITriggerExitActionHandoff
-{
-    Task<bool?> IsHandedOffAsync(TriggerOutboxAction action, CancellationToken cancellationToken);
-
-    Task HandOffAsync(TriggerOutboxAction action, CancellationToken cancellationToken);
-}
-
 /// <summary>Adapts current application services to idempotent durable trigger-action semantics.</summary>
 internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
 {
@@ -33,7 +25,7 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
     private readonly NetworkStateCoordinator _network;
     private readonly INetworkStateObserver _networkObserver;
     private readonly IIdempotentTriggerNotificationSink _notifications;
-    private readonly ITriggerExitActionHandoff _exitHandoff;
+    private readonly ITriggerLifecycleHandoff _exitHandoff;
 
     public TriggerActionRuntimeAdapter(
         AppSettingsService settings,
@@ -44,7 +36,7 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         NetworkStateCoordinator network,
         INetworkStateObserver networkObserver,
         IIdempotentTriggerNotificationSink notifications,
-        ITriggerExitActionHandoff exitHandoff)
+        ITriggerLifecycleHandoff exitHandoff)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
@@ -65,6 +57,11 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
+            if (action.DesiredEffect.Kind == TriggerActionKind.ExitApplication)
+            {
+                return await _exitHandoff.ProbeAsync(action, cancellationToken).ConfigureAwait(false);
+            }
+
             bool? desired = action.DesiredEffect.Kind switch
             {
                 TriggerActionKind.CloseConnections =>
@@ -79,9 +76,6 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
                 TriggerActionKind.SwitchProxyMode => await ProbeNetworkModeAsync(
                     RequireMode(action),
                     cancellationToken).ConfigureAwait(false),
-                TriggerActionKind.ExitApplication => await _exitHandoff
-                    .IsHandedOffAsync(action, cancellationToken)
-                    .ConfigureAwait(false),
                 TriggerActionKind.SendNotification => await _notifications
                     .IsTriggerNotificationDeliveredAsync(action.IdempotencyKey, cancellationToken)
                     .ConfigureAwait(false),
@@ -135,8 +129,7 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
                     admissionLease,
                     cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.ExitApplication:
-                await _exitHandoff.HandOffAsync(action, cancellationToken).ConfigureAwait(false);
-                return TriggerActionApplyResult.HandedOff();
+                return await _exitHandoff.HandOffAsync(action, cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.SendNotification:
                 await _notifications.DeliverTriggerNotificationAsync(
                     action.IdempotencyKey,

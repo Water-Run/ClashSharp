@@ -5,7 +5,7 @@ using ClashSharp.ApplicationModel.Lifecycle;
 namespace ClashSharp.Service;
 
 /// <summary>Hands UI lifetime commands to the App-owned process lifetime without stopping host services inline.</summary>
-internal sealed class ApplicationLifecycleService
+internal sealed class ApplicationLifecycleService : IApplicationLifetimeRequestSink
 {
     private static ApplicationLifecycleService? _instance;
     private readonly IApplicationLifetimeRequestSink _requests;
@@ -47,6 +47,12 @@ internal sealed class ApplicationLifecycleService
     internal void RequestRestart(string source)
     {
         _requests.TryRequest(ApplicationLifetimeRequest.Restart(source));
+    }
+
+    /// <inheritdoc />
+    public bool TryRequest(ApplicationLifetimeRequest request)
+    {
+        return _requests.TryRequest(request);
     }
 
 #if UNIT_TESTS

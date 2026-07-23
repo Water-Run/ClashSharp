@@ -72,6 +72,9 @@ public sealed record TriggerLifecycleHandoffTransition
     /// <param name="nextState">Requested next handoff state.</param>
     /// <param name="updatedAt">Timestamp of the transition.</param>
     /// <param name="lastError">Latest stable error detail, or null.</param>
+    /// <param name="recoveryProcessEpoch">
+    /// Different process epoch that observed termination and is completing a prior-epoch exit, or null.
+    /// </param>
     public TriggerLifecycleHandoffTransition(
         Guid executionId,
         int actionIndex,
@@ -79,7 +82,8 @@ public sealed record TriggerLifecycleHandoffTransition
         TriggerLifecycleHandoffState? expectedState,
         TriggerLifecycleHandoffState nextState,
         DateTimeOffset updatedAt,
-        string? lastError = null)
+        string? lastError = null,
+        Guid? recoveryProcessEpoch = null)
     {
         if (executionId == Guid.Empty)
         {
@@ -102,6 +106,30 @@ public sealed record TriggerLifecycleHandoffTransition
             throw new ArgumentOutOfRangeException(nameof(nextState));
         }
 
+        if (recoveryProcessEpoch is Guid recoveryEpoch)
+        {
+            if (recoveryEpoch == Guid.Empty)
+            {
+                throw new ArgumentException(
+                    "Recovery process epoch must be nonempty.",
+                    nameof(recoveryProcessEpoch));
+            }
+
+            if (recoveryEpoch == processEpoch)
+            {
+                throw new ArgumentException(
+                    "Recovery must be observed by a different process epoch.",
+                    nameof(recoveryProcessEpoch));
+            }
+
+            if (nextState != TriggerLifecycleHandoffState.Succeeded)
+            {
+                throw new ArgumentException(
+                    "A recovery process epoch is valid only for successful prior-epoch completion.",
+                    nameof(recoveryProcessEpoch));
+            }
+        }
+
         ExecutionId = executionId;
         ActionIndex = actionIndex;
         ProcessEpoch = processEpoch;
@@ -109,6 +137,7 @@ public sealed record TriggerLifecycleHandoffTransition
         NextState = nextState;
         UpdatedAt = updatedAt;
         LastError = lastError;
+        RecoveryProcessEpoch = recoveryProcessEpoch;
     }
 
     /// <summary>Gets the owning execution identity.</summary>
@@ -131,4 +160,7 @@ public sealed record TriggerLifecycleHandoffTransition
 
     /// <summary>Gets the latest stable error detail, or null.</summary>
     public string? LastError { get; }
+
+    /// <summary>Gets the different process epoch completing a terminated prior-epoch exit, or null.</summary>
+    public Guid? RecoveryProcessEpoch { get; }
 }
