@@ -3,14 +3,13 @@ using ClashSharp.Service;
 
 namespace ClashSharp.Tests.Unit.Services;
 
-/// <summary>Unit tests for trigger task evaluation and runtime event dispatch.</summary>
+/// <summary>Tests the temporary legacy CRUD facade retained until the editor migration completes.</summary>
 public sealed class TriggerServiceTests
 {
     [Fact]
     public void GetTasks_ReturnsDefensiveCopiesThatCannotMutateStoredTasks()
     {
-        string storagePath = CreateTempStoragePath();
-        TriggerService service = CreateService(storagePath);
+        TriggerService service = CreateService(CreateTempStoragePath());
         service.SaveTasks(
         [
             new TriggerTask(
@@ -39,8 +38,7 @@ public sealed class TriggerServiceTests
     [Fact]
     public void SaveTasks_CopiesInputTasksBeforeStoring()
     {
-        string storagePath = CreateTempStoragePath();
-        TriggerService service = CreateService(storagePath);
+        TriggerService service = CreateService(CreateTempStoragePath());
         TriggerTask inputTask = new(
             "input-copy",
             "Input copy",
@@ -59,119 +57,15 @@ public sealed class TriggerServiceTests
         Assert.Equal([TriggerActionKind.SendNotification], storedTask.Actions.Select(static action => action.Kind));
     }
 
-    /// <summary>Verifies runtime events raised during an active evaluation are queued instead of dropped.</summary>
-    [Fact]
-    public async Task RuntimeEvents_WhenEvaluationIsActive_AreQueuedAndEvaluated()
-    {
-        string storagePath = CreateTempStoragePath();
-        FakeTriggerActions actions = new() { BlockFirstDispatch = true };
-        FakeTriggerRuntimeEvents runtimeEvents = new();
-        TriggerService service = CreateService(storagePath, actions, runtimeEvents);
-        service.SaveTasks(
-        [
-            new TriggerTask(
-                "queued",
-                "Queued trigger",
-                true,
-                [new TriggerCondition(TriggerConditionKind.AppEntered)],
-                [new TriggerAction(TriggerActionKind.SendNotification, "queued")]),
-        ]);
-
-        runtimeEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.AppEntered));
-        await actions.FirstDispatchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-        runtimeEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.AppEntered));
-        actions.ReleaseFirstDispatch.TrySetResult(null);
-
-        await WaitUntilAsync(() => actions.DispatchValues.Count == 2);
-        Assert.Equal(["queued", "queued"], actions.DispatchValues);
-    }
-
-    [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    public async Task EvaluateEventAsync_DisabledGlobalOrTaskSkipsContextAcquisition(
-        bool triggersEnabled,
-        bool taskEnabled)
-    {
-        string storagePath = CreateTempStoragePath();
-        int acquisitions = 0;
-        TriggerService service = CreateService(
-            storagePath,
-            getTriggersEnabled: () => triggersEnabled,
-            createEvaluationContext: (triggerEvent, _) =>
-            {
-                acquisitions++;
-                return Task.FromResult(
-                    TriggerEvaluationContextCreationResult.Succeeded(
-                        new TriggerEvaluationContext(
-                            triggerEvent.EventKind,
-                            0,
-                            0,
-                            TimeSpan.Zero,
-                            TimeOnly.MinValue,
-                            triggerEvent.NotificationLevel)));
-            });
-        service.SaveTasks(
-        [
-            new TriggerTask(
-                "disabled",
-                "Disabled",
-                taskEnabled,
-                [new TriggerCondition(TriggerConditionKind.AppEntered)],
-                [new TriggerAction(TriggerActionKind.SendNotification, "disabled")]),
-        ]);
-
-        IReadOnlyList<TriggerExecutionResult> results = await service.EvaluateEventAsync(
-            new TriggerRuntimeEvent(TriggerEventKind.AppEntered),
-            CancellationToken.None);
-
-        Assert.Empty(results);
-        Assert.Equal(0, acquisitions);
-    }
-
-    /// <summary>Verifies quiescence rejects new events and awaits the action already running.</summary>
-    [Fact]
-    public async Task QuiesceAsync_ActionInFlight_WaitsForReleaseAndRejectsLaterEvents()
-    {
-        string storagePath = CreateTempStoragePath();
-        FakeTriggerActions actions = new() { BlockFirstDispatch = true };
-        FakeTriggerRuntimeEvents runtimeEvents = new();
-        TriggerService service = CreateService(storagePath, actions, runtimeEvents);
-        service.SaveTasks(
-        [
-            new TriggerTask(
-                "exit",
-                "Exit trigger",
-                true,
-                [new TriggerCondition(TriggerConditionKind.AppEntered)],
-                [new TriggerAction(TriggerActionKind.ExitApplication, "exit")]),
-        ]);
-
-        runtimeEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.AppEntered));
-        await actions.FirstDispatchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        Task quiescence = service.QuiesceAsync(CancellationToken.None);
-
-        Assert.False(quiescence.IsCompleted);
-        actions.ReleaseFirstDispatch.TrySetResult(null);
-        await quiescence.WaitAsync(TimeSpan.FromSeconds(2));
-        runtimeEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.AppEntered));
-        await Task.Delay(50);
-
-        Assert.Equal(["exit"], actions.DispatchValues);
-    }
-
-    /// <summary>Verifies one failing trigger action is logged and does not prevent later matching triggers from running.</summary>
     [Fact]
     public async Task EvaluateAsync_WhenOneTriggerActionFails_ContinuesWithOtherTriggers()
     {
-        string storagePath = CreateTempStoragePath();
         FakeTriggerActions actions = new()
         {
             ThrowForValue = "fail",
         };
         FakeTriggerLog log = new();
-        TriggerService service = CreateService(storagePath, actions, log: log);
+        TriggerService service = CreateService(CreateTempStoragePath(), actions, log);
         service.SaveTasks(
         [
             new TriggerTask(
@@ -189,245 +83,21 @@ public sealed class TriggerServiceTests
         ]);
 
         IReadOnlyList<TriggerExecutionResult> results = await service.EvaluateAsync(
-            new TriggerEvaluationContext(
-                TriggerEventKind.AppEntered,
-                0,
-                0,
-                TimeSpan.Zero,
-                TimeOnly.MinValue,
-                NotificationLevel.Default),
+            AppEnteredContext(),
             CancellationToken.None);
 
-        TriggerExecutionResult result = Assert.Single(results);
-        Assert.Equal("passing", result.TaskId);
+        Assert.Equal("passing", Assert.Single(results).TaskId);
         Assert.Equal(["fail", "pass"], actions.DispatchValues);
         Assert.Contains(log.Entries, entry => entry.Level == "Warning" && entry.Category == "Trigger");
     }
 
-    /// <summary>Verifies notification triggers do not re-enter from notifications generated by trigger actions.</summary>
-    [Fact]
-    public async Task RuntimeEvents_WhenNotificationTriggerSendsNotification_DoesNotReenterGeneratedNotification()
-    {
-        string storagePath = CreateTempStoragePath();
-        FakeTriggerRuntimeEvents runtimeEvents = new();
-        int generatedNotificationEvents = 0;
-        FakeTriggerActions actions = new()
-        {
-            AfterDispatch = kind =>
-            {
-                if (kind == ApplicationActionKind.SendNotification && generatedNotificationEvents < 2)
-                {
-                    generatedNotificationEvents++;
-                    runtimeEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.NotificationRaised));
-                }
-            },
-        };
-        TriggerService service = CreateService(storagePath, actions, runtimeEvents);
-        service.SaveTasks(
-        [
-            new TriggerTask(
-                "notification-loop",
-                "Notification loop",
-                true,
-                [new TriggerCondition(TriggerConditionKind.NotificationRaised)],
-                [new TriggerAction(TriggerActionKind.SendNotification, "loop")]),
-        ]);
-
-        runtimeEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.NotificationRaised));
-
-        await WaitUntilAsync(() => actions.DispatchValues.Count >= 1);
-        await Task.Delay(100);
-        Assert.Single(actions.DispatchValues);
-    }
-
-    /// <summary>Verifies starting the trigger service schedules periodic trigger evaluation.</summary>
-    [Fact]
-    public async Task Start_WhenPeriodicTriggerMatches_DispatchesPeriodicAction()
-    {
-        string storagePath = CreateTempStoragePath();
-        FakeTriggerActions actions = new();
-        TriggerService service = CreateService(
-            storagePath,
-            actions,
-            periodicInterval: TimeSpan.FromMilliseconds(20),
-            createPeriodicContext: () => new TriggerEvaluationContext(
-                TriggerEventKind.Periodic,
-                0,
-                0,
-                TimeSpan.FromSeconds(5),
-                TimeOnly.MinValue,
-                NotificationLevel.Default));
-        service.SaveTasks(
-        [
-            new TriggerTask(
-                "periodic",
-                "Periodic trigger",
-                true,
-                [new TriggerCondition(TriggerConditionKind.Runtime, Threshold: 1)],
-                [new TriggerAction(TriggerActionKind.SendNotification, "periodic")]),
-        ]);
-
-        try
-        {
-            service.Start();
-
-            await WaitUntilAsync(() => actions.DispatchValues.Count >= 1);
-            Assert.Contains("periodic", actions.DispatchValues);
-        }
-        finally
-        {
-            service.Stop();
-        }
-    }
-
-    /// <summary>Verifies a continuously matching periodic trigger is not dispatched on every timer tick.</summary>
-    [Fact]
-    public async Task Start_WhenPeriodicTriggerRemainsMatched_UsesCooldownBeforeDispatchingAgain()
-    {
-        string storagePath = CreateTempStoragePath();
-        FakeTriggerActions actions = new();
-        TriggerService service = CreateService(
-            storagePath,
-            actions,
-            periodicInterval: TimeSpan.FromMilliseconds(20),
-            repeatedTriggerCooldown: TimeSpan.FromSeconds(1),
-            createPeriodicContext: () => new TriggerEvaluationContext(
-                TriggerEventKind.Periodic,
-                0,
-                0,
-                TimeSpan.FromSeconds(5),
-                TimeOnly.MinValue,
-                NotificationLevel.Default));
-        service.SaveTasks(
-        [
-            new TriggerTask(
-                "periodic-cooldown",
-                "Periodic cooldown trigger",
-                true,
-                [new TriggerCondition(TriggerConditionKind.Runtime, Threshold: 1)],
-                [new TriggerAction(TriggerActionKind.SendNotification, "periodic-cooldown")]),
-        ]);
-
-        try
-        {
-            service.Start();
-
-            await WaitUntilAsync(() => actions.DispatchValues.Count >= 1);
-            await Task.Delay(140);
-
-            Assert.Single(actions.DispatchValues);
-        }
-        finally
-        {
-            service.Stop();
-        }
-    }
-
-
-    /// <summary>Verifies enabling triggers at runtime starts periodic evaluation after a disabled startup.</summary>
-    [Fact]
-    public async Task TriggersEnabled_WhenEnabledAfterDisabledStart_StartsPeriodicEvaluation()
-    {
-        string storagePath = CreateTempStoragePath();
-        FakeTriggerActions actions = new();
-        bool triggersEnabled = false;
-        TriggerService service = CreateService(
-            storagePath,
-            actions,
-            periodicInterval: TimeSpan.FromMilliseconds(20),
-            createPeriodicContext: () => new TriggerEvaluationContext(
-                TriggerEventKind.Periodic,
-                0,
-                0,
-                TimeSpan.FromSeconds(5),
-                TimeOnly.MinValue,
-                NotificationLevel.Default),
-            getTriggersEnabled: () => triggersEnabled,
-            setTriggersEnabled: value => triggersEnabled = value);
-        service.SaveTasks(
-        [
-            new TriggerTask(
-                "periodic-toggle",
-                "Periodic toggle trigger",
-                true,
-                [new TriggerCondition(TriggerConditionKind.Runtime, Threshold: 1)],
-                [new TriggerAction(TriggerActionKind.SendNotification, "periodic-toggle")]),
-        ]);
-
-        try
-        {
-            service.Start();
-            await Task.Delay(80);
-            Assert.Empty(actions.DispatchValues);
-
-            service.TriggersEnabled = true;
-
-            await WaitUntilAsync(() => actions.DispatchValues.Count >= 1);
-            Assert.Contains("periodic-toggle", actions.DispatchValues);
-        }
-        finally
-        {
-            service.Stop();
-        }
-    }
-
-    /// <summary>Verifies disabling triggers at runtime stops periodic evaluation.</summary>
-    [Fact]
-    public async Task TriggersEnabled_WhenDisabledAfterStart_StopsPeriodicEvaluation()
-    {
-        string storagePath = CreateTempStoragePath();
-        FakeTriggerActions actions = new();
-        bool triggersEnabled = true;
-        TriggerService service = CreateService(
-            storagePath,
-            actions,
-            periodicInterval: TimeSpan.FromMilliseconds(20),
-            createPeriodicContext: () => new TriggerEvaluationContext(
-                TriggerEventKind.Periodic,
-                0,
-                0,
-                TimeSpan.FromSeconds(5),
-                TimeOnly.MinValue,
-                NotificationLevel.Default),
-            getTriggersEnabled: () => triggersEnabled,
-            setTriggersEnabled: value => triggersEnabled = value);
-        service.SaveTasks(
-        [
-            new TriggerTask(
-                "periodic-disable",
-                "Periodic disable trigger",
-                true,
-                [new TriggerCondition(TriggerConditionKind.Runtime, Threshold: 1)],
-                [new TriggerAction(TriggerActionKind.SendNotification, "periodic-disable")]),
-        ]);
-
-        try
-        {
-            service.Start();
-            await WaitUntilAsync(() => actions.DispatchValues.Count >= 1);
-
-            service.TriggersEnabled = false;
-            int dispatchCountAfterDisable = actions.DispatchValues.Count;
-            await Task.Delay(120);
-
-            Assert.False(triggersEnabled);
-            Assert.Equal(dispatchCountAfterDisable, actions.DispatchValues.Count);
-        }
-        finally
-        {
-            service.Stop();
-        }
-    }
-
-    /// <summary>Verifies the runtime trigger enablement switch immediately controls evaluation.</summary>
     [Fact]
     public async Task EvaluateAsync_WhenTriggersDisabledAtRuntime_DoesNotDispatchMatchingTask()
     {
-        string storagePath = CreateTempStoragePath();
         FakeTriggerActions actions = new();
         bool triggersEnabled = true;
         TriggerService service = CreateService(
-            storagePath,
+            CreateTempStoragePath(),
             actions,
             getTriggersEnabled: () => triggersEnabled,
             setTriggersEnabled: value => triggersEnabled = value);
@@ -443,13 +113,7 @@ public sealed class TriggerServiceTests
 
         service.TriggersEnabled = false;
         IReadOnlyList<TriggerExecutionResult> results = await service.EvaluateAsync(
-            new TriggerEvaluationContext(
-                TriggerEventKind.AppEntered,
-                0,
-                0,
-                TimeSpan.Zero,
-                TimeOnly.MinValue,
-                NotificationLevel.Default),
+            AppEnteredContext(),
             CancellationToken.None);
 
         Assert.False(triggersEnabled);
@@ -460,29 +124,15 @@ public sealed class TriggerServiceTests
     private static TriggerService CreateService(
         string storagePath,
         FakeTriggerActions? actions = null,
-        FakeTriggerRuntimeEvents? runtimeEvents = null,
         FakeTriggerLog? log = null,
-        TimeSpan? periodicInterval = null,
-        Func<TriggerEvaluationContext>? createPeriodicContext = null,
         Func<bool>? getTriggersEnabled = null,
-        Action<bool>? setTriggersEnabled = null,
-        TimeSpan? repeatedTriggerCooldown = null,
-        Func<
-            TriggerRuntimeEvent,
-            CancellationToken,
-            Task<TriggerEvaluationContextCreationResult>>? createEvaluationContext = null)
+        Action<bool>? setTriggersEnabled = null)
     {
         log ??= new FakeTriggerLog();
-        Func<CancellationToken, Task<TriggerEvaluationContextCreationResult>>? periodicFactory =
-            createPeriodicContext is null
-                ? null
-                : _ => Task.FromResult(
-                    TriggerEvaluationContextCreationResult.Succeeded(createPeriodicContext()));
         return new TriggerService(
             storagePath,
             actions ?? new FakeTriggerActions(),
             new FakeTriggerNotifications(),
-            runtimeEvents ?? new FakeTriggerRuntimeEvents(),
             log.Append,
             key => key switch
             {
@@ -490,21 +140,17 @@ public sealed class TriggerServiceTests
                 "Triggers.Log.ActionFailed.Format" => "Trigger action failed: {0}",
                 _ => key,
             },
-            createEvaluationContext ?? ((triggerEvent, _) => Task.FromResult(
-                TriggerEvaluationContextCreationResult.Succeeded(
-                    new TriggerEvaluationContext(
-                        triggerEvent.EventKind,
-                        0,
-                        0,
-                        TimeSpan.Zero,
-                        TimeOnly.MinValue,
-                        triggerEvent.NotificationLevel)))),
             getTriggersEnabled,
-            setTriggersEnabled,
-            periodicInterval: periodicInterval,
-            createPeriodicContext: periodicFactory,
-            repeatedTriggerCooldown: repeatedTriggerCooldown);
+            setTriggersEnabled);
     }
+
+    private static TriggerEvaluationContext AppEnteredContext() => new(
+        TriggerEventKind.AppEntered,
+        0,
+        0,
+        TimeSpan.Zero,
+        TimeOnly.MinValue,
+        NotificationLevel.Default);
 
     private static string CreateTempStoragePath()
     {
@@ -513,50 +159,22 @@ public sealed class TriggerServiceTests
         return Path.Combine(directory, "Triggers.json");
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-        while (!condition())
-        {
-            await Task.Delay(20, timeout.Token);
-        }
-    }
-
     private sealed class FakeTriggerActions : IApplicationActionDispatcher
     {
-        private int _dispatchCount;
-
         public List<string> DispatchValues { get; } = [];
-
-        public bool BlockFirstDispatch { get; init; }
 
         public string? ThrowForValue { get; init; }
 
-        public Action<ApplicationActionKind>? AfterDispatch { get; init; }
-
-        public TaskCompletionSource<string> FirstDispatchStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public TaskCompletionSource<object?> ReleaseFirstDispatch { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public async Task DispatchAsync(ApplicationActionKind kind, string value, CancellationToken cancellationToken)
+        public Task DispatchAsync(
+            ApplicationActionKind kind,
+            string value,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             DispatchValues.Add(value);
-            int dispatchCount = Interlocked.Increment(ref _dispatchCount);
-            if (dispatchCount == 1)
-            {
-                FirstDispatchStarted.TrySetResult(value);
-                if (BlockFirstDispatch)
-                {
-                    await ReleaseFirstDispatch.Task.WaitAsync(cancellationToken);
-                }
-            }
-
-            if (StringComparer.Ordinal.Equals(value, ThrowForValue))
-            {
-                throw new InvalidOperationException("action failed");
-            }
-
-            AfterDispatch?.Invoke(kind);
+            return StringComparer.Ordinal.Equals(value, ThrowForValue)
+                ? Task.FromException(new InvalidOperationException("action failed"))
+                : Task.CompletedTask;
         }
     }
 
@@ -564,16 +182,6 @@ public sealed class TriggerServiceTests
     {
         public void NotifyTriggerFired(string triggerName)
         {
-        }
-    }
-
-    private sealed class FakeTriggerRuntimeEvents : ITriggerRuntimeEventSource
-    {
-        public event EventHandler<TriggerRuntimeEvent>? RuntimeEventRaised;
-
-        public void Publish(TriggerRuntimeEvent triggerEvent)
-        {
-            RuntimeEventRaised?.Invoke(this, triggerEvent);
         }
     }
 

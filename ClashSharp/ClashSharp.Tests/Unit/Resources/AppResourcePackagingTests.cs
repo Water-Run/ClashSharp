@@ -1819,6 +1819,8 @@ public sealed class AppResourcePackagingTests
     public void TriggerNotificationArchitecture_UsesRuntimeEventsAndInjectedBoundaries()
     {
         string triggerServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerService.cs");
+        string schedulerAdapterPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerSchedulerAdapters.cs");
+        string schedulerPath = FindSourceFile("ClashSharp", "ClashSharp.Application", "Triggers", "TriggerScheduler.cs");
         string notificationServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "NotificationService.cs");
         string applicationActionServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ApplicationActionService.cs");
         string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
@@ -1826,6 +1828,8 @@ public sealed class AppResourcePackagingTests
         string appCodePath = FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs");
 
         string triggerService = File.ReadAllText(triggerServicePath);
+        string schedulerAdapter = File.ReadAllText(schedulerAdapterPath);
+        string scheduler = File.ReadAllText(schedulerPath);
         string notificationService = File.ReadAllText(notificationServicePath);
         string applicationActionService = File.ReadAllText(applicationActionServicePath);
         string masterControlCode = File.ReadAllText(masterControlCodePath);
@@ -1836,8 +1840,12 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ITriggerRuntimeEventPublisher", triggerRuntimeEvents, StringComparison.Ordinal);
         Assert.Contains("TriggerRuntimeEventHub", triggerRuntimeEvents, StringComparison.Ordinal);
         Assert.Contains("ITriggerNotificationSink", triggerService, StringComparison.Ordinal);
-        Assert.Contains("ITriggerRuntimeEventSource", triggerService, StringComparison.Ordinal);
-        Assert.Contains("_runtimeEvents.RuntimeEventRaised += OnRuntimeEventRaised", triggerService, StringComparison.Ordinal);
+        Assert.DoesNotContain("ITriggerRuntimeEventSource", triggerService, StringComparison.Ordinal);
+        Assert.DoesNotContain("RuntimeEventRaised +=", triggerService, StringComparison.Ordinal);
+        Assert.Contains("ITriggerRuntimeEventSource", schedulerAdapter, StringComparison.Ordinal);
+        Assert.Contains("_source.RuntimeEventRaised += OnRuntimeEventRaised", schedulerAdapter, StringComparison.Ordinal);
+        Assert.Contains("ITriggerSchedulerEventSource", scheduler, StringComparison.Ordinal);
+        Assert.Contains("_eventSource.EventRaised += OnEventRaised", scheduler, StringComparison.Ordinal);
         Assert.DoesNotContain("private readonly NotificationService", triggerService, StringComparison.Ordinal);
         Assert.DoesNotContain("_notifications.NotificationRaised", triggerService, StringComparison.Ordinal);
         Assert.DoesNotContain("NotificationRaisedEventArgs", triggerService, StringComparison.Ordinal);

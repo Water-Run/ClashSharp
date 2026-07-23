@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
@@ -8,6 +9,7 @@ using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Hosting.Startup;
 using ClashSharp.Infrastructure.Recovery;
+using ClashSharp.Infrastructure.Triggers;
 using ClashSharp.Service;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -23,18 +25,33 @@ internal static class ClashSharpAppHostFactory
     {
         ArgumentNullException.ThrowIfNull(attachWindow);
         ArgumentNullException.ThrowIfNull(lifetimeRequests);
+        string triggerRoot = AppDataPathService.ResolveLocalDataDirectory();
+        string triggerDatabasePath = Path.Combine(triggerRoot, "Triggers.db");
+        string legacyTriggerPath = Path.Combine(triggerRoot, "Triggers.json");
+        Guid triggerProcessEpoch = Guid.NewGuid();
         return AppHost.Build(services =>
         {
             services.AddSingleton(attachWindow);
             services.AddSingleton(lifetimeRequests);
+            services.AddSingleton(TimeProvider.System);
             services.AddSingleton(_ => AppSettingsService.Instance);
             services.AddSingleton(_ => ConnectionSamplingService.Instance);
+            services.AddSingleton(_ => StartupLaunchService.Instance);
+            services.AddSingleton(_ => MihomoConnectionService.Instance);
             services.AddSingleton(_ => NetworkTakeoverService.Instance);
             services.AddSingleton(_ => WindowsProxyService.Instance);
             services.AddSingleton(_ => MihomoCoreService.Instance);
             services.AddSingleton(_ => CoreConfigurationService.Instance);
             services.AddSingleton(_ => MihomoServiceManager.Instance);
             services.AddSingleton(_ => ProxyRecoveryService.Instance);
+            services.AddSingleton(_ => NotificationService.Instance);
+            services.AddSingleton<IIdempotentTriggerNotificationSink>(provider =>
+                provider.GetRequiredService<NotificationService>());
+            services.AddSingleton(_ => TriggerRuntimeEventHub.Instance);
+            services.AddSingleton<ITriggerRuntimeEventSource>(provider =>
+                provider.GetRequiredService<TriggerRuntimeEventHub>());
+            services.AddSingleton<ITriggerRuntimeEventPublisher>(provider =>
+                provider.GetRequiredService<TriggerRuntimeEventHub>());
             services.AddSingleton<MutationAdmissionBarrier>();
             services.AddSingleton<FairAsyncMutationGate>();
             services.AddSingleton<MutationDeadlines>(_ => MutationDeadlines.Default);
@@ -67,22 +84,72 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<ApplicationLifecycleService>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
-            services.AddSingleton<ITriggerContextProvider>(_ =>
+            services.AddSingleton(_ => new SqliteTriggerRepository(triggerDatabasePath));
+            services.AddSingleton<ITriggerRepository>(provider =>
+                provider.GetRequiredService<SqliteTriggerRepository>());
+            services.AddSingleton(provider => new TriggerMigrationCoordinator(
+                provider.GetRequiredService<SqliteTriggerRepository>(),
+                legacyTriggerPath,
+                provider.GetRequiredService<TimeProvider>()));
+            services.AddSingleton<ITriggerContextProvider>(provider =>
             {
-                TimeProvider timeProvider = TimeProvider.System;
+                TimeProvider timeProvider = provider.GetRequiredService<TimeProvider>();
                 return new TriggerContextProviderAdapter(
                     new SqliteTriggerTrafficContextSource(LogStorageService.Instance.DatabasePath),
                     new RuntimeTriggerContextSource(RuntimeTrafficRateService.Instance),
                     timeProvider,
                     timeProvider.GetUtcNow());
             });
-            services.AddSingleton<TriggerEvaluationContextFactory>();
+            services.AddSingleton<TriggerEvaluator>();
+            services.AddSingleton<TriggerExecutionGate>();
+            services.AddSingleton(provider => new TriggerLifecycleHandoffCoordinator(
+                provider.GetRequiredService<ITriggerRepository>(),
+                lifetimeRequests,
+                provider.GetRequiredService<TimeProvider>(),
+                triggerProcessEpoch));
+            services.AddSingleton<ITriggerLifecycleHandoff>(provider =>
+                provider.GetRequiredService<TriggerLifecycleHandoffCoordinator>());
+            services.AddSingleton<TriggerActionRuntimeAdapter>();
+            services.AddSingleton<ITriggerActionRuntime>(provider =>
+                provider.GetRequiredService<TriggerActionRuntimeAdapter>());
+            services.AddSingleton<TriggerActionExecutor>();
+            services.AddSingleton<ITriggerExecutionDispatcher>(provider =>
+                provider.GetRequiredService<TriggerActionExecutor>());
+            services.AddSingleton(provider => new TriggerExecutionCoordinator(
+                provider.GetRequiredService<ITriggerRepository>(),
+                provider.GetRequiredService<TriggerExecutionGate>(),
+                provider.GetRequiredService<TriggerEvaluator>(),
+                provider.GetRequiredService<MutationAdmissionBarrier>(),
+                provider.GetRequiredService<ITriggerExecutionDispatcher>(),
+                provider.GetRequiredService<TimeProvider>(),
+                triggerProcessEpoch));
+            services.AddSingleton<TriggerActionReconciler>();
+            services.AddSingleton<ITriggerSchedulerEvaluator, TriggerSchedulerEvaluator>();
+            services.AddSingleton<TriggerSchedulerSettingsAdapter>();
+            services.AddSingleton<ITriggerSchedulerSettings>(provider =>
+                provider.GetRequiredService<TriggerSchedulerSettingsAdapter>());
+            services.AddSingleton<TriggerSchedulerEventSourceAdapter>();
+            services.AddSingleton<ITriggerSchedulerEventSource>(provider =>
+                provider.GetRequiredService<TriggerSchedulerEventSourceAdapter>());
+            services.AddSingleton<ITriggerSchedulerClock>(provider =>
+                new SystemTriggerSchedulerClock(
+                    provider.GetRequiredService<TimeProvider>(),
+                    TimeSpan.FromSeconds(30)));
+            services.AddSingleton<TriggerSchedulerHealthLogAdapter>();
+            services.AddSingleton(provider => new TriggerScheduler(
+                provider.GetRequiredService<ITriggerSchedulerSettings>(),
+                provider.GetRequiredService<ITriggerSchedulerEventSource>(),
+                provider.GetRequiredService<ITriggerSchedulerClock>(),
+                provider.GetRequiredService<ITriggerSchedulerEvaluator>(),
+                provider.GetRequiredService<ITriggerLifecycleHandoff>(),
+                provider.GetRequiredService<TriggerSchedulerHealthLogAdapter>().Report));
+            services.AddSingleton<TriggerStartupInitializer>();
+            services.AddSingleton<ITriggerStartupInitializer>(provider =>
+                provider.GetRequiredService<TriggerStartupInitializer>());
             services.AddSingleton(provider => TriggerService.CreateDefault(
-                provider.GetRequiredService<IApplicationActionDispatcher>(),
-                provider.GetRequiredService<TriggerEvaluationContextFactory>()));
-            services.AddSingleton<LegacyTriggerRuntimeParticipant>();
+                provider.GetRequiredService<IApplicationActionDispatcher>()));
             services.AddSingleton<IRuntimeParticipant>(provider =>
-                provider.GetRequiredService<LegacyTriggerRuntimeParticipant>());
+                provider.GetRequiredService<TriggerScheduler>());
             services.AddSingleton<IRuntimeParticipant>(provider =>
                 provider.GetRequiredService<ConnectionSamplingService>());
             services.AddSingleton(provider => new RuntimeLifecycleCoordinator(

@@ -325,19 +325,19 @@ Run lifecycle/trigger tests ten times and commit `feat: hand off trigger exit sa
 - Modify: `ClashSharp/ClashSharp/AppHost/ClashSharpAppHostFactory.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Triggers/TriggerSchedulerTests.cs`
 
-- [ ] **Step 1: Write RED scheduler/lifecycle tests**
+- [x] **Step 1: Write RED scheduler/lifecycle tests**
 
 Use a fake clock and channels, not delays. Prove disabled startup requests no context; enabled periodic ticks and runtime events are queued deterministically; task exceptions become health/diagnostics; quiesce rejects new events and awaits in-flight work; resume preserves prior running state; stop owns and awaits every task; no event is dropped during active evaluation.
 
-- [ ] **Step 2: Implement one owned scheduler**
+- [x] **Step 2: Implement one owned scheduler**
 
 Use one bounded channel and owned task or the existing supervised primitive. Runtime event publication is synchronous enqueue only; periodic time is awaited; start/quiesce/resume/stop are idempotent. Remove all three TriggerService detached continuations and timer callbacks.
 
-- [ ] **Step 3: Compose startup and recovery in order**
+- [x] **Step 3: Compose startup and recovery in order**
 
 Initialize/migrate/reconcile the repository before scheduler start. Register the scheduler directly as `IRuntimeParticipant`; delete `LegacyTriggerRuntimeParticipant` when no longer needed. Startup failure is typed and visible.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Run scheduler/lifecycle tests ten times, full Release build, and commit `feat: supervise trigger scheduling`.
 

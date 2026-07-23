@@ -87,9 +87,9 @@ public sealed class RepositoryTopologyTests
         Assert.False(File.Exists(legacyServicePath));
     }
 
-    /// <summary>Verifies sampling lifecycle ownership is direct and the legacy adapter cannot return.</summary>
+    /// <summary>Verifies runtime lifecycle ownership is direct and the legacy adapter cannot return.</summary>
     [Fact]
-    public void AppHost_RegistersSamplingAsItsDirectRuntimeParticipant()
+    public void AppHost_RegistersSupervisedRuntimeParticipantsDirectly()
     {
         string hostPath = Path.Combine(
             RepositoryRoot,
@@ -112,12 +112,13 @@ public sealed class RepositoryTopologyTests
             "Startup",
             "ConnectionSamplingStartupStep.cs");
         string host = File.ReadAllText(hostPath);
-        string compatibility = File.ReadAllText(compatibilityPath);
         string startup = File.ReadAllText(startupPath);
 
         Assert.Contains("GetRequiredService<ConnectionSamplingService>()", host, StringComparison.Ordinal);
+        Assert.Contains("GetRequiredService<TriggerScheduler>()", host, StringComparison.Ordinal);
         Assert.DoesNotContain("LegacyConnectionSamplingRuntimeParticipant", host, StringComparison.Ordinal);
-        Assert.DoesNotContain("LegacyConnectionSamplingRuntimeParticipant", compatibility, StringComparison.Ordinal);
+        Assert.DoesNotContain("LegacyTriggerRuntimeParticipant", host, StringComparison.Ordinal);
+        Assert.False(File.Exists(compatibilityPath));
         Assert.Contains("ConnectionSamplingService sampling", startup, StringComparison.Ordinal);
     }
 

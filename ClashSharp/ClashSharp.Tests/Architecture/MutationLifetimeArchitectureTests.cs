@@ -41,17 +41,15 @@ public sealed class MutationLifetimeArchitectureTests
         }
     }
 
-    /// <summary>Freezes the remaining trigger compatibility continuations until Phase 04 replaces them.</summary>
+    /// <summary>Rejects detached async continuations now that trigger scheduling is host-owned.</summary>
     [Fact]
-    public void DetachedAsyncContinuations_AreRestrictedToLegacyTriggerCompatibility()
+    public void DetachedAsyncContinuations_AreAbsentFromProductionSources()
     {
         ProductionSource[] sources = ReadProductionSources()
             .Where(source => Regex.IsMatch(source.Text, @"_\s*=\s*\w+Async\s*\("))
             .ToArray();
 
-        ProductionSource source = Assert.Single(sources);
-        Assert.Equal("ClashSharp/ClashSharp/Service/TriggerService.cs", source.RelativePath);
-        Assert.Equal(3, Regex.Count(source.Text, @"_\s*=\s*\w+Async\s*\("));
+        Assert.Empty(sources);
     }
 
     /// <summary>Restricts direct network side effects to the registered legacy compatibility implementation.</summary>

@@ -53,7 +53,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Coordinates tray commands without coupling behavior to WinUI callbacks.</summary>
     private readonly TrayCommandService _trayCommandService;
 
-    private readonly TriggerService _triggerService;
+    private readonly ITriggerRuntimeEventPublisher _triggerEvents;
 
     private readonly ApplicationActionService _applicationActions;
 
@@ -78,13 +78,13 @@ public sealed partial class MainWindow : Window
 
     /// <summary>Initializes the main window, applies minimum size constraints, configures the title bar, and sets up navigation.</summary>
     internal MainWindow(
-        TriggerService triggerService,
+        ITriggerRuntimeEventPublisher triggerEvents,
         ApplicationActionService applicationActions,
         ApplicationLifecycleService applicationLifecycle,
         TrayCommandService trayCommandService,
         StartupConflictSnapshot startupConflicts)
     {
-        _triggerService = triggerService ?? throw new ArgumentNullException(nameof(triggerService));
+        _triggerEvents = triggerEvents ?? throw new ArgumentNullException(nameof(triggerEvents));
         _applicationActions = applicationActions ?? throw new ArgumentNullException(nameof(applicationActions));
         _applicationLifecycle = applicationLifecycle ?? throw new ArgumentNullException(nameof(applicationLifecycle));
         _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
@@ -257,9 +257,7 @@ public sealed partial class MainWindow : Window
         AppSettingsService settings = AppSettingsService.Instance;
         bool skipStartupDialogs = ShouldSkipStartupDialogs();
 
-        await _triggerService.EvaluateEventAsync(
-            new TriggerRuntimeEvent(TriggerEventKind.AppEntered),
-            System.Threading.CancellationToken.None);
+        _triggerEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.AppEntered));
 
         if (!skipStartupDialogs && _startupConflicts.Issues.Count > 0)
         {
