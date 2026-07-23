@@ -52,19 +52,19 @@ Keep every checkpoint buildable and independently reviewable:
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Triggers/TriggerDefinitionValidatorTests.cs`
 - Modify: `ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj`
 
-- [ ] **Step 1: Write RED domain tests**
+- [x] **Step 1: Write RED domain tests**
 
 Cover stable IDs, positive revisions, immutable copied collections, every condition parameter shape, positive finite thresholds/windows, valid local times, enum membership, nonempty conditions/actions, unique condition identities, ordered actions, and `ExitApplication` only as the final action. Prove undefined numeric enums and mismatched parameter types are rejected before persistence or mutation.
 
-- [ ] **Step 2: Implement the production Core model**
+- [x] **Step 2: Implement the production Core model**
 
 Use typed parameter records rather than `Kind/Threshold/Value` scalar bags. Model `RollingWindow`, `CurrentSession`, and `AllTime` explicitly. Keep notification severity trigger-specific or move a platform-neutral severity enum into Core; Core must not reference WinUI.
 
-- [ ] **Step 3: Prove assembly ownership**
+- [x] **Step 3: Prove assembly ownership**
 
 Tests reference the production Core assembly only. Do not add source links or `UNIT_TESTS` branches. Run the domain tests, Core Release build, format verification, and `git diff --check`.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Use the requesting/receiving-code-review checklists, rerun focused tests, and commit `feat: add typed trigger domain`.
 
