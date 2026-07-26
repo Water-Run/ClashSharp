@@ -23,7 +23,7 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed class TriggerEditorViewModelTests
 {
     [Fact]
-    public async Task OpenEditSave_RoundTripsEveryUntouchedConditionAndActionInOrder()
+    public async Task OpenEditSaveReload_RoundTripsEveryUntouchedConditionAndActionInOrder()
     {
         TriggerTaskDefinition original = CompleteDefinition("alpha", "Original");
         RecordingDefinitionStore store = new(Catalog(7, original));
@@ -42,6 +42,19 @@ public sealed class TriggerEditorViewModelTests
         Assert.Equal(original.IsEnabled, persisted.IsEnabled);
         Assert.Equal(original.Conditions, persisted.Conditions);
         Assert.Equal(original.Actions, persisted.Actions);
+
+        TriggersViewModel reloadedList = new(Localize, store, new FakeTriggerSettings());
+        Assert.True(await reloadedList.LoadAsync(CancellationToken.None));
+        TriggerEditorViewModel reloadedEditor = Assert.IsType<TriggerEditorViewModel>(
+            reloadedList.BeginEdit("alpha"));
+        Assert.True(reloadedEditor.TryBuildDefinition(out TriggerTaskDefinition? reloaded));
+        Assert.NotNull(reloaded);
+        Assert.Equal(persisted.Id, reloaded.Id);
+        Assert.Equal(persisted.Revision, reloaded.Revision);
+        Assert.Equal(persisted.Name, reloaded.Name);
+        Assert.Equal(persisted.IsEnabled, reloaded.IsEnabled);
+        Assert.Equal(persisted.Conditions, reloaded.Conditions);
+        Assert.Equal(persisted.Actions, reloaded.Actions);
     }
 
     [Fact]

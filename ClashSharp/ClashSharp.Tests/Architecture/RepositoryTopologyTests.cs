@@ -139,11 +139,10 @@ public sealed class RepositoryTopologyTests
             ["View/Settings.xaml.cs"] = 60,
             ["View/StartupConflictDialogPresenter.cs"] = 8,
             ["View/Statistics.xaml.cs"] = 3,
-            ["View/Triggers.xaml.cs"] = 40,
             ["ViewModel/AsyncRelayCommand.cs"] = 1,
             ["ViewModel/MainWindowViewModel.cs"] = 1,
             ["ViewModel/ManagementPageViewModels.cs"] = 1,
-            ["ViewModel/MasterControlAdapters.cs"] = 11,
+            ["ViewModel/MasterControlAdapters.cs"] = 10,
             ["ViewModel/MasterControlViewModel.cs"] = 5,
             ["ViewModel/ProxiesViewModel.cs"] = 1,
             ["ViewModel/SettingsAdapters.cs"] = 3,
@@ -169,8 +168,8 @@ public sealed class RepositoryTopologyTests
             .ToDictionary(static item => item.RelativePath, static item => item.Count, StringComparer.Ordinal);
 
         Assert.True(
-            actualOccurrencesByFile.Values.Sum() <= 208,
-            "Presentation service-locator debt exceeded the 208-reference Phase 03 baseline.");
+            actualOccurrencesByFile.Values.Sum() <= 167,
+            "Presentation service-locator debt exceeded the 167-reference Phase 04 baseline.");
         Assert.All(actualOccurrencesByFile, occurrence =>
         {
             Assert.True(

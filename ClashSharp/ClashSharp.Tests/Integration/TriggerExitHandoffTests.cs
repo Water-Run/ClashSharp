@@ -843,6 +843,7 @@ public sealed class TriggerExitHandoffTests
 
     private sealed class TriggerExitDirectory : IDisposable
     {
+        private const int MaximumDeleteAttempts = 5;
         private readonly string _path = Path.Combine(
             Path.GetTempPath(),
             "ClashSharp.TriggerExitTests",
@@ -854,9 +855,23 @@ public sealed class TriggerExitHandoffTests
 
         public void Dispose()
         {
-            if (Directory.Exists(_path))
+            for (int attempt = 1; attempt <= MaximumDeleteAttempts; attempt++)
             {
-                Directory.Delete(_path, recursive: true);
+                try
+                {
+                    if (Directory.Exists(_path))
+                    {
+                        Directory.Delete(_path, recursive: true);
+                    }
+
+                    return;
+                }
+                catch (Exception exception)
+                    when (exception is IOException or UnauthorizedAccessException
+                        && attempt < MaximumDeleteAttempts)
+                {
+                    Thread.Sleep(TimeSpan.FromMilliseconds(10 * attempt));
+                }
             }
         }
     }

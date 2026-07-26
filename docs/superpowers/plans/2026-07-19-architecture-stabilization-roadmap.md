@@ -43,7 +43,7 @@
 - [x] Phase 01: `docs/superpowers/plans/2026-07-19-repository-foundation-and-project-topology.md`
 - [x] Phase 02: `docs/superpowers/plans/2026-07-19-apphost-and-startup-ownership.md`
 - [x] Phase 03: `docs/superpowers/plans/2026-07-19-mutation-network-and-lifetime.md`
-- [ ] Phase 04: `docs/superpowers/plans/2026-07-19-trigger-persistence-and-execution.md`
+- [x] Phase 04: `docs/superpowers/plans/2026-07-19-trigger-persistence-and-execution.md`
 - [ ] Phase 05: `docs/superpowers/plans/2026-07-19-settings-and-data-generations.md`
 - [ ] Phase 06: `docs/superpowers/plans/2026-07-19-navigation-and-connections.md`
 - [ ] Phase 07: `docs/superpowers/plans/2026-07-19-presentation-mvvm-migration.md`

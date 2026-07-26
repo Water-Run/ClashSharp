@@ -360,19 +360,19 @@ Run scheduler/lifecycle tests ten times, full Release build, and commit `feat: s
 - Modify: `ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj`
 - Create: `ClashSharp/ClashSharp.Tests/Unit/ViewModel/TriggerEditorViewModelTests.cs`
 
-- [ ] **Step 1: Write RED editor round-trip tests**
+- [x] **Step 1: Write RED editor round-trip tests**
 
 Open a task with at least three different conditions and multiple ordered actions, edit one field, save, reload, and prove every untouched condition/action remains byte-for-byte equivalent in domain meaning and order. Cover add/remove/reorder, validation, duplicate conditions, invalid time/threshold/scope, name uniqueness, busy/error state, and Exit-final enforcement.
 
-- [ ] **Step 2: Implement the dedicated editor ViewModel**
+- [x] **Step 2: Implement the dedicated editor ViewModel**
 
 Own draft collections, conversion, validation, and async save in the ViewModel. Code-behind may only translate control events/bind dialogs and must not construct domain definitions, select defaults, convert units, or truncate conditions.
 
-- [ ] **Step 3: Remove the legacy monolith and source links**
+- [x] **Step 3: Remove the legacy monolith and source links**
 
 Route CRUD through an injected async facade backed by `ITriggerRepository`. Remove Trigger production source links and the Trigger `UNIT_TESTS` fork. Keep temporary presentation lookup only under a host-registered compatibility factory and reduce the per-file `.Instance` baseline.
 
-- [ ] **Step 4: Verify XAML and checkpoint**
+- [x] **Step 4: Verify XAML and checkpoint**
 
 Run editor/ViewModel tests, WinUI Debug/Release builds, format, diff check, structured review, and commit `refactor: move trigger editing into view models`.
 
@@ -388,18 +388,18 @@ Run editor/ViewModel tests, WinUI Debug/Release builds, format, diff check, stru
 - Modify: `docs/architecture/stabilization-ledger.md`
 - Modify: `docs/superpowers/plans/2026-07-19-architecture-stabilization-roadmap.md`
 
-- [ ] **Step 1: Add executable architecture gates**
+- [x] **Step 1: Add executable architecture gates**
 
 Reject `Triggers.json` writes outside the migration reader, direct Trigger file I/O, timer-based/detached Trigger work, synchronous Trigger context/storage APIs, the removed monolith/source links/`UNIT_TESTS` branch, mutable trigger definitions in presentation, and new Trigger service locators. Verify DI registrations place repository, scheduler, executor, and lifecycle adapters in the composition root.
 
-- [ ] **Step 2: Run clean final verification**
+- [x] **Step 2: Run clean final verification**
 
 Run locked forced restore, format verification, Debug and Release solution builds, the complete Release suite, and the trigger/mutation/lifecycle/supervision filter ten consecutive times. Run all migration/outbox crash probes repeatedly and perform a zero-leaked-probe process-table check. Finish with `git diff --check`.
 
-- [ ] **Step 3: Update the ledger precisely**
+- [x] **Step 3: Update the ledger precisely**
 
 Close `P1-02`, `P1-03`, `P1-04`, and `P1-05` only when their required corruption/migration, scope/edge/outbox/handoff, multi-condition, and async degraded-context evidence is complete. Record checkpoint commits, reviewer method, dates, exact test counts/repetitions, crash cut points, and retained Phase 05/07 compatibility debt.
 
-- [ ] **Step 4: Review and checkpoint**
+- [x] **Step 4: Review and checkpoint**
 
 Use `superpowers:requesting-code-review`, address Critical/Important findings with `superpowers:receiving-code-review`, rerun the complete matrix, mark Phase 04 complete in the roadmap, commit implementation plus evidence, and preserve the worktree for Phase 05.
