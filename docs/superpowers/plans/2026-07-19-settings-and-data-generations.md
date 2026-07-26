@@ -115,21 +115,26 @@ Checkpoint scope: this task establishes the immutable Core domain model, validat
 - Create: `ClashSharp/ClashSharp.Tests/Integration/DataGenerationManagerTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/FileDataGenerationStoreTests.cs`
 
-- [ ] **Step 1: Write RED lease/swap/path tests**
+- [x] **Step 1: Write RED lease/swap/path tests**
 
 Require a nonempty stable generation ID, monotonically increasing generation number, canonical root under `Data/v1/generations/<id>`, and a current-manifest outside all generation directories. Reject relative, escaping, reparse, cross-volume staging, duplicate, stale-generation, and invalid manifest/hash inputs.
 
-- [ ] **Step 2: Implement pin/drain/stage semantics**
+- [x] **Step 2: Implement pin/drain/stage semantics**
 
 `AcquireAsync` pins the current immutable scope for one operation. `BeginDrainAsync` rejects later leases and awaits existing leases without a mutation-gate dependency. Staging constructs a paused scope that is invisible to ordinary consumers. Promotion and in-memory swap are separate explicit steps; rollback can restore the old descriptor before the commit marker.
 
-- [ ] **Step 3: Implement flushed atomic manifest promotion**
+- [x] **Step 3: Implement flushed atomic manifest promotion**
 
 Write a versioned SHA-256 envelope to a same-directory temporary file, flush to disk, inject before/after promotion faults, atomically replace, re-read, and verify. Never delete the prior generation from this store; cleanup is a post-commit manager operation.
 
-- [ ] **Step 4: Run concurrency/fault matrix and checkpoint**
+- [x] **Step 4: Run concurrency/fault matrix and checkpoint**
 
 Cover in-flight lease drain, cancellation, stale facade attempts, pre/post-promotion faults, rollback, and old-scope disposal only after explicit commit. Commit `feat: establish data generation ownership`.
+
+Completed scope also covers exclusive store-backed promotion/restoration, manager-disposal
+coordination, retryable commit/rollback/abort cleanup, immutable identity markers,
+historical-ID rejection, final-component reparse-safe handles, bounded share-delete
+manifest reads, and concurrent cross-instance read/replace stress.
 
 ---
 
