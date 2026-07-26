@@ -10,7 +10,7 @@
 extern alias ClashSharpUi;
 
 using ClashSharp.Model.Triggers;
-using NotificationLevel = ClashSharpUi::ClashSharp.Model.NotificationLevel;
+using NotificationLevel = ClashSharp.Model.NotificationLevel;
 using TriggerRuntimeEvent = ClashSharpUi::ClashSharp.Service.TriggerRuntimeEvent;
 using TriggerRuntimeEventHub = ClashSharpUi::ClashSharp.Service.TriggerRuntimeEventHub;
 

@@ -13,7 +13,7 @@ using ClashSharp.Model.Triggers;
 using ITriggerNotificationReceiptStore = ClashSharpUi::ClashSharp.Service.ITriggerNotificationReceiptStore;
 using ITriggerRuntimeEventPublisher = ClashSharpUi::ClashSharp.Service.ITriggerRuntimeEventPublisher;
 using IWin11NotificationPlatform = ClashSharpUi::ClashSharp.Service.IWin11NotificationPlatform;
-using NotificationLevel = ClashSharpUi::ClashSharp.Model.NotificationLevel;
+using NotificationLevel = ClashSharp.Model.NotificationLevel;
 using NotificationService = ClashSharpUi::ClashSharp.Service.NotificationService;
 using TriggerRuntimeEvent = ClashSharpUi::ClashSharp.Service.TriggerRuntimeEvent;
 

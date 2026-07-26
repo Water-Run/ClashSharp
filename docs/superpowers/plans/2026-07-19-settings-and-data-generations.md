@@ -46,21 +46,23 @@
 - Modify: `ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj`
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Settings/SettingsRegistryTests.cs`
 
-- [ ] **Step 1: Write RED registry completeness and parsing tests**
+- [x] **Step 1: Write RED registry completeness and parsing tests**
 
 Reference the production Core assembly. Require one unique definition for every current `AppSettingsService` property/key, explicit enum values, canonical defaults, stable categories, reset scopes, package inclusion, sensitive flag, authority classification (`Internal`, `ExternallyObserved`, `RestartBound`), and application kind. Test every enum with its valid names and reject `-2`, `999`, numeric enum text, undefined boxed values, malformed booleans, invalid ports/intervals/colors/URLs, whitespace IDs, and duplicate keys.
 
-- [ ] **Step 2: Implement canonical values and definitions**
+- [x] **Step 2: Implement canonical values and definitions**
 
 Use invariant canonical text as the durable representation. `SettingDefinition.Normalize(string)` must return a typed success/failure without throwing for user input. Store a default canonical value, schema version, aliases, parser/validator, import/export flag, reset scopes, authority/application kind, safe fallback, localization category, and sensitive flag. Collections are defensively copied and read-only.
 
-- [ ] **Step 3: Make the registry the only metadata source**
+- [x] **Step 3: Make the registry the only metadata source**
 
 Register all current settings, including three distinct connection-test URLs and `MasterHeroStatusLayout`. Do not add a production restart-bound key merely to exercise the engine; use a synthetic definition in later domain tests when no current setting truly requires restart. Delete moved WinUI model files and their test source links.
 
-- [ ] **Step 4: Verify and checkpoint**
+- [x] **Step 4: Verify and checkpoint**
 
 Run registry tests, Core tests, Debug/Release builds, format, and diff check. Review default/enum compatibility and commit `feat: define canonical settings registry`.
+
+Checkpoint scope: the registry is the sole canonical metadata authority for the new architecture. The active `AppSettingsService` writable API/`KnownKeys` and XML package descriptors are frozen compatibility debt scheduled for Tasks 12–14; this checkpoint does not claim that those legacy runtime paths have already been removed. Moving the eight setting enums into Core intentionally changes their assembly identity while preserving namespace, source names, and numeric values; no precompiled plugin contract is supported.
 
 ---
 
