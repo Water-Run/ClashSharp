@@ -3,31 +3,17 @@
     x:Class="ClashSharp.View.Triggers"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:components="using:ClashSharp.Components"
-    xmlns:converters="using:ClashSharp.Converters"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    xmlns:converters="using:ClashSharp.Converters">
 
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-        <Storyboard x:Name="ShowTriggerEditorStoryboard">
-            <DoubleAnimation Storyboard.TargetName="TriggerListHost" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12" />
-            <DoubleAnimation Storyboard.TargetName="TriggerEditorHost" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18" />
-            <DoubleAnimation Storyboard.TargetName="TriggerEditorHostTranslateTransform" Storyboard.TargetProperty="X" From="32" To="0" Duration="0:0:0.18" />
-        </Storyboard>
-        <Storyboard x:Name="ShowTriggerListStoryboard">
-            <DoubleAnimation Storyboard.TargetName="TriggerEditorHost" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12" />
-            <DoubleAnimation Storyboard.TargetName="TriggerListHost" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18" />
-            <DoubleAnimation Storyboard.TargetName="TriggerListHostTranslateTransform" Storyboard.TargetProperty="X" From="-24" To="0" Duration="0:0:0.18" />
-        </Storyboard>
     </Page.Resources>
 
     <Grid Padding="{StaticResource ClashPagePadding}">
-        <Grid x:Name="TriggerListHost" RowSpacing="16" Opacity="1">
-            <Grid.RenderTransform>
-                <TranslateTransform x:Name="TriggerListHostTranslateTransform" />
-            </Grid.RenderTransform>
+        <Grid
+            x:Name="TriggerListHost"
+            RowSpacing="16"
+            Visibility="{Binding IsListing, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -35,8 +21,12 @@
             </Grid.RowDefinitions>
 
             <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock
+                    Text="{Binding DescriptionText}"
+                    Style="{ThemeResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="WrapWholeWords" />
             </StackPanel>
 
             <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="10">
@@ -46,27 +36,34 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-
                 <StackPanel Spacing="4">
-                    <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                    <TextBlock Text="{Binding DisabledNoticeText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" Visibility="{Binding IsDisabledNoticeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                    <TextBlock
+                        Text="{Binding DisabledNoticeText}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="WrapWholeWords"
+                        Visibility="{Binding IsDisabledNoticeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock
+                        Text="{Binding ErrorMessage}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        TextWrapping="WrapWholeWords"
+                        Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </StackPanel>
-
-                <Button x:Name="EnableAllTriggersButton" Grid.Column="1" Click="EnableAllTriggersButton_Click" VerticalAlignment="Center" IsEnabled="{Binding CanEditTriggers}">
+                <Button Grid.Column="1" Click="EnableAllTriggersButton_Click" IsEnabled="{Binding CanEditTriggers}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE73E;" FontSize="14" />
                         <TextBlock Text="{Binding EnableAllText}" />
                     </StackPanel>
                 </Button>
-
-                <Button x:Name="DisableAllTriggersButton" Grid.Column="2" Click="DisableAllTriggersButton_Click" VerticalAlignment="Center" IsEnabled="{Binding CanEditTriggers}">
+                <Button Grid.Column="2" Click="DisableAllTriggersButton_Click" IsEnabled="{Binding CanEditTriggers}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE711;" FontSize="14" />
                         <TextBlock Text="{Binding DisableAllText}" />
                     </StackPanel>
                 </Button>
-
-                <Button x:Name="OpenTriggerLogsButton" Grid.Column="3" Click="OpenTriggerLogsButton_Click" VerticalAlignment="Center">
+                <Button Grid.Column="3" Click="OpenTriggerLogsButton_Click">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE8A5;" FontSize="14" />
                         <TextBlock Text="{Binding OpenTriggerLogsText}" />
@@ -76,65 +73,63 @@
 
             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="10">
-                    <ListView x:Name="TriggerTasksList" ItemsSource="{Binding TriggerTasks}" SelectionMode="None" IsEnabled="{Binding CanEditTriggers}">
+                    <ProgressRing
+                        IsActive="{Binding IsBusy}"
+                        Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"
+                        HorizontalAlignment="Center" />
+                    <TextBlock
+                        Text="{Binding EmptyText}"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <ListView ItemsSource="{Binding TriggerTasks}" SelectionMode="None" IsEnabled="{Binding CanEditTriggers}">
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <Grid Style="{StaticResource ClashCardGridStyle}" Margin="0,0,0,10" ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-
-                                    <FontIcon Glyph="&#xE7C1;" FontSize="20" Width="28" VerticalAlignment="Top" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-                                    <StackPanel Grid.Column="1" Spacing="8">
+                                    <StackPanel Spacing="8">
                                         <Grid ColumnSpacing="10">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBox Text="{Binding Name, Mode=TwoWay}" Tag="{Binding}" LostFocus="TriggerNameBox_LostFocus" />
-                                            <ToggleSwitch Grid.Column="1" IsOn="{Binding IsEnabled, Mode=TwoWay}" Tag="{Binding}" Toggled="TriggerEnabledToggle_Toggled" MinWidth="0" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                            <TextBlock Text="{Binding Name}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                            <ToggleSwitch
+                                                Grid.Column="1"
+                                                IsOn="{Binding IsEnabled, Mode=OneWay}"
+                                                Tag="{Binding}"
+                                                Toggled="TriggerEnabledToggle_Toggled"
+                                                MinWidth="0"
+                                                OnContent="{x:Null}"
+                                                OffContent="{x:Null}" />
                                         </Grid>
-
                                         <StackPanel Spacing="2">
                                             <TextBlock Text="{Binding ConditionsLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                             <TextBlock Text="{Binding ConditionsSummary}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
                                         </StackPanel>
-
                                         <StackPanel Spacing="2">
                                             <TextBlock Text="{Binding ActionsLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                             <TextBlock Text="{Binding ActionsSummary}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
                                         </StackPanel>
-
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <TextBlock Text="{Binding LastTriggeredLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                             <TextBlock Text="{Binding LastTriggeredSummary}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         </StackPanel>
                                     </StackPanel>
-
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
-                                        <Button Tag="{Binding}" Click="EditTriggerButton_Click">
-                                            <FontIcon Glyph="&#xE70F;" FontSize="14" />
-                                        </Button>
-                                        <Button Tag="{Binding Id}" Click="MoveTriggerUpButton_Click">
-                                            <FontIcon Glyph="&#xE70E;" FontSize="14" />
-                                        </Button>
-                                        <Button Tag="{Binding Id}" Click="MoveTriggerDownButton_Click">
-                                            <FontIcon Glyph="&#xE70D;" FontSize="14" />
-                                        </Button>
-                                        <Button Tag="{Binding Id}" Click="DeleteTriggerButton_Click">
-                                            <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                                        </Button>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+                                        <Button Tag="{Binding}" Click="EditTriggerButton_Click"><FontIcon Glyph="&#xE70F;" FontSize="14" /></Button>
+                                        <Button Tag="{Binding Id}" Click="MoveTriggerUpButton_Click"><FontIcon Glyph="&#xE70E;" FontSize="14" /></Button>
+                                        <Button Tag="{Binding Id}" Click="MoveTriggerDownButton_Click"><FontIcon Glyph="&#xE70D;" FontSize="14" /></Button>
+                                        <Button Tag="{Binding Id}" Click="DeleteTriggerButton_Click"><FontIcon Glyph="&#xE74D;" FontSize="14" /></Button>
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
-
                     <Button
-                        x:Name="AddTriggerCardButton"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
                         Padding="0"
@@ -149,7 +144,7 @@
                             </Grid.ColumnDefinitions>
                             <FontIcon Glyph="&#xE710;" FontSize="20" Width="28" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding AddTriggerText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding AddTriggerText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                                 <TextBlock Text="{Binding AddDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                         </Grid>
@@ -158,128 +153,216 @@
             </ScrollViewer>
         </Grid>
 
-        <Grid x:Name="TriggerEditorHost" RowSpacing="16" Visibility="Collapsed" Opacity="0">
-            <Grid.RenderTransform>
-                <TranslateTransform x:Name="TriggerEditorHostTranslateTransform" />
-            </Grid.RenderTransform>
+        <Grid
+            x:Name="TriggerEditorHost"
+            RowSpacing="16"
+            Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-
             <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Button x:Name="BackToTriggerListButton" Click="BackToTriggerListButton_Click" VerticalAlignment="Top">
-                    <FontIcon Glyph="&#xE72B;" FontSize="14" />
-                </Button>
+                <Button Click="BackToTriggerListButton_Click" VerticalAlignment="Top" IsEnabled="{Binding CurrentEditor.CanCancel}"><FontIcon Glyph="&#xE72B;" FontSize="14" /></Button>
                 <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock x:Name="TriggerEditorTitleText" Text="{Binding AddTriggerText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                    <TextBlock Text="{Binding CurrentEditor.Title}" Style="{ThemeResource TitleTextBlockStyle}" />
                     <TextBlock Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                 </StackPanel>
             </Grid>
 
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsEnabled="{Binding CurrentEditor.CanEdit}">
                 <StackPanel Spacing="14">
-                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="8">
-                        <TextBox
-                            x:Name="TriggerEditorNameBox"
-                            Header="{Binding NameText}"
-                            MaxLength="48" />
+                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBox Header="{Binding NameText}" Text="{Binding CurrentEditor.Name, Mode=TwoWay}" MaxLength="48" />
+                        <ToggleSwitch Grid.Row="1" Header="{Binding EnabledText}" IsOn="{Binding CurrentEditor.IsEnabled, Mode=TwoWay}" MinWidth="0" OnContent="{x:Null}" OffContent="{x:Null}" />
+                        <TextBlock
+                            Grid.Row="2"
+                            Text="{Binding CurrentEditor.ErrorMessage}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            TextWrapping="WrapWholeWords"
+                            Visibility="{Binding CurrentEditor.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </Grid>
 
                     <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding ConditionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding ConditionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                                 <TextBlock Text="{Binding ConditionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                             </StackPanel>
-                            <Button x:Name="ChooseTriggerConditionButton" Grid.Column="1" Click="ChooseTriggerConditionButton_Click" VerticalAlignment="Center">
-                                <FontIcon Glyph="&#xE8A1;" FontSize="14" />
-                            </Button>
-                        </Grid>
-                        <Grid Grid.Row="1" ColumnSpacing="18" RowSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="320" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock x:Name="SelectedTriggerConditionText" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
-                                <TextBlock x:Name="SelectedTriggerConditionDescriptionText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
-                                <TextBlock x:Name="TriggerConditionValidationText" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="WrapWholeWords" Visibility="Collapsed" />
-                            </StackPanel>
-                            <StackPanel x:Name="TriggerConditionParameterPanel" Grid.Column="1" Spacing="8">
-                                <NumberBox x:Name="TriggerConditionThresholdBox" Header="{Binding ConditionThresholdHeaderText}" Minimum="0" ValueChanged="TriggerConditionThresholdBox_ValueChanged" SpinButtonPlacementMode="Compact" />
-                                <ComboBox x:Name="TriggerConditionUnitBox" Header="{Binding ConditionUnitHeaderText}" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
-                                <ComboBox x:Name="TriggerConditionStartBox" Header="{Binding ConditionScopeHeaderText}" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
-                                <ComboBox x:Name="TriggerConditionLevelBox" Header="{Binding NotificationLevelHeaderText}" HorizontalAlignment="Stretch" SelectionChanged="TriggerConditionComboBox_SelectionChanged" />
-                                <TextBox x:Name="TriggerConditionValueBox" Header="{Binding ConditionValueHeaderText}" TextChanged="TriggerConditionValueBox_TextChanged" />
-                            </StackPanel>
-                        </Grid>
-                    </Grid>
-
-                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding ActionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                <TextBlock Text="{Binding ActionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
-                            </StackPanel>
-                            <Button x:Name="ChooseTriggerActionsButton" Grid.Column="1" Click="ChooseTriggerActionsButton_Click" VerticalAlignment="Center">
-                                <FontIcon Glyph="&#xE710;" FontSize="14" />
-                            </Button>
+                            <Button Grid.Column="1" Click="ChooseTriggerConditionButton_Click"><FontIcon Glyph="&#xE710;" FontSize="14" /></Button>
                         </Grid>
                         <ListView
-                            x:Name="SelectedTriggerActionsList"
                             Grid.Row="1"
-                            SelectionMode="None"
-                            MaxHeight="220">
+                            ItemsSource="{Binding CurrentEditor.Conditions}"
+                            SelectedItem="{Binding CurrentEditor.SelectedCondition, Mode=TwoWay}"
+                            SelectionMode="Single"
+                            MaxHeight="260">
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Padding="0,6" ColumnSpacing="10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <FontIcon Glyph="{Binding Glyph}" FontSize="16" Width="24" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        <StackPanel Grid.Column="1" Spacing="2">
-                                            <TextBlock Text="{Binding Title}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
+                                    <Grid Padding="0,6" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Title}" />
                                             <TextBlock Text="{Binding Description}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                            <Button Tag="{Binding}" Click="MoveConditionUpButton_Click"><FontIcon Glyph="&#xE70E;" FontSize="12" /></Button>
+                                            <Button Tag="{Binding}" Click="MoveConditionDownButton_Click"><FontIcon Glyph="&#xE70D;" FontSize="12" /></Button>
+                                            <Button Tag="{Binding}" Click="RemoveConditionButton_Click"><FontIcon Glyph="&#xE74D;" FontSize="12" /></Button>
                                         </StackPanel>
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
+                        <StackPanel Grid.Row="2" Spacing="8">
+                            <Grid
+                                ColumnSpacing="8"
+                                Visibility="{Binding CurrentEditor.SelectedCondition.IsThresholdVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    Header="{Binding ConditionThresholdHeaderText}"
+                                    Text="{Binding CurrentEditor.SelectedCondition.ThresholdText, Mode=TwoWay}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Margin="0,0,0,8"
+                                    VerticalAlignment="Bottom"
+                                    Text="{Binding CurrentEditor.SelectedCondition.ThresholdUnitText}"
+                                    Style="{ThemeResource BodyTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                            <ComboBox
+                                Header="{Binding ConditionScopeHeaderText}"
+                                ItemsSource="{Binding CurrentEditor.TrafficScopeOptions}"
+                                DisplayMemberPath="Title"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding CurrentEditor.SelectedCondition.TrafficScope, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch"
+                                Visibility="{Binding CurrentEditor.SelectedCondition.IsTrafficScopeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBox
+                                Header="{Binding WindowSecondsHeaderText}"
+                                Text="{Binding CurrentEditor.SelectedCondition.WindowSecondsText, Mode=TwoWay}"
+                                Visibility="{Binding CurrentEditor.SelectedCondition.IsWindowVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ComboBox
+                                Header="{Binding NotificationLevelHeaderText}"
+                                ItemsSource="{Binding CurrentEditor.NotificationLevelOptions}"
+                                DisplayMemberPath="Title"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding CurrentEditor.SelectedCondition.NotificationLevel, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch"
+                                Visibility="{Binding CurrentEditor.SelectedCondition.IsNotificationLevelVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ComboBox
+                                Header="{Binding RateDirectionHeaderText}"
+                                ItemsSource="{Binding CurrentEditor.RateDirectionOptions}"
+                                DisplayMemberPath="Title"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding CurrentEditor.SelectedCondition.RateDirection, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch"
+                                Visibility="{Binding CurrentEditor.SelectedCondition.IsRateDirectionVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBox
+                                Header="{Binding RuntimeSecondsHeaderText}"
+                                Text="{Binding CurrentEditor.SelectedCondition.RuntimeSecondsText, Mode=TwoWay}"
+                                Visibility="{Binding CurrentEditor.SelectedCondition.IsRuntimeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBox
+                                Header="{Binding ConditionTimeHeaderText}"
+                                Text="{Binding CurrentEditor.SelectedCondition.TargetTimeText, Mode=TwoWay}"
+                                Visibility="{Binding CurrentEditor.SelectedCondition.IsTimeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBlock
+                                Text="{Binding CurrentEditor.SelectedCondition.ErrorMessage}"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                TextWrapping="WrapWholeWords"
+                                Visibility="{Binding CurrentEditor.SelectedCondition.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding ActionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="{Binding ActionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Click="ChooseTriggerActionButton_Click"><FontIcon Glyph="&#xE710;" FontSize="14" /></Button>
+                        </Grid>
+                        <ListView
+                            Grid.Row="1"
+                            ItemsSource="{Binding CurrentEditor.Actions}"
+                            SelectedItem="{Binding CurrentEditor.SelectedAction, Mode=TwoWay}"
+                            SelectionMode="Single"
+                            MaxHeight="260">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="0,6" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Title}" />
+                                            <TextBlock Text="{Binding Description}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                            <Button Tag="{Binding}" Click="MoveActionUpButton_Click"><FontIcon Glyph="&#xE70E;" FontSize="12" /></Button>
+                                            <Button Tag="{Binding}" Click="MoveActionDownButton_Click"><FontIcon Glyph="&#xE70D;" FontSize="12" /></Button>
+                                            <Button Tag="{Binding}" Click="RemoveActionButton_Click"><FontIcon Glyph="&#xE74D;" FontSize="12" /></Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <StackPanel Grid.Row="2" Spacing="8">
+                            <ToggleSwitch
+                                Header="{Binding BooleanValueHeaderText}"
+                                IsOn="{Binding CurrentEditor.SelectedAction.BooleanValue, Mode=TwoWay}"
+                                MinWidth="0"
+                                OnContent="{x:Null}"
+                                OffContent="{x:Null}"
+                                Visibility="{Binding CurrentEditor.SelectedAction.IsBooleanVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ComboBox
+                                Header="{Binding ProxyModeHeaderText}"
+                                ItemsSource="{Binding CurrentEditor.ProxyModeOptions}"
+                                DisplayMemberPath="Title"
+                                SelectedValuePath="Value"
+                                SelectedValue="{Binding CurrentEditor.SelectedAction.ProxyMode, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch"
+                                Visibility="{Binding CurrentEditor.SelectedAction.IsProxyModeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBox
+                                Header="{Binding NotificationMessageHeaderText}"
+                                Text="{Binding CurrentEditor.SelectedAction.NotificationMessage, Mode=TwoWay}"
+                                Visibility="{Binding CurrentEditor.SelectedAction.IsNotificationMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBlock
+                                Text="{Binding CurrentEditor.SelectedAction.ErrorMessage}"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                TextWrapping="WrapWholeWords"
+                                Visibility="{Binding CurrentEditor.SelectedAction.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
                     </Grid>
                 </StackPanel>
             </ScrollViewer>
 
             <Grid Grid.Row="2">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                    <Button x:Name="CancelTriggerEditButton" Click="CancelTriggerEditButton_Click">
-                        <TextBlock Text="{Binding CancelText}" />
-                    </Button>
-                    <Button x:Name="SaveTriggerButton" Click="SaveTriggerButton_Click">
-                        <TextBlock Text="{Binding SaveText}" />
-                    </Button>
+                    <ProgressRing IsActive="{Binding CurrentEditor.IsBusy}" Visibility="{Binding CurrentEditor.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button Click="CancelTriggerEditButton_Click" IsEnabled="{Binding CurrentEditor.CanCancel}"><TextBlock Text="{Binding CancelText}" /></Button>
+                    <Button Click="SaveTriggerButton_Click" IsEnabled="{Binding CurrentEditor.CanSave}"><TextBlock Text="{Binding SaveText}" /></Button>
                 </StackPanel>
             </Grid>
         </Grid>

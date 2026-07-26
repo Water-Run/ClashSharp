@@ -12,6 +12,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
 
 namespace ClashSharp;
 

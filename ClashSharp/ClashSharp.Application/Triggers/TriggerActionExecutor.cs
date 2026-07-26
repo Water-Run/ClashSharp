@@ -7,12 +7,18 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
 {
     private readonly ITriggerRepository _repository;
     private readonly ITriggerActionRuntime _runtime;
+    private readonly ITriggerFiredNotificationSink _firedNotifications;
 
     /// <summary>Initializes one durable action executor.</summary>
-    public TriggerActionExecutor(ITriggerRepository repository, ITriggerActionRuntime runtime)
+    public TriggerActionExecutor(
+        ITriggerRepository repository,
+        ITriggerActionRuntime runtime,
+        ITriggerFiredNotificationSink firedNotifications)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _firedNotifications = firedNotifications
+            ?? throw new ArgumentNullException(nameof(firedNotifications));
     }
 
     /// <inheritdoc />
@@ -33,13 +39,12 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
         ArgumentNullException.ThrowIfNull(execution);
         ArgumentNullException.ThrowIfNull(admissionLease);
         return await ExecuteCoreAsync(
-            execution.ExecutionId,
-            execution.TaskRevision,
+            execution,
             admissionLease,
             cancellationToken).ConfigureAwait(false);
     }
 
-    internal Task<IReadOnlyList<TriggerActionResult>> ReconcileAsync(
+    internal async Task<IReadOnlyList<TriggerActionResult>> ReconcileAsync(
         Guid executionId,
         long taskRevision,
         MutationAdmissionLease admissionLease,
@@ -52,18 +57,35 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
 
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(taskRevision);
         ArgumentNullException.ThrowIfNull(admissionLease);
-        return ExecuteCoreAsync(executionId, taskRevision, admissionLease, cancellationToken);
+        TriggerPersistenceResult<TriggerExecution> read = await _repository
+            .ReadExecutionAsync(executionId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!read.IsSucceeded || read.Value is not TriggerExecution execution)
+        {
+            throw new InvalidOperationException(
+                read.Diagnostic?.Code ?? "trigger.execution.read_unavailable");
+        }
+
+        if (execution.TaskRevision != taskRevision)
+        {
+            throw new InvalidDataException(
+                "The recoverable execution revision does not match its ordered actions.");
+        }
+
+        return await ExecuteCoreAsync(
+            execution,
+            admissionLease,
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyList<TriggerActionResult>> ExecuteCoreAsync(
-        Guid executionId,
-        long taskRevision,
+        TriggerExecution execution,
         MutationAdmissionLease admissionLease,
         CancellationToken cancellationToken)
     {
         TriggerPersistenceResult<IReadOnlyList<TriggerOutboxAction>> read =
             await _repository.ReadExecutionActionsAsync(
-                executionId,
+                execution.ExecutionId,
                 cancellationToken).ConfigureAwait(false);
         if (!read.IsSucceeded || read.Value is not IReadOnlyList<TriggerOutboxAction> actions)
         {
@@ -71,7 +93,22 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
                 read.Diagnostic?.Code ?? "trigger.outbox.read_unavailable");
         }
 
-        ValidateOrderedActions(executionId, taskRevision, actions);
+        ValidateOrderedActions(execution.ExecutionId, execution.TaskRevision, actions);
+        try
+        {
+            await _firedNotifications
+                .NotifyAsync(execution, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            TryReportNotificationFailure(execution, exception);
+        }
+
         List<TriggerActionResult> results = [];
         foreach (TriggerOutboxAction action in actions)
         {
@@ -350,5 +387,19 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
             _ => null,
         };
         return new TriggerActionResult(action, action.State, diagnosticCode);
+    }
+
+    private void TryReportNotificationFailure(
+        TriggerExecution execution,
+        Exception notificationException)
+    {
+        try
+        {
+            _firedNotifications.ReportFailure(execution, notificationException);
+        }
+        catch (Exception)
+        {
+            // Notification diagnostics are also ancillary and must never block business actions.
+        }
     }
 }

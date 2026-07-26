@@ -23,7 +23,10 @@ public sealed class TriggerActionExecutorTests
             : new(
                 [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired()],
                 [TriggerActionApplyResult.Applied()]);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -54,7 +57,10 @@ public sealed class TriggerActionExecutorTests
             execution,
             [Outbox(execution, 0, action, TriggerOutboxState.Running, attemptCount: 1)]);
         FakeTriggerActionRuntime runtime = new([TriggerActionProbeResult.Desired()], []);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -87,7 +93,10 @@ public sealed class TriggerActionExecutorTests
                 TriggerActionProbeResult.Desired(),
             ],
             [TriggerActionApplyResult.Applied()]);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -120,7 +129,10 @@ public sealed class TriggerActionExecutorTests
         FakeTriggerActionRuntime runtime = new(
             [TriggerActionProbeResult.Unknown("trigger.action.probe_unavailable")],
             []);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -152,7 +164,10 @@ public sealed class TriggerActionExecutorTests
         FakeTriggerActionRuntime runtime = new(
             [TriggerActionProbeResult.NotDesired()],
             [TriggerActionApplyResult.Failed("trigger.action.denied")]);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -182,7 +197,10 @@ public sealed class TriggerActionExecutorTests
         FakeTriggerActionRuntime runtime = new(
             [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Unknown("probe.unavailable")],
             [TriggerActionApplyResult.Applied()]);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -206,7 +224,10 @@ public sealed class TriggerActionExecutorTests
             execution,
             [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
         FakeTriggerActionRuntime runtime = new([TriggerActionProbeResult.Desired()], []);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -236,7 +257,10 @@ public sealed class TriggerActionExecutorTests
         FakeTriggerActionRuntime runtime = new(
             [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.NotDesired()],
             [TriggerActionApplyResult.Applied()]);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -270,7 +294,10 @@ public sealed class TriggerActionExecutorTests
         FakeTriggerActionRuntime runtime = state == TriggerOutboxState.HandedOff
             ? new([TriggerActionProbeResult.NotDesired()], [])
             : new([], []);
-        TriggerActionExecutor executor = new(repository, runtime);
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -284,6 +311,105 @@ public sealed class TriggerActionExecutorTests
         Assert.Equal(diagnosticCode, result.DiagnosticCode);
         Assert.Equal(TriggerOutboxState.Pending, repository.Actions[1].State);
         Assert.Empty(repository.Transitions);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NotifiesTheCommittedExecutionBeforeApplyingItsFirstAction()
+    {
+        List<string> timeline = [];
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(
+            execution,
+            [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
+        FakeTriggerActionRuntime runtime = new(
+            [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired()],
+            [TriggerActionApplyResult.Applied()],
+            timeline);
+        RecordingFiredNotificationSink notifications = new(timeline);
+        TriggerActionExecutor executor = new(repository, runtime, notifications);
+        MutationAdmissionBarrier admission = new();
+        await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
+            CancellationToken.None);
+
+        await executor.ExecuteAsync(execution, lease, CancellationToken.None);
+
+        Assert.Same(execution, Assert.Single(notifications.Executions));
+        Assert.Equal(["notify", "apply"], timeline);
+    }
+
+    [Fact]
+    public async Task ReconcileAsync_NotifiesTheDurableExecutionBeforeRecoveringItsActions()
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(
+            execution,
+            [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
+        FakeTriggerActionRuntime runtime = new(
+            [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired()],
+            [TriggerActionApplyResult.Applied()]);
+        RecordingFiredNotificationSink notifications = new();
+        TriggerActionExecutor executor = new(repository, runtime, notifications);
+        MutationAdmissionBarrier admission = new();
+        TriggerActionReconciler reconciler = new(repository, executor, admission);
+
+        await reconciler.ReconcileAsync(CancellationToken.None);
+
+        Assert.Same(execution, Assert.Single(notifications.Executions));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_FiredNotificationFailureDoesNotBlockBusinessActions()
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(
+            execution,
+            [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
+        FakeTriggerActionRuntime runtime = new(
+            [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired()],
+            [TriggerActionApplyResult.Applied()]);
+        ThrowingFiredNotificationSink notifications = new();
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            notifications);
+        MutationAdmissionBarrier admission = new();
+        await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
+            CancellationToken.None);
+
+        IReadOnlyList<TriggerActionResult> results = await executor.ExecuteAsync(
+            execution,
+            lease,
+            CancellationToken.None);
+
+        Assert.Equal(TriggerOutboxState.Succeeded, Assert.Single(results).FinalState);
+        Assert.Equal(1, runtime.ApplyCount);
+        Assert.IsType<InvalidOperationException>(Assert.Single(notifications.Failures));
+    }
+
+    [Fact]
+    public async Task ReconcileAsync_FiredNotificationFailureDoesNotBlockRecovery()
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(
+            execution,
+            [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
+        FakeTriggerActionRuntime runtime = new(
+            [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired()],
+            [TriggerActionApplyResult.Applied()]);
+        ThrowingFiredNotificationSink notifications = new();
+        TriggerActionExecutor executor = new(
+            repository,
+            runtime,
+            notifications);
+        MutationAdmissionBarrier admission = new();
+        TriggerActionReconciler reconciler = new(repository, executor, admission);
+
+        IReadOnlyList<TriggerActionResult> results = await reconciler.ReconcileAsync(
+            CancellationToken.None);
+
+        Assert.Equal(TriggerOutboxState.Succeeded, Assert.Single(results).FinalState);
+        Assert.Equal(1, runtime.ApplyCount);
+        Assert.IsType<InvalidOperationException>(Assert.Single(notifications.Failures));
     }
 
     public static TheoryData<TriggerAction, TriggerOutboxState> CurrentActions => new()
@@ -365,7 +491,8 @@ public sealed class TriggerActionExecutorTests
 
     private sealed class FakeTriggerActionRuntime(
         IEnumerable<TriggerActionProbeResult> probes,
-        IEnumerable<TriggerActionApplyResult> applies)
+        IEnumerable<TriggerActionApplyResult> applies,
+        List<string>? timeline = null)
         : ITriggerActionRuntime
     {
         private readonly Queue<TriggerActionProbeResult> _probes = new(probes);
@@ -389,8 +516,47 @@ public sealed class TriggerActionExecutorTests
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            timeline?.Add("apply");
             AppliedActions.Add(action);
             return Task.FromResult(_applies.Dequeue());
+        }
+    }
+
+    private sealed class RecordingFiredNotificationSink(List<string>? timeline = null)
+        : ITriggerFiredNotificationSink
+    {
+        public List<TriggerExecution> Executions { get; } = [];
+
+        public Task NotifyAsync(
+            TriggerExecution execution,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            timeline?.Add("notify");
+            Executions.Add(execution);
+            return Task.CompletedTask;
+        }
+
+        public void ReportFailure(TriggerExecution execution, Exception exception)
+        {
+            ArgumentNullException.ThrowIfNull(execution);
+            ArgumentNullException.ThrowIfNull(exception);
+        }
+    }
+
+    private sealed class ThrowingFiredNotificationSink : ITriggerFiredNotificationSink
+    {
+        public List<Exception> Failures { get; } = [];
+
+        public Task NotifyAsync(
+            TriggerExecution execution,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("notification unavailable");
+
+        public void ReportFailure(TriggerExecution execution, Exception exception)
+        {
+            ArgumentNullException.ThrowIfNull(execution);
+            Failures.Add(exception);
         }
     }
 
@@ -477,11 +643,22 @@ public sealed class TriggerActionExecutorTests
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<TriggerPersistenceResult<IReadOnlyList<TriggerOutboxAction>>> ReadRecoverableActionsAsync(
-            CancellationToken cancellationToken) => throw new NotSupportedException();
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(TriggerPersistenceResult.Succeeded<IReadOnlyList<TriggerOutboxAction>>(
+                Actions.ToArray()));
+        }
 
         public Task<TriggerPersistenceResult<TriggerExecution>> ReadExecutionAsync(
             Guid executionId,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(executionId == _execution.ExecutionId
+                ? TriggerPersistenceResult.Succeeded(_execution)
+                : TriggerPersistenceResult.NotFound<TriggerExecution>());
+        }
 
         public Task<TriggerPersistenceResult<TriggerLifecycleHandoff>> ReadLifecycleHandoffAsync(
             Guid executionId,

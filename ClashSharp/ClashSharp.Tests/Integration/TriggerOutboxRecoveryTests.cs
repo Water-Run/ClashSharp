@@ -45,7 +45,10 @@ public sealed class TriggerOutboxRecoveryTests
             await SeedExecutionAsync(directory);
         IReadOnlyList<TriggerOutboxAction> initial = await ReadActionsAsync(repository, execution.ExecutionId);
         DurableEffectLedger ledger = new(initial[0].IdempotencyKey);
-        TriggerActionExecutor executor = new(repository, new LedgerActionRuntime(ledger));
+        TriggerActionExecutor executor = new(
+            repository,
+            new LedgerActionRuntime(ledger),
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using (MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None))
@@ -92,7 +95,8 @@ public sealed class TriggerOutboxRecoveryTests
         DurableEffectLedger ledger = new();
         TriggerActionExecutor executor = new(
             faultedRepository,
-            new LedgerActionRuntime(ledger));
+            new LedgerActionRuntime(ledger),
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using (MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None))
@@ -139,7 +143,8 @@ public sealed class TriggerOutboxRecoveryTests
         DurableEffectLedger ledger = new();
         TriggerActionExecutor executor = new(
             faultedRepository,
-            new LedgerActionRuntime(ledger));
+            new LedgerActionRuntime(ledger),
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using (MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None))
@@ -192,7 +197,8 @@ public sealed class TriggerOutboxRecoveryTests
         DurableEffectLedger ledger = new();
         TriggerActionExecutor executor = new(
             faultedRepository,
-            new LedgerActionRuntime(ledger));
+            new LedgerActionRuntime(ledger),
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using (MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None))
@@ -223,7 +229,10 @@ public sealed class TriggerOutboxRecoveryTests
         DurableEffectLedger ledger)
     {
         MutationAdmissionBarrier admission = new();
-        TriggerActionExecutor executor = new(repository, new LedgerActionRuntime(ledger));
+        TriggerActionExecutor executor = new(
+            repository,
+            new LedgerActionRuntime(ledger),
+            NullTriggerFiredNotificationSink.Instance);
         TriggerActionReconciler reconciler = new(repository, executor, admission);
         return await reconciler.ReconcileAsync(CancellationToken.None);
     }

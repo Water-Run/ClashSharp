@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ClashSharp\ClashSharp.csproj" Aliases="ClashSharpUi" />
     <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
@@ -69,7 +70,6 @@
     <Compile Include="..\ClashSharp\Model\WindowsDiagnosticResult.cs" Link="Model\WindowsDiagnosticResult.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsDiagnosticTarget.cs" Link="Model\WindowsDiagnosticTarget.cs" />
     <Compile Include="..\ClashSharp\Model\LogRecord.cs" Link="Model\LogRecord.cs" />
-    <Compile Include="..\ClashSharp\Model\TriggerTask.cs" Link="Model\TriggerTask.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.cs" Link="Service\AppSettingsService.cs" />
     <Compile Include="..\ClashSharp\Service\ApplicationLifecycleService.cs" Link="Service\ApplicationLifecycleService.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageService.cs" Link="Service\ClashDataPackageService.cs" />
@@ -85,14 +85,7 @@
     <Compile Include="..\ClashSharp\Service\LogStorageSchema.cs" Link="Service\LogStorageSchema.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.cs" Link="Service\LogStorageService.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageServiceFactory.cs" Link="Service\LogStorageServiceFactory.cs" />
-    <Compile Include="..\ClashSharp\Service\TriggerRuntimeEvents.cs" Link="Service\TriggerRuntimeEvents.cs" />
     <Compile Include="..\ClashSharp\Service\RuntimeTrafficRateService.cs" Link="Service\RuntimeTrafficRateService.cs" />
-    <Compile Include="..\ClashSharp\Service\TriggerTaskNormalizer.cs" Link="Service\TriggerTaskNormalizer.cs" />
-    <Compile Include="..\ClashSharp\Service\TriggerEvaluationContextFactory.cs" Link="Service\TriggerEvaluationContextFactory.cs" />
-    <Compile Include="..\ClashSharp\Service\TriggerContextProviderAdapter.cs" Link="Service\TriggerContextProviderAdapter.cs" />
-    <Compile Include="..\ClashSharp\Service\TriggerActionRuntimeAdapter.cs" Link="Service\TriggerActionRuntimeAdapter.cs" />
-    <Compile Include="..\ClashSharp\Service\TriggerService.cs" Link="Service\TriggerService.cs" />
-    <Compile Include="..\ClashSharp\Service\NotificationService.cs" Link="Service\NotificationService.cs" />
     <Compile Include="..\ClashSharp\Service\IApplicationActionDispatcher.cs" Link="Service\IApplicationActionDispatcher.cs" />
     <Compile Include="..\ClashSharp\Service\LocalizationService.cs" Link="Service\LocalizationService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />

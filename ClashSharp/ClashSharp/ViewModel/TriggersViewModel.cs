@@ -1,12 +1,3 @@
-/*
- * Triggers ViewModel
- * Owns trigger task list state, ordering, and localized page text
- *
- * @author: WaterRun
- * @file: ViewModel/TriggersViewModel.cs
- * @date: 2026-06-26
- */
-
 #nullable enable
 
 using System;
@@ -14,36 +5,46 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
-using ClashSharp.Model;
-using ClashSharp.Service;
+using System.Threading;
+using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Triggers;
+using ClashSharp.Model.Triggers;
 
 namespace ClashSharp.ViewModel;
 
-/// <summary>Bindable trigger task panel view model.</summary>
+/// <summary>Presentation boundary for the global trigger enablement setting.</summary>
+internal interface ITriggerPresentationSettings
+{
+    bool IsEnabled { get; set; }
+}
+
+/// <summary>Owns asynchronous trigger catalog CRUD, ordering, and the active editor draft.</summary>
 internal sealed class TriggersViewModel : ObservableObject
 {
-    internal const int MaxTriggerNameLength = 48;
-
     private readonly Func<string, string> _getString;
-    private readonly TriggerService _triggerService;
+    private readonly ITriggerDefinitionStore _store;
+    private readonly ITriggerPresentationSettings _settings;
+    private long _generation;
     private bool _triggersEnabled;
+    private TriggerEditorViewModel? _currentEditor;
+    private string? _errorCode;
+    private string? _errorResourceKey;
+    private int _busy;
 
-    public TriggersViewModel(Func<string, string> getString, TriggerService triggerService)
+    public TriggersViewModel(
+        Func<string, string> getString,
+        ITriggerDefinitionStore store,
+        ITriggerPresentationSettings settings)
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
-        _triggerService = triggerService ?? throw new ArgumentNullException(nameof(triggerService));
-        MoveUpCommand = new RelayCommand(() => { });
-        MoveDownCommand = new RelayCommand(() => { });
-        Reload();
+        _store = store ?? throw new ArgumentNullException(nameof(store));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _triggersEnabled = settings.IsEnabled;
     }
 
     public string PageTitleText => _getString("Nav.Triggers");
 
     public string DescriptionText => _getString("Page.Triggers.Description");
-
-    public string EnabledTitleText => _getString("Triggers.Enabled.Title");
-
-    public string EnabledDescriptionText => _getString("Triggers.Enabled.Description");
 
     public string AddTriggerText => _getString("Triggers.Add");
 
@@ -53,11 +54,9 @@ internal sealed class TriggersViewModel : ObservableObject
 
     public string ActionDescriptionText => _getString("Triggers.Action.Description");
 
-    public string ConditionSearchPlaceholderText => _getString("Triggers.Condition.SearchPlaceholder");
-
-    public string ActionSearchPlaceholderText => _getString("Triggers.Action.SearchPlaceholder");
-
     public string NameText => _getString("Triggers.Name");
+
+    public string EnabledText => _getString("Triggers.Enabled.Title");
 
     public string OpenTriggerLogsText => _getString("Triggers.OpenLogs");
 
@@ -79,21 +78,39 @@ internal sealed class TriggersViewModel : ObservableObject
 
     public string CancelText => _getString("Command.Cancel");
 
-    public string ConditionThresholdHeaderText => _getString("Triggers.Condition.Parameter.Threshold");
+    public string AddText => _getString("Command.Add");
 
-    public string ConditionUnitHeaderText => _getString("Triggers.Condition.Parameter.Unit");
+    public string DeleteText => _getString("Command.Delete");
+
+    public string SearchConditionsText => _getString("Triggers.SearchConditions");
+
+    public string SearchActionsText => _getString("Triggers.SearchActions");
+
+    public string DeleteTitleText => _getString("Triggers.Delete.Title");
+
+    public string DeleteMessageText => _getString("Triggers.Delete.Message");
+
+    public string ConditionThresholdHeaderText => _getString("Triggers.Condition.Parameter.Threshold");
 
     public string ConditionScopeHeaderText => _getString("Triggers.Condition.Parameter.Scope");
 
+    public string RateDirectionHeaderText => _getString("Triggers.Condition.Parameter.Direction");
+
     public string NotificationLevelHeaderText => _getString("Triggers.Condition.Parameter.NotificationLevel");
 
-    public string ConditionValueHeaderText => _getString("Triggers.Condition.Parameter.Value");
+    public string ConditionTimeHeaderText => _getString("Triggers.Condition.Parameter.Time");
+
+    public string WindowSecondsHeaderText => _getString("Triggers.Condition.Parameter.WindowSeconds");
+
+    public string RuntimeSecondsHeaderText => _getString("Triggers.Condition.Parameter.RuntimeSeconds");
+
+    public string BooleanValueHeaderText => _getString("Triggers.Action.Parameter.Enabled");
+
+    public string ProxyModeHeaderText => _getString("Triggers.Action.Parameter.ProxyMode");
+
+    public string NotificationMessageHeaderText => _getString("Triggers.Action.Parameter.Message");
 
     public ObservableCollection<TriggerTaskItemViewModel> TriggerTasks { get; } = [];
-
-    public RelayCommand MoveUpCommand { get; }
-
-    public RelayCommand MoveDownCommand { get; }
 
     public bool TriggersEnabled
     {
@@ -102,154 +119,472 @@ internal sealed class TriggersViewModel : ObservableObject
         {
             if (SetProperty(ref _triggersEnabled, value))
             {
-                _triggerService.TriggersEnabled = value;
+                _settings.IsEnabled = value;
                 OnPropertyChanged(nameof(CanEditTriggers));
                 OnPropertyChanged(nameof(IsDisabledNoticeVisible));
             }
         }
     }
 
-    public bool CanEditTriggers => TriggersEnabled;
+    public bool CanEditTriggers => TriggersEnabled && !IsBusy;
 
     public bool IsDisabledNoticeVisible => !TriggersEnabled;
 
     public bool IsEmpty => TriggerTasks.Count == 0;
 
-    public void Reload()
+    public bool IsBusy => Volatile.Read(ref _busy) != 0;
+
+    public TriggerEditorViewModel? CurrentEditor
     {
-        TriggerTasks.Clear();
-        foreach (TriggerTask task in _triggerService.GetTasks())
+        get => _currentEditor;
+        private set
         {
-            TriggerTasks.Add(new TriggerTaskItemViewModel(task, _getString));
+            if (SetProperty(ref _currentEditor, value))
+            {
+                OnPropertyChanged(nameof(IsEditing));
+                OnPropertyChanged(nameof(IsListing));
+            }
+        }
+    }
+
+    public bool IsEditing => CurrentEditor is not null;
+
+    public bool IsListing => CurrentEditor is null;
+
+    public string? ErrorCode
+    {
+        get => _errorCode;
+        private set
+        {
+            if (SetProperty(ref _errorCode, value))
+            {
+                OnPropertyChanged(nameof(ErrorMessage));
+                OnPropertyChanged(nameof(HasError));
+            }
+        }
+    }
+
+    public string? ErrorMessage => ErrorCode is null
+        ? null
+        : _getString(_errorResourceKey ?? MapErrorResource(ErrorCode));
+
+    public bool HasError => ErrorCode is not null;
+
+    /// <summary>Loads the current repository generation without blocking the UI thread.</summary>
+    public async Task<bool> LoadAsync(CancellationToken cancellationToken)
+    {
+        if (!TryBeginOperation())
+        {
+            return false;
         }
 
-        SetProperty(ref _triggersEnabled, _triggerService.TriggersEnabled, nameof(TriggersEnabled));
-        OnPropertyChanged(nameof(CanEditTriggers));
-        OnPropertyChanged(nameof(IsDisabledNoticeVisible));
+        try
+        {
+            TriggerPersistenceResult<TriggerDefinitionCatalog> result;
+            try
+            {
+                result = await _store.ReadAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                SetError(
+                    "trigger.definition.read_unavailable",
+                    "Triggers.Validation.LoadFailed");
+                return false;
+            }
+            if (!result.IsSucceeded || result.Value is not TriggerDefinitionCatalog catalog)
+            {
+                SetPersistenceError(
+                    result.Status,
+                    result.Diagnostic,
+                    "trigger.definition.read_unavailable",
+                    "Triggers.Validation.LoadFailed");
+                return false;
+            }
+
+            ApplyCatalog(catalog);
+            TriggersEnabled = _settings.IsEnabled;
+            ClearError();
+            return true;
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    /// <summary>Opens a new complete draft with safe typed defaults.</summary>
+    public TriggerEditorViewModel BeginCreate()
+    {
+        long expectedGeneration = _generation;
+        CurrentEditor = new TriggerEditorViewModel(
+            _getString,
+            original: null,
+            TriggerTasks.Select(static task => task.Name),
+            (definition, cancellationToken) =>
+                SaveDefinitionAsync(expectedGeneration, definition, cancellationToken));
+        return CurrentEditor;
+    }
+
+    /// <summary>Opens an existing immutable definition without dropping any condition or action.</summary>
+    public TriggerEditorViewModel? BeginEdit(string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        TriggerTaskItemViewModel? item = TriggerTasks.FirstOrDefault(
+            task => StringComparer.Ordinal.Equals(task.Id, id));
+        if (item is null)
+        {
+            SetError("trigger.definition.not_found");
+            return null;
+        }
+
+        long expectedGeneration = _generation;
+        CurrentEditor = new TriggerEditorViewModel(
+            _getString,
+            item.Definition,
+            TriggerTasks
+                .Where(task => !StringComparer.Ordinal.Equals(task.Id, id))
+                .Select(static task => task.Name),
+            (definition, cancellationToken) =>
+                SaveDefinitionAsync(expectedGeneration, definition, cancellationToken));
+        return CurrentEditor;
+    }
+
+    public void CancelEdit()
+    {
+        if (CurrentEditor?.IsBusy == true)
+        {
+            return;
+        }
+
+        CurrentEditor = null;
+        ClearError();
+    }
+
+    public Task<bool> DeleteTaskAsync(string id, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (!TriggerTasks.Any(task => StringComparer.Ordinal.Equals(task.Id, id)))
+        {
+            SetError("trigger.definition.not_found");
+            return Task.FromResult(false);
+        }
+
+        return ReplaceDefinitionsAsync(
+            TriggerTasks
+                .Where(task => !StringComparer.Ordinal.Equals(task.Id, id))
+                .Select(static task => task.Definition)
+                .ToArray(),
+            cancellationToken);
+    }
+
+    public Task<bool> MoveTaskAsync(string id, int direction, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        List<TriggerTaskDefinition> definitions = TriggerTasks
+            .Select(static task => task.Definition)
+            .ToList();
+        int index = definitions.FindIndex(definition => StringComparer.Ordinal.Equals(definition.Id, id));
+        int target = index + Math.Sign(direction);
+        if (index < 0 || direction == 0 || target < 0 || target >= definitions.Count)
+        {
+            return Task.FromResult(false);
+        }
+
+        TriggerTaskDefinition moved = definitions[index];
+        definitions.RemoveAt(index);
+        definitions.Insert(target, moved);
+        return ReplaceDefinitionsAsync(definitions, cancellationToken);
+    }
+
+    public Task<bool> SetAllTasksEnabledAsync(bool isEnabled, CancellationToken cancellationToken)
+    {
+        if (TriggerTasks.All(task => task.Definition.IsEnabled == isEnabled))
+        {
+            ClearError();
+            return Task.FromResult(true);
+        }
+
+        TriggerTaskDefinition[] definitions = TriggerTasks
+            .Select(task => task.Definition.IsEnabled == isEnabled
+                ? task.Definition
+                : CopyDefinition(task.Definition, isEnabled: isEnabled))
+            .ToArray();
+        return ReplaceDefinitionsAsync(definitions, cancellationToken);
+    }
+
+    public async Task<bool> SetTaskEnabledAsync(
+        string id,
+        bool isEnabled,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        TriggerTaskItemViewModel? selected = TriggerTasks.FirstOrDefault(
+            task => StringComparer.Ordinal.Equals(task.Id, id));
+        if (selected is null)
+        {
+            SetError("trigger.definition.not_found");
+            return false;
+        }
+
+        if (selected.Definition.IsEnabled == isEnabled)
+        {
+            ClearError();
+            return true;
+        }
+
+        TriggerTaskDefinition[] definitions = TriggerTasks
+            .Select(task => StringComparer.Ordinal.Equals(task.Id, id)
+                && task.Definition.IsEnabled != isEnabled
+                    ? CopyDefinition(task.Definition, isEnabled: isEnabled)
+                    : task.Definition)
+            .ToArray();
+        bool replaced = await ReplaceDefinitionsAsync(definitions, cancellationToken);
+        if (!replaced)
+        {
+            selected.RepublishEnabledState();
+        }
+
+        return replaced;
+    }
+
+    private async Task<TriggerEditorSaveResult> SaveDefinitionAsync(
+        long expectedGeneration,
+        TriggerTaskDefinition definition,
+        CancellationToken cancellationToken)
+    {
+        List<TriggerTaskDefinition> definitions = TriggerTasks
+            .Select(static task => task.Definition)
+            .ToList();
+        int index = definitions.FindIndex(existing =>
+            StringComparer.Ordinal.Equals(existing.Id, definition.Id));
+        if (index >= 0)
+        {
+            definitions[index] = definition;
+        }
+        else
+        {
+            definitions.Add(definition);
+        }
+
+        bool saved = await ReplaceDefinitionsAsync(
+            definitions,
+            cancellationToken,
+            expectedGeneration);
+        if (saved)
+        {
+            CurrentEditor = null;
+            return TriggerEditorSaveResult.Succeeded();
+        }
+
+        return TriggerEditorSaveResult.Failed(
+            ErrorCode ?? "trigger.definition.write_unavailable");
+    }
+
+    private async Task<bool> ReplaceDefinitionsAsync(
+        IReadOnlyList<TriggerTaskDefinition> definitions,
+        CancellationToken cancellationToken,
+        long? expectedGeneration = null)
+    {
+        if (!TryBeginOperation())
+        {
+            return false;
+        }
+
+        try
+        {
+            TriggerPersistenceResult<TriggerDefinitionCatalog> result;
+            try
+            {
+                result = await _store.ReplaceAsync(
+                    expectedGeneration ?? _generation,
+                    definitions,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                SetError("trigger.definition.write_unavailable");
+                return false;
+            }
+            if (!result.IsSucceeded || result.Value is not TriggerDefinitionCatalog catalog)
+            {
+                SetPersistenceError(result.Status, result.Diagnostic, "trigger.definition.write_unavailable");
+                if (result.Status == TriggerPersistenceStatus.Conflict)
+                {
+                    try
+                    {
+                        TriggerPersistenceResult<TriggerDefinitionCatalog> refreshed =
+                            await _store.ReadAsync(cancellationToken);
+                        if (refreshed.IsSucceeded
+                            && refreshed.Value is TriggerDefinitionCatalog latest)
+                        {
+                            ApplyCatalog(latest);
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception)
+                    {
+                        // Refresh is best effort; retain the actionable optimistic-conflict result.
+                    }
+                }
+
+                return false;
+            }
+
+            ApplyCatalog(catalog);
+            ClearError();
+            return true;
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private void ApplyCatalog(TriggerDefinitionCatalog catalog)
+    {
+        _generation = catalog.Generation;
+        TriggerTasks.Clear();
+        foreach (TriggerDefinitionCatalogItem task in catalog.Tasks)
+        {
+            TriggerTasks.Add(new TriggerTaskItemViewModel(
+                task.Definition,
+                task.LastTriggeredAt,
+                _getString));
+        }
+
         OnPropertyChanged(nameof(IsEmpty));
     }
 
-    public void AddTask(TriggerTask task)
+    private bool TryBeginOperation()
     {
-        ArgumentNullException.ThrowIfNull(task);
-        task.Name = ValidateTriggerName(task.Name, task.Id);
-        _triggerService.AddTask(task);
-        Reload();
-    }
-
-    public void DeleteTask(string id)
-    {
-        _triggerService.DeleteTask(id);
-        Reload();
-    }
-
-    public void MoveTask(string id, int direction)
-    {
-        _triggerService.MoveTask(id, direction);
-        Reload();
-    }
-
-    public void UpdateTask(TriggerTaskItemViewModel item)
-    {
-        ArgumentNullException.ThrowIfNull(item);
-        item.Name = ValidateTriggerName(item.Name, item.Id);
-        _triggerService.SaveTasks(TriggerTasks.Select(static row => row.Task).ToList());
-        Reload();
-    }
-
-    public void SetAllTasksEnabled(bool isEnabled)
-    {
-        _triggerService.SetAllTasksEnabled(isEnabled);
-        Reload();
-    }
-
-    public string ValidateTriggerName(string name, string? currentId = null)
-    {
-        string normalized = string.IsNullOrWhiteSpace(name) ? _getString("Triggers.DefaultName") : name.Trim();
-        if (normalized.Length > MaxTriggerNameLength)
+        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
         {
-            normalized = normalized[..MaxTriggerNameLength];
+            SetError("trigger.presentation.busy");
+            return false;
         }
 
-        HashSet<string> existingNames = TriggerTasks
-            .Where(item => !StringComparer.Ordinal.Equals(item.Id, currentId))
-            .Select(static item => item.Name)
-            .ToHashSet(StringComparer.CurrentCultureIgnoreCase);
-        if (!existingNames.Contains(normalized))
+        OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(CanEditTriggers));
+        return true;
+    }
+
+    private void EndOperation()
+    {
+        Interlocked.Exchange(ref _busy, 0);
+        OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(CanEditTriggers));
+    }
+
+    private void SetPersistenceError(
+        TriggerPersistenceStatus status,
+        TriggerDiagnostic? diagnostic,
+        string fallbackCode,
+        string? fallbackResourceKey = null)
+    {
+        switch (status)
         {
-            return normalized;
+            case TriggerPersistenceStatus.Conflict:
+                SetError("trigger.definition.conflict");
+                break;
+            case TriggerPersistenceStatus.NotFound:
+                SetError("trigger.definition.not_found");
+                break;
+            default:
+                SetError(diagnostic?.Code ?? fallbackCode, fallbackResourceKey);
+                break;
         }
+    }
 
-        string baseName = normalized;
-        for (int suffix = 2; suffix < 1000; suffix++)
+    private void ClearError()
+    {
+        _errorResourceKey = null;
+        ErrorCode = null;
+    }
+
+    private void SetError(string errorCode, string? resourceKey = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
+        bool resourceChanged = !StringComparer.Ordinal.Equals(
+            _errorResourceKey,
+            resourceKey);
+        string? previousErrorCode = ErrorCode;
+        _errorResourceKey = resourceKey;
+        ErrorCode = errorCode;
+        if (resourceChanged && StringComparer.Ordinal.Equals(previousErrorCode, errorCode))
         {
-            string candidate = $"{baseName} {suffix}";
-            if (candidate.Length > MaxTriggerNameLength)
-            {
-                candidate = $"{baseName[..Math.Max(0, MaxTriggerNameLength - suffix.ToString(CultureInfo.InvariantCulture).Length - 1)]} {suffix}";
-            }
-
-            if (!existingNames.Contains(candidate))
-            {
-                return candidate;
-            }
+            OnPropertyChanged(nameof(ErrorMessage));
         }
+    }
 
-        return $"{Guid.NewGuid():N}"[..MaxTriggerNameLength];
+    private static TriggerTaskDefinition CopyDefinition(
+        TriggerTaskDefinition definition,
+        bool isEnabled)
+    {
+        return new TriggerTaskDefinition(
+            definition.Id,
+            checked(definition.Revision + 1),
+            definition.Name,
+            isEnabled,
+            definition.Conditions,
+            definition.Actions);
+    }
+
+    private static string MapErrorResource(string errorCode)
+    {
+        return errorCode switch
+        {
+            "trigger.presentation.busy" => "Triggers.Validation.Busy",
+            "trigger.definition.conflict" => "Triggers.Validation.Conflict",
+            "trigger.definition.not_found" => "Triggers.Validation.NotFound",
+            "trigger.definition.read_unavailable" => "Triggers.Validation.LoadFailed",
+            _ => "Triggers.Validation.SaveFailed",
+        };
     }
 }
 
-/// <summary>Bindable row for one trigger task.</summary>
+/// <summary>Immutable bindable row for one persisted trigger definition.</summary>
 internal sealed class TriggerTaskItemViewModel : ObservableObject
 {
     private readonly Func<string, string> _getString;
-    private string _name;
-    private bool _isEnabled;
 
-    public TriggerTaskItemViewModel(TriggerTask task, Func<string, string> getString)
+    public TriggerTaskItemViewModel(
+        TriggerTaskDefinition definition,
+        DateTimeOffset? lastTriggeredAt,
+        Func<string, string> getString)
     {
-        Task = task ?? throw new ArgumentNullException(nameof(task));
+        Definition = definition ?? throw new ArgumentNullException(nameof(definition));
+        LastTriggeredAt = lastTriggeredAt;
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
-        _name = task.Name;
-        _isEnabled = task.IsEnabled;
     }
 
-    public TriggerTask Task { get; }
+    public TriggerTaskDefinition Definition { get; }
 
-    public string Id => Task.Id;
+    public DateTimeOffset? LastTriggeredAt { get; }
 
-    public string Name
-    {
-        get => _name;
-        set
-        {
-            string normalized = string.IsNullOrWhiteSpace(value) ? _getString("Triggers.DefaultName") : value.Trim();
-            if (normalized.Length > TriggersViewModel.MaxTriggerNameLength)
-            {
-                normalized = normalized[..TriggersViewModel.MaxTriggerNameLength];
-            }
-            if (SetProperty(ref _name, normalized))
-            {
-                Task.Name = normalized;
-            }
-        }
-    }
+    public string Id => Definition.Id;
 
-    public bool IsEnabled
-    {
-        get => _isEnabled;
-        set
-        {
-            if (SetProperty(ref _isEnabled, value))
-            {
-                Task.IsEnabled = value;
-            }
-        }
-    }
+    public string Name => Definition.Name;
 
-    public string ConditionsSummary => string.Join(", ", Task.Conditions.Select(FormatCondition));
+    public bool IsEnabled => Definition.IsEnabled;
 
-    public string ActionsSummary => string.Join(", ", Task.Actions.Select(FormatAction));
+    /// <summary>Re-publishes the durable value after a rejected one-way UI toggle.</summary>
+    public void RepublishEnabledState() => OnPropertyChanged(nameof(IsEnabled));
+
+    public string ConditionsSummary => string.Join(", ", Definition.Conditions.Select(FormatCondition));
+
+    public string ActionsSummary => string.Join(", ", Definition.Actions.Select(FormatAction));
 
     public string ConditionsLabel => _getString("Triggers.Conditions");
 
@@ -257,34 +592,54 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
 
     public string LastTriggeredLabel => _getString("Triggers.LastTriggered");
 
-    public string LastTriggeredSummary => Task.LastTriggeredAt is DateTimeOffset lastTriggered
+    public string LastTriggeredSummary => LastTriggeredAt is DateTimeOffset lastTriggered
         ? lastTriggered.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
         : _getString("Triggers.NeverTriggered");
 
     private string FormatCondition(TriggerCondition condition)
     {
-        string title = _getString($"Triggers.Condition.{condition.Kind}");
-        return condition.Kind switch
+        return condition.Parameters switch
         {
-            TriggerConditionKind.TotalTraffic or TriggerConditionKind.TrafficInWindow
-                or TriggerConditionKind.UploadRate or TriggerConditionKind.DownloadRate
-                or TriggerConditionKind.SessionTraffic =>
-                $"{title} >= {FormatBytes(condition.Threshold)}{FormatTrafficScope(condition.Value)}",
-            TriggerConditionKind.ActiveConnections =>
-                $"{title} >= {condition.Threshold:N0}",
-            TriggerConditionKind.Runtime =>
-                $"{title} >= {FormatDuration(condition.Threshold)}",
-            TriggerConditionKind.SystemTime when !string.IsNullOrWhiteSpace(condition.Value) =>
-                $"{title} >= {condition.Value}",
-            TriggerConditionKind.NotificationRaised when !string.IsNullOrWhiteSpace(condition.Value) =>
-                $"{title}: {condition.Value}",
-            _ => title,
+            EventConditionParameters eventParameters =>
+                _getString($"Triggers.Condition.{eventParameters.EventKind}"),
+            NotificationConditionParameters notification =>
+                $"{_getString("Triggers.Condition.NotificationRaised")}: {notification.MinimumLevel}",
+            TrafficConditionParameters traffic => FormatTrafficCondition(traffic),
+            RateConditionParameters rate =>
+                $"{_getString(rate.Direction == TriggerTrafficDirection.Upload
+                    ? "Triggers.Condition.UploadRate"
+                    : "Triggers.Condition.DownloadRate")} >= {FormatBytes(rate.ThresholdBytesPerSecond)}/s",
+            ActiveConnectionsConditionParameters connections =>
+                $"{_getString("Triggers.Condition.ActiveConnections")} >= {connections.Threshold:N0}",
+            RuntimeConditionParameters runtime =>
+                $"{_getString("Triggers.Condition.Runtime")} >= {runtime.Threshold:g}",
+            SystemTimeConditionParameters time =>
+                $"{_getString("Triggers.Condition.SystemTime")} >= {time.TargetTime:t}",
+            _ => _getString("Triggers.Validation.InvalidCondition"),
         };
     }
 
     private string FormatAction(TriggerAction action)
     {
         return _getString($"Triggers.Action.{action.Kind}");
+    }
+
+    private string TrafficTitle(TriggerTrafficScope scope)
+    {
+        return _getString(scope switch
+        {
+            TriggerTrafficScope.RollingWindow => "Triggers.Condition.TrafficInWindow",
+            TriggerTrafficScope.CurrentSession => "Triggers.Condition.SessionTraffic",
+            _ => "Triggers.Condition.TotalTraffic",
+        });
+    }
+
+    private string FormatTrafficCondition(TrafficConditionParameters traffic)
+    {
+        string summary = $"{TrafficTitle(traffic.Scope)} >= {FormatBytes(traffic.ThresholdBytes)}";
+        return traffic.Window is TimeSpan window
+            ? $"{summary} · {window.ToString("g", CultureInfo.CurrentCulture)}"
+            : summary;
     }
 
     private static string FormatBytes(long bytes)
@@ -299,31 +654,5 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
         }
 
         return $"{value:N1} {units[unitIndex]}";
-    }
-
-    private static string FormatDuration(long seconds)
-    {
-        if (seconds >= 3600 && seconds % 3600 == 0)
-        {
-            return $"{seconds / 3600:N0} h";
-        }
-
-        if (seconds >= 60 && seconds % 60 == 0)
-        {
-            return $"{seconds / 60:N0} min";
-        }
-
-        return $"{seconds:N0} s";
-    }
-
-    private string FormatTrafficScope(string value)
-    {
-        return value switch
-        {
-            "Scheduled" => $" · {_getString("Triggers.Condition.Scope.Scheduled")}",
-            "Startup" => $" · {_getString("Triggers.Condition.Scope.Startup")}",
-            "Cumulative" => $" · {_getString("Triggers.Condition.Scope.Cumulative")}",
-            _ => string.Empty,
-        };
     }
 }

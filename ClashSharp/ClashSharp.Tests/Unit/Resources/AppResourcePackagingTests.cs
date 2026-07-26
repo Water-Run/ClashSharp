@@ -1115,14 +1115,16 @@ public sealed class AppResourcePackagingTests
         string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
         string settingsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
         string appSettingsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.cs");
-        string triggerServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerService.cs");
+        string triggerViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "TriggersViewModel.cs");
+        string triggerFactoryPath = FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Compatibility", "TriggerPresentationCompatibilityFactory.cs");
         string triggerViewPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml");
         string triggerCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml.cs");
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
         string settingsViewModel = File.ReadAllText(settingsViewModelPath);
         string appSettings = File.ReadAllText(appSettingsPath);
-        string triggerService = File.ReadAllText(triggerServicePath);
+        string triggerViewModel = File.ReadAllText(triggerViewModelPath);
+        string triggerFactory = File.ReadAllText(triggerFactoryPath);
         string triggerView = File.ReadAllText(triggerViewPath);
         string triggerCode = File.ReadAllText(triggerCodePath);
 
@@ -1133,22 +1135,20 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("TriggerNotificationsEnabled", settingsViewModel, StringComparison.Ordinal);
         Assert.Contains("TriggerNotificationsEnabled", appSettings, StringComparison.Ordinal);
         Assert.Contains("TriggersEnabled", appSettings, StringComparison.Ordinal);
-        Assert.Contains("TriggerNotificationsEnabled", triggerService, StringComparison.Ordinal);
-        Assert.Contains("CreateDefault", triggerService, StringComparison.Ordinal);
-        Assert.DoesNotContain("triggersEnabledAtStartup", triggerService, StringComparison.Ordinal);
-        Assert.Contains("() => AppSettingsService.Instance.TriggersEnabled", triggerService, StringComparison.Ordinal);
-        Assert.Contains("value => AppSettingsService.Instance.TriggersEnabled = value", triggerService, StringComparison.Ordinal);
-        Assert.Contains("Triggers.Log.Fired.Format", triggerService, StringComparison.Ordinal);
-        Assert.Contains("SetAllTasksEnabled", triggerService, StringComparison.Ordinal);
+        Assert.Contains("ITriggerPresentationSettings", triggerViewModel, StringComparison.Ordinal);
+        Assert.Contains("SetAllTasksEnabledAsync", triggerViewModel, StringComparison.Ordinal);
+        Assert.Contains("AppSettingsService", triggerFactory, StringComparison.Ordinal);
+        Assert.Contains("_settings.TriggersEnabled", triggerFactory, StringComparison.Ordinal);
+        Assert.Contains("ITriggerDefinitionStore", triggerFactory, StringComparison.Ordinal);
         Assert.Contains("CanEditTriggers", triggerView, StringComparison.Ordinal);
         Assert.DoesNotContain("TriggersEnabledSwitch", triggerView, StringComparison.Ordinal);
         Assert.Contains("TriggerListHost", triggerView, StringComparison.Ordinal);
         Assert.Contains("TriggerEditorHost", triggerView, StringComparison.Ordinal);
         Assert.Contains("ChooseTriggerConditionButton", triggerView, StringComparison.Ordinal);
-        Assert.Contains("ChooseTriggerActionsButton", triggerView, StringComparison.Ordinal);
-        Assert.Contains("ShowTriggerEditorForNewTask", triggerCode, StringComparison.Ordinal);
-        Assert.Contains("OpenTriggerList", triggerCode, StringComparison.Ordinal);
-        Assert.Contains("ValidateTriggerName", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("ChooseTriggerActionButton", triggerView, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.BeginCreate()", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("editor.SaveAsync", triggerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("new TriggerTaskDefinition", triggerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowTriggerNameStepAsync", triggerCode, StringComparison.Ordinal);
     }
 
@@ -1687,12 +1687,13 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("public string TriggersText", mainWindowViewModel, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies triggers have dedicated model/service/view files and searchable add dialogs.</summary>
+    /// <summary>Verifies triggers use immutable domain definitions, async persistence, and searchable add dialogs.</summary>
     [Fact]
     public void TriggerFeature_UsesDedicatedArchitectureAndSearchableOptionList()
     {
-        string triggerModelPath = FindSourceFile("ClashSharp", "ClashSharp", "Model", "TriggerTask.cs");
-        string triggerServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerService.cs");
+        string triggerModelPath = FindSourceFile("ClashSharp", "ClashSharp.Core", "Domain", "Triggers", "TriggerEventKind.cs");
+        string triggerDefinitionPath = FindSourceFile("ClashSharp", "ClashSharp.Core", "Domain", "Triggers", "TriggerTaskDefinition.cs");
+        string triggerStorePath = FindSourceFile("ClashSharp", "ClashSharp.Application", "Triggers", "TriggerDefinitionStore.cs");
         string triggerViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "TriggersViewModel.cs");
         string triggerViewPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml");
         string triggerCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml.cs");
@@ -1700,7 +1701,8 @@ public sealed class AppResourcePackagingTests
         string searchableComponentPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "SearchableOptionList.xaml");
 
         string triggerModel = File.ReadAllText(triggerModelPath);
-        string triggerService = File.ReadAllText(triggerServicePath);
+        string triggerDefinition = File.ReadAllText(triggerDefinitionPath);
+        string triggerStore = File.ReadAllText(triggerStorePath);
         string triggerViewModel = File.ReadAllText(triggerViewModelPath);
         string triggerView = File.ReadAllText(triggerViewPath);
         string triggerCode = File.ReadAllText(triggerCodePath);
@@ -1712,8 +1714,8 @@ public sealed class AppResourcePackagingTests
             "AppEntered",
             "ProxyStarted",
             "NotificationRaised",
-            "TotalTraffic",
-            "TrafficInWindow",
+            "Traffic",
+            "RollingWindow",
             "Runtime",
             "SystemTime",
             "CloseConnections",
@@ -1726,23 +1728,23 @@ public sealed class AppResourcePackagingTests
             Assert.Contains(expected, triggerModel, StringComparison.Ordinal);
         }
 
-        Assert.Contains("MoveTask", triggerService, StringComparison.Ordinal);
-        Assert.Contains("Evaluate", triggerService, StringComparison.Ordinal);
-        Assert.Contains("TriggerLog", triggerService, StringComparison.Ordinal);
+        Assert.Contains("TriggerTaskDefinition", triggerDefinition, StringComparison.Ordinal);
+        Assert.Contains("ITriggerRepository", triggerStore, StringComparison.Ordinal);
+        Assert.Contains("ReplaceAsync", triggerStore, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", searchableComponent, StringComparison.Ordinal);
         Assert.Contains("SearchBox", searchableComponent, StringComparison.Ordinal);
         Assert.Contains("Padding=\"0,0,14,0\"", searchableComponent, StringComparison.Ordinal);
         Assert.Contains("ScrollViewer.VerticalScrollBarVisibility=\"Visible\"", searchableComponent, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", triggerCode, StringComparison.Ordinal);
-        Assert.Contains("ShowTriggerConditionPickerAsync", triggerCode, StringComparison.Ordinal);
-        Assert.Contains("ShowTriggerActionPickerAsync", triggerCode, StringComparison.Ordinal);
-        Assert.Contains("MoveUpCommand", triggerViewModel, StringComparison.Ordinal);
-        Assert.Contains("MoveDownCommand", triggerViewModel, StringComparison.Ordinal);
+        Assert.Contains("ChooseTriggerConditionButton_Click", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("ChooseTriggerActionButton_Click", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("MoveTaskAsync", triggerViewModel, StringComparison.Ordinal);
+        Assert.Contains("SetTaskEnabledAsync", triggerViewModel, StringComparison.Ordinal);
         Assert.Contains("CanEditTriggers", triggerView, StringComparison.Ordinal);
         Assert.Contains("TriggersEnabledRow", settingsView, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies trigger creation is a full in-page editor reached from the final list item instead of a multi-dialog wizard.</summary>
+    /// <summary>Verifies trigger creation is a complete multi-row in-page editor.</summary>
     [Fact]
     public void TriggerFeature_UsesFullAddEditorSubpage()
     {
@@ -1754,24 +1756,18 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("x:Name=\"TriggerListHost\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TriggerEditorHost\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"ShowTriggerEditorStoryboard\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"ShowTriggerListStoryboard\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"TriggerListHostTranslateTransform\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"TriggerEditorHostTranslateTransform\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"AddTriggerCardButton\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"BackToTriggerListButton\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"TriggerEditorNameBox\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"SelectedTriggerConditionText\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"SelectedTriggerActionsList\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"ChooseTriggerConditionButton\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"ChooseTriggerActionsButton\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{Binding IsListing", triggerView, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{Binding IsEditing", triggerView, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding CurrentEditor.Conditions}\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding CurrentEditor.Actions}\"", triggerView, StringComparison.Ordinal);
+        Assert.Contains("SelectedCondition", triggerView, StringComparison.Ordinal);
+        Assert.Contains("SelectedAction", triggerView, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ConditionDescriptionText}\"", triggerView, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding ActionDescriptionText}\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"SaveTriggerButton\"", triggerView, StringComparison.Ordinal);
-        Assert.Contains("ShowTriggerEditorForNewTask", triggerCode, StringComparison.Ordinal);
-        Assert.Contains("OpenTriggerList", triggerCode, StringComparison.Ordinal);
-        Assert.Contains("ShowTriggerEditorStoryboard.Begin()", triggerCode, StringComparison.Ordinal);
-        Assert.Contains("ShowTriggerListStoryboard.Begin()", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("SaveTriggerButton_Click", triggerView, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.BeginCreate()", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.CancelEdit()", triggerCode, StringComparison.Ordinal);
+        Assert.Contains("editor.SaveAsync", triggerCode, StringComparison.Ordinal);
         Assert.Contains("BackToTriggerListButton_Click", triggerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowTriggerNameStepAsync", triggerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowTriggerConditionStepAsync", triggerCode, StringComparison.Ordinal);
@@ -1803,7 +1799,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("NotificationLevel", appSettings, StringComparison.Ordinal);
         Assert.Contains("Microsoft.Windows.AppNotifications", notificationService, StringComparison.Ordinal);
         Assert.Contains("NotifyProxyModeChanged", notificationService, StringComparison.Ordinal);
-        Assert.Contains("NotifyTriggerFired", notificationService, StringComparison.Ordinal);
+        Assert.Contains("DeliverTriggerFiredNotificationAsync", notificationService, StringComparison.Ordinal);
         Assert.Contains("NotifyConnectionTestTimeout", notificationService, StringComparison.Ordinal);
         Assert.Contains("GetString(\"Notification.ProxyMode.Title\")", notificationService, StringComparison.Ordinal);
         Assert.Contains("AppendNotificationLog", notificationService, StringComparison.Ordinal);
@@ -1818,20 +1814,26 @@ public sealed class AppResourcePackagingTests
     [Fact]
     public void TriggerNotificationArchitecture_UsesRuntimeEventsAndInjectedBoundaries()
     {
-        string triggerServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerService.cs");
+        string triggerExecutorPath = FindSourceFile("ClashSharp", "ClashSharp.Application", "Triggers", "TriggerActionExecutor.cs");
+        string triggerRuntimeAdapterPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerActionRuntimeAdapter.cs");
         string schedulerAdapterPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerSchedulerAdapters.cs");
         string schedulerPath = FindSourceFile("ClashSharp", "ClashSharp.Application", "Triggers", "TriggerScheduler.cs");
         string notificationServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "NotificationService.cs");
+        string firedNotificationAdapterPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerFiredNotificationAdapter.cs");
         string applicationActionServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ApplicationActionService.cs");
+        string appHostFactoryPath = FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "ClashSharpAppHostFactory.cs");
         string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
         string triggerRuntimeEventsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerRuntimeEvents.cs");
         string appCodePath = FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs");
 
-        string triggerService = File.ReadAllText(triggerServicePath);
+        string triggerExecutor = File.ReadAllText(triggerExecutorPath);
+        string triggerRuntimeAdapter = File.ReadAllText(triggerRuntimeAdapterPath);
         string schedulerAdapter = File.ReadAllText(schedulerAdapterPath);
         string scheduler = File.ReadAllText(schedulerPath);
         string notificationService = File.ReadAllText(notificationServicePath);
+        string firedNotificationAdapter = File.ReadAllText(firedNotificationAdapterPath);
         string applicationActionService = File.ReadAllText(applicationActionServicePath);
+        string appHostFactory = File.ReadAllText(appHostFactoryPath);
         string masterControlCode = File.ReadAllText(masterControlCodePath);
         string triggerRuntimeEvents = File.ReadAllText(triggerRuntimeEventsPath);
         string appCode = File.ReadAllText(appCodePath);
@@ -1839,16 +1841,28 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ITriggerRuntimeEventSource", triggerRuntimeEvents, StringComparison.Ordinal);
         Assert.Contains("ITriggerRuntimeEventPublisher", triggerRuntimeEvents, StringComparison.Ordinal);
         Assert.Contains("TriggerRuntimeEventHub", triggerRuntimeEvents, StringComparison.Ordinal);
-        Assert.Contains("ITriggerNotificationSink", triggerService, StringComparison.Ordinal);
-        Assert.DoesNotContain("ITriggerRuntimeEventSource", triggerService, StringComparison.Ordinal);
-        Assert.DoesNotContain("RuntimeEventRaised +=", triggerService, StringComparison.Ordinal);
+        Assert.Contains("ITriggerActionRuntime", triggerExecutor, StringComparison.Ordinal);
+        Assert.Contains("ITriggerFiredNotificationSink", triggerExecutor, StringComparison.Ordinal);
+        Assert.DoesNotContain("ITriggerRuntimeEventSource", triggerExecutor, StringComparison.Ordinal);
+        Assert.DoesNotContain("RuntimeEventRaised +=", triggerExecutor, StringComparison.Ordinal);
         Assert.Contains("ITriggerRuntimeEventSource", schedulerAdapter, StringComparison.Ordinal);
         Assert.Contains("_source.RuntimeEventRaised += OnRuntimeEventRaised", schedulerAdapter, StringComparison.Ordinal);
         Assert.Contains("ITriggerSchedulerEventSource", scheduler, StringComparison.Ordinal);
         Assert.Contains("_eventSource.EventRaised += OnEventRaised", scheduler, StringComparison.Ordinal);
-        Assert.DoesNotContain("private readonly NotificationService", triggerService, StringComparison.Ordinal);
-        Assert.DoesNotContain("_notifications.NotificationRaised", triggerService, StringComparison.Ordinal);
-        Assert.DoesNotContain("NotificationRaisedEventArgs", triggerService, StringComparison.Ordinal);
+        Assert.Contains("IIdempotentTriggerNotificationSink", triggerRuntimeAdapter, StringComparison.Ordinal);
+        Assert.Contains("ITriggerFiredNotificationSink", firedNotificationAdapter, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<ITriggerFiredNotificationSink>", appHostFactory, StringComparison.Ordinal);
+        Assert.Contains("settings.TriggerNotificationsEnabled", appHostFactory, StringComparison.Ordinal);
+        int catalogLoadIndex = schedulerAdapter.IndexOf(
+            "TriggerPersistenceResult<TriggerDefinitionCatalog> catalog",
+            StringComparison.Ordinal);
+        int reconciliationIndex = schedulerAdapter.IndexOf(
+            "reconciled = await _reconciler",
+            StringComparison.Ordinal);
+        Assert.True(catalogLoadIndex >= 0, "Trigger definition cache load is missing.");
+        Assert.True(reconciliationIndex > catalogLoadIndex, "Definition cache must load before outbox reconciliation.");
+        Assert.DoesNotContain("private readonly NotificationService", triggerExecutor, StringComparison.Ordinal);
+        Assert.DoesNotContain("NotificationRaisedEventArgs", triggerExecutor, StringComparison.Ordinal);
         Assert.Contains("ITriggerRuntimeEventPublisher", notificationService, StringComparison.Ordinal);
         Assert.Contains("_triggerEvents.Publish(new TriggerRuntimeEvent", notificationService, StringComparison.Ordinal);
         Assert.DoesNotContain("public event EventHandler<NotificationRaisedEventArgs>? NotificationRaised", notificationService, StringComparison.Ordinal);

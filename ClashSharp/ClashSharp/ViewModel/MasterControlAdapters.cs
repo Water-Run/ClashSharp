@@ -15,6 +15,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -310,7 +311,9 @@ internal sealed class MasterControlRuntimeAdapter : IMasterControlRuntime
         IReadOnlyList<ProfileSubscriptionLink> links = ProfileCatalogService.Instance.GetSubscriptionLinks();
         IReadOnlyList<ProxyNode> nodes = ProxyNodeCatalogService.Instance.GetNodes();
         IReadOnlyList<RulePreview> rules = RuleCatalogService.Instance.GetRules();
-        IReadOnlyList<TriggerTask> triggerTasks = TriggerService.Instance.GetTasks();
+        TriggerPresentationSummary triggerSummary = TriggerPresentationCompatibilityFactory
+            .RequireActive()
+            .GetSummary();
 
         return new MasterControlRuntimeSnapshot(
             CoreConfigurationService.Instance.GetState(),
@@ -318,8 +321,8 @@ internal sealed class MasterControlRuntimeAdapter : IMasterControlRuntime
             links.Count,
             nodes.Count,
             rules.Count,
-            triggerTasks.Count,
-            triggerTasks.Count(static task => task.IsEnabled),
+            triggerSummary.TaskCount,
+            triggerSummary.EnabledTaskCount,
             LogStorageService.Instance.GetStorageSummary(),
             LogStorageService.Instance.GetTrafficStatisticsSummary(),
             MihomoServiceManager.Instance.GetLatestStatus(),

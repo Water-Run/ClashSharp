@@ -87,7 +87,10 @@ public sealed class TriggerExitHandoffTests
             await SeedRunningExitAsync(directory.DatabasePath, CurrentEpoch);
         ApplicationLifetimeRequestChannel requests = new();
         TriggerLifecycleHandoffCoordinator handoff = CreateCoordinator(repository, requests);
-        TriggerActionExecutor executor = new(repository, new ExitOnlyRuntime(handoff));
+        TriggerActionExecutor executor = new(
+            repository,
+            new ExitOnlyRuntime(handoff),
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);
@@ -343,7 +346,10 @@ public sealed class TriggerExitHandoffTests
             await SeedRunningExitAsync(directory.DatabasePath, PriorEpoch);
         ApplicationLifetimeRequestChannel requests = new();
         TriggerLifecycleHandoffCoordinator handoff = CreateCoordinator(repository, requests);
-        TriggerActionExecutor executor = new(repository, new ExitOnlyRuntime(handoff));
+        TriggerActionExecutor executor = new(
+            repository,
+            new ExitOnlyRuntime(handoff),
+            NullTriggerFiredNotificationSink.Instance);
         MutationAdmissionBarrier admission = new();
         await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
             CancellationToken.None);

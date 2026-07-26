@@ -11,7 +11,6 @@ using ClashSharp.Hosting.Startup;
 using ClashSharp.Infrastructure.Triggers;
 using CoreTriggerEventKind = ClashSharp.Model.Triggers.TriggerEventKind;
 using CoreTriggerNotificationLevel = ClashSharp.Model.Triggers.TriggerNotificationLevel;
-using LegacyTriggerEventKind = ClashSharp.Model.TriggerEventKind;
 using LegacyTriggerNotificationLevel = ClashSharp.Model.NotificationLevel;
 
 namespace ClashSharp.Service;
@@ -72,10 +71,10 @@ internal sealed class TriggerSchedulerEventSourceAdapter : ITriggerSchedulerEven
     {
         TriggerSchedulerEvent mapped = triggerEvent.EventKind switch
         {
-            LegacyTriggerEventKind.Periodic => new TriggerSchedulerEvent(CoreTriggerEventKind.Periodic),
-            LegacyTriggerEventKind.AppEntered => new TriggerSchedulerEvent(CoreTriggerEventKind.AppEntered),
-            LegacyTriggerEventKind.ProxyStarted => new TriggerSchedulerEvent(CoreTriggerEventKind.ProxyStarted),
-            LegacyTriggerEventKind.NotificationRaised => new TriggerSchedulerEvent(
+            CoreTriggerEventKind.Periodic => new TriggerSchedulerEvent(CoreTriggerEventKind.Periodic),
+            CoreTriggerEventKind.AppEntered => new TriggerSchedulerEvent(CoreTriggerEventKind.AppEntered),
+            CoreTriggerEventKind.ProxyStarted => new TriggerSchedulerEvent(CoreTriggerEventKind.ProxyStarted),
+            CoreTriggerEventKind.NotificationRaised => new TriggerSchedulerEvent(
                 CoreTriggerEventKind.NotificationRaised,
                 MapNotificationLevel(triggerEvent.NotificationLevel)),
             _ => throw new InvalidDataException("The runtime event source published an undefined trigger event."),
@@ -128,12 +127,15 @@ internal sealed class SystemTriggerSchedulerClock : ITriggerSchedulerClock
 /// <summary>Opens/migrates durable trigger state and reconciles its outbox before scheduling.</summary>
 internal sealed class TriggerStartupInitializer(
     TriggerMigrationCoordinator migration,
-    TriggerActionReconciler reconciler) : ITriggerStartupInitializer
+    TriggerActionReconciler reconciler,
+    ITriggerDefinitionStore definitionStore) : ITriggerStartupInitializer
 {
     private readonly TriggerMigrationCoordinator _migration = migration
         ?? throw new ArgumentNullException(nameof(migration));
     private readonly TriggerActionReconciler _reconciler = reconciler
         ?? throw new ArgumentNullException(nameof(reconciler));
+    private readonly ITriggerDefinitionStore _definitionStore = definitionStore
+        ?? throw new ArgumentNullException(nameof(definitionStore));
 
     public async Task<StartupStepResult> InitializeAsync(CancellationToken cancellationToken)
     {
@@ -145,6 +147,15 @@ internal sealed class TriggerStartupInitializer(
             return StartupStepResult.Fatal(
                 migrationResult.Diagnostics.FirstOrDefault()?.Code
                     ?? "trigger.startup.migration_unavailable");
+        }
+
+        TriggerPersistenceResult<TriggerDefinitionCatalog> catalog = await _definitionStore
+            .ReadAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (!catalog.IsSucceeded)
+        {
+            return StartupStepResult.Fatal(
+                catalog.Diagnostic?.Code ?? "trigger.startup.catalog_unavailable");
         }
 
         IReadOnlyList<TriggerActionResult> reconciled;

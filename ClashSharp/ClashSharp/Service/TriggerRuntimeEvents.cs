@@ -9,6 +9,7 @@
 
 using System;
 using ClashSharp.Model;
+using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
 
 namespace ClashSharp.Service;
 

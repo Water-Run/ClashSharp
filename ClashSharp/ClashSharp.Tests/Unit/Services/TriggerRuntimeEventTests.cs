@@ -7,8 +7,12 @@
  * @date: 2026-06-28
  */
 
-using ClashSharp.Model;
-using ClashSharp.Service;
+extern alias ClashSharpUi;
+
+using ClashSharp.Model.Triggers;
+using NotificationLevel = ClashSharpUi::ClashSharp.Model.NotificationLevel;
+using TriggerRuntimeEvent = ClashSharpUi::ClashSharp.Service.TriggerRuntimeEvent;
+using TriggerRuntimeEventHub = ClashSharpUi::ClashSharp.Service.TriggerRuntimeEventHub;
 
 namespace ClashSharp.Tests.Unit.Services;
 

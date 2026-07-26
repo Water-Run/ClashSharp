@@ -1,9 +1,13 @@
+extern alias ClashSharpUi;
 using System.Text.Json;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Model.Triggers;
-using ClashSharp.Service;
 using Microsoft.Data.Sqlite;
-using RuntimeTrafficRateSnapshot = ClashSharp.Model.RuntimeTrafficRateSnapshot;
+using ITriggerRuntimeContextSource = ClashSharpUi::ClashSharp.Service.ITriggerRuntimeContextSource;
+using ITriggerTrafficContextSource = ClashSharpUi::ClashSharp.Service.ITriggerTrafficContextSource;
+using RuntimeTrafficRateSnapshot = ClashSharpUi::ClashSharp.Model.RuntimeTrafficRateSnapshot;
+using TriggerContextProviderAdapter = ClashSharpUi::ClashSharp.Service.TriggerContextProviderAdapter;
+using TriggerTrafficContextSnapshot = ClashSharpUi::ClashSharp.Service.TriggerTrafficContextSnapshot;
 
 namespace ClashSharp.Tests.Unit.Triggers;
 
@@ -349,60 +353,6 @@ public sealed class TriggerContextProviderTests
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => acquisition);
-    }
-
-    [Fact]
-    public async Task CompatibilityFactory_DegradedContextDoesNotSubstituteZeroValues()
-    {
-        FakeContextProvider provider = new(TriggerContextResult.Degraded(
-            Context(activeConnections: null),
-            new Dictionary<TriggerDataField, TriggerDataUnavailableReason>
-            {
-                [TriggerDataField.ActiveConnectionCount] = TriggerDataUnavailableReason.Timeout,
-            }));
-        TriggerEvaluationContextFactory factory = new(provider);
-
-        TriggerEvaluationContextCreationResult result = await factory.CreateAsync(
-            ClashSharp.Model.TriggerEventKind.Periodic,
-            ClashSharp.Model.NotificationLevel.Default,
-            CancellationToken.None);
-
-        Assert.Null(result.Context);
-        Assert.Equal("trigger.context.degraded", result.DiagnosticCode);
-    }
-
-    [Fact]
-    public async Task CompatibilityFactory_CompleteContextMapsEveryLegacyObservation()
-    {
-        TriggerEvaluationContext complete = new(
-            TriggerEventKind.Periodic,
-            new DateOnly(2026, 7, 23),
-            new TimeOnly(10, 0),
-            new Dictionary<TimeSpan, long> { [TimeSpan.FromMinutes(5)] = 100 },
-            currentSessionTrafficBytes: 700,
-            allTimeTrafficBytes: 900,
-            uploadBytesPerSecond: 10,
-            downloadBytesPerSecond: 20,
-            activeConnectionCount: 3,
-            runtime: TimeSpan.FromHours(1));
-        TriggerEvaluationContextFactory factory = new(
-            new FakeContextProvider(TriggerContextResult.Available(complete)));
-
-        TriggerEvaluationContextCreationResult result = await factory.CreateAsync(
-            ClashSharp.Model.TriggerEventKind.Periodic,
-            ClashSharp.Model.NotificationLevel.Default,
-            CancellationToken.None);
-
-        ClashSharp.Model.TriggerEvaluationContext legacy =
-            Assert.IsType<ClashSharp.Model.TriggerEvaluationContext>(result.Context);
-        Assert.Equal(900, legacy.TotalTrafficBytes);
-        Assert.Equal(100, legacy.WindowTrafficBytes);
-        Assert.Equal(700, legacy.SessionTrafficBytes);
-        Assert.Equal(10, legacy.UploadBytesPerSecond);
-        Assert.Equal(20, legacy.DownloadBytesPerSecond);
-        Assert.Equal(3, legacy.ActiveConnectionCount);
-        Assert.Equal(TimeSpan.FromHours(1), legacy.Runtime);
-        Assert.Equal(new TimeOnly(10, 0), legacy.SystemTime);
     }
 
     private static TriggerContextProviderAdapter Adapter(

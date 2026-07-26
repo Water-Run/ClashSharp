@@ -87,6 +87,22 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(_ => new SqliteTriggerRepository(triggerDatabasePath));
             services.AddSingleton<ITriggerRepository>(provider =>
                 provider.GetRequiredService<SqliteTriggerRepository>());
+            services.AddSingleton<TriggerDefinitionStore>();
+            services.AddSingleton<ITriggerDefinitionStore>(provider =>
+                provider.GetRequiredService<TriggerDefinitionStore>());
+            services.AddSingleton(provider =>
+            {
+                AppSettingsService settings = provider.GetRequiredService<AppSettingsService>();
+                NotificationService notifications =
+                    provider.GetRequiredService<NotificationService>();
+                return new TriggerFiredNotificationAdapter(
+                    () => settings.TriggerNotificationsEnabled,
+                    provider.GetRequiredService<ITriggerDefinitionStore>(),
+                    notifications.DeliverTriggerFiredNotificationAsync,
+                    notifications.ReportTriggerFiredNotificationFailure);
+            });
+            services.AddSingleton<ITriggerFiredNotificationSink>(provider =>
+                provider.GetRequiredService<TriggerFiredNotificationAdapter>());
             services.AddSingleton(provider => new TriggerMigrationCoordinator(
                 provider.GetRequiredService<SqliteTriggerRepository>(),
                 legacyTriggerPath,
@@ -146,8 +162,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<TriggerStartupInitializer>();
             services.AddSingleton<ITriggerStartupInitializer>(provider =>
                 provider.GetRequiredService<TriggerStartupInitializer>());
-            services.AddSingleton(provider => TriggerService.CreateDefault(
-                provider.GetRequiredService<IApplicationActionDispatcher>()));
+            services.AddSingleton<TriggerPresentationCompatibilityFactory>();
             services.AddSingleton<IRuntimeParticipant>(provider =>
                 provider.GetRequiredService<TriggerScheduler>());
             services.AddSingleton<IRuntimeParticipant>(provider =>
@@ -172,6 +187,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IStartupStep, StartupConflictProbeStep>();
             services.AddSingleton<IStartupStep, StartupNetworkBehaviorStep>();
             services.AddSingleton<IStartupStep, TriggerSupervisorStartupStep>();
+            services.AddSingleton<IStartupStep, TriggerPresentationStartupStep>();
             services.AddSingleton<IStartupStep, WindowShellStartupStep>();
             services.AddSingleton<IStartupStep, ConnectionSamplingStartupStep>();
         });

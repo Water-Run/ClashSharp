@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
+using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
 
 namespace ClashSharp.Service;
 

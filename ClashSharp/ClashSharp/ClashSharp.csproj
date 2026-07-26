@@ -65,6 +65,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ClashSharp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />

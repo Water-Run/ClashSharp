@@ -16,6 +16,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
+using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
 using Windows.Storage;
 #if !UNIT_TESTS
 using Microsoft.Windows.AppNotifications;
@@ -114,7 +115,6 @@ internal sealed class Win11NotificationPlatform : IWin11NotificationPlatform
 
 /// <summary>Win11 notification gateway with policy filtering.</summary>
 internal sealed class NotificationService :
-    ITriggerNotificationSink,
     IApplicationNotificationSink,
     IIdempotentTriggerNotificationSink
 {
@@ -164,14 +164,6 @@ internal sealed class NotificationService :
             string.Format(CultureInfo.CurrentCulture, GetString("Notification.ProxyMode.Message.Format"), GetModeLabel(mode)));
     }
 
-    public void NotifyTriggerFired(string triggerName)
-    {
-        Show(
-            NotificationLevel.Default,
-            GetString("Notification.TriggerFired.Title"),
-            string.Format(CultureInfo.CurrentCulture, GetString("Notification.TriggerFired.Message.Format"), triggerName));
-    }
-
     public void NotifyConnectionTestTimeout(string target)
     {
         Show(
@@ -208,39 +200,66 @@ internal sealed class NotificationService :
         return registered;
     }
 
-    public async Task DeliverTriggerNotificationAsync(
+    public Task DeliverTriggerNotificationAsync(
         string idempotencyKey,
         string message,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (await IsTriggerNotificationDeliveredAsync(idempotencyKey, cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
         string title = GetString("Notification.Custom.Title");
         string detail = string.IsNullOrWhiteSpace(message)
             ? GetString("Notification.Custom.Message")
             : message.Trim();
-        if (!ShouldShow(NotificationLevel.Default))
-        {
-            AppendNotificationLog("Info", GetString("Notification.Log.Suppressed"), title, detail);
-            _triggerReceipts.Record(idempotencyKey);
-            return;
-        }
+        return DeliverIdempotentAsync(
+            idempotencyKey,
+            title,
+            detail,
+            isFeatureEnabled: true,
+            shouldLogFailure: true,
+            cancellationToken);
+    }
 
+    public Task DeliverTriggerFiredNotificationAsync(
+        string idempotencyKey,
+        string triggerName,
+        bool isTriggerNotificationEnabled,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(triggerName);
+        return DeliverIdempotentAsync(
+            idempotencyKey,
+            GetString("Notification.TriggerFired.Title"),
+            string.Format(
+                CultureInfo.CurrentCulture,
+                GetString("Notification.TriggerFired.Message.Format"),
+                triggerName),
+            isTriggerNotificationEnabled,
+            shouldLogFailure: false,
+            cancellationToken);
+    }
+
+    public void ReportTriggerFiredNotificationFailure(
+        string triggerName,
+        Exception exception)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(triggerName);
+        ArgumentNullException.ThrowIfNull(exception);
         try
         {
-            _platform.Show(title, detail, idempotencyKey);
-            _triggerReceipts.Record(idempotencyKey);
-            AppendNotificationLog("Info", GetString("Notification.Log.Shown"), title, detail);
+            string title = GetString("Notification.TriggerFired.Title");
+            string detail = string.Format(
+                CultureInfo.CurrentCulture,
+                GetString("Notification.TriggerFired.Message.Format"),
+                triggerName);
+            AppendNotificationLog(
+                "Warning",
+                GetString("Notification.Log.Failed"),
+                title,
+                detail,
+                exception.Message);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception)
         {
-            AppendNotificationLog("Warning", GetString("Notification.Log.Failed"), title, detail, exception.Message);
-            throw;
+            // Diagnostic storage is best effort and must not revive a contained notification failure.
         }
     }
 
@@ -278,6 +297,50 @@ internal sealed class NotificationService :
             NotificationLevel.More => true,
             _ => minimumLevel is NotificationLevel.Default or NotificationLevel.CriticalOnly,
         };
+    }
+
+    private async Task DeliverIdempotentAsync(
+        string idempotencyKey,
+        string title,
+        string detail,
+        bool isFeatureEnabled,
+        bool shouldLogFailure,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!isFeatureEnabled || !ShouldShow(NotificationLevel.Default))
+        {
+            AppendNotificationLog("Info", GetString("Notification.Log.Suppressed"), title, detail);
+            _triggerReceipts.Record(idempotencyKey);
+            return;
+        }
+
+        if (await IsTriggerNotificationDeliveredAsync(idempotencyKey, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        try
+        {
+            _platform.Show(title, detail, idempotencyKey);
+            _triggerReceipts.Record(idempotencyKey);
+            AppendNotificationLog("Info", GetString("Notification.Log.Shown"), title, detail);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            if (shouldLogFailure)
+            {
+                AppendNotificationLog(
+                    "Warning",
+                    GetString("Notification.Log.Failed"),
+                    title,
+                    detail,
+                    exception.Message);
+            }
+
+            throw;
+        }
     }
 
     private void AppendNotificationLog(string level, string messageTemplate, string title, string detail, string? error = null)
