@@ -80,21 +80,23 @@ Checkpoint scope: the registry is the sole canonical metadata authority for the 
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Settings/SettingsEnvelopeTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Unit/Settings/SettingsEnvelopeEditorTests.cs`
 
-- [ ] **Step 1: Write RED envelope invariant tests**
+- [x] **Step 1: Write RED envelope invariant tests**
 
 Require positive schema/envelope/key revisions, complete desired/applied maps, unique ordered batches, disjoint entries, current key revision/value hash, total `LiveReconcile` then `Restart` ordering, stable attempt identity independent of `EnvelopeRevision`, and explicit `Unknown` reason/safe behavior. Reject missing, duplicate, overlapping, stale-hash, stale-revision, undefined enum, and unregistered-key states.
 
-- [ ] **Step 2: Implement immutable state and validation**
+- [x] **Step 2: Implement immutable state and validation**
 
 Use sealed records/classes with defensive copies. Batch identity consists of batch ID, kind, creation sequence, attempt ID, state, last error, and sorted immutable `(key, keyDesiredRevision, valueHash)` entries. Compute hashes from registry-normalized canonical text using SHA-256.
 
-- [ ] **Step 3: Implement atomic pure edit/revert/import partitioning**
+- [x] **Step 3: Implement atomic pure edit/revert/import partitioning**
 
 `SettingsEnvelopeEditor.ApplyChanges` performs one pure rewrite. A no-op returns the original instance. Changed keys alone receive new desired revisions and leave old batches; untouched siblings remain byte-for-byte equivalent. Reject edits to `Running` batches. Revert uses verified applied state or the registry safe fallback and preserves unrelated work. Group new work by application kind and transaction without merging existing batches.
 
-- [ ] **Step 4: Stress and checkpoint**
+- [x] **Step 4: Stress and checkpoint**
 
 Generate randomized valid envelopes and thousands of edit/revert/import sequences; validate after every transition and prove unrelated envelope changes do not alter attempt identities. Commit `feat: model settings desired and applied state`.
+
+Checkpoint scope: this task establishes the immutable Core domain model, validator, and deterministic pure rewrite rules. Repository persistence, migration, runtime reconciliation, Settings presentation, and legacy-path removal remain intentionally assigned to later tasks; no unfinished product feature is treated as a Task 2 regression.
 
 ---
 
