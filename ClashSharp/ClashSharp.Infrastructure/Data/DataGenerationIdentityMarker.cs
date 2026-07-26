@@ -63,7 +63,7 @@ internal static class DataGenerationIdentityMarker
                 File.GetAttributes);
             using SafeFileHandle handle = ReparseSafeFile.OpenRead(
                 path,
-                FileShare.Read | FileShare.Delete);
+                FileShare.ReadWrite | FileShare.Delete);
             DataGenerationPathPolicy.ValidateNoReparsePoints(
                 path,
                 File.GetAttributes);

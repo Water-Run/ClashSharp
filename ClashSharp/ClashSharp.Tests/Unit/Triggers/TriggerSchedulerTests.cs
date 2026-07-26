@@ -543,8 +543,9 @@ public sealed class TriggerSchedulerTests
         {
             get
             {
+                Exception? failure = ReadFailure;
                 _readObserved.TrySetResult(null);
-                return ReadFailure is null ? _isEnabled : throw ReadFailure;
+                return failure is null ? _isEnabled : throw failure;
             }
 
             set => _isEnabled = value;

@@ -138,6 +138,67 @@ public sealed class DataGenerationPathPolicyTests
         Assert.Equal(DataGenerationStoreError.UnsafePath, exception.Error);
     }
 
+    /// <summary>Verifies a write-lock handle cannot resolve through a reparse parent.</summary>
+    [Fact]
+    public async Task OpenWriteLock_ReparseParent_IsRejectedByHandlePath()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        DataGenerationDescriptor descriptor = directory.CreateGeneration(1);
+        string markerPath = Path.Combine(
+            descriptor.RootPath,
+            DataGenerationIdentityMarker.FileName);
+        string externalDirectory = Path.Combine(
+            directory.RootPath,
+            "external-lock-target");
+        Directory.CreateDirectory(externalDirectory);
+        File.Copy(
+            markerPath,
+            Path.Combine(
+                externalDirectory,
+                DataGenerationIdentityMarker.FileName));
+        string redirectedParent = Path.Combine(
+            descriptor.RootPath,
+            "redirected-lock-parent");
+        Directory.CreateSymbolicLink(redirectedParent, externalDirectory);
+        string redirectedMarker = Path.Combine(
+            redirectedParent,
+            DataGenerationIdentityMarker.FileName);
+
+        DataGenerationStoreException exception =
+            Assert.Throws<DataGenerationStoreException>(
+                () =>
+                {
+                    using var handle =
+                        ReparseSafeFile.OpenWriteLock(redirectedMarker);
+                });
+
+        Assert.Equal(DataGenerationStoreError.UnsafePath, exception.Error);
+    }
+
+    /// <summary>Verifies the held generation lock prevents marker replacement.</summary>
+    [Fact]
+    public async Task OpenWriteLock_HeldMarkerCannotBeReplaced()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        DataGenerationDescriptor descriptor = directory.CreateGeneration(1);
+        string markerPath = Path.Combine(
+            descriptor.RootPath,
+            DataGenerationIdentityMarker.FileName);
+        string replacementPath = Path.Combine(
+            descriptor.RootPath,
+            ".replacement-generation-identity.json");
+        File.Copy(markerPath, replacementPath);
+        using var handle = ReparseSafeFile.OpenWriteLock(markerPath);
+
+        Assert.ThrowsAny<IOException>(
+            () => File.Replace(
+                replacementPath,
+                markerPath,
+                destinationBackupFileName: null));
+
+        DataGenerationIdentityMarker.Validate(descriptor);
+    }
+
     /// <summary>Verifies a current-manifest symlink cannot redirect store reads.</summary>
     [Fact]
     public async Task LoadCurrentAsync_ReparseManifest_IsRejected()

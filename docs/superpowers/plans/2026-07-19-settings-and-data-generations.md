@@ -154,21 +154,26 @@ manifest reads, and concurrent cross-instance read/replace stress.
 - Create: `ClashSharp/ClashSharp.Tests/Integration/JsonSettingsRepositoryTests.cs`
 - Create: `ClashSharp/ClashSharp.Tests/Integration/SettingsPersistenceCrashTests.cs`
 
-- [ ] **Step 1: Write RED repository/codec tests**
+- [x] **Step 1: Write RED repository/codec tests**
 
 Require async cancellation-aware open/read/replace, optimistic expected revision, canonical deterministic JSON, schema/hash verification, exact enum and numeric rejection, denied/busy I/O typing, corrupt-primary quarantine, valid backup recovery, and no exception escaping static construction.
 
-- [ ] **Step 2: Implement one-generation repository**
+- [x] **Step 2: Implement one-generation repository**
 
 The repository is constructed from a pinned generation descriptor and cannot resolve global paths. Writes use a flushed same-directory candidate and atomic replace; backups are validated before promotion. Return typed `Succeeded`, `Conflict`, `Invalid`, `Unavailable`, or `Corrupt` outcomes with stable diagnostics.
 
-- [ ] **Step 3: Add real termination cuts**
+- [x] **Step 3: Add real termination cuts**
 
 The probe terminates before and after envelope promotion and backup promotion. Restart against the same generation proves exactly the complete old or complete new envelope, never a partial document, and cleans orphan candidates.
 
-- [ ] **Step 4: Repeat crash probes and checkpoint**
+- [x] **Step 4: Repeat crash probes and checkpoint**
 
 Run every cut repeatedly, verify zero leaked probe process, locked restore, builds, format, and commit `feat: persist versioned settings envelopes`.
+
+Completed scope also covers strict canonical payload parsing, generation identity and
+reparse validation, cross-instance optimistic serialization, corrupt-file quarantine,
+verified backup restoration, cancellation boundaries, and repeated real-process
+termination before and after both backup and primary promotion.
 
 ---
 

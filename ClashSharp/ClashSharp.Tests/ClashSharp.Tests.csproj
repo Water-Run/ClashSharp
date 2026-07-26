@@ -19,6 +19,7 @@
     <ProjectReference Include="..\ClashSharp.StartupProbe\ClashSharp.StartupProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <ProjectReference Include="..\ClashSharp.ProcessProbe\ClashSharp.ProcessProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <ProjectReference Include="..\ClashSharp.TriggerProbe\ClashSharp.TriggerProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <ProjectReference Include="..\ClashSharp.SettingsProbe\ClashSharp.SettingsProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
