@@ -50,6 +50,18 @@ public sealed partial class SettingsRegistry
         "Availability",
     ];
 
+    private static readonly string[] DefaultMasterInfoTileIds =
+    [
+        "core",
+        "upload-rate",
+        "download-rate",
+        "active-connections",
+        "transparent-proxy",
+        "latency",
+        "active-profile",
+        "current-mode",
+    ];
+
     private static readonly string[] HeroStatusItems =
     [
         "CoreStatus",
@@ -363,6 +375,12 @@ public sealed partial class SettingsRegistry
             NormalizeHeroStatusLayout,
             Metadata(SettingCategory.Appearance, SettingsResetScope.MasterControl, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.MasterControl"));
         yield return SettingDefinition.CreateString(
+            Keys.MasterInfoTileLayout,
+            string.Join(",", DefaultMasterInfoTileIds),
+            string.Join(",", DefaultMasterInfoTileIds),
+            NormalizeMasterInfoTileLayout,
+            Metadata(SettingCategory.Appearance, SettingsResetScope.MasterControl, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.MasterControl"));
+        yield return SettingDefinition.CreateString(
             Keys.ConnectionTestProxyUrl1,
             DefaultConnectionTestProxyUrl1,
             DefaultConnectionTestProxyUrl1,
@@ -559,6 +577,37 @@ public sealed partial class SettingsRegistry
         }
 
         return Invalid(SettingValueErrorKind.InvalidFormat, "hero_status.incomplete");
+    }
+
+    private static StringNormalizationOutcome NormalizeMasterInfoTileLayout(string input)
+    {
+        List<string> normalized = [];
+        HashSet<string> seen = new(StringComparer.Ordinal);
+
+        foreach (string candidate in input.Split(
+                     ',',
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string canonical = candidate.ToLowerInvariant();
+            if (canonical.Length is 0 or > 64
+                || canonical.Any(static character =>
+                    !IsAsciiLetterOrDigit(character) && character != '-'))
+            {
+                return Invalid(SettingValueErrorKind.UnsafeValue, "master_info_tile.unsafe_id");
+            }
+
+            if (seen.Add(canonical))
+            {
+                normalized.Add(canonical);
+            }
+
+            if (normalized.Count > 64)
+            {
+                return Invalid(SettingValueErrorKind.OutOfRange, "master_info_tile.too_many");
+            }
+        }
+
+        return StringNormalizationOutcome.Succeeded(string.Join(",", normalized));
     }
 
     private static StringNormalizationOutcome Invalid(SettingValueErrorKind kind, string suffix) =>

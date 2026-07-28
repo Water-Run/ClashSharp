@@ -1,12 +1,3 @@
-/*
- * Installer Build Script Tests
- * Verifies the repository contains a deterministic desktop packaging helper
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Resources/InstallerBuildScriptTests.cs
- * @date: 2026-06-25
- */
-
 namespace ClashSharp.Tests.Unit.Resources;
 
 /// <summary>Tests the installer build script source-level contract.</summary>

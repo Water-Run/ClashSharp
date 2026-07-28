@@ -1,32 +1,17 @@
-#nullable enable
-
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model.Triggers;
 using ClashSharpMode = global::ClashSharp.Model.ClashSharpMode;
 using TriggerAction = global::ClashSharp.Model.Triggers.TriggerAction;
 using TriggerActionKind = global::ClashSharp.Model.Triggers.TriggerActionKind;
 
 namespace ClashSharp.ViewModel;
-
-/// <summary>One localized option whose typed value is interpreted only by an editor ViewModel.</summary>
-internal sealed record TriggerEditorOption<T>(T Value, string Title, string Description);
-
-/// <summary>Typed completion returned by the list owner after an editor save request.</summary>
-internal sealed record TriggerEditorSaveResult(bool IsSucceeded, string? ErrorCode)
-{
-    public static TriggerEditorSaveResult Succeeded() => new(true, null);
-
-    public static TriggerEditorSaveResult Failed(string errorCode)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
-        return new TriggerEditorSaveResult(false, errorCode);
-    }
-}
 
 /// <summary>Owns a complete multi-condition, ordered-action trigger draft and asynchronous save state.</summary>
 internal sealed class TriggerEditorViewModel : ObservableObject
@@ -39,6 +24,7 @@ internal sealed class TriggerEditorViewModel : ObservableObject
         TriggerTaskDefinition,
         CancellationToken,
         Task<TriggerEditorSaveResult>> _saveAsync;
+    private readonly IApplicationErrorSink _errorSink;
     private TriggerTaskDefinition? _original;
     private string _name;
     private bool _isEnabled;
@@ -54,11 +40,13 @@ internal sealed class TriggerEditorViewModel : ObservableObject
         TriggerTaskDefinition? original,
         IEnumerable<string> existingNames,
         Func<TriggerTaskDefinition, CancellationToken, Task<TriggerEditorSaveResult>> saveAsync,
+        IApplicationErrorSink errorSink,
         string? newId = null)
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         ArgumentNullException.ThrowIfNull(existingNames);
         _saveAsync = saveAsync ?? throw new ArgumentNullException(nameof(saveAsync));
+        _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _original = original;
         _existingNames = existingNames
             .Where(static name => !string.IsNullOrWhiteSpace(name))
@@ -407,12 +395,14 @@ internal sealed class TriggerEditorViewModel : ObservableObject
             {
                 result = await _saveAsync(definition, cancellationToken);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (Exception exception) when (
+                ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
+                await ReportUnexpectedAsync("Triggers.Editor.Save", exception);
                 SetError("trigger.definition.write_unavailable");
                 return false;
             }
@@ -561,6 +551,21 @@ internal sealed class TriggerEditorViewModel : ObservableObject
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
         ErrorCode = errorCode;
+    }
+
+    private async Task ReportUnexpectedAsync(string operationName, Exception exception)
+    {
+        try
+        {
+            await _errorSink.ReportAsync(
+                new ApplicationError(operationName, exception),
+                CancellationToken.None);
+        }
+        catch (Exception sinkException) when (
+            !ExceptionGraphClassifier.IsProcessFatal(sinkException))
+        {
+            // The primary operation remains represented by the typed presentation error.
+        }
     }
 
     private void MarkStale()

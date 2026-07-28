@@ -1,12 +1,3 @@
-/*
- * Traffic Statistic Row Model
- * Represents one traffic statistics row for profile, time, or node breakdown views
- *
- * @author: WaterRun
- * @file: Model/TrafficStatisticRow.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Globalization;
 

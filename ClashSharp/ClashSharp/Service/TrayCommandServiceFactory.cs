@@ -1,12 +1,3 @@
-/*
- * Tray Command Service Factory
- * Wires tray command coordination to application singleton services
- *
- * @author: WaterRun
- * @file: Service/TrayCommandServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;

@@ -176,6 +176,35 @@ public sealed class TriggerSchedulerTests
     }
 
     [Fact]
+    public async Task ClockCancellationWrapsFatalFailure_FaultsOwnedLoopWithoutRetry()
+    {
+        OperationCanceledException failure = new(
+            "clock cancelled while fatally failing",
+            CreateProcessFatalException<OutOfMemoryException>(),
+            CancellationToken.None);
+        FakeSchedulerClock clock = new()
+        {
+            FailuresRemaining = 1,
+            Failure = failure,
+        };
+        TriggerScheduler scheduler = CreateScheduler(
+            new FakeSchedulerSettings(),
+            new FakeSchedulerEventSource(),
+            clock,
+            new RecordingEvaluator());
+
+        await scheduler.StartAsync(CancellationToken.None);
+        await clock.WaitUntilWaitingAsync(1);
+
+        OperationCanceledException actual =
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                () => scheduler.StopAsync(CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.Equal(1, clock.WaitCount);
+    }
+
+    [Fact]
     public async Task SettingsFailure_BecomesHealthAndDoesNotTerminateTheOwnedLoop()
     {
         List<SupervisorHealth> observedHealth = [];
@@ -440,6 +469,44 @@ public sealed class TriggerSchedulerTests
     }
 
     [Fact]
+    public async Task CancelledQuiesce_WhenPublicationRestoreFails_PreservesBothFailures()
+    {
+        TaskCompletionSource<object?> releaseEvaluation = Signal();
+        RecordingEvaluator evaluator = new()
+        {
+            Handler = async (_, _, _) =>
+            {
+                await releaseEvaluation.Task;
+                return TriggerSchedulerEvaluationOutcome.Succeeded();
+            },
+        };
+        InvalidOperationException restoreFailure = new("event subscription unavailable");
+        ThrowOnResubscribeEventSource events = new(restoreFailure);
+        TriggerScheduler scheduler = CreateScheduler(
+            new FakeSchedulerSettings(),
+            events,
+            new FakeSchedulerClock(),
+            evaluator);
+        await scheduler.StartAsync(CancellationToken.None);
+        events.Publish(TriggerEventKind.AppEntered);
+        await evaluator.ReadCallAsync();
+        using CancellationTokenSource cancellation = new();
+
+        Task<QuiescedState> quiescing = scheduler.QuiesceAsync(cancellation.Token);
+        cancellation.Cancel();
+        AggregateException actual = await Assert.ThrowsAsync<AggregateException>(
+            () => quiescing);
+
+        Assert.Contains(
+            actual.InnerExceptions,
+            exception => exception is OperationCanceledException);
+        Assert.Contains(restoreFailure, actual.InnerExceptions);
+
+        releaseEvaluation.TrySetResult(null);
+        await scheduler.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
     public async Task Stop_CancelsSchedulingAndAwaitsTheSoleOwnedTask()
     {
         TaskCompletionSource<object?> releaseFirst = Signal();
@@ -508,7 +575,7 @@ public sealed class TriggerSchedulerTests
 
     private static TriggerScheduler CreateScheduler(
         FakeSchedulerSettings settings,
-        FakeSchedulerEventSource events,
+        ITriggerSchedulerEventSource events,
         FakeSchedulerClock clock,
         RecordingEvaluator evaluator,
         Action<SupervisorHealth>? healthChanged = null,
@@ -574,6 +641,33 @@ public sealed class TriggerSchedulerTests
         }
     }
 
+    private sealed class ThrowOnResubscribeEventSource(Exception failure) :
+        ITriggerSchedulerEventSource
+    {
+        private EventHandler<TriggerSchedulerEvent>? _eventRaised;
+        private int _subscriptionCount;
+
+        public event EventHandler<TriggerSchedulerEvent>? EventRaised
+        {
+            add
+            {
+                if (Interlocked.Increment(ref _subscriptionCount) > 1)
+                {
+                    throw failure;
+                }
+
+                _eventRaised += value;
+            }
+
+            remove => _eventRaised -= value;
+        }
+
+        public void Publish(TriggerEventKind eventKind)
+        {
+            _eventRaised?.Invoke(this, new TriggerSchedulerEvent(eventKind));
+        }
+    }
+
     private sealed class FakeSchedulerClock : ITriggerSchedulerClock
     {
         private readonly ConcurrentDictionary<int, TaskCompletionSource<object?>> _waiters = new();
@@ -583,6 +677,10 @@ public sealed class TriggerSchedulerTests
 
         public int FailuresRemaining { get; init; }
 
+        public Exception? Failure { get; init; }
+
+        public int WaitCount => Volatile.Read(ref _waitCount);
+
         public DateTimeOffset UtcNow => DateTimeOffset.UnixEpoch.AddSeconds(Volatile.Read(ref _releasedCount));
 
         public Task WaitForNextTickAsync(CancellationToken cancellationToken)
@@ -591,7 +689,8 @@ public sealed class TriggerSchedulerTests
             _registrations.GetOrAdd(ordinal, static _ => Signal()).TrySetResult(null);
             if (ordinal <= FailuresRemaining)
             {
-                return Task.FromException(new IOException("clock unavailable"));
+                return Task.FromException(
+                    Failure ?? new IOException("clock unavailable"));
             }
 
             TaskCompletionSource<object?> waiter = Signal();
@@ -617,6 +716,10 @@ public sealed class TriggerSchedulerTests
             await WaitUntilWaitingAsync(ordinal + 1);
         }
     }
+
+    private static TException CreateProcessFatalException<TException>()
+        where TException : Exception =>
+        Activator.CreateInstance<TException>();
 
     private sealed class RecordingEvaluator : ITriggerSchedulerEvaluator
     {

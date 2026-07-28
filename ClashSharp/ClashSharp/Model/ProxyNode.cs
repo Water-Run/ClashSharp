@@ -1,14 +1,3 @@
-/*
- * Proxy Node Model
- * Represents one proxy node prepared for the proxy node list
- *
- * @author: WaterRun
- * @file: Model/ProxyNode.cs
- * @date: 2026-06-15
- */
-
-using ClashSharp.Service;
-
 namespace ClashSharp.Model;
 
 /// <summary>Represents one proxy node prepared for the proxy node list.</summary>
@@ -29,9 +18,4 @@ public readonly record struct ProxyNode(
     RegionMetadata Region,
     int? LatencyMilliseconds,
     string ServerHost = "",
-    int? ServerPort = null)
-{
-    /// <summary>Gets the UI-filtered node display name.</summary>
-    /// <value>Display name after mainland China UI replacement; never null.</value>
-    public string NameDisplay => MainlandChinaTextDisplayService.Instance.Apply(Name);
-}
+    int? ServerPort = null);

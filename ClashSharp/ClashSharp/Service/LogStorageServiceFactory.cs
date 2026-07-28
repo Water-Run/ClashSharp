@@ -1,12 +1,3 @@
-/*
- * Log Storage Service Factory
- * Wires production dependencies for SQLite log storage
- *
- * @author: WaterRun
- * @file: Service/LogStorageServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System.IO;
 
 namespace ClashSharp.Service;

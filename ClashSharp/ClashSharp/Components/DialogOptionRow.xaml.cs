@@ -1,12 +1,3 @@
-/*
- * Dialog Option Row
- * Reusable dialog row for option lists with icon, title, category, description, and checked state
- *
- * @author: WaterRun
- * @file: Components/DialogOptionRow.xaml.cs
- * @date: 2026-06-26
- */
-
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

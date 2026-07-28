@@ -1,12 +1,3 @@
-/*
- * Region Metadata Model
- * Represents display metadata for proxy node regions and flag assets
- *
- * @author: WaterRun
- * @file: Model/RegionMetadata.cs
- * @date: 2026-06-15
- */
-
 namespace ClashSharp.Model;
 
 /// <summary>Represents display metadata for a proxy node region.</summary>

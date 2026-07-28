@@ -1,12 +1,3 @@
-/*
- * Startup Conflict Detection Service Factory
- * Wires production dependencies for startup conflict detection
- *
- * @author: WaterRun
- * @file: Service/StartupConflictDetectionServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;

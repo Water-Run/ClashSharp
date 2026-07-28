@@ -1,12 +1,3 @@
-/*
- * Profile Import Result Model
- * Represents the outcome of downloading, validating, and importing a subscription profile
- *
- * @author: WaterRun
- * @file: Model/ProfileImportResult.cs
- * @date: 2026-06-15
- */
-
 namespace ClashSharp.Model;
 
 /// <summary>Represents the outcome of downloading, validating, and importing a subscription profile.</summary>

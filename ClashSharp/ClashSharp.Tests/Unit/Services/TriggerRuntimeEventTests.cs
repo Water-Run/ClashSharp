@@ -1,12 +1,3 @@
-/*
- * Trigger Runtime Event Tests
- * Verifies the in-process runtime event boundary used by trigger evaluation
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/TriggerRuntimeEventTests.cs
- * @date: 2026-06-28
- */
-
 extern alias ClashSharpUi;
 
 using ClashSharp.Model.Triggers;

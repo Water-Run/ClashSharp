@@ -1,3 +1,5 @@
+using ClashSharp.ApplicationModel.Diagnostics;
+
 namespace ClashSharp.ApplicationModel.Mutations;
 
 internal sealed class MutationRecoveryExecutor(
@@ -16,7 +18,7 @@ internal sealed class MutationRecoveryExecutor(
         {
             snapshot = await journalStore.LoadAsync(callerToken).ConfigureAwait(false);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return Retained(operationId, exception, "recovery-journal-load-failed");
         }
@@ -40,7 +42,7 @@ internal sealed class MutationRecoveryExecutor(
             plan = await recoveryPlanResolver.ResolveAsync(snapshot.Journal, callerToken).ConfigureAwait(false);
             ValidateRecoveryPlan(snapshot.Journal, plan);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return Retained(operationId, exception, "recovery-plan-failed");
         }
@@ -79,7 +81,7 @@ internal sealed class MutationRecoveryExecutor(
                 JournalPresent: false,
                 VerifiedSuccess: true);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return Retained(operationId, exception, "mutation-recovery-required");
         }

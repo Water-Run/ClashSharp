@@ -1,12 +1,3 @@
-/*
- * Log Record Model
- * Represents one SQLite-backed application log entry for the logs page
- *
- * @author: WaterRun
- * @file: Model/LogRecord.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Globalization;
 

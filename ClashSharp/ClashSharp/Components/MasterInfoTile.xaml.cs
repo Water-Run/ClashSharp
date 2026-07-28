@@ -1,12 +1,3 @@
-/*
- * Master Info Tile
- * Reusable information tile for the master control page
- *
- * @author: WaterRun
- * @file: Components/MasterInfoTile.xaml.cs
- * @date: 2026-06-25
- */
-
 using System.Windows.Input;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;

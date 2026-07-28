@@ -1,12 +1,3 @@
-/*
- * Application Data Path Service
- * Centralizes resolution of Clash# local application data paths
- *
- * @author: WaterRun
- * @file: Service/AppDataPathService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.IO;
 using Windows.Storage;

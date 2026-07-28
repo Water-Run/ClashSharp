@@ -1,12 +1,3 @@
-/*
- * Mihomo Controller Client Tests
- * Verifies mihomo external-controller request shapes and JSON parsing
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/MihomoControllerClientTests.cs
- * @date: 2026-06-24
- */
-
 using System.Net;
 using System.Net.Http;
 using System.Text;

@@ -13,7 +13,9 @@ namespace ClashSharp.Hosting.Startup;
 /// <summary>Runs the login restore helper without constructing the normal application shell.</summary>
 internal sealed class StartupRestoreFallbackStep(
     NetworkStateCoordinator network,
-    LegacyNetworkIntentSource intents) : IStartupStep
+    LegacyNetworkIntentSource intents,
+    LogStorageService logStorage,
+    LocalizationService localization) : IStartupStep
 {
     public string Name => "startup-restore-fallback";
 
@@ -34,19 +36,19 @@ internal sealed class StartupRestoreFallbackStep(
                 .ConfigureAwait(false);
             if (result.Outcome != MutationOutcome.Succeeded)
             {
-                LogStorageService.Instance.AppendLog(
+                logStorage.AppendLog(
                     "Warning",
                     "StartupRestoreFallback",
-                    LocalizationService.Instance.GetString("ProxyRecovery.StartupFailed"),
+                    localization.GetString("ProxyRecovery.StartupFailed"),
                     result.ErrorCode);
             }
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
-            LogStorageService.Instance.AppendLog(
+            logStorage.AppendLog(
                 "Warning",
                 "StartupRestoreFallback",
-                LocalizationService.Instance.GetString("ProxyRecovery.StartupFailed"),
+                localization.GetString("ProxyRecovery.StartupFailed"),
                 exception.Message);
         }
 

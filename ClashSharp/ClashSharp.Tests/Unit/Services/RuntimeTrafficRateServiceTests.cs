@@ -1,12 +1,3 @@
-/*
- * Runtime Traffic Rate Service Tests
- * Verifies realtime traffic rate snapshots derived from active connection counters
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/RuntimeTrafficRateServiceTests.cs
- * @date: 2026-06-29
- */
-
 using System.Globalization;
 using ClashSharp.Model;
 using ClashSharp.Service;

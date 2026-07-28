@@ -1,12 +1,3 @@
-/*
- * Notification Service Tests
- * Verifies Win11 notification policy, logging, and trigger runtime event publishing through an injected gateway
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/NotificationServiceTests.cs
- * @date: 2026-06-28
- */
-
 extern alias ClashSharpUi;
 
 using ClashSharp.Model.Triggers;
@@ -91,6 +82,153 @@ public sealed class NotificationServiceTests
         Assert.Equal("Warning", entry.Level);
         Assert.Equal("Failed Title Message toast unavailable", entry.Message);
         Assert.Contains("Error: toast unavailable", entry.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Show_WhenWin11PlatformThrowsUnexpectedException_ContainsFailureWithoutTerminatingCaller()
+    {
+        FakeWin11NotificationPlatform platform = new()
+        {
+            ExceptionToThrow = new IOException("toast registration unavailable"),
+        };
+        FakeTriggerRuntimeEvents triggerEvents = new();
+        FakeNotificationLog log = new();
+        NotificationService service = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            platform,
+            triggerEvents,
+            log);
+
+        service.Show(NotificationLevel.Default, "Title", "Message");
+
+        Assert.Empty(triggerEvents.Events);
+        LogEntry entry = Assert.Single(log.Entries);
+        Assert.Equal("Warning", entry.Level);
+        Assert.Contains("toast registration unavailable", entry.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Show_WhenWin11PlatformThrowsProcessFatalException_DoesNotSwallowFailure()
+    {
+        OutOfMemoryException expected = Assert.IsType<OutOfMemoryException>(
+            Activator.CreateInstance(
+                typeof(OutOfMemoryException),
+                "process memory exhausted"));
+        FakeWin11NotificationPlatform platform = new()
+        {
+            ExceptionToThrow = expected,
+        };
+        NotificationService service = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            platform,
+            new FakeTriggerRuntimeEvents(),
+            new FakeNotificationLog());
+
+        OutOfMemoryException actual = Assert.Throws<OutOfMemoryException>(
+            () => service.Show(NotificationLevel.Default, "Title", "Message"));
+
+        Assert.Same(expected, actual);
+    }
+
+    [Fact]
+    public void Show_WhenWin11PlatformWrapsProcessFatalException_DoesNotSwallowFailure()
+    {
+        OutOfMemoryException processFailure = Assert.IsType<OutOfMemoryException>(
+            Activator.CreateInstance(
+                typeof(OutOfMemoryException),
+                "process memory exhausted"));
+        AggregateException expected = new(
+            "notification platform failed",
+            new InvalidOperationException(
+                "native notification call failed",
+                processFailure));
+        FakeWin11NotificationPlatform platform = new()
+        {
+            ExceptionToThrow = expected,
+        };
+        NotificationService service = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            platform,
+            new FakeTriggerRuntimeEvents(),
+            new FakeNotificationLog());
+
+        AggregateException actual = Assert.Throws<AggregateException>(
+            () => service.Show(NotificationLevel.Default, "Title", "Message"));
+
+        Assert.Same(expected, actual);
+    }
+
+    [Fact]
+    public void ReportTriggerFiredNotificationFailure_WhenDiagnosticLogThrowsProcessFatalException_DoesNotSwallowFailure()
+    {
+        OutOfMemoryException expected = Assert.IsType<OutOfMemoryException>(
+            Activator.CreateInstance(
+                typeof(OutOfMemoryException),
+                "process memory exhausted"));
+        FakeNotificationLog log = new()
+        {
+            ExceptionToThrow = expected,
+        };
+        NotificationService service = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            new FakeWin11NotificationPlatform(),
+            new FakeTriggerRuntimeEvents(),
+            log);
+
+        OutOfMemoryException actual = Assert.Throws<OutOfMemoryException>(
+            () => service.ReportTriggerFiredNotificationFailure(
+                "Alpha",
+                new IOException("notification delivery failed")));
+
+        Assert.Same(expected, actual);
+    }
+
+    [Fact]
+    public void Show_WhenRuntimeEventPublisherThrowsUnexpectedException_DoesNotHideProgrammingFailure()
+    {
+        IOException expected = new("runtime event persistence failed");
+        FakeTriggerRuntimeEvents triggerEvents = new()
+        {
+            ExceptionToThrow = expected,
+        };
+        NotificationService service = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            new FakeWin11NotificationPlatform(),
+            triggerEvents,
+            new FakeNotificationLog());
+
+        IOException actual = Assert.Throws<IOException>(
+            () => service.Show(NotificationLevel.Default, "Title", "Message"));
+
+        Assert.Same(expected, actual);
+    }
+
+    [Fact]
+    public void Show_WhenRuntimeEventPublisherRejectsExpectedOperation_LogsAndContainsFailure()
+    {
+        FakeTriggerRuntimeEvents triggerEvents = new()
+        {
+            ExceptionToThrow = new InvalidOperationException("publisher unavailable"),
+        };
+        FakeNotificationLog log = new();
+        NotificationService service = CreateService(
+            enabled: true,
+            configuredLevel: NotificationLevel.Default,
+            new FakeWin11NotificationPlatform(),
+            triggerEvents,
+            log);
+
+        service.Show(NotificationLevel.Default, "Title", "Message");
+
+        Assert.Contains(
+            log.Entries,
+            entry => entry.Level == "Warning"
+                && entry.Message.Contains("publisher unavailable", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -413,8 +551,15 @@ public sealed class NotificationServiceTests
     {
         public List<TriggerRuntimeEvent> Events { get; } = [];
 
+        public Exception? ExceptionToThrow { get; init; }
+
         public void Publish(TriggerRuntimeEvent triggerEvent)
         {
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+
             Events.Add(triggerEvent);
         }
     }

@@ -1,12 +1,3 @@
-/*
- * Log Storage Maintenance Tests
- * Verifies SQLite cleanup helper behavior for log storage maintenance
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/LogStorageMaintenanceTests.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Globalization;
 using ClashSharp.Service;

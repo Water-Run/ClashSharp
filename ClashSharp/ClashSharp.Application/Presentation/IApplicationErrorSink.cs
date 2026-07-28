@@ -13,22 +13,3 @@ public interface IApplicationErrorSink
     /// <param name="cancellationToken">Cancels sink work only.</param>
     Task ReportAsync(ApplicationError applicationError, CancellationToken cancellationToken);
 }
-
-/// <summary>Fallback sink used only when a presentation composition root has not supplied reporting.</summary>
-public sealed class NullApplicationErrorSink : IApplicationErrorSink
-{
-    private NullApplicationErrorSink()
-    {
-    }
-
-    /// <summary>Gets the shared no-op sink.</summary>
-    public static NullApplicationErrorSink Instance { get; } = new();
-
-    /// <inheritdoc />
-    public Task ReportAsync(ApplicationError applicationError, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(applicationError);
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.CompletedTask;
-    }
-}

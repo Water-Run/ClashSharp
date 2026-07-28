@@ -1,3 +1,5 @@
+using ClashSharp.ApplicationModel.Diagnostics;
+
 namespace ClashSharp.ApplicationModel.Mutations;
 
 internal interface IAdmittedApplicationMutationCoordinator
@@ -86,7 +88,9 @@ public sealed class ApplicationMutationCoordinator :
                 ? await _admissionBarrier.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken)
                 : await _admissionBarrier.AcquireOrdinaryAsync(cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (
+            cancellationToken.IsCancellationRequested
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return CreateResult<T>(request.OperationId, MutationOutcome.Cancelled, default, "mutation-cancelled");
         }
@@ -104,12 +108,34 @@ public sealed class ApplicationMutationCoordinator :
                     request.OperationId,
                     async (context, _) =>
                     {
-                        ExecutionEnvelope<T> result = await ExecutePlannedMutationAsync(
-                            request,
-                            planFactory,
-                            resultFactory,
-                            context,
-                            admittedCancellation.Token).ConfigureAwait(false);
+                        ExecutionEnvelope<T> result;
+                        try
+                        {
+                            result = await ExecutePlannedMutationAsync(
+                                request,
+                                planFactory,
+                                resultFactory,
+                                context,
+                                admittedCancellation.Token).ConfigureAwait(false);
+                        }
+                        catch (Exception processFatalFailure) when (
+                            ExceptionGraphClassifier.IsProcessFatal(processFatalFailure))
+                        {
+                            try
+                            {
+                                recoveryReady = _admissionBarrier.BeginRecoveryOnlyTransition(
+                                    admissionLease);
+                            }
+                            catch (Exception transitionFailure)
+                            {
+                                throw new AggregateException(
+                                    processFatalFailure,
+                                    transitionFailure);
+                            }
+
+                            throw;
+                        }
+
                         if (result.RetainRecovery)
                         {
                             recoveryReady = _admissionBarrier.BeginRecoveryOnlyTransition(admissionLease);
@@ -119,7 +145,9 @@ public sealed class ApplicationMutationCoordinator :
                     },
                     admittedCancellation.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (admittedCancellation.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (
+                admittedCancellation.IsCancellationRequested
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 execution = new ExecutionEnvelope<T>(
                     CreateResult<T>(request.OperationId, MutationOutcome.Cancelled, default, "mutation-cancelled"),
@@ -172,12 +200,33 @@ public sealed class ApplicationMutationCoordinator :
                 request.OperationId,
                 async (context, gateToken) =>
                 {
-                    ExecutionEnvelope<T> result = await ExecutePlannedMutationAsync(
-                        request,
-                        planFactory,
-                        resultFactory,
-                        context,
-                        gateToken).ConfigureAwait(false);
+                    ExecutionEnvelope<T> result;
+                    try
+                    {
+                        result = await ExecutePlannedMutationAsync(
+                            request,
+                            planFactory,
+                            resultFactory,
+                            context,
+                            gateToken).ConfigureAwait(false);
+                    }
+                    catch (Exception processFatalFailure) when (
+                        ExceptionGraphClassifier.IsProcessFatal(processFatalFailure))
+                    {
+                        try
+                        {
+                            _ = _admissionBarrier.BeginRecoveryOnlyTransition(admissionLease);
+                        }
+                        catch (Exception transitionFailure)
+                        {
+                            throw new AggregateException(
+                                processFatalFailure,
+                                transitionFailure);
+                        }
+
+                        throw;
+                    }
+
                     if (result.RetainRecovery)
                     {
                         _ = _admissionBarrier.BeginRecoveryOnlyTransition(admissionLease);
@@ -187,7 +236,9 @@ public sealed class ApplicationMutationCoordinator :
                 },
                 cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (
+            cancellationToken.IsCancellationRequested
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             execution = new ExecutionEnvelope<T>(
                 CreateResult<T>(request.OperationId, MutationOutcome.Cancelled, default, "mutation-cancelled"),
@@ -218,7 +269,9 @@ public sealed class ApplicationMutationCoordinator :
         {
             recoveryLease = await _admissionBarrier.AcquireRecoveryAsync(cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (
+            cancellationToken.IsCancellationRequested
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return CreateResult<object?>(operationId, MutationOutcome.Cancelled, null, "recovery-cancelled");
         }
@@ -233,7 +286,9 @@ public sealed class ApplicationMutationCoordinator :
                     (context, _) => _recoveryExecutor.ExecuteAsync(operationId, context, cancellationToken),
                     cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (
+                cancellationToken.IsCancellationRequested
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 execution = new MutationRecoveryExecutionResult(
                     CreateResult<object?>(operationId, MutationOutcome.Cancelled, null, "recovery-cancelled"),
@@ -263,13 +318,15 @@ public sealed class ApplicationMutationCoordinator :
         {
             await plan.ValidateAsync(callerToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (callerToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (
+            callerToken.IsCancellationRequested
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
                 CreateResult<T>(request.OperationId, MutationOutcome.Cancelled, default, "mutation-cancelled"),
                 RetainRecovery: false);
         }
-        catch (Exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
                 CreateResult<T>(request.OperationId, MutationOutcome.Failed, default, "mutation-plan-failed"),
@@ -281,13 +338,16 @@ public sealed class ApplicationMutationCoordinator :
         {
             snapshot = await _journalWriter.CreateInitialAsync(request, plan, callerToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (callerToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (
+            callerToken.IsCancellationRequested
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
                 CreateResult<T>(request.OperationId, MutationOutcome.Cancelled, default, "mutation-cancelled"),
                 RetainRecovery: false);
         }
-        catch (MutationJournalStoreException exception)
+        catch (MutationJournalStoreException exception) when (
+            !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
                 CreateResult<T>(
@@ -297,7 +357,7 @@ public sealed class ApplicationMutationCoordinator :
                     ClassifyError(exception, "mutation-journal-create-failed")),
                 RetainRecovery: true);
         }
-        catch (Exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
                 CreateResult<T>(request.OperationId, MutationOutcome.Failed, default, "mutation-journal-create-failed"),
@@ -423,7 +483,7 @@ public sealed class ApplicationMutationCoordinator :
                 CreateResult(request.OperationId, MutationOutcome.Succeeded, value, null),
                 RetainRecovery: false);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             if (committed)
             {
@@ -461,13 +521,15 @@ public sealed class ApplicationMutationCoordinator :
             plan = await planFactory(context, callerToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("The mutation plan factory returned null.");
         }
-        catch (OperationCanceledException) when (callerToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (
+            callerToken.IsCancellationRequested
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
                 CreateResult<T>(request.OperationId, MutationOutcome.Cancelled, default, "mutation-cancelled"),
                 RetainRecovery: false);
         }
-        catch (Exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
                 CreateResult<T>(request.OperationId, MutationOutcome.Failed, default, "mutation-plan-failed"),
@@ -501,7 +563,7 @@ public sealed class ApplicationMutationCoordinator :
                     CreateResult<T>(operationId, outcome, default, ClassifyError(failure, "mutation-failed")),
                     RetainRecovery: false);
             }
-            catch (Exception)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 return new ExecutionEnvelope<T>(
                     CreateResult<T>(operationId, MutationOutcome.RecoveryRequired, default, "mutation-journal-cleanup-failed"),
@@ -563,7 +625,8 @@ public sealed class ApplicationMutationCoordinator :
                 CreateResult<T>(operationId, MutationOutcome.Compensated, default, ClassifyError(failure, "mutation-compensated")),
                 RetainRecovery: false);
         }
-        catch (Exception compensationException)
+        catch (Exception compensationException) when (
+            !ExceptionGraphClassifier.IsProcessFatal(compensationException))
         {
             return new ExecutionEnvelope<T>(
                 CreateResult<T>(

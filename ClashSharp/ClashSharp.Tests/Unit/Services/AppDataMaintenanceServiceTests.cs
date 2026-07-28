@@ -1,12 +1,3 @@
-/*
- * App Data Maintenance Service Tests
- * Verifies destructive maintenance orchestration through injected dependencies
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/AppDataMaintenanceServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Service;
 
 namespace ClashSharp.Tests.Unit.Services;

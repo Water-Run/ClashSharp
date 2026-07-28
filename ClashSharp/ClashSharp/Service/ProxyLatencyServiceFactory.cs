@@ -1,12 +1,3 @@
-/*
- * Proxy Latency Service Factory
- * Wires production dependencies for proxy node latency probing
- *
- * @author: WaterRun
- * @file: Service/ProxyLatencyServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.Diagnostics;
 using System.Net.Sockets;

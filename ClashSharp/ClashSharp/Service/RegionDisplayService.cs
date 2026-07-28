@@ -1,12 +1,3 @@
-/*
- * Region Display Service
- * Resolves proxy node region display names and flag asset keys with mainland China display policy support
- *
- * @author: WaterRun
- * @file: Service/RegionDisplayService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;

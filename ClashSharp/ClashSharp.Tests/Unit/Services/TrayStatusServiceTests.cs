@@ -1,12 +1,3 @@
-/*
- * Tray Status Service Tests
- * Verifies system tray status snapshots summarize current runtime proxy information
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/TrayStatusServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

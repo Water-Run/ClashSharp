@@ -1,12 +1,3 @@
-/*
- * Mihomo Connection Service
- * Reads active connection rows from the mihomo external controller
- *
- * @author: WaterRun
- * @file: Service/MihomoConnectionService.cs
- * @date: 2026-06-15
- */
-
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;

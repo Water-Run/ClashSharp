@@ -6,7 +6,9 @@ using ClashSharp.Service;
 namespace ClashSharp.Hosting.Startup;
 
 /// <summary>Applies the persisted display language after primary ownership.</summary>
-internal sealed class ConfigureLocalizationStartupStep : IStartupStep
+internal sealed class ConfigureLocalizationStartupStep(
+    AppSettingsService settings,
+    LocalizationService localization) : IStartupStep
 {
     public string Name => "configure-localization";
 
@@ -15,7 +17,7 @@ internal sealed class ConfigureLocalizationStartupStep : IStartupStep
     public Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        LocalizationService.Instance.CurrentLanguage = AppSettingsService.Instance.DisplayLanguage;
+        localization.CurrentLanguage = settings.DisplayLanguage;
         return Task.FromResult(StartupStepResult.Succeeded());
     }
 }

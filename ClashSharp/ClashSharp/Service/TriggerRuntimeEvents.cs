@@ -1,12 +1,3 @@
-/*
- * Trigger Runtime Events
- * Provides a small in-process event boundary between runtime actions, notifications, and trigger evaluation
- *
- * @author: WaterRun
- * @file: Service/TriggerRuntimeEvents.cs
- * @date: 2026-06-28
- */
-
 using System;
 using ClashSharp.Model;
 using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;

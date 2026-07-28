@@ -1,12 +1,3 @@
-/*
- * Log Storage Service Tests
- * Verifies SQLite traffic aggregation through injected active profile dependencies
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/LogStorageServiceTests.cs
- * @date: 2026-06-25
- */
-
 using System.Globalization;
 using ClashSharp.Model;
 using ClashSharp.Service;
@@ -17,6 +8,19 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for SQLite log storage behavior.</summary>
 public sealed class LogStorageServiceTests
 {
+    [Fact]
+    public void Constructor_DoesNotCreateDatabaseDirectory()
+    {
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "clashsharp-log-constructor-" + Guid.NewGuid().ToString("N"));
+        string databasePath = Path.Combine(root, "nested", "logs.sqlite3");
+
+        _ = new LogStorageService(databasePath, () => "profile-a");
+
+        Assert.False(Directory.Exists(root));
+    }
+
     /// <summary>Verifies connection snapshots aggregate profile traffic using the injected active profile id.</summary>
     [Fact]
     public void AppendConnectionSnapshot_UsesInjectedActiveProfileId()
@@ -42,6 +46,30 @@ public sealed class LogStorageServiceTests
         Assert.Equal(100, row.UploadBytes);
         Assert.Equal(200, row.DownloadBytes);
         Assert.Equal(1, row.SampleCount);
+    }
+
+    /// <summary>Verifies injected profile resolution runs before the SQLite serialization lock is acquired.</summary>
+    [Fact]
+    public void AppendConnectionSnapshot_ResolvesExternalDependenciesOutsideStorageLock()
+    {
+        using TempDatabase tempDatabase = new();
+        LogStorageService? service = null;
+        service = new LogStorageService(
+            tempDatabase.Path,
+            () =>
+            {
+                Task<LogStorageSummary> concurrentRead = Task.Run(
+                    () => service!.GetStorageSummary());
+                Assert.True(
+                    concurrentRead.Wait(TimeSpan.FromSeconds(5)),
+                    "The active-profile callback ran while the storage lock was held.");
+                _ = concurrentRead.GetAwaiter().GetResult();
+                return "profile-a";
+            });
+
+        int inserted = service.AppendConnectionSnapshot([]);
+
+        Assert.Equal(0, inserted);
     }
 
     /// <summary>Verifies recent-window traffic can be queried from persisted traffic snapshots.</summary>

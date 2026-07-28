@@ -1,12 +1,3 @@
-/*
- * Mainland China Text Display Service Factory
- * Wires production dependencies for UI-only mainland China display filtering
- *
- * @author: WaterRun
- * @file: Service/MainlandChinaTextDisplayServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;

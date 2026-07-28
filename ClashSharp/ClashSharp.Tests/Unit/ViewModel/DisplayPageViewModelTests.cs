@@ -1,12 +1,4 @@
-/*
- * Display Page ViewModel Tests
- * Verifies read-oriented page view models preserve existing display behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/DisplayPageViewModelTests.cs
- * @date: 2026-06-17
- */
-
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
 
@@ -17,27 +9,68 @@ public sealed class DisplayPageViewModelTests
 {
     /// <summary>Verifies rules view model loads labels and rule rows.</summary>
     [Fact]
-    public void RulesViewModel_Constructor_LoadsLabelsAndRules()
+    public async Task RulesViewModel_LoadAsync_LoadsRulesAfterPureConstruction()
     {
         FakeDisplayLocalization localization = new();
         FakeRuleCatalog rules = new();
 
-        RulesViewModel viewModel = new(localization, rules);
+        RulesViewModel viewModel = new(
+            localization,
+            rules,
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => $"display:{text}"));
 
         Assert.Equal("Rules", viewModel.PageTitleText);
         Assert.Equal("Rules description", viewModel.DescriptionText);
-        Assert.Equal(rules.Rules, viewModel.Rules);
+        Assert.Empty(viewModel.Rules);
+        Assert.Equal(0, rules.GetRulesCallCount);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(rules.Rules, viewModel.Rules.Select(static row => row.Model));
+        Assert.Equal("display:provider", viewModel.Rules[0].ProviderNameDisplay);
+        Assert.Equal("display:example.com", viewModel.Rules[0].PayloadDisplay);
+        Assert.Equal(1, rules.GetRulesCallCount);
+    }
+
+    [Fact]
+    public async Task RulesViewModel_LoadAsync_WhenReadFails_ReportsStableError()
+    {
+        TestApplicationErrorSink errorSink = new();
+        RulesViewModel viewModel = new(
+            new FakeDisplayLocalization(),
+            new ThrowingRuleCatalog(),
+            errorSink,
+            new ModelDisplayMapper(static text => text));
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Empty(viewModel.Rules);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Equal("rules-load", error.OperationName);
+        Assert.IsType<InvalidOperationException>(error.Exception);
     }
 
     /// <summary>Verifies statistics view model formats summary and loads row collections.</summary>
     [Fact]
-    public void StatisticsViewModel_Refresh_LoadsSummaryAndRows()
+    public async Task StatisticsViewModel_LoadAsync_LoadsSummaryAfterPureConstruction()
     {
         FakeDisplayLocalization localization = new();
         FakeStatisticsStore statistics = new();
         FakeStatisticsProfiles profiles = new();
 
-        StatisticsViewModel viewModel = new(localization, statistics, profiles, () => { });
+        StatisticsViewModel viewModel = new(
+            localization,
+            statistics,
+            profiles,
+            () => { },
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => $"display:{text}"));
+
+        Assert.Equal(0, statistics.SummaryReadCount);
+        Assert.Empty(viewModel.ProfileTrafficRows);
+
+        await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal("1.0 KB / 2.0 KB", viewModel.TotalTrafficText);
         Assert.Equal("3 connections", viewModel.ConnectionCountText);
@@ -45,9 +78,10 @@ public sealed class DisplayPageViewModelTests
         Assert.Equal("5 snapshots", viewModel.SnapshotStatisticText);
         Assert.Equal("2 nodes / 4 health", viewModel.NodeStatisticText);
         Assert.Equal("6 rules", viewModel.RuleStatisticText);
-        Assert.Equal("Active profile", viewModel.ProfileTrafficRows.Single().Label);
+        Assert.Equal("display:Active profile", viewModel.ProfileTrafficRows.Single().Label);
         Assert.Equal(statistics.DailyRows, viewModel.DailyTrafficRows);
         Assert.Equal(statistics.NodeRows, viewModel.NodeTrafficRows);
+        Assert.Equal(1, statistics.SummaryReadCount);
     }
 
     /// <summary>Verifies statistics view model invokes the supplied logs navigation action.</summary>
@@ -55,7 +89,13 @@ public sealed class DisplayPageViewModelTests
     public void StatisticsViewModel_OpenLogsCommand_InvokesNavigation()
     {
         bool navigated = false;
-        StatisticsViewModel viewModel = new(new FakeDisplayLocalization(), new FakeStatisticsStore(), new FakeStatisticsProfiles(), () => navigated = true);
+        StatisticsViewModel viewModel = new(
+            new FakeDisplayLocalization(),
+            new FakeStatisticsStore(),
+            new FakeStatisticsProfiles(),
+            () => navigated = true,
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
 
         viewModel.OpenLogsCommand.Execute(null);
 
@@ -67,7 +107,11 @@ public sealed class DisplayPageViewModelTests
     public async Task AboutViewModel_LoadAsync_WhenCoreAvailable_FormatsVersionStatus()
     {
         FakeAboutCore core = new() { VersionText = "Mihomo Meta v1.19.11 windows amd64 with go1.24.4" };
-        AboutViewModel viewModel = new(new FakeDisplayLocalization(), core, new FakeUriLauncher());
+        AboutViewModel viewModel = new(
+            new FakeDisplayLocalization(),
+            core,
+            new FakeUriLauncher(),
+            new TestApplicationErrorSink());
 
         await viewModel.LoadAsync(CancellationToken.None);
 
@@ -94,7 +138,11 @@ public sealed class DisplayPageViewModelTests
     public async Task AboutViewModel_LinkCommands_LaunchExpectedUris()
     {
         FakeUriLauncher launcher = new();
-        AboutViewModel viewModel = new(new FakeDisplayLocalization(), new FakeAboutCore(), launcher);
+        AboutViewModel viewModel = new(
+            new FakeDisplayLocalization(),
+            new FakeAboutCore(),
+            launcher,
+            new TestApplicationErrorSink());
 
         await viewModel.OpenGitHubCommand.ExecuteAsync(null);
         await viewModel.OpenMihomoCommand.ExecuteAsync(null);
@@ -161,6 +209,8 @@ public sealed class DisplayPageViewModelTests
     /// <summary>Fake rule catalog for rules tests.</summary>
     private sealed class FakeRuleCatalog : IRuleCatalog
     {
+        public int GetRulesCallCount { get; private set; }
+
         /// <summary>Gets fake rule rows.</summary>
         /// <value>Current fake rule rows.</value>
         public IReadOnlyList<RulePreview> Rules { get; } =
@@ -172,13 +222,24 @@ public sealed class DisplayPageViewModelTests
         /// <returns>Configured rule rows.</returns>
         public IReadOnlyList<RulePreview> GetRules()
         {
+            GetRulesCallCount++;
             return Rules;
+        }
+    }
+
+    private sealed class ThrowingRuleCatalog : IRuleCatalog
+    {
+        public IReadOnlyList<RulePreview> GetRules()
+        {
+            throw new InvalidOperationException("Synthetic rule read failure.");
         }
     }
 
     /// <summary>Fake statistics store for statistics tests.</summary>
     private sealed class FakeStatisticsStore : IStatisticsStore
     {
+        public int SummaryReadCount { get; private set; }
+
         /// <summary>Gets fake daily traffic rows.</summary>
         /// <value>Configured daily rows.</value>
         public IReadOnlyList<TrafficStatisticRow> DailyRows { get; } =
@@ -197,6 +258,7 @@ public sealed class DisplayPageViewModelTests
         /// <returns>Configured statistics summary.</returns>
         public StatisticsSummary GetTrafficStatisticsSummary()
         {
+            SummaryReadCount++;
             return new StatisticsSummary(1024, 2048, 3, 5, 1, 2, 4, 6);
         }
 

@@ -262,6 +262,14 @@ public sealed class SettingsRegistryMetadataTests
             SettingApplicationKind.Appearance,
             "Settings.MasterControl"),
         Internal(
+            "MasterInfoTileLayout",
+            typeof(string),
+            "core,upload-rate,download-rate,active-connections,transparent-proxy,latency,active-profile,current-mode",
+            SettingCategory.Appearance,
+            SettingsResetScope.MasterControl,
+            SettingApplicationKind.Appearance,
+            "Settings.MasterControl"),
+        Internal(
             "ConnectionTestProxyUrl1",
             typeof(string),
             "https://www.google.com",

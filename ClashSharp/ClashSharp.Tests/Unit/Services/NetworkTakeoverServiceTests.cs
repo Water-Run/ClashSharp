@@ -1,12 +1,3 @@
-/*
- * Network Takeover Service Tests
- * Verifies proxy takeover mode coordination through injected dependencies
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/NetworkTakeoverServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

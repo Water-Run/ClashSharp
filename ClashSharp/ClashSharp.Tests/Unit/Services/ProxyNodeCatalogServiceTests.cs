@@ -1,12 +1,3 @@
-/*
- * Proxy Node Catalog Service Tests
- * Verifies proxy node catalog composition through injected dependencies
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/ProxyNodeCatalogServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

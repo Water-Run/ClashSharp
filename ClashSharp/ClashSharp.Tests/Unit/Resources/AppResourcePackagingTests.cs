@@ -1,14 +1,7 @@
-/*
- * App Resource Packaging Tests
- * Verifies runtime-critical application resources stay in App.xaml
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Resources/AppResourcePackagingTests.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 
 namespace ClashSharp.Tests.Unit.Resources;
 
@@ -55,23 +48,139 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("PaneToggleRequested=\"AppTitleBar_PaneToggleRequested\"", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("Grid.Row=\"1\"", mainWindowXaml, StringComparison.Ordinal);
         Assert.Contains("IsPaneToggleButtonVisible=\"False\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("CompactModeThresholdWidth=\"641\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("ExpandedModeThresholdWidth=\"1008\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("CompactPaneLength=\"48\"", mainWindowXaml, StringComparison.Ordinal);
+        Assert.Contains("OpenPaneLength=\"260\"", mainWindowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<NavigationView.PaneHeader>", mainWindowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Margin=\"304,0,138,0\"", mainWindowXaml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies custom accent resources are applied before WinUI controls are created on startup.</summary>
+    /// <summary>Verifies optional native shell features are capability-gated after cleanup registration.</summary>
     [Fact]
-    public void MainWindowCode_AppliesAccentColorBeforeInitializeComponent()
+    public void MainWindowCode_GatesOptionalNativeFeaturesAndRegistersCleanupFirst()
     {
         string mainWindowCodePath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
 
         string mainWindowCode = File.ReadAllText(mainWindowCodePath);
-        int applyAccentIndex = mainWindowCode.IndexOf("AppThemeService.ApplyAccentColor", StringComparison.Ordinal);
+        int applyAccentIndex = mainWindowCode.IndexOf(
+            "StartupShellSetupPolicy.TryRun(_composition.ApplyStartupAccentColor);",
+            StringComparison.Ordinal);
         int initializeIndex = mainWindowCode.IndexOf("InitializeComponent();", StringComparison.Ordinal);
+        int cleanupRegistrationIndex = mainWindowCode.IndexOf(
+            "Closed += OnWindowClosed;",
+            StringComparison.Ordinal);
+        int nativeSetupIndex = mainWindowCode.IndexOf(
+            "InitializeWindowNativeCapabilities();",
+            StringComparison.Ordinal);
+        int nativeHandleIndex = mainWindowCode.IndexOf(
+            "_nativeCapabilities.TryAcquireWindowHandle",
+            StringComparison.Ordinal);
+        int windowMessageHookIndex = mainWindowCode.IndexOf(
+            "_nativeCapabilities.TryInstallWindowMessageHook",
+            StringComparison.Ordinal);
+        int titleBarGateIndex = mainWindowCode.IndexOf(
+            "_nativeCapabilities.TryRunWindowHandleFeature(InitializeTitleBar);",
+            StringComparison.Ordinal);
+        int trayGateIndex = mainWindowCode.IndexOf(
+            "_nativeCapabilities.TryCreateWindowMessageFeature(",
+            StringComparison.Ordinal);
 
-        Assert.True(applyAccentIndex >= 0, "Accent color application is missing.");
+        Assert.True(applyAccentIndex >= 0, "Contained accent color application is missing.");
         Assert.True(initializeIndex >= 0, "InitializeComponent call is missing.");
-        Assert.True(applyAccentIndex < initializeIndex, "Accent color resources must be applied before WinUI controls are created.");
+        Assert.True(
+            applyAccentIndex < initializeIndex,
+            "Accent color resources should still be attempted before WinUI controls are created.");
+        Assert.True(
+            cleanupRegistrationIndex > initializeIndex,
+            "Closed cleanup must be registered after the non-degradable XAML initialization.");
+        Assert.True(
+            nativeSetupIndex > cleanupRegistrationIndex,
+            "Native capability setup must run after Closed cleanup is registered.");
+        Assert.True(
+            windowMessageHookIndex > nativeHandleIndex,
+            "Window-procedure subclassing must require a successfully acquired window handle.");
+        Assert.True(
+            titleBarGateIndex > nativeSetupIndex,
+            "Custom title-bar setup must be gated by the native handle capability.");
+        Assert.True(
+            trayGateIndex > titleBarGateIndex,
+            "Tray creation must be deferred until runtime startup and gated by the window-message capability.");
+        Assert.Contains(
+            "closeBehavior is CloseBehaviorMode.MinimizeToTray && IsTrayAvailableForHide()",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "WindowCloseBehaviorPolicy.Resolve(closeBehavior, isTrayAvailable)",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains("_trayService?.TryEnsureAvailable() == true", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "_nativeCapabilities.TryReleaseWindowMessageHook(",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "StartupShellSetupPolicy.TryRun(trayService.Dispose)",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "StartupShellSetupPolicy.TryRun(runtime.Dispose)",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "StartupShellSetupPolicy.TryRun(_windowLifetime.Cancel)",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "StartupShellSetupPolicy.TryRun(_windowLifetime.Dispose)",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "NativeWindowProcedureRoot.Retain(_wndProcDelegate);",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains("previousWindowProcedure != 0", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("DefWindowProc(", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "RegisterWindowMessage(TaskbarCreatedMessageName)",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "uMsg == _taskbarCreatedMessage",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SystemTrayAvailabilityPolicy.TryRefreshAndPreserveReachability(",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.Contains("sender.Hide();", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("_hiddenToTray = true;", mainWindowCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Guards the best-effort tray refresh against blocking persistence and swallowed fatal failures.</summary>
+    [Fact]
+    public void MainWindowCode_ContainsTrayStatusRefreshWithoutBlockingUiDiagnostics()
+    {
+        string mainWindowCode = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs"));
+        const string methodMarker =
+            "private async Task RefreshMihomoServiceStatusForTrayAsync(";
+        int methodStart = mainWindowCode.IndexOf(methodMarker, StringComparison.Ordinal);
+        int methodEnd = mainWindowCode.IndexOf(
+            "\n    /// <summary>Runs post-startup work",
+            methodStart + methodMarker.Length,
+            StringComparison.Ordinal);
+
+        Assert.True(methodStart >= 0, "The tray status refresh boundary is missing.");
+        Assert.True(methodEnd > methodStart, "The tray status refresh boundary could not be isolated.");
+        string refreshBoundary = mainWindowCode[methodStart..methodEnd];
+
+        Assert.Contains(
+            "StartupCompletionFailurePolicy.IsRecoverable(exception)",
+            refreshBoundary,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("exception.Message", refreshBoundary, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogStorageService", refreshBoundary, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies logs are only reachable from statistics and not duplicated in the footer navigation.</summary>
@@ -109,14 +218,25 @@ public sealed class AppResourcePackagingTests
         string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
         string aboutXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "About.xaml");
         string aboutCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "About.xaml.cs");
+        string compositionPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Composition",
+            "AboutPageComposition.cs");
         string settingsXaml = File.ReadAllText(settingsXamlPath);
         string aboutXaml = File.ReadAllText(aboutXamlPath);
         string aboutCode = File.ReadAllText(aboutCodePath);
+        string composition = File.ReadAllText(compositionPath);
 
         Assert.DoesNotContain("x:Name=\"ProxyInformationTitleText\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ProxyInformationButton\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("OpenProxyInformationButton_Click", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("SettingsProxyInformationAdapter.CreateSnapshot", aboutCode, StringComparison.Ordinal);
+        Assert.Contains(": this(AboutPageComposition.Create())", aboutCode, StringComparison.Ordinal);
+        Assert.Contains("_readProxyInformation()", aboutCode, StringComparison.Ordinal);
+        Assert.Contains("ReadProxyInformation", composition, StringComparison.Ordinal);
+        Assert.Contains("new ProxyInformation(", composition, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Instance", aboutCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies about page version and runtime summary live under the product name before the app description.</summary>
@@ -403,12 +523,26 @@ public sealed class AppResourcePackagingTests
     public void SettingsViewModel_UsesCentralizedSupportedLanguageList()
     {
         string viewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
+        string compositionPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Composition",
+            "SettingsPageComposition.cs");
 
         string viewModelCode = File.ReadAllText(viewModelPath);
+        string compositionCode = File.ReadAllText(compositionPath);
 
-        Assert.DoesNotContain("\"简体中文\"", viewModelCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"繁體中文\"", viewModelCode, StringComparison.Ordinal);
-        Assert.Contains("LocalizationService.GetSupportedLanguages", viewModelCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "_supportedLanguages = Array.AsReadOnly(supportedLanguages.ToArray())",
+            viewModelCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("using ClashSharp.Service", viewModelCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationService.", viewModelCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "supportedLanguages: LocalizationService.GetSupportedLanguages().ToArray()",
+            compositionCode,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings view model helpers do not access the global localization singleton directly.</summary>
@@ -581,7 +715,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("AppDataMaintenanceService.ClearAllData()", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("AppSettingsService.Instance.DisplayLanguage", settingsCode, StringComparison.Ordinal);
         Assert.Contains("_viewModel.ResetAllSettings()", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("await _viewModel.ClearAllDataAsync(CancellationToken.None)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("await _viewModel.ClearAllDataAsync(cancellationToken)", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings code-behind delegates startup conflict detection to the view model.</summary>
@@ -593,7 +727,10 @@ public sealed class AppResourcePackagingTests
         string settingsCode = File.ReadAllText(settingsCodePath);
 
         Assert.DoesNotContain("StartupConflictDetectionService.Instance.CheckConflicts(_viewModel.MixedPort)", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("_viewModel.CheckStartupConflicts()", settingsCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "await _viewModel.CheckStartupConflictsAsync(cancellationToken)",
+            settingsCode,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Verifies Windows diagnostic result messages use localization keys.</summary>
@@ -844,13 +981,188 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("_lifecycle.RequestExit", applicationActions, StringComparison.Ordinal);
     }
 
+    /// <summary>Guards the WinUI handoff that makes a failed shutdown request retryable.</summary>
+    [Fact]
+    public void FailedRuntimeShutdown_ReleasesAppAndWindowRequestStateForRetry()
+    {
+        string application = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs"));
+        string mainWindow = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs"));
+
+        Assert.Contains("RetryFailedRequestAsync", application, StringComparison.Ordinal);
+        Assert.Contains("NotifyExitRequestFailed", application, StringComparison.Ordinal);
+        Assert.Contains("ReleaseShutdownAttempt", application, StringComparison.Ordinal);
+        Assert.Contains(
+            "catch (ApplicationHostDisposalException exception)",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains("TryLogTerminalHostDisposalFailure", application, StringComparison.Ordinal);
+        Assert.Contains("TryResumePendingMainWindowStartup", application, StringComparison.Ordinal);
+        Assert.Contains("_lifetimeRunner.CanResumeAttachedHost", application, StringComparison.Ordinal);
+        Assert.Contains(
+            "CompleteLifetimeRequestWithoutDispatcherAsync",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "StopHostWithoutDispatcherAsync",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "await ForceExitStoppedHostOnDispatcherAsync(dispatcherQueue, request)",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "() => ForceExitAfterShutdownFailureAsync(request)",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "StartupCompletionFailurePolicy.IsRecoverable(exception)",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ShowStartupFailure(\"startup-deferred-completion-failed\")",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains("_startupCompletion.Abandon()", application, StringComparison.Ordinal);
+        Assert.Contains("NotifyExitRequestFailed", mainWindow, StringComparison.Ordinal);
+        Assert.Contains("_exitRequested = false", mainWindow, StringComparison.Ordinal);
+        Assert.Contains("_applicationLifecycle.RequestExit(source)", mainWindow, StringComparison.Ordinal);
+        Assert.DoesNotContain("NotifyExitRequestFailed(exception.Message)", application, StringComparison.Ordinal);
+    }
+
+    /// <summary>Guards dispatcher rejection against invoking WinUI objects from the consumer thread.</summary>
+    [Fact]
+    public void DispatcherRejectedTerminalExit_UsesNonUiAwaitedFallback()
+    {
+        string application = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs"));
+        const string methodMarker =
+            "private async Task ReleaseStoppedHostWithoutDispatcherAsync(";
+        int methodStart = application.IndexOf(methodMarker, StringComparison.Ordinal);
+
+        Assert.True(methodStart >= 0, "The non-UI dispatcher fallback must remain explicit.");
+        int methodEnd = application.IndexOf(
+            "\n    private ",
+            methodStart + methodMarker.Length,
+            StringComparison.Ordinal);
+        Assert.True(methodEnd > methodStart, "The non-UI dispatcher fallback body was not found.");
+        string fallback = application[methodStart..methodEnd];
+
+        Assert.Contains(
+            "() => ReleaseStoppedHostWithoutDispatcherAsync(request)",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "await CompleteStartupDiagnosticsAsync().ConfigureAwait(false)",
+            fallback,
+            StringComparison.Ordinal);
+        Assert.Contains("ReleasePrimaryInstanceOwnership", fallback, StringComparison.Ordinal);
+        Assert.Contains(
+            "TryLogDispatcherUnavailableShutdown",
+            fallback,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("TryLogForcedShutdown", fallback, StringComparison.Ordinal);
+        Assert.DoesNotContain("_mainWindow", fallback, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApproveWindowCloseForApplicationExit", fallback, StringComparison.Ordinal);
+        Assert.DoesNotContain("Exit()", fallback, StringComparison.Ordinal);
+    }
+
+    /// <summary>Guards the long-lived lifetime consumer against unobserved task faults.</summary>
+    [Fact]
+    public void LifetimeRequestConsumer_IsAwaitedByLaunchBoundary()
+    {
+        string application = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs"));
+        const string methodMarker =
+            "private async Task AwaitLifetimeRequestConsumerAsync(";
+        int methodStart = application.IndexOf(methodMarker, StringComparison.Ordinal);
+
+        Assert.True(methodStart >= 0, "The owned consumer await boundary must remain explicit.");
+        int methodEnd = application.IndexOf(
+            "\n    private ",
+            methodStart + methodMarker.Length,
+            StringComparison.Ordinal);
+        Assert.True(methodEnd > methodStart, "The owned consumer await boundary was not found.");
+        string observer = application[methodStart..methodEnd];
+
+        Assert.True(
+            CountOccurrences(application, "await AwaitLifetimeRequestConsumerAsync(") >= 2,
+            "Every launch path that owns the consumer must await it.");
+        Assert.Contains(
+            "await consumer.ConfigureAwait(false)",
+            observer,
+            StringComparison.Ordinal);
+        Assert.Contains("finally", observer, StringComparison.Ordinal);
+        Assert.Contains("_lifetimeRequestConsumer = null", observer, StringComparison.Ordinal);
+    }
+
+    /// <summary>Guards startup-close and headless-fatal paths against leaving a windowless primary process.</summary>
+    [Fact]
+    public void HeadlessStartupOutcomes_ExitWithoutRecreatingAWindowOverUserIntent()
+    {
+        string application = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs"));
+        string mainWindow = File.ReadAllText(FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "MainWindow.xaml.cs"));
+
+        Assert.Contains(
+            "result.Disposition == ApplicationLaunchDisposition.Fatal && _startupShellSuppressed",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains("StopAndExitHeadlessAsync", application, StringComparison.Ordinal);
+        Assert.Contains("ForceExitAfterShutdownFailure", application, StringComparison.Ordinal);
+        Assert.Contains("_lifetimeRequests.HasAcceptedRequest", application, StringComparison.Ordinal);
+        Assert.Contains("AwaitLifetimeRequestConsumerAsync", application, StringComparison.Ordinal);
+        Assert.Contains(
+            "StartupExceptionDiagnostics.FormatDebugMessage(exception)",
+            application,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "$\"ClashSharp startup failed: {exception}\"",
+            application,
+            StringComparison.Ordinal);
+        Assert.Contains("_startupLifetimeRequests.TryRequest(", mainWindow, StringComparison.Ordinal);
+        Assert.Contains(
+            "ApplicationLifetimeRequest.Exit(\"startup-shell\")",
+            mainWindow,
+            StringComparison.Ordinal);
+        Assert.Contains("args.Cancel = true", mainWindow, StringComparison.Ordinal);
+        Assert.Contains("ApproveApplicationExit", mainWindow, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "string.IsNullOrWhiteSpace(exception.Message)",
+            application,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>Guards the restore helper's forced-disabled final network shutdown policy.</summary>
+    [Fact]
+    public void StartupRestoreFallback_UsesDedicatedFinalShutdownPolicy()
+    {
+        string app = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs"));
+        string hostFactory = File.ReadAllText(FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "AppHost",
+            "ClashSharpAppHostFactory.cs"));
+
+        Assert.Contains("ClashSharpAppHostFactory.Build(launchRequest", app, StringComparison.Ordinal);
+        Assert.Contains("StartupRestoreFallbackService.HelperArgument", hostFactory, StringComparison.Ordinal);
+        Assert.Contains("CreateStartupRestoreFallbackShutdown", hostFactory, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies startup launch synchronization composes Windows startup task and logging through injected boundaries.</summary>
     [Fact]
     public void StartupLaunchService_UsesInjectedDependencies()
     {
         string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "StartupLaunchService.cs");
+        string factoryPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Service",
+            "StartupLaunchServiceFactory.cs");
 
         string serviceCode = File.ReadAllText(servicePath);
+        string factoryCode = File.ReadAllText(factoryPath);
 
         Assert.DoesNotContain("Windows.ApplicationModel", serviceCode, StringComparison.Ordinal);
         Assert.DoesNotContain("StartupTask.GetAsync", serviceCode, StringComparison.Ordinal);
@@ -861,6 +1173,80 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("IStartupLaunchLog", serviceCode, StringComparison.Ordinal);
         Assert.Contains("StartupLaunch.UpdateFailed", serviceCode, StringComparison.Ordinal);
         Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "Task<StartupLaunchTaskState> RequestEnableAsync()",
+            serviceCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "StartupTaskState state = await task.RequestEnableAsync();",
+            factoryCode,
+            StringComparison.Ordinal);
+        Assert.Contains("return NormalizeState(state);", factoryCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartupLaunchService Instance", factoryCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Guards startup launch updates as verified platform-first transactions in every action path.</summary>
+    [Fact]
+    public void StartupLaunchUpdates_VerifyPlatformBeforePersistingPreference()
+    {
+        string serviceCode = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "Service", "StartupLaunchService.cs"));
+        string actionService = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "Service", "ApplicationActionService.cs"));
+        string triggerAdapter = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "Service", "TriggerActionRuntimeAdapter.cs"));
+        string hostFactory = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "ClashSharpAppHostFactory.cs"));
+
+        Assert.Contains(
+            "SetEnabledAsync(bool isEnabled, CancellationToken cancellationToken)",
+            serviceCode,
+            StringComparison.Ordinal);
+        Assert.Contains("StartupLaunchUpdateException", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("StartupLaunchUpdateFailure.EnableDenied", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("StartupLaunchUpdateFailure.UnsupportedState", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("StartupLaunchUpdateFailure.VerificationFailed", serviceCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "verifiedTask.State != StartupLaunchTaskState.Enabled",
+            serviceCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "verifiedTask.State != StartupLaunchTaskState.Disabled",
+            serviceCode,
+            StringComparison.Ordinal);
+
+        int actionPlatformUpdate = actionService.IndexOf(
+            ".SetEnabledAsync(launchAtStartup, cancellationToken)",
+            StringComparison.Ordinal);
+        int actionPreferenceCommit = actionService.IndexOf(
+            "_settings.LaunchAtStartupEnabled = launchAtStartup;",
+            StringComparison.Ordinal);
+        Assert.True(actionPlatformUpdate >= 0, "Application action startup platform update is missing.");
+        Assert.True(
+            actionPreferenceCommit > actionPlatformUpdate,
+            "Application actions must leave the previous preference unchanged when the platform update fails.");
+        Assert.Contains("StartupLaunchService startupLaunch", actionService, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartupLaunchService.Instance", actionService, StringComparison.Ordinal);
+
+        int triggerPlatformUpdate = triggerAdapter.IndexOf(
+            ".SetEnabledAsync(launchAtStartup, cancellationToken)",
+            StringComparison.Ordinal);
+        int triggerPreferenceCommit = triggerAdapter.IndexOf(
+            "_settings.LaunchAtStartupEnabled = launchAtStartup;",
+            StringComparison.Ordinal);
+        Assert.True(triggerPlatformUpdate >= 0, "Trigger startup platform update is missing.");
+        Assert.True(
+            triggerPreferenceCommit > triggerPlatformUpdate,
+            "Trigger actions must leave the previous preference unchanged when the platform update fails.");
+
+        Assert.Contains(
+            "StartupLaunchServiceFactory.CreateDefault()",
+            hostFactory,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "provider.GetRequiredService<StartupLaunchService>()",
+            hostFactory,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Verifies proxy latency orchestration receives storage and TCP probing through injected boundaries.</summary>
@@ -1259,7 +1645,7 @@ public sealed class AppResourcePackagingTests
         Assert.True(resetWindowsNativeIndex > checkStaleProxyIndex, "Windows-native reset link should cover startup restore fallback.");
     }
 
-    /// <summary>Verifies the startup guide has a reusable dialog component reserved for future guide content.</summary>
+    /// <summary>Verifies the startup guide component renders only pre-collected display state.</summary>
     [Fact]
     public void StartupGuideDialog_ComponentExists()
     {
@@ -1271,9 +1657,13 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("x:Class=\"ClashSharp.Components.StartupGuideDialog\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("public sealed partial class StartupGuideDialog : ContentDialog", dialogCode, StringComparison.Ordinal);
-        Assert.Contains("private const double DialogWidth = 520", dialogCode, StringComparison.Ordinal);
-        Assert.Contains("ShowCenteredAsync", dialogCode, StringComparison.Ordinal);
-        Assert.Contains("CenteredDialogOverlay.ShowAsync", dialogCode, StringComparison.Ordinal);
+        Assert.Contains("IReadOnlyList<StartupCheckItem> checks", dialogCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string> getString", dialogCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartupCheckService", dialogCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("using ClashSharp.Service;", dialogCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Instance", dialogCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowCenteredAsync", dialogCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("CenteredDialogOverlay", dialogCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"520\"", dialogXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxWidth=\"520\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("MinWidth=\"0\"", dialogXaml, StringComparison.Ordinal);
@@ -1398,10 +1788,19 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"SetHeroStatusDisplayButton\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"{Binding SetHeroStatusDisplayText}\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"SetHeroStatusDisplayButton_Click\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"MasterHeroStatusOptionTemplate\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Title}\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Flyout flyout = new()", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("BuildHeroStatusFlyoutContent", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("foreach (MasterHeroStatusSlotViewModel slot in _viewModel.HeroStatusSlots)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("ItemTemplate = (DataTemplate)Resources[\"MasterHeroStatusOptionTemplate\"]", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("comboBox.SetBinding(Selector.SelectedValueProperty", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("Mode = BindingMode.TwoWay", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("CalculateHeroStatusFlyoutListHeight", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("VerticalScrollBarVisibility = ScrollBarVisibility.Auto", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("_heroStatusSelection.TryApplySelection(", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("_heroStatusSelection.RunProgrammaticUpdate(() =>", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("_viewModel.ResetHeroStatusLayout();", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"EditInfoTilesLink\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"{Binding EditInfoTilesText}\"", masterControlXaml, StringComparison.Ordinal);
@@ -1434,6 +1833,10 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionItem", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("tile.IsVisible)));", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("Text = _viewModel.InfoTileSelectionDescriptionText", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.SetVisibleInfoTileIds(", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("DragItemsCompleted=\"InfoTileGrid_DragItemsCompleted\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.PersistInfoTileOrder();", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.ShowStartupPrompt", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.CheckStartupConflicts", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.RunLatencyTest", masterControlCode, StringComparison.Ordinal);
@@ -1448,26 +1851,71 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("<Setter Property=\"Width\" Value=\"250\" />", masterControlXaml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies master control places the status card beside a vertically matched mode stack and keeps edit tiles fixed-width.</summary>
+    /// <summary>Verifies the master header stays horizontal with dense mode controls and a compact narrow fallback.</summary>
     [Fact]
-    public void MasterControlXaml_UsesSideBySideHeroAndFixedInfoTileWidth()
+    public void MasterControlXaml_UsesHorizontalHeroAndResponsiveModeGrid()
     {
         string masterControlXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "MasterControl.xaml");
         string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
 
         string masterControlXaml = File.ReadAllText(masterControlXamlPath);
         string masterControlCode = File.ReadAllText(masterControlCodePath);
+        XDocument document = XDocument.Parse(masterControlXaml);
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement NamedElement(string name) => document
+            .Descendants()
+            .Single(element => string.Equals(
+                (string?)element.Attribute(xaml + "Name"),
+                name,
+                StringComparison.Ordinal));
 
-        Assert.Contains("x:Name=\"HeroAndModeGrid\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"HeroStatusCard\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Grid.RowSpan=\"4\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Grid.Column=\"1\"", masterControlXaml, StringComparison.Ordinal);
+        XElement rootScrollViewer = NamedElement("RootScrollViewer");
+        XElement heroAndModeGrid = NamedElement("HeroAndModeGrid");
+        XElement heroStatusCard = NamedElement("HeroStatusCard");
+        XElement modeButtonGrid = NamedElement("ModeButtonGrid");
+        XElement modeColumn = NamedElement("ModeColumn");
+        XElement heroStatusItemGrid = NamedElement("HeroStatusItemGrid");
+        XElement heroItemsPanel = heroStatusItemGrid
+            .Descendants(presentation + "ItemsWrapGrid")
+            .Single();
+
+        Assert.Equal("Stretch", (string?)rootScrollViewer.Attribute("HorizontalContentAlignment"));
+        Assert.Equal("360", (string?)modeColumn.Attribute("Width"));
+        Assert.Equal("Top", (string?)modeButtonGrid.Attribute("VerticalAlignment"));
+        Assert.Same(heroAndModeGrid, heroStatusCard.Parent);
+        Assert.Same(heroAndModeGrid, modeButtonGrid.Parent);
+        XElement[] modeRows = modeButtonGrid
+            .Element(presentation + "Grid.RowDefinitions")!
+            .Elements(presentation + "RowDefinition")
+            .ToArray();
+        Assert.Equal(4, modeRows.Length);
+        Assert.All(modeRows, static row => Assert.Equal("Auto", (string?)row.Attribute("Height")));
+        Assert.Equal("Horizontal", (string?)heroItemsPanel.Attribute("Orientation"));
+        Assert.Equal("2", (string?)heroItemsPanel.Attribute("MaximumRowsOrColumns"));
+        Assert.Contains("x:Name=\"StandbyModeButton\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Row=\"2\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Grid.Row=\"3\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(masterControlXaml, "Grid.ColumnSpan=\"2\""));
+        Assert.Contains("ArrangeModeButtons(layout.IsSideBySide)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("ModeButtonGrid.RowSpacing = isSideBySide ? 10 : 0", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SetModeButtonLayout(StandbyModeButton, row: 0, column: 1, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SetModeButtonLayout(RuleTakeoverModeButton, row: 1, column: 0, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SetModeButtonLayout(FullTakeoverModeButton, row: 1, column: 1, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SizeChanged=\"ContentHost_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("UpdateMasterLayout(e.NewSize.Width)", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentHost.Width =", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SizeChanged=\"HeroStatusItemGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("ContainerContentChanging=\"HeroStatusItemGrid_ContainerContentChanging\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeroStatusItemContent\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"HeroStatusItemContent\" Spacing=\"4\" MinWidth=\"220\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("UpdateHeroStatusItemWidths", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("CalculateHeroStatusItemWidth", masterControlCode, StringComparison.Ordinal);
         Assert.DoesNotContain("<Setter Property=\"Width\" Value=\"260\" />", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("SizeChanged=\"InfoTileGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("UpdateInfoTileWidths", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("CalculateInfoTileWidth", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("RootScrollBarGutter", masterControlCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("RootScrollBarGutter", masterControlCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings page exposes a restart-required notice and keeps reset links away from the edge.</summary>
@@ -1555,9 +2003,16 @@ public sealed class AppResourcePackagingTests
     {
         string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
         string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+        string settingsCompositionPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Composition",
+            "SettingsPageComposition.cs");
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
         string settingsCode = File.ReadAllText(settingsCodePath);
+        string settingsComposition = File.ReadAllText(settingsCompositionPath);
 
         Assert.Contains("x:Name=\"DataPackageRow\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DataPackageScopeBox\"", settingsXaml, StringComparison.Ordinal);
@@ -1577,7 +2032,10 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Settings.DataImport.SecondConfirm.Title", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ReadPackageScope", settingsCode, StringComparison.Ordinal);
         Assert.Contains("FormatDataImportWarning", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("ClashDataPackageService.Instance", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_operations.ImportDataPackageAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_operations.ExportDataAsync", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Instance", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ISettingsPageOperations", settingsComposition, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies user-triggered settings operations surface expected failures instead of letting async event handlers throw.</summary>
@@ -1589,7 +2047,8 @@ public sealed class AppResourcePackagingTests
         string settingsCode = File.ReadAllText(settingsCodePath);
 
         Assert.Contains("ShowSettingsOperationFailureAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("LogStorageService.Instance.AppendLog(\"Warning\", \"Settings\"", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_operations.ReportUnexpectedErrorAsync(", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("exception.Message", settingsCode, StringComparison.Ordinal);
         Assert.True(CountOccurrences(settingsCode, "await ShowSettingsOperationFailureAsync(") >= 3);
     }
 
@@ -1650,9 +2109,16 @@ public sealed class AppResourcePackagingTests
     {
         string settingsXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "Settings.xaml");
         string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
+        string settingsCompositionPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Composition",
+            "SettingsPageComposition.cs");
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
         string settingsCode = File.ReadAllText(settingsCodePath);
+        string settingsComposition = File.ReadAllText(settingsCompositionPath);
 
         Assert.Contains("BackupRestoreTitleText", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("BackupRestoreDescriptionText", settingsXaml, StringComparison.Ordinal);
@@ -1662,7 +2128,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("ExportLogsXmlAsync", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ExportLogsAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("DataPackageExportScope.SystemLogSqlite", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("ExportLogSqliteAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("DataPackageExportScope.SystemLogSqlite => ExportLogDatabaseAsync", settingsComposition, StringComparison.Ordinal);
         Assert.Contains("IsImportableDataPackageScope", settingsCode, StringComparison.Ordinal);
     }
 
@@ -1671,11 +2137,16 @@ public sealed class AppResourcePackagingTests
     public void MainWindowXaml_ExposesTriggersAboveStatistics()
     {
         string mainWindowXamlPath = Path.Combine(AppContext.BaseDirectory, "MainWindow.xaml");
-        string mainWindowCodePath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
+        string mainWindowCompositionPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Composition",
+            "MainWindowComposition.cs");
         string mainWindowViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "MainWindowViewModel.cs");
 
         string mainWindowXaml = File.ReadAllText(mainWindowXamlPath);
-        string mainWindowCode = File.ReadAllText(mainWindowCodePath);
+        string mainWindowComposition = File.ReadAllText(mainWindowCompositionPath);
         string mainWindowViewModel = File.ReadAllText(mainWindowViewModelPath);
 
         int triggersIndex = mainWindowXaml.IndexOf("x:Name=\"NavTriggersItem\"", StringComparison.Ordinal);
@@ -1683,7 +2154,7 @@ public sealed class AppResourcePackagingTests
         Assert.True(triggersIndex >= 0, "Triggers navigation item is missing.");
         Assert.True(statisticsIndex > triggersIndex, "Triggers must appear above statistics.");
         Assert.Contains("Content=\"{Binding TriggersText}\"", mainWindowXaml, StringComparison.Ordinal);
-        Assert.Contains("[\"Triggers\"] = typeof(View.Triggers)", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("[\"Triggers\"] = typeof(View.Triggers)", mainWindowComposition, StringComparison.Ordinal);
         Assert.Contains("public string TriggersText", mainWindowViewModel, StringComparison.Ordinal);
     }
 
@@ -1892,7 +2363,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("event EventHandler<AppSettingChangedEventArgs>? SettingChanged", appSettings, StringComparison.Ordinal);
         Assert.Contains("NotifySettingChanged", appSettings, StringComparison.Ordinal);
         Assert.Contains("AppSettingChangedEventArgs", appSettings, StringComparison.Ordinal);
-        Assert.Contains("AppSettingsAuditLogService.Instance.Start()", auditStartupStep, StringComparison.Ordinal);
+        Assert.Contains("AppSettingsAuditLogService auditLog", auditStartupStep, StringComparison.Ordinal);
+        Assert.Contains("auditLog.Start()", auditStartupStep, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppSettingsAuditLogService.Instance", auditStartupStep, StringComparison.Ordinal);
         Assert.Contains("\"Settings\"", auditService, StringComparison.Ordinal);
         Assert.Contains("AppendLog(\"Info\", \"Settings\"", auditService, StringComparison.Ordinal);
     }
@@ -1944,12 +2417,21 @@ public sealed class AppResourcePackagingTests
     {
         string masterViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "MasterControlViewModel.cs");
         string actionServicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ApplicationActionService.cs");
+        string actionAdapterPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Adapters",
+            "MasterControlActionsAdapter.cs");
 
         string masterViewModel = File.ReadAllText(masterViewModelPath);
         string actionService = File.ReadAllText(actionServicePath);
+        string actionAdapter = File.ReadAllText(actionAdapterPath);
 
         Assert.Contains("MasterTileCatalog", masterViewModel, StringComparison.Ordinal);
-        Assert.Contains("IApplicationActionDispatcher", masterViewModel, StringComparison.Ordinal);
+        Assert.Contains("IMasterControlActions", masterViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("IApplicationActionDispatcher", masterViewModel, StringComparison.Ordinal);
+        Assert.Contains("IApplicationActionDispatcher", actionAdapter, StringComparison.Ordinal);
         foreach (string expectedTile in new[]
         {
             "export-config",
@@ -2077,8 +2559,12 @@ public sealed class AppResourcePackagingTests
     [Fact]
     public void StartupConflictDialogPresenter_UsesGeneralConflictCopyAndStackedActions()
     {
-        string presenterPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "StartupConflictDialogPresenter.cs");
-
+        string presenterPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Dialogs",
+            "StartupConflictDialogPresenter.cs");
         string presenterCode = File.ReadAllText(presenterPath);
 
         Assert.Contains("StartupConflict.Dialog.Introduction", presenterCode, StringComparison.Ordinal);
@@ -2086,6 +2572,14 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("HorizontalAlignment = HorizontalAlignment.Right", presenterCode, StringComparison.Ordinal);
         Assert.Contains("statusText.Text = result.Succeeded", presenterCode, StringComparison.Ordinal);
         Assert.Contains("private const double DialogWidth = 560", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("Func<string, string> getString", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("IApplicationErrorSink errorSink", presenterCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "ReportUnexpectedAsync(errorSink, exception, cancellationToken)",
+            presenterCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalizationService.Instance", presenterCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("exception.Message", presenterCode, StringComparison.Ordinal);
         Assert.Contains("CenteredDialogOverlay.ShowAsync", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialogMinWidth", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialogMaxWidth", presenterCode, StringComparison.Ordinal);
@@ -2102,14 +2596,33 @@ public sealed class AppResourcePackagingTests
         string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
         string guideXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "StartupGuideDialog.xaml");
         string guideCodePath = FindSourceFile("ClashSharp", "ClashSharp", "Components", "StartupGuideDialog.xaml.cs");
-        string presenterPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "StartupConflictDialogPresenter.cs");
-        string overlayPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "CenteredDialogOverlay.cs");
+        string presenterPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Dialogs",
+            "StartupConflictDialogPresenter.cs");
+        string guidePresenterPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Dialogs",
+            "StartupGuidePresenter.cs");
+        string overlayPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Dialogs",
+            "CenteredDialogOverlay.cs");
 
         string masterControlCode = File.ReadAllText(masterControlCodePath);
         string settingsCode = File.ReadAllText(settingsCodePath);
+        string mainWindowCode = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs"));
         string guideXaml = File.ReadAllText(guideXamlPath);
         string guideCode = File.ReadAllText(guideCodePath);
         string presenterCode = File.ReadAllText(presenterPath);
+        string guidePresenterCode = File.ReadAllText(guidePresenterPath);
         string overlayCode = File.ReadAllText(overlayPath);
 
         Assert.Contains("GetDialogXamlRoot()", masterControlCode, StringComparison.Ordinal);
@@ -2122,10 +2635,27 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("Width=\"520\"", guideXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxWidth=\"520\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">520</x:Double>", guideXaml, StringComparison.Ordinal);
-        Assert.Contains("await dialog.ShowCenteredAsync(xamlRoot)", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("await dialog.ShowCenteredAsync(xamlRoot)", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("await dialog.ShowCenteredAsync(xamlRoot)", File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs")), StringComparison.Ordinal);
-        Assert.Contains("CenteredDialogOverlay.ShowAsync", guideCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken)",
+            masterControlCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken)",
+            settingsCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "await Runtime.ShowStartupGuideAsync(xamlRoot, _windowLifetime.Token)",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("CenteredDialogOverlay", guideCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "WindowDialogCoordinator.ShowAsync(dialog, cancellationToken)",
+            guidePresenterCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "_checks.GetChecksAsync(cancellationToken)",
+            guidePresenterCode,
+            StringComparison.Ordinal);
         Assert.Contains("private const double DialogWidth = 560", presenterCode, StringComparison.Ordinal);
         Assert.Contains("CenteredDialogOverlay.ShowAsync", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialog dialog = new()", presenterCode, StringComparison.Ordinal);
@@ -2197,7 +2727,7 @@ public sealed class AppResourcePackagingTests
     {
         string logsXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Logs.xaml");
         string logsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Logs.xaml.cs");
-        string logsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "ManagementPageViewModels.cs");
+        string logsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "LogsViewModel.cs");
         string logStoragePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "LogStorageService.cs");
 
         string logsXaml = File.ReadAllText(logsXamlPath);
@@ -2217,19 +2747,35 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ApplySearchText", logsViewModel, StringComparison.Ordinal);
         Assert.Contains("SelectedLevelFilter", logsViewModel, StringComparison.Ordinal);
         Assert.Contains("SelectedCategoryFilter", logsViewModel, StringComparison.Ordinal);
-        Assert.Contains("GetLogs(VisibleLogLimit", logsViewModel, StringComparison.Ordinal);
+        Assert.Contains("_logStorage.GetLogs(", logsViewModel, StringComparison.Ordinal);
+        Assert.Contains("VisibleLogLimit,", logsViewModel, StringComparison.Ordinal);
         Assert.Contains("GetLogSources", logStorage, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies startup dialogs wait for the content frame to enter the XAML tree.</summary>
+    /// <summary>Verifies startup dialogs are explicitly scheduled after runtime readiness.</summary>
     [Fact]
-    public void MainWindowCodeBehind_RunsStartupFlowAfterContentFrameLoaded()
+    public void MainWindowCodeBehind_RunsStartupFlowAfterRuntimeReadiness()
     {
         string mainWindowCodePath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
 
         string mainWindowCode = File.ReadAllText(mainWindowCodePath);
+        int runtimeReadyIndex = mainWindowCode.IndexOf(
+            "_runtimeReady = true;",
+            StringComparison.Ordinal);
+        int scheduleIndex = mainWindowCode.IndexOf(
+            "_startupFlow.TrySchedule(",
+            StringComparison.Ordinal);
 
-        Assert.Contains("ContentFrame.Loaded += OnContentFrameLoaded", mainWindowCode, StringComparison.Ordinal);
+        Assert.True(runtimeReadyIndex >= 0, "Runtime readiness transition is missing.");
+        Assert.True(
+            scheduleIndex > runtimeReadyIndex,
+            "Startup flow must be scheduled only after runtime dependencies are ready.");
+        Assert.Contains(
+            "DispatcherQueue.TryEnqueue(RunStartupFlowOnDispatcher)",
+            mainWindowCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentFrame.Loaded", mainWindowCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnContentFrameLoaded", mainWindowCode, StringComparison.Ordinal);
         Assert.Contains("xamlRoot is null", mainWindowCode, StringComparison.Ordinal);
         Assert.Contains("GetDialogXamlRoot()", mainWindowCode, StringComparison.Ordinal);
         Assert.Contains("Content is FrameworkElement root", mainWindowCode, StringComparison.Ordinal);
@@ -2240,6 +2786,24 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("SingleInstanceService", mainWindowCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ResolveSingleInstanceConflictAsync", mainWindowCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Activated += OnWindowActivated", mainWindowCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>Guards primary host construction behind an actual completed compositor frame.</summary>
+    [Fact]
+    public void AppStartup_WaitsForRenderedStartupShellBeforeBuildingHost()
+    {
+        string application = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "App.xaml.cs"));
+
+        Assert.Contains("CompositionTarget.Rendered += OnRendered", application, StringComparison.Ordinal);
+        Assert.Contains("firstFrame.WaitAsync(", application, StringComparison.Ordinal);
+        Assert.Contains("CompositionTarget.Rendered -= OnRendered", application, StringComparison.Ordinal);
+        Assert.Contains("_startupDiagnostics.Start();", application, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(application, "_startupDiagnostics.Start();"));
+        Assert.DoesNotContain(
+            "window.Activate();\n        await Task.Yield();",
+            application,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Verifies startup does not require unused Windows App SDK main/singleton deployment initialization.</summary>

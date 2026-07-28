@@ -1,12 +1,3 @@
-/*
- * Proxy Latency Service Tests
- * Verifies node latency orchestration through injected probe and storage dependencies
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/ProxyLatencyServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

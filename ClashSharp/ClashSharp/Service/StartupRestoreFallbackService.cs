@@ -1,26 +1,15 @@
-/*
- * Startup Restore Fallback Service
- * Registers a lightweight login helper that clears stale Windows proxy state
- *
- * @author: WaterRun
- * @file: Service/StartupRestoreFallbackService.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.Diagnostics;
 using System.IO;
+using ClashSharp.Model;
 using Microsoft.Win32;
 
 namespace ClashSharp.Service;
 
-/// <summary>Current registration state for the startup restore fallback helper.</summary>
-public readonly record struct StartupRestoreFallbackStatus(bool IsRegistered, string CommandLine);
-
 /// <summary>Registers a lightweight current-user login helper for stale proxy cleanup.</summary>
 /// <remarks>
 /// Invariants: Registration is stored only under HKCU Run.
-/// Thread safety: Public registry writes are serialized.
+/// Thread safety: Public registry reads and writes are serialized.
 /// Side effects: Writes or removes one HKCU Run value.
 /// </remarks>
 public sealed class StartupRestoreFallbackService
@@ -44,11 +33,14 @@ public sealed class StartupRestoreFallbackService
     /// <summary>Gets the current helper registration status.</summary>
     public StartupRestoreFallbackStatus GetStatus()
     {
-        using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
-        string commandLine = key?.GetValue(RunValueName) as string ?? string.Empty;
-        bool isRegistered = commandLine.Contains(HelperArgument, StringComparison.OrdinalIgnoreCase)
-            && Path.GetFileName(commandLine).Contains("ClashSharp", StringComparison.OrdinalIgnoreCase);
-        return new StartupRestoreFallbackStatus(isRegistered, commandLine);
+        lock (_syncLock)
+        {
+            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
+            string commandLine = key?.GetValue(RunValueName) as string ?? string.Empty;
+            bool isRegistered = commandLine.Contains(HelperArgument, StringComparison.OrdinalIgnoreCase)
+                && Path.GetFileName(commandLine).Contains("ClashSharp", StringComparison.OrdinalIgnoreCase);
+            return new StartupRestoreFallbackStatus(isRegistered, commandLine);
+        }
     }
 
     /// <summary>Registers the current executable as the login helper.</summary>
@@ -83,7 +75,8 @@ public sealed class StartupRestoreFallbackService
             return processPath;
         }
 
-        return Process.GetCurrentProcess().MainModule?.FileName
+        using Process process = Process.GetCurrentProcess();
+        return process.MainModule?.FileName
             ?? throw new InvalidOperationException("Could not resolve current executable path.");
     }
 

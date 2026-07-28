@@ -1,16 +1,8 @@
-/*
- * Centralized Localization Service
- * Provides localized UI strings for all supported languages with change-notification capability
- *
- * @author: WaterRun
- * @file: Service/LocalizationService.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Threading;
 using ClashSharp.Model;
 using ClashSharp.Strings;
 
@@ -19,7 +11,8 @@ namespace ClashSharp.Service;
 /// <summary>Singleton service that resolves localized string resources for all supported languages.</summary>
 /// <remarks>
 /// Invariants: <see cref="Instance"/> is non-null after type initialization. All language dictionaries contain identical key sets.
-/// Thread safety: Not thread-safe; must be accessed from the UI thread only.
+/// Thread safety: String lookup and language reads are thread-safe. Language changes and
+/// <see cref="LanguageChanged"/> handlers remain UI-thread operations.
 /// Side effects: Fires <see cref="LanguageChanged"/> when <see cref="CurrentLanguage"/> is modified.
 /// </remarks>
 public sealed class LocalizationService
@@ -29,7 +22,7 @@ public sealed class LocalizationService
     public static LocalizationService Instance { get; } = new();
 
     /// <summary>Backing field for the currently active display language.</summary>
-    private AppLanguage _currentLanguage = AppLanguage.AutoDetect;
+    private int _currentLanguage = (int)AppLanguage.AutoDetect;
 
     /// <summary>Immutable lookup table mapping each language to its resource dictionary.</summary>
     private static readonly ReadOnlyDictionary<AppLanguage, ReadOnlyDictionary<string, string>> Translations = LocalizationResources.Translations;
@@ -38,15 +31,17 @@ public sealed class LocalizationService
     /// <value>The currently selected <see cref="AppLanguage"/>. Defaults to <see cref="AppLanguage.AutoDetect"/>.</value>
     public AppLanguage CurrentLanguage
     {
-        get => _currentLanguage;
+        get => (AppLanguage)Volatile.Read(ref _currentLanguage);
         set
         {
-            if (_currentLanguage == value)
+            AppLanguage previous = (AppLanguage)Interlocked.Exchange(
+                ref _currentLanguage,
+                (int)value);
+            if (previous == value)
             {
                 return;
             }
 
-            _currentLanguage = value;
             LanguageChanged?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -71,7 +66,7 @@ public sealed class LocalizationService
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        AppLanguage effectiveLanguage = ResolveEffectiveLanguage(_currentLanguage);
+        AppLanguage effectiveLanguage = ResolveEffectiveLanguage(CurrentLanguage);
         if (Translations.TryGetValue(effectiveLanguage, out ReadOnlyDictionary<string, string>? languageMap)
             && languageMap.TryGetValue(key, out string? value))
         {

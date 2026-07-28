@@ -1,12 +1,3 @@
-/*
- * Core Configuration Service Factory
- * Wires production dependencies for mihomo configuration management
- *
- * @author: WaterRun
- * @file: Service/CoreConfigurationServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.ComponentModel;
 using System.Diagnostics;

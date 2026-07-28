@@ -1,35 +1,14 @@
-/*
- * Master Hero Status Layout Service
- * Normalizes and persists the compact status slots shown on the master-control hero card
- *
- * @author: WaterRun
- * @file: Service/MasterHeroStatusLayoutService.cs
- * @date: 2026-06-29
- */
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using ClashSharp.Model;
+using ClashSharp.ViewModel;
 
 namespace ClashSharp.Service;
 
 internal interface IMasterHeroStatusLayoutSettings
 {
     string MasterHeroStatusLayout { get; set; }
-}
-
-internal interface IMasterHeroStatusLayoutService
-{
-    IReadOnlyList<MasterHeroStatusItemKind> GetLayout();
-
-    IReadOnlyList<MasterHeroStatusItemKind> GetDefaultLayout();
-
-    IReadOnlyList<MasterHeroStatusItemKind> GetCandidates();
-
-    IReadOnlyList<MasterHeroStatusItemKind> SaveLayout(IEnumerable<MasterHeroStatusItemKind> layout);
-
-    IReadOnlyList<MasterHeroStatusItemKind> ResetLayout();
 }
 
 internal sealed class MasterHeroStatusLayoutService : IMasterHeroStatusLayoutService
@@ -72,8 +51,6 @@ internal sealed class MasterHeroStatusLayoutService : IMasterHeroStatusLayoutSer
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
-
-    public static MasterHeroStatusLayoutService Instance { get; } = new(AppSettingsService.Instance);
 
     public IReadOnlyList<MasterHeroStatusItemKind> GetLayout()
     {

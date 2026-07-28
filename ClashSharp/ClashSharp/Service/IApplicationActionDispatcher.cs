@@ -1,12 +1,3 @@
-/*
- * Application Action Dispatcher
- * Shared boundary for actions requested by tiles, triggers, and traditional UI entry points
- *
- * @author: WaterRun
- * @file: Service/IApplicationActionDispatcher.cs
- * @date: 2026-06-26
- */
-
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;

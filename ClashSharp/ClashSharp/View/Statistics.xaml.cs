@@ -1,16 +1,8 @@
-/*
- * Statistics Page
- * Hosts the traffic statistics view and delegates statistics state to its view model
- *
- * @author: WaterRun
- * @file: View/Statistics.xaml.cs
- * @date: 2026-06-17
- */
-
-#nullable enable
-
-using ClashSharp.Service;
+using System;
+using ClashSharp.Presentation.Composition;
+using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace ClashSharp.View;
@@ -19,23 +11,43 @@ namespace ClashSharp.View;
 /// <remarks>
 /// Invariants: The page has a non-null <see cref="StatisticsViewModel"/> after construction.
 /// Thread safety: Must be accessed from the UI thread only.
-/// Side effects: Creates singleton-backed service adapters for the view model and navigates to logs on command.
+/// Side effects: Navigates its owning frame to logs on command.
 /// </remarks>
 public sealed partial class Statistics : Page
 {
     /// <summary>Bindable view model for this page.</summary>
     private readonly StatisticsViewModel _viewModel;
 
+    private readonly PageLoadSession _loadSession = new();
+
     /// <summary>Initializes the statistics page and its view model.</summary>
     public Statistics()
+        : this(StatisticsPageComposition.Create())
     {
-        _viewModel = new(
-            new DisplayPageLocalizationAdapter(LocalizationService.Instance),
-            new StatisticsStoreAdapter(LogStorageService.Instance),
-            new StatisticsProfilesAdapter(ProfileCatalogService.Instance),
-            () => Frame.Navigate(typeof(Logs)));
+    }
 
+    /// <summary>Initializes the page from an explicit composition contract.</summary>
+    internal Statistics(StatisticsPageComposition.Dependencies dependencies)
+    {
+        ArgumentNullException.ThrowIfNull(dependencies);
+        _viewModel = dependencies.CreateViewModel(OpenLogs);
         InitializeComponent();
         DataContext = _viewModel;
+    }
+
+    private async void Page_Loaded(object sender, RoutedEventArgs e)
+    {
+        await _loadSession.RunAsync(_viewModel.LoadAsync);
+    }
+
+    private void Page_Unloaded(object sender, RoutedEventArgs e)
+    {
+        _loadSession.Cancel();
+    }
+
+    /// <summary>Navigates to the logs page inside the owning frame.</summary>
+    private void OpenLogs()
+    {
+        Frame.Navigate(typeof(Logs));
     }
 }

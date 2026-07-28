@@ -26,6 +26,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly Action<string, string, string, string?> _appendLog;
     private readonly Func<string, string> _getString;
     private readonly ApplicationLifecycleService _lifecycle;
+    private readonly StartupLaunchService _startupLaunch;
 
     internal ApplicationActionService(
         AppSettingsService settings,
@@ -36,7 +37,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         ITriggerRuntimeEventPublisher triggerEvents,
         Action<string, string, string, string?> appendLog,
         Func<string, string> getString,
-        ApplicationLifecycleService lifecycle)
+        ApplicationLifecycleService lifecycle,
+        StartupLaunchService startupLaunch)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _network = network ?? throw new ArgumentNullException(nameof(network));
@@ -47,6 +49,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
+        _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
         if (Interlocked.CompareExchange(ref _instance, this, null) is not null)
         {
             throw new InvalidOperationException("The primary application action service is already configured.");
@@ -59,8 +62,10 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         {
             case ApplicationActionKind.SetLaunchAtStartup:
                 bool launchAtStartup = ParseBoolean(value);
+                await _startupLaunch
+                    .SetEnabledAsync(launchAtStartup, cancellationToken)
+                    .ConfigureAwait(false);
                 _settings.LaunchAtStartupEnabled = launchAtStartup;
-                await StartupLaunchService.Instance.SetEnabledAsync(launchAtStartup).ConfigureAwait(false);
                 break;
             case ApplicationActionKind.SetTransparentProxy:
                 _settings.TransparentProxyEnabled = ParseBoolean(value);

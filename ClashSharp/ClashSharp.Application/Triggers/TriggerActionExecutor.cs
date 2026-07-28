@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
 
 namespace ClashSharp.ApplicationModel.Triggers;
@@ -104,7 +105,12 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
         {
             throw;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (
+            ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            throw;
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             TryReportNotificationFailure(execution, exception);
         }
@@ -120,7 +126,10 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
 
             if (action.State == TriggerOutboxState.HandedOff)
             {
-                results.Add(await ReconcileHandedOffAsync(action, cancellationToken).ConfigureAwait(false));
+                results.Add(await ReconcileHandedOffAsync(
+                    action,
+                    admissionLease,
+                    cancellationToken).ConfigureAwait(false));
                 break;
             }
 
@@ -224,14 +233,42 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
 
     private async Task<TriggerActionResult> ReconcileHandedOffAsync(
         TriggerOutboxAction action,
+        MutationAdmissionLease admissionLease,
         CancellationToken cancellationToken)
     {
         TriggerActionProbeResult probe = await _runtime.ProbeAsync(
             action,
             cancellationToken).ConfigureAwait(false);
-        if (probe.Status != TriggerActionProbeStatus.Desired)
+        if (probe.Status == TriggerActionProbeStatus.Unknown)
         {
             return ToTerminalResult(action);
+        }
+
+        if (probe.Status == TriggerActionProbeStatus.NotDesired)
+        {
+            TriggerActionApplyResult reapplied = await _runtime.ApplyAsync(
+                action,
+                admissionLease,
+                cancellationToken).ConfigureAwait(false);
+            return reapplied.Status switch
+            {
+                TriggerActionApplyStatus.HandedOff => new TriggerActionResult(
+                    action,
+                    TriggerOutboxState.HandedOff,
+                    null),
+                TriggerActionApplyStatus.Failed => await CommitTerminalAsync(
+                    action,
+                    TriggerOutboxState.Failed,
+                    reapplied.DiagnosticCode,
+                    cancellationToken).ConfigureAwait(false),
+                TriggerActionApplyStatus.Uncertain => await CommitTerminalAsync(
+                    action,
+                    TriggerOutboxState.Uncertain,
+                    reapplied.DiagnosticCode,
+                    cancellationToken).ConfigureAwait(false),
+                _ => throw new InvalidOperationException(
+                    "A recoverable lifecycle handoff returned an incompatible application result."),
+            };
         }
 
         TriggerOutboxAction current = await ReadActionRequiredAsync(
@@ -397,7 +434,7 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
         {
             _firedNotifications.ReportFailure(execution, notificationException);
         }
-        catch (Exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             // Notification diagnostics are also ancillary and must never block business actions.
         }

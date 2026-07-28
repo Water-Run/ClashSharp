@@ -1,12 +1,3 @@
-/*
- * Core Configuration Service
- * Provides local mihomo configuration directory management and default configuration generation
- *
- * @author: WaterRun
- * @file: Service/CoreConfigurationService.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.IO;
 using System.Text;
@@ -49,13 +40,16 @@ internal interface ICoreConfigurationValidator
 /// <summary>Manages local mihomo configuration paths and default configuration generation.</summary>
 /// <remarks>
 /// Invariants: The configuration directory is created before a default configuration is written.
-/// Thread safety: Public mutation methods serialize filesystem access through a private lock.
+/// Thread safety: Public filesystem reads and mutations serialize access through a private lock.
 /// Side effects: Creates directories and writes the local mihomo configuration file.
 /// </remarks>
 public sealed partial class CoreConfigurationService
 {
     /// <summary>Synchronization object guarding filesystem mutations for this service lifetime.</summary>
     private readonly object _syncLock = new();
+
+    /// <summary>Serializes complete import transactions by normalized profile path.</summary>
+    private readonly ProfileImportGate _profileImportGate = new();
 
     /// <summary>Absolute directory path for mihomo runtime configuration.</summary>
     private readonly string _configurationDirectoryPath;
@@ -71,6 +65,10 @@ public sealed partial class CoreConfigurationService
 
     private readonly Func<string, string> _getString;
 
+    private readonly Func<string, string> _readAllText;
+
+    private readonly Action<string, string, Encoding> _writeAllText;
+
     /// <summary>Initializes the configuration service and resolves configuration paths.</summary>
     internal CoreConfigurationService(
         string configurationDirectoryPath,
@@ -78,6 +76,26 @@ public sealed partial class CoreConfigurationService
         ICoreConfigurationProfileMetrics profileMetrics,
         ICoreConfigurationValidator validator,
         Func<string, string> getString)
+        : this(
+            configurationDirectoryPath,
+            settings,
+            profileMetrics,
+            validator,
+            getString,
+            File.ReadAllText,
+            File.WriteAllText)
+    {
+    }
+
+    /// <summary>Initializes the configuration service with injectable text I/O boundaries.</summary>
+    internal CoreConfigurationService(
+        string configurationDirectoryPath,
+        ICoreConfigurationSettings settings,
+        ICoreConfigurationProfileMetrics profileMetrics,
+        ICoreConfigurationValidator validator,
+        Func<string, string> getString,
+        Func<string, string> readAllText,
+        Action<string, string, Encoding> writeAllText)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configurationDirectoryPath);
 
@@ -87,16 +105,21 @@ public sealed partial class CoreConfigurationService
         _profileMetrics = profileMetrics ?? throw new ArgumentNullException(nameof(profileMetrics));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        _readAllText = readAllText ?? throw new ArgumentNullException(nameof(readAllText));
+        _writeAllText = writeAllText ?? throw new ArgumentNullException(nameof(writeAllText));
     }
 
     /// <summary>Gets the current local mihomo configuration state.</summary>
     /// <returns>A <see cref="CoreConfigurationState"/> snapshot for the managed configuration file.</returns>
     public CoreConfigurationState GetState()
     {
-        return new CoreConfigurationState(
-            _configurationDirectoryPath,
-            _configurationFilePath,
-            File.Exists(_configurationFilePath));
+        lock (_syncLock)
+        {
+            return new CoreConfigurationState(
+                _configurationDirectoryPath,
+                _configurationFilePath,
+                File.Exists(_configurationFilePath));
+        }
     }
 
     /// <summary>Ensures the local configuration directory and default configuration file exist.</summary>
@@ -138,7 +161,10 @@ public sealed partial class CoreConfigurationService
             Directory.CreateDirectory(_configurationDirectoryPath);
 
             string configText = BuildRuntimeConfiguration(mixedPort, mode, transparentProxyEnabled);
-            File.WriteAllText(_configurationFilePath, configText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            _writeAllText(
+                _configurationFilePath,
+                configText,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             return GetState();
         }
@@ -184,34 +210,68 @@ public sealed partial class CoreConfigurationService
 
         string profileDirectory = GetProfileDirectoryPath(normalizedProfileId);
         string profileConfigPath = Path.Combine(profileDirectory, "config.yaml");
-        string backupPath = Path.Combine(profileDirectory, "config.yaml.bak");
+        string transactionId = Guid.NewGuid().ToString("N");
+        string stagingPath = Path.Combine(
+            profileDirectory,
+            $"config.yaml.staging.{transactionId}");
+        string backupPath = Path.Combine(
+            profileDirectory,
+            $"config.yaml.backup.{transactionId}");
         int nodeCount = _profileMetrics.CountNodes(normalizedText);
         int ruleCount = _profileMetrics.CountRules(normalizedText);
 
-        lock (_syncLock)
-        {
-            Directory.CreateDirectory(profileDirectory);
-            if (File.Exists(profileConfigPath))
-            {
-                File.Copy(profileConfigPath, backupPath, overwrite: true);
-            }
-
-            File.WriteAllText(profileConfigPath, normalizedText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        }
-
+        using IDisposable transactionLease = await _profileImportGate
+            .EnterAsync(normalizedProfileId, cancellationToken)
+            .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        bool hadCommittedConfiguration = false;
+        bool commitAttempted = false;
         try
         {
-            await _validator.ValidateAsync(profileDirectory, profileConfigPath, cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            RestoreProfileBackup(profileConfigPath, backupPath);
-            throw;
-        }
+            lock (_syncLock)
+            {
+                Directory.CreateDirectory(profileDirectory);
+                hadCommittedConfiguration = File.Exists(profileConfigPath);
+                if (hadCommittedConfiguration)
+                {
+                    File.Copy(profileConfigPath, backupPath, overwrite: false);
+                }
 
-        if (File.Exists(backupPath))
+                _writeAllText(
+                    stagingPath,
+                    normalizedText,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            }
+
+            await _validator
+                .ValidateAsync(profileDirectory, stagingPath, cancellationToken)
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            lock (_syncLock)
+            {
+                commitAttempted = true;
+                File.Move(stagingPath, profileConfigPath, overwrite: true);
+                DeleteFileIfPresent(backupPath);
+            }
+        }
+        catch (Exception importFailure)
         {
-            File.Delete(backupPath);
+            Exception? rollbackFailure = TryRollbackProfileImport(
+                profileConfigPath,
+                stagingPath,
+                backupPath,
+                hadCommittedConfiguration,
+                commitAttempted);
+            if (rollbackFailure is not null)
+            {
+                throw new AggregateException(
+                    "Profile import failed and its private transaction could not be rolled back.",
+                    importFailure,
+                    rollbackFailure);
+            }
+
+            throw;
         }
 
         return new ProfileImportResult(
@@ -231,6 +291,28 @@ public sealed partial class CoreConfigurationService
     {
         ArgumentNullException.ThrowIfNull(profileId);
         return Path.Combine(GetProfileDirectoryPath(NormalizeProfileId(profileId)), "config.yaml");
+    }
+
+    /// <summary>Tries to read an imported profile configuration as one complete text snapshot.</summary>
+    /// <param name="profileId">Stable profile identifier. Must not be null.</param>
+    /// <param name="configurationText">Configuration text when the profile exists; otherwise null.</param>
+    /// <returns>True when the profile configuration exists; otherwise false.</returns>
+    public bool TryReadProfileConfigurationText(string profileId, out string? configurationText)
+    {
+        ArgumentNullException.ThrowIfNull(profileId);
+
+        lock (_syncLock)
+        {
+            string profileConfigPath = GetProfileConfigurationPath(profileId);
+            if (!File.Exists(profileConfigPath))
+            {
+                configurationText = null;
+                return false;
+            }
+
+            configurationText = _readAllText(profileConfigPath);
+            return true;
+        }
     }
 
     /// <summary>Validates an already-imported profile configuration with the bundled mihomo binary when available.</summary>
@@ -253,6 +335,11 @@ public sealed partial class CoreConfigurationService
         string normalizedProfileId = NormalizeProfileId(profileId);
         string profileDirectory = GetProfileDirectoryPath(normalizedProfileId);
         string profileConfigPath = Path.Combine(profileDirectory, "config.yaml");
+
+        using IDisposable transactionLease = await _profileImportGate
+            .EnterAsync(normalizedProfileId, cancellationToken)
+            .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         if (!File.Exists(profileConfigPath))
         {
             throw new FileNotFoundException("Imported profile configuration was not found.", profileConfigPath);
@@ -282,31 +369,58 @@ public sealed partial class CoreConfigurationService
         string profileConfigPath = GetProfileConfigurationPath(activeProfileId);
         if (File.Exists(profileConfigPath) && !StringComparer.Ordinal.Equals(activeProfileId, ProfileCatalogIds.BuiltInDirect))
         {
-            string profileText = File.ReadAllText(profileConfigPath);
+            string profileText = _readAllText(profileConfigPath);
             return MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(profileText, mixedPort, mode, transparentProxyEnabled);
         }
 
         return MihomoRuntimeConfigurationBuilder.BuildDefaultConfiguration(mixedPort, mode, transparentProxyEnabled);
     }
 
-    /// <summary>Restores the previous imported profile configuration after failed validation.</summary>
-    /// <param name="profileConfigPath">Current profile configuration path. Must not be null.</param>
-    /// <param name="backupPath">Backup path. Must not be null.</param>
-    private static void RestoreProfileBackup(string profileConfigPath, string backupPath)
+    /// <summary>Restores the previous committed configuration and removes only this transaction's sidecars.</summary>
+    private Exception? TryRollbackProfileImport(
+        string profileConfigPath,
+        string stagingPath,
+        string backupPath,
+        bool hadCommittedConfiguration,
+        bool commitAttempted)
     {
         ArgumentNullException.ThrowIfNull(profileConfigPath);
+        ArgumentNullException.ThrowIfNull(stagingPath);
         ArgumentNullException.ThrowIfNull(backupPath);
 
-        if (File.Exists(backupPath))
+        try
         {
-            File.Copy(backupPath, profileConfigPath, overwrite: true);
-            File.Delete(backupPath);
-            return;
-        }
+            lock (_syncLock)
+            {
+                if (commitAttempted)
+                {
+                    if (hadCommittedConfiguration)
+                    {
+                        File.Copy(backupPath, profileConfigPath, overwrite: true);
+                    }
+                    else
+                    {
+                        DeleteFileIfPresent(profileConfigPath);
+                    }
+                }
 
-        if (File.Exists(profileConfigPath))
+                DeleteFileIfPresent(stagingPath);
+                DeleteFileIfPresent(backupPath);
+            }
+
+            return null;
+        }
+        catch (Exception rollbackFailure)
         {
-            File.Delete(profileConfigPath);
+            return rollbackFailure;
+        }
+    }
+
+    private static void DeleteFileIfPresent(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
         }
     }
 

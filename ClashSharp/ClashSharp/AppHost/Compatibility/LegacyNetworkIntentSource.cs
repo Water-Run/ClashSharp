@@ -5,6 +5,16 @@ using ClashSharp.Service;
 
 namespace ClashSharp.Hosting.Compatibility;
 
+/// <summary>Chooses the network state that must remain after one host shutdown path.</summary>
+internal enum LegacyNetworkShutdownPolicy
+{
+    /// <summary>Honors the user's configured normal-exit behavior.</summary>
+    Configured,
+
+    /// <summary>Leaves startup restore fallback cleanup disabled even when normal exit preserves takeover.</summary>
+    StartupRestoreFallback,
+}
+
 /// <summary>Reads legacy settings once to construct validated application-layer network intents.</summary>
 internal sealed class LegacyNetworkIntentSource(AppSettingsService settings)
 {
@@ -31,13 +41,45 @@ internal sealed class LegacyNetworkIntentSource(AppSettingsService settings)
 
     public NetworkIntent CreateShutdown()
     {
-        ClashSharpMode mode = settings.RestoreProxyOnExit
-            ? ClashSharpMode.Disabled
-            : GetSupportedCurrentMode();
-        return NetworkIntent.Shutdown(
-            mode,
+        return CreateShutdownIntent(
+            GetSupportedCurrentMode(),
+            settings.RestoreProxyOnExit,
             settings.TransparentProxyEnabled,
-            settings.MixedPort);
+            settings.MixedPort,
+            LegacyNetworkShutdownPolicy.Configured);
+    }
+
+    public NetworkIntent CreateStartupRestoreFallbackShutdown()
+    {
+        return CreateShutdownIntent(
+            GetSupportedCurrentMode(),
+            settings.RestoreProxyOnExit,
+            settings.TransparentProxyEnabled,
+            settings.MixedPort,
+            LegacyNetworkShutdownPolicy.StartupRestoreFallback);
+    }
+
+    internal static NetworkIntent CreateShutdownIntent(
+        ClashSharpMode currentMode,
+        bool restoreProxyOnExit,
+        bool transparentProxyEnabled,
+        int mixedPort,
+        LegacyNetworkShutdownPolicy policy)
+    {
+        if (!Enum.IsDefined(policy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(policy));
+        }
+
+        ClashSharpMode mode = policy == LegacyNetworkShutdownPolicy.StartupRestoreFallback
+            || restoreProxyOnExit
+                ? ClashSharpMode.Disabled
+                : currentMode;
+        bool finalTransparentProxyEnabled =
+            policy == LegacyNetworkShutdownPolicy.StartupRestoreFallback
+                ? false
+                : transparentProxyEnabled;
+        return NetworkIntent.Shutdown(mode, finalTransparentProxyEnabled, mixedPort);
     }
 
     private ClashSharpMode GetSupportedCurrentMode()

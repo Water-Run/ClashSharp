@@ -1,12 +1,3 @@
-/*
- * Startup Launch Service
- * Synchronizes user startup preference with the packaged Windows startup task
- *
- * @author: WaterRun
- * @file: Service/StartupLaunchService.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -41,10 +32,44 @@ internal interface IStartupLaunchTask
     StartupLaunchTaskState State { get; }
 
     /// <summary>Requests startup task enablement from Windows.</summary>
-    Task RequestEnableAsync();
+    Task<StartupLaunchTaskState> RequestEnableAsync();
 
     /// <summary>Disables startup launch.</summary>
     void Disable();
+}
+
+/// <summary>Classifies a failed startup-launch update without losing the platform failure.</summary>
+internal enum StartupLaunchUpdateFailure
+{
+    PlatformFailure,
+    EnableDenied,
+    UnsupportedState,
+    VerificationFailed,
+}
+
+/// <summary>Reports that Windows did not accept or verify a requested startup-launch update.</summary>
+internal sealed class StartupLaunchUpdateException : InvalidOperationException
+{
+    public StartupLaunchUpdateException(
+        bool desiredEnabled,
+        StartupLaunchUpdateFailure failure,
+        StartupLaunchTaskState? observedState,
+        Exception? innerException = null)
+        : base(
+            $"Startup launch could not be set to '{desiredEnabled}'. " +
+            $"Failure: '{failure}', observed state: '{observedState?.ToString() ?? "Unavailable"}'.",
+            innerException)
+    {
+        DesiredEnabled = desiredEnabled;
+        Failure = failure;
+        ObservedState = observedState;
+    }
+
+    public bool DesiredEnabled { get; }
+
+    public StartupLaunchUpdateFailure Failure { get; }
+
+    public StartupLaunchTaskState? ObservedState { get; }
 }
 
 /// <summary>Persists startup launch warning logs.</summary>
@@ -95,16 +120,56 @@ internal sealed partial class StartupLaunchService
     }
 
     /// <summary>Requests the startup task state to match <paramref name="isEnabled"/>.</summary>
-    public async Task SetEnabledAsync(bool isEnabled)
+    public async Task SetEnabledAsync(bool isEnabled, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         try
         {
             IStartupLaunchTask startupTask = await _taskProvider.GetAsync(TaskId).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (startupTask.State == StartupLaunchTaskState.Other)
+            {
+                throw CreateUpdateException(
+                    isEnabled,
+                    StartupLaunchUpdateFailure.UnsupportedState,
+                    startupTask.State);
+            }
+
             if (isEnabled)
             {
                 if (startupTask.State == StartupLaunchTaskState.Disabled)
                 {
-                    await startupTask.RequestEnableAsync().ConfigureAwait(false);
+                    StartupLaunchTaskState requestedState = await startupTask
+                        .RequestEnableAsync()
+                        .ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (requestedState == StartupLaunchTaskState.Disabled)
+                    {
+                        throw CreateUpdateException(
+                            isEnabled,
+                            StartupLaunchUpdateFailure.EnableDenied,
+                            requestedState);
+                    }
+
+                    if (requestedState == StartupLaunchTaskState.Other)
+                    {
+                        throw CreateUpdateException(
+                            isEnabled,
+                            StartupLaunchUpdateFailure.UnsupportedState,
+                            requestedState);
+                    }
+
+                    IStartupLaunchTask verifiedTask = await _taskProvider
+                        .GetAsync(TaskId)
+                        .ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (verifiedTask.State != StartupLaunchTaskState.Enabled)
+                    {
+                        throw CreateUpdateException(
+                            isEnabled,
+                            StartupLaunchUpdateFailure.VerificationFailed,
+                            verifiedTask.State);
+                    }
                 }
 
                 return;
@@ -113,11 +178,35 @@ internal sealed partial class StartupLaunchService
             if (startupTask.State == StartupLaunchTaskState.Enabled)
             {
                 startupTask.Disable();
+                cancellationToken.ThrowIfCancellationRequested();
+                IStartupLaunchTask verifiedTask = await _taskProvider
+                    .GetAsync(TaskId)
+                    .ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (verifiedTask.State != StartupLaunchTaskState.Disabled)
+                {
+                    throw CreateUpdateException(
+                        isEnabled,
+                        StartupLaunchUpdateFailure.VerificationFailed,
+                        verifiedTask.State);
+                }
             }
+        }
+        catch (StartupLaunchUpdateException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception) when (IsPlatformFailure(exception))
         {
-            AppendUpdateFailure(exception);
+            throw CreateUpdateException(
+                isEnabled,
+                StartupLaunchUpdateFailure.PlatformFailure,
+                observedState: null,
+                exception);
         }
     }
 
@@ -126,7 +215,23 @@ internal sealed partial class StartupLaunchService
         return exception is InvalidOperationException or
             UnauthorizedAccessException or
             ArgumentException or
+            NotSupportedException or
             COMException;
+    }
+
+    private StartupLaunchUpdateException CreateUpdateException(
+        bool desiredEnabled,
+        StartupLaunchUpdateFailure failure,
+        StartupLaunchTaskState? observedState,
+        Exception? innerException = null)
+    {
+        StartupLaunchUpdateException exception = new(
+            desiredEnabled,
+            failure,
+            observedState,
+            innerException);
+        AppendUpdateFailure(innerException ?? exception);
+        return exception;
     }
 
     private void AppendUpdateFailure(Exception exception)

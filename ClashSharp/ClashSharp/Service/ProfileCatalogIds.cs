@@ -1,12 +1,3 @@
-/*
- * Profile Catalog Identifiers
- * Defines stable profile identifiers shared across catalog, settings, parser, and statistics services
- *
- * @author: WaterRun
- * @file: Service/ProfileCatalogIds.cs
- * @date: 2026-06-15
- */
-
 namespace ClashSharp.Service;
 
 /// <summary>Defines stable profile identifiers used across Clash# services.</summary>

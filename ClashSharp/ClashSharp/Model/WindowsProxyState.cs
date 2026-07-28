@@ -1,12 +1,3 @@
-/*
- * Windows Proxy State Model
- * Represents the current Windows system proxy registry state
- *
- * @author: WaterRun
- * @file: Model/WindowsProxyState.cs
- * @date: 2026-06-15
- */
-
 namespace ClashSharp.Model;
 
 /// <summary>Represents the Windows per-user system proxy state.</summary>

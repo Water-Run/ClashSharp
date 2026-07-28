@@ -1,12 +1,3 @@
-/*
- * Log Storage Footprint Tests
- * Verifies SQLite storage footprint calculation for database and WAL sidecar files
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/LogStorageFootprintTests.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.IO;
 using System.Linq;

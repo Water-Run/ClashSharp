@@ -1,12 +1,3 @@
-/*
- * Mihomo Profile Preview Parser Tests
- * Verifies conservative mihomo profile preview extraction for proxy nodes, providers, and rules
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/MihomoProfilePreviewParserTests.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Linq;
 using ClashSharp.Model;

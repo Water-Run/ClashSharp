@@ -1,12 +1,3 @@
-/*
- * Settings ViewModel Tests
- * Verifies the settings view model owns settings state transitions without WinUI controls
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/SettingsViewModelTests.cs
- * @date: 2026-06-17
- */
-
 using System.Collections.Specialized;
 using System.Net.Http;
 using System.Reflection;
@@ -231,6 +222,7 @@ public sealed class SettingsViewModelTests
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.German };
         int applyCount = 0;
         SettingsViewModel viewModel = new(store, _ => applyCount++, () => { });
+        viewModel.Load();
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
@@ -247,6 +239,7 @@ public sealed class SettingsViewModelTests
     {
         FakeSettingsStore store = new() { TransparentProxyEnabled = true };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
@@ -264,6 +257,7 @@ public sealed class SettingsViewModelTests
         FakeSettingsStore store = new() { TransparentProxyEnabled = false };
         FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"));
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+        viewModel.Load();
 
         viewModel.TransparentProxyEnabled = true;
 
@@ -326,6 +320,54 @@ public sealed class SettingsViewModelTests
 
         Assert.False(store.TransparentProxyEnabled);
         Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
+    }
+
+    /// <summary>Verifies an uninitialized service cache cannot erase the user's transparent proxy preference.</summary>
+    [Fact]
+    public void Load_WhenTransparentProxyPreferenceEnabledAndServiceStatusUnknown_PreservesPreference()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = true };
+        FakeMihomoServiceController service = new(MihomoServiceStatus.Unknown("Not checked"));
+
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+        viewModel.Load();
+
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
+        Assert.Equal("Not checked", viewModel.MihomoServiceStatusText);
+    }
+
+    [Fact]
+    public void Load_WhenUnconfirmedStatusCarriesStaleInstalledBits_DisablesToggleAndPreservesPreference()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = true };
+        MihomoServiceStatus unconfirmed = new(true, true, "Not checked")
+        {
+            ObservationState = MihomoServiceObservationState.Unknown,
+        };
+        FakeMihomoServiceController service = new(unconfirmed);
+
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+        viewModel.Load();
+
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
+    }
+
+    [Fact]
+    public void Load_WhenServiceStatusIsDefault_UsesUnknownStatusText()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = true };
+        FakeMihomoServiceController service = new(default);
+
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+        viewModel.Load();
+
+        Assert.Equal("MihomoService.Status.Unknown", viewModel.MihomoServiceStatusText);
+        Assert.True(store.TransparentProxyEnabled);
         Assert.False(viewModel.CanToggleTransparentProxy);
     }
 
@@ -452,6 +494,7 @@ public sealed class SettingsViewModelTests
     {
         FakeSettingsStore store = new() { MixedPort = 10000 };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
 
         bool changed = viewModel.SetMixedPort(input);
 
@@ -592,6 +635,7 @@ public sealed class SettingsViewModelTests
     {
         FakeSettingsStore store = new() { StartupConflictCheckEnabled = true };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
@@ -612,6 +656,7 @@ public sealed class SettingsViewModelTests
             NotificationLevel = NotificationLevel.Default,
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
@@ -712,6 +757,7 @@ public sealed class SettingsViewModelTests
     {
         FakeSettingsStore store = new();
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        viewModel.Load();
 
         Assert.Equal("Settings.Section.Startup", ReadProperty<string>(viewModel, "StartupSectionTitleText"));
         Assert.Equal("Settings.CheckStartupConflicts.Title", ReadProperty<string>(viewModel, "CheckStartupConflictsTitleText"));
@@ -727,6 +773,7 @@ public sealed class SettingsViewModelTests
     {
         FakeSettingsStore store = new();
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        viewModel.Load();
 
         Assert.Equal("Settings.AppAccentColor.Title", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
         Assert.Equal("Settings.AppAccentColor.Description", ReadProperty<string>(viewModel, "AppAccentColorDescriptionText"));
@@ -814,6 +861,7 @@ public sealed class SettingsViewModelTests
             MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter,
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
 
         bool changed = viewModel.SetMainlandChinaFeatureModeIndex(index);
 
@@ -851,6 +899,7 @@ public sealed class SettingsViewModelTests
             MainlandChinaUrlBlockingEnabled = false,
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        viewModel.Load();
 
         viewModel.SetMainlandChinaFeatureModeIndex((int)MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter);
 
@@ -932,6 +981,7 @@ public sealed class SettingsViewModelTests
     public void ConnectionTestUrlSummary_UsesKnownLocalizedProviderNames()
     {
         SettingsViewModel defaultViewModel = new(new FakeSettingsStore(), _ => { }, () => { }, key => key);
+        defaultViewModel.Load();
 
         Assert.Equal(
             "Settings.ConnectionTestUrl.Provider.Google | Settings.ConnectionTestUrl.Provider.GitHub | Settings.ConnectionTestUrl.Provider.Baidu",
@@ -944,6 +994,7 @@ public sealed class SettingsViewModelTests
             ConnectionTestDirectUrl = "https://www.baidu.com",
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        viewModel.Load();
 
         Assert.Equal(
             "Settings.ConnectionTestUrl.Provider.Google | Settings.ConnectionTestUrl.Provider.Custom | Settings.ConnectionTestUrl.Provider.Baidu",
@@ -960,6 +1011,7 @@ public sealed class SettingsViewModelTests
     {
         FakeSettingsStore store = new() { ConnectionSamplingIntervalSeconds = 30 };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
 
         bool changed = viewModel.SetConnectionSamplingIntervalSeconds(input);
 
@@ -1042,9 +1094,9 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Info", entry.Level);
         Assert.Equal("ConnectionTest", entry.Category);
         Assert.Equal("Settings.ConnectionTest.AllPassed", entry.Message);
-        Assert.Contains("https://www.google.com", entry.Detail);
         Assert.Contains("HTTP 204", entry.Detail);
         Assert.Contains("Settings.ConnectionTestUrl.Direct", entry.Detail);
+        Assert.DoesNotContain("https://", entry.Detail, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies a mixed connection-test result reports a partial-failure summary state.</summary>
@@ -1078,7 +1130,11 @@ public sealed class SettingsViewModelTests
 
         Assert.Equal(3, rows.Count);
         Assert.All(rows, row => Assert.False(ReadObjectProperty<bool>(row, "Succeeded")));
-        Assert.All(rows, row => Assert.Equal("failed network unavailable", ReadObjectProperty<string>(row, "StatusText")));
+        Assert.All(
+            rows,
+            row => Assert.Equal(
+                "failed Application.UnexpectedError",
+                ReadObjectProperty<string>(row, "StatusText")));
         Assert.Equal("Settings.ConnectionTest.AllFailed", ReadObjectProperty<string>(report, "SummaryText"));
         Assert.Equal("AllFailed", ReadObjectProperty<object>(report, "SummaryState").ToString());
         Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
@@ -1183,6 +1239,7 @@ public sealed class SettingsViewModelTests
             theme => appliedTheme = theme,
             () => samplingRestarts++,
             isEnabled => appliedLaunch = isEnabled);
+        viewModel.Load();
 
         InvokeMethod<object?>(viewModel, "ResetBasicSettingsToDefaults", Array.Empty<object>());
 
@@ -1234,7 +1291,7 @@ public sealed class SettingsViewModelTests
 
     /// <summary>Verifies startup conflict checks are delegated through an injected checker using the current mixed port.</summary>
     [Fact]
-    public void CheckStartupConflicts_UsesInjectedCheckerAndMixedPort()
+    public async Task CheckStartupConflictsAsync_UsesInjectedCheckerAndMixedPort()
     {
         FakeSettingsStore store = new() { MixedPort = 12345 };
         int? checkedPort = null;
@@ -1244,20 +1301,37 @@ public sealed class SettingsViewModelTests
             "Port 12345 is occupied.",
             "Inspect",
             _ => Task.FromResult(new StartupConflictRepairResult(false, "No repair")));
-        SettingsViewModel viewModel = CreateStartupConflictViewModel(store, port =>
+        SettingsViewModel viewModel = CreateStartupConflictViewModel(store, (port, cancellationToken) =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
             checkedPort = port;
-            return [expectedIssue];
+            return Task.FromResult<IReadOnlyList<StartupConflictIssue>>([expectedIssue]);
         });
 
-        IReadOnlyList<StartupConflictIssue> issues = InvokeMethod<IReadOnlyList<StartupConflictIssue>>(
-            viewModel,
-            "CheckStartupConflicts",
-            Array.Empty<object>());
+        IReadOnlyList<StartupConflictIssue> issues =
+            await viewModel.CheckStartupConflictsAsync(CancellationToken.None);
 
         Assert.Equal(12345, checkedPort);
         StartupConflictIssue issue = Assert.Single(issues);
         Assert.Same(expectedIssue, issue);
+    }
+
+    [Fact]
+    public async Task CheckStartupConflictsAsync_WhenPageLifetimeIsCanceled_PropagatesCancellation()
+    {
+        FakeSettingsStore store = new() { MixedPort = 12345 };
+        SettingsViewModel viewModel = CreateStartupConflictViewModel(
+            store,
+            static (_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult<IReadOnlyList<StartupConflictIssue>>([]);
+            });
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => viewModel.CheckStartupConflictsAsync(cancellation.Token));
     }
 
     private sealed class FakeSettingsStore : ISettingsStore
@@ -1321,7 +1395,7 @@ public sealed class SettingsViewModelTests
         Func<Uri, CancellationToken, Task<int>> testConnectionAsync,
         Action<string, string, string, string?>? appendLog = null)
     {
-        return new SettingsViewModel(
+        SettingsViewModel viewModel = new(
             new FakeSettingsStore(),
             _ => { },
             _ => { },
@@ -1338,15 +1412,31 @@ public sealed class SettingsViewModelTests
                 _ => key,
             },
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            new FakeApplicationErrorSink(),
+            () => { },
+            () => { },
+            () => false,
+            () => { },
+            () => { },
             testConnectionAsync: testConnectionAsync,
             resetAllSettings: () => { },
             clearAllData: () => { },
-            checkStartupConflicts: _ => [],
+            checkStartupConflictsAsync: NoStartupConflictsAsync,
             notifyConnectionTestTimeout: _ => { },
             appendLog: appendLog ?? ((_, _, _, _) => { }));
+        viewModel.Load();
+        return viewModel;
     }
 
     private sealed record LogEntry(string Level, string Category, string Message, string? Detail);
+
+    private static Task<IReadOnlyList<StartupConflictIssue>> NoStartupConflictsAsync(
+        int mixedPort,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<IReadOnlyList<StartupConflictIssue>>([]);
+    }
 
     private static SettingsViewModel CreateRuntimeMutationViewModel(
         FakeSettingsStore store,
@@ -1354,7 +1444,7 @@ public sealed class SettingsViewModelTests
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
         IApplicationErrorSink? errorSink = null)
     {
-        return new SettingsViewModel(
+        SettingsViewModel viewModel = new(
             store,
             _ => { },
             _ => { },
@@ -1362,9 +1452,17 @@ public sealed class SettingsViewModelTests
             _ => { },
             key => key,
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            errorSink ?? new FakeApplicationErrorSink(),
+            () => { },
+            () => { },
+            () => false,
+            () => { },
+            () => { },
+            (_, _) => Task.FromResult(204),
             restartConnectionSamplingAsync: restartConnectionSamplingAsync,
-            applyLaunchAtStartupAsync: applyLaunchAtStartupAsync,
-            errorSink: errorSink);
+            applyLaunchAtStartupAsync: applyLaunchAtStartupAsync);
+        viewModel.Load();
+        return viewModel;
     }
 
     private sealed class FakeApplicationErrorSink : IApplicationErrorSink
@@ -1385,7 +1483,7 @@ public sealed class SettingsViewModelTests
         Action resetAllSettings,
         Action clearAllData)
     {
-        return new SettingsViewModel(
+        SettingsViewModel viewModel = new(
             store,
             applyLanguage,
             _ => { },
@@ -1393,19 +1491,27 @@ public sealed class SettingsViewModelTests
             _ => { },
             key => key,
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            new FakeApplicationErrorSink(),
+            () => { },
+            () => { },
+            () => false,
+            () => { },
+            () => { },
             testConnectionAsync: (_, _) => Task.FromResult(204),
             resetAllSettings: resetAllSettings,
             clearAllData: clearAllData,
-            checkStartupConflicts: _ => [],
+            checkStartupConflictsAsync: NoStartupConflictsAsync,
             notifyConnectionTestTimeout: _ => { },
             appendLog: (_, _, _, _) => { });
+        viewModel.Load();
+        return viewModel;
     }
 
     private static SettingsViewModel CreateStartupConflictViewModel(
         FakeSettingsStore store,
-        Func<int, IReadOnlyList<StartupConflictIssue>> checkStartupConflicts)
+        Func<int, CancellationToken, Task<IReadOnlyList<StartupConflictIssue>>> checkStartupConflictsAsync)
     {
-        return new SettingsViewModel(
+        SettingsViewModel viewModel = new(
             store,
             _ => { },
             _ => { },
@@ -1413,19 +1519,27 @@ public sealed class SettingsViewModelTests
             _ => { },
             key => key,
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            new FakeApplicationErrorSink(),
+            () => { },
+            () => { },
+            () => false,
+            () => { },
+            () => { },
             testConnectionAsync: (_, _) => Task.FromResult(204),
             resetAllSettings: () => { },
             clearAllData: () => { },
-            checkStartupConflicts: checkStartupConflicts,
+            checkStartupConflictsAsync: checkStartupConflictsAsync,
             notifyConnectionTestTimeout: _ => { },
             appendLog: (_, _, _, _) => { });
+        viewModel.Load();
+        return viewModel;
     }
 
     private static SettingsViewModel CreateAccentRestartViewModel(
         FakeSettingsStore store,
         Func<AppAccentColorMode, string, bool> isAccentColorRestartPending)
     {
-        return new SettingsViewModel(
+        SettingsViewModel viewModel = new(
             store,
             _ => { },
             _ => { },
@@ -1433,13 +1547,21 @@ public sealed class SettingsViewModelTests
             _ => { },
             key => key,
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            new FakeApplicationErrorSink(),
+            () => { },
+            () => { },
+            () => false,
+            () => { },
+            () => { },
             testConnectionAsync: (_, _) => Task.FromResult(204),
             resetAllSettings: () => { },
             clearAllData: () => { },
-            checkStartupConflicts: _ => [],
+            checkStartupConflictsAsync: NoStartupConflictsAsync,
             isAccentColorRestartPending: isAccentColorRestartPending,
             notifyConnectionTestTimeout: _ => { },
             appendLog: (_, _, _, _) => { });
+        viewModel.Load();
+        return viewModel;
     }
 
     /// <summary>Reads a view model property by name so the red test can specify a new binding contract before implementation.</summary>

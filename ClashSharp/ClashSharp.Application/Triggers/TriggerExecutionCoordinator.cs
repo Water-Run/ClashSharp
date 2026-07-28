@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model.Triggers;
 
@@ -301,7 +302,9 @@ public sealed class TriggerExecutionCoordinator
             admissionLease = await _admissionBarrier.AcquireOrdinaryAsync(
                 cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (
+            cancellationToken.IsCancellationRequested
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return Result(
                 taskId,
@@ -337,7 +340,9 @@ public sealed class TriggerExecutionCoordinator
                     execution,
                     TriggerDispatchStatus.Completed);
             }
-            catch (OperationCanceledException) when (dispatchCancellation.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (
+                dispatchCancellation.IsCancellationRequested
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 return Result(
                     taskId,
@@ -346,7 +351,7 @@ public sealed class TriggerExecutionCoordinator
                     TriggerDispatchStatus.Deferred,
                     "trigger.dispatch.cancelled");
             }
-            catch (Exception)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 return Result(
                     taskId,

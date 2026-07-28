@@ -108,6 +108,50 @@ public sealed class TriggerExitHandoffTests
     }
 
     [Fact]
+    public async Task HandOffAsync_RequestChannelInitiallyBusy_AutomaticallyPromotesDurableExitAfterActiveRequestReleases()
+    {
+        using TriggerExitDirectory directory = new();
+        (SqliteTriggerRepository repository, TriggerExecution execution, _) =
+            await SeedRunningExitAsync(directory.DatabasePath, CurrentEpoch);
+        ApplicationLifetimeRequestChannel requests = new();
+        ApplicationLifetimeRequest blockingRequest = ApplicationLifetimeRequest.Exit("main-window");
+        Assert.True(requests.TryRequest(blockingRequest));
+        TriggerLifecycleHandoffCoordinator handoff = CreateCoordinator(repository, requests);
+        TriggerActionExecutor executor = new(
+            repository,
+            new ExitOnlyRuntime(handoff),
+            NullTriggerFiredNotificationSink.Instance);
+        MutationAdmissionBarrier admission = new();
+        await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
+            CancellationToken.None);
+
+        TriggerActionResult firstResult = Assert.Single(
+            await executor.ExecuteAsync(execution, lease, CancellationToken.None));
+
+        Assert.Equal(TriggerOutboxState.HandedOff, firstResult.FinalState);
+        TriggerOutboxAction handedOffAction =
+            (await ReadActionsAsync(repository, execution.ExecutionId))[0];
+        Assert.Equal(TriggerOutboxState.HandedOff, handedOffAction.State);
+        Assert.Equal(
+            TriggerActionApplyStatus.HandedOff,
+            (await handoff.HandOffAsync(handedOffAction, CancellationToken.None)).Status);
+        Assert.Same(blockingRequest, await requests.ReadAsync(CancellationToken.None));
+        Assert.False(await requests.RetryFailedRequestAsync(
+            blockingRequest,
+            CancellationToken.None));
+
+        ApplicationLifetimeRequest published = await requests.ReadAsync(CancellationToken.None);
+
+        Assert.True(requests.HasAcceptedRequest);
+        Assert.Equal(
+            TriggerLifecycleHandoffIdentity.CreateKey(execution.ExecutionId, 0, CurrentEpoch),
+            published.Handoff?.IdempotencyKey);
+        Assert.True(requests.TryRequest(ApplicationLifetimeRequest.Exit(
+            "trigger-duplicate",
+            published.Handoff!)));
+    }
+
+    [Fact]
     public async Task Repository_RejectsCompletionShortcutWithoutDifferentRecoveryEpoch()
     {
         using TriggerExitDirectory directory = new();
@@ -204,6 +248,67 @@ public sealed class TriggerExitHandoffTests
             action.ActionIndex);
         Assert.Equal(TriggerLifecycleHandoffState.Succeeded, handoff.State);
         Assert.Equal(TriggerOutboxState.Succeeded, (await ReadActionsAsync(repository, execution.ExecutionId))[0].State);
+    }
+
+    [Theory]
+    [InlineData(LifetimeCallbackFaultPoint.WaitForRelease)]
+    [InlineData(LifetimeCallbackFaultPoint.MarkShutdownStarted)]
+    [InlineData(LifetimeCallbackFaultPoint.MarkShutdownSucceeded)]
+    [InlineData(LifetimeCallbackFaultPoint.MarkShutdownFailed)]
+    public async Task ProcessAsync_FailOnceProductionCallback_AutomaticallyRetriesToDurableTerminalState(
+        LifetimeCallbackFaultPoint faultPoint)
+    {
+        using TriggerExitDirectory directory = new();
+        (SqliteTriggerRepository repository, TriggerExecution execution, TriggerOutboxAction action) =
+            await SeedRunningExitAsync(directory.DatabasePath, CurrentEpoch);
+        ApplicationLifetimeRequestChannel requests = new();
+        TriggerLifecycleHandoffCoordinator coordinator = CreateCoordinator(
+            repository,
+            new FailOnceCallbackRequestSink(requests, faultPoint));
+        await coordinator.HandOffAsync(action, CancellationToken.None);
+        ApplicationLifetimeRequest request = await requests.ReadAsync(CancellationToken.None);
+        await coordinator.AcknowledgeReleaseAsync(
+            new TriggerLifecycleHandoffIdentity(execution.ExecutionId, 0, CurrentEpoch),
+            CancellationToken.None);
+        List<string> trace = [];
+        ProcessLifetimeRunner runner = new();
+        runner.AttachHost(new FakeHost(trace)
+        {
+            StopException = faultPoint == LifetimeCallbackFaultPoint.MarkShutdownFailed
+                ? new InvalidOperationException("shutdown failed")
+                : null,
+        });
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => runner.ProcessAsync(request, CancellationToken.None));
+        Assert.Equal(
+            ApplicationLifetimeTerminalStatePersistence.Unconfirmed,
+            request.TerminalStatePersistence);
+        Assert.True(await requests.RetryFailedRequestAsync(request, CancellationToken.None));
+        Assert.Same(request, await requests.ReadAsync(CancellationToken.None));
+
+        if (faultPoint == LifetimeCallbackFaultPoint.MarkShutdownFailed)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => runner.ProcessAsync(request, CancellationToken.None));
+            Assert.False(await requests.RetryFailedRequestAsync(request, CancellationToken.None));
+            Assert.True(runner.HasAttachedHost);
+        }
+        else
+        {
+            await runner.ProcessAsync(request, CancellationToken.None);
+            Assert.False(runner.HasAttachedHost);
+        }
+
+        Assert.Equal(1, trace.Count(entry => entry == "host-stop-enter"));
+        Assert.Equal(
+            ApplicationLifetimeTerminalStatePersistence.Confirmed,
+            request.TerminalStatePersistence);
+        Assert.Equal(
+            faultPoint == LifetimeCallbackFaultPoint.MarkShutdownFailed
+                ? TriggerLifecycleHandoffState.Uncertain
+                : TriggerLifecycleHandoffState.Succeeded,
+            (await ReadHandoffAsync(repository, execution.ExecutionId, 0)).State);
     }
 
     [Fact]
@@ -724,6 +829,73 @@ public sealed class TriggerExitHandoffTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    public enum LifetimeCallbackFaultPoint
+    {
+        WaitForRelease,
+        MarkShutdownStarted,
+        MarkShutdownSucceeded,
+        MarkShutdownFailed,
+    }
+
+    private sealed class FailOnceCallbackRequestSink(
+        ApplicationLifetimeRequestChannel requests,
+        LifetimeCallbackFaultPoint faultPoint) : IApplicationLifetimeRequestSink
+    {
+        public bool TryRequest(ApplicationLifetimeRequest request)
+        {
+            return requests.TryRequest(request.Handoff is null
+                ? request
+                : ApplicationLifetimeRequest.Exit(
+                    request.Source,
+                    new FailOnceCallbackHandoff(request.Handoff, faultPoint)));
+        }
+    }
+
+    private sealed class FailOnceCallbackHandoff(
+        IApplicationLifetimeHandoff inner,
+        LifetimeCallbackFaultPoint faultPoint) : IApplicationLifetimeHandoff
+    {
+        private int _remainingFailures = 1;
+
+        public string IdempotencyKey => inner.IdempotencyKey;
+
+        public async Task WaitForReleaseAsync(CancellationToken cancellationToken)
+        {
+            await inner.WaitForReleaseAsync(cancellationToken);
+            ThrowOnce(LifetimeCallbackFaultPoint.WaitForRelease);
+        }
+
+        public async Task MarkShutdownStartedAsync(CancellationToken cancellationToken)
+        {
+            ThrowOnce(LifetimeCallbackFaultPoint.MarkShutdownStarted);
+            await inner.MarkShutdownStartedAsync(cancellationToken);
+        }
+
+        public async Task MarkShutdownSucceededAsync(CancellationToken cancellationToken)
+        {
+            ThrowOnce(LifetimeCallbackFaultPoint.MarkShutdownSucceeded);
+            await inner.MarkShutdownSucceededAsync(cancellationToken);
+        }
+
+        public async Task MarkShutdownFailedAsync(
+            ApplicationLifetimeShutdownFailureKind failureKind,
+            string diagnosticCode,
+            CancellationToken cancellationToken)
+        {
+            ThrowOnce(LifetimeCallbackFaultPoint.MarkShutdownFailed);
+            await inner.MarkShutdownFailedAsync(failureKind, diagnosticCode, cancellationToken);
+        }
+
+        private void ThrowOnce(LifetimeCallbackFaultPoint current)
+        {
+            if (faultPoint == current
+                && Interlocked.Exchange(ref _remainingFailures, 0) != 0)
+            {
+                throw new InvalidOperationException($"Injected {current} callback failure.");
+            }
+        }
     }
 
     private sealed class FakeHost(List<string> trace) : IApplicationHost

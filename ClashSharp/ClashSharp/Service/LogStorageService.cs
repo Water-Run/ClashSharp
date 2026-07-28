@@ -1,65 +1,17 @@
-/*
- * SQLite Log Storage Service
- * Provides persistent local storage for logs, connection records, traffic snapshots, and cleanup operations
- *
- * @author: WaterRun
- * @file: Service/LogStorageService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using ClashSharp.Model;
 using Microsoft.Data.Sqlite;
 
 namespace ClashSharp.Service;
 
-/// <summary>Summarizes the current SQLite log storage footprint and record counts.</summary>
-/// <param name="DatabasePath">Absolute path to the SQLite database file; never null.</param>
-/// <param name="DatabaseSizeBytes">Current SQLite footprint in bytes, including WAL sidecar files when present.</param>
-/// <param name="LogCount">Total count of log records currently stored.</param>
-/// <param name="ConnectionCount">Total count of connection records currently stored.</param>
-/// <remarks>
-/// Invariants: Count values are non-negative and reflect the database state at query time.
-/// Thread safety: Immutable value type and inherently thread-safe after construction.
-/// Side effects: None.
-/// </remarks>
-public readonly record struct LogStorageSummary(
-    string DatabasePath,
-    long DatabaseSizeBytes,
-    long LogCount,
-    long ConnectionCount);
-
 /// <summary>Previews the impact of deleting a filtered set of log records.</summary>
 /// <param name="EntryCount">Number of log entries that match the cleanup filter.</param>
 /// <param name="EstimatedSizeBytes">Estimated storage occupied by matching entries.</param>
 public readonly record struct LogCleanupPreview(long EntryCount, long EstimatedSizeBytes);
-
-/// <summary>Summarizes long-term traffic and aggregation records stored in SQLite.</summary>
-/// <param name="TotalUploadBytes">Total uploaded bytes estimated from connection records.</param>
-/// <param name="TotalDownloadBytes">Total downloaded bytes estimated from connection records.</param>
-/// <param name="ConnectionCount">Total connection record count.</param>
-/// <param name="SnapshotCount">Total traffic snapshot count.</param>
-/// <param name="ProfileCount">Number of profile traffic aggregation rows.</param>
-/// <param name="NodeCount">Number of node traffic aggregation rows.</param>
-/// <param name="NodeHealthCount">Number of node health rows.</param>
-/// <param name="RuleCount">Number of rule hit aggregation rows.</param>
-/// <remarks>
-/// Invariants: Count and byte values are non-negative and reflect the database state at query time.
-/// Thread safety: Immutable value type and inherently thread-safe after construction.
-/// Side effects: None.
-/// </remarks>
-public readonly record struct TrafficStatisticsSummary(
-    long TotalUploadBytes,
-    long TotalDownloadBytes,
-    long ConnectionCount,
-    long SnapshotCount,
-    long ProfileCount,
-    long NodeCount,
-    long NodeHealthCount,
-    long RuleCount);
 
 /// <summary>Provides SQLite-backed persistence for logs, connection history, and traffic statistics.</summary>
 /// <remarks>
@@ -86,12 +38,6 @@ public sealed partial class LogStorageService
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
 
         _databasePath = Path.GetFullPath(databasePath);
-        string? dataDirectory = Path.GetDirectoryName(_databasePath);
-        if (!string.IsNullOrWhiteSpace(dataDirectory))
-        {
-            Directory.CreateDirectory(dataDirectory);
-        }
-
         _getActiveProfileId = getActiveProfileId ?? throw new ArgumentNullException(nameof(getActiveProfileId));
     }
 
@@ -424,6 +370,10 @@ public sealed partial class LogStorageService
     {
         ArgumentNullException.ThrowIfNull(connections);
 
+        IReadOnlyList<ActiveConnection> snapshot = connections as IReadOnlyList<ActiveConnection>
+            ?? connections.ToList();
+        string activeProfileId = GetActiveProfileId();
+
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -435,7 +385,7 @@ public sealed partial class LogStorageService
 
             using SqliteConnection connection = OpenConnection();
             using SqliteTransaction transaction = connection.BeginTransaction();
-            foreach (ActiveConnection activeConnection in connections)
+            foreach (ActiveConnection activeConnection in snapshot)
             {
                 totalUploadBytes += activeConnection.UploadBytes;
                 totalDownloadBytes += activeConnection.DownloadBytes;
@@ -465,7 +415,14 @@ public sealed partial class LogStorageService
                 ("$createdAt", createdAt),
                 ("$uploadBytes", totalUploadBytes),
                 ("$downloadBytes", totalDownloadBytes));
-            UpsertProfileTraffic(connection, transaction, GetActiveProfileId(), totalUploadBytes, totalDownloadBytes, insertedCount, createdAt);
+            UpsertProfileTraffic(
+                connection,
+                transaction,
+                activeProfileId,
+                totalUploadBytes,
+                totalDownloadBytes,
+                insertedCount,
+                createdAt);
             transaction.Commit();
 
             return insertedCount;
@@ -927,9 +884,19 @@ public sealed partial class LogStorageService
             return;
         }
 
+        EnsureDatabaseDirectoryExists();
         using SqliteConnection connection = OpenConnection();
         LogStorageSchema.EnsureCreated(connection);
         _isInitialized = true;
+    }
+
+    private void EnsureDatabaseDirectoryExists()
+    {
+        string? dataDirectory = Path.GetDirectoryName(_databasePath);
+        if (!string.IsNullOrWhiteSpace(dataDirectory))
+        {
+            Directory.CreateDirectory(dataDirectory);
+        }
     }
 
     /// <summary>Opens a SQLite connection to the configured database path.</summary>

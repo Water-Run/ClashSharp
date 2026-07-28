@@ -9,19 +9,23 @@ public sealed class ApplicationBootstrapper
     private readonly IPrimaryInstanceBootstrap _primaryInstance;
     private readonly Func<IApplicationHost> _hostFactory;
     private readonly ProcessLifetimeRunner _lifetime;
+    private readonly Func<AppLaunchRequest, CancellationToken, Task>? _onPrimaryOwned;
 
     /// <summary>Initializes the ownership-first launch orchestrator.</summary>
     /// <param name="primaryInstance">Minimal process-ownership boundary.</param>
     /// <param name="hostFactory">Lazy host factory invoked only by the primary process.</param>
     /// <param name="lifetime">App-owned outer host lifetime.</param>
+    /// <param name="onPrimaryOwned">Optional callback awaited after arbitration and before host construction.</param>
     public ApplicationBootstrapper(
         IPrimaryInstanceBootstrap primaryInstance,
         Func<IApplicationHost> hostFactory,
-        ProcessLifetimeRunner lifetime)
+        ProcessLifetimeRunner lifetime,
+        Func<AppLaunchRequest, CancellationToken, Task>? onPrimaryOwned = null)
     {
         _primaryInstance = primaryInstance ?? throw new ArgumentNullException(nameof(primaryInstance));
         _hostFactory = hostFactory ?? throw new ArgumentNullException(nameof(hostFactory));
         _lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
+        _onPrimaryOwned = onPrimaryOwned;
     }
 
     /// <summary>Arbitrates ownership, then starts and attaches the primary host.</summary>
@@ -43,6 +47,11 @@ public sealed class ApplicationBootstrapper
         if (ownership != PrimaryInstanceOwnership.Primary)
         {
             throw new InvalidOperationException($"Unsupported primary-instance outcome '{ownership}'.");
+        }
+
+        if (_onPrimaryOwned is not null)
+        {
+            await _onPrimaryOwned(request, cancellationToken);
         }
 
         IApplicationHost host = _hostFactory()
@@ -76,7 +85,7 @@ public sealed class ApplicationBootstrapper
             _ => throw new InvalidOperationException($"Unsupported startup outcome '{startupResult.Outcome}'."),
         };
 
-        if (disposition is ApplicationLaunchDisposition.ExitRequested or ApplicationLaunchDisposition.Fatal)
+        if (disposition == ApplicationLaunchDisposition.ExitRequested)
         {
             await _lifetime.StopAsync(CancellationToken.None).ConfigureAwait(false);
         }

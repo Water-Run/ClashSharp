@@ -1,14 +1,3 @@
-/*
- * Relay Command
- * Provides shared synchronous command routing for MVVM view models
- *
- * @author: WaterRun
- * @file: ViewModel/RelayCommand.cs
- * @date: 2026-06-17
- */
-
-#nullable enable
-
 using System;
 using System.Windows.Input;
 

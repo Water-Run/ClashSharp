@@ -1,12 +1,3 @@
-/*
- * Windows Network Diagnostic Service
- * Provides independent WSL, terminal, and Microsoft Store network diagnostics, apply, and reset actions
- *
- * @author: WaterRun
- * @file: Service/WindowsNetworkDiagnosticService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;

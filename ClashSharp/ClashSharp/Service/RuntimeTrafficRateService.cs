@@ -1,12 +1,3 @@
-/*
- * Runtime Traffic Rate Service
- * Calculates realtime upload and download rates from mihomo connection counters
- *
- * @author: WaterRun
- * @file: Service/RuntimeTrafficRateService.cs
- * @date: 2026-06-29
- */
-
 using System;
 using System.Collections.Generic;
 using System.Linq;

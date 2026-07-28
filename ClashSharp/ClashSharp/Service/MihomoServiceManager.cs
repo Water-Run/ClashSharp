@@ -57,7 +57,7 @@ public sealed partial class MihomoServiceManager
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
         _deploymentContext = deploymentContext ?? throw new ArgumentNullException(nameof(deploymentContext));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
-        _latestStatus = new MihomoServiceStatus(false, false, GetString("MihomoService.Status.NotDeployed"));
+        _latestStatus = MihomoServiceStatus.Unknown(GetString("MihomoService.Status.Unknown"));
     }
 
     /// <summary>Gets current Windows service status.</summary>
@@ -88,20 +88,17 @@ public sealed partial class MihomoServiceManager
         if (result.Outcome == ProcessRunOutcome.Completed && result.ExitCode == 1060)
         {
             queryResult = new ServiceQueryResult(
-                true,
                 new MihomoServiceStatus(false, false, GetString("MihomoService.Status.NotDeployed")));
         }
         else if (result.Outcome != ProcessRunOutcome.Completed || result.ExitCode != 0)
         {
             queryResult = new ServiceQueryResult(
-                false,
-                new MihomoServiceStatus(false, false, GetString("MihomoService.Status.NotDeployed")));
+                MihomoServiceStatus.Unknown(GetString("MihomoService.Status.Unknown")));
         }
         else
         {
             bool isRunning = result.CombinedOutput.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
             queryResult = new ServiceQueryResult(
-                true,
                 new MihomoServiceStatus(
                     true,
                     isRunning,
@@ -126,7 +123,7 @@ public sealed partial class MihomoServiceManager
         ServiceQueryResult currentQuery = await QueryStatusAsync(cancellationToken).ConfigureAwait(false);
         if (!currentQuery.IsConclusive)
         {
-            return new MihomoServiceStatus(false, false, GetString("MihomoService.Status.DeploymentFailed"));
+            return MihomoServiceStatus.Unknown(GetString("MihomoService.Status.DeploymentFailed"));
         }
 
         MihomoServiceStatus current = currentQuery.Status;
@@ -165,6 +162,11 @@ public sealed partial class MihomoServiceManager
         if (observedQuery.IsConclusive && observedQuery.Status.IsInstalled)
         {
             return observedQuery.Status;
+        }
+
+        if (!observedQuery.IsConclusive)
+        {
+            return MihomoServiceStatus.Unknown(GetString("MihomoService.Status.DeploymentFailed"));
         }
 
         if (createResult.Outcome != ProcessRunOutcome.Completed || createResult.ExitCode != 0)
@@ -253,10 +255,10 @@ public sealed partial class MihomoServiceManager
 
     private MihomoServiceStatus CreateRemovalFailed(MihomoServiceStatus observed)
     {
-        return new MihomoServiceStatus(
-            observed.IsInstalled,
-            observed.IsRunning,
-            GetString("MihomoService.Status.RemovalFailed"));
+        string message = GetString("MihomoService.Status.RemovalFailed");
+        return observed.IsKnown
+            ? new MihomoServiceStatus(observed.IsInstalled, observed.IsRunning, message)
+            : MihomoServiceStatus.Unknown(message);
     }
 
     private static void ThrowIfCancelled(ProcessRunResult result, CancellationToken cancellationToken)
@@ -278,5 +280,8 @@ public sealed partial class MihomoServiceManager
         return _getString(key);
     }
 
-    private readonly record struct ServiceQueryResult(bool IsConclusive, MihomoServiceStatus Status);
+    private readonly record struct ServiceQueryResult(MihomoServiceStatus Status)
+    {
+        public bool IsConclusive => Status.IsKnown;
+    }
 }

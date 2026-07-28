@@ -1,12 +1,3 @@
-/*
- * Master Hero Status Layout Service Tests
- * Verifies persisted hero-card status slots normalize to a compact, predictable layout
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/MasterHeroStatusLayoutServiceTests.cs
- * @date: 2026-06-29
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

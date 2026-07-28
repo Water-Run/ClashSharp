@@ -1,12 +1,3 @@
-/*
- * SQLite Log Storage Schema
- * Owns SQLite schema creation and lightweight migrations for Clash# log storage
- *
- * @author: WaterRun
- * @file: Service/LogStorageSchema.cs
- * @date: 2026-06-15
- */
-
 using System;
 using Microsoft.Data.Sqlite;
 

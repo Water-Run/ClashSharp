@@ -1,6 +1,7 @@
 extern alias ClashSharpUi;
 using System.ComponentModel;
 using System.Globalization;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Model.Triggers;
 using ClashSharpMode = global::ClashSharp.Model.ClashSharpMode;
@@ -27,7 +28,7 @@ public sealed class TriggerEditorViewModelTests
     {
         TriggerTaskDefinition original = CompleteDefinition("alpha", "Original");
         RecordingDefinitionStore store = new(Catalog(7, original));
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
         TriggerEditorViewModel editor = Assert.IsType<TriggerEditorViewModel>(list.BeginEdit("alpha"));
 
@@ -43,7 +44,7 @@ public sealed class TriggerEditorViewModelTests
         Assert.Equal(original.Conditions, persisted.Conditions);
         Assert.Equal(original.Actions, persisted.Actions);
 
-        TriggersViewModel reloadedList = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel reloadedList = NewList(store);
         Assert.True(await reloadedList.LoadAsync(CancellationToken.None));
         TriggerEditorViewModel reloadedEditor = Assert.IsType<TriggerEditorViewModel>(
             reloadedList.BeginEdit("alpha"));
@@ -66,7 +67,7 @@ public sealed class TriggerEditorViewModelTests
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
             TriggerTaskDefinition original = FractionalDurationDefinition();
             RecordingDefinitionStore store = new(Catalog(7, original));
-            TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+            TriggersViewModel list = NewList(store);
             await list.LoadAsync(CancellationToken.None);
             TriggerEditorViewModel editor = Assert.IsType<TriggerEditorViewModel>(
                 list.BeginEdit(original.Id));
@@ -106,7 +107,7 @@ public sealed class TriggerEditorViewModelTests
                     new NotificationActionParameters("done")),
             ]);
         RecordingDefinitionStore store = new(Catalog(3, original));
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
         TriggerEditorViewModel editor = Assert.IsType<TriggerEditorViewModel>(
             list.BeginEdit(original.Id));
@@ -122,7 +123,7 @@ public sealed class TriggerEditorViewModelTests
     public async Task CatalogSummary_IncludesTheRollingWindowDuration()
     {
         RecordingDefinitionStore store = new(Catalog(7, CompleteDefinition("alpha", "Alpha")));
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
 
         Assert.Contains(
@@ -252,7 +253,7 @@ public sealed class TriggerEditorViewModelTests
         TriggerTaskDefinition first = CompleteDefinition("alpha", "Alpha");
         TriggerTaskDefinition second = CompleteDefinition("beta", "Beta");
         RecordingDefinitionStore store = new(Catalog(2, first, second));
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
         TriggerEditorViewModel editor = Assert.IsType<TriggerEditorViewModel>(list.BeginEdit("alpha"));
         editor.Name = " beta ";
@@ -272,6 +273,7 @@ public sealed class TriggerEditorViewModelTests
             original: null,
             existingNames: [],
             (_, _) => completion.Task,
+            new TestApplicationErrorSink(),
             newId: "new-task");
 
         Task<bool> firstSave = editor.SaveAsync(CancellationToken.None);
@@ -301,7 +303,7 @@ public sealed class TriggerEditorViewModelTests
         {
             ReplaceCompletion = completion,
         };
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
         TriggerEditorViewModel editor = Assert.IsType<TriggerEditorViewModel>(list.BeginEdit("alpha"));
         editor.Name = "Changed";
@@ -339,7 +341,7 @@ public sealed class TriggerEditorViewModelTests
     {
         TriggerTaskDefinition definition = CompleteDefinition("alpha", "Alpha");
         RecordingDefinitionStore store = new(Catalog(3, definition));
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
 
         Assert.True(await list.SetAllTasksEnabledAsync(true, CancellationToken.None));
@@ -355,7 +357,7 @@ public sealed class TriggerEditorViewModelTests
         {
             ReplaceException = new InvalidOperationException("storage failed"),
         };
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
         var item = Assert.Single(list.TriggerTasks);
         INotifyPropertyChanged notifier = Assert.IsAssignableFrom<INotifyPropertyChanged>(item);
@@ -371,7 +373,7 @@ public sealed class TriggerEditorViewModelTests
     public async Task MissingTaskEnablement_IsRejectedWithoutWritingTheCatalog()
     {
         RecordingDefinitionStore store = new(Catalog(3, CompleteDefinition("alpha", "Alpha")));
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
 
         Assert.False(await list.SetTaskEnabledAsync("missing", false, CancellationToken.None));
@@ -383,7 +385,7 @@ public sealed class TriggerEditorViewModelTests
     public async Task MissingTaskDeletion_IsRejectedWithoutWritingTheCatalog()
     {
         RecordingDefinitionStore store = new(Catalog(3, CompleteDefinition("alpha", "Alpha")));
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
 
         Assert.False(await list.DeleteTaskAsync("missing", CancellationToken.None));
@@ -398,7 +400,8 @@ public sealed class TriggerEditorViewModelTests
         {
             ReplaceException = new InvalidOperationException("storage failed"),
         };
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TestApplicationErrorSink errorSink = new();
+        TriggersViewModel list = NewList(store, errorSink);
         await list.LoadAsync(CancellationToken.None);
         TriggerEditorViewModel editor = Assert.IsType<TriggerEditorViewModel>(list.BeginEdit("alpha"));
         editor.Name = "Changed";
@@ -407,6 +410,9 @@ public sealed class TriggerEditorViewModelTests
         Assert.Equal("trigger.definition.write_unavailable", editor.ErrorCode);
         Assert.False(editor.IsBusy);
         Assert.False(list.IsBusy);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Equal("Triggers.Replace", error.OperationName);
+        Assert.IsType<InvalidOperationException>(error.Exception);
     }
 
     [Fact]
@@ -416,12 +422,33 @@ public sealed class TriggerEditorViewModelTests
         {
             ReadException = new InvalidOperationException("storage failed"),
         };
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TestApplicationErrorSink errorSink = new();
+        TriggersViewModel list = NewList(store, errorSink);
 
         Assert.False(await list.LoadAsync(CancellationToken.None));
         Assert.Equal("trigger.definition.read_unavailable", list.ErrorCode);
         Assert.Equal("Triggers.Validation.LoadFailed", list.ErrorMessage);
         Assert.False(list.IsBusy);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Equal("Triggers.Load", error.OperationName);
+        Assert.IsType<InvalidOperationException>(error.Exception);
+    }
+
+    [Fact]
+    public async Task ProcessFatalReadFailure_PropagatesWithoutDiagnosticContainment()
+    {
+        RecordingDefinitionStore store = new(Catalog(0))
+        {
+            ReadException = CreateProcessFatalException<OutOfMemoryException>(),
+        };
+        TestApplicationErrorSink errorSink = new();
+        TriggersViewModel list = NewList(store, errorSink);
+
+        await Assert.ThrowsAsync<OutOfMemoryException>(
+            () => list.LoadAsync(CancellationToken.None));
+
+        Assert.False(list.IsBusy);
+        Assert.Empty(errorSink.Errors);
     }
 
     [Fact]
@@ -437,7 +464,7 @@ public sealed class TriggerEditorViewModelTests
                     "read_snapshot",
                     DateTimeOffset.UnixEpoch)),
         };
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
 
         Assert.False(await list.LoadAsync(CancellationToken.None));
         Assert.Equal("trigger.storage.read_failed", list.ErrorCode);
@@ -449,7 +476,7 @@ public sealed class TriggerEditorViewModelTests
     public async Task LoadCancellation_PropagatesWithoutLeavingTheListBusy()
     {
         RecordingDefinitionStore store = new(Catalog(0));
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
 
@@ -472,6 +499,7 @@ public sealed class TriggerEditorViewModelTests
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
                 return TriggerEditorSaveResult.Succeeded();
             },
+            new TestApplicationErrorSink(),
             newId: "new-task");
         using CancellationTokenSource cancellation = new();
 
@@ -491,17 +519,43 @@ public sealed class TriggerEditorViewModelTests
     [Fact]
     public async Task UnexpectedSaveDelegateFailure_IsContainedByTheEditor()
     {
+        TestApplicationErrorSink errorSink = new();
         TriggerEditorViewModel editor = new(
             Localize,
             original: null,
             existingNames: [],
             (_, _) => Task.FromException<TriggerEditorSaveResult>(
                 new InvalidOperationException("save failed")),
+            errorSink,
             newId: "new-task");
 
         Assert.False(await editor.SaveAsync(CancellationToken.None));
         Assert.Equal("trigger.definition.write_unavailable", editor.ErrorCode);
         Assert.False(editor.IsBusy);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Equal("Triggers.Editor.Save", error.OperationName);
+        Assert.IsType<InvalidOperationException>(error.Exception);
+    }
+
+    [Fact]
+    public async Task ProcessFatalSaveFailure_PropagatesAndRestoresEditorAvailability()
+    {
+        TestApplicationErrorSink errorSink = new();
+        TriggerEditorViewModel editor = new(
+            Localize,
+            original: null,
+            existingNames: [],
+            (_, _) => Task.FromException<TriggerEditorSaveResult>(
+                CreateProcessFatalException<OutOfMemoryException>()),
+            errorSink,
+            newId: "new-task");
+
+        await Assert.ThrowsAsync<OutOfMemoryException>(
+            () => editor.SaveAsync(CancellationToken.None));
+
+        Assert.False(editor.IsBusy);
+        Assert.True(editor.CanSave);
+        Assert.Empty(errorSink.Errors);
     }
 
     [Fact]
@@ -512,7 +566,7 @@ public sealed class TriggerEditorViewModelTests
             ForceConflict = true,
             ReadExceptionOnCall = 2,
         };
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
         TriggerEditorViewModel editor = Assert.IsType<TriggerEditorViewModel>(list.BeginEdit("alpha"));
         editor.Name = "Changed";
@@ -532,7 +586,7 @@ public sealed class TriggerEditorViewModelTests
             ForceConflict = true,
             ConflictCatalog = Catalog(4, remote),
         };
-        TriggersViewModel list = new(Localize, store, new FakeTriggerSettings());
+        TriggersViewModel list = NewList(store);
         await list.LoadAsync(CancellationToken.None);
         TriggerEditorViewModel editor = Assert.IsType<TriggerEditorViewModel>(list.BeginEdit("alpha"));
         editor.Name = "Local";
@@ -558,8 +612,24 @@ public sealed class TriggerEditorViewModelTests
             original: null,
             existingNames: [],
             (_, _) => Task.FromResult(TriggerEditorSaveResult.Succeeded()),
+            new TestApplicationErrorSink(),
             newId: "new-task");
     }
+
+    private static TriggersViewModel NewList(
+        RecordingDefinitionStore store,
+        TestApplicationErrorSink? errorSink = null)
+    {
+        return new TriggersViewModel(
+            Localize,
+            store,
+            new FakeTriggerSettings(),
+            errorSink ?? new TestApplicationErrorSink());
+    }
+
+    private static TException CreateProcessFatalException<TException>()
+        where TException : Exception =>
+        Activator.CreateInstance<TException>();
 
     private static TriggerTaskDefinition CompleteDefinition(string id, string name)
     {

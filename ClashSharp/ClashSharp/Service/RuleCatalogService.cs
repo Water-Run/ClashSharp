@@ -1,12 +1,3 @@
-/*
- * Rule Catalog Service
- * Provides routing rule data from the active profile with a built-in direct fallback row
- *
- * @author: WaterRun
- * @file: Service/RuleCatalogService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using ClashSharp.Model;
@@ -69,6 +60,24 @@ public sealed partial class RuleCatalogService
         [
             new RulePreview(GetString("RuleCatalog.BuiltInDirect.Name"), "MATCH", "*", "DIRECT", 0),
         ]);
+    }
+
+    /// <summary>Counts rules in captured profile text using the same built-in fallback as <see cref="GetRules"/>.</summary>
+    /// <remarks>
+    /// This read-only summary deliberately does not initialize rule-hit rows or query hit counters;
+    /// the master page consumes count value semantics and must not mutate statistics as a side effect.
+    /// </remarks>
+    internal static int CountRules(string? configurationText)
+    {
+        if (string.IsNullOrWhiteSpace(configurationText))
+        {
+            return 1;
+        }
+
+        int parsedCount = MihomoProfilePreviewParser.ParseRules(
+            configurationText,
+            static key => key).Count;
+        return Math.Max(parsedCount, 1);
     }
 
     /// <summary>Registers rule rows in SQLite and merges stored hit counts into the visible rows.</summary>

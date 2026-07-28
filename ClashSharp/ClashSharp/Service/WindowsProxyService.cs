@@ -1,12 +1,3 @@
-/*
- * Windows Proxy Service
- * Provides controlled access to per-user Windows system proxy settings
- *
- * @author: WaterRun
- * @file: Service/WindowsProxyService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;

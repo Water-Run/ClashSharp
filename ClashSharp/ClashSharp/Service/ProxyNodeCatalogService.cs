@@ -1,12 +1,3 @@
-/*
- * Proxy Node Catalog Service
- * Provides proxy node data from the active profile with a built-in direct fallback row
- *
- * @author: WaterRun
- * @file: Service/ProxyNodeCatalogService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using ClashSharp.Model;
@@ -55,5 +46,19 @@ public sealed partial class ProxyNodeCatalogService
         [
             new ProxyNode("Direct", "DIRECT", _resolveRegion("CN"), 0),
         ];
+    }
+
+    /// <summary>Counts nodes in captured profile text using the same built-in fallback as <see cref="GetNodes"/>.</summary>
+    internal static int CountNodes(string? configurationText)
+    {
+        if (string.IsNullOrWhiteSpace(configurationText))
+        {
+            return 1;
+        }
+
+        int parsedCount = MihomoProfilePreviewParser.ParseNodes(
+            configurationText,
+            static regionCode => new RegionMetadata(regionCode, regionCode, regionCode)).Count;
+        return Math.Max(parsedCount, 1);
     }
 }

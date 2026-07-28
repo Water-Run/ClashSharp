@@ -1,12 +1,3 @@
-/*
- * Region Display Service Tests
- * Verifies localized proxy-node region names and mainland China display overrides
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/RegionDisplayServiceTests.cs
- * @date: 2026-06-25
- */
-
 using System.Reflection;
 using ClashSharp.Model;
 using ClashSharp.Service;

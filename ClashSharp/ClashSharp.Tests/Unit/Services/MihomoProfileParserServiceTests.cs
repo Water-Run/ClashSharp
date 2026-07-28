@@ -1,12 +1,3 @@
-/*
- * Mihomo Profile Parser Service Tests
- * Verifies active-profile parsing through injected text sources
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/MihomoProfileParserServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

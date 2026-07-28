@@ -1,12 +1,3 @@
-/*
- * Notification Service
- * Sends Win11 system notifications according to the configured notification policy
- *
- * @author: WaterRun
- * @file: Service/NotificationService.cs
- * @date: 2026-06-26
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -15,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Model;
 using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
 using Windows.Storage;
@@ -257,7 +249,7 @@ internal sealed class NotificationService :
                 detail,
                 exception.Message);
         }
-        catch (Exception)
+        catch (Exception loggingException) when (IsRecoverableBestEffortFailure(loggingException))
         {
             // Diagnostic storage is best effort and must not revive a contained notification failure.
         }
@@ -267,19 +259,38 @@ internal sealed class NotificationService :
     {
         if (!ShouldShow(minimumLevel))
         {
-            AppendNotificationLog("Info", GetString("Notification.Log.Suppressed"), title, message);
+            TryAppendNotificationLog("Info", GetString("Notification.Log.Suppressed"), title, message);
             return;
         }
 
         try
         {
             _platform.Show(title, message);
-            AppendNotificationLog("Info", GetString("Notification.Log.Shown"), title, message);
+        }
+        catch (Exception exception) when (IsRecoverableBestEffortFailure(exception))
+        {
+            TryAppendNotificationLog(
+                "Warning",
+                GetString("Notification.Log.Failed"),
+                title,
+                message,
+                exception.Message);
+            return;
+        }
+
+        TryAppendNotificationLog("Info", GetString("Notification.Log.Shown"), title, message);
+        try
+        {
             _triggerEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.NotificationRaised, minimumLevel));
         }
         catch (Exception exception) when (exception is InvalidOperationException or NotSupportedException)
         {
-            AppendNotificationLog("Warning", GetString("Notification.Log.Failed"), title, message, exception.Message);
+            TryAppendNotificationLog(
+                "Warning",
+                GetString("Notification.Log.Failed"),
+                title,
+                message,
+                exception.Message);
         }
     }
 
@@ -349,6 +360,28 @@ internal sealed class NotificationService :
             ? string.Format(CultureInfo.CurrentCulture, messageTemplate, title, detail)
             : string.Format(CultureInfo.CurrentCulture, messageTemplate, title, detail, error);
         _appendLog(level, "Notification", message, BuildNotificationDetail(title, detail, error));
+    }
+
+    private void TryAppendNotificationLog(
+        string level,
+        string messageTemplate,
+        string title,
+        string detail,
+        string? error = null)
+    {
+        try
+        {
+            AppendNotificationLog(level, messageTemplate, title, detail, error);
+        }
+        catch (Exception exception) when (IsRecoverableBestEffortFailure(exception))
+        {
+            // Notifications and their diagnostics are best effort and cannot break the caller.
+        }
+    }
+
+    private static bool IsRecoverableBestEffortFailure(Exception exception)
+    {
+        return StartupCompletionFailurePolicy.IsRecoverable(exception);
     }
 
     private static string BuildNotificationDetail(string title, string message, string? error)

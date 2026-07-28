@@ -1,12 +1,3 @@
-/*
- * Windows Network Diagnostic Service Factory
- * Wires production dependencies for Windows-native diagnostics
- *
- * @author: WaterRun
- * @file: Service/WindowsNetworkDiagnosticServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;

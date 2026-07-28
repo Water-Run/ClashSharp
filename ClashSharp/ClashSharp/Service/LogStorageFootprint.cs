@@ -1,12 +1,3 @@
-/*
- * SQLite Log Storage Footprint
- * Calculates SQLite database storage usage including WAL-mode sidecar files
- *
- * @author: WaterRun
- * @file: Service/LogStorageFootprint.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using System.IO;

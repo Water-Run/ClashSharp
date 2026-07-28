@@ -11,6 +11,11 @@
 
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <DataTemplate x:Key="MasterHeroStatusOptionTemplate">
+            <TextBlock
+                Text="{Binding Title}"
+                TextTrimming="CharacterEllipsis" />
+        </DataTemplate>
     </Page.Resources>
 
     <ScrollViewer
@@ -18,8 +23,11 @@
         Padding="24,18,24,24"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled"
-        SizeChanged="RootScrollViewer_SizeChanged">
-        <StackPanel x:Name="ContentHost" Spacing="14">
+        HorizontalContentAlignment="Stretch">
+        <StackPanel
+            x:Name="ContentHost"
+            Spacing="14"
+            SizeChanged="ContentHost_SizeChanged">
             <InfoBar
                 Message="{Binding OperationErrorText}"
                 Severity="Error"
@@ -27,19 +35,17 @@
                 IsOpen="{Binding HasOperationError, Mode=OneWay}"
                 Visibility="{Binding HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-            <Grid x:Name="HeroAndModeGrid" ColumnSpacing="12" RowSpacing="10" MinHeight="342">
+            <Grid x:Name="HeroAndModeGrid" ColumnSpacing="12" RowSpacing="12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="380" />
+                    <ColumnDefinition x:Name="HeroColumn" Width="*" />
+                    <ColumnDefinition x:Name="ModeColumn" Width="360" />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Grid x:Name="HeroStatusCard" Grid.RowSpan="4" Style="{StaticResource ClashCardGridStyle}" Padding="18" RowSpacing="16">
+                <Grid x:Name="HeroStatusCard" Style="{StaticResource ClashCardGridStyle}" Padding="18" RowSpacing="16">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -71,10 +77,12 @@
                         Grid.Row="1"
                         ItemsSource="{Binding HeroStatusItems}"
                         SelectionMode="None"
-                        IsItemClickEnabled="False">
+                        IsItemClickEnabled="False"
+                        SizeChanged="HeroStatusItemGrid_SizeChanged"
+                        ContainerContentChanging="HeroStatusItemGrid_ContainerContentChanging">
                         <GridView.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" />
+                                <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="2" />
                             </ItemsPanelTemplate>
                         </GridView.ItemsPanel>
                         <GridView.ItemContainerStyle>
@@ -82,12 +90,11 @@
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                 <Setter Property="VerticalContentAlignment" Value="Stretch" />
                                 <Setter Property="Margin" Value="0,0,10,10" />
-                                <Setter Property="MinWidth" Value="220" />
                             </Style>
                         </GridView.ItemContainerStyle>
                         <GridView.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Spacing="4" MinWidth="220">
+                                <StackPanel x:Name="HeroStatusItemContent" Spacing="4">
                                     <TextBlock Text="{Binding Title}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding Value}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
@@ -96,44 +103,62 @@
                     </GridView>
                 </Grid>
 
-                <components:MasterModeButton
-                    x:Name="DisabledModeButton"
+                <Grid
+                    x:Name="ModeButtonGrid"
                     Grid.Column="1"
-                    Title="{Binding DisabledModeTitleText}"
-                    Description="{Binding DisabledModeDescriptionText}"
-                    Glyph="&#xE711;"
-                    IsChecked="{Binding IsDisabledModeSelected, Mode=OneWay}"
-                    Command="{Binding DisabledModeCommand}" />
+                    ColumnSpacing="10"
+                    RowSpacing="10"
+                    VerticalAlignment="Top">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                <components:MasterModeButton
-                    x:Name="StandbyModeButton"
-                    Grid.Row="1"
-                    Grid.Column="1"
-                    Title="{Binding StandbyModeTitleText}"
-                    Description="{Binding StandbyModeDescriptionText}"
-                    Glyph="&#xE774;"
-                    IsChecked="{Binding IsStandbyModeSelected, Mode=OneWay}"
-                    Command="{Binding StandbyModeCommand}" />
+                    <components:MasterModeButton
+                        x:Name="DisabledModeButton"
+                        Grid.ColumnSpan="2"
+                        Title="{Binding DisabledModeTitleText}"
+                        Description="{Binding DisabledModeDescriptionText}"
+                        Glyph="&#xE711;"
+                        IsChecked="{Binding IsDisabledModeSelected, Mode=OneWay}"
+                        Command="{Binding DisabledModeCommand}" />
 
-                <components:MasterModeButton
-                    x:Name="RuleTakeoverModeButton"
-                    Grid.Row="2"
-                    Grid.Column="1"
-                    Title="{Binding RuleTakeoverModeTitleText}"
-                    Description="{Binding RuleTakeoverModeDescriptionText}"
-                    Glyph="&#xE9D9;"
-                    IsChecked="{Binding IsRuleTakeoverModeSelected, Mode=OneWay}"
-                    Command="{Binding RuleTakeoverModeCommand}" />
+                    <components:MasterModeButton
+                        x:Name="StandbyModeButton"
+                        Grid.Row="1"
+                        Grid.ColumnSpan="2"
+                        Title="{Binding StandbyModeTitleText}"
+                        Description="{Binding StandbyModeDescriptionText}"
+                        Glyph="&#xE774;"
+                        IsChecked="{Binding IsStandbyModeSelected, Mode=OneWay}"
+                        Command="{Binding StandbyModeCommand}" />
 
-                <components:MasterModeButton
-                    x:Name="FullTakeoverModeButton"
-                    Grid.Row="3"
-                    Grid.Column="1"
-                    Title="{Binding FullTakeoverModeTitleText}"
-                    Description="{Binding FullTakeoverModeDescriptionText}"
-                    Glyph="&#xE968;"
-                    IsChecked="{Binding IsFullTakeoverModeSelected, Mode=OneWay}"
-                    Command="{Binding FullTakeoverModeCommand}" />
+                    <components:MasterModeButton
+                        x:Name="RuleTakeoverModeButton"
+                        Grid.Row="2"
+                        Grid.ColumnSpan="2"
+                        Title="{Binding RuleTakeoverModeTitleText}"
+                        Description="{Binding RuleTakeoverModeDescriptionText}"
+                        Glyph="&#xE9D9;"
+                        IsChecked="{Binding IsRuleTakeoverModeSelected, Mode=OneWay}"
+                        Command="{Binding RuleTakeoverModeCommand}" />
+
+                    <components:MasterModeButton
+                        x:Name="FullTakeoverModeButton"
+                        Grid.Row="3"
+                        Grid.ColumnSpan="2"
+                        Title="{Binding FullTakeoverModeTitleText}"
+                        Description="{Binding FullTakeoverModeDescriptionText}"
+                        Glyph="&#xE968;"
+                        IsChecked="{Binding IsFullTakeoverModeSelected, Mode=OneWay}"
+                        Command="{Binding FullTakeoverModeCommand}" />
+                </Grid>
             </Grid>
 
             <HyperlinkButton
@@ -152,6 +177,7 @@
                     CanReorderItems="True"
                     CanDragItems="True"
                     AllowDrop="True"
+                    DragItemsCompleted="InfoTileGrid_DragItemsCompleted"
                     IsItemClickEnabled="False"
                     SizeChanged="InfoTileGrid_SizeChanged"
                     ContainerContentChanging="InfoTileGrid_ContainerContentChanging">

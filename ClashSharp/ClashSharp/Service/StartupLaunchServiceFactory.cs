@@ -1,23 +1,8 @@
-/*
- * Startup Launch Service Factory
- * Wires production dependencies for packaged startup task synchronization
- *
- * @author: WaterRun
- * @file: Service/StartupLaunchServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
 
 namespace ClashSharp.Service;
-
-internal sealed partial class StartupLaunchService
-{
-    /// <summary>Shared singleton instance.</summary>
-    public static StartupLaunchService Instance { get; } = StartupLaunchServiceFactory.CreateDefault();
-}
 
 /// <summary>Creates startup launch services with production dependencies.</summary>
 internal static class StartupLaunchServiceFactory
@@ -43,21 +28,27 @@ internal sealed class StartupLaunchTaskProvider : IStartupLaunchTaskProvider
 
 internal sealed class StartupLaunchTaskAdapter(StartupTask task) : IStartupLaunchTask
 {
-    public StartupLaunchTaskState State => task.State switch
-    {
-        StartupTaskState.Disabled => StartupLaunchTaskState.Disabled,
-        StartupTaskState.Enabled => StartupLaunchTaskState.Enabled,
-        _ => StartupLaunchTaskState.Other,
-    };
+    public StartupLaunchTaskState State => NormalizeState(task.State);
 
-    public async Task RequestEnableAsync()
+    public async Task<StartupLaunchTaskState> RequestEnableAsync()
     {
-        await task.RequestEnableAsync();
+        StartupTaskState state = await task.RequestEnableAsync();
+        return NormalizeState(state);
     }
 
     public void Disable()
     {
         task.Disable();
+    }
+
+    private static StartupLaunchTaskState NormalizeState(StartupTaskState state)
+    {
+        return state switch
+        {
+            StartupTaskState.Disabled => StartupLaunchTaskState.Disabled,
+            StartupTaskState.Enabled => StartupLaunchTaskState.Enabled,
+            _ => StartupLaunchTaskState.Other,
+        };
     }
 }
 

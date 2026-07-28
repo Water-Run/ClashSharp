@@ -1,12 +1,3 @@
-/*
- * Profile Catalog Service
- * Provides local configuration profile and subscription-link data for WinUI pages
- *
- * @author: WaterRun
- * @file: Service/ProfileCatalogService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -51,6 +42,14 @@ internal interface IProfileCatalogLog
     /// <summary>Appends a profile catalog log entry.</summary>
     void AppendLog(string level, string category, string message, string? detail);
 }
+
+/// <summary>Localized fallback text captured before background profile-catalog aggregation.</summary>
+internal readonly record struct ProfileCatalogFallbackStrings(
+    string BuiltInProfileName,
+    string AvailableStatus);
+
+/// <summary>Profile and subscription counts normalized with production catalog semantics.</summary>
+internal readonly record struct ProfileCatalogSummary(int ProfileCount, int SubscriptionCount);
 
 /// <summary>Provides local configuration profile and subscription-link data for WinUI pages.</summary>
 /// <remarks>
@@ -100,12 +99,6 @@ public sealed partial class ProfileCatalogService
         ArgumentException.ThrowIfNullOrWhiteSpace(catalogPath);
 
         _catalogPath = Path.GetFullPath(catalogPath);
-        string? dataDirectory = Path.GetDirectoryName(_catalogPath);
-        if (!string.IsNullOrWhiteSpace(dataDirectory))
-        {
-            Directory.CreateDirectory(dataDirectory);
-        }
-
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _coreConfiguration = coreConfiguration ?? throw new ArgumentNullException(nameof(coreConfiguration));
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -138,6 +131,27 @@ public sealed partial class ProfileCatalogService
         lock (_syncLock)
         {
             return [.. LoadDocument().Links];
+        }
+    }
+
+    /// <summary>
+    /// Returns normalized catalog counts without invoking this service's localization dependency.
+    /// </summary>
+    /// <remarks>
+    /// Thread safety: Serialized by the catalog lock. The supplied strings must be captured on the
+    /// localization-owning thread before this method is dispatched to a worker.
+    /// </remarks>
+    internal ProfileCatalogSummary GetSummary(ProfileCatalogFallbackStrings fallbackStrings)
+    {
+        lock (_syncLock)
+        {
+            ProfileCatalogDocument document = LoadDocument(key => key switch
+            {
+                "ProfileCatalog.BuiltInDirect.Name" => fallbackStrings.BuiltInProfileName,
+                "ProfileCatalog.Status.Available" => fallbackStrings.AvailableStatus,
+                _ => key,
+            });
+            return new ProfileCatalogSummary(document.Profiles.Count, document.Links.Count);
         }
     }
 
@@ -589,6 +603,14 @@ public sealed partial class ProfileCatalogService
     /// <returns>Loaded profile catalog document; never null.</returns>
     private ProfileCatalogDocument LoadDocument()
     {
+        return LoadDocument(GetString);
+    }
+
+    /// <summary>Loads the catalog with an explicit fallback text source.</summary>
+    private ProfileCatalogDocument LoadDocument(Func<string, string> getString)
+    {
+        ArgumentNullException.ThrowIfNull(getString);
+
         if (_cachedDocument is not null)
         {
             return _cachedDocument;
@@ -602,7 +624,7 @@ public sealed partial class ProfileCatalogService
                 ProfileCatalogDocument? document = JsonSerializer.Deserialize<ProfileCatalogDocument>(json);
                 if (document is not null)
                 {
-                    _cachedDocument = EnsureBuiltInProfile(document);
+                    _cachedDocument = EnsureBuiltInProfile(document, getString);
                     return _cachedDocument;
                 }
             }
@@ -616,7 +638,7 @@ public sealed partial class ProfileCatalogService
             }
         }
 
-        _cachedDocument = BuildDefaultDocument();
+        _cachedDocument = BuildDefaultDocument(getString);
         SaveDocument(_cachedDocument);
         return _cachedDocument;
     }
@@ -628,18 +650,31 @@ public sealed partial class ProfileCatalogService
     {
         ArgumentNullException.ThrowIfNull(document);
 
+        EnsureCatalogDirectoryExists();
         string json = JsonSerializer.Serialize(document, JsonOptions);
         File.WriteAllText(_catalogPath, json);
         _cachedDocument = document;
+    }
+
+    private void EnsureCatalogDirectoryExists()
+    {
+        string? dataDirectory = Path.GetDirectoryName(_catalogPath);
+        if (!string.IsNullOrWhiteSpace(dataDirectory))
+        {
+            Directory.CreateDirectory(dataDirectory);
+        }
     }
 
     /// <summary>Ensures the catalog document contains the built-in direct profile.</summary>
     /// <param name="document">Catalog document to inspect. Must not be null.</param>
     /// <returns>The original document with the built-in profile inserted when necessary.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
-    private ProfileCatalogDocument EnsureBuiltInProfile(ProfileCatalogDocument document)
+    private ProfileCatalogDocument EnsureBuiltInProfile(
+        ProfileCatalogDocument document,
+        Func<string, string> getString)
     {
         ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(getString);
 
         document.Profiles ??= [];
         document.Links ??= [];
@@ -653,19 +688,21 @@ public sealed partial class ProfileCatalogService
             }
         }
 
-        document.Profiles.Insert(0, BuildDefaultProfile());
+        document.Profiles.Insert(0, BuildDefaultProfile(getString));
         return document;
     }
 
     /// <summary>Builds the default catalog document used on first run.</summary>
     /// <returns>A catalog document containing the built-in direct profile and no user links.</returns>
-    private ProfileCatalogDocument BuildDefaultDocument()
+    private ProfileCatalogDocument BuildDefaultDocument(Func<string, string> getString)
     {
+        ArgumentNullException.ThrowIfNull(getString);
+
         return new ProfileCatalogDocument
         {
             Profiles =
             [
-                BuildDefaultProfile(),
+                BuildDefaultProfile(getString),
             ],
             Links = [],
         };
@@ -681,13 +718,15 @@ public sealed partial class ProfileCatalogService
 
     /// <summary>Builds the built-in direct profile.</summary>
     /// <returns>The built-in direct profile row.</returns>
-    private ConfigurationProfile BuildDefaultProfile()
+    private ConfigurationProfile BuildDefaultProfile(Func<string, string> getString)
     {
+        ArgumentNullException.ThrowIfNull(getString);
+
         return new ConfigurationProfile(
             ProfileCatalogIds.BuiltInDirect,
-            GetString("ProfileCatalog.BuiltInDirect.Name"),
+            getString("ProfileCatalog.BuiltInDirect.Name"),
             "Clash#",
-            GetString("ProfileCatalog.Status.Available"),
+            getString("ProfileCatalog.Status.Available"),
             DateTimeOffset.Now,
             0,
             1,

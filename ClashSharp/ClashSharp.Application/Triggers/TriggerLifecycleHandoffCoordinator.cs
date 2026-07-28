@@ -140,7 +140,12 @@ public sealed class TriggerLifecycleHandoffCoordinator : ITriggerLifecycleHandof
         }
 
         LifetimeHandoffSession session = GetOrCreateSession(identity);
-        _requests.TryRequest(ApplicationLifetimeRequest.Exit("trigger-action", session));
+        if (!_requests.TryRequest(ApplicationLifetimeRequest.Exit("trigger-action", session)))
+        {
+            throw new InvalidOperationException(
+                "The application lifetime request channel is busy; the durable handoff remains recoverable.");
+        }
+
         return TriggerActionApplyResult.HandedOff();
     }
 

@@ -1,12 +1,3 @@
-/*
- * App Settings Service Tests
- * Verifies default user-facing settings
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/AppSettingsServiceTests.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -123,6 +114,46 @@ public sealed class AppSettingsServiceTests
         Assert.Equal(MainlandChinaFeatureMode.FlagReplacementAndTextCompletion, AppSettingsService.Instance.MainlandChinaFeatureMode);
     }
 
+    /// <summary>Verifies direct layout writes persist the registry's canonical text.</summary>
+    [Fact]
+    public void MasterInfoTileLayout_WhenNoncanonical_PersistsCanonicalText()
+    {
+        ResetSettings();
+        try
+        {
+            AppSettingsService.Instance.MasterInfoTileLayout =
+                " Latency, core,LATENCY, memory-usage ";
+
+            Assert.Equal(
+                "latency,core,memory-usage",
+                AppSettingsService.Instance.MasterInfoTileLayout);
+        }
+        finally
+        {
+            ResetSettings();
+        }
+    }
+
+    /// <summary>Verifies direct unsafe layout writes cannot replace the current persisted value.</summary>
+    [Fact]
+    public void MasterInfoTileLayout_WhenUnsafe_RejectsValueWithoutChangingSetting()
+    {
+        ResetSettings();
+        try
+        {
+            AppSettingsService.Instance.MasterInfoTileLayout = "latency,core";
+
+            Assert.Throws<ArgumentException>(
+                () => AppSettingsService.Instance.MasterInfoTileLayout = "core,../unknown");
+
+            Assert.Equal("latency,core", AppSettingsService.Instance.MasterInfoTileLayout);
+        }
+        finally
+        {
+            ResetSettings();
+        }
+    }
+
     /// <summary>Verifies reset clears persisted overrides back to their default values.</summary>
     [Fact]
     public void ResetAllSettings_RestoresDefaults()
@@ -182,6 +213,33 @@ public sealed class AppSettingsServiceTests
         Assert.Equal("MixedPort", change.Key);
         Assert.Equal(12001, change.NewValue);
         Assert.False(change.WasRemoved);
+    }
+
+    /// <summary>Verifies change subscribers can safely enter settings from another thread.</summary>
+    [Fact]
+    public void SettingChanged_IsRaisedAfterReleasingSettingsLock()
+    {
+        ResetSettings();
+        void OnSettingChanged(object? sender, AppSettingChangedEventArgs e)
+        {
+            Task<int> concurrentRead = Task.Run(
+                () => AppSettingsService.Instance.MixedPort);
+            Assert.True(
+                concurrentRead.Wait(TimeSpan.FromSeconds(5)),
+                "A settings change subscriber was invoked while the settings lock was held.");
+            Assert.Equal(12002, concurrentRead.GetAwaiter().GetResult());
+        }
+
+        AppSettingsService.Instance.SettingChanged += OnSettingChanged;
+        try
+        {
+            AppSettingsService.Instance.MixedPort = 12002;
+        }
+        finally
+        {
+            AppSettingsService.Instance.SettingChanged -= OnSettingChanged;
+            ResetSettings();
+        }
     }
 
     /// <summary>Restores process-wide application settings before a default-value assertion.</summary>

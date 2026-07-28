@@ -1,14 +1,3 @@
-/*
- * Master Control ViewModel
- * Owns bindable state and commands for the master control page
- *
- * @author: WaterRun
- * @file: ViewModel/MasterControlViewModel.cs
- * @date: 2026-06-17
- */
-
-#nullable enable
-
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -20,389 +9,11 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
-using ClashSharp.Service;
 
 namespace ClashSharp.ViewModel;
-
-/// <summary>Localization contract required by <see cref="MasterControlViewModel"/>.</summary>
-/// <remarks>
-/// Invariants: Implementations return a non-null string for every requested key.
-/// Thread safety: Determined by the concrete implementation.
-/// Side effects: None required by the contract.
-/// </remarks>
-internal interface IMasterControlLocalization
-{
-    /// <summary>Gets a localized string for the supplied key.</summary>
-    /// <param name="key">Localization key. Must not be null.</param>
-    /// <returns>Resolved localized string, or a fallback string when the key is unknown.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="key"/> is null.</exception>
-    string GetString(string key);
-}
-
-/// <summary>Core runtime contract required by <see cref="MasterControlViewModel"/>.</summary>
-/// <remarks>
-/// Invariants: Implementations return a non-empty version string when the bundled core is available.
-/// Thread safety: Determined by the concrete implementation.
-/// Side effects: Implementations may start a short-lived core probe process.
-/// </remarks>
-internal interface IMasterControlCore
-{
-    /// <summary>Gets the bundled core version text.</summary>
-    /// <param name="cancellationToken">Cancels the probe operation when requested.</param>
-    /// <returns>The first user-facing version line returned by the core.</returns>
-    /// <exception cref="FileNotFoundException">The bundled core binary is missing.</exception>
-    /// <exception cref="InvalidOperationException">The core version probe fails.</exception>
-    /// <remarks>
-    /// Cancellation semantics: Implementations should stop only the version probe.
-    /// Completion semantics: Does not mutate the long-running core state.
-    /// </remarks>
-    Task<string> GetVersionTextAsync(CancellationToken cancellationToken);
-}
-
-/// <summary>Windows proxy state contract required by <see cref="MasterControlViewModel"/>.</summary>
-/// <remarks>
-/// Invariants: Returned proxy state contains a non-null server string.
-/// Thread safety: Determined by the concrete implementation.
-/// Side effects: Reads Windows proxy state.
-/// </remarks>
-internal interface IMasterControlWindowsProxy
-{
-    /// <summary>Gets current Windows system proxy state.</summary>
-    /// <returns>Current Windows proxy state.</returns>
-    /// <exception cref="InvalidOperationException">The proxy state cannot be read.</exception>
-    /// <exception cref="UnauthorizedAccessException">The proxy registry state cannot be accessed.</exception>
-    WindowsProxyState GetCurrentState();
-}
-
-/// <summary>Settings contract required by <see cref="MasterControlViewModel"/>.</summary>
-/// <remarks>
-/// Invariants: Current mode is a valid <see cref="ClashSharpMode"/> value.
-/// Thread safety: Determined by the concrete implementation.
-/// Side effects: Setters may persist settings to durable storage.
-/// </remarks>
-internal interface IMasterControlSettings
-{
-    /// <summary>Gets or sets the current master takeover mode.</summary>
-    /// <value>Current persisted mode.</value>
-    ClashSharpMode CurrentMode { get; set; }
-
-    /// <summary>Gets or sets whether transparent proxy is enabled in settings.</summary>
-    /// <value>True when transparent proxy is enabled; otherwise false.</value>
-    bool TransparentProxyEnabled { get; set; }
-
-    /// <summary>Gets or sets whether Clash# launches when the user signs in.</summary>
-    bool LaunchAtStartupEnabled { get; set; }
-
-    /// <summary>Gets or sets whether background connection sampling is enabled.</summary>
-    bool ConnectionSamplingEnabled { get; set; }
-
-    /// <summary>Gets or sets whether marked URL blocking is enabled.</summary>
-    bool MainlandChinaUrlBlockingEnabled { get; set; }
-
-    /// <summary>Gets the active profile identifier.</summary>
-    string ActiveProfileId { get; }
-
-    /// <summary>Gets the local mixed proxy port.</summary>
-    int MixedPort { get; }
-
-    /// <summary>Gets the first proxy connection-test URL.</summary>
-    string ConnectionTestProxyUrl1 { get; }
-
-    /// <summary>Gets the second proxy connection-test URL.</summary>
-    string ConnectionTestProxyUrl2 { get; }
-
-    /// <summary>Gets the direct connection-test URL.</summary>
-    string ConnectionTestDirectUrl { get; }
-
-    AppLanguage DisplayLanguage { get; }
-
-    AppThemeMode AppThemeMode { get; }
-
-    int ConnectionSamplingIntervalSeconds { get; }
-
-    StartupBehaviorMode StartupBehaviorMode { get; }
-
-    bool TriggersEnabled { get; }
-
-    bool TriggerNotificationsEnabled { get; }
-
-    CloseBehaviorMode CloseBehaviorMode { get; }
-
-    bool TrayUseMonochromeInactiveIcon { get; }
-
-    string TrayVisibleFeatureIds { get; }
-
-    bool NotificationEnabled { get; }
-
-    NotificationLevel NotificationLevel { get; }
-
-    bool RestoreProxyOnExit { get; set; }
-
-    bool CheckStaleProxyOnStartup { get; set; }
-
-    bool StartupConflictCheckEnabled { get; set; }
-
-    bool ShowStartupGuideOnStartup { get; set; }
-
-    MainlandChinaFeatureMode MainlandChinaFeatureMode { get; }
-
-    AppAccentColorMode AppAccentColorMode { get; }
-
-    string AppAccentColorValue { get; }
-}
-
-/// <summary>Page-level action requested by a functional master-control tile.</summary>
-internal enum MasterControlTileAction
-{
-    ShowStartupPrompt,
-    CheckStartupConflicts,
-    RunLatencyTest,
-    ExportConfiguration,
-    ImportConfiguration,
-}
-
-/// <summary>Network takeover contract required by <see cref="MasterControlViewModel"/>.</summary>
-/// <remarks>
-/// Invariants: Implementations return only a verified mode result or throw an expected runtime exception.
-/// Thread safety: Determined by the concrete implementation.
-/// Side effects: Submits a durable network mutation through the application layer.
-/// </remarks>
-internal interface IMasterControlTakeover
-{
-    /// <summary>Applies a master takeover mode.</summary>
-    /// <param name="mode">Mode to apply.</param>
-    /// <param name="cancellationToken">Cancels admission or pre-side-effect work.</param>
-    /// <returns>Verified result describing the applied runtime state.</returns>
-    /// <exception cref="FileNotFoundException">Required runtime files are missing.</exception>
-    /// <exception cref="InvalidOperationException">Runtime state cannot be applied.</exception>
-    /// <exception cref="Win32Exception">Windows rejects proxy notification.</exception>
-    /// <exception cref="UnauthorizedAccessException">Windows proxy state cannot be changed.</exception>
-    Task<NetworkTakeoverResult> ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken);
-}
-
-/// <summary>Logging contract required by <see cref="MasterControlViewModel"/>.</summary>
-/// <remarks>
-/// Invariants: Implementations persist or discard each complete log entry atomically.
-/// Thread safety: Determined by the concrete implementation.
-/// Side effects: May write to persistent log storage.
-/// </remarks>
-internal interface IMasterControlLog
-{
-    /// <summary>Appends one log entry.</summary>
-    /// <param name="level">Log level. Must not be null.</param>
-    /// <param name="category">Log category. Must not be null.</param>
-    /// <param name="message">Log summary. Must not be null.</param>
-    /// <param name="detail">Optional detail text; null when no detail exists.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="level"/>, <paramref name="category"/>, or <paramref name="message"/> is null.</exception>
-    void Append(string level, string category, string message, string? detail);
-}
-
-/// <summary>Tray status contract required by the master-control page.</summary>
-internal interface IMasterControlTrayStatus
-{
-    /// <summary>Gets current node and latency status.</summary>
-    Task<TrayStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken);
-}
-
-/// <summary>Runtime counters and storage summaries shown by master-control information tiles.</summary>
-internal sealed record MasterControlRuntimeSnapshot(
-    CoreConfigurationState CoreConfiguration,
-    int ProfileCount,
-    int SubscriptionCount,
-    int ProxyNodeCount,
-    int RuleCount,
-    int TriggerTaskCount,
-    int EnabledTriggerTaskCount,
-    LogStorageSummary LogStorage,
-    TrafficStatisticsSummary Traffic,
-    MihomoServiceStatus MihomoService,
-    StartupRestoreFallbackStatus StartupRestoreFallback,
-    RuntimeTrafficRateSnapshot RuntimeTraffic = default,
-    long AppWorkingSetBytes = 0)
-{
-    public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
-        new CoreConfigurationState(string.Empty, string.Empty, false),
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        new LogStorageSummary(string.Empty, 0, 0, 0),
-        new TrafficStatisticsSummary(0, 0, 0, 0, 0, 0, 0, 0),
-        new MihomoServiceStatus(false, false, string.Empty),
-        new StartupRestoreFallbackStatus(false, string.Empty));
-}
-
-/// <summary>Runtime information contract required by the master-control tile catalog.</summary>
-internal interface IMasterControlRuntime
-{
-    MasterControlRuntimeSnapshot GetSnapshot();
-}
-
-/// <summary>Fallback runtime provider used when counters are unavailable.</summary>
-internal sealed class UnavailableMasterControlRuntime : IMasterControlRuntime
-{
-    public static UnavailableMasterControlRuntime Instance { get; } = new();
-
-    public MasterControlRuntimeSnapshot GetSnapshot()
-    {
-        return MasterControlRuntimeSnapshot.Unavailable;
-    }
-}
-
-/// <summary>Fallback tray status provider used in tests and when runtime status is unavailable.</summary>
-internal sealed class UnavailableMasterControlTrayStatus : IMasterControlTrayStatus
-{
-    public static UnavailableMasterControlTrayStatus Instance { get; } = new();
-
-    public Task<TrayStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(TrayStatusSnapshot.Unavailable);
-    }
-}
-
-/// <summary>One draggable master-control information tile.</summary>
-internal sealed class MasterControlInfoTileViewModel : ObservableObject
-{
-    private string _value;
-    private string _detail;
-    private bool _isVisible = true;
-    private bool _isToggleOn;
-
-    public MasterControlInfoTileViewModel(
-        string id,
-        string title,
-        string value,
-        string detail,
-        string glyph,
-        string description,
-        string typeText,
-        bool isToggleVisible = false,
-        bool isToggleOn = false,
-        ICommand? tileCommand = null)
-    {
-        Id = id ?? throw new ArgumentNullException(nameof(id));
-        Title = title ?? throw new ArgumentNullException(nameof(title));
-        _value = value ?? throw new ArgumentNullException(nameof(value));
-        _detail = detail ?? throw new ArgumentNullException(nameof(detail));
-        Glyph = glyph ?? throw new ArgumentNullException(nameof(glyph));
-        Description = description ?? throw new ArgumentNullException(nameof(description));
-        TypeText = typeText ?? throw new ArgumentNullException(nameof(typeText));
-        IsToggleVisible = isToggleVisible;
-        _isToggleOn = isToggleOn;
-        TileCommand = tileCommand;
-    }
-
-    public string Id { get; }
-
-    public string Title { get; }
-
-    public string Glyph { get; }
-
-    public string Description { get; }
-
-    public string TypeText { get; }
-
-    public bool IsToggleVisible { get; }
-
-    public ICommand? TileCommand { get; }
-
-    public string Value
-    {
-        get => _value;
-        set => SetProperty(ref _value, value);
-    }
-
-    public string Detail
-    {
-        get => _detail;
-        set => SetProperty(ref _detail, value);
-    }
-
-    public bool IsVisible
-    {
-        get => _isVisible;
-        set => SetProperty(ref _isVisible, value);
-    }
-
-    public bool IsToggleOn
-    {
-        get => _isToggleOn;
-        set => SetProperty(ref _isToggleOn, value);
-    }
-}
-
-internal sealed class MasterHeroStatusItemViewModel : ObservableObject
-{
-    private MasterHeroStatusItemKind _kind;
-    private string _title;
-    private string _value;
-
-    public MasterHeroStatusItemViewModel(MasterHeroStatusItemKind kind, string title, string value)
-    {
-        _kind = kind;
-        _title = title ?? throw new ArgumentNullException(nameof(title));
-        _value = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    public MasterHeroStatusItemKind Kind
-    {
-        get => _kind;
-        set => SetProperty(ref _kind, value);
-    }
-
-    public string Title
-    {
-        get => _title;
-        set => SetProperty(ref _title, value);
-    }
-
-    public string Value
-    {
-        get => _value;
-        set => SetProperty(ref _value, value);
-    }
-}
-
-internal sealed class MasterHeroStatusOptionViewModel(MasterHeroStatusItemKind kind, string title)
-{
-    public MasterHeroStatusItemKind Kind { get; } = kind;
-
-    public string Title { get; } = title ?? throw new ArgumentNullException(nameof(title));
-}
-
-internal sealed class MasterHeroStatusSlotViewModel : ObservableObject
-{
-    private MasterHeroStatusItemKind _selectedKind;
-
-    public MasterHeroStatusSlotViewModel(
-        int index,
-        string title,
-        MasterHeroStatusItemKind selectedKind,
-        IReadOnlyList<MasterHeroStatusOptionViewModel> options)
-    {
-        Index = index;
-        Title = title ?? throw new ArgumentNullException(nameof(title));
-        _selectedKind = selectedKind;
-        Options = options ?? throw new ArgumentNullException(nameof(options));
-    }
-
-    public int Index { get; }
-
-    public string Title { get; }
-
-    public IReadOnlyList<MasterHeroStatusOptionViewModel> Options { get; }
-
-    public MasterHeroStatusItemKind SelectedKind
-    {
-        get => _selectedKind;
-        set => SetProperty(ref _selectedKind, value);
-    }
-}
 
 /// <summary>Bindable view model for the master control page.</summary>
 /// <remarks>
@@ -437,7 +48,7 @@ internal sealed class MasterControlViewModel : ObservableObject
     private readonly IMasterControlRuntime _runtime;
 
     /// <summary>Shared application action dispatcher used by functional tiles.</summary>
-    private readonly IApplicationActionDispatcher _actions;
+    private readonly IMasterControlActions _actions;
 
     private readonly AsyncRelayCommand _toggleTransparentProxyCommand;
 
@@ -446,6 +57,8 @@ internal sealed class MasterControlViewModel : ObservableObject
     private readonly AsyncRelayCommand _toggleConnectionSamplingCommand;
 
     private readonly IMasterHeroStatusLayoutService _heroStatusLayout;
+
+    private readonly IMasterInfoTileLayoutService _infoTileLayout;
 
     private readonly Func<DateTimeOffset> _getNow;
 
@@ -491,11 +104,16 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Currently visible information tiles displayed in the lower grid.</summary>
     private readonly ObservableCollection<MasterControlInfoTileViewModel> _visibleInfoTiles = [];
 
+    private bool _isApplyingInfoTileLayout;
+
     private readonly ObservableCollection<MasterHeroStatusItemViewModel> _heroStatusItems = [];
 
     private readonly ObservableCollection<MasterHeroStatusSlotViewModel> _heroStatusSlots = [];
 
-    private readonly IReadOnlyList<MasterHeroStatusOptionViewModel> _heroStatusOptions;
+    private IReadOnlyList<MasterHeroStatusOptionViewModel> _heroStatusOptions = [];
+
+    /// <summary>Whether persisted layout and settings state have been loaded for this page lifetime.</summary>
+    private bool _isInitialized;
 
     private DateTimeOffset? _lastHeavyRefreshAt;
 
@@ -508,6 +126,7 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <param name="settings">Settings store. Must not be null.</param>
     /// <param name="takeover">Network takeover provider. Must not be null.</param>
     /// <param name="log">Log sink. Must not be null.</param>
+    /// <param name="infoTileLayout">Persistent information-tile layout service. Must not be null.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public MasterControlViewModel(
         IMasterControlLocalization localization,
@@ -516,13 +135,14 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterControlSettings settings,
         IMasterControlTakeover takeover,
         IMasterControlLog log,
+        IMasterInfoTileLayoutService infoTileLayout,
+        IMasterHeroStatusLayoutService heroStatusLayout,
+        IApplicationErrorSink errorSink,
         IMasterControlTrayStatus? trayStatus = null,
         IMasterControlRuntime? runtime = null,
-        IApplicationActionDispatcher? actions = null,
+        IMasterControlActions? actions = null,
         Func<ClashSharpMode, Task>? modeApplied = null,
-        IMasterHeroStatusLayoutService? heroStatusLayout = null,
-        Func<DateTimeOffset>? getNow = null,
-        IApplicationErrorSink? errorSink = null)
+        Func<DateTimeOffset>? getNow = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -530,47 +150,45 @@ internal sealed class MasterControlViewModel : ObservableObject
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _takeover = takeover ?? throw new ArgumentNullException(nameof(takeover));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _infoTileLayout = infoTileLayout ?? throw new ArgumentNullException(nameof(infoTileLayout));
+        _heroStatusLayout = heroStatusLayout ?? throw new ArgumentNullException(nameof(heroStatusLayout));
+        ArgumentNullException.ThrowIfNull(errorSink);
         _trayStatus = trayStatus ?? UnavailableMasterControlTrayStatus.Instance;
         _runtime = runtime ?? UnavailableMasterControlRuntime.Instance;
         _actions = actions ?? NoMasterControlApplicationActionDispatcher.Instance;
-        _heroStatusLayout = heroStatusLayout ?? MasterHeroStatusLayoutService.Instance;
         _getNow = getNow ?? (() => DateTimeOffset.Now);
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
-        _selectedMode = _settings.CurrentMode;
-        _heroStatusOptions = BuildHeroStatusOptions();
-        IApplicationErrorSink commandErrors = errorSink ?? NullApplicationErrorSink.Instance;
-
         DisabledModeCommand = new AsyncRelayCommand(
             token => ApplyModeAsync(ClashSharpMode.Disabled, token),
-            errorSink: commandErrors,
+            errorSink,
             operationName: "master-mode-disabled");
         StandbyModeCommand = new AsyncRelayCommand(
             token => ApplyModeAsync(ClashSharpMode.Standby, token),
-            errorSink: commandErrors,
+            errorSink,
             operationName: "master-mode-standby");
         RuleTakeoverModeCommand = new AsyncRelayCommand(
             token => ApplyModeAsync(ClashSharpMode.RuleTakeover, token),
-            errorSink: commandErrors,
+            errorSink,
             operationName: "master-mode-rule-takeover");
         FullTakeoverModeCommand = new AsyncRelayCommand(
             token => ApplyModeAsync(ClashSharpMode.FullTakeover, token),
-            errorSink: commandErrors,
+            errorSink,
             operationName: "master-mode-full-takeover");
         LoadCommand = new AsyncRelayCommand(
             LoadAsync,
-            errorSink: commandErrors,
+            errorSink,
             operationName: "master-load");
         _toggleTransparentProxyCommand = new AsyncRelayCommand(
             ToggleTransparentProxyAsync,
-            errorSink: commandErrors,
+            errorSink,
             operationName: "master-transparent-proxy-setting");
         _toggleStartupLaunchCommand = new AsyncRelayCommand(
             ToggleStartupLaunchAsync,
-            errorSink: commandErrors,
+            errorSink,
             operationName: "master-startup-launch-setting");
         _toggleConnectionSamplingCommand = new AsyncRelayCommand(
             ToggleConnectionSamplingAsync,
-            errorSink: commandErrors,
+            errorSink,
             operationName: "master-connection-sampling-setting");
 
         CoreStatusText = string.Empty;
@@ -578,9 +196,6 @@ internal sealed class MasterControlViewModel : ObservableObject
         TransparentProxyStatusText = string.Empty;
         CurrentNodeText = _localization.GetString("Master.Status.CurrentNodeUnavailable");
         LatencySummaryText = _localization.GetString("Master.Status.LatencyUnavailable");
-        BuildHeroStatusItems();
-        BuildInfoTiles();
-        RefreshTileValues();
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -663,9 +278,15 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     public string LatencyTitleText => _localization.GetString("Master.Tile.Latency");
 
+    /// <summary>Gets the localized message shown when an on-demand latency test fails.</summary>
+    public string LatencyTestFailedText => _localization.GetString("Master.LatencyDialog.Failed");
+
     public string EditInfoTilesText => _localization.GetString("Master.Tile.Edit");
 
     public string SearchInfoTilesPlaceholderText => _localization.GetString("Master.Tile.SearchPlaceholder");
+
+    public string InfoTileSelectionDescriptionText =>
+        _localization.GetString("Master.Tile.SelectionDescription");
 
     public string VisibleTileText => _localization.GetString("Master.Tile.Visible");
 
@@ -792,14 +413,16 @@ internal sealed class MasterControlViewModel : ObservableObject
     public AsyncRelayCommand FullTakeoverModeCommand { get; }
 
     /// <summary>Loads core and proxy status for the page.</summary>
-    /// <param name="cancellationToken">Cancels the core version probe when requested.</param>
+    /// <param name="cancellationToken">Cancels all runtime status probes when requested.</param>
     /// <returns>A task that completes after status text is refreshed.</returns>
     /// <remarks>
-    /// Cancellation semantics: Cancellation propagates from the core version probe.
+    /// Cancellation semantics: Cancellation propagates from every probe and prevents stale results from being committed.
     /// Thread / reentrancy: Not guarded; callers should use <see cref="LoadCommand"/> for UI invocation.
     /// </remarks>
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureInitialized();
         DateTimeOffset now = _getNow();
         if (_lastHeavyRefreshAt is DateTimeOffset lastRefresh && now - lastRefresh < LoadRefreshThrottle)
         {
@@ -807,9 +430,46 @@ internal sealed class MasterControlViewModel : ObservableObject
             return;
         }
 
+        RefreshProxyStatus();
+        await Task.WhenAll(
+            RefreshCoreStatusAsync(cancellationToken),
+            RefreshRuntimeSnapshotAsync(cancellationToken),
+            RefreshTrayStatusAsync(cancellationToken));
+        cancellationToken.ThrowIfCancellationRequested();
+        OnPropertyChanged(nameof(BasicStatusText));
+        RefreshTileValues();
+        _lastHeavyRefreshAt = now;
+    }
+
+    /// <summary>Loads persisted page state once without recreating collections on repeated Loaded events.</summary>
+    private void EnsureInitialized()
+    {
+        if (_isInitialized)
+        {
+            return;
+        }
+
+        _selectedMode = _settings.CurrentMode;
+        _heroStatusOptions = BuildHeroStatusOptions();
+        OnPropertyChanged(nameof(SelectedMode));
+        OnPropertyChanged(nameof(IsDisabledModeSelected));
+        OnPropertyChanged(nameof(IsStandbyModeSelected));
+        OnPropertyChanged(nameof(IsRuleTakeoverModeSelected));
+        OnPropertyChanged(nameof(IsFullTakeoverModeSelected));
+        OnPropertyChanged(nameof(HeroStatusOptions));
+        BuildHeroStatusItems();
+        BuildInfoTiles();
+        _isInitialized = true;
+        RefreshTileValues();
+    }
+
+    private async Task RefreshCoreStatusAsync(CancellationToken cancellationToken)
+    {
         try
         {
-            string versionText = CoreVersionDisplayFormatter.Format(await _core.GetVersionTextAsync(cancellationToken));
+            string versionText = CoreVersionDisplayFormatter.Format(
+                await _core.GetVersionTextAsync(cancellationToken));
+            cancellationToken.ThrowIfCancellationRequested();
             _mihomoVersionText = versionText;
             CoreStatusText = string.Format(
                 CultureInfo.CurrentCulture,
@@ -817,19 +477,16 @@ internal sealed class MasterControlViewModel : ObservableObject
                 versionText);
             _isCoreAvailable = true;
         }
-        catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException)
+        catch (Exception exception) when (
+            exception is FileNotFoundException or InvalidOperationException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _mihomoVersionText = _localization.GetString("Master.Status.Unavailable");
             CoreStatusText = _localization.GetString("Master.Status.CoreUnavailable");
             _isCoreAvailable = false;
         }
-
-        RefreshRuntimeSnapshot();
-        RefreshProxyStatus();
-        await RefreshTrayStatusAsync(cancellationToken);
-        OnPropertyChanged(nameof(BasicStatusText));
-        RefreshTileValues();
-        _lastHeavyRefreshAt = now;
     }
 
     /// <summary>Applies a selected takeover mode and refreshes visible status.</summary>
@@ -869,7 +526,10 @@ internal sealed class MasterControlViewModel : ObservableObject
             await _modeApplied(result.Mode);
             _isCoreAvailable = true;
         }
-        catch (Exception exception) when (exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException)
+        catch (Exception exception) when (
+            exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             RestoreModePresentation(
                 baselineMode,
@@ -930,6 +590,12 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
 
         MasterHeroStatusItemKind[] layout = _heroStatusItems.Select(static item => item.Kind).ToArray();
+        int existingIndex = Array.IndexOf(layout, kind);
+        if (existingIndex >= 0 && existingIndex != slotIndex)
+        {
+            layout[existingIndex] = layout[slotIndex];
+        }
+
         layout[slotIndex] = kind;
         IReadOnlyList<MasterHeroStatusItemKind> normalized = _heroStatusLayout.SaveLayout(layout);
         ApplyHeroStatusLayout(normalized);
@@ -938,6 +604,26 @@ internal sealed class MasterControlViewModel : ObservableObject
     public void ResetHeroStatusLayout()
     {
         ApplyHeroStatusLayout(_heroStatusLayout.ResetLayout());
+    }
+
+    /// <summary>Applies and persists the ordered set of information tiles shown on the master page.</summary>
+    /// <param name="tileIds">Ordered tile identifiers selected by the user.</param>
+    public void SetVisibleInfoTileIds(IEnumerable<string> tileIds)
+    {
+        ArgumentNullException.ThrowIfNull(tileIds);
+
+        string[] availableTileIds = _infoTiles.Select(static tile => tile.Id).ToArray();
+        IReadOnlyList<string> layout = _infoTileLayout.SaveLayout(tileIds, availableTileIds);
+        ApplyInfoTileLayout(layout);
+    }
+
+    /// <summary>Persists the current visible tile order after a drag-and-drop reorder.</summary>
+    public void PersistInfoTileOrder()
+    {
+        string[] availableTileIds = _infoTiles.Select(static tile => tile.Id).ToArray();
+        _infoTileLayout.SaveLayout(
+            _visibleInfoTiles.Select(static tile => tile.Id),
+            availableTileIds);
     }
 
     /// <summary>Refreshes visible proxy and transparent-proxy status from current service state.</summary>
@@ -950,7 +636,9 @@ internal sealed class MasterControlViewModel : ObservableObject
                 ? _localization.GetString("Master.Status.On")
                 : _localization.GetString("Master.Status.Off");
         }
-        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
+        catch (Exception exception) when (
+            exception is InvalidOperationException or UnauthorizedAccessException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
         }
@@ -963,6 +651,7 @@ internal sealed class MasterControlViewModel : ObservableObject
     private async Task RefreshTrayStatusAsync(CancellationToken cancellationToken)
     {
         TrayStatusSnapshot snapshot = await _trayStatus.GetSnapshotAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         CurrentNodeText = string.IsNullOrWhiteSpace(snapshot.CurrentNodeName)
             ? _localization.GetString("Master.Status.CurrentNodeUnavailable")
             : snapshot.CurrentNodeName;
@@ -971,14 +660,24 @@ internal sealed class MasterControlViewModel : ObservableObject
             : _localization.GetString("Master.Status.LatencyUnavailable");
     }
 
-    private void RefreshRuntimeSnapshot()
+    private async Task RefreshRuntimeSnapshotAsync(CancellationToken cancellationToken)
     {
         try
         {
-            _runtimeSnapshot = _runtime.GetSnapshot();
+            MasterControlRuntimeSnapshot snapshot =
+                await _runtime.GetSnapshotAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            _runtimeSnapshot = snapshot;
         }
-        catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (
+            exception is MasterControlRuntimeUnavailableException
+                or InvalidOperationException
+                or IOException
+                or UnauthorizedAccessException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
         }
     }
@@ -987,7 +686,8 @@ internal sealed class MasterControlViewModel : ObservableObject
     {
         _infoTiles.Clear();
         _visibleInfoTiles.Clear();
-        foreach (MasterTileDefinition tile in MasterTileCatalog.Create(this))
+        IReadOnlyList<MasterTileDefinition> definitions = MasterTileCatalog.Create(this);
+        foreach (MasterTileDefinition tile in definitions)
         {
             MasterControlInfoTileViewModel viewModel = new(
                 tile.Id,
@@ -999,17 +699,44 @@ internal sealed class MasterControlViewModel : ObservableObject
                 tile.TypeText,
                 tile.IsToggleVisible,
                 tile.IsToggleOn,
-                tile.Command)
-            {
-                IsVisible = tile.IsVisibleByDefault,
-            };
+                tile.Command);
             viewModel.PropertyChanged += OnInfoTilePropertyChanged;
             _infoTiles.Add(viewModel);
-            if (viewModel.IsVisible)
+        }
+
+        string[] availableTileIds = definitions.Select(static tile => tile.Id).ToArray();
+        ApplyInfoTileLayout(_infoTileLayout.GetLayout(availableTileIds));
+    }
+
+    private void ApplyInfoTileLayout(IReadOnlyList<string> tileIds)
+    {
+        Dictionary<string, MasterControlInfoTileViewModel> tilesById = _infoTiles
+            .ToDictionary(static tile => tile.Id, StringComparer.Ordinal);
+        HashSet<string> visibleIds = tileIds.ToHashSet(StringComparer.Ordinal);
+
+        _isApplyingInfoTileLayout = true;
+        try
+        {
+            foreach (MasterControlInfoTileViewModel tile in _infoTiles)
             {
-                _visibleInfoTiles.Add(viewModel);
+                tile.IsVisible = visibleIds.Contains(tile.Id);
+            }
+
+            _visibleInfoTiles.Clear();
+            foreach (string tileId in tileIds)
+            {
+                if (tilesById.TryGetValue(tileId, out MasterControlInfoTileViewModel? tile))
+                {
+                    _visibleInfoTiles.Add(tile);
+                }
             }
         }
+        finally
+        {
+            _isApplyingInfoTileLayout = false;
+        }
+
+        OnPropertyChanged(nameof(VisibleInfoTiles));
     }
 
     private void BuildHeroStatusItems()
@@ -1241,6 +968,11 @@ internal sealed class MasterControlViewModel : ObservableObject
             return;
         }
 
+        if (_isApplyingInfoTileLayout)
+        {
+            return;
+        }
+
         if (tile.IsVisible)
         {
             int sourceIndex = _infoTiles.IndexOf(tile);
@@ -1259,6 +991,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(VisibleInfoTiles));
+        PersistInfoTileOrder();
     }
 
     private async Task ToggleTransparentProxyAsync(CancellationToken cancellationToken)
@@ -1425,6 +1158,11 @@ internal sealed class MasterControlViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(_runtimeSnapshot.MihomoService.Message))
         {
             return _runtimeSnapshot.MihomoService.Message;
+        }
+
+        if (!_runtimeSnapshot.MihomoService.IsKnown)
+        {
+            return _localization.GetString("MihomoService.Status.Unknown");
         }
 
         return _runtimeSnapshot.MihomoService.IsRunning
@@ -1609,7 +1347,6 @@ internal sealed class MasterControlViewModel : ObservableObject
         string TypeText,
         bool IsToggleVisible = false,
         bool IsToggleOn = false,
-        bool IsVisibleByDefault = true,
         ICommand? Command = null);
 
     private static class MasterTileCatalog
@@ -1627,60 +1364,60 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTile("upload-rate", "UploadRate", "\uE898", infoType),
                 owner.CreateTile("download-rate", "DownloadRate", "\uE896", infoType),
                 owner.CreateTile("active-connections", "ActiveConnections", "\uE839", infoType),
-                owner.CreateTile("session-traffic", "SessionTraffic", "\uE9D2", infoType, isVisibleByDefault: false),
-                owner.CreateTile("memory-usage", "MemoryUsage", "\uE950", infoType, isVisibleByDefault: false),
-                owner.CreateTile("mihomo-version", "MihomoVersion", "\uE950", infoType, isVisibleByDefault: false),
-                owner.CreateTile("system-proxy", "SystemProxy", "\uE968", infoType, isVisibleByDefault: false),
+                owner.CreateTile("session-traffic", "SessionTraffic", "\uE9D2", infoType),
+                owner.CreateTile("memory-usage", "MemoryUsage", "\uE950", infoType),
+                owner.CreateTile("mihomo-version", "MihomoVersion", "\uE950", infoType),
+                owner.CreateTile("system-proxy", "SystemProxy", "\uE968", infoType),
                 owner.CreateTile("transparent-proxy", "TransparentProxy", "\uE8A7", controllableType, true, owner._settings.TransparentProxyEnabled, trackedCommand: owner._toggleTransparentProxyCommand),
                 owner.CreateTile("latency", "Latency", "\uEC4A", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.RunLatencyTest)),
-                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, isVisibleByDefault: false, trackedCommand: owner._toggleStartupLaunchCommand),
-                owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, isVisibleByDefault: false, trackedCommand: owner._toggleConnectionSamplingCommand),
-                owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, isVisibleByDefault: false, command: owner.ToggleUrlBlocking),
+                owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, trackedCommand: owner._toggleStartupLaunchCommand),
+                owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, trackedCommand: owner._toggleConnectionSamplingCommand),
+                owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, command: owner.ToggleUrlBlocking),
                 owner.CreateTile("active-profile", "ActiveProfile", "\uE8A5", infoType),
-                owner.CreateTile("port", "Port", "\uE839", infoType, isVisibleByDefault: false),
-                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", navigationType, isVisibleByDefault: false),
-                owner.CreateTile("connection-test-proxy-url-1", "ConnectionTestProxyUrl1", "\uE774", infoType, isVisibleByDefault: false),
-                owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", infoType, isVisibleByDefault: false),
-                owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", infoType, isVisibleByDefault: false),
-                owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ShowStartupPrompt)),
-                owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.CheckStartupConflicts)),
-                owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ExportConfiguration)),
-                owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, isVisibleByDefault: false, command: () => owner.RequestTileAction(MasterControlTileAction.ImportConfiguration)),
-                owner.CreateTile("app-name", "AppName", "\uE946", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("app-version", "About.Version.Title", "\uE946", "Master.Tile.Description.AppVersion", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("app-runtime", "About.Runtime.Title", "\uE7F8", "Master.Tile.Description.AppRuntime", infoType, isVisibleByDefault: false),
+                owner.CreateTile("port", "Port", "\uE839", infoType),
+                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", navigationType),
+                owner.CreateTile("connection-test-proxy-url-1", "ConnectionTestProxyUrl1", "\uE774", infoType),
+                owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", infoType),
+                owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", infoType),
+                owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ShowStartupPrompt)),
+                owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.CheckStartupConflicts)),
+                owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ExportConfiguration)),
+                owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ImportConfiguration)),
+                owner.CreateTile("app-name", "AppName", "\uE946", infoType),
+                owner.CreateTileFromKeys("app-version", "About.Version.Title", "\uE946", "Master.Tile.Description.AppVersion", infoType),
+                owner.CreateTileFromKeys("app-runtime", "About.Runtime.Title", "\uE7F8", "Master.Tile.Description.AppRuntime", infoType),
                 owner.CreateTileFromKeys("current-mode", "Tray.Menu.Mode", "\uE8AB", "Master.Mode.RuleTakeover.Description", infoType),
-                owner.CreateTileFromKeys("current-node", "Tray.Status.Node.Format", "\uE8A5", "Settings.Tray.Feature.Status.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("notification-enabled", "Settings.Notification.Enabled.Title", "\uE7F4", "Settings.Notification.Enabled.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("notification-level", "Settings.Notification.Title", "\uE7F4", "Settings.Notification.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("triggers-enabled", "Settings.Triggers.Enabled.Title", "\uE9F5", "Settings.Triggers.Enabled.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("trigger-notifications", "Settings.Triggers.Notifications.Title", "\uE7F4", "Settings.Triggers.Notifications.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("tray-visible-features", "Settings.Tray.VisibleFeatures.Title", "\uE8A7", "Settings.Tray.VisibleFeatures.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("tray-monochrome-icon", "Settings.Tray.MonochromeInactiveIcon.Title", "\uE790", "Settings.Tray.MonochromeInactiveIcon.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("close-behavior", "Settings.CloseBehavior.Title", "\uE8BB", "Settings.CloseBehavior.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("startup-behavior", "Settings.StartupBehavior.Title", "\uE7C3", "Settings.StartupBehavior.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("app-theme", "Settings.AppTheme.Title", "\uE790", "Settings.AppTheme.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("display-language", "Settings.Language.Title", "\uE774", "Settings.Language.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("sampling-interval", "Settings.SamplingInterval.Title", "\uE916", "Settings.SamplingInterval.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("app-accent", "Settings.AppAccentColor.Title", "\uE790", "Settings.AppAccentColor.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, isVisibleByDefault: false, command: owner.ToggleRestoreProxyOnExit),
-                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, isVisibleByDefault: false, command: owner.ToggleCheckStaleProxyOnStartup),
-                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, isVisibleByDefault: false, command: owner.ToggleStartupConflictCheck),
-                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, isVisibleByDefault: false, command: owner.ToggleStartupGuide),
-                owner.CreateTileFromKeys("mainland-feature-mode", "Settings.MainlandChinaDisplay.Title", "\uE7B5", "Settings.MainlandChinaDisplay.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("startup-restore-fallback", "Settings.StartupRestoreFallback.Title", "\uE7C3", "Settings.StartupRestoreFallback.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("mihomo-service", "Settings.TransparentProxy.Service.Title", "\uE95A", "Settings.TransparentProxy.Service.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("core-config-file", "Master.Status.CoreConfiguration", "\uE8A5", "Settings.ProxyInformation.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("profile-count", "Nav.Profiles", "\uE8A5", "Page.Profiles.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("subscription-count", "StartupPrompt.Check.Subscription.Title", "\uE774", "Page.Profiles.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("proxy-node-count", "Nav.ProxyNodes", "\uE8A5", "Page.ProxyNodes.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("rule-count", "Nav.Rules", "\uE8D7", "Page.Rules.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("trigger-count", "Settings.Section.Triggers", "\uE9F5", "Page.Triggers.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("system-log-count", "Statistics.LogsShortcut.Title", "\uE9D9", "Statistics.LogsShortcut.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("connection-records", "Nav.Connections", "\uE839", "Page.Connections.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("traffic-total", "Statistics.Total.Title", "\uE9D2", "Page.Statistics.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("traffic-snapshots", "Statistics.ByDate.Title", "\uE121", "Page.Statistics.Description", infoType, isVisibleByDefault: false),
-                owner.CreateTileFromKeys("node-health-records", "Statistics.Node.Title", "\uE8A5", "Page.Statistics.Description", infoType, isVisibleByDefault: false),
+                owner.CreateTileFromKeys("current-node", "Tray.Status.Node.Format", "\uE8A5", "Settings.Tray.Feature.Status.Description", infoType),
+                owner.CreateTileFromKeys("notification-enabled", "Settings.Notification.Enabled.Title", "\uE7F4", "Settings.Notification.Enabled.Description", infoType),
+                owner.CreateTileFromKeys("notification-level", "Settings.Notification.Title", "\uE7F4", "Settings.Notification.Description", infoType),
+                owner.CreateTileFromKeys("triggers-enabled", "Settings.Triggers.Enabled.Title", "\uE9F5", "Settings.Triggers.Enabled.Description", infoType),
+                owner.CreateTileFromKeys("trigger-notifications", "Settings.Triggers.Notifications.Title", "\uE7F4", "Settings.Triggers.Notifications.Description", infoType),
+                owner.CreateTileFromKeys("tray-visible-features", "Settings.Tray.VisibleFeatures.Title", "\uE8A7", "Settings.Tray.VisibleFeatures.Description", infoType),
+                owner.CreateTileFromKeys("tray-monochrome-icon", "Settings.Tray.MonochromeInactiveIcon.Title", "\uE790", "Settings.Tray.MonochromeInactiveIcon.Description", infoType),
+                owner.CreateTileFromKeys("close-behavior", "Settings.CloseBehavior.Title", "\uE8BB", "Settings.CloseBehavior.Description", infoType),
+                owner.CreateTileFromKeys("startup-behavior", "Settings.StartupBehavior.Title", "\uE7C3", "Settings.StartupBehavior.Description", infoType),
+                owner.CreateTileFromKeys("app-theme", "Settings.AppTheme.Title", "\uE790", "Settings.AppTheme.Description", infoType),
+                owner.CreateTileFromKeys("display-language", "Settings.Language.Title", "\uE774", "Settings.Language.Description", infoType),
+                owner.CreateTileFromKeys("sampling-interval", "Settings.SamplingInterval.Title", "\uE916", "Settings.SamplingInterval.Description", infoType),
+                owner.CreateTileFromKeys("app-accent", "Settings.AppAccentColor.Title", "\uE790", "Settings.AppAccentColor.Description", infoType),
+                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, command: owner.ToggleRestoreProxyOnExit),
+                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, command: owner.ToggleCheckStaleProxyOnStartup),
+                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, command: owner.ToggleStartupConflictCheck),
+                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, command: owner.ToggleStartupGuide),
+                owner.CreateTileFromKeys("mainland-feature-mode", "Settings.MainlandChinaDisplay.Title", "\uE7B5", "Settings.MainlandChinaDisplay.Description", infoType),
+                owner.CreateTileFromKeys("startup-restore-fallback", "Settings.StartupRestoreFallback.Title", "\uE7C3", "Settings.StartupRestoreFallback.Description", infoType),
+                owner.CreateTileFromKeys("mihomo-service", "Settings.TransparentProxy.Service.Title", "\uE95A", "Settings.TransparentProxy.Service.Description", infoType),
+                owner.CreateTileFromKeys("core-config-file", "Master.Status.CoreConfiguration", "\uE8A5", "Settings.ProxyInformation.Description", infoType),
+                owner.CreateTileFromKeys("profile-count", "Nav.Profiles", "\uE8A5", "Page.Profiles.Description", infoType),
+                owner.CreateTileFromKeys("subscription-count", "StartupPrompt.Check.Subscription.Title", "\uE774", "Page.Profiles.Description", infoType),
+                owner.CreateTileFromKeys("proxy-node-count", "Nav.ProxyNodes", "\uE8A5", "Page.ProxyNodes.Description", infoType),
+                owner.CreateTileFromKeys("rule-count", "Nav.Rules", "\uE8D7", "Page.Rules.Description", infoType),
+                owner.CreateTileFromKeys("trigger-count", "Settings.Section.Triggers", "\uE9F5", "Page.Triggers.Description", infoType),
+                owner.CreateTileFromKeys("system-log-count", "Statistics.LogsShortcut.Title", "\uE9D9", "Statistics.LogsShortcut.Description", infoType),
+                owner.CreateTileFromKeys("connection-records", "Nav.Connections", "\uE839", "Page.Connections.Description", infoType),
+                owner.CreateTileFromKeys("traffic-total", "Statistics.Total.Title", "\uE9D2", "Page.Statistics.Description", infoType),
+                owner.CreateTileFromKeys("traffic-snapshots", "Statistics.ByDate.Title", "\uE121", "Page.Statistics.Description", infoType),
+                owner.CreateTileFromKeys("node-health-records", "Statistics.Node.Title", "\uE8A5", "Page.Statistics.Description", infoType),
             ];
         }
     }
@@ -1692,7 +1429,6 @@ internal sealed class MasterControlViewModel : ObservableObject
         string typeText,
         bool isToggleVisible = false,
         bool isToggleOn = false,
-        bool isVisibleByDefault = true,
         Action? command = null,
         ICommand? trackedCommand = null)
     {
@@ -1704,7 +1440,6 @@ internal sealed class MasterControlViewModel : ObservableObject
             typeText,
             isToggleVisible,
             isToggleOn,
-            isVisibleByDefault,
             trackedCommand ?? (command is null ? null : new RelayCommand(command)));
     }
 
@@ -1716,7 +1451,6 @@ internal sealed class MasterControlViewModel : ObservableObject
         string typeText,
         bool isToggleVisible = false,
         bool isToggleOn = false,
-        bool isVisibleByDefault = true,
         Action? command = null)
     {
         return new MasterTileDefinition(
@@ -1727,7 +1461,6 @@ internal sealed class MasterControlViewModel : ObservableObject
             typeText,
             isToggleVisible,
             isToggleOn,
-            isVisibleByDefault,
             command is null ? null : new RelayCommand(command));
     }
 
@@ -1742,7 +1475,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         return version is null ? "1.0.0.0" : version.ToString();
     }
 
-    private sealed class NoMasterControlApplicationActionDispatcher : IApplicationActionDispatcher
+    private sealed class NoMasterControlApplicationActionDispatcher : IMasterControlActions
     {
         public static NoMasterControlApplicationActionDispatcher Instance { get; } = new();
 

@@ -1,12 +1,3 @@
-/*
- * Network Takeover Service
- * Applies Clash# master takeover modes to mihomo runtime state and Windows system proxy settings
- *
- * @author: WaterRun
- * @file: Service/NetworkTakeoverService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.ComponentModel;
 using System.IO;

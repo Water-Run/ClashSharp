@@ -1,30 +1,9 @@
-/*
- * Tray Menu State Builder
- * Builds deterministic system tray menu state for Clash# controls
- *
- * @author: WaterRun
- * @file: Service/TrayMenuStateBuilder.cs
- * @date: 2026-06-24
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
-
-/// <summary>Runtime status displayed in the tray status submenu.</summary>
-/// <param name="CurrentNodeName">Current proxy node name; empty when unavailable.</param>
-/// <param name="LatencyMilliseconds">Measured latency in milliseconds; null when unavailable.</param>
-public readonly record struct TrayStatusSnapshot(string CurrentNodeName, int? LatencyMilliseconds)
-{
-    /// <summary>Unavailable status snapshot.</summary>
-    public static TrayStatusSnapshot Unavailable { get; } = new(string.Empty, null);
-
-    /// <summary>Gets whether the snapshot contains a current node name.</summary>
-    public bool HasCurrentNode => !string.IsNullOrWhiteSpace(CurrentNodeName);
-}
 
 /// <summary>One tray status menu item.</summary>
 /// <param name="Label">Display label; never null.</param>

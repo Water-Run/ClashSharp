@@ -11,6 +11,7 @@ public sealed class AppHost : IApplicationHost
     private readonly ServiceProvider _services;
     private Task? _stopTask;
     private Task? _disposeTask;
+    private long _stopAttemptVersion;
     private int _started;
 
     private AppHost(ServiceProvider services)
@@ -54,8 +55,12 @@ public sealed class AppHost : IApplicationHost
         lock (_syncLock)
         {
             ThrowIfDisposed();
-            _stopTask ??= _services.GetRequiredService<IApplicationShutdownCoordinator>()
-                .StopAsync(cancellationToken);
+            if (_stopTask is null)
+            {
+                long attemptVersion = ++_stopAttemptVersion;
+                _stopTask = StopCoreAsync(attemptVersion, cancellationToken);
+            }
+
             return _stopTask;
         }
     }
@@ -73,6 +78,31 @@ public sealed class AppHost : IApplicationHost
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
+    }
+
+    private async Task StopCoreAsync(
+        long attemptVersion,
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        try
+        {
+            await _services.GetRequiredService<IApplicationShutdownCoordinator>()
+                .StopAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            lock (_syncLock)
+            {
+                if (_stopAttemptVersion == attemptVersion)
+                {
+                    _stopTask = null;
+                }
+            }
+
+            throw;
+        }
     }
 
     private sealed class NoOpApplicationShutdownCoordinator : IApplicationShutdownCoordinator

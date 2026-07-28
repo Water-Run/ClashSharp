@@ -1,14 +1,3 @@
-/*
- * Rule Preview Model
- * Represents one routing rule preview row shown by the rules page
- *
- * @author: WaterRun
- * @file: Model/RulePreview.cs
- * @date: 2026-06-15
- */
-
-using ClashSharp.Service;
-
 namespace ClashSharp.Model;
 
 /// <summary>Represents one routing rule preview row shown by the rules page.</summary>
@@ -27,13 +16,4 @@ public readonly record struct RulePreview(
     string RuleType,
     string Payload,
     string Action,
-    long HitCount)
-{
-    /// <summary>Gets the UI-filtered provider display name.</summary>
-    /// <value>Display name after mainland China UI replacement; never null.</value>
-    public string ProviderNameDisplay => MainlandChinaTextDisplayService.Instance.Apply(ProviderName);
-
-    /// <summary>Gets the UI-filtered payload display text.</summary>
-    /// <value>Payload after mainland China UI replacement; never null.</value>
-    public string PayloadDisplay => MainlandChinaTextDisplayService.Instance.Apply(Payload);
-}
+    long HitCount);

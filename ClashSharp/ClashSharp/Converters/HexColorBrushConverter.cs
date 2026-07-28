@@ -1,12 +1,3 @@
-/*
- * Hex Color Brush Converter
- * Converts persisted ARGB accent color text into a WinUI brush for preview swatches
- *
- * @author: WaterRun
- * @file: Converters/HexColorBrushConverter.cs
- * @date: 2026-06-25
- */
-
 using System;
 using ClashSharp.Service;
 using Microsoft.UI.Xaml.Data;

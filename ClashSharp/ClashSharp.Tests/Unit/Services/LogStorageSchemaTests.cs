@@ -1,12 +1,3 @@
-/*
- * Log Storage Schema Tests
- * Verifies SQLite log storage schema creation and lightweight migration behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/LogStorageSchemaTests.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Globalization;
 using ClashSharp.Service;

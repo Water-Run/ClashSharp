@@ -1,12 +1,3 @@
-/*
- * Mihomo Profile Preview Parser
- * Provides pure conservative preview parsing for mihomo proxy nodes, providers, and rules
- *
- * @author: WaterRun
- * @file: Service/MihomoProfilePreviewParser.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Collections.Generic;
 using ClashSharp.Model;

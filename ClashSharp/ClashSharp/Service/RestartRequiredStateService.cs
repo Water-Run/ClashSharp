@@ -1,12 +1,3 @@
-/*
- * Restart Required State Service
- * Shares restart-required settings state between settings pages and the shell
- *
- * @author: WaterRun
- * @file: Service/RestartRequiredStateService.cs
- * @date: 2026-06-25
- */
-
 using System;
 
 namespace ClashSharp.Service;

@@ -57,9 +57,20 @@ public sealed partial class DataGenerationTransition
 
             if (IsExactBaseline(observed))
             {
-                await owner
-                    .AbortAsync(this, observed, operationToken)
-                    .ConfigureAwait(false);
+                try
+                {
+                    await owner
+                        .AbortAsync(this, observed, operationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception abortFailure)
+                {
+                    throw new DataGenerationManagerException(
+                        DataGenerationManagerError.ScopeDisposalFailed,
+                        "Manifest promotion failed before commit, but candidate cleanup also failed.",
+                        new AggregateException(failure, abortFailure));
+                }
+
                 Interlocked.Exchange(ref _owner, null);
                 ExceptionDispatchInfo.Capture(failure).Throw();
             }
@@ -145,9 +156,20 @@ public sealed partial class DataGenerationTransition
 
                 if (IsRestoredBaseline(observed, promoted))
                 {
-                    await owner
-                        .RollbackAsync(this, observed!, operationToken)
-                        .ConfigureAwait(false);
+                    try
+                    {
+                        await owner
+                            .RollbackAsync(this, observed!, operationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception rollbackFailure)
+                    {
+                        throw new DataGenerationManagerException(
+                            DataGenerationManagerError.ManifestRestorationCommitted,
+                            "Baseline restoration completed durably, but the original call and in-memory cleanup failed.",
+                            new AggregateException(failure, rollbackFailure));
+                    }
+
                     Interlocked.Exchange(ref _owner, null);
                     throw new DataGenerationManagerException(
                         DataGenerationManagerError.ManifestRestorationCommitted,

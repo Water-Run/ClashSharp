@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Model.Triggers;
 using Microsoft.Data.Sqlite;
@@ -214,7 +215,7 @@ internal sealed class TriggerContextProviderAdapter : ITriggerContextProvider
         {
             throw;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new SourceRead<TriggerTrafficContextSnapshot>(
                 default!,
@@ -248,7 +249,7 @@ internal sealed class TriggerContextProviderAdapter : ITriggerContextProvider
         {
             throw;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new SourceRead<RuntimeTrafficRateSnapshot>(
                 default,

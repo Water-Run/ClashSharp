@@ -1,12 +1,3 @@
-/*
- * Tray Status Service
- * Builds current system tray status snapshots from runtime proxy state and stored node health
- *
- * @author: WaterRun
- * @file: Service/TrayStatusService.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.Collections.Generic;
 using System.Threading;

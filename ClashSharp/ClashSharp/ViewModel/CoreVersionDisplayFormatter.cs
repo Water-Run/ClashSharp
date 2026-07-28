@@ -1,14 +1,3 @@
-/*
- * Core Version Display Formatter
- * Normalizes mihomo version probe output for compact UI display
- *
- * @author: WaterRun
- * @file: ViewModel/CoreVersionDisplayFormatter.cs
- * @date: 2026-06-24
- */
-
-#nullable enable
-
 using System;
 using System.Linq;
 using System.Text.RegularExpressions;

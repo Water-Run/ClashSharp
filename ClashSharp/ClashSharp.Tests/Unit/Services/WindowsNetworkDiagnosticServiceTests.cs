@@ -1,12 +1,3 @@
-/*
- * Windows Network Diagnostic Service Tests
- * Verifies Windows-native diagnostics without touching the real user environment
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/WindowsNetworkDiagnosticServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

@@ -1,12 +1,3 @@
-/*
- * Mainland China Text Display Service Tests
- * Verifies mainland China feature levels apply only the configured UI display behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/MainlandChinaTextDisplayServiceTests.cs
- * @date: 2026-06-17
- */
-
 using System.Reflection;
 using ClashSharp.Model;
 using ClashSharp.Service;

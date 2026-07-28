@@ -33,6 +33,36 @@ public sealed class RepositoryTopologyTests
         Assert.All(paths, path => Assert.True(File.Exists(Path.Combine(RepositoryRoot, path)), path));
     }
 
+    /// <summary>Verifies C# sources rely on source control and project-level nullability policy.</summary>
+    [Fact]
+    public void CSharpSources_DoNotUseVolatileBannersOrRedundantNullableDirectives()
+    {
+        string sourceRoot = Path.Combine(RepositoryRoot, "ClashSharp");
+        string[] offenders = Directory
+            .EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path =>
+            {
+                string relativePath = Path.GetRelativePath(sourceRoot, path).Replace('\\', '/');
+                return !relativePath.Contains("/bin/", StringComparison.Ordinal)
+                    && !relativePath.Contains("/obj/", StringComparison.Ordinal)
+                    && !relativePath.StartsWith("bin/", StringComparison.Ordinal)
+                    && !relativePath.StartsWith("obj/", StringComparison.Ordinal);
+            })
+            .Where(path =>
+            {
+                string source = File.ReadAllText(path);
+                return Regex.IsMatch(source, @"@(?:author|file|date):", RegexOptions.IgnoreCase)
+                    || Regex.IsMatch(source, @"(?m)^#nullable enable\s*$");
+            })
+            .Select(path => Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            $"Volatile source banners or redundant nullable directives found:{Environment.NewLine}{string.Join(Environment.NewLine, offenders)}");
+    }
+
     /// <summary>Verifies tests and the app reference the production Core and Infrastructure projects.</summary>
     [Fact]
     public void ProductionProjects_AreReferencedWithoutActiveConnectionSourceLink()
@@ -128,25 +158,11 @@ public sealed class RepositoryTopologyTests
     {
         Dictionary<string, int> maximumOccurrencesByFile = new(StringComparer.Ordinal)
         {
-            ["View/About.xaml.cs"] = 8,
-            ["View/Connections.xaml.cs"] = 4,
-            ["View/Links.xaml.cs"] = 9,
-            ["View/Logs.xaml.cs"] = 14,
-            ["View/MasterControl.xaml.cs"] = 20,
-            ["View/Profiles.xaml.cs"] = 5,
-            ["View/Proxies.xaml.cs"] = 5,
-            ["View/Rules.xaml.cs"] = 2,
-            ["View/Settings.xaml.cs"] = 60,
-            ["View/StartupConflictDialogPresenter.cs"] = 8,
-            ["View/Statistics.xaml.cs"] = 3,
-            ["ViewModel/AsyncRelayCommand.cs"] = 1,
-            ["ViewModel/MainWindowViewModel.cs"] = 1,
-            ["ViewModel/ManagementPageViewModels.cs"] = 1,
-            ["ViewModel/MasterControlAdapters.cs"] = 10,
-            ["ViewModel/MasterControlViewModel.cs"] = 5,
-            ["ViewModel/ProxiesViewModel.cs"] = 1,
-            ["ViewModel/SettingsAdapters.cs"] = 3,
-            ["ViewModel/SettingsViewModel.cs"] = 7,
+            ["Presentation/Composition/LegacyPageServiceBridge.cs"] = 11,
+            ["Presentation/Composition/MainWindowComposition.cs"] = 5,
+            ["Presentation/Composition/MasterControlPageComposition.cs"] = 14,
+            ["Presentation/Composition/SettingsPageComposition.cs"] = 13,
+            ["Presentation/Composition/StartupGuideComposition.cs"] = 6,
         };
         string presentationRoot = Path.Combine(RepositoryRoot, "ClashSharp", "ClashSharp");
         Dictionary<string, int> actualOccurrencesByFile = Directory
@@ -156,20 +172,23 @@ public sealed class RepositoryTopologyTests
                 string relative = Path.GetRelativePath(presentationRoot, path).Replace('\\', '/');
                 return !relative.StartsWith("obj/", StringComparison.Ordinal)
                     && !relative.StartsWith("bin/", StringComparison.Ordinal)
-                    && (relative.StartsWith("View/", StringComparison.Ordinal)
+                    && (relative.StartsWith("Presentation/", StringComparison.Ordinal)
+                        || relative.StartsWith("View/", StringComparison.Ordinal)
                         || relative.StartsWith("ViewModel/", StringComparison.Ordinal));
             })
             .Select(path => new
             {
                 RelativePath = Path.GetRelativePath(presentationRoot, path).Replace('\\', '/'),
-                Count = Regex.Count(File.ReadAllText(path), @"\.Instance\b"),
+                Count = Regex.Count(
+                    File.ReadAllText(path),
+                    @"\b[A-Za-z_][A-Za-z0-9_]*Service\.Instance\b"),
             })
             .Where(static item => item.Count > 0)
             .ToDictionary(static item => item.RelativePath, static item => item.Count, StringComparer.Ordinal);
 
         Assert.True(
-            actualOccurrencesByFile.Values.Sum() <= 167,
-            "Presentation service-locator debt exceeded the 167-reference Phase 04 baseline.");
+            actualOccurrencesByFile.Values.Sum() <= 49,
+            "Presentation service-locator debt exceeded the 49-reference mid-refactor baseline.");
         Assert.All(actualOccurrencesByFile, occurrence =>
         {
             Assert.True(
@@ -179,6 +198,30 @@ public sealed class RepositoryTopologyTests
                 occurrence.Value <= maximum,
                 $"Presentation service-locator debt increased in {occurrence.Key}: {occurrence.Value} > {maximum}.");
         });
+    }
+
+    /// <summary>Verifies startup steps receive dependencies from the host composition root.</summary>
+    [Fact]
+    public void StartupSteps_DoNotResolveProcessWideServiceInstances()
+    {
+        string startupRoot = Path.Combine(
+            RepositoryRoot,
+            "ClashSharp",
+            "ClashSharp",
+            "AppHost",
+            "Startup");
+        string[] offenders = Directory
+            .EnumerateFiles(startupRoot, "*Step.cs", SearchOption.TopDirectoryOnly)
+            .Where(path => Regex.IsMatch(
+                File.ReadAllText(path),
+                @"\b[A-Za-z_][A-Za-z0-9_]*Service\.Instance\b"))
+            .Select(static path => Path.GetFileName(path) ?? path)
+            .OrderBy(static fileName => fileName, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            "Startup steps must use constructor-injected dependencies: " + string.Join(", ", offenders));
     }
 
     /// <summary>Verifies workflow actions are immutable and workflow permissions are read-only.</summary>

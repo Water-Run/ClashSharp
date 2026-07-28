@@ -1,12 +1,3 @@
-/*
- * Observable Object Tests
- * Verifies shared MVVM property notification behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/ObservableObjectTests.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;

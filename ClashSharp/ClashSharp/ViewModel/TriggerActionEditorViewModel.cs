@@ -1,5 +1,3 @@
-#nullable enable
-
 using System;
 using ClashSharp.Model.Triggers;
 using ClashSharpMode = global::ClashSharp.Model.ClashSharpMode;

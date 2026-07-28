@@ -1,12 +1,3 @@
-/*
- * Mihomo Worker
- * Starts and supervises mihomo for the Windows service host
- *
- * @author: WaterRun
- * @file: ClashSharp.MihomoService/MihomoWorker.cs
- * @date: 2026-06-24
- */
-
 using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.Extensions.Hosting;

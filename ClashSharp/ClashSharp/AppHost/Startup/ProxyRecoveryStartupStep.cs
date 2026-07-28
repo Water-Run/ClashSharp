@@ -13,7 +13,9 @@ namespace ClashSharp.Hosting.Startup;
 /// <summary>Completes best-effort stale proxy recovery before window startup.</summary>
 internal sealed class ProxyRecoveryStartupStep(
     NetworkStateCoordinator network,
-    LegacyNetworkIntentSource intents) : IStartupStep
+    LegacyNetworkIntentSource intents,
+    LogStorageService logStorage,
+    LocalizationService localization) : IStartupStep
 {
     public string Name => "proxy-recovery";
 
@@ -31,10 +33,10 @@ internal sealed class ProxyRecoveryStartupStep(
                 return StartupStepResult.Succeeded();
             }
 
-            LogStorageService.Instance.AppendLog(
+            logStorage.AppendLog(
                 "Warning",
                 "ProxyRecovery",
-                LocalizationService.Instance.GetString("ProxyRecovery.StartupFailed"),
+                localization.GetString("ProxyRecovery.StartupFailed"),
                 result.ErrorCode);
             return result.Outcome is MutationOutcome.RecoveryRequired or MutationOutcome.CommittedRecoveryRequired
                 ? StartupStepResult.Fatal(result.ErrorCode ?? "proxy-recovery-required")
@@ -42,10 +44,10 @@ internal sealed class ProxyRecoveryStartupStep(
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or UnauthorizedAccessException)
         {
-            LogStorageService.Instance.AppendLog(
+            logStorage.AppendLog(
                 "Warning",
                 "ProxyRecovery",
-                LocalizationService.Instance.GetString("ProxyRecovery.StartupFailed"),
+                localization.GetString("ProxyRecovery.StartupFailed"),
                 exception.Message);
             return StartupStepResult.Warning("ProxyRecovery.StartupFailed");
         }

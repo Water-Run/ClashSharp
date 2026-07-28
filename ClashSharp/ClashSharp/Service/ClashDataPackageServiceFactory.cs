@@ -1,12 +1,3 @@
-/*
- * Clash Data Package Service Factory
- * Wires production dependencies for XML data package import and export
- *
- * @author: WaterRun
- * @file: Service/ClashDataPackageServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
 using ClashSharp.Model;
 
@@ -210,5 +201,11 @@ internal sealed class ClashDataPackageSettingsAdapter : IClashDataPackageSetting
     {
         get => _settings.ConnectionTestDirectUrl;
         set => _settings.ConnectionTestDirectUrl = value;
+    }
+
+    public string MasterInfoTileLayout
+    {
+        get => _settings.MasterInfoTileLayout;
+        set => _settings.MasterInfoTileLayout = value;
     }
 }

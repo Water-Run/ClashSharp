@@ -1,12 +1,3 @@
-/*
- * Windows Diagnostic Target Model
- * Defines Windows-native network diagnostic targets exposed by Clash#
- *
- * @author: WaterRun
- * @file: Model/WindowsDiagnosticTarget.cs
- * @date: 2026-06-15
- */
-
 namespace ClashSharp.Model;
 
 /// <summary>Defines Windows-native network diagnostic targets exposed by Clash#.</summary>

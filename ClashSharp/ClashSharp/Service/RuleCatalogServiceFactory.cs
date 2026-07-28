@@ -1,12 +1,3 @@
-/*
- * Rule Catalog Service Factory
- * Wires production dependencies for routing rule catalog data
- *
- * @author: WaterRun
- * @file: Service/RuleCatalogServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System.Collections.Generic;
 using ClashSharp.Model;
 

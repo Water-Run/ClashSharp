@@ -12,7 +12,6 @@ using ClashSharp.Infrastructure.Recovery;
 using ClashSharp.Infrastructure.Triggers;
 using ClashSharp.Service;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.UI.Xaml;
 
 namespace ClashSharp.Hosting;
 
@@ -20,23 +19,34 @@ namespace ClashSharp.Hosting;
 internal static class ClashSharpAppHostFactory
 {
     public static AppHost Build(
-        Action<Window> attachWindow,
-        IApplicationLifetimeRequestSink lifetimeRequests)
+        AppLaunchRequest launchRequest,
+        Action<MainWindowStartupContext> completeWindow,
+        IApplicationLifetimeRequestSink lifetimeRequests,
+        IStartupDiagnosticSink startupDiagnostics)
     {
-        ArgumentNullException.ThrowIfNull(attachWindow);
+        ArgumentNullException.ThrowIfNull(launchRequest);
+        ArgumentNullException.ThrowIfNull(completeWindow);
         ArgumentNullException.ThrowIfNull(lifetimeRequests);
+        ArgumentNullException.ThrowIfNull(startupDiagnostics);
+        bool isStartupRestoreFallback = launchRequest.Arguments.Contains(
+            StartupRestoreFallbackService.HelperArgument,
+            StringComparison.OrdinalIgnoreCase);
         string triggerRoot = AppDataPathService.ResolveLocalDataDirectory();
         string triggerDatabasePath = Path.Combine(triggerRoot, "Triggers.db");
         string legacyTriggerPath = Path.Combine(triggerRoot, "Triggers.json");
         Guid triggerProcessEpoch = Guid.NewGuid();
         return AppHost.Build(services =>
         {
-            services.AddSingleton(attachWindow);
+            services.AddSingleton(completeWindow);
             services.AddSingleton(lifetimeRequests);
+            services.AddSingleton(startupDiagnostics);
             services.AddSingleton(TimeProvider.System);
             services.AddSingleton(_ => AppSettingsService.Instance);
+            services.AddSingleton(_ => AppSettingsAuditLogService.Instance);
+            services.AddSingleton(_ => LocalizationService.Instance);
+            services.AddSingleton(_ => LogStorageService.Instance);
             services.AddSingleton(_ => ConnectionSamplingService.Instance);
-            services.AddSingleton(_ => StartupLaunchService.Instance);
+            services.AddSingleton(_ => StartupLaunchServiceFactory.CreateDefault());
             services.AddSingleton(_ => MihomoConnectionService.Instance);
             services.AddSingleton(_ => NetworkTakeoverService.Instance);
             services.AddSingleton(_ => WindowsProxyService.Instance);
@@ -81,7 +91,8 @@ internal static class ClashSharpAppHostFactory
                 TriggerRuntimeEventHub.Instance,
                 LogStorageService.Instance.AppendLog,
                 LocalizationService.Instance.GetString,
-                provider.GetRequiredService<ApplicationLifecycleService>()));
+                provider.GetRequiredService<ApplicationLifecycleService>(),
+                provider.GetRequiredService<StartupLaunchService>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton(_ => new SqliteTriggerRepository(triggerDatabasePath));
@@ -167,11 +178,19 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<TriggerScheduler>());
             services.AddSingleton<IRuntimeParticipant>(provider =>
                 provider.GetRequiredService<ConnectionSamplingService>());
-            services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
-                provider.GetRequiredService<MutationAdmissionBarrier>(),
-                provider.GetRequiredService<IRuntimeShutdownNetworkCoordinator>(),
-                provider.GetRequiredService<LegacyNetworkIntentSource>().CreateShutdown,
-                provider.GetServices<IRuntimeParticipant>()));
+            services.AddSingleton(provider =>
+            {
+                LegacyNetworkIntentSource intents =
+                    provider.GetRequiredService<LegacyNetworkIntentSource>();
+                Func<NetworkIntent> shutdownIntentFactory = isStartupRestoreFallback
+                    ? intents.CreateStartupRestoreFallbackShutdown
+                    : intents.CreateShutdown;
+                return new RuntimeLifecycleCoordinator(
+                    provider.GetRequiredService<MutationAdmissionBarrier>(),
+                    provider.GetRequiredService<IRuntimeShutdownNetworkCoordinator>(),
+                    shutdownIntentFactory,
+                    provider.GetServices<IRuntimeParticipant>());
+            });
             services.AddSingleton<IApplicationShutdownCoordinator>(provider =>
                 provider.GetRequiredService<RuntimeLifecycleCoordinator>());
             services.AddSingleton(provider => TrayCommandServiceFactory.CreateDefault(

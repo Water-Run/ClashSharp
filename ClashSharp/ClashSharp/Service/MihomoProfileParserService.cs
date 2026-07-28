@@ -1,12 +1,3 @@
-/*
- * Mihomo Profile Parser Service
- * Extracts proxy node and rule preview rows from imported mihomo configuration files
- *
- * @author: WaterRun
- * @file: Service/MihomoProfileParserService.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Collections.Generic;
 using ClashSharp.Model;

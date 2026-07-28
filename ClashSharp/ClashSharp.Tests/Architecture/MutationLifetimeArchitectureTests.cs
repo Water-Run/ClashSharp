@@ -35,7 +35,7 @@ public sealed class MutationLifetimeArchitectureTests
                 string trimmed = line.Trim();
                 bool isOwned = trimmed.Contains("await Task.Run(", StringComparison.Ordinal)
                     || trimmed.StartsWith("return Task.Run(", StringComparison.Ordinal)
-                    || Regex.IsMatch(trimmed, @"^Task(?:<[^>]+>)?\s+\w+\s*=\s*Task\.Run\(");
+                    || Regex.IsMatch(trimmed, @"^Task(?:<.+>)?\s+\w+\s*=\s*Task\.Run\(");
                 Assert.True(isOwned, $"Unowned Task.Run in {source.RelativePath}: {trimmed}");
             }
         }

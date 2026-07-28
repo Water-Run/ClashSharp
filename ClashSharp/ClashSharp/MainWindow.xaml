@@ -32,10 +32,15 @@
         <NavigationView
             x:Name="NavView"
             Grid.Row="1"
+            IsEnabled="False"
+            Visibility="Collapsed"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
             IsPaneToggleButtonVisible="False"
             PaneDisplayMode="Auto"
+            CompactModeThresholdWidth="641"
+            ExpandedModeThresholdWidth="1008"
+            CompactPaneLength="48"
             OpenPaneLength="260"
             SelectionChanged="OnNavigationSelectionChanged">
             <NavigationView.Resources>
@@ -111,5 +116,33 @@
 
             <Frame x:Name="ContentFrame" />
         </NavigationView>
+
+        <Grid
+            x:Name="StartupOverlay"
+            Grid.Row="1"
+            Padding="40">
+            <StackPanel
+                MaxWidth="560"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="16">
+                <ProgressRing
+                    x:Name="StartupProgressRing"
+                    Width="40"
+                    Height="40"
+                    IsActive="True" />
+                <TextBlock
+                    x:Name="StartupStatusText"
+                    HorizontalAlignment="Center"
+                    FontSize="20"
+                    FontWeight="SemiBold" />
+                <TextBlock
+                    x:Name="StartupDiagnosticText"
+                    HorizontalAlignment="Center"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

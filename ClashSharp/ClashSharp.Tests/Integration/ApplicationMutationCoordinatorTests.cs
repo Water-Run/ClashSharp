@@ -51,6 +51,28 @@ public sealed class ApplicationMutationCoordinatorTests
         Assert.Equal(["validate"], fixture.Trace);
     }
 
+    /// <summary>Verifies a wrapped process-fatal plan failure is never converted into a failed result.</summary>
+    [Fact]
+    public async Task ExecuteAsync_PlanningFailsFatally_PropagatesFailure()
+    {
+        Fixture fixture = new();
+        InvalidOperationException failure = new(
+            "planning wrapper",
+            CreateProcessFatalException<OutOfMemoryException>());
+        fixture.ValidateException = failure;
+
+        InvalidOperationException actual = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Coordinator.ExecuteAsync(
+                fixture.Request,
+                fixture.Plan,
+                (_, _) => Task.FromResult("unused"),
+                CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.Null(fixture.Store.Current);
+        Assert.Equal(["validate"], fixture.Trace);
+    }
+
     /// <summary>Verifies an uncommitted apply failure restores and verifies the baseline with an independent token.</summary>
     [Fact]
     public async Task ExecuteAsync_ApplyFailure_CompensatesAndVerifiesBaseline()
@@ -71,6 +93,31 @@ public sealed class ApplicationMutationCoordinatorTests
         Assert.Contains("restore-baseline", fixture.Trace);
         Assert.Contains("verify-baseline", fixture.Trace);
         Assert.False(fixture.Participant.LastCompensationTokenWasCancelled);
+    }
+
+    /// <summary>Verifies cancellation wrapping a fatal side-effect failure retains recovery and propagates.</summary>
+    [Fact]
+    public async Task ExecuteAsync_ApplyCancellationWrapsFatalFailure_PropagatesAndRetainsJournal()
+    {
+        Fixture fixture = new();
+        OperationCanceledException failure = new(
+            "apply cancelled while fatally failing",
+            CreateProcessFatalException<AccessViolationException>(),
+            CancellationToken.None);
+        fixture.Participant.ApplyException = failure;
+
+        OperationCanceledException actual =
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                () => fixture.Coordinator.ExecuteAsync(
+                    fixture.Request,
+                    fixture.Plan,
+                    (_, _) => Task.FromResult("unused"),
+                    CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.NotNull(fixture.Store.Current);
+        Assert.Equal(MutationAdmissionState.RecoveryOnly, fixture.Barrier.State);
+        Assert.DoesNotContain("compensate", fixture.Trace);
     }
 
     /// <summary>Verifies cancellation after the first side effect requests bounded compensation instead of cancelling rollback.</summary>
@@ -577,4 +624,8 @@ public sealed class ApplicationMutationCoordinatorTests
     {
         return new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
     }
+
+    private static TException CreateProcessFatalException<TException>()
+        where TException : Exception =>
+        Activator.CreateInstance<TException>();
 }

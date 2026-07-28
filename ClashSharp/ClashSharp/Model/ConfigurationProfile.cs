@@ -1,14 +1,4 @@
-/*
- * Configuration Profile Model
- * Represents one Clash# configuration profile available to the profile page
- *
- * @author: WaterRun
- * @file: Model/ConfigurationProfile.cs
- * @date: 2026-06-15
- */
-
 using System;
-using ClashSharp.Service;
 
 namespace ClashSharp.Model;
 
@@ -34,17 +24,4 @@ public readonly record struct ConfigurationProfile(
     DateTimeOffset UpdatedAt,
     int NodeCount,
     int RuleCount,
-    bool IsActive)
-{
-    /// <summary>Gets the UI-filtered profile display name.</summary>
-    /// <value>Display name after mainland China UI replacement; never null.</value>
-    public string NameDisplay => MainlandChinaTextDisplayService.Instance.Apply(Name);
-
-    /// <summary>Gets the UI-filtered profile source display name.</summary>
-    /// <value>Source display name after mainland China UI replacement; never null.</value>
-    public string SourceNameDisplay => MainlandChinaTextDisplayService.Instance.Apply(SourceName);
-
-    /// <summary>Gets the UI-filtered profile status display text.</summary>
-    /// <value>Status display text after mainland China UI replacement; never null.</value>
-    public string StatusDisplay => MainlandChinaTextDisplayService.Instance.Apply(Status);
-}
+    bool IsActive);

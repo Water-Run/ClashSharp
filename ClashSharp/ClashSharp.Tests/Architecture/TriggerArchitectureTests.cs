@@ -216,7 +216,6 @@ public sealed class TriggerArchitectureTests
     {
         Dictionary<string, int> expected = new(StringComparer.Ordinal)
         {
-            ["ClashSharp/ClashSharp/AppHost/Compatibility/TriggerPresentationCompatibilityFactory.cs"] = 1,
             ["ClashSharp/ClashSharp/Service/TriggerSchedulerAdapters.cs"] = 2,
         };
         Dictionary<string, int> actual = ReadTriggerSources()

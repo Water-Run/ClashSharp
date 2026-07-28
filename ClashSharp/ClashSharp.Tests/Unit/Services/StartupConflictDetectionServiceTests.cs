@@ -1,12 +1,3 @@
-/*
- * Startup Conflict Detection Service Tests
- * Verifies startup conflict discovery and repair actions without touching the host machine
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/StartupConflictDetectionServiceTests.cs
- * @date: 2026-06-17
- */
-
 using System.Reflection;
 using ClashSharp.Model;
 using ClashSharp.Service;
@@ -68,6 +59,92 @@ public sealed class StartupConflictDetectionServiceTests
         Assert.Equal(StartupConflictKind.WindowsProxyWrongPort, issue.Kind);
     }
 
+    /// <summary>Verifies synchronous host probes do not occupy the startup caller while they run.</summary>
+    [Fact]
+    public async Task CheckConflictsAsync_BlockingHostProbe_ReturnsPendingTaskToCaller()
+    {
+        int callerThreadId = Environment.CurrentManagedThreadId;
+        int? probeThreadId = null;
+        using ManualResetEventSlim probeEntered = new();
+        using ManualResetEventSlim releaseProbe = new();
+        FakeStartupConflictEnvironment environment = new()
+        {
+            OnGetProcesses = () =>
+            {
+                probeThreadId = Environment.CurrentManagedThreadId;
+                probeEntered.Set();
+                releaseProbe.Wait();
+            },
+        };
+        StartupConflictDetectionService service = new(environment);
+
+        Task<IReadOnlyList<StartupConflictIssue>> probe =
+            service.CheckConflictsAsync(10000, CancellationToken.None);
+        Assert.True(probeEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        try
+        {
+            Assert.False(probe.IsCompleted);
+        }
+        finally
+        {
+            releaseProbe.Set();
+        }
+
+        Assert.Empty(await probe);
+        Assert.NotEqual(callerThreadId, probeThreadId);
+    }
+
+    /// <summary>Verifies cancellation before scheduling prevents every host probe.</summary>
+    [Fact]
+    public async Task CheckConflictsAsync_PreCanceled_DoesNotTouchHostEnvironment()
+    {
+        int probeCalls = 0;
+        FakeStartupConflictEnvironment environment = new()
+        {
+            OnGetProcesses = () => probeCalls++,
+        };
+        StartupConflictDetectionService service = new(environment);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.CheckConflictsAsync(10000, cancellation.Token));
+
+        Assert.Equal(0, probeCalls);
+    }
+
+    /// <summary>Verifies cancellation releases the caller while a non-cancellable host probe is still blocked.</summary>
+    [Fact]
+    public async Task CheckConflictsAsync_CanceledDuringBlockingProbe_ReleasesCallerImmediately()
+    {
+        using ManualResetEventSlim probeEntered = new();
+        using ManualResetEventSlim releaseProbe = new();
+        FakeStartupConflictEnvironment environment = new()
+        {
+            OnGetProcesses = () =>
+            {
+                probeEntered.Set();
+                releaseProbe.Wait();
+            },
+        };
+        StartupConflictDetectionService service = new(environment);
+        using CancellationTokenSource cancellation = new();
+        Task<IReadOnlyList<StartupConflictIssue>> probe =
+            service.CheckConflictsAsync(10000, cancellation.Token);
+        Assert.True(probeEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        cancellation.Cancel();
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probe);
+        }
+        finally
+        {
+            releaseProbe.Set();
+        }
+    }
+
     /// <summary>Verifies per-issue repair actions update host state and report success or failure.</summary>
     [Fact]
     public async Task RepairAsync_PerIssueActionReportsStatus()
@@ -90,6 +167,29 @@ public sealed class StartupConflictDetectionServiceTests
         Assert.False(portResult.Succeeded);
         Assert.True(proxyResult.Succeeded);
         Assert.True(environment.ProxyDisabled);
+    }
+
+    /// <summary>Verifies a canceled dialog lifetime cannot begin a process or proxy repair.</summary>
+    [Fact]
+    public async Task RepairAsync_PreCanceled_DoesNotMutateHostState()
+    {
+        FakeStartupConflictEnvironment environment = new()
+        {
+            Processes = [new StartupConflictProcess(42, "mihomo")],
+            ProxyState = new WindowsProxyState(true, "127.0.0.1:7890"),
+        };
+        StartupConflictDetectionService service = new(environment);
+        IReadOnlyList<StartupConflictIssue> issues = service.CheckConflicts(10000);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => issues[0].RepairAsync(cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => issues[1].RepairAsync(cancellation.Token));
+
+        Assert.Empty(environment.TerminatedProcessIds);
+        Assert.False(environment.ProxyDisabled);
     }
 
     /// <summary>Verifies user-facing issue text is resolved through an injected localizer.</summary>
@@ -133,6 +233,36 @@ public sealed class StartupConflictDetectionServiceTests
         Assert.Equal("proxy repaired", (await issues[2].RepairAsync(CancellationToken.None)).Message);
     }
 
+    /// <summary>Verifies host failure details are not exposed through repair status text.</summary>
+    [Fact]
+    public async Task RepairAsync_HostFailure_ReturnsLocalizedGenericStatus()
+    {
+        const string privateFailureDetail = "private host failure detail";
+        FakeStartupConflictEnvironment environment = new()
+        {
+            Processes = [new StartupConflictProcess(42, "mihomo")],
+            ProxyState = new WindowsProxyState(true, "127.0.0.1:7890"),
+            TerminateProcessException = new InvalidOperationException(privateFailureDetail),
+            DisableProxyException = new UnauthorizedAccessException(privateFailureDetail),
+        };
+        StartupConflictDetectionService service = CreateService(
+            environment,
+            key => key == "StartupConflict.Status.Failed" ? "localized failure" : key);
+        IReadOnlyList<StartupConflictIssue> issues = service.CheckConflicts(10000);
+
+        StartupConflictRepairResult processResult =
+            await issues[0].RepairAsync(CancellationToken.None);
+        StartupConflictRepairResult proxyResult =
+            await issues[1].RepairAsync(CancellationToken.None);
+
+        Assert.False(processResult.Succeeded);
+        Assert.Equal("localized failure", processResult.Message);
+        Assert.DoesNotContain(privateFailureDetail, processResult.Message, StringComparison.Ordinal);
+        Assert.False(proxyResult.Succeeded);
+        Assert.Equal("localized failure", proxyResult.Message);
+        Assert.DoesNotContain(privateFailureDetail, proxyResult.Message, StringComparison.Ordinal);
+    }
+
     private static StartupConflictDetectionService CreateService(
         IStartupConflictEnvironment environment,
         Func<string, string> getString)
@@ -152,6 +282,8 @@ public sealed class StartupConflictDetectionServiceTests
 
     private sealed class FakeStartupConflictEnvironment : IStartupConflictEnvironment
     {
+        public Action? OnGetProcesses { get; init; }
+
         public IReadOnlyList<StartupConflictProcess> Processes { get; init; } = [];
 
         public bool IsPortInUse { get; init; }
@@ -162,8 +294,13 @@ public sealed class StartupConflictDetectionServiceTests
 
         public bool ProxyDisabled { get; private set; }
 
+        public Exception? TerminateProcessException { get; init; }
+
+        public Exception? DisableProxyException { get; init; }
+
         public IReadOnlyList<StartupConflictProcess> GetExternalMihomoProcesses()
         {
+            OnGetProcesses?.Invoke();
             return Processes;
         }
 
@@ -179,12 +316,24 @@ public sealed class StartupConflictDetectionServiceTests
 
         public Task TerminateProcessAsync(int processId, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (TerminateProcessException is not null)
+            {
+                return Task.FromException(TerminateProcessException);
+            }
+
             TerminatedProcessIds.Add(processId);
             return Task.CompletedTask;
         }
 
         public Task DisableWindowsProxyAsync(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (DisableProxyException is not null)
+            {
+                return Task.FromException(DisableProxyException);
+            }
+
             ProxyDisabled = true;
             return Task.CompletedTask;
         }

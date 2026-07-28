@@ -1,39 +1,10 @@
-/*
- * Settings Diagnostics ViewModel
- * Routes Windows-native diagnostic commands without depending on WinUI controls
- *
- * @author: WaterRun
- * @file: ViewModel/SettingsDiagnosticsViewModel.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
-
-/// <summary>Runs Windows-native diagnostic operations for the settings diagnostics view model.</summary>
-internal interface IWindowsDiagnosticsClient
-{
-    Task<WindowsDiagnosticResult> DiagnoseAsync(WindowsDiagnosticTarget target, CancellationToken cancellationToken);
-
-    Task<WindowsDiagnosticResult> ApplyAsync(WindowsDiagnosticTarget target, CancellationToken cancellationToken);
-
-    Task<WindowsDiagnosticResult> ResetAsync(WindowsDiagnosticTarget target, CancellationToken cancellationToken);
-}
-
-/// <summary>Writes diagnostic command logs for the settings diagnostics view model.</summary>
-internal interface IDiagnosticsLog
-{
-    void Append(string level, string category, string message, string? detail);
-}
-
-/// <summary>Status update returned to the settings page after a diagnostic command.</summary>
-/// <param name="Target">Diagnostic target whose visible status should be updated.</param>
-/// <param name="Message">Status message to display.</param>
-internal readonly record struct SettingsDiagnosticStatus(WindowsDiagnosticTarget Target, string Message);
 
 /// <summary>Owns Windows-native diagnostic command parsing, execution, logging, and failure messages.</summary>
 /// <remarks>
@@ -100,7 +71,10 @@ internal sealed class SettingsDiagnosticsViewModel
             _log.Append("Info", LogCategory, result.Message, result.Detail);
             return new SettingsDiagnosticStatus(result.Target, result.Message);
         }
-        catch (Exception exception) when (exception is InvalidOperationException or OperationCanceledException or UnauthorizedAccessException)
+        catch (Exception exception) when (
+            exception is InvalidOperationException or OperationCanceledException or UnauthorizedAccessException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             string message = GetFailureMessage(action);
             _log.Append("Warning", LogCategory, message, exception.Message);

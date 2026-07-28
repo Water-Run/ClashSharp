@@ -7,6 +7,22 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for mihomo Windows service management.</summary>
 public sealed class MihomoServiceManagerTests
 {
+    /// <summary>Verifies a manager does not report service absence before SCM has been queried.</summary>
+    [Fact]
+    public void GetLatestStatus_BeforeFirstQuery_ReturnsUnknownStatus()
+    {
+        FakeProcessRunner runner = new();
+        MihomoServiceManager manager = CreateManager(runner);
+
+        MihomoServiceStatus status = manager.GetLatestStatus();
+
+        Assert.False(status.IsKnown);
+        Assert.False(status.IsInstalled);
+        Assert.False(status.IsRunning);
+        Assert.Equal("unknown", status.Message);
+        Assert.Empty(runner.Requests);
+    }
+
     /// <summary>Verifies a failed sc.exe query maps to a localized not-deployed status.</summary>
     [Fact]
     public async Task GetStatusAsync_WhenScQueryFails_ReturnsLocalizedNotDeployedStatus()
@@ -17,6 +33,7 @@ public sealed class MihomoServiceManagerTests
 
         MihomoServiceStatus status = await manager.GetStatusAsync(CancellationToken.None);
 
+        Assert.True(status.IsKnown);
         Assert.False(status.IsInstalled);
         Assert.False(status.IsRunning);
         Assert.Equal("not deployed", status.Message);
@@ -24,6 +41,22 @@ public sealed class MihomoServiceManagerTests
         Assert.Equal("sc.exe", request.FileName);
         Assert.Equal(["query", MihomoServiceManager.ServiceName], request.Arguments);
         Assert.False(request.RunElevated);
+    }
+
+    /// <summary>Verifies an inconclusive query cannot be cached as a confirmed missing service.</summary>
+    [Fact]
+    public async Task GetStatusAsync_WhenScQueryTimesOut_ReturnsAndCachesUnknownStatus()
+    {
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Result(ProcessRunOutcome.TimedOut));
+        MihomoServiceManager manager = CreateManager(runner);
+
+        MihomoServiceStatus status = await manager.GetStatusAsync(CancellationToken.None);
+        MihomoServiceStatus cachedStatus = manager.GetLatestStatus();
+
+        Assert.False(status.IsKnown);
+        Assert.Equal("unknown", status.Message);
+        Assert.Equal(status, cachedStatus);
     }
 
     /// <summary>Verifies a running service query maps to a localized running status.</summary>
@@ -133,10 +166,29 @@ public sealed class MihomoServiceManagerTests
 
         MihomoServiceStatus status = await manager.DeployAsync(CancellationToken.None);
 
+        Assert.False(status.IsKnown);
         Assert.False(status.IsInstalled);
         Assert.Equal("deployment failed", status.Message);
         Assert.Single(runner.Requests);
         Assert.False(runner.Requests[0].RunElevated);
+    }
+
+    /// <summary>Verifies a successful create command plus an inconclusive final query is not reported as confirmed absence.</summary>
+    [Fact]
+    public async Task DeployAsync_WhenFinalQueryTimesOut_ReturnsUnknownFailureStatus()
+    {
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(1060));
+        runner.Results.Enqueue(Completed(0));
+        runner.Results.Enqueue(Result(ProcessRunOutcome.TimedOut));
+        MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\service.exe");
+
+        MihomoServiceStatus status = await manager.DeployAsync(CancellationToken.None);
+
+        Assert.False(status.IsKnown);
+        Assert.False(status.IsInstalled);
+        Assert.Equal("deployment failed", status.Message);
+        Assert.Equal(3, runner.Requests.Count);
     }
 
     /// <summary>Verifies uninstall re-queries after stop and delete and treats externally absent service as success.</summary>
@@ -209,6 +261,7 @@ public sealed class MihomoServiceManagerTests
 
         MihomoServiceStatus status = await manager.UninstallAsync(CancellationToken.None);
 
+        Assert.False(status.IsKnown);
         Assert.False(status.IsInstalled);
         Assert.Equal("removal failed", status.Message);
         Assert.Single(runner.Requests);
@@ -225,6 +278,7 @@ public sealed class MihomoServiceManagerTests
             key => key switch
             {
                 "MihomoService.Status.NotDeployed" => "not deployed",
+                "MihomoService.Status.Unknown" => "unknown",
                 "MihomoService.Status.DeployedRunning" => "running",
                 "MihomoService.Status.Deployed" => "deployed",
                 "MihomoService.Status.DeploymentFailed" => "deployment failed",

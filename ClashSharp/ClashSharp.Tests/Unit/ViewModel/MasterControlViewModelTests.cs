@@ -1,12 +1,3 @@
-/*
- * Master Control ViewModel Tests
- * Verifies master control status and takeover mode behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/MasterControlViewModelTests.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
@@ -17,18 +8,61 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the master control view model.</summary>
 public sealed class MasterControlViewModelTests
 {
+    [Fact]
+    public void Constructor_DefersPersistedStateAndLayoutReads()
+    {
+        FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.RuleTakeover };
+        FakeMasterHeroStatusLayoutService heroLayout = new();
+        FakeMasterInfoTileLayoutService infoLayout = new();
+
+        MasterControlViewModel viewModel = CreateViewModel(
+            settings: settings,
+            heroStatusLayout: heroLayout,
+            infoTileLayout: infoLayout);
+
+        Assert.Equal(ClashSharpMode.Disabled, viewModel.SelectedMode);
+        Assert.Empty(viewModel.HeroStatusItems);
+        Assert.Empty(viewModel.InfoTiles);
+        Assert.Equal(0, heroLayout.GetLayoutCount);
+        Assert.Equal(0, heroLayout.GetCandidatesCount);
+        Assert.Equal(0, infoLayout.GetLayoutCount);
+    }
+
     /// <summary>Verifies construction loads localized static labels and persisted mode state.</summary>
     [Fact]
-    public void Constructor_LoadsLocalizedLabelsAndSelectedMode()
+    public async Task LoadAsync_LoadsLocalizedLabelsAndSelectedMode()
     {
         FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.RuleTakeover };
 
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+        await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal("Master", viewModel.PageTitleText);
         Assert.Equal("Status title", viewModel.StatusControlTitleText);
         Assert.True(viewModel.IsRuleTakeoverModeSelected);
         Assert.False(viewModel.IsDisabledModeSelected);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenRepeated_DoesNotRebuildLayoutCollections()
+    {
+        FakeMasterHeroStatusLayoutService heroLayout = new();
+        FakeMasterInfoTileLayoutService infoLayout = new();
+        MasterControlViewModel viewModel = CreateViewModel(
+            heroStatusLayout: heroLayout,
+            infoTileLayout: infoLayout);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+        MasterControlInfoTileViewModel firstTile = viewModel.InfoTiles[0];
+        MasterHeroStatusItemViewModel firstHeroItem = viewModel.HeroStatusItems[0];
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Same(firstTile, viewModel.InfoTiles[0]);
+        Assert.Same(firstHeroItem, viewModel.HeroStatusItems[0]);
+        Assert.Equal(1, heroLayout.GetLayoutCount);
+        Assert.Equal(1, heroLayout.GetCandidatesCount);
+        Assert.Equal(1, infoLayout.GetLayoutCount);
     }
 
     /// <summary>Verifies loading probes core version and visible proxy status.</summary>
@@ -54,10 +88,11 @@ public sealed class MasterControlViewModelTests
     }
 
     [Fact]
-    public void Constructor_BuildsEightConfigurableHeroStatusItems()
+    public async Task LoadAsync_BuildsEightConfigurableHeroStatusItems()
     {
         FakeMasterHeroStatusLayoutService layoutService = new();
         MasterControlViewModel viewModel = CreateViewModel(heroStatusLayout: layoutService);
+        await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal(
             [
@@ -78,15 +113,45 @@ public sealed class MasterControlViewModelTests
     }
 
     [Fact]
-    public void SetHeroStatusSlot_UpdatesLayoutThroughService()
+    public async Task SetHeroStatusSlot_UpdatesLayoutThroughService()
     {
         FakeMasterHeroStatusLayoutService layoutService = new();
         MasterControlViewModel viewModel = CreateViewModel(heroStatusLayout: layoutService);
+        await viewModel.LoadAsync(CancellationToken.None);
 
         viewModel.SetHeroStatusSlot(4, MasterHeroStatusItemKind.ActiveConnections);
 
         Assert.Equal(MasterHeroStatusItemKind.ActiveConnections, viewModel.HeroStatusItems[4].Kind);
         Assert.Equal(MasterHeroStatusItemKind.ActiveConnections, layoutService.SavedLayout[4]);
+    }
+
+    [Fact]
+    public async Task SetHeroStatusSlot_WhenKindIsAlreadyDisplayed_SwapsSlotsWithoutCompactingLayout()
+    {
+        FakeMasterHeroStatusLayoutService layoutService = new();
+        MasterControlViewModel viewModel = CreateViewModel(heroStatusLayout: layoutService);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        viewModel.SetHeroStatusSlot(0, MasterHeroStatusItemKind.CurrentNode);
+
+        Assert.Equal(
+            [
+                MasterHeroStatusItemKind.CurrentNode,
+                MasterHeroStatusItemKind.SystemProxy,
+                MasterHeroStatusItemKind.TransparentProxy,
+                MasterHeroStatusItemKind.CoreStatus,
+                MasterHeroStatusItemKind.UploadRate,
+                MasterHeroStatusItemKind.DownloadRate,
+                MasterHeroStatusItemKind.TotalTraffic,
+                MasterHeroStatusItemKind.Availability,
+            ],
+            layoutService.SavedLayout);
+        Assert.Equal(
+            layoutService.SavedLayout,
+            viewModel.HeroStatusItems.Select(static item => item.Kind));
+        Assert.Equal(
+            layoutService.SavedLayout,
+            viewModel.HeroStatusSlots.Select(static slot => slot.SelectedKind));
     }
 
     [Fact]
@@ -144,6 +209,9 @@ public sealed class MasterControlViewModelTests
             settings,
             takeover,
             new FakeMasterLog(),
+            new FakeMasterInfoTileLayoutService(),
+            new FakeMasterHeroStatusLayoutService(),
+            new FakeApplicationErrorSink(),
             new FakeMasterTrayStatus(),
             modeApplied: mode =>
             {
@@ -173,6 +241,9 @@ public sealed class MasterControlViewModelTests
             settings,
             takeover,
             log,
+            new FakeMasterInfoTileLayoutService(),
+            new FakeMasterHeroStatusLayoutService(),
+            new FakeApplicationErrorSink(),
             new FakeMasterTrayStatus(),
             modeApplied: _ =>
             {
@@ -239,7 +310,7 @@ public sealed class MasterControlViewModelTests
 
     /// <summary>Verifies the redesigned master control exposes information tiles without mixing in editor commands.</summary>
     [Fact]
-    public void Constructor_BuildsCompleteInfoTiles()
+    public async Task LoadAsync_BuildsCompleteInfoTiles()
     {
         FakeMasterSettings settings = new()
         {
@@ -273,6 +344,7 @@ public sealed class MasterControlViewModelTests
         };
 
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+        await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.True(viewModel.InfoTiles.Count >= 49);
         Assert.Equal(viewModel.InfoTiles.Count, viewModel.InfoTiles.Select(static tile => tile.Id).Distinct(StringComparer.Ordinal).Count());
@@ -282,7 +354,7 @@ public sealed class MasterControlViewModelTests
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "edit-tiles");
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "backup");
         Assert.Equal("core", viewModel.InfoTiles[0].Id);
-        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mihomo-version" && tile.Value == string.Empty);
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mihomo-version" && tile.Value == "mihomo");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "transparent-proxy" && tile.IsToggleVisible && tile.IsToggleOn);
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-1" && tile.Value == "google.com");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "connection-test-proxy-url-2" && tile.Value == "github.com");
@@ -315,6 +387,56 @@ public sealed class MasterControlViewModelTests
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "mainland-feature-mode" && tile.Value == "Keyword filter");
         Assert.All(viewModel.InfoTiles, tile => Assert.False(string.IsNullOrWhiteSpace(tile.Description)));
         Assert.Equal("Search tiles", viewModel.SearchInfoTilesPlaceholderText);
+    }
+
+    [Fact]
+    public async Task LoadAsync_UnavailableRuntimeDoesNotClaimMihomoServiceIsMissing()
+    {
+        MasterControlViewModel viewModel = CreateViewModel();
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(
+            "Unknown",
+            viewModel.InfoTiles.Single(static tile => tile.Id == "mihomo-service").Value);
+    }
+
+    [Fact]
+    public async Task LoadAsync_UsesPersistedInfoTileVisibilityAndOrder()
+    {
+        FakeMasterInfoTileLayoutService infoTileLayout = new()
+        {
+            SavedLayout = ["memory-usage", "core", "latency"],
+        };
+
+        MasterControlViewModel viewModel = CreateViewModel(infoTileLayout: infoTileLayout);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(
+            ["memory-usage", "core", "latency"],
+            viewModel.VisibleInfoTiles.Select(static tile => tile.Id));
+        Assert.All(
+            viewModel.InfoTiles,
+            tile => Assert.Equal(
+                infoTileLayout.SavedLayout.Contains(tile.Id, StringComparer.Ordinal),
+                tile.IsVisible));
+    }
+
+    [Fact]
+    public async Task SetVisibleInfoTileIds_PersistsOneCanonicalLayoutAndUpdatesChecks()
+    {
+        FakeMasterInfoTileLayoutService infoTileLayout = new();
+        MasterControlViewModel viewModel = CreateViewModel(infoTileLayout: infoTileLayout);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        viewModel.SetVisibleInfoTileIds(["latency", "core", "memory-usage", "unknown"]);
+
+        Assert.Equal(1, infoTileLayout.SaveCount);
+        Assert.Equal(["latency", "core", "memory-usage"], infoTileLayout.SavedLayout);
+        Assert.Equal(
+            ["latency", "core", "memory-usage"],
+            viewModel.VisibleInfoTiles.Select(static tile => tile.Id));
+        Assert.True(viewModel.InfoTiles.Single(static tile => tile.Id == "latency").IsVisible);
+        Assert.False(viewModel.InfoTiles.Single(static tile => tile.Id == "active-profile").IsVisible);
     }
 
     [Fact]
@@ -354,12 +476,150 @@ public sealed class MasterControlViewModelTests
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "startup-restore-fallback" && tile.Value == "Registered");
     }
 
+    [Fact]
+    public async Task LoadAsync_AwaitsRuntimeSnapshotWithoutSynchronouslyBlockingTheCaller()
+    {
+        TaskCompletionSource<MasterControlRuntimeSnapshot> snapshotCompletion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeMasterRuntime runtime = new()
+        {
+            SnapshotTask = snapshotCompletion.Task,
+        };
+        MasterControlViewModel viewModel = CreateViewModel(runtime: runtime);
+
+        Task loadTask = viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.False(loadTask.IsCompleted);
+        snapshotCompletion.SetResult(MasterControlRuntimeSnapshot.Unavailable);
+        await loadTask;
+        Assert.Equal(1, runtime.SnapshotCount);
+    }
+
+    [Fact]
+    public async Task LoadCommand_WhenPageLifetimeIsCanceled_DiscardsOldRuntimeResultAndNextLoadRecovers()
+    {
+        using CancellationTokenSource firstLifetime = new();
+        TaskCompletionSource firstStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource coreStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource trayStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<string> firstCoreCompletion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<TrayStatusSnapshot> firstTrayCompletion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<MasterControlRuntimeSnapshot> firstCompletion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        List<CancellationToken> observedTokens = [];
+        int callCount = 0;
+        int coreCallCount = 0;
+        int trayCallCount = 0;
+        FakeMasterCore core = new()
+        {
+            GetVersionTextAsyncHandler = _ =>
+            {
+                coreCallCount++;
+                if (coreCallCount == 1)
+                {
+                    coreStarted.TrySetResult();
+                    return firstCoreCompletion.Task;
+                }
+
+                return Task.FromResult("Mihomo Meta v2.0.0");
+            },
+        };
+        FakeMasterTrayStatus trayStatus = new()
+        {
+            GetSnapshotAsyncHandler = _ =>
+            {
+                trayCallCount++;
+                if (trayCallCount == 1)
+                {
+                    trayStarted.TrySetResult();
+                    return firstTrayCompletion.Task;
+                }
+
+                return Task.FromResult(new TrayStatusSnapshot("New node", 12));
+            },
+        };
+        FakeMasterRuntime runtime = new()
+        {
+            GetSnapshotAsyncHandler = cancellationToken =>
+            {
+                observedTokens.Add(cancellationToken);
+                callCount++;
+                if (callCount == 1)
+                {
+                    firstStarted.TrySetResult();
+                    return firstCompletion.Task;
+                }
+
+                return Task.FromResult(
+                    MasterControlRuntimeSnapshot.Unavailable with { ProfileCount = 7 });
+            },
+        };
+        MasterControlViewModel viewModel = CreateViewModel(
+            core: core,
+            trayStatus: trayStatus,
+            runtime: runtime);
+
+        Task firstLoad = viewModel.LoadCommand.ExecuteObservedAsync(null, firstLifetime.Token);
+        await Task.WhenAll(firstStarted.Task, coreStarted.Task, trayStarted.Task);
+        firstLifetime.Cancel();
+        firstCoreCompletion.SetResult("Mihomo Meta v41.0.0");
+        firstTrayCompletion.SetResult(new TrayStatusSnapshot("Old node", 410));
+        firstCompletion.SetResult(
+            MasterControlRuntimeSnapshot.Unavailable with { ProfileCount = 41 });
+        await firstLoad;
+
+        Assert.Equal("0", viewModel.InfoTiles.Single(static tile => tile.Id == "profile-count").Value);
+        Assert.Equal(string.Empty, viewModel.CoreStatusText);
+        Assert.Equal("No node", viewModel.CurrentNodeText);
+
+        await viewModel.LoadCommand.ExecuteObservedAsync(null, CancellationToken.None);
+
+        Assert.Equal([firstLifetime.Token, CancellationToken.None], observedTokens);
+        Assert.Equal("7", viewModel.InfoTiles.Single(static tile => tile.Id == "profile-count").Value);
+        Assert.Equal("Core ready: v2.0.0", viewModel.CoreStatusText);
+        Assert.Equal("New node", viewModel.CurrentNodeText);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenRuntimeStorageIsUnavailable_FallsBackToUnavailableSnapshot()
+    {
+        DateTimeOffset now = new(2026, 7, 27, 12, 0, 0, TimeSpan.Zero);
+        int callCount = 0;
+        FakeMasterRuntime runtime = new()
+        {
+            GetSnapshotAsyncHandler = _ =>
+            {
+                callCount++;
+                return callCount == 1
+                    ? Task.FromResult(
+                        MasterControlRuntimeSnapshot.Unavailable with { ProfileCount = 9 })
+                    : Task.FromException<MasterControlRuntimeSnapshot>(
+                        new MasterControlRuntimeUnavailableException(
+                            new IOException("storage failed")));
+            },
+        };
+        MasterControlViewModel viewModel = CreateViewModel(
+            runtime: runtime,
+            getNow: () => now);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal("9", viewModel.InfoTiles.Single(static tile => tile.Id == "profile-count").Value);
+
+        now = now.AddSeconds(6);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("0", viewModel.InfoTiles.Single(static tile => tile.Id == "profile-count").Value);
+    }
+
     /// <summary>Verifies the transparent-proxy tile toggle persists through the settings boundary.</summary>
     [Fact]
     public async Task ToggleTransparentProxyCommand_UpdatesSettingsAndTile()
     {
         FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
         MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+        await viewModel.LoadAsync(CancellationToken.None);
         MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "transparent-proxy");
 
         tile.TileCommand?.Execute(null);
@@ -382,6 +642,7 @@ public sealed class MasterControlViewModelTests
             settings: settings,
             actions: actions,
             errorSink: errorSink);
+        await viewModel.LoadAsync(CancellationToken.None);
         MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "transparent-proxy");
         AsyncRelayCommand command = Assert.IsAssignableFrom<AsyncRelayCommand>(tile.TileCommand);
 
@@ -400,9 +661,10 @@ public sealed class MasterControlViewModelTests
 
     /// <summary>Verifies functional tiles request page-level actions without directly owning dialogs.</summary>
     [Fact]
-    public void FunctionalTileCommands_RequestPageActions()
+    public async Task FunctionalTileCommands_RequestPageActions()
     {
         MasterControlViewModel viewModel = CreateViewModel();
+        await viewModel.LoadAsync(CancellationToken.None);
         List<MasterControlTileAction> actions = [];
         viewModel.TileActionRequested += (_, action) => actions.Add(action);
 
@@ -431,8 +693,9 @@ public sealed class MasterControlViewModelTests
         FakeMasterTrayStatus? trayStatus = null,
         FakeMasterRuntime? runtime = null,
         FakeMasterHeroStatusLayoutService? heroStatusLayout = null,
+        FakeMasterInfoTileLayoutService? infoTileLayout = null,
         Func<DateTimeOffset>? getNow = null,
-        IApplicationActionDispatcher? actions = null,
+        IMasterControlActions? actions = null,
         IApplicationErrorSink? errorSink = null,
         Func<ClashSharpMode, Task>? modeApplied = null)
     {
@@ -443,13 +706,14 @@ public sealed class MasterControlViewModelTests
             settings ?? new FakeMasterSettings(),
             takeover ?? new FakeMasterTakeover(),
             log ?? new FakeMasterLog(),
+            infoTileLayout ?? new FakeMasterInfoTileLayoutService(),
+            heroStatusLayout ?? new FakeMasterHeroStatusLayoutService(),
+            errorSink ?? new FakeApplicationErrorSink(),
             trayStatus ?? new FakeMasterTrayStatus(),
             runtime ?? new FakeMasterRuntime(),
             actions: actions,
             modeApplied: modeApplied,
-            heroStatusLayout: heroStatusLayout ?? new FakeMasterHeroStatusLayoutService(),
-            getNow: getNow,
-            errorSink: errorSink);
+            getNow: getNow);
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>
@@ -660,13 +924,14 @@ public sealed class MasterControlViewModelTests
                 "Master.Status.CoreStartFailed" => "Core failed",
                 "Master.Status.Unavailable" => "Unavailable",
                 "Master.Status.Standby" => "Standby",
+                "MihomoService.Status.Unknown" => "Unknown",
                 "Application.UnexpectedError" => "Unexpected error",
                 _ => key,
             };
         }
     }
 
-    private sealed class FakeApplicationActionDispatcher : IApplicationActionDispatcher
+    private sealed class FakeApplicationActionDispatcher : IMasterControlActions
     {
         public Exception? ExceptionToThrow { get; set; }
 
@@ -705,6 +970,8 @@ public sealed class MasterControlViewModelTests
         /// <value>Exception thrown when non-null.</value>
         public Exception? ExceptionToThrow { get; set; }
 
+        public Func<CancellationToken, Task<string>>? GetVersionTextAsyncHandler { get; set; }
+
         public int VersionProbeCount { get; private set; }
 
         /// <summary>Gets fake core version text.</summary>
@@ -713,9 +980,10 @@ public sealed class MasterControlViewModelTests
         public Task<string> GetVersionTextAsync(CancellationToken cancellationToken)
         {
             VersionProbeCount++;
-            return ExceptionToThrow is null
+            return GetVersionTextAsyncHandler?.Invoke(cancellationToken)
+                ?? (ExceptionToThrow is null
                 ? Task.FromResult(VersionText)
-                : Task.FromException<string>(ExceptionToThrow);
+                : Task.FromException<string>(ExceptionToThrow));
         }
     }
 
@@ -860,8 +1128,15 @@ public sealed class MasterControlViewModelTests
     {
         public TrayStatusSnapshot Snapshot { get; set; } = TrayStatusSnapshot.Unavailable;
 
+        public Func<CancellationToken, Task<TrayStatusSnapshot>>? GetSnapshotAsyncHandler { get; set; }
+
         public Task<TrayStatusSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
         {
+            if (GetSnapshotAsyncHandler is not null)
+            {
+                return GetSnapshotAsyncHandler(cancellationToken);
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Snapshot);
         }
@@ -871,12 +1146,19 @@ public sealed class MasterControlViewModelTests
     {
         public MasterControlRuntimeSnapshot Snapshot { get; set; } = MasterControlRuntimeSnapshot.Unavailable;
 
+        public Task<MasterControlRuntimeSnapshot>? SnapshotTask { get; set; }
+
+        public Func<CancellationToken, Task<MasterControlRuntimeSnapshot>>? GetSnapshotAsyncHandler { get; set; }
+
         public int SnapshotCount { get; private set; }
 
-        public MasterControlRuntimeSnapshot GetSnapshot()
+        public Task<MasterControlRuntimeSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SnapshotCount++;
-            return Snapshot;
+            return GetSnapshotAsyncHandler?.Invoke(cancellationToken)
+                ?? SnapshotTask
+                ?? Task.FromResult(Snapshot);
         }
     }
 
@@ -884,8 +1166,13 @@ public sealed class MasterControlViewModelTests
     {
         public IReadOnlyList<MasterHeroStatusItemKind> SavedLayout { get; private set; } = MasterHeroStatusLayoutService.DefaultLayout;
 
+        public int GetLayoutCount { get; private set; }
+
+        public int GetCandidatesCount { get; private set; }
+
         public IReadOnlyList<MasterHeroStatusItemKind> GetLayout()
         {
+            GetLayoutCount++;
             return SavedLayout;
         }
 
@@ -896,6 +1183,7 @@ public sealed class MasterControlViewModelTests
 
         public IReadOnlyList<MasterHeroStatusItemKind> GetCandidates()
         {
+            GetCandidatesCount++;
             return MasterHeroStatusLayoutService.Candidates;
         }
 
@@ -908,6 +1196,36 @@ public sealed class MasterControlViewModelTests
         public IReadOnlyList<MasterHeroStatusItemKind> ResetLayout()
         {
             SavedLayout = MasterHeroStatusLayoutService.DefaultLayout;
+            return SavedLayout;
+        }
+    }
+
+    private sealed class FakeMasterInfoTileLayoutService : IMasterInfoTileLayoutService
+    {
+        public IReadOnlyList<string> SavedLayout { get; set; } =
+            MasterInfoTileLayoutService.DefaultLayout;
+
+        public int SaveCount { get; private set; }
+
+        public int GetLayoutCount { get; private set; }
+
+        public IReadOnlyList<string> GetLayout(IReadOnlyCollection<string> availableTileIds)
+        {
+            GetLayoutCount++;
+            return SavedLayout
+                .Where(availableTileIds.Contains)
+                .ToArray();
+        }
+
+        public IReadOnlyList<string> SaveLayout(
+            IEnumerable<string> tileIds,
+            IReadOnlyCollection<string> availableTileIds)
+        {
+            SaveCount++;
+            SavedLayout = tileIds
+                .Where(availableTileIds.Contains)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
             return SavedLayout;
         }
     }

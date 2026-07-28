@@ -1,12 +1,3 @@
-/*
- * Proxy Latency Service
- * Measures proxy node TCP reachability and records node health statistics
- *
- * @author: WaterRun
- * @file: Service/ProxyLatencyService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using System.Threading;

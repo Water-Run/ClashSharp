@@ -1,12 +1,3 @@
-/*
- * Proxy Node Catalog Service Factory
- * Wires production dependencies for proxy node catalog data
- *
- * @author: WaterRun
- * @file: Service/ProxyNodeCatalogServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System.Collections.Generic;
 using ClashSharp.Model;
 

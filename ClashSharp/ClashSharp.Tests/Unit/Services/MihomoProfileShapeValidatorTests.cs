@@ -1,12 +1,3 @@
-/*
- * Mihomo Profile Shape Validator Tests
- * Verifies minimum mihomo profile section validation before import
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/MihomoProfileShapeValidatorTests.cs
- * @date: 2026-06-17
- */
-
 using System;
 using ClashSharp.Service;
 

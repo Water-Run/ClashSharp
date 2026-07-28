@@ -1,12 +1,3 @@
-/*
- * Mihomo Controller Client
- * Wraps the local mihomo external-controller API used by Clash# runtime pages
- *
- * @author: WaterRun
- * @file: Service/MihomoControllerClient.cs
- * @date: 2026-06-24
- */
-
 using System;
 using System.Collections.Generic;
 using System.IO;

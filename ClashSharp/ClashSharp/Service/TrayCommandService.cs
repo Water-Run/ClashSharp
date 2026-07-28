@@ -1,12 +1,3 @@
-/*
- * Tray Command Service
- * Coordinates task tray commands with runtime mode, transparent proxy preference, and logging
- *
- * @author: WaterRun
- * @file: Service/TrayCommandService.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.ComponentModel;
 using System.IO;

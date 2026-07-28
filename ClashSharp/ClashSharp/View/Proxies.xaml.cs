@@ -1,17 +1,6 @@
-/*
- * Proxies Page
- * Hosts the proxy node view and delegates proxy state to its view model
- *
- * @author: WaterRun
- * @file: View/Proxies.xaml.cs
- * @date: 2026-06-17
- */
-
-#nullable enable
-
 using System;
-using ClashSharp.Model;
-using ClashSharp.Service;
+using ClashSharp.Presentation.Composition;
+using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -22,45 +11,55 @@ namespace ClashSharp.View;
 /// <remarks>
 /// Invariants: The page has a non-null <see cref="ProxiesViewModel"/> after construction.
 /// Thread safety: Must be accessed from the UI thread only.
-/// Side effects: Creates singleton-backed service adapters for the view model.
+/// Side effects: Refreshes runtime state when loaded and delegates user selections to the view model.
 /// </remarks>
 public sealed partial class Proxies : Page
 {
     /// <summary>Bindable view model for this page.</summary>
     private readonly ProxiesViewModel _viewModel;
 
+    private readonly PageLoadSession _loadSession = new();
+
+    private readonly PageLoadSession _selectionSession = new();
+
     /// <summary>Initializes the proxies page and its view model.</summary>
     public Proxies()
+        : this(ProxiesPageComposition.Create())
     {
-        _viewModel = new(
-            new ProxiesLocalizationAdapter(LocalizationService.Instance),
-            new ProxyNodeCatalogAdapter(ProxyNodeCatalogService.Instance),
-            new ProxyLatencyTesterAdapter(ProxyLatencyService.Instance),
-            new ProxyRuntimeControllerAdapter(MihomoControllerClient.Instance),
-            new ProxiesLogAdapter(LogStorageService.Instance));
-
-        InitializeComponent();
-        DataContext = _viewModel;
-        Loaded += OnLoaded;
     }
 
-    /// <summary>Refreshes mihomo runtime state when the page first loads.</summary>
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    /// <summary>Initializes the page from an explicit composition contract.</summary>
+    internal Proxies(ProxiesPageComposition.Dependencies dependencies)
     {
-        Loaded -= OnLoaded;
-        await _viewModel.RefreshRuntimeAsync(default);
+        ArgumentNullException.ThrowIfNull(dependencies);
+        _viewModel = dependencies.ViewModel;
+        InitializeComponent();
+        DataContext = _viewModel;
+    }
+
+    /// <summary>Loads catalog and mihomo runtime state while the page is active.</summary>
+    private async void Page_Loaded(object sender, RoutedEventArgs e)
+    {
+        await _loadSession.RunAsync(_viewModel.LoadAsync);
+    }
+
+    /// <summary>Cancels page-owned requests before the visual tree is released.</summary>
+    private void Page_Unloaded(object sender, RoutedEventArgs e)
+    {
+        _loadSession.Cancel();
+        _selectionSession.Cancel();
     }
 
     /// <summary>Handles runtime strategy group selection changes.</summary>
     private async void ProxyGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is not ComboBox { DataContext: MihomoProxyGroup group, SelectedItem: string proxyName }
+        if (sender is not ComboBox { DataContext: MihomoProxyGroupDisplay group, SelectedItem: string proxyName }
             || string.Equals(group.CurrentSelection, proxyName, StringComparison.Ordinal))
         {
             return;
         }
 
-        await _viewModel.SelectProxyAsync(group, proxyName, default);
+        await _selectionSession.RunAsync(
+            cancellationToken => _viewModel.SelectProxyAsync(group.Model, proxyName, cancellationToken));
     }
-
 }

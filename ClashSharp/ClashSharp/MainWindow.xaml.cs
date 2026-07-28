@@ -1,13 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
-using ClashSharp.Components;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Lifecycle;
+using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Hosting.Startup;
 using ClashSharp.Model;
+using ClashSharp.Presentation.Composition;
+using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Service;
-using ClashSharp.View;
-using ClashSharp.ViewModel;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -18,11 +23,11 @@ namespace ClashSharp;
 
 /// <summary>Primary application window containing the NavigationView shell and content frame.</summary>
 /// <remarks>
-/// Invariants: The window enforces a minimum size of 800×600 DIP via Win32 window-procedure subclassing.
+/// Invariants: The window enforces a minimum size of 800×600 DIP when native window-procedure subclassing is available.
 /// Thread safety: Must be instantiated and accessed from the UI thread only.
-/// Side effects: Subclasses the native window procedure on construction; restores the original procedure on close.
+/// Side effects: Best-effort native setup is capability-gated and restored on close when installed.
 /// </remarks>
-public sealed partial class MainWindow : Window
+public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 {
     /// <summary>Command-line argument used by automated UI validation to skip startup modal dialogs.</summary>
     internal const string SkipStartupDialogsArgument = "--skip-startup-dialogs";
@@ -39,82 +44,180 @@ public sealed partial class MainWindow : Window
     /// <summary>Win32 message identifier for querying minimum and maximum sizing information.</summary>
     private const uint WmGetminmaxinfo = 0x0024;
 
+    /// <summary>Registered shell message broadcast after Explorer recreates the taskbar.</summary>
+    private const string TaskbarCreatedMessageName = "TaskbarCreated";
+
+    private readonly IApplicationLifetimeRequestSink _startupLifetimeRequests;
+
+    private readonly MainWindowComposition _composition;
+
     /// <summary>Delegate instance preventing garbage collection of the custom window procedure.</summary>
     private WndProcDelegate? _wndProcDelegate;
 
-    /// <summary>Previous window procedure pointer, restored during window cleanup.</summary>
-    private nint _oldWndProc;
+    /// <summary>Native capabilities available to optional shell decoration and tray integration.</summary>
+    private readonly StartupShellNativeCapabilityState _nativeCapabilities = new();
 
-    /// <summary>Native window handle obtained during initialization.</summary>
-    private nint _hWnd;
-
-    /// <summary>Bindable shell view model used by navigation controls.</summary>
-    private readonly MainWindowViewModel _viewModel;
+    /// <summary>Runtime-only shell dependencies created after startup completes.</summary>
+    private MainWindowComposition.Runtime? _runtime;
 
     /// <summary>Coordinates tray commands without coupling behavior to WinUI callbacks.</summary>
-    private readonly TrayCommandService _trayCommandService;
+    private TrayCommandService _trayCommandService = null!;
 
-    private readonly ITriggerRuntimeEventPublisher _triggerEvents;
+    private ITriggerRuntimeEventPublisher _triggerEvents = null!;
 
-    private readonly ApplicationActionService _applicationActions;
+    private ApplicationActionService _applicationActions = null!;
 
-    private readonly ApplicationLifecycleService _applicationLifecycle;
+    private ApplicationLifecycleService _applicationLifecycle = null!;
 
-    private readonly StartupConflictSnapshot _startupConflicts;
+    private StartupConflictSnapshot _startupConflicts = null!;
 
     /// <summary>Current app window used for close interception.</summary>
     private AppWindow? _appWindow;
 
     /// <summary>Native system tray integration.</summary>
-    private SystemTrayService? _trayService;
+    private MainWindowComposition.ITray? _trayService;
 
-    /// <summary>True after window or tray UI has handed exit to the App-owned lifetime.</summary>
+    /// <summary>Registered identifier for Explorer notification-area recreation.</summary>
+    private uint _taskbarCreatedMessage;
+
+    /// <summary>True only while this window was deliberately hidden behind a confirmed tray icon.</summary>
+    private bool _hiddenToTray;
+
+    /// <summary>True while a window or tray exit request is owned by the App lifetime.</summary>
     private bool _exitRequested;
+
+    /// <summary>Allows the outer lifetime owner to close the window after shutdown completes.</summary>
+    private bool _applicationExitApproved;
 
     /// <summary>Prevents reentrant native closing events from opening duplicate confirmation dialogs.</summary>
     private bool _closePromptActive;
 
-    /// <summary>True after startup conflict checks and startup behavior have been scheduled.</summary>
-    private bool _startupFlowStarted;
+    /// <summary>Owns the once-only transition into post-startup dialogs and trigger publication.</summary>
+    private readonly StartupFlowSchedulingGate _startupFlow = new();
 
-    /// <summary>Initializes the main window, applies minimum size constraints, configures the title bar, and sets up navigation.</summary>
+    /// <summary>True after startup invariants have completed and runtime pages are safe to expose.</summary>
+    private bool _runtimeReady;
+
+    private readonly CancellationTokenSource _windowLifetime = new();
+    private Task? _mihomoServiceStatusRefreshTask;
+
+    /// <summary>Initializes the minimal visible startup shell without exposing runtime navigation.</summary>
+    internal MainWindow(IApplicationLifetimeRequestSink startupLifetimeRequests)
+        : this(startupLifetimeRequests, MainWindowComposition.Create())
+    {
+    }
+
     internal MainWindow(
+        IApplicationLifetimeRequestSink startupLifetimeRequests,
+        MainWindowComposition composition)
+    {
+        _startupLifetimeRequests = startupLifetimeRequests
+            ?? throw new ArgumentNullException(nameof(startupLifetimeRequests));
+        _composition = composition ?? throw new ArgumentNullException(nameof(composition));
+        StartupShellSetupPolicy.TryRun(_composition.ApplyStartupAccentColor);
+        InitializeComponent();
+        Closed += OnWindowClosed;
+        StartupShellSetupPolicy.TryRun(InitializeStartupStatus);
+        InitializeWindowNativeCapabilities();
+        _nativeCapabilities.TryRunWindowHandleFeature(InitializeTitleBar);
+    }
+
+    /// <summary>Supplies runtime dependencies and unlocks navigation after critical startup steps finish.</summary>
+    internal void CompleteStartup(
         ITriggerRuntimeEventPublisher triggerEvents,
         ApplicationActionService applicationActions,
         ApplicationLifecycleService applicationLifecycle,
         TrayCommandService trayCommandService,
         StartupConflictSnapshot startupConflicts)
     {
+        if (_runtimeReady)
+        {
+            throw new InvalidOperationException("The main window startup shell is already complete.");
+        }
+
         _triggerEvents = triggerEvents ?? throw new ArgumentNullException(nameof(triggerEvents));
         _applicationActions = applicationActions ?? throw new ArgumentNullException(nameof(applicationActions));
         _applicationLifecycle = applicationLifecycle ?? throw new ArgumentNullException(nameof(applicationLifecycle));
         _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
         _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
-        _viewModel = new MainWindowViewModel(
-            new ShellLocalizationAdapter(LocalizationService.Instance),
-            CreatePageMap(),
-            new ShellRestartStateAdapter(RestartRequiredStateService.Instance));
-        AppThemeService.ApplyAccentColor(
-            AppSettingsService.Instance.AppAccentColorMode,
-            AppSettingsService.Instance.AppAccentColorValue);
-        InitializeComponent();
-        AppThemeService.Apply((FrameworkElement)Content, AppSettingsService.Instance.AppThemeMode);
-        NavView.DataContext = _viewModel;
-        InitializeWindowMinSize();
-        InitializeTitleBar();
+        _runtime = _composition.CreateRuntime();
+        _runtime.ApplyTheme((FrameworkElement)Content);
+        NavView.DataContext = _runtime.ViewModel;
 
+        _runtimeReady = true;
+        StartupOverlay.Visibility = Visibility.Collapsed;
+        NavView.Visibility = Visibility.Visible;
+        NavView.IsEnabled = true;
         NavView.SelectedItem = NavMasterControlItem;
         NavigateToTag("MasterControl");
-        InitializeTray();
+        _nativeCapabilities.TryCreateWindowMessageFeature(
+            CreateTrayService,
+            out _trayService);
+        if (_trayService is not null)
+        {
+            _mihomoServiceStatusRefreshTask =
+                RefreshMihomoServiceStatusForTrayAsync(_windowLifetime.Token);
+        }
 
-        Closed += OnWindowClosed;
-        ContentFrame.Loaded += OnContentFrameLoaded;
+        _ = _startupFlow.TrySchedule(
+            _runtimeReady,
+            () => DispatcherQueue.TryEnqueue(RunStartupFlowOnDispatcher));
+    }
+
+    /// <summary>Keeps the startup shell visible and presents a stable diagnostic after startup stops.</summary>
+    internal void ShowStartupFailure(string diagnostic)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(diagnostic);
+        _runtimeReady = false;
+        NavView.IsEnabled = false;
+        NavView.Visibility = Visibility.Collapsed;
+        StartupOverlay.Visibility = Visibility.Visible;
+        StartupProgressRing.IsActive = false;
+        StartupProgressRing.Visibility = Visibility.Collapsed;
+        StartupStatusText.Text = _composition.ResolveStartupText(
+            "Startup.Shell.Failed",
+            "Clash# could not finish starting.");
+        StartupDiagnosticText.Text = diagnostic;
+        StartupDiagnosticText.Visibility = Visibility.Visible;
+        PrimaryWindowActivation.BringToFront(this);
+    }
+
+    private void InitializeStartupStatus()
+    {
+        StartupStatusText.Text = _composition.ResolveStartupText(
+            "Startup.Shell.Starting",
+            "Clash# is starting…");
+    }
+
+    bool IPrimaryWindowActivationTarget.IsMinimized =>
+        _appWindow?.Presenter is OverlappedPresenter
+        {
+            State: OverlappedPresenterState.Minimized,
+        };
+
+    void IPrimaryWindowActivationTarget.Show()
+    {
+        _hiddenToTray = false;
+        _appWindow?.Show();
+    }
+
+    void IPrimaryWindowActivationTarget.Restore()
+    {
+        if (_appWindow?.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.Restore();
+        }
+    }
+
+    void IPrimaryWindowActivationTarget.Activate()
+    {
+        Activate();
     }
 
     /// <summary>Configures the custom title bar with transparent caption buttons.</summary>
-    private void InitializeTitleBar()
+    private void InitializeTitleBar(nint windowHandle)
     {
-        var windowId = Win32Interop.GetWindowIdFromWindow(_hWnd);
+        var windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
         _appWindow = AppWindow.GetFromWindowId(windowId);
 
         _appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
@@ -126,20 +229,36 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Subclasses the native window procedure to enforce minimum window dimensions.</summary>
-    private void InitializeWindowMinSize()
+    private void InitializeWindowNativeCapabilities()
     {
-        _hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        if (!_nativeCapabilities.TryAcquireWindowHandle(
+            () => WinRT.Interop.WindowNative.GetWindowHandle(this)))
+        {
+            return;
+        }
+
         _wndProcDelegate = new WndProcDelegate(WindowProc);
-        _oldWndProc = SetWindowLong(_hWnd, GwlpWndproc,
-            Marshal.GetFunctionPointerForDelegate(_wndProcDelegate));
+        nint newWindowProcedure = Marshal.GetFunctionPointerForDelegate(_wndProcDelegate);
+        if (!_nativeCapabilities.TryInstallWindowMessageHook(
+            handle => SetWindowLong(handle, GwlpWndproc, newWindowProcedure)))
+        {
+            _wndProcDelegate = null;
+            return;
+        }
+
+        if (SystemTrayAvailabilityPolicy.TryRegisterRecoveryMessage(
+            () => RegisterWindowMessage(TaskbarCreatedMessageName),
+            out uint taskbarCreatedMessage))
+        {
+            _taskbarCreatedMessage = taskbarCreatedMessage;
+        }
     }
 
-    /// <summary>Initializes the native system tray icon and menu.</summary>
-    private void InitializeTray()
+    /// <summary>Creates the native system tray icon and menu.</summary>
+    private MainWindowComposition.ITray CreateTrayService(nint windowHandle)
     {
-        _trayService = new SystemTrayService(
-            _hWnd,
-            BuildTrayMenuState,
+        return Runtime.CreateTray(
+            windowHandle,
             tag => DispatcherQueue.TryEnqueue(() => NavigateFromTray(tag)),
             () => DispatcherQueue.TryEnqueue(RequestSafeExitFromTray),
             mode => DispatcherQueue.TryEnqueue(() => ApplyModeFromTray(mode)),
@@ -151,6 +270,11 @@ public sealed partial class MainWindow : Window
     /// <param name="args">Event data containing the newly selected item. Not null.</param>
     private void OnNavigationSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
+        if (!_runtimeReady)
+        {
+            return;
+        }
+
         if (args.SelectedItem is not NavigationViewItem { Tag: string tag })
         {
             return;
@@ -164,6 +288,11 @@ public sealed partial class MainWindow : Window
     /// <param name="args">Event payload supplied by WinUI. Not null.</param>
     private void AppTitleBar_PaneToggleRequested(TitleBar sender, object args)
     {
+        if (!_runtimeReady)
+        {
+            return;
+        }
+
         NavView.IsPaneOpen = !NavView.IsPaneOpen;
     }
 
@@ -174,7 +303,7 @@ public sealed partial class MainWindow : Window
     {
         ArgumentNullException.ThrowIfNull(tag);
 
-        Type? pageType = _viewModel.ResolvePageType(tag);
+        Type? pageType = _runtime?.ViewModel.ResolvePageType(tag);
 
         if (pageType is not null && ContentFrame.CurrentSourcePageType != pageType)
         {
@@ -191,7 +320,7 @@ public sealed partial class MainWindow : Window
         }
 
         NavigateToTag(tag);
-        Activate();
+        PrimaryWindowActivation.BringToFront(this);
     }
 
     private NavigationViewItem? FindNavigationItemByTag(string tag)
@@ -215,47 +344,131 @@ public sealed partial class MainWindow : Window
     /// <summary>Restores the original window procedure and releases native resources on window close.</summary>
     /// <param name="sender">The window being closed. Not null.</param>
     /// <param name="args">Window close event arguments. Not null.</param>
-    private void OnWindowClosed(object sender, WindowEventArgs args)
+    private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        ContentFrame.Loaded -= OnContentFrameLoaded;
-        _trayService?.Dispose();
+        Task? statusRefreshTask = _mihomoServiceStatusRefreshTask;
+        _mihomoServiceStatusRefreshTask = null;
+        MainWindowComposition.ITray? trayService = _trayService;
         _trayService = null;
+        _taskbarCreatedMessage = 0;
+        _hiddenToTray = false;
+        AppWindow? appWindow = _appWindow;
+        _appWindow = null;
+        MainWindowComposition.Runtime? runtime = _runtime;
+        _runtime = null;
 
-        if (_appWindow is not null)
+        try
         {
-            _appWindow.Closing -= OnAppWindowClosing;
-            _appWindow = null;
+            try
+            {
+                _ = StartupShellSetupPolicy.TryRun(_windowLifetime.Cancel);
+            }
+            finally
+            {
+                try
+                {
+                    if (appWindow is not null)
+                    {
+                        _ = StartupShellSetupPolicy.TryRun(
+                            () => appWindow.Closing -= OnAppWindowClosing);
+                    }
+
+                    if (trayService is not null)
+                    {
+                        _ = StartupShellSetupPolicy.TryRun(trayService.Dispose);
+                    }
+
+                    if (runtime is not null)
+                    {
+                        _ = StartupShellSetupPolicy.TryRun(runtime.Dispose);
+                    }
+                }
+                finally
+                {
+                    bool windowMessageHookReleased =
+                        _nativeCapabilities.TryReleaseWindowMessageHook(
+                            (handle, previousWindowProcedure) =>
+                                SetWindowLong(handle, GwlpWndproc, previousWindowProcedure) != 0);
+                    if (windowMessageHookReleased)
+                    {
+                        _wndProcDelegate = null;
+                    }
+                    else if (_wndProcDelegate is not null)
+                    {
+                        NativeWindowProcedureRoot.Retain(_wndProcDelegate);
+                    }
+                }
+            }
+
+            if (statusRefreshTask is not null)
+            {
+                await statusRefreshTask;
+            }
         }
-
-        _viewModel.Dispose();
-
-        if (_hWnd != 0 && _oldWndProc != 0)
+        finally
         {
-            SetWindowLong(_hWnd, GwlpWndproc, _oldWndProc);
-            _oldWndProc = 0;
+            _ = StartupShellSetupPolicy.TryRun(_windowLifetime.Dispose);
         }
-
-        _wndProcDelegate = null;
-        _hWnd = 0;
     }
 
-    /// <summary>Runs startup checks once after the content frame has entered the XAML tree.</summary>
-    private async void OnContentFrameLoaded(object sender, RoutedEventArgs args)
+    private async Task RefreshMihomoServiceStatusForTrayAsync(CancellationToken cancellationToken)
     {
-        if (_startupFlowStarted)
+        try
+        {
+            await Runtime.RefreshMihomoStatusAsync(cancellationToken);
+            RefreshTrayMenuPreservingReachability();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Window shutdown owns cancellation of this best-effort status refresh.
+        }
+        catch (Exception exception) when (
+            StartupCompletionFailurePolicy.IsRecoverable(exception))
+        {
+            TryReportMihomoStatusRefreshFailure(exception);
+        }
+    }
+
+    private static void TryReportMihomoStatusRefreshFailure(Exception exception)
+    {
+        try
+        {
+            Debug.WriteLine(
+                $"ClashSharp tray status refresh failed ({exception.GetType().FullName}).");
+        }
+        catch (Exception diagnosticException) when (
+            StartupCompletionFailurePolicy.IsRecoverable(diagnosticException))
+        {
+            // Best-effort diagnostics must not replace the status-refresh failure they describe.
+        }
+    }
+
+    /// <summary>Runs post-startup work after runtime readiness and one dispatcher turn.</summary>
+    private async void RunStartupFlowOnDispatcher()
+    {
+        if (!_runtimeReady || _windowLifetime.IsCancellationRequested)
         {
             return;
         }
 
-        _startupFlowStarted = true;
-        ContentFrame.Loaded -= OnContentFrameLoaded;
-        await RunStartupFlowAsync();
+        try
+        {
+            await RunStartupFlowAsync();
+        }
+        catch (OperationCanceledException) when (_windowLifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception) when (
+            StartupCompletionFailurePolicy.IsRecoverable(exception))
+        {
+            Debug.WriteLine(
+                $"ClashSharp startup flow failed ({exception.GetType().FullName}).");
+        }
     }
 
     /// <summary>Shows startup conflicts and applies the configured startup proxy behavior.</summary>
     private async Task RunStartupFlowAsync()
     {
-        AppSettingsService settings = AppSettingsService.Instance;
         bool skipStartupDialogs = ShouldSkipStartupDialogs();
 
         _triggerEvents.Publish(new TriggerRuntimeEvent(TriggerEventKind.AppEntered));
@@ -265,7 +478,7 @@ public sealed partial class MainWindow : Window
             await ShowStartupConflictDialogAsync(_startupConflicts.Issues);
         }
 
-        if (!skipStartupDialogs && settings.ShowStartupGuideOnStartup)
+        if (!skipStartupDialogs && Runtime.ShowStartupGuideOnStartup)
         {
             await ShowStartupPromptDialogAsync();
         }
@@ -291,11 +504,16 @@ public sealed partial class MainWindow : Window
         XamlRoot? xamlRoot = GetDialogXamlRoot();
         if (xamlRoot is null)
         {
-            LogStorageService.Instance.AppendLog("Warning", "Startup", LocalizationService.Instance.GetString("Startup.Log.ConflictDialogSkipped"), null);
+            Runtime.LogStartupWarning("Startup.Log.ConflictDialogSkipped");
             return;
         }
 
-        await StartupConflictDialogPresenter.ShowAsync(xamlRoot, issues);
+        await StartupConflictDialogPresenter.ShowAsync(
+            xamlRoot,
+            issues,
+            Runtime.GetString,
+            Runtime.ErrorSink,
+            _windowLifetime.Token);
     }
 
     /// <summary>Shows the startup health prompt when enabled by settings.</summary>
@@ -304,12 +522,11 @@ public sealed partial class MainWindow : Window
         XamlRoot? xamlRoot = GetDialogXamlRoot();
         if (xamlRoot is null)
         {
-            LogStorageService.Instance.AppendLog("Warning", "Startup", LocalizationService.Instance.GetString("Startup.Log.PromptSkipped"), null);
+            Runtime.LogStartupWarning("Startup.Log.PromptSkipped");
             return;
         }
 
-        StartupGuideDialog dialog = new();
-        await dialog.ShowCenteredAsync(xamlRoot);
+        await Runtime.ShowStartupGuideAsync(xamlRoot, _windowLifetime.Token);
     }
 
     /// <summary>Returns the top-level XAML root so dialogs are centered in the whole app window.</summary>
@@ -325,28 +542,50 @@ public sealed partial class MainWindow : Window
     /// <param name="args">Closing event arguments. Not null.</param>
     private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
+        if (_applicationExitApproved)
+        {
+            return;
+        }
+
+        if (!_runtimeReady)
+        {
+            args.Cancel = true;
+            if (!_exitRequested)
+            {
+                _exitRequested = _startupLifetimeRequests.TryRequest(
+                    ApplicationLifetimeRequest.Exit("startup-shell"));
+            }
+
+            return;
+        }
+
         if (_exitRequested)
         {
             args.Cancel = true;
             return;
         }
 
-        CloseBehaviorMode closeBehavior = AppSettingsService.Instance.CloseBehaviorMode;
-        if (closeBehavior is CloseBehaviorMode.MinimizeToTray)
+        CloseBehaviorMode closeBehavior = Runtime.CloseBehavior;
+        bool isTrayAvailable =
+            closeBehavior is CloseBehaviorMode.MinimizeToTray && IsTrayAvailableForHide();
+        WindowCloseDisposition closeDisposition =
+            WindowCloseBehaviorPolicy.Resolve(closeBehavior, isTrayAvailable);
+        if (closeDisposition is WindowCloseDisposition.HideToTray)
         {
             args.Cancel = true;
-            _appWindow?.Hide();
+            sender.Hide();
+            _hiddenToTray = true;
             return;
         }
 
-        if (closeBehavior == CloseBehaviorMode.ExitWithoutConfirmation)
+        if (closeDisposition is WindowCloseDisposition.RequestSafeExit)
         {
             args.Cancel = true;
             RequestApplicationExit("main-window");
             return;
         }
 
-        bool proxyTakeoverActive = IsProxyTakeoverActive();
+        bool proxyTakeoverActive = Runtime.IsProxyTakeoverActive();
         args.Cancel = true;
         if (_closePromptActive)
         {
@@ -356,17 +595,17 @@ public sealed partial class MainWindow : Window
         _closePromptActive = true;
         ThemedContentDialog dialog = new()
         {
-            Title = LocalizationService.Instance.GetString(proxyTakeoverActive ? "Close.ProxyActive.Title" : "Close.Confirm.Title"),
-            Content = LocalizationService.Instance.GetString(proxyTakeoverActive ? "Close.ProxyActive.Message" : "Close.Confirm.Message"),
-            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Close"),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            Title = Runtime.GetString(proxyTakeoverActive ? "Close.ProxyActive.Title" : "Close.Confirm.Title"),
+            Content = Runtime.GetString(proxyTakeoverActive ? "Close.ProxyActive.Message" : "Close.Confirm.Message"),
+            PrimaryButtonText = Runtime.GetString("Command.Close"),
+            CloseButtonText = Runtime.GetString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = GetDialogXamlRoot(),
         };
 
         try
         {
-            if (await dialog.ShowAsync() is ContentDialogResult.Primary)
+            if (await dialog.ShowManagedAsync() is ContentDialogResult.Primary)
             {
                 RequestApplicationExit("main-window-confirmation");
             }
@@ -377,66 +616,140 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Returns whether a proxy takeover mode is currently active.</summary>
-    /// <returns>True when closing will stop active proxy routing.</returns>
-    private static bool IsProxyTakeoverActive()
+    private bool IsTrayAvailableForHide()
     {
-        ClashSharpMode currentMode = AppSettingsService.Instance.CurrentMode;
-        return currentMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
+        return SystemTrayAvailabilityPolicy.CanHideToTray(
+            _taskbarCreatedMessage,
+            () => _trayService?.TryEnsureAvailable() == true);
     }
 
-    /// <summary>Builds current tray menu state.</summary>
-    private static TrayMenuState BuildTrayMenuState()
+    private void RecoverTrayAfterShellRestart()
     {
-        MihomoServiceStatus serviceStatus = MihomoServiceManager.Instance.GetLatestStatus();
-        return TrayMenuStateBuilder.Build(
-            AppSettingsService.Instance.CurrentMode,
-            AppSettingsService.Instance.TransparentProxyEnabled,
-            serviceStatus.IsInstalled,
-            TrayStatusService.Instance.GetLatestSnapshot(),
-            AppSettingsService.Instance.TrayVisibleFeatureIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            LocalizationService.Instance.GetString);
+        _ = SystemTrayAvailabilityPolicy.TryRefreshAndPreserveReachability(
+            () => _trayService?.TryEnsureAvailable() == true,
+            _hiddenToTray,
+            () => PrimaryWindowActivation.BringToFront(this));
+    }
+
+    private void RefreshTrayMenuPreservingReachability()
+    {
+        _ = SystemTrayAvailabilityPolicy.TryRefreshAndPreserveReachability(
+            () => _trayService?.RefreshMenu() == true,
+            _hiddenToTray,
+            () => PrimaryWindowActivation.BringToFront(this));
     }
 
     /// <summary>Applies a mode requested from the tray menu.</summary>
     private async void ApplyModeFromTray(ClashSharpMode mode)
     {
-        if (mode == AppSettingsService.Instance.CurrentMode)
+        MainWindowComposition.Runtime? runtime = _runtime;
+        if (!_runtimeReady
+            || runtime is null
+            || _windowLifetime.IsCancellationRequested)
         {
             return;
         }
 
-        if (await _trayCommandService.ApplyModeAsync(
-            mode,
-            System.Threading.CancellationToken.None))
+        CancellationToken cancellationToken = _windowLifetime.Token;
+        try
         {
-            await NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
-        }
+            if (mode == runtime.CurrentMode)
+            {
+                return;
+            }
 
-        _trayService?.RefreshMenu();
+            if (await _trayCommandService.ApplyModeAsync(mode, cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await NotifyAndTriggerModeAppliedAsync(
+                    runtime.CurrentMode,
+                    cancellationToken);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            RefreshTrayMenuPreservingReachability();
+        }
+        catch (Exception exception) when (
+            ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await ReportShellOperationFailureAsync(
+                runtime.ErrorSink,
+                "tray-apply-mode",
+                exception);
+        }
     }
 
     /// <summary>Sets transparent proxy preference from the tray menu.</summary>
     private async void SetTransparentProxyFromTray(bool isEnabled)
     {
-        if (isEnabled == AppSettingsService.Instance.TransparentProxyEnabled)
+        MainWindowComposition.Runtime? runtime = _runtime;
+        if (!_runtimeReady
+            || runtime is null
+            || _windowLifetime.IsCancellationRequested)
         {
             return;
         }
 
-        if (await _trayCommandService.SetTransparentProxyEnabledAsync(
-            isEnabled,
-            System.Threading.CancellationToken.None))
+        CancellationToken cancellationToken = _windowLifetime.Token;
+        try
         {
-            await NotifyAndTriggerModeAppliedAsync(AppSettingsService.Instance.CurrentMode);
-        }
+            if (isEnabled == runtime.TransparentProxyEnabled)
+            {
+                return;
+            }
 
-        _trayService?.RefreshMenu();
+            if (await _trayCommandService.SetTransparentProxyEnabledAsync(
+                isEnabled,
+                cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await NotifyAndTriggerModeAppliedAsync(
+                    runtime.CurrentMode,
+                    cancellationToken);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            RefreshTrayMenuPreservingReachability();
+        }
+        catch (Exception exception) when (
+            ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await ReportShellOperationFailureAsync(
+                runtime.ErrorSink,
+                "tray-set-transparent-proxy",
+                exception);
+        }
     }
 
-    private async Task NotifyAndTriggerModeAppliedAsync(ClashSharpMode mode)
+    private async Task NotifyAndTriggerModeAppliedAsync(
+        ClashSharpMode mode,
+        CancellationToken cancellationToken)
     {
-        await _applicationActions.PublishProxyModeAppliedAsync(mode, System.Threading.CancellationToken.None);
+        await _applicationActions.PublishProxyModeAppliedAsync(mode, cancellationToken);
+    }
+
+    private static async Task ReportShellOperationFailureAsync(
+        IApplicationErrorSink errorSink,
+        string operationName,
+        Exception exception)
+    {
+        try
+        {
+            await errorSink.ReportAsync(
+                new ApplicationError(operationName, exception),
+                CancellationToken.None);
+        }
+        catch (Exception sinkException) when (
+            !ExceptionGraphClassifier.IsProcessFatal(sinkException))
+        {
+            // This async-void shell boundary has no independent secondary diagnostic channel.
+        }
     }
 
     /// <summary>Requests safe exit from the tray without showing the close confirmation prompt.</summary>
@@ -447,48 +760,24 @@ public sealed partial class MainWindow : Window
 
     private void RequestApplicationExit(string source)
     {
-        _exitRequested = true;
-        _applicationLifecycle.RequestExit(source);
+        _exitRequested = _applicationLifecycle.RequestExit(source);
     }
 
-    /// <summary>Creates the navigation tag to page-type mapping used by the shell view model.</summary>
-    /// <returns>Immutable navigation page map keyed by NavigationView tag.</returns>
-    private static IReadOnlyDictionary<string, Type> CreatePageMap()
+    /// <summary>Re-enables window and tray exit commands after outer shutdown could not prepare disposal.</summary>
+    internal void NotifyExitRequestFailed()
     {
-        return new Dictionary<string, Type>
-        {
-            ["MasterControl"] = typeof(View.MasterControl),
-            ["ProxyNodes"] = typeof(View.Proxies),
-            ["Profiles"] = typeof(View.Profiles),
-            ["Links"] = typeof(View.Links),
-            ["Rules"] = typeof(View.Rules),
-            ["Triggers"] = typeof(View.Triggers),
-            ["Statistics"] = typeof(View.Statistics),
-            ["Logs"] = typeof(View.Logs),
-            ["About"] = typeof(View.About),
-            ["Settings"] = typeof(View.Settings),
-        };
+        _exitRequested = false;
+        RefreshTrayMenuPreservingReachability();
     }
 
-    /// <summary>Adapts restart-required settings state to the shell view model.</summary>
-    private sealed class ShellRestartStateAdapter : IShellRestartState
+    /// <summary>Allows the App-owned lifetime to close this window after host shutdown succeeds.</summary>
+    internal void ApproveApplicationExit()
     {
-        private readonly RestartRequiredStateService _state;
-
-        public ShellRestartStateAdapter(RestartRequiredStateService state)
-        {
-            _state = state ?? throw new ArgumentNullException(nameof(state));
-        }
-
-        public event EventHandler? RestartPendingChanged
-        {
-            add => _state.RestartPendingChanged += value;
-            remove => _state.RestartPendingChanged -= value;
-        }
-
-        public bool IsRestartPending => _state.IsRestartPending;
+        _applicationExitApproved = true;
     }
 
+    private MainWindowComposition.Runtime Runtime =>
+        _runtime ?? throw new InvalidOperationException("The main window runtime is not ready.");
 
     /// <summary>Custom window procedure that enforces minimum window size by handling WM_GETMINMAXINFO.</summary>
     /// <param name="hWnd">Native window handle.</param>
@@ -498,6 +787,11 @@ public sealed partial class MainWindow : Window
     /// <returns>The result of message processing.</returns>
     private nint WindowProc(nint hWnd, uint uMsg, nint wParam, nint lParam)
     {
+        if (_taskbarCreatedMessage != 0 && uMsg == _taskbarCreatedMessage)
+        {
+            RecoverTrayAfterShellRestart();
+        }
+
         if (_trayService?.TryHandleWindowMessage(uMsg, wParam, lParam) == true)
         {
             return 0;
@@ -512,7 +806,10 @@ public sealed partial class MainWindow : Window
             Marshal.StructureToPtr(info, lParam, true);
         }
 
-        return CallWindowProc(_oldWndProc, hWnd, uMsg, wParam, lParam);
+        nint previousWindowProcedure = _nativeCapabilities.PreviousWindowProcedure;
+        return previousWindowProcedure != 0
+            ? CallWindowProc(previousWindowProcedure, hWnd, uMsg, wParam, lParam)
+            : DefWindowProc(hWnd, uMsg, wParam, lParam);
     }
 
     #region Win32 Interop Declarations
@@ -577,6 +874,14 @@ public sealed partial class MainWindow : Window
     /// <summary>Passes a message to the specified previous window procedure.</summary>
     [DllImport("user32.dll")]
     private static extern nint CallWindowProc(nint lpPrevWndFunc, nint hWnd, uint msg, nint wParam, nint lParam);
+
+    /// <summary>Provides safe default processing when a previous window procedure is unavailable.</summary>
+    [DllImport("user32.dll")]
+    private static extern nint DefWindowProc(nint hWnd, uint msg, nint wParam, nint lParam);
+
+    /// <summary>Registers the Explorer taskbar-recreation message for this process.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint RegisterWindowMessage(string lpString);
 
     /// <summary>Retrieves the DPI for the specified window.</summary>
     [DllImport("user32.dll")]

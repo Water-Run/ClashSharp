@@ -92,6 +92,9 @@ public sealed partial class SettingsRegistry
         /// <summary>Master-control hero status layout.</summary>
         public static SettingKey MasterHeroStatusLayout { get; } = new("MasterHeroStatusLayout");
 
+        /// <summary>Master-control visible information-tile layout.</summary>
+        public static SettingKey MasterInfoTileLayout { get; } = new("MasterInfoTileLayout");
+
         /// <summary>First proxy-routed connection-test URL.</summary>
         public static SettingKey ConnectionTestProxyUrl1 { get; } = new("ConnectionTestProxyUrl1");
 

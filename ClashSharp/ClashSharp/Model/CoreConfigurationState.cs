@@ -1,12 +1,3 @@
-/*
- * Core Configuration State Model
- * Represents the local mihomo configuration file state managed by Clash#
- *
- * @author: WaterRun
- * @file: Model/CoreConfigurationState.cs
- * @date: 2026-06-15
- */
-
 namespace ClashSharp.Model;
 
 /// <summary>Represents local mihomo configuration file state managed by Clash#.</summary>

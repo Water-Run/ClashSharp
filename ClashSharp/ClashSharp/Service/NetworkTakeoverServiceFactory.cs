@@ -1,12 +1,3 @@
-/*
- * Network Takeover Service Factory
- * Wires production dependencies for Clash# network takeover mode application
- *
- * @author: WaterRun
- * @file: Service/NetworkTakeoverServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;

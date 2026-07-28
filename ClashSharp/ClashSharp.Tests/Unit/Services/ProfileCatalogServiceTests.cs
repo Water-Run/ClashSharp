@@ -1,12 +1,3 @@
-/*
- * Profile Catalog Service Tests
- * Verifies profile catalog state through injected settings and dependencies
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/ProfileCatalogServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -15,6 +6,19 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for profile catalog composition.</summary>
 public sealed class ProfileCatalogServiceTests
 {
+    [Fact]
+    public void Constructor_DoesNotCreateCatalogDirectory()
+    {
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "clashsharp-profile-constructor-" + Guid.NewGuid().ToString("N"));
+        string catalogPath = Path.Combine(root, "nested", "ProfileCatalog.json");
+
+        _ = CreateService(catalogPath, new FakeProfileCatalogSettings());
+
+        Assert.False(Directory.Exists(root));
+    }
+
     /// <summary>Verifies a missing catalog creates the localized built-in profile and marks it active from injected settings.</summary>
     [Fact]
     public void GetProfiles_WhenCatalogMissing_ReturnsLocalizedBuiltInProfile()

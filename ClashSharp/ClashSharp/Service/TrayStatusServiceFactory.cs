@@ -1,12 +1,3 @@
-/*
- * Tray Status Service Factory
- * Wires tray status snapshots to runtime proxy state and node health storage
- *
- * @author: WaterRun
- * @file: Service/TrayStatusServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.Collections.Generic;
 using System.Threading;

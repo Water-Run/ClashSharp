@@ -1,12 +1,3 @@
-/*
- * Application Theme Service
- * Applies user-selected display style to the WinUI root element
- *
- * @author: WaterRun
- * @file: Service/AppThemeService.cs
- * @date: 2026-06-17
- */
-
 using System;
 using ClashSharp.Model;
 using Microsoft.UI;

@@ -1,12 +1,3 @@
-/*
- * System Tray Service
- * Owns the native notification-area icon and minimal Clash# tray menu
- *
- * @author: WaterRun
- * @file: Service/SystemTrayService.cs
- * @date: 2026-06-24
- */
-
 using System;
 using System.IO;
 using System.Linq;
@@ -74,6 +65,12 @@ public sealed class SystemTrayService : IDisposable
     /// <summary>True after the service is disposed.</summary>
     private bool _disposed;
 
+    /// <summary>True after the shell most recently confirmed an add or modify operation.</summary>
+    private bool _isAvailable;
+
+    /// <summary>Gets whether the most recent shell operation confirmed the tray entry.</summary>
+    public bool IsAvailable => !_disposed && _isAvailable;
+
     /// <summary>Initializes a system tray service.</summary>
     public SystemTrayService(
         nint ownerWindowHandle,
@@ -95,35 +92,74 @@ public sealed class SystemTrayService : IDisposable
         _applyMode = applyMode ?? throw new ArgumentNullException(nameof(applyMode));
         _setTransparentProxy = setTransparentProxy ?? throw new ArgumentNullException(nameof(setTransparentProxy));
         _icon = LoadTrayIcon(isInactive: false, useMonochrome: false);
-        AddTrayIcon();
-        RefreshTrayIcon();
+        SystemTrayInitializationPolicy.Complete(
+            _icon,
+            AddTrayIcon,
+            TryRefreshTrayIcon,
+            RemoveTrayIcon);
+        _isAvailable = true;
     }
 
     /// <summary>Refreshes menu check marks and enabled states.</summary>
-    public void RefreshMenu()
+    public bool RefreshMenu()
     {
-        RefreshTrayIcon();
+        return RefreshTrayIcon();
     }
 
     /// <summary>Refreshes the tray icon according to the current proxy mode and inactive icon settings.</summary>
-    public void RefreshTrayIcon()
+    /// <returns><see langword="true"/> only when notification-area reachability was confirmed.</returns>
+    public bool RefreshTrayIcon()
     {
         if (_disposed)
         {
-            return;
+            return false;
         }
 
+        return TryEnsureAvailable();
+    }
+
+    /// <summary>Revalidates the icon before callers hide the only visible application window.</summary>
+    /// <returns><see langword="true"/> only when the shell confirms the icon is available.</returns>
+    public bool TryEnsureAvailable()
+    {
+        if (_disposed)
+        {
+            return false;
+        }
+
+        _isAvailable = SystemTrayAvailabilityPolicy.TryEnsureAvailable(
+            TryRefreshTrayIcon,
+            AddTrayIcon);
+        return _isAvailable;
+    }
+
+    private bool TryRefreshTrayIcon()
+    {
         TrayMenuState state = _getState();
         bool isProxyActive = state.ModeItems.Any(static item =>
             item.IsChecked && item.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover);
-        DrawingIcon nextIcon = LoadTrayIcon(
-            isInactive: !isProxyActive,
-            useMonochrome: AppSettingsService.Instance.TrayUseMonochromeInactiveIcon);
-        DrawingIcon previousIcon = _icon;
-        _icon = nextIcon;
-        NOTIFYICONDATA data = CreateNotifyIconData();
-        Shell_NotifyIcon(NimModify, ref data);
-        previousIcon.Dispose();
+        DrawingIcon? nextIcon = null;
+        try
+        {
+            nextIcon = LoadTrayIcon(
+                isInactive: !isProxyActive,
+                useMonochrome: AppSettingsService.Instance.TrayUseMonochromeInactiveIcon);
+            NOTIFYICONDATA data = CreateNotifyIconData(nextIcon);
+            if (!Shell_NotifyIcon(NimModify, ref data))
+            {
+                return false;
+            }
+
+            DrawingIcon previousIcon = _icon;
+            _icon = nextIcon;
+            nextIcon = null;
+            TryDisposeIcon(previousIcon);
+            return true;
+        }
+        finally
+        {
+            TryDisposeIcon(nextIcon);
+        }
     }
 
     /// <summary>Handles one owner-window message when it belongs to the tray icon.</summary>
@@ -133,7 +169,7 @@ public sealed class SystemTrayService : IDisposable
     /// <returns>True when the message was handled.</returns>
     public bool TryHandleWindowMessage(uint message, nint wParam, nint lParam)
     {
-        if (_disposed || message != TrayCallbackMessage)
+        if (_disposed || !_isAvailable || message != TrayCallbackMessage)
         {
             return false;
         }
@@ -232,15 +268,25 @@ public sealed class SystemTrayService : IDisposable
         }
 
         _disposed = true;
-        RemoveTrayIcon();
-        _icon.Dispose();
+        _isAvailable = false;
+        try
+        {
+            RemoveTrayIcon();
+        }
+        catch (Exception exception) when (
+            ClashSharp.ApplicationModel.Startup.StartupCompletionFailurePolicy.IsRecoverable(exception))
+        {
+            // Notification-area removal is best effort during application teardown.
+        }
+
+        TryDisposeIcon(_icon);
     }
 
     /// <summary>Adds the tray icon.</summary>
-    private void AddTrayIcon()
+    private bool AddTrayIcon()
     {
         NOTIFYICONDATA data = CreateNotifyIconData();
-        Shell_NotifyIcon(NimAdd, ref data);
+        return Shell_NotifyIcon(NimAdd, ref data);
     }
 
     /// <summary>Removes the tray icon.</summary>
@@ -253,6 +299,11 @@ public sealed class SystemTrayService : IDisposable
     /// <summary>Builds notification icon data for Shell_NotifyIcon.</summary>
     private NOTIFYICONDATA CreateNotifyIconData()
     {
+        return CreateNotifyIconData(_icon);
+    }
+
+    private NOTIFYICONDATA CreateNotifyIconData(DrawingIcon icon)
+    {
         return new NOTIFYICONDATA
         {
             cbSize = Marshal.SizeOf<NOTIFYICONDATA>(),
@@ -260,9 +311,27 @@ public sealed class SystemTrayService : IDisposable
             uID = 1,
             uFlags = NifMessage | NifIcon | NifTip,
             uCallbackMessage = TrayCallbackMessage,
-            hIcon = _icon.Handle,
+            hIcon = icon.Handle,
             szTip = "Clash#",
         };
+    }
+
+    private static void TryDisposeIcon(DrawingIcon? icon)
+    {
+        if (icon is null)
+        {
+            return;
+        }
+
+        try
+        {
+            icon.Dispose();
+        }
+        catch (Exception exception) when (
+            ClashSharp.ApplicationModel.Startup.StartupCompletionFailurePolicy.IsRecoverable(exception))
+        {
+            // Icon replacement is best effort and must preserve the usable tray service.
+        }
     }
 
     /// <summary>Handles one popup menu command.</summary>

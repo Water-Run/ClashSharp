@@ -1,12 +1,12 @@
-#nullable enable
-
 using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Components;
-using ClashSharp.Hosting.Compatibility;
-using ClashSharp.Service;
+using ClashSharp.Presentation.Composition;
+using ClashSharp.Presentation.Dialogs;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -18,13 +18,19 @@ namespace ClashSharp.View;
 public sealed partial class Triggers : Page
 {
     private readonly TriggersViewModel _viewModel;
+    private readonly IApplicationErrorSink _errorSink;
     private CancellationTokenSource? _pageLifetime;
 
     public Triggers()
+        : this(TriggersPageComposition.Create())
     {
-        _viewModel = TriggerPresentationCompatibilityFactory
-            .RequireActive()
-            .CreateViewModel();
+    }
+
+    internal Triggers(TriggersPageDependencies dependencies)
+    {
+        ArgumentNullException.ThrowIfNull(dependencies);
+        _viewModel = dependencies.ViewModel;
+        _errorSink = dependencies.ErrorSink;
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
@@ -110,7 +116,7 @@ public sealed partial class Triggers : Page
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = XamlRoot,
         };
-        if (await dialog.ShowAsync() is ContentDialogResult.Primary)
+        if (await dialog.ShowManagedAsync() is ContentDialogResult.Primary)
         {
             await AwaitPageOperationAsync(token => _viewModel.DeleteTaskAsync(id, token));
         }
@@ -258,7 +264,7 @@ public sealed partial class Triggers : Page
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
-        return await dialog.ShowAsync() is ContentDialogResult.Primary;
+        return await dialog.ShowManagedAsync() is ContentDialogResult.Primary;
     }
 
     private async Task AwaitPageOperationAsync(Func<CancellationToken, Task> operation)
@@ -269,12 +275,33 @@ public sealed partial class Triggers : Page
             return;
         }
 
+        CancellationToken cancellationToken = lifetime.Token;
         try
         {
-            await operation(lifetime.Token);
+            await operation(cancellationToken);
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (Exception exception) when (
+            ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await ReportUnexpectedAsync("Triggers.PageOperation", exception);
+        }
+    }
+
+    private async Task ReportUnexpectedAsync(string operationName, Exception exception)
+    {
+        try
+        {
+            await _errorSink.ReportAsync(
+                new ApplicationError(operationName, exception),
+                CancellationToken.None);
+        }
+        catch (Exception sinkException) when (
+            !ExceptionGraphClassifier.IsProcessFatal(sinkException))
+        {
+            // No secondary diagnostic channel is available at this presentation boundary.
         }
     }
 

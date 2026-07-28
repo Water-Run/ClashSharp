@@ -1,3 +1,5 @@
+using ClashSharp.ApplicationModel.Diagnostics;
+
 namespace ClashSharp.ApplicationModel.Lifecycle;
 
 /// <summary>Records successful pauses so a failed destructive transition can restore them in reverse order.</summary>
@@ -21,6 +23,7 @@ internal sealed class QuiescenceSession
     public async Task<IReadOnlyList<string>> ResumeAsync(CancellationToken cancellationToken)
     {
         List<string> failures = [];
+        List<Exception> processFatalFailures = [];
         for (int index = _paused.Count - 1; index >= 0; index--)
         {
             PausedParticipant paused = _paused[index];
@@ -30,10 +33,21 @@ internal sealed class QuiescenceSession
                     .ResumeAsync(paused.PriorState, cancellationToken)
                     .ConfigureAwait(false);
             }
+            catch (Exception exception) when (ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                processFatalFailures.Add(exception);
+            }
             catch (Exception)
             {
                 failures.Add(paused.Participant.Name);
             }
+        }
+
+        if (processFatalFailures.Count != 0)
+        {
+            throw new AggregateException(
+                "One or more runtime participants failed fatally while resuming.",
+                processFatalFailures);
         }
 
         return failures;

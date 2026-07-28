@@ -1,25 +1,16 @@
-/*
- * Settings Page
- * Provides application settings for language, proxy behavior, and Windows integration
- *
- * @author: WaterRun
- * @file: View/Settings.xaml.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Components;
-using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Model;
-using ClashSharp.Service;
+using ClashSharp.Presentation.Composition;
+using ClashSharp.Presentation.Dialogs;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -34,7 +25,7 @@ namespace ClashSharp.View;
 
 /// <summary>Page for application-wide settings such as language, Windows proxy behavior, and core configuration.</summary>
 /// <remarks>
-/// Invariants: Loaded controls mirror <see cref="AppSettingsService"/> values after construction.
+/// Invariants: Loaded controls mirror the injected settings view model after construction.
 /// Thread safety: Must be accessed from the UI thread only.
 /// Side effects: Persists settings when user-facing controls change.
 /// </remarks>
@@ -44,6 +35,13 @@ public sealed partial class Settings : Page
 
     /// <summary>Owns settings state transitions and persistence.</summary>
     private readonly SettingsViewModel _viewModel;
+    private readonly Func<string, string> _getString;
+    private readonly Action<bool> _setRestartPending;
+    private readonly Func<string, Windows.UI.Color> _parseAccentColor;
+    private readonly Func<Windows.UI.Color, string> _formatAccentColor;
+    private readonly IApplicationErrorSink _errorSink;
+    private readonly IStartupGuidePresenter _startupGuide;
+    private readonly ISettingsPageOperations _operations;
 
     /// <summary>True while initial settings are being bound to controls.</summary>
     private bool _isLoadingSettings = true;
@@ -51,42 +49,38 @@ public sealed partial class Settings : Page
     /// <summary>True while a restart-required switch is being restored after cancellation.</summary>
     private bool _isRevertingRestartSwitch;
 
+    private CancellationTokenSource? _pageLifetime = new();
+    private bool _isViewModelSubscribed;
+
     /// <summary>Initializes the settings page and applies localized text.</summary>
     public Settings()
+        : this(SettingsPageComposition.Create())
     {
-        SettingsRuntimeMutationAdapter runtimeMutations = SettingsRuntimeMutationAdapter.CreateDefault();
-        SettingsDiagnosticsViewModel diagnosticsViewModel = new(
-            new WindowsDiagnosticsClient(WindowsNetworkDiagnosticService.Instance),
-            new DiagnosticsLog(LogStorageService.Instance),
-            LocalizationService.Instance.GetString);
-        _viewModel = new(
-            new AppSettingsStore(AppSettingsService.Instance),
-            language => LocalizationService.Instance.CurrentLanguage = language,
-            AppThemeService.Apply,
-            () => { },
-            _ => { },
-            LocalizationService.Instance.GetString,
-            SettingsProxyInformationAdapter.CreateSnapshot,
-            diagnosticsViewModel,
-            new MihomoServiceControllerAdapter(MihomoServiceManager.Instance),
-            AppThemeService.ApplyAccentColor,
-            resetAllSettings: AppDataMaintenanceService.ResetAllSettings,
-            clearAllDataAsync: AppDataMaintenanceService.ClearAllDataAsync,
-            checkStartupConflicts: StartupConflictDetectionService.Instance.CheckConflicts,
-            isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending,
-            notifyConnectionTestTimeout: NotificationService.Instance.NotifyConnectionTestTimeout,
-            appendLog: LogStorageService.Instance.AppendLog,
-            restartConnectionSamplingAsync: runtimeMutations.RestartConnectionSamplingAsync,
-            applyLaunchAtStartupAsync: runtimeMutations.ApplyLaunchAtStartupAsync,
-            errorSink: ApplicationErrorSink.CreateDefault());
+    }
+
+    internal Settings(SettingsPageDependencies dependencies)
+    {
+        ArgumentNullException.ThrowIfNull(dependencies);
+        _viewModel = dependencies.ViewModel
+            ?? throw new ArgumentException("A settings view model is required.", nameof(dependencies));
+        _getString = dependencies.GetString
+            ?? throw new ArgumentException("A localization function is required.", nameof(dependencies));
+        _setRestartPending = dependencies.SetRestartPending
+            ?? throw new ArgumentException("A restart-state publisher is required.", nameof(dependencies));
+        _parseAccentColor = dependencies.ParseAccentColor
+            ?? throw new ArgumentException("An accent-color parser is required.", nameof(dependencies));
+        _formatAccentColor = dependencies.FormatAccentColor
+            ?? throw new ArgumentException("An accent-color formatter is required.", nameof(dependencies));
+        _errorSink = dependencies.ErrorSink
+            ?? throw new ArgumentException("An application error sink is required.", nameof(dependencies));
+        _startupGuide = dependencies.StartupGuide
+            ?? throw new ArgumentException("A startup-guide presenter is required.", nameof(dependencies));
+        _operations = dependencies.Operations
+            ?? throw new ArgumentException("Settings page operations are required.", nameof(dependencies));
         InitializeComponent();
         DataContext = _viewModel;
-        _viewModel.RefreshMihomoServiceStatusCommand.Execute(null);
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        LoadSettings();
-        _isLoadingSettings = false;
-        UpdateRestartRequiredState();
     }
 
     /// <summary>Loads persisted settings into visible controls.</summary>
@@ -108,14 +102,55 @@ public sealed partial class Settings : Page
     /// <summary>Publishes the current restart-required settings state to the shell.</summary>
     private void UpdateRestartRequiredState()
     {
-        RestartRequiredStateService.Instance.SetRestartPending(_viewModel.HasRestartRequiredSettings);
+        _setRestartPending(_viewModel.HasRestartRequiredSettings);
     }
 
-    /// <summary>Stops listening to view model notifications when the page leaves the visual tree.</summary>
+    /// <summary>Restores page-scoped subscriptions and cancellation after navigation back to this instance.</summary>
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_pageLifetime is null)
+        {
+            _pageLifetime = new CancellationTokenSource();
+        }
+
+        SubscribeToViewModel();
+        CheckStartupConflictsButton.IsEnabled = true;
+        _isLoadingSettings = true;
+        try
+        {
+            LoadSettings();
+        }
+        finally
+        {
+            _isLoadingSettings = false;
+        }
+
+        _viewModel.RefreshMihomoServiceStatusCommand.Execute(null);
+    }
+
+    /// <summary>Stops page work and view-model notifications while the page is outside the visual tree.</summary>
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        Unloaded -= OnUnloaded;
+        if (_isViewModelSubscribed)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _isViewModelSubscribed = false;
+        }
+
+        CancellationTokenSource? pageLifetime = Interlocked.Exchange(ref _pageLifetime, null);
+        pageLifetime?.Cancel();
+        pageLifetime?.Dispose();
+    }
+
+    private void SubscribeToViewModel()
+    {
+        if (_isViewModelSubscribed)
+        {
+            return;
+        }
+
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _isViewModelSubscribed = true;
     }
 
     /// <summary>Returns the window-level XAML root so dialogs center in the visible window.</summary>
@@ -130,15 +165,23 @@ public sealed partial class Settings : Page
     /// <summary>Runs a connection test against the configured test URL.</summary>
     private async void ConnectionTestButton_Click(object sender, RoutedEventArgs e)
     {
+        CancellationToken cancellationToken = _pageLifetime?.Token ?? new CancellationToken(canceled: true);
         ConnectionTestButton.IsEnabled = false;
         try
         {
-            ConnectionTestReport report = await _viewModel.RunConnectionTestAsync(CancellationToken.None);
-            await ShowConnectionTestResultAsync(report);
+            ConnectionTestReport report = await _viewModel.RunConnectionTestAsync(cancellationToken);
+            await ShowConnectionTestResultAsync(report, cancellationToken);
         }
-        catch (Exception exception)
+        catch (OperationCanceledException exception)
+            when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            await ShowSettingsOperationFailureAsync(_viewModel.ConnectionTestUrlTitleText, exception);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await ShowSettingsOperationFailureAsync(
+                "Settings.ConnectionTest",
+                _viewModel.ConnectionTestUrlTitleText,
+                exception);
         }
         finally
         {
@@ -147,14 +190,17 @@ public sealed partial class Settings : Page
     }
 
     /// <summary>Shows the connection test result.</summary>
-    private async Task ShowConnectionTestResultAsync(ConnectionTestReport report)
+    private async Task ShowConnectionTestResultAsync(
+        ConnectionTestReport report,
+        CancellationToken cancellationToken)
     {
         await CenteredDialogOverlay.ShowAsync(
             GetDialogXamlRoot(),
             _viewModel.ConnectionTestUrlTitleText,
             BuildConnectionTestResultPanel(report),
-            LocalizationService.Instance.GetString("Command.Close"),
-            720);
+            _getString("Command.Close"),
+            720,
+            cancellationToken);
     }
 
     private StackPanel BuildConnectionTestResultPanel(ConnectionTestReport report)
@@ -281,11 +327,11 @@ public sealed partial class Settings : Page
         {
             Title = _viewModel.WindowsNativeTitleText,
             Content = BuildNetworkRepairPanel(),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            CloseButtonText = _getString("Command.Close"),
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        await dialog.ShowAsync();
+        await dialog.ShowManagedAsync();
     }
 
     /// <summary>Shows restart guidance when accent color mode changes after initial binding.</summary>
@@ -318,7 +364,7 @@ public sealed partial class Settings : Page
     {
         ColorPicker picker = new()
         {
-            Color = AppThemeService.ParseAccentColorOrDefault(_viewModel.AppAccentColorValue),
+            Color = _parseAccentColor(_viewModel.AppAccentColorValue),
             IsAlphaEnabled = false,
             Width = 320,
             MaxWidth = 320,
@@ -338,18 +384,18 @@ public sealed partial class Settings : Page
             Content = pickerPanel,
             MaxWidth = 420,
             PrimaryButtonText = _viewModel.AppAccentColorPickText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
+        if (await dialog.ShowManagedAsync() is not ContentDialogResult.Primary)
         {
             return;
         }
 
         _viewModel.SetAppAccentColorModeIndex((int)AppAccentColorMode.Custom);
-        _viewModel.SetAppAccentColorValue(AppThemeService.FormatAccentColor(picker.Color));
+        _viewModel.SetAppAccentColorValue(_formatAccentColor(picker.Color));
         if (_viewModel.IsAppAccentColorRestartPending)
         {
             await ShowRestartRequiredDialogAsync();
@@ -368,14 +414,14 @@ public sealed partial class Settings : Page
         {
             Title = _viewModel.ConnectionTestUrlTitleText,
             Content = panel,
-            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Save"),
+            PrimaryButtonText = _getString("Command.Save"),
             SecondaryButtonText = _viewModel.ResetText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        ContentDialogResult result = await dialog.ShowAsync();
+        ContentDialogResult result = await dialog.ShowManagedAsync();
         if (result is ContentDialogResult.Secondary)
         {
             _viewModel.ResetConnectionTestUrlsToDefaults();
@@ -431,13 +477,13 @@ public sealed partial class Settings : Page
     {
         ThemedContentDialog dialog = new()
         {
-            Title = LocalizationService.Instance.GetString("Settings.RestartRequired.Title"),
-            Content = LocalizationService.Instance.GetString("Settings.RestartRequired.Message"),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            Title = _getString("Settings.RestartRequired.Title"),
+            Content = _getString("Settings.RestartRequired.Message"),
+            CloseButtonText = _getString("Command.Close"),
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        await dialog.ShowAsync();
+        await dialog.ShowManagedAsync();
     }
 
     /// <summary>Confirms a setting change that is persisted now but only applied after restart.</summary>
@@ -445,15 +491,15 @@ public sealed partial class Settings : Page
     {
         ThemedContentDialog dialog = new()
         {
-            Title = LocalizationService.Instance.GetString("Settings.RestartSettingConfirm.Title"),
-            Content = LocalizationService.Instance.GetString("Settings.RestartSettingConfirm.Message"),
-            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Apply"),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            Title = _getString("Settings.RestartSettingConfirm.Title"),
+            Content = _getString("Settings.RestartSettingConfirm.Message"),
+            PrimaryButtonText = _getString("Command.Apply"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        return await dialog.ShowAsync() is ContentDialogResult.Primary;
+        return await dialog.ShowManagedAsync() is ContentDialogResult.Primary;
     }
 
     private void TriggersEnabledToggle_Toggled(object sender, RoutedEventArgs e)
@@ -559,12 +605,12 @@ public sealed partial class Settings : Page
             Title = _viewModel.ResetGroupConfirmTitleText,
             Content = message,
             PrimaryButtonText = _viewModel.ResetGroupToDefaultsText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        if (await dialog.ShowAsync() is ContentDialogResult.Primary)
+        if (await dialog.ShowManagedAsync() is ContentDialogResult.Primary)
         {
             resetAction();
         }
@@ -584,9 +630,9 @@ public sealed partial class Settings : Page
         };
         optionList.SetOptions(SettingsViewModel.TrayFeatureDefinitions.Select(feature => new SearchableOptionItem(
             feature.Id,
-            LocalizationService.Instance.GetString(feature.TitleKey),
+            _getString(feature.TitleKey),
             _viewModel.TraySectionTitleText,
-            LocalizationService.Instance.GetString(feature.DescriptionKey),
+            _getString(feature.DescriptionKey),
             feature.Glyph,
             feature.Id,
             selectedIds.Contains(feature.Id))));
@@ -595,13 +641,13 @@ public sealed partial class Settings : Page
         {
             Title = _viewModel.TrayVisibleFeaturesTitleText,
             Content = optionList,
-            PrimaryButtonText = LocalizationService.Instance.GetString("Command.Save"),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            PrimaryButtonText = _getString("Command.Save"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        if (await dialog.ShowAsync() is ContentDialogResult.Primary)
+        if (await dialog.ShowManagedAsync() is ContentDialogResult.Primary)
         {
             _viewModel.SetTrayVisibleFeatureIds(optionList.SelectedOptions.Select(static option => option.Id));
         }
@@ -612,16 +658,63 @@ public sealed partial class Settings : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void CheckStartupConflictsButton_Click(object sender, RoutedEventArgs e)
     {
-        IReadOnlyList<StartupConflictIssue> issues = _viewModel.CheckStartupConflicts();
-        await StartupConflictDialogPresenter.ShowAsync(GetDialogXamlRoot(), issues);
+        CancellationToken cancellationToken = _pageLifetime?.Token
+            ?? new CancellationToken(canceled: true);
+        CheckStartupConflictsButton.IsEnabled = false;
+        try
+        {
+            IReadOnlyList<StartupConflictIssue> issues =
+                await _viewModel.CheckStartupConflictsAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await StartupConflictDialogPresenter.ShowAsync(
+                GetDialogXamlRoot(),
+                issues,
+                _getString,
+                _errorSink,
+                cancellationToken);
+        }
+        catch (OperationCanceledException exception) when (
+            ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+        }
+        catch (Exception exception) when (
+            !ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await ReportStartupConflictFailureAsync(exception, cancellationToken);
+        }
+        finally
+        {
+            if (_pageLifetime is CancellationTokenSource lifetime
+                && lifetime.Token == cancellationToken
+                && !cancellationToken.IsCancellationRequested)
+            {
+                CheckStartupConflictsButton.IsEnabled = true;
+            }
+        }
+    }
+
+    private async Task ReportStartupConflictFailureAsync(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _errorSink.ReportAsync(
+                new ApplicationError("settings-startup-conflict-detection", exception),
+                cancellationToken);
+        }
+        catch (Exception sinkException) when (
+            !ExceptionGraphClassifier.IsProcessFatal(sinkException))
+        {
+        }
     }
 
     /// <summary>Shows the startup prompt immediately.</summary>
     private async void ShowStartupPromptButton_Click(object sender, RoutedEventArgs e)
     {
-        XamlRoot xamlRoot = GetDialogXamlRoot();
-        StartupGuideDialog dialog = new();
-        await dialog.ShowCenteredAsync(xamlRoot);
+        CancellationToken cancellationToken = _pageLifetime?.Token
+            ?? new CancellationToken(canceled: true);
+        await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken);
     }
 
     /// <summary>Registers the startup restore fallback helper.</summary>
@@ -645,23 +738,32 @@ public sealed partial class Settings : Page
     /// <summary>Exports a Clash# XML data package with the selected scope.</summary>
     private async void ExportDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
+        CancellationToken cancellationToken = _pageLifetime?.Token ?? new CancellationToken(canceled: true);
         try
         {
             DataPackageExportScope? scope = await SelectDataPackageExportScopeAsync();
             if (scope is DataPackageExportScope selectedScope)
             {
-                await PickAndExportDataPackageAsync(selectedScope);
+                await PickAndExportDataPackageAsync(selectedScope, cancellationToken);
             }
         }
-        catch (Exception exception)
+        catch (OperationCanceledException exception)
+            when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            await ShowSettingsOperationFailureAsync(_viewModel.DataExportTitleText, exception);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await ShowSettingsOperationFailureAsync(
+                "Settings.ExportData",
+                _viewModel.DataExportTitleText,
+                exception);
         }
     }
 
     /// <summary>Imports a Clash# XML data package after two confirmations.</summary>
     private async void ImportDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
+        CancellationToken cancellationToken = _pageLifetime?.Token ?? new CancellationToken(canceled: true);
         try
         {
             FileOpenPicker picker = new()
@@ -672,18 +774,30 @@ public sealed partial class Settings : Page
             picker.FileTypeFilter.Add(".xml");
 
             StorageFile? file = await picker.PickSingleFileAsync();
-            ClashDataPackageScope? scope = ReadPackageScope(file?.Path ?? string.Empty);
-            if (file is null || !IsImportableDataPackageScope(scope) || !await ConfirmDataImportAsync(scope))
+            if (file is null)
             {
                 return;
             }
 
-            await ClashDataPackageService.Instance.ImportAsync(file.Path, CancellationToken.None);
+            ClashDataPackageScope? scope = _operations.ReadPackageScope(file.Path);
+            if (!IsImportableDataPackageScope(scope) || !await ConfirmDataImportAsync(scope))
+            {
+                return;
+            }
+
+            await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
             ApplyImportedSettings();
         }
-        catch (Exception exception)
+        catch (OperationCanceledException exception)
+            when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            await ShowSettingsOperationFailureAsync(_viewModel.ImportText, exception);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await ShowSettingsOperationFailureAsync(
+                "Settings.ImportData",
+                _viewModel.ImportText,
+                exception);
         }
     }
 
@@ -729,15 +843,15 @@ public sealed partial class Settings : Page
 
         ThemedContentDialog dialog = new()
         {
-            Title = LocalizationService.Instance.GetString("Settings.DataExport.Title"),
+            Title = _getString("Settings.DataExport.Title"),
             Content = panel,
             PrimaryButtonText = _viewModel.ExportText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        if (await dialog.ShowAsync() is not ContentDialogResult.Primary)
+        if (await dialog.ShowManagedAsync() is not ContentDialogResult.Primary)
         {
             return null;
         }
@@ -760,17 +874,17 @@ public sealed partial class Settings : Page
             new(
                 DataPackageExportScope.Settings,
                 _viewModel.DataPackageScopeSettingsText,
-                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.Settings.Description"),
+                _getString("Settings.DataPackage.Scope.Settings.Description"),
                 "\uE713"),
             new(
                 DataPackageExportScope.SettingsAndProxyConfiguration,
                 _viewModel.DataPackageScopeSettingsAndProxyConfigurationText,
-                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration.Description"),
+                _getString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration.Description"),
                 "\uE968"),
             new(
                 DataPackageExportScope.SystemLogSqlite,
-                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogSqlite"),
-                LocalizationService.Instance.GetString("Settings.DataPackage.Scope.SystemLogSqlite.Description"),
+                _getString("Settings.DataPackage.Scope.SystemLogSqlite"),
+                _getString("Settings.DataPackage.Scope.SystemLogSqlite.Description"),
                 "\uE777"),
         ];
     }
@@ -784,7 +898,9 @@ public sealed partial class Settings : Page
     }
 
     /// <summary>Shows a save picker and exports the selected data package scope.</summary>
-    private async Task PickAndExportDataPackageAsync(DataPackageExportScope scope)
+    private async Task PickAndExportDataPackageAsync(
+        DataPackageExportScope scope,
+        CancellationToken cancellationToken)
     {
         FileSavePicker picker = new()
         {
@@ -807,26 +923,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        switch (scope)
-        {
-            case DataPackageExportScope.Settings:
-                await ClashDataPackageService.Instance.ExportAsync(file.Path, ClashDataPackageScope.Settings, CancellationToken.None);
-                break;
-            case DataPackageExportScope.SettingsAndProxyConfiguration:
-                await ClashDataPackageService.Instance.ExportAsync(file.Path, ClashDataPackageScope.SettingsAndProxyConfiguration, CancellationToken.None);
-                break;
-            case DataPackageExportScope.SystemLogSqlite:
-                await ExportLogSqliteAsync(file.Path, CancellationToken.None);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unsupported export scope.");
-        }
-    }
-
-    private static async Task ExportLogSqliteAsync(string path, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        await Task.Run(() => LogStorageService.Instance.ExportDatabase(path), cancellationToken);
+        await _operations.ExportDataAsync(file.Path, scope, cancellationToken);
     }
 
     private static bool IsImportableDataPackageScope(ClashDataPackageScope? scope)
@@ -839,56 +936,41 @@ public sealed partial class Settings : Page
     {
         ThemedContentDialog firstDialog = new()
         {
-            Title = LocalizationService.Instance.GetString("Settings.DataImport.Warning.Title"),
+            Title = _getString("Settings.DataImport.Warning.Title"),
             Content = FormatDataImportWarning(scope),
             PrimaryButtonText = _viewModel.ImportText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        if (await firstDialog.ShowAsync() is not ContentDialogResult.Primary)
+        if (await firstDialog.ShowManagedAsync() is not ContentDialogResult.Primary)
         {
             return false;
         }
 
         ThemedContentDialog secondDialog = new()
         {
-            Title = LocalizationService.Instance.GetString("Settings.DataImport.SecondConfirm.Title"),
-            Content = LocalizationService.Instance.GetString("Settings.DataImport.SecondConfirm.Message"),
+            Title = _getString("Settings.DataImport.SecondConfirm.Title"),
+            Content = _getString("Settings.DataImport.SecondConfirm.Message"),
             PrimaryButtonText = _viewModel.ImportText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        return await secondDialog.ShowAsync() is ContentDialogResult.Primary;
-    }
-
-    private static ClashDataPackageScope? ReadPackageScope(string packagePath)
-    {
-        try
-        {
-            string? scopeText = XDocument.Load(packagePath).Root?.Attribute("Scope")?.Value;
-            return Enum.TryParse(scopeText, out ClashDataPackageScope scope)
-                ? scope
-                : null;
-        }
-        catch
-        {
-            return null;
-        }
+        return await secondDialog.ShowManagedAsync() is ContentDialogResult.Primary;
     }
 
     private string FormatDataImportWarning(ClashDataPackageScope? scope)
     {
-        string message = LocalizationService.Instance.GetString("Settings.DataImport.Warning.Message");
+        string message = _getString("Settings.DataImport.Warning.Message");
         if (scope is null)
         {
             return message;
         }
 
-        return $"{message}{Environment.NewLine}{string.Format(CultureInfo.CurrentCulture, LocalizationService.Instance.GetString("Settings.DataImport.Warning.Scope.Format"), GetDataPackageScopeText(scope.Value))}";
+        return $"{message}{Environment.NewLine}{string.Format(CultureInfo.CurrentCulture, _getString("Settings.DataImport.Warning.Scope.Format"), GetDataPackageScopeText(scope.Value))}";
     }
 
     private string GetDataPackageScopeText(ClashDataPackageScope scope)
@@ -904,10 +986,7 @@ public sealed partial class Settings : Page
     /// <summary>Re-applies settings that affect running application services after package import.</summary>
     private void ApplyImportedSettings()
     {
-        AppSettingsService settings = AppSettingsService.Instance;
-        LocalizationService.Instance.CurrentLanguage = settings.DisplayLanguage;
-        AppThemeService.Apply(settings.AppThemeMode);
-        AppThemeService.ApplyAccentColor(settings.AppAccentColorMode, settings.AppAccentColorValue);
+        _operations.ApplyImportedPresentationSettings();
         _viewModel.Load();
         _viewModel.ReapplyRuntimeSettings();
     }
@@ -1026,12 +1105,12 @@ public sealed partial class Settings : Page
     private async void ResetAllSettingsButton_Click(object sender, RoutedEventArgs e)
     {
         if (!await ConfirmAsync(
-                LocalizationService.Instance.GetString("Settings.ResetAllSettings.Title"),
-                LocalizationService.Instance.GetString("Settings.ResetAllSettings.Confirm"),
+                _getString("Settings.ResetAllSettings.Title"),
+                _getString("Settings.ResetAllSettings.Confirm"),
                 _viewModel.ResetText)
             || !await ConfirmAsync(
-                LocalizationService.Instance.GetString("Settings.ResetAllSettings.SecondConfirm.Title"),
-                LocalizationService.Instance.GetString("Settings.ResetAllSettings.SecondConfirm"),
+                _getString("Settings.ResetAllSettings.SecondConfirm.Title"),
+                _getString("Settings.ResetAllSettings.SecondConfirm"),
                 _viewModel.ResetText))
         {
             return;
@@ -1044,28 +1123,34 @@ public sealed partial class Settings : Page
     private async void ClearAllDataButton_Click(object sender, RoutedEventArgs e)
     {
         if (!await ConfirmAsync(
-                LocalizationService.Instance.GetString("Settings.ClearAllData.Title"),
-                LocalizationService.Instance.GetString("Settings.ClearAllData.Confirm"),
+                _getString("Settings.ClearAllData.Title"),
+                _getString("Settings.ClearAllData.Confirm"),
                 _viewModel.CleanupText)
             || !await ConfirmAsync(
-                LocalizationService.Instance.GetString("Settings.ClearAllData.SecondConfirm.Title"),
-                LocalizationService.Instance.GetString("Settings.ClearAllData.SecondConfirm"),
+                _getString("Settings.ClearAllData.SecondConfirm.Title"),
+                _getString("Settings.ClearAllData.SecondConfirm"),
                 _viewModel.CleanupText)
             || !await ConfirmAsync(
-                LocalizationService.Instance.GetString("Settings.ClearAllData.FinalConfirm.Title"),
-                LocalizationService.Instance.GetString("Settings.ClearAllData.FinalConfirm"),
+                _getString("Settings.ClearAllData.FinalConfirm.Title"),
+                _getString("Settings.ClearAllData.FinalConfirm"),
                 _viewModel.CleanupText))
         {
             return;
         }
 
+        CancellationToken cancellationToken = _pageLifetime?.Token ?? new CancellationToken(canceled: true);
         try
         {
-            await _viewModel.ClearAllDataAsync(CancellationToken.None);
+            await _viewModel.ClearAllDataAsync(cancellationToken);
         }
-        catch (Exception exception)
+        catch (OperationCanceledException exception)
+            when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             await ShowSettingsOperationFailureAsync(
+                "Settings.ClearAllData",
                 _viewModel.ClearAllDataTitleText,
                 exception);
         }
@@ -1079,27 +1164,33 @@ public sealed partial class Settings : Page
             Title = title,
             Content = content,
             PrimaryButtonText = primaryButtonText,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Cancel"),
+            CloseButtonText = _getString("Command.Cancel"),
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        return await dialog.ShowAsync() is ContentDialogResult.Primary;
+        return await dialog.ShowManagedAsync() is ContentDialogResult.Primary;
     }
 
     /// <summary>Logs and displays a settings operation failure without escaping the async event handler.</summary>
-    private async Task ShowSettingsOperationFailureAsync(string title, Exception exception)
+    private async Task ShowSettingsOperationFailureAsync(
+        string operationName,
+        string title,
+        Exception exception)
     {
-        LogStorageService.Instance.AppendLog("Warning", "Settings", title, exception.Message);
+        await _operations.ReportUnexpectedErrorAsync(
+            operationName,
+            exception,
+            CancellationToken.None);
         ThemedContentDialog dialog = new()
         {
             Title = title,
-            Content = exception.Message,
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            Content = _viewModel.UnexpectedErrorText,
+            CloseButtonText = _getString("Command.Close"),
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        await dialog.ShowAsync();
+        await dialog.ShowManagedAsync();
     }
 
 }

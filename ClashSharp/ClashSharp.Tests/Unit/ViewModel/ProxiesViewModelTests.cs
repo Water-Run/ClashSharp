@@ -1,12 +1,3 @@
-/*
- * Proxies ViewModel Tests
- * Verifies proxy node list and latency command behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/ProxiesViewModelTests.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
 
@@ -15,13 +6,19 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the proxies view model.</summary>
 public sealed class ProxiesViewModelTests
 {
-    /// <summary>Verifies construction loads localized command labels and initial nodes.</summary>
+    /// <summary>Verifies construction initializes labels without reading the proxy catalog.</summary>
     [Fact]
-    public void Constructor_LoadsLabelsAndNodes()
+    public void Constructor_IsSideEffectFree()
     {
         FakeProxyCatalog catalog = new();
 
-        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), catalog, new FakeProxyLatency(), new FakeProxiesLog());
+        ProxiesViewModel viewModel = new(
+            new FakeProxiesLocalization(),
+            catalog,
+            new FakeProxyLatency(),
+            new FakeProxiesLog(),
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
 
         Assert.Equal("Proxy nodes", viewModel.PageTitleText);
         Assert.Equal("Refresh", viewModel.RefreshNodesText);
@@ -29,24 +26,37 @@ public sealed class ProxiesViewModelTests
         Assert.Equal("Test latency", viewModel.TestLatencyText);
         Assert.Equal("Strategy groups", viewModel.ProxyGroupsSectionTitleText);
         Assert.Equal("Resources", viewModel.ProviderResourcesSectionTitleText);
-        Assert.Equal(catalog.Nodes, viewModel.ProxyNodes);
+        Assert.Empty(viewModel.ProxyNodes);
+        Assert.Equal(0, catalog.ReadCount);
     }
 
-    /// <summary>Verifies refresh replaces visible nodes from the catalog.</summary>
+    /// <summary>Verifies explicit loading replaces visible nodes from the catalog.</summary>
     [Fact]
-    public void RefreshNodes_ReloadsCatalogNodes()
+    public async Task LoadAsync_LoadsCatalogAndRuntimeState()
     {
         FakeProxyCatalog catalog = new();
-        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), catalog, new FakeProxyLatency(), new FakeProxiesLog());
+        FakeProxyRuntimeController runtime = new();
+        ProxiesViewModel viewModel = new(
+            new FakeProxiesLocalization(),
+            catalog,
+            new FakeProxyLatency(),
+            runtime,
+            new FakeProxiesLog(),
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => $"display:{text}"));
         IReadOnlyList<ProxyNode> updatedNodes =
         [
             new("Updated", "HTTPS", new RegionMetadata("US", "United States", "us"), null),
         ];
         catalog.Nodes = updatedNodes;
 
-        viewModel.RefreshNodes();
+        await viewModel.LoadAsync(CancellationToken.None);
 
-        Assert.Equal(updatedNodes, viewModel.ProxyNodes);
+        Assert.Equal(updatedNodes, viewModel.ProxyNodes.Select(static row => row.Model));
+        Assert.Equal(runtime.ProxyGroups, viewModel.ProxyGroups.Select(static row => row.Model));
+        Assert.Equal(runtime.ProviderResources, viewModel.ProviderResources.Select(static row => row.Model));
+        Assert.Equal("display:Updated", viewModel.ProxyNodes[0].NameDisplay);
+        Assert.Equal(1, catalog.ReadCount);
     }
 
     /// <summary>Verifies latency testing updates visible nodes and logs success.</summary>
@@ -55,7 +65,13 @@ public sealed class ProxiesViewModelTests
     {
         FakeProxyLatency latency = new();
         FakeProxiesLog log = new();
-        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(), latency, log);
+        ProxiesViewModel viewModel = new(
+            new FakeProxiesLocalization(),
+            new FakeProxyCatalog(),
+            latency,
+            log,
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
         IReadOnlyList<ProxyNode> testedNodes =
         [
             new("Direct", "DIRECT", new RegionMetadata("CN", "China", "cn"), 0),
@@ -64,7 +80,7 @@ public sealed class ProxiesViewModelTests
 
         await viewModel.TestLatencyAsync(CancellationToken.None);
 
-        Assert.Equal(testedNodes, viewModel.ProxyNodes);
+        Assert.Equal(testedNodes, viewModel.ProxyNodes.Select(static row => row.Model));
         Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Category == "ProxyNodes");
     }
 
@@ -77,8 +93,14 @@ public sealed class ProxiesViewModelTests
             ExceptionToThrow = new InvalidOperationException("probe failed"),
         };
         FakeProxiesLog log = new();
-        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(), latency, log);
-        IReadOnlyList<ProxyNode> originalNodes = viewModel.ProxyNodes;
+        ProxiesViewModel viewModel = new(
+            new FakeProxiesLocalization(),
+            new FakeProxyCatalog(),
+            latency,
+            log,
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
+        IReadOnlyList<ProxyNodeDisplay> originalNodes = viewModel.ProxyNodes;
 
         await viewModel.TestLatencyAsync(CancellationToken.None);
 
@@ -96,12 +118,14 @@ public sealed class ProxiesViewModelTests
             new FakeProxyCatalog(),
             new FakeProxyLatency(),
             runtime,
-            new FakeProxiesLog());
+            new FakeProxiesLog(),
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
 
         await viewModel.RefreshRuntimeAsync(CancellationToken.None);
 
-        Assert.Equal(runtime.ProxyGroups, viewModel.ProxyGroups);
-        Assert.Equal(runtime.ProviderResources, viewModel.ProviderResources);
+        Assert.Equal(runtime.ProxyGroups, viewModel.ProxyGroups.Select(static row => row.Model));
+        Assert.Equal(runtime.ProviderResources, viewModel.ProviderResources.Select(static row => row.Model));
         Assert.Equal("Runtime refreshed", viewModel.RuntimeStatusText);
     }
 
@@ -115,7 +139,9 @@ public sealed class ProxiesViewModelTests
             new FakeProxyCatalog(),
             new FakeProxyLatency(),
             runtime,
-            new FakeProxiesLog());
+            new FakeProxiesLog(),
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
         MihomoProxyGroup group = runtime.ProxyGroups[0];
 
         await viewModel.SelectProxyAsync(group, "Node B", CancellationToken.None);
@@ -135,7 +161,9 @@ public sealed class ProxiesViewModelTests
             new FakeProxyCatalog(),
             new FakeProxyLatency(),
             runtime,
-            new FakeProxiesLog());
+            new FakeProxiesLog(),
+            new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
         MihomoProviderResource provider = runtime.ProviderResources[0];
 
         await viewModel.UpdateProviderAsync(provider, CancellationToken.None);
@@ -182,10 +210,13 @@ public sealed class ProxiesViewModelTests
             new("Direct", "DIRECT", new RegionMetadata("CN", "China", "cn"), 0),
         ];
 
+        public int ReadCount { get; private set; }
+
         /// <summary>Gets fake proxy nodes.</summary>
         /// <returns>Configured proxy nodes.</returns>
         public IReadOnlyList<ProxyNode> GetNodes()
         {
+            ReadCount++;
             return Nodes;
         }
     }

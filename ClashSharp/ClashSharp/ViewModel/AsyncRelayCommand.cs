@@ -1,9 +1,8 @@
-#nullable enable
-
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 
 namespace ClashSharp.ViewModel;
@@ -27,13 +26,13 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand
     /// <summary>Initializes an asynchronous relay command.</summary>
     public AsyncRelayCommand(
         Func<CancellationToken, Task> executeAsync,
+        IApplicationErrorSink errorSink,
         Func<bool>? canExecute = null,
-        IApplicationErrorSink? errorSink = null,
         string? operationName = null)
         : this(
             (_, cancellationToken) => executeAsync(cancellationToken),
-            canExecute,
             errorSink,
+            canExecute,
             operationName)
     {
         ArgumentNullException.ThrowIfNull(executeAsync);
@@ -42,13 +41,13 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand
     /// <summary>Initializes an asynchronous relay command with command-parameter support.</summary>
     public AsyncRelayCommand(
         Func<object?, CancellationToken, Task> executeAsync,
+        IApplicationErrorSink errorSink,
         Func<bool>? canExecute = null,
-        IApplicationErrorSink? errorSink = null,
         string? operationName = null)
     {
         _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
+        _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _canExecute = canExecute;
-        _errorSink = errorSink ?? NullApplicationErrorSink.Instance;
         _operationName = string.IsNullOrWhiteSpace(operationName)
             ? "async-command"
             : operationName;
@@ -86,13 +85,7 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand
     /// <inheritdoc />
     public void Execute(object? parameter)
     {
-        if (!TryBeginExecution())
-        {
-            return;
-        }
-
-        LastError = null;
-        ExecutionTask = ExecuteObservedAsync(parameter);
+        StartObservedExecution(parameter, CancellationToken.None);
     }
 
     /// <summary>Executes explicitly without caller cancellation.</summary>
@@ -110,6 +103,18 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand
         }
 
         return ExecuteStartedAsync(parameter, cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes with caller cancellation while observing failures through the application error sink.
+    /// </summary>
+    /// <remarks>
+    /// This is the cancellable equivalent of <see cref="ICommand.Execute"/> for UI lifecycle owners.
+    /// Reentrant invocation returns a completed task and preserves the tracked in-flight task.
+    /// </remarks>
+    internal Task ExecuteObservedAsync(object? parameter, CancellationToken cancellationToken)
+    {
+        return StartObservedExecution(parameter, cancellationToken);
     }
 
     private async Task ExecuteStartedAsync(object? parameter, CancellationToken cancellationToken)
@@ -131,16 +136,30 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand
         CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task ExecuteObservedAsync(object? parameter)
+    private Task StartObservedExecution(object? parameter, CancellationToken cancellationToken)
+    {
+        if (!TryBeginExecution())
+        {
+            return Task.CompletedTask;
+        }
+
+        LastError = null;
+        Task execution = ExecuteObservedCoreAsync(parameter, cancellationToken);
+        ExecutionTask = execution;
+        return execution;
+    }
+
+    private async Task ExecuteObservedCoreAsync(object? parameter, CancellationToken cancellationToken)
     {
         try
         {
-            await ExecuteStartedAsync(parameter, CancellationToken.None);
+            await ExecuteStartedAsync(parameter, cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (Exception exception) when (
+            ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             LastError = exception;
             try
@@ -149,7 +168,8 @@ internal sealed class AsyncRelayCommand : ObservableObject, ICommand
                     new ApplicationError(_operationName, exception),
                     CancellationToken.None);
             }
-            catch (Exception sinkException)
+            catch (Exception sinkException) when (
+                !ExceptionGraphClassifier.IsProcessFatal(sinkException))
             {
                 LastError = new AggregateException(exception, sinkException);
             }

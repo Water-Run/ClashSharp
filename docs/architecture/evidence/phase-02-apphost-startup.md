@@ -22,7 +22,7 @@ The two-process regression first failed because `ClashSharp.StartupProbe.dll` di
 - WinUI uses `AppInstance.FindOrRegisterForKey`. A secondary process awaits `RedirectActivationToAsync` and exits without host/window construction. Redirected activation is marshalled to the primary dispatcher and activates the existing window, including one pending activation before window attachment.
 - Primary startup runs ordered compatibility steps for localization, helper restore, awaited stale-proxy recovery, audit, triggers, window, and sampling. Proxy recovery completes before window construction, removing the previous untracked recovery-versus-startup-mode race.
 - The old process-enumeration/kill dialog, service, tests, and localization keys were removed from `MainWindow`.
-- WinUI `App` owns the outer lifetime runner. Window close and helper/fatal outcomes await host stop and async disposal before application exit.
+- WinUI `App` owns the outer lifetime runner. Ordinary window and helper exits await host stop and async disposal. A primary fatal startup keeps a visible diagnostic shell; redirected or intentionally headless outcomes use bounded shutdown attempts, while terminal host-disposal failure follows a controlled ownership-release and process-exit path.
 
 ## Verification evidence
 
@@ -34,4 +34,4 @@ Implementation checkpoint: `76bea68e71ed08a20f4c4eff17a17b90bac5e6ba` (`refactor
 
 ## Pending evidence
 
-`P1-01` remains `In Progress`: Phase 03 must route recovery and startup-mode application through the mutation/network coordinator, and a packaged real-app two-instance smoke must confirm the Windows App SDK path against the actual proxy/core state. Static `.Instance` access is now isolated behind startup compatibility steps for this path, but later presentation/runtime phases must remove the remaining service locators and replace the no-op shutdown coordinator with supervised quiescence.
+`P1-01` remains `In Progress`: Phase 03 now routes recovery, startup-mode application, and shutdown through the mutation/network and runtime-lifecycle coordinators. The remaining closure item is a packaged real-app two-instance smoke against the actual Windows App SDK, proxy, and core state. Static `.Instance` access is contained behind compatibility and composition boundaries for this path, but later presentation phases must still remove the remaining service locators.

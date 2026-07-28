@@ -12,7 +12,7 @@ public enum ApplicationLaunchDisposition
     /// <summary>A primary helper path completed and the process must exit.</summary>
     ExitRequested,
 
-    /// <summary>Primary startup reported a typed fatal outcome and the process must exit.</summary>
+    /// <summary>Primary startup reported a typed fatal outcome and remains available for diagnosis.</summary>
     Fatal,
 }
 

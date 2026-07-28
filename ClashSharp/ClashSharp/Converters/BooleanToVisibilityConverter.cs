@@ -1,12 +1,3 @@
-/*
- * Boolean To Visibility Converter
- * Converts ViewModel boolean state into WinUI visibility values
- *
- * @author: WaterRun
- * @file: Converters/BooleanToVisibilityConverter.cs
- * @date: 2026-06-25
- */
-
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;

@@ -1,14 +1,12 @@
 using System;
 using System.Linq;
 using System.Threading;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Hosting.Compatibility;
-
-/// <summary>Cached trigger counts consumed by presentation surfaces that still use WinUI activation.</summary>
-internal sealed record TriggerPresentationSummary(int TaskCount, int EnabledTaskCount);
 
 /// <summary>
 /// Host-owned transition boundary for pages that WinUI still creates through parameterless constructors.
@@ -55,13 +53,16 @@ internal sealed class TriggerPresentationCompatibilityFactory : IDisposable
     }
 
     /// <summary>Creates a page-owned list ViewModel over the shared asynchronous facade.</summary>
-    public TriggersViewModel CreateViewModel()
+    public TriggersViewModel CreateViewModel(
+        Func<string, string> getString,
+        IApplicationErrorSink errorSink)
     {
         EnsureActive();
         return new TriggersViewModel(
-            LocalizationService.Instance.GetString,
+            getString,
             _store,
-            new PresentationSettings(_settings));
+            new PresentationSettings(_settings),
+            errorSink);
     }
 
     /// <summary>Returns trigger counts from the latest successfully initialized facade cache.</summary>

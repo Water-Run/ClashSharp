@@ -1,16 +1,8 @@
-/*
- * Application Settings Service
- * Provides persistent access to user-facing Clash# behavior switches and recovery policies
- *
- * @author: WaterRun
- * @file: Service/AppSettingsService.cs
- * @date: 2026-06-24
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 using Windows.Storage;
 
 namespace ClashSharp.Service;
@@ -21,8 +13,13 @@ namespace ClashSharp.Service;
 /// Thread safety: Public members serialize access through a private lock.
 /// Side effects: Writes setting changes to Windows local settings when available, otherwise to an in-memory fallback.
 /// </remarks>
-public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
+public sealed class AppSettingsService :
+    IMasterHeroStatusLayoutSettings,
+    IMasterInfoTileLayoutSettings
 {
+    private static readonly SettingDefinition MasterInfoTileLayoutDefinition =
+        SettingsRegistry.Default.Get(SettingsRegistry.Keys.MasterInfoTileLayout.Value);
+
     /// <summary>Shared singleton instance created once at type initialization.</summary>
     /// <value>A non-null <see cref="AppSettingsService"/> instance.</value>
     public static AppSettingsService Instance { get; } = new();
@@ -120,6 +117,9 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
     /// <summary>Storage key for the eight compact master-control hero status slots.</summary>
     private const string KeyMasterHeroStatusLayout = "MasterHeroStatusLayout";
 
+    /// <summary>Storage key for the ordered visible information tiles on the master-control page.</summary>
+    private const string KeyMasterInfoTileLayout = "MasterInfoTileLayout";
+
     private const string KeyConnectionTestProxyUrl1 = "ConnectionTestProxyUrl1";
     private const string KeyConnectionTestProxyUrl2 = "ConnectionTestProxyUrl2";
     private const string KeyConnectionTestDirectUrl = "ConnectionTestDirectUrl";
@@ -167,6 +167,7 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
         KeyNotificationLevel,
         KeyConnectionTestUrl,
         KeyMasterHeroStatusLayout,
+        KeyMasterInfoTileLayout,
         KeyConnectionTestProxyUrl1,
         KeyConnectionTestProxyUrl2,
         KeyConnectionTestDirectUrl,
@@ -424,6 +425,15 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
         set => SetString(KeyMasterHeroStatusLayout, value);
     }
 
+    /// <summary>Gets or sets the ordered comma-separated identifiers of visible master-control information tiles.</summary>
+    public string MasterInfoTileLayout
+    {
+        get => GetString(
+            KeyMasterInfoTileLayout,
+            MasterInfoTileLayoutDefinition.DefaultValue.CanonicalText);
+        set => SetString(KeyMasterInfoTileLayout, NormalizeMasterInfoTileLayout(value));
+    }
+
     public string ConnectionTestProxyUrl1
     {
         get => GetString(KeyConnectionTestProxyUrl1, DefaultConnectionTestProxyUrl1);
@@ -470,12 +480,21 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
     /// <summary>Removes all persisted settings owned by Clash#, restoring default values on subsequent reads.</summary>
     public void ResetAllSettings()
     {
+        List<AppSettingChangedEventArgs> changes = [];
         lock (_syncLock)
         {
             foreach (string key in KnownKeys)
             {
-                RemoveValue(key);
+                if (RemoveValue(key) is AppSettingChangedEventArgs change)
+                {
+                    changes.Add(change);
+                }
             }
+        }
+
+        foreach (AppSettingChangedEventArgs change in changes)
+        {
+            NotifySettingChanged(change);
         }
     }
 
@@ -502,10 +521,13 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        AppSettingChangedEventArgs? change;
         lock (_syncLock)
         {
-            SetValue(key, value);
+            change = SetValue(key, value);
         }
+
+        NotifySettingChanged(change);
     }
 
     /// <summary>Reads a 32-bit integer setting from storage or returns <paramref name="defaultValue"/>.</summary>
@@ -531,10 +553,13 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        AppSettingChangedEventArgs? change;
         lock (_syncLock)
         {
-            SetValue(key, value);
+            change = SetValue(key, value);
         }
+
+        NotifySettingChanged(change);
     }
 
     /// <summary>Reads a string setting from storage or returns <paramref name="defaultValue"/>.</summary>
@@ -562,10 +587,26 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(value);
 
+        AppSettingChangedEventArgs? change;
         lock (_syncLock)
         {
-            SetValue(key, value);
+            change = SetValue(key, value);
         }
+
+        NotifySettingChanged(change);
+    }
+
+    private static string NormalizeMasterInfoTileLayout(string value)
+    {
+        SettingNormalizationResult normalized = MasterInfoTileLayoutDefinition.Normalize(value);
+        if (!normalized.IsSuccess)
+        {
+            throw new ArgumentException(
+                $"Master information tile layout is invalid: {normalized.Error!.Code}.",
+                nameof(value));
+        }
+
+        return normalized.Value!.CanonicalText;
     }
 
     /// <summary>Reads an enum setting from storage or returns <paramref name="defaultValue"/>.</summary>
@@ -601,10 +642,15 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        AppSettingChangedEventArgs? change;
         lock (_syncLock)
         {
-            SetValue(key, Convert.ToInt32(value, CultureInfo.InvariantCulture));
+            change = SetValue(
+                key,
+                Convert.ToInt32(value, CultureInfo.InvariantCulture));
         }
+
+        NotifySettingChanged(change);
     }
 
     /// <summary>Reads a raw setting value from the preferred backing store.</summary>
@@ -627,37 +673,44 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
     /// <param name="key">Storage key. Must not be null.</param>
     /// <param name="value">Value to persist. Must be supported by Windows local settings.</param>
     /// <exception cref="ArgumentNullException"><paramref name="key"/> is null.</exception>
-    private void SetValue(string key, object value)
+    private AppSettingChangedEventArgs? SetValue(string key, object value)
     {
         ArgumentNullException.ThrowIfNull(key);
 
         object? previousValue = GetValue(key);
         if (Equals(previousValue, value))
         {
-            return;
+            return null;
         }
 
         if (_localSettings is not null)
         {
             _localSettings.Values[key] = value;
-            NotifySettingChanged(key, previousValue, value, wasRemoved: false);
-            return;
+            return new AppSettingChangedEventArgs(
+                key,
+                previousValue,
+                value,
+                wasRemoved: false);
         }
 
         _fallbackValues[key] = value;
-        NotifySettingChanged(key, previousValue, value, wasRemoved: false);
+        return new AppSettingChangedEventArgs(
+            key,
+            previousValue,
+            value,
+            wasRemoved: false);
     }
 
     /// <summary>Removes a raw setting value from the preferred backing store.</summary>
     /// <param name="key">Storage key. Must not be null.</param>
-    private void RemoveValue(string key)
+    private AppSettingChangedEventArgs? RemoveValue(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
 
         object? previousValue = GetValue(key);
         if (previousValue is null)
         {
-            return;
+            return null;
         }
 
         if (_localSettings is not null)
@@ -666,13 +719,20 @@ public sealed class AppSettingsService : IMasterHeroStatusLayoutSettings
         }
 
         _fallbackValues.Remove(key);
-        NotifySettingChanged(key, previousValue, null, wasRemoved: true);
+        return new AppSettingChangedEventArgs(
+            key,
+            previousValue,
+            newValue: null,
+            wasRemoved: true);
     }
 
     /// <summary>Raises the setting change event for audit subscribers.</summary>
-    private void NotifySettingChanged(string key, object? oldValue, object? newValue, bool wasRemoved)
+    private void NotifySettingChanged(AppSettingChangedEventArgs? change)
     {
-        SettingChanged?.Invoke(this, new AppSettingChangedEventArgs(key, oldValue, newValue, wasRemoved));
+        if (change is not null)
+        {
+            SettingChanged?.Invoke(this, change);
+        }
     }
 
     /// <summary>Normalizes a user-entered HTTP/HTTPS connection test URL.</summary>

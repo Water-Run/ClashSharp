@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Supervision;
 using ClashSharp.ApplicationModel.Triggers;
@@ -169,7 +170,7 @@ internal sealed class TriggerStartupInitializer(
         {
             throw;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return StartupStepResult.Fatal(
                 SupervisorFailureClassifier.Classify(exception) switch

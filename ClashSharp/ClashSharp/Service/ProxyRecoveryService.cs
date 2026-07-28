@@ -1,12 +1,3 @@
-/*
- * Proxy Recovery Service
- * Provides read-only stale Windows proxy detection after abnormal exits
- *
- * @author: WaterRun
- * @file: Service/ProxyRecoveryService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using ClashSharp.Model;
 

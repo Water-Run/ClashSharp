@@ -1,12 +1,3 @@
-/*
- * Clash Data Package Service
- * Imports and exports Clash# settings and local data as an XML package
- *
- * @author: WaterRun
- * @file: Service/ClashDataPackageService.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -16,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 
 namespace ClashSharp.Service;
 
@@ -79,6 +71,8 @@ internal interface IClashDataPackageSettings
     string ConnectionTestProxyUrl2 { get; set; }
 
     string ConnectionTestDirectUrl { get; set; }
+
+    string MasterInfoTileLayout { get; set; }
 }
 
 /// <summary>Imports and exports Clash# user settings and local data as a versioned XML package.</summary>
@@ -129,6 +123,7 @@ internal sealed partial class ClashDataPackageService
         StringSetting(nameof(IClashDataPackageSettings.ConnectionTestProxyUrl1), settings => settings.ConnectionTestProxyUrl1, (settings, value) => settings.ConnectionTestProxyUrl1 = value),
         StringSetting(nameof(IClashDataPackageSettings.ConnectionTestProxyUrl2), settings => settings.ConnectionTestProxyUrl2, (settings, value) => settings.ConnectionTestProxyUrl2 = value),
         StringSetting(nameof(IClashDataPackageSettings.ConnectionTestDirectUrl), settings => settings.ConnectionTestDirectUrl, (settings, value) => settings.ConnectionTestDirectUrl = value),
+        RegisteredStringSetting(SettingsRegistry.Keys.MasterInfoTileLayout, settings => settings.MasterInfoTileLayout, (settings, value) => settings.MasterInfoTileLayout = value),
     ];
 
     /// <summary>Initializes a data package service.</summary>
@@ -181,12 +176,12 @@ internal sealed partial class ClashDataPackageService
         XDocument document = XDocument.Load(packagePath);
         XElement root = ValidatePackageRoot(document);
         IReadOnlyList<ImportFilePayload> files = BuildImportFilePayloads(root.Element("Files"), cancellationToken);
-        ValidateSettings(root.Element("Settings"));
+        IReadOnlyDictionary<string, string> settings = ValidateSettings(root.Element("Settings"));
         Dictionary<string, string> settingSnapshot = CaptureSettings();
 
         try
         {
-            ImportSettings(root.Element("Settings"));
+            ImportSettings(settings);
             await WriteImportFilesAsync(files, cancellationToken);
         }
         catch
@@ -313,7 +308,7 @@ internal sealed partial class ClashDataPackageService
             SettingDescriptors.Select(descriptor => new XElement(
                 "Setting",
                 new XAttribute("Name", descriptor.Name),
-                new XAttribute("Value", descriptor.Read(_settings)))));
+                new XAttribute("Value", descriptor.Normalize(descriptor.Read(_settings))))));
     }
 
     private async Task<XElement> ExportFilesAsync(string packagePath, ClashDataPackageScope scope, CancellationToken cancellationToken)
@@ -373,21 +368,8 @@ internal sealed partial class ClashDataPackageService
         }
     }
 
-    private void ImportSettings(XElement? settingsElement)
+    private void ImportSettings(IReadOnlyDictionary<string, string> values)
     {
-        if (settingsElement is null)
-        {
-            return;
-        }
-
-        Dictionary<string, string> values = settingsElement
-            .Elements("Setting")
-            .Where(element => element.Attribute("Name") is not null)
-            .ToDictionary(
-                element => element.Attribute("Name")!.Value,
-                element => element.Attribute("Value")?.Value ?? string.Empty,
-                StringComparer.Ordinal);
-
         foreach (SettingDescriptor descriptor in SettingDescriptors)
         {
             if (values.TryGetValue(descriptor.Name, out string? value))
@@ -397,11 +379,11 @@ internal sealed partial class ClashDataPackageService
         }
     }
 
-    private void ValidateSettings(XElement? settingsElement)
+    private IReadOnlyDictionary<string, string> ValidateSettings(XElement? settingsElement)
     {
         if (settingsElement is null)
         {
-            return;
+            return new Dictionary<string, string>(StringComparer.Ordinal);
         }
 
         Dictionary<string, string> values = settingsElement
@@ -416,9 +398,11 @@ internal sealed partial class ClashDataPackageService
         {
             if (values.TryGetValue(descriptor.Name, out string? value))
             {
-                descriptor.Validate(value);
+                values[descriptor.Name] = descriptor.Normalize(value);
             }
         }
+
+        return values;
     }
 
     private Dictionary<string, string> CaptureSettings()
@@ -491,7 +475,30 @@ internal sealed partial class ClashDataPackageService
 
     private static SettingDescriptor StringSetting(string name, Func<IClashDataPackageSettings, string> read, Action<IClashDataPackageSettings, string> write)
     {
-        return new SettingDescriptor(name, read, write, _ => { });
+        return new SettingDescriptor(name, read, write, static value => value);
+    }
+
+    private static SettingDescriptor RegisteredStringSetting(
+        SettingKey key,
+        Func<IClashDataPackageSettings, string> read,
+        Action<IClashDataPackageSettings, string> write)
+    {
+        SettingDefinition definition = SettingsRegistry.Default.Get(key.Value);
+        return new SettingDescriptor(
+            key.Value,
+            read,
+            write,
+            value =>
+            {
+                SettingNormalizationResult normalized = definition.Normalize(value);
+                if (!normalized.IsSuccess)
+                {
+                    throw new InvalidDataException(
+                        $"Clash# data package setting '{key.Value}' is invalid: {normalized.Error!.Code}.");
+                }
+
+                return normalized.Value!.CanonicalText;
+            });
     }
 
     private static SettingDescriptor BoolSetting(string name, Func<IClashDataPackageSettings, bool> read, Action<IClashDataPackageSettings, bool> write)
@@ -500,7 +507,11 @@ internal sealed partial class ClashDataPackageService
             name,
             settings => read(settings).ToString(CultureInfo.InvariantCulture),
             (settings, value) => write(settings, bool.Parse(value)),
-            value => _ = bool.Parse(value));
+            value =>
+            {
+                _ = bool.Parse(value);
+                return value;
+            });
     }
 
     private static SettingDescriptor IntSetting(string name, Func<IClashDataPackageSettings, int> read, Action<IClashDataPackageSettings, int> write)
@@ -509,7 +520,11 @@ internal sealed partial class ClashDataPackageService
             name,
             settings => read(settings).ToString(CultureInfo.InvariantCulture),
             (settings, value) => write(settings, int.Parse(value, CultureInfo.InvariantCulture)),
-            value => _ = int.Parse(value, CultureInfo.InvariantCulture));
+            value =>
+            {
+                _ = int.Parse(value, CultureInfo.InvariantCulture);
+                return value;
+            });
     }
 
     private static SettingDescriptor RangedIntSetting(
@@ -530,6 +545,8 @@ internal sealed partial class ClashDataPackageService
                 {
                     throw new ArgumentOutOfRangeException(name, $"Setting must be in the range [{minimum}, {maximum}].");
                 }
+
+                return value;
             });
     }
 
@@ -540,14 +557,18 @@ internal sealed partial class ClashDataPackageService
             name,
             settings => read(settings).ToString(),
             (settings, value) => write(settings, Enum.Parse<TEnum>(value)),
-            value => _ = Enum.Parse<TEnum>(value));
+            value =>
+            {
+                _ = Enum.Parse<TEnum>(value);
+                return value;
+            });
     }
 
     private readonly record struct SettingDescriptor(
         string Name,
         Func<IClashDataPackageSettings, string> Read,
         Action<IClashDataPackageSettings, string> Write,
-        Action<string> Validate);
+        Func<string, string> Normalize);
 
     private readonly record struct ImportFilePayload(string TargetPath, byte[] Content);
 

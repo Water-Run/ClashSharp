@@ -1,12 +1,3 @@
-/*
- * Proxy Recovery Service Factory
- * Creates the stateless startup stale proxy probe
- *
- * @author: WaterRun
- * @file: Service/ProxyRecoveryServiceFactory.cs
- * @date: 2026-06-25
- */
-
 namespace ClashSharp.Service;
 
 public sealed partial class ProxyRecoveryService

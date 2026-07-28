@@ -1,12 +1,3 @@
-/*
- * Setting Row Component
- * Provides a reusable title, description, and action layout for settings pages
- *
- * @author: WaterRun
- * @file: Components/SettingRow.xaml.cs
- * @date: 2026-06-17
- */
-
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 

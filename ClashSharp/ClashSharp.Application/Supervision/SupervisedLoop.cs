@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Lifecycle;
 
 namespace ClashSharp.ApplicationModel.Supervision;
@@ -191,7 +192,9 @@ public sealed class SupervisedLoop : IRuntimeParticipant
             {
                 await _clock.DelayAsync(delay, cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (
+                cancellationToken.IsCancellationRequested
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 return;
             }
@@ -209,11 +212,13 @@ public sealed class SupervisedLoop : IRuntimeParticipant
                 nextDelay = GetNormalInterval();
                 Publish(succeeded with { NextAttemptAt = completedAt + nextDelay });
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (
+                cancellationToken.IsCancellationRequested
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 break;
             }
-            catch (Exception exception)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 DateTimeOffset failedAt = _clock.UtcNow;
                 SupervisorHealth previous = Health;
@@ -227,7 +232,9 @@ public sealed class SupervisedLoop : IRuntimeParticipant
             {
                 await _clock.DelayAsync(nextDelay, cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (
+                cancellationToken.IsCancellationRequested
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 break;
             }
@@ -337,7 +344,7 @@ public sealed class SupervisedLoop : IRuntimeParticipant
         {
             _healthChanged(health);
         }
-        catch
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             // Health observers cannot own or terminate the supervised task.
         }

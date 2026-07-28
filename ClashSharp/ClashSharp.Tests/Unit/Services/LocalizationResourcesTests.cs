@@ -1,12 +1,3 @@
-/*
- * Localization Resources Tests
- * Verifies localized string resource coverage across supported application languages
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/LocalizationResourcesTests.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -37,20 +28,38 @@ public sealed class LocalizationResourcesTests
         }
     }
 
-    /// <summary>Verifies non-English resource dictionaries use the same key set as English.</summary>
+    /// <summary>Verifies every explicit non-English resource dictionary uses the same key set as English.</summary>
     [Fact]
-    public void Translations_NonEnglishLanguages_MatchEnglishKeySet()
+    public void ExplicitTranslations_NonEnglishLanguages_MatchEnglishKeySet()
     {
-        IReadOnlySet<string> englishKeys = LocalizationResources.Translations[AppLanguage.English].Keys.ToHashSet(StringComparer.Ordinal);
+        IReadOnlyDictionary<AppLanguage, IReadOnlyDictionary<string, string>> explicitTranslations =
+            LocalizationResources.BuildExplicitTranslations()
+                .ToDictionary(
+                    pair => pair.Key,
+                    pair => (IReadOnlyDictionary<string, string>)pair.Value);
+        IReadOnlySet<string> englishKeys = explicitTranslations[AppLanguage.English].Keys.ToHashSet(StringComparer.Ordinal);
 
-        foreach ((AppLanguage language, IReadOnlyDictionary<string, string> translations) in LocalizationResources.Translations)
+        Assert.Equal(6, explicitTranslations.Count);
+        Assert.Equal(690, englishKeys.Count);
+        Assert.DoesNotContain(AppLanguage.AutoDetect, explicitTranslations.Keys);
+
+        foreach ((AppLanguage language, IReadOnlyDictionary<string, string> translations) in explicitTranslations)
         {
             string[] missingKeys = englishKeys.Except(translations.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
             string[] extraKeys = translations.Keys.Except(englishKeys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
-            Assert.Empty(missingKeys);
-            Assert.Empty(extraKeys);
+            Assert.True(missingKeys.Length == 0, $"{language} is missing: {string.Join(", ", missingKeys)}");
+            Assert.True(extraKeys.Length == 0, $"{language} has unexpected keys: {string.Join(", ", extraKeys)}");
         }
+    }
+
+    /// <summary>Verifies automatic language selection keeps the established Simplified Chinese alias.</summary>
+    [Fact]
+    public void Translations_AutoDetect_AliasesSimplifiedChineseCatalog()
+    {
+        Assert.Same(
+            LocalizationResources.Translations[AppLanguage.SimplifiedChinese],
+            LocalizationResources.Translations[AppLanguage.AutoDetect]);
     }
 
     /// <summary>Verifies removed backup/data-package entry points are not exposed in addition to current export choices.</summary>
@@ -202,8 +211,11 @@ public sealed class LocalizationResourcesTests
     [InlineData("StartupPrompt.Check.Subscription.Missing")]
     [InlineData("StartupPrompt.Check.TransparentProxy.Title")]
     [InlineData("StartupPrompt.Check.TransparentProxy.Missing")]
+    [InlineData("Startup.Shell.Starting")]
+    [InlineData("Startup.Shell.Failed")]
     [InlineData("StartupPrompt.Check.Fallback.Title")]
     [InlineData("StartupPrompt.Check.StaleProxy.Title")]
+    [InlineData("StartupPrompt.Check.Unavailable")]
     [InlineData("MihomoService.Status.NotDeployed")]
     [InlineData("MihomoService.Status.DeployedRunning")]
     [InlineData("Tray.Menu.Mode")]

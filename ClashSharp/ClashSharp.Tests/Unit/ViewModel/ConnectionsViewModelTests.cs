@@ -1,12 +1,3 @@
-/*
- * Connections ViewModel Tests
- * Verifies active connection refresh and persistence behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/ConnectionsViewModelTests.cs
- * @date: 2026-06-17
- */
-
 using System.Net.Http;
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
@@ -20,7 +11,11 @@ public sealed class ConnectionsViewModelTests
     [Fact]
     public void Constructor_LoadsLabelsAndInitialStatus()
     {
-        ConnectionsViewModel viewModel = new(new FakeConnectionsLocalization(), new FakeConnectionClient(), new FakeConnectionLog());
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            new FakeConnectionClient(),
+            new FakeConnectionLog(),
+            new TestApplicationErrorSink());
 
         Assert.Equal("Connections", viewModel.PageTitleText);
         Assert.Equal("Description", viewModel.DescriptionText);
@@ -36,7 +31,12 @@ public sealed class ConnectionsViewModelTests
     public async Task RefreshConnectionsAsync_WhenSuccessful_LoadsRows()
     {
         FakeConnectionClient client = new();
-        ConnectionsViewModel viewModel = new(new FakeConnectionsLocalization(), client, new FakeConnectionLog(), text => $"display:{text}");
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            client,
+            new FakeConnectionLog(),
+            new TestApplicationErrorSink(),
+            text => $"display:{text}");
 
         await viewModel.RefreshConnectionsAsync(CancellationToken.None);
 
@@ -57,7 +57,11 @@ public sealed class ConnectionsViewModelTests
     {
         FakeConnectionClient client = new() { ExceptionToThrow = new HttpRequestException("offline") };
         FakeConnectionLog log = new();
-        ConnectionsViewModel viewModel = new(new FakeConnectionsLocalization(), client, log);
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            client,
+            log,
+            new TestApplicationErrorSink());
 
         await viewModel.RefreshConnectionsAsync(CancellationToken.None);
 
@@ -72,7 +76,11 @@ public sealed class ConnectionsViewModelTests
     {
         FakeConnectionClient client = new();
         FakeConnectionLog log = new() { InsertedCount = 2 };
-        ConnectionsViewModel viewModel = new(new FakeConnectionsLocalization(), client, log);
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            client,
+            log,
+            new TestApplicationErrorSink());
 
         await viewModel.PersistConnectionsAsync(CancellationToken.None);
 
@@ -87,7 +95,11 @@ public sealed class ConnectionsViewModelTests
     {
         FakeConnectionClient client = new();
         FakeConnectionLog log = new();
-        ConnectionsViewModel viewModel = new(new FakeConnectionsLocalization(), client, log);
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            client,
+            log,
+            new TestApplicationErrorSink());
 
         await viewModel.CloseConnectionAsync(client.Connections[0], CancellationToken.None);
 
@@ -102,7 +114,11 @@ public sealed class ConnectionsViewModelTests
     public async Task CloseAllConnectionsAsync_WhenSuccessful_ClosesAllConnectionsAndRefreshes()
     {
         FakeConnectionClient client = new();
-        ConnectionsViewModel viewModel = new(new FakeConnectionsLocalization(), client, new FakeConnectionLog());
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            client,
+            new FakeConnectionLog(),
+            new TestApplicationErrorSink());
 
         await viewModel.CloseAllConnectionsAsync(CancellationToken.None);
 

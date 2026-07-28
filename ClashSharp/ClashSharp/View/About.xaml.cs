@@ -1,17 +1,7 @@
-/*
- * About Page
- * Hosts the application information view and delegates state to its view model
- *
- * @author: WaterRun
- * @file: View/About.xaml.cs
- * @date: 2026-06-17
- */
-
-#nullable enable
-
 using System;
 using System.Globalization;
-using ClashSharp.Service;
+using ClashSharp.Presentation.Composition;
+using ClashSharp.Presentation.Dialogs;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -23,21 +13,30 @@ namespace ClashSharp.View;
 /// <remarks>
 /// Invariants: The page has a non-null <see cref="AboutViewModel"/> after construction.
 /// Thread safety: Must be accessed from the UI thread only.
-/// Side effects: Creates singleton-backed service adapters and starts mihomo status loading when loaded.
+/// Side effects: Starts mihomo status loading when loaded and presents platform dialogs.
 /// </remarks>
 public sealed partial class About : Page
 {
     /// <summary>Bindable view model for this page.</summary>
     private readonly AboutViewModel _viewModel;
 
+    private readonly Func<string, string> _getString;
+
+    private readonly Func<AboutPageComposition.ProxyInformation> _readProxyInformation;
+
     /// <summary>Initializes the about page and its view model.</summary>
     public About()
+        : this(AboutPageComposition.Create())
     {
-        _viewModel = new(
-            new DisplayPageLocalizationAdapter(LocalizationService.Instance),
-            new AboutCoreAdapter(MihomoCoreService.Instance),
-            new WindowsUriLauncher());
+    }
 
+    /// <summary>Initializes the page from an explicit composition contract.</summary>
+    internal About(AboutPageComposition.Dependencies dependencies)
+    {
+        ArgumentNullException.ThrowIfNull(dependencies);
+        _viewModel = dependencies.ViewModel;
+        _getString = dependencies.GetString;
+        _readProxyInformation = dependencies.ReadProxyInformation;
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
@@ -58,21 +57,20 @@ public sealed partial class About : Page
         {
             Title = _viewModel.ProxyInformationTitleText,
             Content = BuildProxyInformationPanel(),
-            CloseButtonText = LocalizationService.Instance.GetString("Command.Close"),
+            CloseButtonText = _getString("Command.Close"),
             XamlRoot = XamlRoot,
         };
 
-        await dialog.ShowAsync();
+        await dialog.ShowManagedAsync();
     }
 
     /// <summary>Builds the proxy information dialog content.</summary>
     private StackPanel BuildProxyInformationPanel()
     {
-        SettingsProxyInformation information = SettingsProxyInformationAdapter.CreateSnapshot();
-        int mixedPort = AppSettingsService.Instance.MixedPort;
+        AboutPageComposition.ProxyInformation information = _readProxyInformation();
         string coreBinaryText = information.IsCoreBinaryAvailable
             ? information.CoreBinaryPath
-            : LocalizationService.Instance.GetString("Settings.ProxyInformation.CoreBinary.Missing");
+            : _getString("Settings.ProxyInformation.CoreBinary.Missing");
 
         StackPanel panel = new()
         {
@@ -83,15 +81,15 @@ public sealed partial class About : Page
 
         AddInformationText(panel, string.Format(
             CultureInfo.CurrentCulture,
-            LocalizationService.Instance.GetString("Settings.ProxyInformation.LocalEntry.Format"),
-            mixedPort));
+            _getString("Settings.ProxyInformation.LocalEntry.Format"),
+            information.MixedPort));
         AddInformationText(panel, string.Format(
             CultureInfo.CurrentCulture,
-            LocalizationService.Instance.GetString("Settings.ProxyInformation.CoreConfig.Format"),
+            _getString("Settings.ProxyInformation.CoreConfig.Format"),
             information.ConfigPath));
         AddInformationText(panel, string.Format(
             CultureInfo.CurrentCulture,
-            LocalizationService.Instance.GetString("Settings.ProxyInformation.CoreBinary.Format"),
+            _getString("Settings.ProxyInformation.CoreBinary.Format"),
             coreBinaryText));
 
         return panel;

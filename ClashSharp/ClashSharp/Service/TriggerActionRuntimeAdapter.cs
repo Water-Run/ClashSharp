@@ -113,8 +113,10 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SetLaunchAtStartup:
                 bool launchAtStartup = RequireBoolean(action);
+                await _startupLaunch
+                    .SetEnabledAsync(launchAtStartup, cancellationToken)
+                    .ConfigureAwait(false);
                 _settings.LaunchAtStartupEnabled = launchAtStartup;
-                await _startupLaunch.SetEnabledAsync(launchAtStartup).ConfigureAwait(false);
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SetTransparentProxy:
                 _settings.TransparentProxyEnabled = RequireBoolean(action);

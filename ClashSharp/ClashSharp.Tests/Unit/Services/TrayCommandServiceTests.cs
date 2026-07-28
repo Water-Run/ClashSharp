@@ -1,12 +1,3 @@
-/*
- * Tray Command Service Tests
- * Verifies tray command coordination without creating a native tray icon
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/TrayCommandServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

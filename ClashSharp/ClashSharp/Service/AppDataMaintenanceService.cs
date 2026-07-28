@@ -1,12 +1,3 @@
-/*
- * Application Data Maintenance Service
- * Provides destructive user-requested reset operations for local Clash# data
- *
- * @author: WaterRun
- * @file: Service/AppDataMaintenanceService.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.IO;
 using System.Threading;

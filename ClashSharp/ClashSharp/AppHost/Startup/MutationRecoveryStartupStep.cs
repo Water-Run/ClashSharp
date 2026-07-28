@@ -12,7 +12,8 @@ namespace ClashSharp.Hosting.Startup;
 internal sealed class MutationRecoveryStartupStep(
     IMutationJournalStore journalStore,
     MutationAdmissionBarrier admissionBarrier,
-    IApplicationMutationCoordinator mutations) : IStartupStep
+    IApplicationMutationCoordinator mutations,
+    LogStorageService logStorage) : IStartupStep
 {
     public string Name => "mutation-recovery";
 
@@ -31,7 +32,7 @@ internal sealed class MutationRecoveryStartupStep(
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            LogStorageService.Instance.AppendLog(
+            logStorage.AppendLog(
                 "Error",
                 "MutationRecovery",
                 "mutation-journal-load-failed",

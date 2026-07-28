@@ -5,6 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Loaded="Page_Loaded"
+    Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
     <Grid Padding="{StaticResource ClashPagePadding}">
@@ -20,12 +22,12 @@
                         <FontIcon Glyph="&#xE8E5;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="ValidateProfileButton" Label="{Binding ValidateProfileText}" Command="{Binding ValidateProfileCommand}">
+                <AppBarButton x:Name="ValidateProfileButton" Label="{Binding ValidateProfileText}" Click="ValidateProfileButton_Click">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE73E;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="SetActiveProfileButton" Label="{Binding SetActiveProfileText}" Command="{Binding SetActiveProfileCommand}">
+                <AppBarButton x:Name="SetActiveProfileButton" Label="{Binding SetActiveProfileText}" Click="SetActiveProfileButton_Click">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE73E;" />
                     </AppBarButton.Icon>

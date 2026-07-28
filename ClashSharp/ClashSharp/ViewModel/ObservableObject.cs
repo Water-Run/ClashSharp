@@ -1,14 +1,3 @@
-/*
- * Observable Object
- * Provides shared property change notification support for MVVM view models
- *
- * @author: WaterRun
- * @file: ViewModel/ObservableObject.cs
- * @date: 2026-06-17
- */
-
-#nullable enable
-
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;

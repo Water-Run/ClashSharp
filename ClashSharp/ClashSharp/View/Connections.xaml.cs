@@ -1,15 +1,5 @@
-/*
- * Connections Page
- * Hosts active connection monitoring and delegates state to its view model
- *
- * @author: WaterRun
- * @file: View/Connections.xaml.cs
- * @date: 2026-06-17
- */
-
-#nullable enable
-
-using ClashSharp.Service;
+using System;
+using ClashSharp.Presentation.Composition;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml.Controls;
 
@@ -19,7 +9,7 @@ namespace ClashSharp.View;
 /// <remarks>
 /// Invariants: The page has a non-null <see cref="ConnectionsViewModel"/> after construction.
 /// Thread safety: Must be accessed from the UI thread only.
-/// Side effects: Creates singleton-backed service adapters for the view model.
+/// Side effects: None beyond XAML initialization and data binding.
 /// </remarks>
 public sealed partial class Connections : Page
 {
@@ -28,13 +18,15 @@ public sealed partial class Connections : Page
 
     /// <summary>Initializes the connections page and its view model.</summary>
     public Connections()
+        : this(ConnectionsPageComposition.Create())
     {
-        _viewModel = new(
-            new ConnectionsLocalizationAdapter(LocalizationService.Instance),
-            new ActiveConnectionClientAdapter(MihomoConnectionService.Instance),
-            new ConnectionLogAdapter(LogStorageService.Instance),
-            MainlandChinaTextDisplayService.Instance.Apply);
+    }
 
+    /// <summary>Initializes the page from an explicit composition contract.</summary>
+    internal Connections(ConnectionsPageComposition.Dependencies dependencies)
+    {
+        ArgumentNullException.ThrowIfNull(dependencies);
+        _viewModel = dependencies.ViewModel;
         InitializeComponent();
         DataContext = _viewModel;
     }

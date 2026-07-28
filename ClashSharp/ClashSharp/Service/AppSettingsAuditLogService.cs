@@ -1,12 +1,3 @@
-/*
- * Application Settings Audit Log Service
- * Records persisted settings changes to the shared application log
- *
- * @author: WaterRun
- * @file: Service/AppSettingsAuditLogService.cs
- * @date: 2026-06-28
- */
-
 using System;
 using System.Globalization;
 using System.IO;

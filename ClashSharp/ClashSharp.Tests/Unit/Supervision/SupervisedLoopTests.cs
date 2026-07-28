@@ -241,6 +241,67 @@ public sealed class SupervisedLoopTests
             TimeSpan.FromSeconds(33));
     }
 
+    /// <summary>Verifies a wrapped process-fatal iteration failure is never converted into retry health.</summary>
+    [Fact]
+    public async Task Iteration_WrappedProcessFatalFailure_FaultsOwnedLoopWithoutRetry()
+    {
+        AutoAdvanceSupervisorClock clock = new();
+        InvalidOperationException failure = new(
+            "iteration wrapper",
+            CreateProcessFatalException<OutOfMemoryException>());
+        SupervisedLoop loop = CreateLoop(
+            clock,
+            (_, _) => Task.FromException(failure));
+
+        await loop.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => !loop.IsRunning);
+
+        InvalidOperationException actual = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => loop.StopAsync(CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.Empty(clock.Delays);
+        Assert.Equal(SupervisorHealthState.Stopped, loop.Health.State);
+    }
+
+    /// <summary>Verifies owned cancellation cannot hide a process-fatal inner failure.</summary>
+    [Fact]
+    public async Task StopAsync_IterationCancellationWrapsFatalFailure_Propagates()
+    {
+        AutoAdvanceSupervisorClock clock = new();
+        TaskCompletionSource<object?> started = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        OperationCanceledException? failure = null;
+        SupervisedLoop loop = CreateLoop(
+            clock,
+            async (_, cancellationToken) =>
+            {
+                started.TrySetResult(null);
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    failure = new OperationCanceledException(
+                        "cancelled while fatally failing",
+                        CreateProcessFatalException<AccessViolationException>(),
+                        cancellationToken);
+                    await Task.FromException(failure);
+                }
+            });
+
+        await loop.StartAsync(CancellationToken.None);
+        await started.Task;
+
+        OperationCanceledException actual =
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                () => loop.StopAsync(CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.Empty(clock.Delays);
+    }
+
     /// <summary>Verifies quiescence is stopped health and awaits the active iteration before returning.</summary>
     [Fact]
     public async Task QuiesceAndResume_AwaitInFlightWorkAndRestorePriorState()
@@ -305,6 +366,10 @@ public sealed class SupervisedLoopTests
         { new JsonException("invalid payload"), "supervisor.json" },
         { new InvalidOperationException("bug"), "supervisor.unexpected" },
     };
+
+    private static TException CreateProcessFatalException<TException>()
+        where TException : Exception =>
+        Activator.CreateInstance<TException>();
 
     private static SupervisedLoop CreateLoop(
         ISupervisorClock clock,

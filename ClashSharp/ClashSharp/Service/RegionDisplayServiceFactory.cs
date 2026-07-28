@@ -1,12 +1,3 @@
-/*
- * Region Display Service Factory
- * Wires production dependencies for region display resolution
- *
- * @author: WaterRun
- * @file: Service/RegionDisplayServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;

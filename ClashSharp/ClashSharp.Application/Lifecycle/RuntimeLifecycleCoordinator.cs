@@ -1,3 +1,5 @@
+using System.Runtime.ExceptionServices;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
@@ -63,6 +65,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
     private readonly IReadOnlyList<IRuntimeParticipant> _participants;
     private readonly TimeSpan _quiescenceTimeout;
     private Task<RuntimeShutdownResult>? _shutdownTask;
+    private long _shutdownAttemptVersion;
 
     /// <summary>Initializes the sole host-owned runtime shutdown coordinator.</summary>
     public RuntimeLifecycleCoordinator(
@@ -98,12 +101,19 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         }
     }
 
-    /// <summary>Runs one idempotent shutdown preparation operation.</summary>
+    /// <summary>
+    /// Shares one active shutdown preparation attempt, retaining successful completion and releasing failed attempts for retry.
+    /// </summary>
     public Task<RuntimeShutdownResult> ShutdownAsync(CancellationToken cancellationToken)
     {
         lock (_syncLock)
         {
-            _shutdownTask ??= ShutdownCoreAsync(cancellationToken);
+            if (_shutdownTask is null)
+            {
+                long attemptVersion = ++_shutdownAttemptVersion;
+                _shutdownTask = RunShutdownAttemptAsync(attemptVersion, cancellationToken);
+            }
+
             return _shutdownTask;
         }
     }
@@ -115,6 +125,41 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         if (result.Outcome != RuntimeShutdownOutcome.PreparedForHostDisposal)
         {
             throw new RuntimeShutdownNotPreparedException(result);
+        }
+    }
+
+    private async Task<RuntimeShutdownResult> RunShutdownAttemptAsync(
+        long attemptVersion,
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        RuntimeShutdownResult result;
+        try
+        {
+            result = await ShutdownCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            ReleaseRetryableAttempt(attemptVersion);
+            throw;
+        }
+
+        if (result.Outcome != RuntimeShutdownOutcome.PreparedForHostDisposal)
+        {
+            ReleaseRetryableAttempt(attemptVersion);
+        }
+
+        return result;
+    }
+
+    private void ReleaseRetryableAttempt(long attemptVersion)
+    {
+        lock (_syncLock)
+        {
+            if (_shutdownAttemptVersion == attemptVersion)
+            {
+                _shutdownTask = null;
+            }
         }
     }
 
@@ -149,7 +194,8 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(10), transitionDeadline.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException exception) when (
+                !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 return CreateResult(
                     RuntimeShutdownOutcome.Aborted,
@@ -171,7 +217,8 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                 .CloseAndDrainAsync(MutationAdmissionClosure.Destructive, quiescenceDeadline.Token)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception) when (
+            !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             string errorCode = callerToken.IsCancellationRequested
                 ? "shutdown-cancelled"
@@ -191,11 +238,17 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             {
                 await session.QuiesceAsync(_participants, quiescenceDeadline.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException exception) when (
+                !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 quiescenceError = callerToken.IsCancellationRequested
                     ? "shutdown-cancelled"
                     : "quiescence-timeout";
+            }
+            catch (Exception exception) when (ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                await RestoreAfterFatalFailureAsync(session, exception).ConfigureAwait(false);
+                throw;
             }
             catch (Exception)
             {
@@ -215,9 +268,15 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                     .ApplyShutdownAsync(intent, admissionLease, callerToken)
                     .ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException exception) when (
+                !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 return await RestoreAfterAbortAsync(session, "shutdown-network-cancelled").ConfigureAwait(false);
+            }
+            catch (Exception exception) when (ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                await RestoreAfterFatalFailureAsync(session, exception).ConfigureAwait(false);
+                throw;
             }
             catch (Exception)
             {
@@ -251,7 +310,8 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         {
             await _admissionBarrier.RequestRecoveryShutdownAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception) when (
+            !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return CreateResult(RuntimeShutdownOutcome.Aborted, "recovery-shutdown-cancelled");
         }
@@ -269,7 +329,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             {
                 await session.QuiesceAsync(_participants, deadline.Token).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 degraded.Add("runtime-quiescence");
             }
@@ -303,10 +363,27 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                 restoreFailures);
     }
 
+    private async Task RestoreAfterFatalFailureAsync(
+        QuiescenceSession session,
+        Exception processFatalFailure)
+    {
+        try
+        {
+            _ = await RestoreAfterAbortAsync(session, "process-fatal-failure").ConfigureAwait(false);
+        }
+        catch (Exception restoreFailure)
+        {
+            throw new AggregateException(processFatalFailure, restoreFailure);
+        }
+
+        ExceptionDispatchInfo.Capture(processFatalFailure).Throw();
+    }
+
     private async Task<IReadOnlyList<string>> StopWithRecoveryDeadlineAsync()
     {
         using CancellationTokenSource recoveryDeadline = new(_quiescenceTimeout);
         List<string> failures = [];
+        List<Exception> processFatalFailures = [];
         for (int index = _participants.Count - 1; index >= 0; index--)
         {
             IRuntimeParticipant participant = _participants[index];
@@ -314,10 +391,21 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             {
                 await participant.StopAsync(recoveryDeadline.Token).ConfigureAwait(false);
             }
+            catch (Exception exception) when (ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                processFatalFailures.Add(exception);
+            }
             catch (Exception)
             {
                 failures.Add(participant.Name);
             }
+        }
+
+        if (processFatalFailures.Count != 0)
+        {
+            throw new AggregateException(
+                "One or more runtime participants failed fatally while stopping.",
+                processFatalFailures);
         }
 
         return failures;

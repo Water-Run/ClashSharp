@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Supervision;
 using ClashSharp.Model.Triggers;
@@ -170,7 +172,7 @@ public sealed class TriggerSchedulerEvaluator : ITriggerSchedulerEvaluator
             {
                 throw;
             }
-            catch (Exception exception)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 diagnosticCode ??= SupervisorFailureClassifier.Classify(exception);
             }
@@ -293,9 +295,18 @@ public sealed class TriggerScheduler : IRuntimeParticipant
             {
                 await stoppingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch
+            catch (Exception failure)
             {
-                await RestoreInterruptedQuiescenceAsync(stoppingTask).ConfigureAwait(false);
+                try
+                {
+                    await RestoreInterruptedQuiescenceAsync(stoppingTask).ConfigureAwait(false);
+                }
+                catch (Exception restoreFailure)
+                {
+                    throw new AggregateException(failure, restoreFailure);
+                }
+
+                ExceptionDispatchInfo.Capture(failure).Throw();
                 throw;
             }
 
@@ -348,9 +359,10 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 {
                     await stoppingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (
+                catch (OperationCanceledException exception) when (
                     !cancellationToken.IsCancellationRequested
-                    && workCancellation?.IsCancellationRequested == true)
+                    && workCancellation?.IsCancellationRequested == true
+                    && !ExceptionGraphClassifier.IsProcessFatal(exception))
                 {
                     // Cancellation of the participant-owned loop is successful stop completion.
                 }
@@ -472,7 +484,9 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 {
                     await wakeTask.ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (wakeCancellation.IsCancellationRequested)
+                catch (OperationCanceledException exception) when (
+                    wakeCancellation.IsCancellationRequested
+                    && !ExceptionGraphClassifier.IsProcessFatal(exception))
                 {
                     // The losing channel wait must not survive this loop iteration.
                 }
@@ -481,7 +495,8 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 {
                     await tickTask.ConfigureAwait(false);
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException exception) when (
+                    !ExceptionGraphClassifier.IsProcessFatal(exception))
                 {
                     if (workCancellationToken.IsCancellationRequested)
                     {
@@ -491,7 +506,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                     tickTask = StartTickWait();
                     continue;
                 }
-                catch (Exception exception)
+                catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
                 {
                     RecordFailure(SupervisorFailureClassifier.Classify(exception));
                     tickTask = StartTickWait();
@@ -514,7 +529,9 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                     return;
                 }
             }
-            catch (OperationCanceledException) when (workCancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (
+                workCancellationToken.IsCancellationRequested
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 return;
             }
@@ -565,7 +582,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
         {
             throw;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             RecordFailure(SupervisorFailureClassifier.Classify(exception));
         }
@@ -590,7 +607,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                 {
                     throw;
                 }
-                catch (Exception exception)
+                catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
                 {
                     RecordFailure(SupervisorFailureClassifier.Classify(exception));
                     if (attempt + 1 < ImmediateReleaseAcknowledgementAttempts)
@@ -775,7 +792,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
         {
             _healthChanged(health);
         }
-        catch
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             // Observers cannot own or terminate the scheduler.
         }

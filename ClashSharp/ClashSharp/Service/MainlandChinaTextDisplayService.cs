@@ -1,12 +1,3 @@
-/*
- * Mainland China Text Display Service
- * Applies mainland China UI-only text replacement without mutating stored data
- *
- * @author: WaterRun
- * @file: Service/MainlandChinaTextDisplayService.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;

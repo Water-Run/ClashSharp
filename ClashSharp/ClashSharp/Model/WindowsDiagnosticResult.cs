@@ -1,12 +1,3 @@
-/*
- * Windows Diagnostic Result Model
- * Represents the outcome of one Windows-native network diagnostic
- *
- * @author: WaterRun
- * @file: Model/WindowsDiagnosticResult.cs
- * @date: 2026-06-15
- */
-
 namespace ClashSharp.Model;
 
 /// <summary>Represents the outcome of one Windows-native network diagnostic.</summary>

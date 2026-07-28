@@ -1,12 +1,3 @@
-/*
- * Mihomo Runtime Configuration Builder
- * Builds deterministic mihomo runtime configuration fragments controlled by Clash#
- *
- * @author: WaterRun
- * @file: Service/MihomoRuntimeConfigurationBuilder.cs
- * @date: 2026-06-15
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;

@@ -1,12 +1,3 @@
-/*
- * SQLite Log Storage Maintenance
- * Provides cleanup helpers for SQLite log storage tables and database compaction
- *
- * @author: WaterRun
- * @file: Service/LogStorageMaintenance.cs
- * @date: 2026-06-15
- */
-
 using System;
 using Microsoft.Data.Sqlite;
 

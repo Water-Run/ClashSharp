@@ -1,12 +1,3 @@
-/*
- * Startup Behavior Service Tests
- * Verifies startup behavior selection resolves to the expected proxy mode
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/StartupBehaviorServiceTests.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

@@ -38,6 +38,8 @@ public sealed class SettingsRegistryTests
             ["ConnectionTestUrl"] = "https://www.google.com/generate_204",
             ["MasterHeroStatusLayout"] =
                 "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability",
+            ["MasterInfoTileLayout"] =
+                "core,upload-rate,download-rate,active-connections,transparent-proxy,latency,active-profile,current-mode",
             ["ConnectionTestProxyUrl1"] = "https://www.google.com",
             ["ConnectionTestProxyUrl2"] = "https://github.com",
             ["ConnectionTestDirectUrl"] = "https://www.baidu.com",
@@ -479,6 +481,11 @@ public sealed class SettingsRegistryTests
             "Latency,UploadRate,DownloadRate,TotalTraffic,ActiveConnections,CurrentMode,ActiveProfile,MihomoService",
             "Latency,UploadRate,DownloadRate,TotalTraffic,ActiveConnections,CurrentMode,ActiveProfile,MihomoService"
         },
+        {
+            "MasterInfoTileLayout",
+            "Latency, core,latency,memory-usage",
+            "latency,core,memory-usage"
+        },
     };
 
     public static TheoryData<string, string, SettingValueErrorKind> InvalidNormalizationCases => new()
@@ -507,6 +514,7 @@ public sealed class SettingsRegistryTests
         { "ConnectionTestUrl", "ftp://example.com", SettingValueErrorKind.InvalidFormat },
         { "ConnectionTestUrl", "https://user:password@example.com", SettingValueErrorKind.UnsafeValue },
         { "MasterHeroStatusLayout", "CoreStatus,Unknown", SettingValueErrorKind.UndefinedValue },
+        { "MasterInfoTileLayout", "core,../unknown", SettingValueErrorKind.UnsafeValue },
         {
             "MasterHeroStatusLayout",
             "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability,Unknown",
@@ -588,7 +596,7 @@ public sealed class SettingsRegistryTests
         },
         {
             SettingsResetScope.MasterControl,
-            ["MasterHeroStatusLayout"]
+            ["MasterHeroStatusLayout", "MasterInfoTileLayout"]
         },
         {
             SettingsResetScope.All,

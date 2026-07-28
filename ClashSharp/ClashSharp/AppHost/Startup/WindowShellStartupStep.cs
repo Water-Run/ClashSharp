@@ -3,13 +3,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Service;
-using Microsoft.UI.Xaml;
 
 namespace ClashSharp.Hosting.Startup;
 
-/// <summary>Creates and activates the one primary application window.</summary>
+/// <summary>Unlocks the already-visible startup shell after mutation and trigger readiness.</summary>
 internal sealed class WindowShellStartupStep(
-    Action<Window> attachWindow,
+    Action<MainWindowStartupContext> completeWindow,
     ITriggerRuntimeEventPublisher triggerEvents,
     ApplicationActionService actions,
     ApplicationLifecycleService lifecycle,
@@ -23,9 +22,20 @@ internal sealed class WindowShellStartupStep(
     public Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        MainWindow window = new(triggerEvents, actions, lifecycle, trayCommands, startupConflicts);
-        attachWindow(window);
-        window.Activate();
+        completeWindow(new MainWindowStartupContext(
+            triggerEvents,
+            actions,
+            lifecycle,
+            trayCommands,
+            startupConflicts));
         return Task.FromResult(StartupStepResult.Succeeded());
     }
 }
+
+/// <summary>Runtime-only dependencies supplied when the startup shell becomes interactive.</summary>
+internal sealed record MainWindowStartupContext(
+    ITriggerRuntimeEventPublisher TriggerEvents,
+    ApplicationActionService Actions,
+    ApplicationLifecycleService Lifecycle,
+    TrayCommandService TrayCommands,
+    StartupConflictSnapshot StartupConflicts);

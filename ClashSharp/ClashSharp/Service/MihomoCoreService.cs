@@ -153,9 +153,17 @@ public sealed class MihomoCoreService
 
         lock (_syncLock)
         {
-            if (_process is { HasExited: false })
+            if (_process is not null)
             {
-                return;
+                if (!_process.HasExited)
+                {
+                    return;
+                }
+
+                // A naturally exited process still owns native handles. Release it before
+                // replacing the field so repeated crash/restart cycles cannot accumulate them.
+                _process.Dispose();
+                _process = null;
             }
 
             ProcessStartInfo startInfo = new()

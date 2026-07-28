@@ -1,12 +1,3 @@
-/*
- * Settings Diagnostics ViewModel Tests
- * Verifies Windows-native diagnostic command routing without WinUI controls
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/SettingsDiagnosticsViewModelTests.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
 

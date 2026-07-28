@@ -1,12 +1,3 @@
-/*
- * Mihomo Profile Parser Service Factory
- * Wires production dependencies for imported profile preview parsing
- *
- * @author: WaterRun
- * @file: Service/MihomoProfileParserServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System;
 using System.IO;
 

@@ -1,16 +1,6 @@
-/*
- * Searchable Option List
- * Reusable dialog list built from DialogOptionRow with top search and optional multi-select
- *
- * @author: WaterRun
- * @file: Components/SearchableOptionList.xaml.cs
- * @date: 2026-06-26
- */
-
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -111,51 +101,5 @@ public sealed partial class SearchableOptionList : UserControl
             || option.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
             || option.Metadata.Contains(query, StringComparison.CurrentCultureIgnoreCase)
             || option.Description.Contains(query, StringComparison.CurrentCultureIgnoreCase);
-    }
-}
-
-/// <summary>One option row used by <see cref="SearchableOptionList"/>.</summary>
-public sealed class SearchableOptionItem : INotifyPropertyChanged
-{
-    private bool _isChecked;
-
-    public SearchableOptionItem(string id, string title, string metadata, string description, string glyph, object? payload = null, bool isChecked = false)
-    {
-        Id = id ?? throw new ArgumentNullException(nameof(id));
-        Title = title ?? throw new ArgumentNullException(nameof(title));
-        Metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
-        Description = description ?? throw new ArgumentNullException(nameof(description));
-        Glyph = glyph ?? throw new ArgumentNullException(nameof(glyph));
-        Payload = payload;
-        _isChecked = isChecked;
-    }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    public string Id { get; }
-
-    public string Title { get; }
-
-    public string Metadata { get; }
-
-    public string Description { get; }
-
-    public string Glyph { get; }
-
-    public object? Payload { get; }
-
-    public bool IsChecked
-    {
-        get => _isChecked;
-        set
-        {
-            if (_isChecked == value)
-            {
-                return;
-            }
-
-            _isChecked = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsChecked)));
-        }
     }
 }

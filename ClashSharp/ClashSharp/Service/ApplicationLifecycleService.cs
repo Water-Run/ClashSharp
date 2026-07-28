@@ -39,14 +39,14 @@ internal sealed class ApplicationLifecycleService : IApplicationLifetimeRequestS
         RequestRestart("settings");
     }
 
-    internal void RequestExit(string source)
+    internal bool RequestExit(string source)
     {
-        _requests.TryRequest(ApplicationLifetimeRequest.Exit(source));
+        return _requests.TryRequest(ApplicationLifetimeRequest.Exit(source));
     }
 
-    internal void RequestRestart(string source)
+    internal bool RequestRestart(string source)
     {
-        _requests.TryRequest(ApplicationLifetimeRequest.Restart(source));
+        return _requests.TryRequest(ApplicationLifetimeRequest.Restart(source));
     }
 
     /// <inheritdoc />

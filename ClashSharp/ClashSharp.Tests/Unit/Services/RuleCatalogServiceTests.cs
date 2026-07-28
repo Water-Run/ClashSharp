@@ -1,12 +1,3 @@
-/*
- * Rule Catalog Service Tests
- * Verifies rule catalog rows are composed through injected dependencies
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/RuleCatalogServiceTests.cs
- * @date: 2026-06-25
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

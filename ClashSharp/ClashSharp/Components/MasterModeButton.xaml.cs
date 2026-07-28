@@ -1,12 +1,3 @@
-/*
- * Master Mode Button
- * Reusable takeover-mode button for the master control page
- *
- * @author: WaterRun
- * @file: Components/MasterModeButton.xaml.cs
- * @date: 2026-06-25
- */
-
 using System.Windows.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

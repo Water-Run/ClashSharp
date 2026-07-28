@@ -1,12 +1,3 @@
-/*
- * Mihomo Service Options
- * Parses service host command-line options
- *
- * @author: WaterRun
- * @file: ClashSharp.MihomoService/MihomoServiceOptions.cs
- * @date: 2026-06-24
- */
-
 namespace ClashSharp.MihomoService;
 
 /// <summary>Command-line options for the mihomo service host.</summary>

@@ -1,12 +1,3 @@
-/*
- * Relay Command Tests
- * Verifies shared synchronous command behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/RelayCommandTests.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;

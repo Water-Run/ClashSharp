@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Triggers;
 
@@ -34,7 +35,7 @@ internal sealed class TriggerSupervisorStartupStep(
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return StartupStepResult.Fatal("trigger.startup.initialization_failed");
         }
@@ -53,7 +54,7 @@ internal sealed class TriggerSupervisorStartupStep(
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return StartupStepResult.Fatal("trigger.scheduler.start_failed");
         }

@@ -292,7 +292,9 @@ public sealed class TriggerActionExecutorTests
                 Outbox(execution, 1, NotificationAction()),
             ]);
         FakeTriggerActionRuntime runtime = state == TriggerOutboxState.HandedOff
-            ? new([TriggerActionProbeResult.NotDesired()], [])
+            ? new(
+                [TriggerActionProbeResult.NotDesired()],
+                [TriggerActionApplyResult.HandedOff()])
             : new([], []);
         TriggerActionExecutor executor = new(
             repository,
@@ -311,6 +313,7 @@ public sealed class TriggerActionExecutorTests
         Assert.Equal(diagnosticCode, result.DiagnosticCode);
         Assert.Equal(TriggerOutboxState.Pending, repository.Actions[1].State);
         Assert.Empty(repository.Transitions);
+        Assert.Equal(state == TriggerOutboxState.HandedOff ? 1 : 0, runtime.ApplyCount);
     }
 
     [Fact]
@@ -384,6 +387,66 @@ public sealed class TriggerActionExecutorTests
         Assert.Equal(TriggerOutboxState.Succeeded, Assert.Single(results).FinalState);
         Assert.Equal(1, runtime.ApplyCount);
         Assert.IsType<InvalidOperationException>(Assert.Single(notifications.Failures));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_FiredNotificationWrapsFatalFailure_PropagatesBeforeBusinessActions()
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(
+            execution,
+            [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
+        FakeTriggerActionRuntime runtime = new(
+            [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired()],
+            [TriggerActionApplyResult.Applied()]);
+        InvalidOperationException failure = new(
+            "notification wrapper",
+            CreateProcessFatalException<OutOfMemoryException>());
+        ThrowingFiredNotificationSink notifications = new()
+        {
+            NotifyException = failure,
+        };
+        TriggerActionExecutor executor = new(repository, runtime, notifications);
+        MutationAdmissionBarrier admission = new();
+        await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
+            CancellationToken.None);
+
+        InvalidOperationException actual = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => executor.ExecuteAsync(execution, lease, CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.Equal(0, runtime.ApplyCount);
+        Assert.Empty(notifications.Failures);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NotificationFailureReportingFailsFatally_Propagates()
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(
+            execution,
+            [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
+        FakeTriggerActionRuntime runtime = new(
+            [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired()],
+            [TriggerActionApplyResult.Applied()]);
+        InvalidOperationException reportFailure = new(
+            "report wrapper",
+            CreateProcessFatalException<AccessViolationException>());
+        ThrowingFiredNotificationSink notifications = new()
+        {
+            ReportException = reportFailure,
+        };
+        TriggerActionExecutor executor = new(repository, runtime, notifications);
+        MutationAdmissionBarrier admission = new();
+        await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(
+            CancellationToken.None);
+
+        InvalidOperationException actual = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => executor.ExecuteAsync(execution, lease, CancellationToken.None));
+
+        Assert.Same(reportFailure, actual);
+        Assert.Equal(0, runtime.ApplyCount);
+        Assert.Single(notifications.Failures);
     }
 
     [Fact]
@@ -548,15 +611,24 @@ public sealed class TriggerActionExecutorTests
     {
         public List<Exception> Failures { get; } = [];
 
+        public Exception NotifyException { get; init; } =
+            new InvalidOperationException("notification unavailable");
+
+        public Exception? ReportException { get; init; }
+
         public Task NotifyAsync(
             TriggerExecution execution,
             CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("notification unavailable");
+            Task.FromException(NotifyException);
 
         public void ReportFailure(TriggerExecution execution, Exception exception)
         {
             ArgumentNullException.ThrowIfNull(execution);
             Failures.Add(exception);
+            if (ReportException is not null)
+            {
+                throw ReportException;
+            }
         }
     }
 
@@ -672,4 +744,8 @@ public sealed class TriggerActionExecutorTests
         public Task<TriggerPersistenceResult> CreateBackupAsync(CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
+
+    private static TException CreateProcessFatalException<TException>()
+        where TException : Exception =>
+        Activator.CreateInstance<TException>();
 }

@@ -1,12 +1,3 @@
-/*
- * Main Window ViewModel Tests
- * Verifies navigation shell label and page-resolution behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/ViewModel/MainWindowViewModelTests.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;

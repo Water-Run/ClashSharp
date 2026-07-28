@@ -1,12 +1,3 @@
-/*
- * Tray Menu State Builder Tests
- * Verifies task tray menu state without creating a native tray icon
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/TrayMenuStateBuilderTests.cs
- * @date: 2026-06-24
- */
-
 using ClashSharp.Model;
 using ClashSharp.Service;
 

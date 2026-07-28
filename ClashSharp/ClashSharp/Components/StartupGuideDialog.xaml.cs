@@ -1,16 +1,6 @@
-/*
- * Startup Guide Dialog
- * Reserves the reusable startup guide dialog shell for quick-start content
- *
- * @author: WaterRun
- * @file: Components/StartupGuideDialog.xaml.cs
- * @date: 2026-06-24
- */
-
 using System;
-using System.Threading.Tasks;
-using ClashSharp.Service;
-using ClashSharp.View;
+using System.Collections.Generic;
+using ClashSharp.Model;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -18,80 +8,28 @@ using Microsoft.UI.Xaml.Media;
 
 namespace ClashSharp.Components;
 
-/// <summary>Reusable dialog shell reserved for startup guide content.</summary>
+/// <summary>Renders a pre-collected startup-health snapshot in a reusable content dialog.</summary>
 /// <remarks>
-/// Invariants: Dialog text is resolved from localization resources during construction.
+/// Invariants: The dialog renders exactly the immutable check snapshot supplied by its presenter.
 /// Thread safety: Must be created and shown on the UI thread.
 /// Side effects: None until the dialog is shown by a caller.
 /// </remarks>
 public sealed partial class StartupGuideDialog : ContentDialog
 {
-    private const double DialogWidth = 520;
-
-    /// <summary>Initializes the startup guide dialog shell with localized text.</summary>
-    public StartupGuideDialog()
+    /// <summary>Initializes the startup guide from a pre-collected health snapshot.</summary>
+    /// <param name="checks">Health rows collected before the visual component is created.</param>
+    /// <param name="getString">Localization dependency for dialog-only display text.</param>
+    public StartupGuideDialog(
+        IReadOnlyList<StartupCheckItem> checks,
+        Func<string, string> getString)
     {
+        ArgumentNullException.ThrowIfNull(checks);
+        ArgumentNullException.ThrowIfNull(getString);
         InitializeComponent();
-        Title = LocalizationService.Instance.GetString("Settings.StartupGuide.Title");
-        CloseButtonText = LocalizationService.Instance.GetString("Command.Close");
-        GuideDescriptionText.Text = LocalizationService.Instance.GetString("Settings.StartupGuide.Description");
-        LoadChecks();
-    }
-
-    /// <summary>Shows startup guidance in the app-owned centered overlay.</summary>
-    /// <param name="xamlRoot">Window-level XAML root that hosts the dialog. Not null.</param>
-    /// <returns>A task that completes when the user closes the overlay.</returns>
-    public Task ShowCenteredAsync(XamlRoot xamlRoot)
-    {
-        ArgumentNullException.ThrowIfNull(xamlRoot);
-
-        return CenteredDialogOverlay.ShowAsync(
-            xamlRoot,
-            LocalizationService.Instance.GetString("Settings.StartupGuide.Title"),
-            BuildGuideContent(),
-            LocalizationService.Instance.GetString("Command.Close"),
-            DialogWidth);
-    }
-
-    private static StackPanel BuildGuideContent()
-    {
-        StackPanel panel = new()
-        {
-            MinWidth = 360,
-            MaxWidth = 480,
-            Spacing = 12,
-        };
-        panel.Children.Add(new TextBlock
-        {
-            Text = LocalizationService.Instance.GetString("Settings.StartupGuide.Description"),
-            TextWrapping = TextWrapping.WrapWholeWords,
-            Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
-        });
-
-        StackPanel checksPanel = new()
-        {
-            Spacing = 8,
-        };
-        foreach (StartupCheckItem check in StartupCheckService.Instance.GetChecks())
-        {
-            checksPanel.Children.Add(BuildCheckRow(check));
-        }
-        panel.Children.Add(new ScrollViewer
-        {
-            Content = checksPanel,
-            MaxHeight = 260,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        });
-
-        return panel;
-    }
-
-    private void LoadChecks()
-    {
-        ChecksPanel.Children.Clear();
-        foreach (StartupCheckItem check in StartupCheckService.Instance.GetChecks())
+        Title = getString("Settings.StartupGuide.Title");
+        CloseButtonText = getString("Command.Close");
+        GuideDescriptionText.Text = getString("Settings.StartupGuide.Description");
+        foreach (StartupCheckItem check in checks)
         {
             ChecksPanel.Children.Add(BuildCheckRow(check));
         }

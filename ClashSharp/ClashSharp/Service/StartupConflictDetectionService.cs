@@ -1,12 +1,3 @@
-/*
- * Startup Conflict Detection Service
- * Detects host proxy conflicts before Clash# applies startup network takeover
- *
- * @author: WaterRun
- * @file: Service/StartupConflictDetectionService.cs
- * @date: 2026-06-17
- */
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -15,53 +6,6 @@ using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
-
-/// <summary>Startup conflict categories shown in the startup check dialog.</summary>
-internal enum StartupConflictKind
-{
-    /// <summary>An external mihomo process is already running.</summary>
-    ExternalMihomoProcess,
-
-    /// <summary>The configured mixed proxy port is occupied.</summary>
-    MixedPortOccupied,
-
-    /// <summary>Windows manual proxy is enabled but points to a different port.</summary>
-    WindowsProxyWrongPort,
-}
-
-/// <summary>External process snapshot used by startup conflict checks.</summary>
-internal readonly record struct StartupConflictProcess(int ProcessId, string ProcessName);
-
-/// <summary>Result returned after attempting to repair a startup conflict.</summary>
-internal readonly record struct StartupConflictRepairResult(bool Succeeded, string Message);
-
-/// <summary>A detected startup conflict and its repair action.</summary>
-internal sealed class StartupConflictIssue
-{
-    public StartupConflictIssue(
-        StartupConflictKind kind,
-        string title,
-        string description,
-        string repairText,
-        Func<CancellationToken, Task<StartupConflictRepairResult>> repairAsync)
-    {
-        Kind = kind;
-        Title = title ?? throw new ArgumentNullException(nameof(title));
-        Description = description ?? throw new ArgumentNullException(nameof(description));
-        RepairText = repairText ?? throw new ArgumentNullException(nameof(repairText));
-        RepairAsync = repairAsync ?? throw new ArgumentNullException(nameof(repairAsync));
-    }
-
-    public StartupConflictKind Kind { get; }
-
-    public string Title { get; }
-
-    public string Description { get; }
-
-    public string RepairText { get; }
-
-    public Func<CancellationToken, Task<StartupConflictRepairResult>> RepairAsync { get; }
-}
 
 /// <summary>Host operations used by startup conflict detection and repair.</summary>
 internal interface IStartupConflictEnvironment
@@ -99,13 +43,22 @@ internal sealed class StartupConflictDetectionService
 
     public IReadOnlyList<StartupConflictIssue> CheckConflicts(int mixedPort)
     {
+        return CheckConflicts(mixedPort, CancellationToken.None);
+    }
+
+    private IReadOnlyList<StartupConflictIssue> CheckConflicts(
+        int mixedPort,
+        CancellationToken cancellationToken)
+    {
         if (mixedPort is < 1 or > 65535)
         {
             throw new ArgumentOutOfRangeException(nameof(mixedPort), "Port must be in the range [1, 65535].");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         List<StartupConflictIssue> issues = [];
         IReadOnlyList<StartupConflictProcess> processes = _environment.GetExternalMihomoProcesses();
+        cancellationToken.ThrowIfCancellationRequested();
         if (processes.Count > 0)
         {
             issues.Add(new StartupConflictIssue(
@@ -118,17 +71,24 @@ internal sealed class StartupConflictDetectionService
 
         if (_environment.IsTcpPortInUse(mixedPort))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             issues.Add(new StartupConflictIssue(
                 StartupConflictKind.MixedPortOccupied,
                 _getString("StartupConflict.Port.Title"),
                 string.Format(CultureInfo.CurrentCulture, _getString("StartupConflict.Port.Description"), mixedPort),
                 _getString("StartupConflict.Port.Repair"),
-                _ => Task.FromResult(new StartupConflictRepairResult(
-                    false,
-                    _getString("StartupConflict.Port.RepairFailed")))));
+                token =>
+                {
+                    token.ThrowIfCancellationRequested();
+                    return Task.FromResult(new StartupConflictRepairResult(
+                        false,
+                        _getString("StartupConflict.Port.RepairFailed")));
+                }));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         WindowsProxyState proxyState = _environment.GetWindowsProxyState();
+        cancellationToken.ThrowIfCancellationRequested();
         if (proxyState.IsEnabled && !ProxyUsesTargetPort(proxyState.ProxyServer, mixedPort))
         {
             issues.Add(new StartupConflictIssue(
@@ -140,6 +100,18 @@ internal sealed class StartupConflictDetectionService
         }
 
         return issues;
+    }
+
+    /// <summary>Runs host process, socket, and registry probes away from the UI startup context.</summary>
+    public Task<IReadOnlyList<StartupConflictIssue>> CheckConflictsAsync(
+        int mixedPort,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Task<IReadOnlyList<StartupConflictIssue>> probeTask = Task.Run(
+            () => CheckConflicts(mixedPort, cancellationToken),
+            CancellationToken.None);
+        return probeTask.WaitAsync(cancellationToken);
     }
 
     private async Task<StartupConflictRepairResult> TerminateExternalMihomoProcessesAsync(
@@ -157,7 +129,7 @@ internal sealed class StartupConflictDetectionService
         }
         catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
         {
-            return new StartupConflictRepairResult(false, exception.Message);
+            return new StartupConflictRepairResult(false, _getString("StartupConflict.Status.Failed"));
         }
     }
 
@@ -170,7 +142,7 @@ internal sealed class StartupConflictDetectionService
         }
         catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
         {
-            return new StartupConflictRepairResult(false, exception.Message);
+            return new StartupConflictRepairResult(false, _getString("StartupConflict.Status.Failed"));
         }
     }
 

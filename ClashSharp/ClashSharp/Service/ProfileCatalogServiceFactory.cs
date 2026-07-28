@@ -1,12 +1,3 @@
-/*
- * Profile Catalog Service Factory
- * Wires production dependencies for local profile catalog management
- *
- * @author: WaterRun
- * @file: Service/ProfileCatalogServiceFactory.cs
- * @date: 2026-06-25
- */
-
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;

@@ -217,6 +217,40 @@ public sealed class TriggerEvaluationConcurrencyTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_DispatchCancellationWrapsFatalFailure_Propagates()
+    {
+        using TriggerTestDirectory directory = new();
+        SqliteTriggerRepository repository = await CreateRepositoryAsync(
+            directory,
+            [Definition("task")]);
+        OperationCanceledException failure = new(
+            "dispatch cancelled while fatally failing",
+            Activator.CreateInstance<OutOfMemoryException>(),
+            CancellationToken.None);
+        RecordingDispatcher dispatcher = new()
+        {
+            ExceptionToThrow = failure,
+        };
+        TriggerExecutionCoordinator coordinator = Coordinator(
+            repository,
+            new BarrierContextProvider((_, request, _) =>
+                Task.FromResult(Available(request, activeConnections: 10))),
+            dispatcher: dispatcher);
+
+        OperationCanceledException actual =
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                () => coordinator.EvaluateAsync(
+                    "task",
+                    TriggerEventKind.Periodic,
+                    null,
+                    CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.Equal(1, dispatcher.CallCount);
+        Assert.Single(await ReadOutboxAsync(repository));
+    }
+
+    [Fact]
     public async Task EvaluateAsync_DisabledTaskRequestsNoContextOrDispatch()
     {
         using TriggerTestDirectory directory = new();
@@ -421,13 +455,17 @@ public sealed class TriggerEvaluationConcurrencyTests
 
         public int CallCount => Volatile.Read(ref _callCount);
 
+        public Exception? ExceptionToThrow { get; init; }
+
         public Task DispatchAsync(
             TriggerExecution execution,
             MutationAdmissionLease admissionLease,
             CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _callCount);
-            return Task.CompletedTask;
+            return ExceptionToThrow is null
+                ? Task.CompletedTask
+                : Task.FromException(ExceptionToThrow);
         }
     }
 

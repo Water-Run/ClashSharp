@@ -16,7 +16,9 @@ namespace ClashSharp.Hosting.Startup;
 internal sealed class StartupNetworkBehaviorStep(
     LegacyNetworkIntentSource intents,
     ApplicationActionService actions,
-    StartupConflictSnapshot conflicts) : IStartupStep
+    StartupConflictSnapshot conflicts,
+    LogStorageService logStorage,
+    LocalizationService localization) : IStartupStep
 {
     public string Name => "startup-network-behavior";
 
@@ -37,7 +39,7 @@ internal sealed class StartupNetworkBehaviorStep(
             NetworkTakeoverResult result = await actions
                 .ApplyNetworkModeAsync(intent.Mode, cancellationToken)
                 .ConfigureAwait(false);
-            LogStorageService.Instance.AppendLog("Info", "Startup", result.Message, null);
+            logStorage.AppendLog("Info", "Startup", result.Message, null);
             await actions.PublishProxyModeAppliedAsync(result.Mode, cancellationToken).ConfigureAwait(false);
             return StartupStepResult.Succeeded();
         }
@@ -45,10 +47,10 @@ internal sealed class StartupNetworkBehaviorStep(
             when (exception.Outcome is MutationOutcome.RecoveryRequired
                 or MutationOutcome.CommittedRecoveryRequired)
         {
-            LogStorageService.Instance.AppendLog(
+            logStorage.AppendLog(
                 "Error",
                 "Startup",
-                LocalizationService.Instance.GetString("Startup.Log.ProxyBehaviorFailed"),
+                localization.GetString("Startup.Log.ProxyBehaviorFailed"),
                 exception.Message);
             return StartupStepResult.Fatal(exception.ErrorCode ?? "startup-network-recovery-required");
         }
@@ -57,10 +59,10 @@ internal sealed class StartupNetworkBehaviorStep(
             or UnauthorizedAccessException
             or Win32Exception)
         {
-            LogStorageService.Instance.AppendLog(
+            logStorage.AppendLog(
                 "Warning",
                 "Startup",
-                LocalizationService.Instance.GetString("Startup.Log.ProxyBehaviorFailed"),
+                localization.GetString("Startup.Log.ProxyBehaviorFailed"),
                 exception.Message);
             return StartupStepResult.Warning("startup-network-behavior-failed");
         }

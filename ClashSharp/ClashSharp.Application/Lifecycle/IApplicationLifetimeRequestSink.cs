@@ -20,6 +20,19 @@ public enum ApplicationLifetimeShutdownFailureKind
     Uncertain,
 }
 
+/// <summary>Describes whether a durable handoff has a confirmed terminal persistence outcome.</summary>
+public enum ApplicationLifetimeTerminalStatePersistence
+{
+    /// <summary>The request has no durable handoff.</summary>
+    NotApplicable,
+
+    /// <summary>No terminal durable state has been confirmed.</summary>
+    Unconfirmed,
+
+    /// <summary>A terminal durable state was confirmed by the handoff.</summary>
+    Confirmed,
+}
+
 /// <summary>Coordinates a durable producer handoff with the App-owned outer lifetime.</summary>
 public interface IApplicationLifetimeHandoff
 {
@@ -43,8 +56,10 @@ public interface IApplicationLifetimeHandoff
 }
 
 /// <summary>Represents one idempotent handoff from host-owned work to the App-owned outer lifetime.</summary>
-public sealed record ApplicationLifetimeRequest
+public sealed class ApplicationLifetimeRequest
 {
+    private int _terminalStatePersistence;
+
     /// <summary>Initializes one validated process-level request.</summary>
     /// <param name="kind">Requested process-level action.</param>
     /// <param name="source">Stable diagnostic source of the request.</param>
@@ -73,6 +88,9 @@ public sealed record ApplicationLifetimeRequest
         Kind = kind;
         Source = source;
         Handoff = handoff;
+        _terminalStatePersistence = (int)(handoff is null
+            ? ApplicationLifetimeTerminalStatePersistence.NotApplicable
+            : ApplicationLifetimeTerminalStatePersistence.Unconfirmed);
     }
 
     /// <summary>Gets the requested process-level action.</summary>
@@ -83,6 +101,10 @@ public sealed record ApplicationLifetimeRequest
 
     /// <summary>Gets the optional durable producer handoff.</summary>
     public IApplicationLifetimeHandoff? Handoff { get; }
+
+    /// <summary>Gets whether the durable handoff has confirmed a terminal persistence outcome.</summary>
+    public ApplicationLifetimeTerminalStatePersistence TerminalStatePersistence =>
+        (ApplicationLifetimeTerminalStatePersistence)Volatile.Read(ref _terminalStatePersistence);
 
     /// <summary>Creates an exit request.</summary>
     public static ApplicationLifetimeRequest Exit(string source) =>
@@ -108,14 +130,25 @@ public sealed record ApplicationLifetimeRequest
     {
         return new ApplicationLifetimeRequest(kind, source, handoff);
     }
+
+    internal void ConfirmTerminalStatePersistence()
+    {
+        if (Handoff is not null)
+        {
+            Interlocked.Exchange(
+                ref _terminalStatePersistence,
+                (int)ApplicationLifetimeTerminalStatePersistence.Confirmed);
+        }
+    }
 }
 
-/// <summary>Accepts at most one process-lifetime request without stopping or disposing the host.</summary>
+/// <summary>Accepts at most one active process-lifetime request without stopping or disposing the host.</summary>
 public interface IApplicationLifetimeRequestSink
 {
     /// <summary>Attempts to hand a request to the outer application lifetime.</summary>
     /// <returns>
-    /// <see langword="true"/> when the request won the process-level handoff or duplicates its durable identity.
+    /// <see langword="true"/> when the request won a processable handoff or idempotently duplicates
+    /// the active, reserved, or terminal durable identity; otherwise <see langword="false"/>.
     /// </returns>
     bool TryRequest(ApplicationLifetimeRequest request);
 }

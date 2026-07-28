@@ -1,12 +1,3 @@
-/*
- * Clash Data Package Service Tests
- * Verifies XML import, export, and backup package behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/ClashDataPackageServiceTests.cs
- * @date: 2026-06-25
- */
-
 using System.Xml.Linq;
 using ClashSharp.Model;
 using ClashSharp.Service;
@@ -29,6 +20,7 @@ public sealed class ClashDataPackageServiceTests
             AppAccentColorValue = "#FF00AA00",
             MixedPort = 12001,
             ConnectionTestProxyUrl1 = "https://google.com",
+            MasterInfoTileLayout = "core,latency",
         };
         ClashDataPackageService service = new(settings, directory.Path);
         string packagePath = Path.Combine(directory.Path, "settings.clashsharp.xml");
@@ -42,7 +34,26 @@ public sealed class ClashDataPackageServiceTests
         Assert.Equal("Custom", SettingValue(root, nameof(IClashDataPackageSettings.AppAccentColorMode)));
         Assert.Equal("#FF00AA00", SettingValue(root, nameof(IClashDataPackageSettings.AppAccentColorValue)));
         Assert.Equal("12001", SettingValue(root, nameof(IClashDataPackageSettings.MixedPort)));
+        Assert.Equal("core,latency", SettingValue(root, nameof(IClashDataPackageSettings.MasterInfoTileLayout)));
         Assert.Empty(root.Element("Files")?.Elements("File") ?? []);
+    }
+
+    /// <summary>Verifies an unsafe persisted information-tile layout cannot be emitted into a package.</summary>
+    [Fact]
+    public async Task ExportAsync_WhenMasterInfoTileLayoutIsUnsafe_RejectsExport()
+    {
+        using TemporaryDirectory directory = new();
+        FakeClashDataPackageSettings settings = new()
+        {
+            MasterInfoTileLayout = "core,../unknown",
+        };
+        ClashDataPackageService service = new(settings, directory.Path);
+        string packagePath = Path.Combine(directory.Path, "unsafe-settings.clashsharp.xml");
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => service.ExportAsync(packagePath, ClashDataPackageScope.Settings, CancellationToken.None));
+
+        Assert.False(File.Exists(packagePath));
     }
 
     /// <summary>Verifies proxy-configuration export includes profile catalog and mihomo files while excluding logs.</summary>
@@ -82,6 +93,7 @@ public sealed class ClashDataPackageServiceTests
             ActiveProfileId = "profile-1",
             MixedPort = 12002,
             ConnectionTestDirectUrl = "https://baidu.com",
+            MasterInfoTileLayout = "latency,core",
         };
         string packagePath = Path.Combine(sourceDirectory.Path, "package.xml");
         await new ClashDataPackageService(exportedSettings, sourceDirectory.Path)
@@ -98,6 +110,7 @@ public sealed class ClashDataPackageServiceTests
         Assert.Equal("profile-1", importedSettings.ActiveProfileId);
         Assert.Equal(12002, importedSettings.MixedPort);
         Assert.Equal("https://baidu.com", importedSettings.ConnectionTestDirectUrl);
+        Assert.Equal("latency,core", importedSettings.MasterInfoTileLayout);
         Assert.Equal("catalog", await File.ReadAllTextAsync(Path.Combine(targetDirectory.Path, "ProfileCatalog.json")));
         Assert.Equal("config", await File.ReadAllTextAsync(Path.Combine(targetDirectory.Path, "mihomo", "config.yaml")));
     }
@@ -190,6 +203,124 @@ public sealed class ClashDataPackageServiceTests
 
         Assert.Equal(10000, settings.MixedPort);
         Assert.False(File.Exists(Path.Combine(directory.Path, "mihomo", "config.yaml")));
+    }
+
+    /// <summary>Verifies unsafe information-tile ids are rejected before any setting is changed.</summary>
+    [Fact]
+    public async Task ImportAsync_WhenMasterInfoTileLayoutIsUnsafe_RejectsPackageWithoutChangingSettings()
+    {
+        using TemporaryDirectory directory = new();
+        string packagePath = Path.Combine(directory.Path, "unsafe-info-tile-layout.xml");
+        XDocument document = new(
+            new XElement("ClashSharpDataPackage",
+                new XAttribute("Format", "ClashSharp.XmlDataPackage"),
+                new XAttribute("Version", "1"),
+                new XAttribute("Scope", ClashDataPackageScope.Settings.ToString()),
+                new XElement("Settings",
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.DisplayLanguage)),
+                        new XAttribute("Value", AppLanguage.French.ToString())),
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.MasterInfoTileLayout)),
+                        new XAttribute("Value", "core,../unknown"))),
+                new XElement("Files")));
+        await File.WriteAllTextAsync(packagePath, document.ToString(SaveOptions.DisableFormatting));
+        FakeClashDataPackageSettings settings = new()
+        {
+            DisplayLanguage = AppLanguage.English,
+            MasterInfoTileLayout = "latency,core",
+        };
+        ClashDataPackageService service = new(settings, directory.Path);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => service.ImportAsync(packagePath, CancellationToken.None));
+
+        Assert.Equal(AppLanguage.English, settings.DisplayLanguage);
+        Assert.Equal("latency,core", settings.MasterInfoTileLayout);
+    }
+
+    /// <summary>Verifies import persists the registry's canonical information-tile layout text.</summary>
+    [Fact]
+    public async Task ImportAsync_WhenMasterInfoTileLayoutIsNoncanonical_WritesCanonicalText()
+    {
+        using TemporaryDirectory directory = new();
+        string packagePath = Path.Combine(directory.Path, "noncanonical-info-tile-layout.xml");
+        XDocument document = new(
+            new XElement("ClashSharpDataPackage",
+                new XAttribute("Format", "ClashSharp.XmlDataPackage"),
+                new XAttribute("Version", "1"),
+                new XAttribute("Scope", ClashDataPackageScope.Settings.ToString()),
+                new XElement("Settings",
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.MasterInfoTileLayout)),
+                        new XAttribute("Value", " Latency, core,LATENCY, memory-usage "))),
+                new XElement("Files")));
+        await File.WriteAllTextAsync(packagePath, document.ToString(SaveOptions.DisableFormatting));
+        FakeClashDataPackageSettings settings = new();
+        ClashDataPackageService service = new(settings, directory.Path);
+
+        await service.ImportAsync(packagePath, CancellationToken.None);
+
+        Assert.Equal("latency,core,memory-usage", settings.MasterInfoTileLayout);
+    }
+
+    /// <summary>Verifies import enforces the registry's information-tile count limit.</summary>
+    [Fact]
+    public async Task ImportAsync_WhenMasterInfoTileLayoutExceedsLimit_RejectsPackage()
+    {
+        using TemporaryDirectory directory = new();
+        string packagePath = Path.Combine(directory.Path, "too-many-info-tiles.xml");
+        string importedLayout = string.Join(",", Enumerable.Range(1, 65).Select(index => $"tile-{index}"));
+        XDocument document = new(
+            new XElement("ClashSharpDataPackage",
+                new XAttribute("Format", "ClashSharp.XmlDataPackage"),
+                new XAttribute("Version", "1"),
+                new XAttribute("Scope", ClashDataPackageScope.Settings.ToString()),
+                new XElement("Settings",
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.MasterInfoTileLayout)),
+                        new XAttribute("Value", importedLayout))),
+                new XElement("Files")));
+        await File.WriteAllTextAsync(packagePath, document.ToString(SaveOptions.DisableFormatting));
+        FakeClashDataPackageSettings settings = new()
+        {
+            MasterInfoTileLayout = "latency,core",
+        };
+        ClashDataPackageService service = new(settings, directory.Path);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => service.ImportAsync(packagePath, CancellationToken.None));
+
+        Assert.Equal("latency,core", settings.MasterInfoTileLayout);
+    }
+
+    /// <summary>Verifies legacy packages that omit the information-tile layout preserve the current value.</summary>
+    [Fact]
+    public async Task ImportAsync_WhenMasterInfoTileLayoutIsMissing_PreservesCurrentValue()
+    {
+        using TemporaryDirectory directory = new();
+        string packagePath = Path.Combine(directory.Path, "legacy-settings.xml");
+        XDocument document = new(
+            new XElement("ClashSharpDataPackage",
+                new XAttribute("Format", "ClashSharp.XmlDataPackage"),
+                new XAttribute("Version", "1"),
+                new XAttribute("Scope", ClashDataPackageScope.Settings.ToString()),
+                new XElement("Settings",
+                    new XElement("Setting",
+                        new XAttribute("Name", nameof(IClashDataPackageSettings.DisplayLanguage)),
+                        new XAttribute("Value", AppLanguage.French.ToString()))),
+                new XElement("Files")));
+        await File.WriteAllTextAsync(packagePath, document.ToString(SaveOptions.DisableFormatting));
+        FakeClashDataPackageSettings settings = new()
+        {
+            MasterInfoTileLayout = "latency,core",
+        };
+        ClashDataPackageService service = new(settings, directory.Path);
+
+        await service.ImportAsync(packagePath, CancellationToken.None);
+
+        Assert.Equal(AppLanguage.French, settings.DisplayLanguage);
+        Assert.Equal("latency,core", settings.MasterInfoTileLayout);
     }
 
     /// <summary>Verifies settings already applied during import are restored if a later setting fails.</summary>
@@ -315,6 +446,9 @@ public sealed class ClashDataPackageServiceTests
         public string ConnectionTestProxyUrl2 { get; set; } = "https://github.com";
 
         public string ConnectionTestDirectUrl { get; set; } = "https://www.baidu.com";
+
+        public string MasterInfoTileLayout { get; set; } =
+            "core,upload-rate,download-rate,active-connections,transparent-proxy,latency,active-profile,current-mode";
     }
 
     private sealed class ThrowingClashDataPackageSettings : IClashDataPackageSettings
@@ -392,6 +526,9 @@ public sealed class ClashDataPackageServiceTests
         public string ConnectionTestProxyUrl2 { get; set; } = "https://github.com";
 
         public string ConnectionTestDirectUrl { get; set; } = "https://www.baidu.com";
+
+        public string MasterInfoTileLayout { get; set; } =
+            "core,upload-rate,download-rate,active-connections,transparent-proxy,latency,active-profile,current-mode";
     }
 
     private sealed class TemporaryDirectory : IDisposable

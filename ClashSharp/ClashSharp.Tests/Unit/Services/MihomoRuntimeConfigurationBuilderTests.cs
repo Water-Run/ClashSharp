@@ -1,12 +1,3 @@
-/*
- * Mihomo Runtime Configuration Builder Tests
- * Verifies deterministic mihomo configuration generation and runtime key overlay behavior
- *
- * @author: WaterRun
- * @file: ClashSharp.Tests/Unit/Services/MihomoRuntimeConfigurationBuilderTests.cs
- * @date: 2026-06-15
- */
-
 using System;
 using ClashSharp.Model;
 using ClashSharp.Service;

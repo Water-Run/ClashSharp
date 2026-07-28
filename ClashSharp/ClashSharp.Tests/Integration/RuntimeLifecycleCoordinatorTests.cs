@@ -151,6 +151,62 @@ public sealed class RuntimeLifecycleCoordinatorTests
         Assert.Equal(MutationAdmissionState.Open, barrier.State);
     }
 
+    /// <summary>Verifies cancellation wrapping a fatal quiescence failure restores prior participants and propagates.</summary>
+    [Fact]
+    public async Task ShutdownAsync_QuiescenceCancellationWrapsFatalFailure_RestoresAndPropagates()
+    {
+        List<string> trace = [];
+        MutationAdmissionBarrier barrier = new();
+        FakeParticipant first = new("first", trace, wasRunning: true);
+        OperationCanceledException failure = new(
+            "quiescence cancelled while fatally failing",
+            CreateProcessFatalException<OutOfMemoryException>(),
+            CancellationToken.None);
+        FakeParticipant second = new("second", trace, wasRunning: true)
+        {
+            QuiesceException = failure,
+        };
+        RuntimeLifecycleCoordinator coordinator = CreateCoordinator(
+            barrier,
+            new FakeNetworkShutdown(trace),
+            first,
+            second);
+
+        OperationCanceledException actual =
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                () => coordinator.ShutdownAsync(CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.Equal(["first.quiesce", "second.quiesce", "first.resume"], trace);
+        Assert.Equal(MutationAdmissionState.Open, barrier.State);
+    }
+
+    /// <summary>Verifies a fatal network failure is not degraded after producers are quiesced.</summary>
+    [Fact]
+    public async Task ShutdownAsync_NetworkFailsFatally_RestoresAndPropagates()
+    {
+        List<string> trace = [];
+        MutationAdmissionBarrier barrier = new();
+        InvalidOperationException failure = new(
+            "network wrapper",
+            CreateProcessFatalException<AccessViolationException>());
+        FakeNetworkShutdown network = new(trace)
+        {
+            ExceptionToThrow = failure,
+        };
+        RuntimeLifecycleCoordinator coordinator = CreateCoordinator(
+            barrier,
+            network,
+            new FakeParticipant("producer", trace, wasRunning: true));
+
+        InvalidOperationException actual = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.ShutdownAsync(CancellationToken.None));
+
+        Assert.Same(failure, actual);
+        Assert.Equal(["producer.quiesce", "network.shutdown", "producer.resume"], trace);
+        Assert.Equal(MutationAdmissionState.Open, barrier.State);
+    }
+
     [Fact]
     public async Task ShutdownAsync_RecoveryOnly_SkipsCompetingNetworkMutation()
     {
@@ -217,6 +273,61 @@ public sealed class RuntimeLifecycleCoordinatorTests
         Assert.Equal(["trigger.quiesce", "network.shutdown", "trigger.resume"], trace);
     }
 
+    [Fact]
+    public async Task ShutdownAsync_FirstAttemptAborts_LaterAttemptCanPrepareHostDisposal()
+    {
+        List<string> trace = [];
+        MutationAdmissionBarrier barrier = new();
+        FailOnceNetworkShutdown network = new(trace);
+        RuntimeLifecycleCoordinator coordinator = CreateCoordinator(
+            barrier,
+            network,
+            new FakeParticipant("trigger", trace, wasRunning: true));
+
+        RuntimeShutdownResult first = await coordinator.ShutdownAsync(CancellationToken.None);
+        RuntimeShutdownResult second = await coordinator.ShutdownAsync(CancellationToken.None);
+
+        Assert.Equal(RuntimeShutdownOutcome.Aborted, first.Outcome);
+        Assert.Equal(RuntimeShutdownOutcome.PreparedForHostDisposal, second.Outcome);
+        Assert.Equal(2, network.CallCount);
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+        Assert.Equal(
+            [
+                "trigger.quiesce",
+                "network.shutdown",
+                "trigger.resume",
+                "trigger.quiesce",
+                "network.shutdown",
+                "trigger.stop",
+            ],
+            trace);
+    }
+
+    [Fact]
+    public async Task ShutdownAsync_FirstAttemptDegrades_LaterAttemptCanPrepareHostDisposal()
+    {
+        List<string> trace = [];
+        MutationAdmissionBarrier barrier = new();
+        FailOnceNetworkShutdown network = new(trace);
+        RuntimeLifecycleCoordinator coordinator = CreateCoordinator(
+            barrier,
+            network,
+            new FakeParticipant("trigger", trace, wasRunning: true)
+            {
+                ResumeException = new InvalidOperationException("resume failed"),
+            });
+
+        RuntimeShutdownResult first = await coordinator.ShutdownAsync(CancellationToken.None);
+        RuntimeShutdownResult second = await coordinator.ShutdownAsync(CancellationToken.None);
+
+        Assert.Equal(RuntimeShutdownOutcome.Degraded, first.Outcome);
+        Assert.Equal("quiescence-restore-failed", first.ErrorCode);
+        Assert.Equal(["trigger"], first.DegradedParticipants);
+        Assert.Equal(RuntimeShutdownOutcome.PreparedForHostDisposal, second.Outcome);
+        Assert.Equal(2, network.CallCount);
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+    }
+
     private static RuntimeLifecycleCoordinator CreateCoordinator(
         MutationAdmissionBarrier barrier,
         IRuntimeShutdownNetworkCoordinator network,
@@ -263,6 +374,8 @@ public sealed class RuntimeLifecycleCoordinatorTests
 
         public string? ErrorCode { get; init; }
 
+        public Exception? ExceptionToThrow { get; init; }
+
         public Task<MutationResult<NetworkTransitionResult>> ApplyShutdownAsync(
             NetworkIntent intent,
             MutationAdmissionLease admissionLease,
@@ -271,6 +384,12 @@ public sealed class RuntimeLifecycleCoordinatorTests
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
             trace.Add("network.shutdown");
+            if (ExceptionToThrow is not null)
+            {
+                return Task.FromException<MutationResult<NetworkTransitionResult>>(
+                    ExceptionToThrow);
+            }
+
             NetworkTransitionResult state = new(
                 ClashSharpMode.Disabled,
                 false,
@@ -286,6 +405,37 @@ public sealed class RuntimeLifecycleCoordinatorTests
         }
     }
 
+    private sealed class FailOnceNetworkShutdown(List<string> trace) : IRuntimeShutdownNetworkCoordinator
+    {
+        private int _callCount;
+
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        public Task<MutationResult<NetworkTransitionResult>> ApplyShutdownAsync(
+            NetworkIntent intent,
+            MutationAdmissionLease admissionLease,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            trace.Add("network.shutdown");
+            int callCount = Interlocked.Increment(ref _callCount);
+            MutationOutcome outcome = callCount == 1
+                ? MutationOutcome.Compensated
+                : MutationOutcome.Succeeded;
+            return Task.FromResult(new MutationResult<NetworkTransitionResult>(
+                Guid.NewGuid(),
+                outcome,
+                new NetworkTransitionResult(
+                    ClashSharpMode.Disabled,
+                    false,
+                    false,
+                    false,
+                    7890,
+                    "disabled"),
+                callCount == 1 ? "shutdown-network-compensated" : null));
+        }
+    }
+
     private sealed class FakeParticipant(
         string name,
         List<string> trace,
@@ -297,6 +447,8 @@ public sealed class RuntimeLifecycleCoordinatorTests
 
         public Exception? ResumeException { get; init; }
 
+        public Exception? QuiesceException { get; init; }
+
         public Task StartAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -307,6 +459,11 @@ public sealed class RuntimeLifecycleCoordinatorTests
         public async Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken)
         {
             trace.Add($"{name}.quiesce");
+            if (QuiesceException is not null)
+            {
+                await Task.FromException(QuiesceException);
+            }
+
             if (BlockQuiescenceUntilCancellation)
             {
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
@@ -329,4 +486,8 @@ public sealed class RuntimeLifecycleCoordinatorTests
             return Task.CompletedTask;
         }
     }
+
+    private static TException CreateProcessFatalException<TException>()
+        where TException : Exception =>
+        Activator.CreateInstance<TException>();
 }

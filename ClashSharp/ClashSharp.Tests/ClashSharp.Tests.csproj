@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
@@ -63,6 +63,15 @@
     <Compile Include="..\ClashSharp\Model\WindowsDiagnosticResult.cs" Link="Model\WindowsDiagnosticResult.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsDiagnosticTarget.cs" Link="Model\WindowsDiagnosticTarget.cs" />
     <Compile Include="..\ClashSharp\Model\LogRecord.cs" Link="Model\LogRecord.cs" />
+    <Compile Include="..\ClashSharp\Model\StartupCheckItem.cs" Link="Model\StartupCheckItem.cs" />
+    <Compile Include="..\ClashSharp\Model\TrayStatusSnapshot.cs" Link="Model\TrayStatusSnapshot.cs" />
+    <Compile Include="..\ClashSharp\Model\LogStorageSummary.cs" Link="Model\LogStorageSummary.cs" />
+    <Compile Include="..\ClashSharp\Model\TrafficStatisticsSummary.cs" Link="Model\TrafficStatisticsSummary.cs" />
+    <Compile Include="..\ClashSharp\Model\StartupRestoreFallbackStatus.cs" Link="Model\StartupRestoreFallbackStatus.cs" />
+    <Compile Include="..\ClashSharp\Model\StartupConflictKind.cs" Link="Model\StartupConflictKind.cs" />
+    <Compile Include="..\ClashSharp\Model\StartupConflictProcess.cs" Link="Model\StartupConflictProcess.cs" />
+    <Compile Include="..\ClashSharp\Model\StartupConflictRepairResult.cs" Link="Model\StartupConflictRepairResult.cs" />
+    <Compile Include="..\ClashSharp\Model\StartupConflictIssue.cs" Link="Model\StartupConflictIssue.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.cs" Link="Service\AppSettingsService.cs" />
     <Compile Include="..\ClashSharp\Service\ApplicationLifecycleService.cs" Link="Service\ApplicationLifecycleService.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageService.cs" Link="Service\ClashDataPackageService.cs" />
@@ -84,6 +93,14 @@
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayServiceFactory.cs" Link="Service\MainlandChinaTextDisplayServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\MasterHeroStatusLayoutService.cs" Link="Service\MasterHeroStatusLayoutService.cs" />
+    <Compile Include="..\ClashSharp\Service\MasterInfoTileLayoutService.cs" Link="Service\MasterInfoTileLayoutService.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Layout\MasterControlLayoutPolicy.cs" Link="Presentation\Layout\MasterControlLayoutPolicy.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Dialogs\DialogPresentationGate.cs" Link="Presentation\Dialogs\DialogPresentationGate.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Lifecycle\PageLoadSession.cs" Link="Presentation\Lifecycle\PageLoadSession.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Adapters\ProfileManagementCatalogAdapter.cs" Link="Presentation\Adapters\ProfileManagementCatalogAdapter.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Adapters\SubscriptionLinkCatalogAdapter.cs" Link="Presentation\Adapters\SubscriptionLinkCatalogAdapter.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Adapters\PageLogAdapter.cs" Link="Presentation\Adapters\PageLogAdapter.cs" />
+    <Compile Include="..\ClashSharp\Presentation\Adapters\LogManagementStoreAdapter.cs" Link="Presentation\Adapters\LogManagementStoreAdapter.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfilePreviewParser.cs" Link="Service\MihomoProfilePreviewParser.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileParserService.cs" Link="Service\MihomoProfileParserService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoProfileParserServiceFactory.cs" Link="Service\MihomoProfileParserServiceFactory.cs" />
@@ -100,6 +117,7 @@
     <Compile Include="..\ClashSharp\Service\NetworkTakeoverServiceFactory.cs" Link="Service\NetworkTakeoverServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogIds.cs" Link="Service\ProfileCatalogIds.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.cs" Link="Service\ProfileCatalogService.cs" />
+    <Compile Include="..\ClashSharp\Service\ProfileImportGate.cs" Link="Service\ProfileImportGate.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogServiceFactory.cs" Link="Service\ProfileCatalogServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyNodeCatalogService.cs" Link="Service\ProxyNodeCatalogService.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyRecoveryService.cs" Link="Service\ProxyRecoveryService.cs" />
@@ -107,6 +125,7 @@
     <Compile Include="..\ClashSharp\Service\ProxyLatencyService.cs" Link="Service\ProxyLatencyService.cs" />
     <Compile Include="..\ClashSharp\Service\RuleCatalogService.cs" Link="Service\RuleCatalogService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupBehaviorService.cs" Link="Service\StartupBehaviorService.cs" />
+    <Compile Include="..\ClashSharp\Service\IStartupCheckProbe.cs" Link="Service\IStartupCheckProbe.cs" />
     <Compile Include="..\ClashSharp\Service\StartupCheckService.cs" Link="Service\StartupCheckService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupRestoreFallbackService.cs" Link="Service\StartupRestoreFallbackService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupLaunchService.cs" Link="Service\StartupLaunchService.cs" />
@@ -118,17 +137,97 @@
     <Compile Include="..\ClashSharp\Service\WindowsNetworkDiagnosticService.cs" Link="Service\WindowsNetworkDiagnosticService.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsProxyService.cs" Link="Service\WindowsProxyService.cs" />
     <Compile Include="..\ClashSharp\Strings\LocalizationResources.cs" Link="Strings\LocalizationResources.cs" />
+    <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.English.cs" Link="Strings\Catalogs\LocalizationResources.English.cs" />
+    <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.French.cs" Link="Strings\Catalogs\LocalizationResources.French.cs" />
+    <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.German.cs" Link="Strings\Catalogs\LocalizationResources.German.cs" />
+    <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.Russian.cs" Link="Strings\Catalogs\LocalizationResources.Russian.cs" />
+    <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.SimplifiedChinese.cs" Link="Strings\Catalogs\LocalizationResources.SimplifiedChinese.cs" />
+    <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.TraditionalChinese.cs" Link="Strings\Catalogs\LocalizationResources.TraditionalChinese.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticsViewModel.cs" Link="ViewModel\SettingsDiagnosticsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IWindowsDiagnosticsClient.cs" Link="ViewModel\IWindowsDiagnosticsClient.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IDiagnosticsLog.cs" Link="ViewModel\IDiagnosticsLog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticStatus.cs" Link="ViewModel\SettingsDiagnosticStatus.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.cs" Link="ViewModel\SettingsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ISettingsStore.cs" Link="ViewModel\ISettingsStore.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SettingsProxyInformation.cs" Link="ViewModel\SettingsProxyInformation.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SettingsTrayFeatureDefinition.cs" Link="ViewModel\SettingsTrayFeatureDefinition.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ConnectionTestTargetResult.cs" Link="ViewModel\ConnectionTestTargetResult.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ConnectionTestSummaryState.cs" Link="ViewModel\ConnectionTestSummaryState.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ConnectionTestReport.cs" Link="ViewModel\ConnectionTestReport.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMihomoServiceController.cs" Link="ViewModel\IMihomoServiceController.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\AlwaysAvailableMihomoServiceController.cs" Link="ViewModel\AlwaysAvailableMihomoServiceController.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterHeroStatusSelectionGate.cs" Link="ViewModel\MasterHeroStatusSelectionGate.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ObservableObject.cs" Link="ViewModel\ObservableObject.cs" />
     <Compile Include="..\ClashSharp\ViewModel\RelayCommand.cs" Link="ViewModel\RelayCommand.cs" />
     <Compile Include="..\ClashSharp\ViewModel\AsyncRelayCommand.cs" Link="ViewModel\AsyncRelayCommand.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ViewModelLoadExecutor.cs" Link="ViewModel\ViewModelLoadExecutor.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MainWindowViewModel.cs" Link="ViewModel\MainWindowViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IShellLocalization.cs" Link="ViewModel\IShellLocalization.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IShellRestartState.cs" Link="ViewModel\IShellRestartState.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\NoShellRestartState.cs" Link="ViewModel\NoShellRestartState.cs" />
     <Compile Include="..\ClashSharp\ViewModel\CoreVersionDisplayFormatter.cs" Link="ViewModel\CoreVersionDisplayFormatter.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterControlViewModel.cs" Link="ViewModel\MasterControlViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlLocalization.cs" Link="ViewModel\IMasterControlLocalization.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlCore.cs" Link="ViewModel\IMasterControlCore.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlWindowsProxy.cs" Link="ViewModel\IMasterControlWindowsProxy.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlSettings.cs" Link="ViewModel\IMasterControlSettings.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterControlTileAction.cs" Link="ViewModel\MasterControlTileAction.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlActions.cs" Link="ViewModel\IMasterControlActions.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlTakeover.cs" Link="ViewModel\IMasterControlTakeover.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlLog.cs" Link="ViewModel\IMasterControlLog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlTrayStatus.cs" Link="ViewModel\IMasterControlTrayStatus.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterControlRuntimeSnapshot.cs" Link="ViewModel\MasterControlRuntimeSnapshot.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterControlRuntime.cs" Link="ViewModel\IMasterControlRuntime.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterControlRuntimeUnavailableException.cs" Link="ViewModel\MasterControlRuntimeUnavailableException.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\UnavailableMasterControlRuntime.cs" Link="ViewModel\UnavailableMasterControlRuntime.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\UnavailableMasterControlTrayStatus.cs" Link="ViewModel\UnavailableMasterControlTrayStatus.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterControlInfoTileViewModel.cs" Link="ViewModel\MasterControlInfoTileViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterHeroStatusItemViewModel.cs" Link="ViewModel\MasterHeroStatusItemViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterHeroStatusOptionViewModel.cs" Link="ViewModel\MasterHeroStatusOptionViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterHeroStatusSlotViewModel.cs" Link="ViewModel\MasterHeroStatusSlotViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterInfoTileLayoutService.cs" Link="ViewModel\IMasterInfoTileLayoutService.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IMasterHeroStatusLayoutService.cs" Link="ViewModel\IMasterHeroStatusLayoutService.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ProxiesViewModel.cs" Link="ViewModel\ProxiesViewModel.cs" />
-    <Compile Include="..\ClashSharp\ViewModel\DisplayPageViewModels.cs" Link="ViewModel\DisplayPageViewModels.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IProxiesLocalization.cs" Link="ViewModel\IProxiesLocalization.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IProxyNodeCatalog.cs" Link="ViewModel\IProxyNodeCatalog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IProxyLatencyTester.cs" Link="ViewModel\IProxyLatencyTester.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IProxyRuntimeController.cs" Link="ViewModel\IProxyRuntimeController.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\EmptyProxyRuntimeController.cs" Link="ViewModel\EmptyProxyRuntimeController.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IProxiesLog.cs" Link="ViewModel\IProxiesLog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ProxyGroupSelectionRequest.cs" Link="ViewModel\ProxyGroupSelectionRequest.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IModelDisplayMapper.cs" Link="ViewModel\IModelDisplayMapper.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ModelDisplayMapper.cs" Link="ViewModel\ModelDisplayMapper.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ConfigurationProfileDisplay.cs" Link="ViewModel\ConfigurationProfileDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ProfileSubscriptionLinkDisplay.cs" Link="ViewModel\ProfileSubscriptionLinkDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ProxyNodeDisplay.cs" Link="ViewModel\ProxyNodeDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MihomoProxyGroupDisplay.cs" Link="ViewModel\MihomoProxyGroupDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MihomoProviderResourceDisplay.cs" Link="ViewModel\MihomoProviderResourceDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\RulePreviewDisplay.cs" Link="ViewModel\RulePreviewDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IDisplayPageLocalization.cs" Link="ViewModel\IDisplayPageLocalization.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IRuleCatalog.cs" Link="ViewModel\IRuleCatalog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\StatisticsSummary.cs" Link="ViewModel\StatisticsSummary.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IStatisticsStore.cs" Link="ViewModel\IStatisticsStore.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IStatisticsProfiles.cs" Link="ViewModel\IStatisticsProfiles.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IAboutCore.cs" Link="ViewModel\IAboutCore.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IUriLauncher.cs" Link="ViewModel\IUriLauncher.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\RulesViewModel.cs" Link="ViewModel\RulesViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\StatisticsViewModel.cs" Link="ViewModel\StatisticsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\AboutViewModel.cs" Link="ViewModel\AboutViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ConnectionsViewModel.cs" Link="ViewModel\ConnectionsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IConnectionsLocalization.cs" Link="ViewModel\IConnectionsLocalization.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IActiveConnectionClient.cs" Link="ViewModel\IActiveConnectionClient.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IConnectionLog.cs" Link="ViewModel\IConnectionLog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ActiveConnectionDisplayRow.cs" Link="ViewModel\ActiveConnectionDisplayRow.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ProfilesViewModel.cs" Link="ViewModel\ProfilesViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\LinksViewModel.cs" Link="ViewModel\LinksViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\LogsViewModel.cs" Link="ViewModel\LogsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\LogRecordDisplay.cs" Link="ViewModel\LogRecordDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IPageLog.cs" Link="ViewModel\IPageLog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IProfileManagementCatalog.cs" Link="ViewModel\IProfileManagementCatalog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ISubscriptionLinkCatalog.cs" Link="ViewModel\ISubscriptionLinkCatalog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ILogManagementStore.cs" Link="ViewModel\ILogManagementStore.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\LogStorageSnapshot.cs" Link="ViewModel\LogStorageSnapshot.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\LogCleanupEstimate.cs" Link="ViewModel\LogCleanupEstimate.cs" />
   </ItemGroup>
 
 </Project>

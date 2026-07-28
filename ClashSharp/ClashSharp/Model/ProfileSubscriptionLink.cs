@@ -1,14 +1,4 @@
-/*
- * Profile Subscription Link Model
- * Represents one subscription link tracked by Clash#
- *
- * @author: WaterRun
- * @file: Model/ProfileSubscriptionLink.cs
- * @date: 2026-06-15
- */
-
 using System;
-using ClashSharp.Service;
 
 namespace ClashSharp.Model;
 
@@ -32,17 +22,4 @@ public readonly record struct ProfileSubscriptionLink(
     bool IsEnabled,
     int UpdateIntervalHours,
     DateTimeOffset LastUpdatedAt,
-    string Status)
-{
-    /// <summary>Gets the UI-filtered subscription link name.</summary>
-    /// <value>Display name after mainland China UI replacement; never null.</value>
-    public string NameDisplay => MainlandChinaTextDisplayService.Instance.Apply(Name);
-
-    /// <summary>Gets the UI-filtered subscription URI display text.</summary>
-    /// <value>URI display text after mainland China UI replacement; never null.</value>
-    public string UriDisplay => MainlandChinaTextDisplayService.Instance.Apply(Uri);
-
-    /// <summary>Gets the UI-filtered subscription status display text.</summary>
-    /// <value>Status display text after mainland China UI replacement; never null.</value>
-    public string StatusDisplay => MainlandChinaTextDisplayService.Instance.Apply(Status);
-}
+    string Status);

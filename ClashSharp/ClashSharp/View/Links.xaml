@@ -5,6 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Loaded="Page_Loaded"
+    Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
     <Grid Padding="{StaticResource ClashPagePadding}">
@@ -20,12 +22,12 @@
                         <FontIcon Glyph="&#xE710;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="CheckLinksButton" Label="{Binding CheckLinksText}" Command="{Binding CheckLinkCommand}">
+                <AppBarButton x:Name="CheckLinksButton" Label="{Binding CheckLinksText}" Click="CheckLinksButton_Click">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE73E;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="UpdateLinksButton" Label="{Binding UpdateLinksText}" Command="{Binding UpdateLinkCommand}">
+                <AppBarButton x:Name="UpdateLinksButton" Label="{Binding UpdateLinksText}" Click="UpdateLinksButton_Click">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE72C;" />
                     </AppBarButton.Icon>

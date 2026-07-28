@@ -1,3 +1,5 @@
+using ClashSharp.ApplicationModel.Diagnostics;
+
 namespace ClashSharp.ApplicationModel.Supervision;
 
 /// <summary>Calculates bounded supervisor retry delays with an injectable jitter source.</summary>
@@ -50,7 +52,7 @@ public sealed class SupervisorBackoffPolicy
         {
             sample = _jitterSource();
         }
-        catch
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             sample = 0d;
         }

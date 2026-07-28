@@ -1,12 +1,3 @@
-/*
- * Startup Behavior Service
- * Resolves configured startup behavior into a runtime proxy mode
- *
- * @author: WaterRun
- * @file: Service/StartupBehaviorService.cs
- * @date: 2026-06-17
- */
-
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;

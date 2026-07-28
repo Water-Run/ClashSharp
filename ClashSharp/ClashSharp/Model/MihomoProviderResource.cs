@@ -1,15 +1,4 @@
-/*
- * Mihomo Provider Resource Model
- * Represents one runtime provider resource exposed by mihomo
- *
- * @author: WaterRun
- * @file: Model/MihomoProviderResource.cs
- * @date: 2026-06-24
- */
-
 using System;
-using System.Globalization;
-using ClashSharp.Service;
 
 namespace ClashSharp.Model;
 
@@ -26,27 +15,4 @@ public readonly record struct MihomoProviderResource(
     string VehicleType,
     string Behavior,
     int ItemCount,
-    DateTimeOffset? UpdatedAt)
-{
-    /// <summary>Gets UI-filtered provider name.</summary>
-    /// <value>Display name after mainland China UI replacement.</value>
-    public string NameDisplay => MainlandChinaTextDisplayService.Instance.Apply(Name);
-
-    /// <summary>Gets a concise provider type display.</summary>
-    /// <value>Provider type display text.</value>
-    public string TypeDisplay => Kind == MihomoProviderKind.Proxy ? "Proxy Provider" : "Rule Provider";
-
-    /// <summary>Gets provider detail text for the UI.</summary>
-    /// <value>Provider detail text.</value>
-    public string DetailDisplay => Kind == MihomoProviderKind.Proxy
-        ? string.IsNullOrWhiteSpace(VehicleType) ? "Proxy" : VehicleType
-        : string.IsNullOrWhiteSpace(Behavior) ? "Rule" : Behavior;
-
-    /// <summary>Gets a compact item-count display.</summary>
-    /// <value>Item-count display text.</value>
-    public string ItemCountDisplay => ItemCount.ToString("N0", CultureInfo.CurrentCulture);
-
-    /// <summary>Gets update time display text.</summary>
-    /// <value>Update time display text.</value>
-    public string UpdatedAtDisplay => UpdatedAt?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "-";
-}
+    DateTimeOffset? UpdatedAt);
