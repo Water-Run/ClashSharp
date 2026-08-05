@@ -23,6 +23,7 @@ internal static class ProfilesPageComposition
 
         return new Dependencies(
             viewModel,
+            localization.GetString,
             () => logStorage.AppendLog(
                 "Warning",
                 "Profiles",
@@ -35,14 +36,18 @@ internal static class ProfilesPageComposition
     {
         public Dependencies(
             ProfilesViewModel viewModel,
+            Func<string, string> getString,
             Action reportFilePickerUnavailable)
         {
             ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            GetString = getString ?? throw new ArgumentNullException(nameof(getString));
             ReportFilePickerUnavailable = reportFilePickerUnavailable
                 ?? throw new ArgumentNullException(nameof(reportFilePickerUnavailable));
         }
 
         public ProfilesViewModel ViewModel { get; }
+
+        public Func<string, string> GetString { get; }
 
         public Action ReportFilePickerUnavailable { get; }
     }

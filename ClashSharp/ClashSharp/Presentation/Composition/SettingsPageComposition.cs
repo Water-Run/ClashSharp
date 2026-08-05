@@ -1,8 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Hosting.Compatibility;
@@ -42,9 +43,6 @@ internal interface ISettingsPageOperations
         DataPackageExportScope scope,
         CancellationToken cancellationToken);
 
-    /// <summary>Re-applies presentation settings after a successful import.</summary>
-    void ApplyImportedPresentationSettings();
-
     /// <summary>Reports an unexpected page-boundary failure through the application diagnostic sink.</summary>
     Task ReportUnexpectedErrorAsync(
         string operationName,
@@ -68,6 +66,8 @@ internal static class SettingsPageComposition
         LogStorageService logStorage = LogStorageService.Instance;
         CoreConfigurationService coreConfiguration = CoreConfigurationService.Instance;
         MihomoCoreService mihomoCore = MihomoCoreService.Instance;
+        ApplicationActionService applicationActions = ApplicationActionService.Instance;
+        ApplicationLifecycleService applicationLifecycle = ApplicationLifecycleService.Instance;
         IApplicationErrorSink errorSink = ApplicationErrorSink.CreateDefault();
         SettingsRuntimeMutationAdapter runtimeMutations = SettingsRuntimeMutationAdapter.CreateDefault();
         StartupRestoreFallbackService startupRestoreFallback = StartupRestoreFallbackService.Instance;
@@ -92,8 +92,8 @@ internal static class SettingsPageComposition
                     mihomoCore.BinaryPath);
             },
             errorSink,
-            ApplicationLifecycleService.Instance.ExitApplication,
-            ApplicationLifecycleService.Instance.RestartApplication,
+            applicationLifecycle.ExitApplication,
+            applicationLifecycle.RestartApplication,
             () => startupRestoreFallback.GetStatus().IsRegistered,
             startupRestoreFallback.Register,
             startupRestoreFallback.Uninstall,
@@ -101,21 +101,27 @@ internal static class SettingsPageComposition
             diagnosticsViewModel,
             new MihomoServiceControllerAdapter(MihomoServiceManager.Instance),
             AppThemeService.ApplyAccentColor,
-            resetAllSettings: AppDataMaintenanceService.ResetAllSettings,
-            clearAllDataAsync: AppDataMaintenanceService.ClearAllDataAsync,
+            clearAllDataAsync: applicationActions.ClearAllDataAndRestartAsync,
             checkStartupConflictsAsync: StartupConflictDetectionService.Instance.CheckConflictsAsync,
             isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending,
             notifyConnectionTestTimeout: NotificationService.Instance.NotifyConnectionTestTimeout,
             appendLog: logStorage.AppendLog,
             restartConnectionSamplingAsync: runtimeMutations.RestartConnectionSamplingAsync,
             applyLaunchAtStartupAsync: runtimeMutations.ApplyLaunchAtStartupAsync,
-            supportedLanguages: LocalizationService.GetSupportedLanguages().ToArray());
+            supportedLanguages: LocalizationService.GetSupportedLanguages().ToArray(),
+            applyNetworkSettingsAsync: runtimeMutations.ApplyNetworkSettingsAsync,
+            requestResetRecoveryRestart: () =>
+                applicationLifecycle.RequestRestart("settings-reset-recovery"),
+            beginDestructiveRuntimeMutationAsync:
+                runtimeMutations.BeginDestructiveMutationAsync);
 
         SettingsPageOperations operations = new(
             settings,
             localization,
             logStorage,
             ClashDataPackageService.Instance,
+            runtimeMutations,
+            applicationLifecycle,
             errorSink);
 
         return new SettingsPageDependencies(
@@ -136,6 +142,8 @@ internal sealed class SettingsPageOperations(
     LocalizationService localization,
     LogStorageService logStorage,
     ClashDataPackageService dataPackages,
+    SettingsRuntimeMutationAdapter runtimeMutations,
+    ApplicationLifecycleService applicationLifecycle,
     IApplicationErrorSink errorSink) : ISettingsPageOperations
 {
     /// <inheritdoc />
@@ -148,8 +156,13 @@ internal sealed class SettingsPageOperations(
 
         try
         {
-            string? scopeText = XDocument.Load(packagePath).Root?.Attribute("Scope")?.Value;
+            string? scopeText = ClashDataPackageService
+                .LoadBoundedPackage(packagePath)
+                .Root?
+                .Attribute("Scope")?
+                .Value;
             return Enum.TryParse(scopeText, out ClashDataPackageScope scope)
+                && Enum.IsDefined(scope)
                 ? scope
                 : null;
         }
@@ -160,9 +173,80 @@ internal sealed class SettingsPageOperations(
     }
 
     /// <inheritdoc />
-    public Task ImportDataPackageAsync(string packagePath, CancellationToken cancellationToken)
+    public async Task ImportDataPackageAsync(string packagePath, CancellationToken cancellationToken)
     {
-        return dataPackages.ImportAsync(packagePath, cancellationToken);
+        await using ISettingsDestructiveRuntimeScope runtimeMutation =
+            await runtimeMutations.BeginDestructiveMutationAsync(cancellationToken);
+        ExternalSettingsSnapshot baseline = CaptureExternalSettingsSnapshot();
+        ISettingsDataPackageTransactionReceipt? receipt = null;
+        bool activationCompleted = false;
+        try
+        {
+            receipt = await runtimeMutation.BeginImportAsync(packagePath, cancellationToken)
+                .ConfigureAwait(false);
+            LegacyPageServiceBridge.Profiles.ResetAfterDataDeletion();
+            ExternalSettingsSnapshot imported = CaptureExternalSettingsSnapshot();
+            await ApplyExternalSettingsSnapshotAsync(imported, runtimeMutation)
+                .ConfigureAwait(false);
+            activationCompleted = true;
+            await CompleteReceiptWithRetryAsync(
+                receipt.CommitAsync,
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception importActivationFailure)
+            when (!ExceptionGraphClassifier.IsProcessFatal(importActivationFailure))
+        {
+            if (receipt is null || activationCompleted)
+            {
+                ExceptionDispatchInfo.Capture(importActivationFailure).Throw();
+                throw;
+            }
+
+            Exception? rollbackFailure = null;
+            try
+            {
+                await CompleteReceiptWithRetryAsync(
+                    receipt.RollbackAsync,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                rollbackFailure = exception;
+            }
+
+            Exception? compensationFailure = null;
+            if (rollbackFailure is null)
+            {
+                try
+                {
+                    LegacyPageServiceBridge.Profiles.ResetAfterDataDeletion();
+                    await ApplyExternalSettingsSnapshotAsync(baseline, runtimeMutation)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+                {
+                    compensationFailure = exception;
+                }
+            }
+
+            if (rollbackFailure is not null || compensationFailure is not null)
+            {
+                throw CreateImportRecoveryFailure(
+                    importActivationFailure,
+                    rollbackFailure,
+                    compensationFailure);
+            }
+
+            ExceptionDispatchInfo.Capture(importActivationFailure).Throw();
+            throw;
+        }
+        finally
+        {
+            if (receipt is not null)
+            {
+                await receipt.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -188,12 +272,20 @@ internal sealed class SettingsPageOperations(
         };
     }
 
-    /// <inheritdoc />
-    public void ApplyImportedPresentationSettings()
+    private ExternalSettingsSnapshot CaptureExternalSettingsSnapshot()
     {
-        localization.CurrentLanguage = settings.DisplayLanguage;
-        AppThemeService.Apply(settings.AppThemeMode);
-        AppThemeService.ApplyAccentColor(settings.AppAccentColorMode, settings.AppAccentColorValue);
+        return new ExternalSettingsSnapshot(
+            settings.DisplayLanguage,
+            settings.AppThemeMode,
+            settings.AppAccentColorMode,
+            settings.AppAccentColorValue,
+            settings.LaunchAtStartupEnabled,
+            settings.ConnectionSamplingEnabled,
+            settings.ConnectionSamplingIntervalSeconds,
+            settings.CurrentMode,
+            settings.ActiveProfileId,
+            settings.TransparentProxyEnabled,
+            settings.MixedPort);
     }
 
     /// <inheritdoc />
@@ -214,4 +306,151 @@ internal sealed class SettingsPageOperations(
             () => logStorage.ExportDatabase(destinationPath),
             cancellationToken);
     }
+
+    private async Task ApplyExternalSettingsSnapshotAsync(
+        ExternalSettingsSnapshot snapshot,
+        ISettingsDestructiveRuntimeScope runtimeMutation)
+    {
+        List<Exception> failures = [];
+        CaptureFailure(() => localization.CurrentLanguage = snapshot.DisplayLanguage, failures);
+        CaptureFailure(() => AppThemeService.Apply(snapshot.AppThemeMode), failures);
+        CaptureFailure(
+            () => AppThemeService.ApplyAccentColor(
+                snapshot.AppAccentColorMode,
+                snapshot.AppAccentColorValue),
+            failures);
+        await CaptureFailureAsync(
+            () => runtimeMutation.ApplyLaunchAtStartupAsync(
+                snapshot.LaunchAtStartupEnabled,
+                CancellationToken.None),
+            failures).ConfigureAwait(false);
+        await CaptureFailureAsync(
+            () => runtimeMutation.RestartConnectionSamplingAsync(CancellationToken.None),
+            failures).ConfigureAwait(false);
+        await CaptureFailureAsync(
+            () => runtimeMutation.ApplyNetworkSettingsAsync(
+                snapshot.TransparentProxyEnabled,
+                snapshot.MixedPort,
+                CancellationToken.None),
+            failures).ConfigureAwait(false);
+        CaptureFailure(
+            () =>
+            {
+                if (CaptureExternalSettingsSnapshot() != snapshot)
+                {
+                    throw new InvalidOperationException(
+                        "A settings import participant changed the durable imported generation.");
+                }
+            },
+            failures);
+
+        if (failures.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
+
+        if (failures.Count > 1)
+        {
+            throw new AggregateException(
+                "One or more imported settings participants failed to converge.",
+                failures);
+        }
+    }
+
+    private static void CaptureFailure(Action action, ICollection<Exception> failures)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            failures.Add(exception);
+        }
+    }
+
+    private static async Task CaptureFailureAsync(
+        Func<Task> action,
+        ICollection<Exception> failures)
+    {
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            failures.Add(exception);
+        }
+    }
+
+    private static async Task CompleteReceiptWithRetryAsync(
+        Func<CancellationToken, Task> completion,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await completion(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception firstFailure) when (!ExceptionGraphClassifier.IsProcessFatal(firstFailure))
+        {
+            try
+            {
+                await completion(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception retryFailure) when (!ExceptionGraphClassifier.IsProcessFatal(retryFailure))
+            {
+                throw new AggregateException(
+                    "The retained data transaction completion could not be finalized after retry.",
+                    firstFailure,
+                    retryFailure);
+            }
+        }
+    }
+
+    private Exception CreateImportRecoveryFailure(
+        Exception activationFailure,
+        Exception? rollbackFailure,
+        Exception? compensationFailure)
+    {
+        List<Exception> failures = [activationFailure];
+        if (rollbackFailure is not null)
+        {
+            failures.Add(rollbackFailure);
+        }
+
+        if (compensationFailure is not null)
+        {
+            failures.Add(compensationFailure);
+        }
+
+        try
+        {
+            if (!applicationLifecycle.RequestRestart("settings-import-recovery"))
+            {
+                failures.Add(new InvalidOperationException(
+                    "The mandatory restart request was rejected after settings import recovery failed."));
+            }
+        }
+        catch (Exception restartFailure) when (!ExceptionGraphClassifier.IsProcessFatal(restartFailure))
+        {
+            failures.Add(restartFailure);
+        }
+
+        return new AggregateException(
+            "Settings import could not restore a consistent durable and external generation; restart recovery is required.",
+            failures);
+    }
+
+    private readonly record struct ExternalSettingsSnapshot(
+        AppLanguage DisplayLanguage,
+        AppThemeMode AppThemeMode,
+        AppAccentColorMode AppAccentColorMode,
+        string AppAccentColorValue,
+        bool LaunchAtStartupEnabled,
+        bool ConnectionSamplingEnabled,
+        int ConnectionSamplingIntervalSeconds,
+        ClashSharpMode CurrentMode,
+        string ActiveProfileId,
+        bool TransparentProxyEnabled,
+        int MixedPort);
 }

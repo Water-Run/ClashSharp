@@ -18,7 +18,9 @@ internal static class ProcessProbeProgram
         {
             "emit" => await EmitAsync(args),
             "arguments" => await WriteArgumentsAsync(args),
-            "-d" => await EmitCoreStartupFailureAsync(),
+            "environment" => await WriteEnvironmentAsync(args),
+            "-d" => await RunCoreProbeAsync(args),
+            "-v" => await SpawnChildAsync(),
             "spawn-child" => await SpawnChildAsync(),
             "child-hang" => await HangAsync("child-ready"),
             "hang" => await HangAsync("root-ready"),
@@ -38,16 +40,7 @@ internal static class ProcessProbeProgram
 
     private static async Task<int> SpawnChildAsync()
     {
-        string assemblyPath = Assembly.GetExecutingAssembly().Location;
-        ProcessStartInfo startInfo = new()
-        {
-            FileName = "dotnet",
-            UseShellExecute = false,
-        };
-        startInfo.ArgumentList.Add(assemblyPath);
-        startInfo.ArgumentList.Add("child-hang");
-        Process child = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("The process probe child could not start.");
+        using Process child = StartChild();
         Console.WriteLine($"child:{child.Id.ToString(CultureInfo.InvariantCulture)}");
         await Console.Out.FlushAsync();
         await Task.Delay(Timeout.InfiniteTimeSpan);
@@ -67,12 +60,89 @@ internal static class ProcessProbeProgram
         return 0;
     }
 
+    private static async Task<int> WriteEnvironmentAsync(IReadOnlyList<string> args)
+    {
+        for (int index = 1; index < args.Count; index++)
+        {
+            string value = Environment.GetEnvironmentVariable(args[index]) ?? "<missing>";
+            string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
+            await Console.Out.WriteLineAsync("env:" + encoded);
+        }
+
+        await Console.Out.FlushAsync();
+        return 0;
+    }
+
     private static async Task<int> EmitCoreStartupFailureAsync()
     {
         Task standardOutput = WriteCoreFailureStreamAsync(Console.Out, "core-out");
         Task standardError = WriteCoreFailureStreamAsync(Console.Error, "core-err");
         await Task.WhenAll(standardOutput, standardError);
         return 23;
+    }
+
+    private static async Task<int> RunCoreProbeAsync(IReadOnlyList<string> args)
+    {
+        int configArgumentIndex = -1;
+        for (int index = 0; index < args.Count; index++)
+        {
+            if (string.Equals(args[index], "-f", StringComparison.Ordinal))
+            {
+                configArgumentIndex = index;
+                break;
+            }
+        }
+
+        if (configArgumentIndex >= 0 && configArgumentIndex + 1 < args.Count)
+        {
+            string configuration = await File.ReadAllTextAsync(args[configArgumentIndex + 1]);
+            if (configuration.Contains("process-probe: delayed-exit", StringComparison.Ordinal))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(300));
+                return 42;
+            }
+
+            if (configuration.Contains("process-probe: spawn-child", StringComparison.Ordinal))
+            {
+                using Process child = StartChild();
+                string childPath = Path.Combine(
+                    Path.GetDirectoryName(args[configArgumentIndex + 1])!,
+                    "child.pid");
+                await File.WriteAllTextAsync(
+                    childPath,
+                    child.Id.ToString(CultureInfo.InvariantCulture));
+                if (configuration.Contains("startup-failure", StringComparison.Ordinal))
+                {
+                    return 23;
+                }
+
+                if (configuration.Contains("then-exit", StringComparison.Ordinal))
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(300));
+                    return 42;
+                }
+
+                await Task.Delay(Timeout.InfiniteTimeSpan);
+                GC.KeepAlive(child);
+                return 0;
+            }
+        }
+
+        return await EmitCoreStartupFailureAsync();
+    }
+
+    private static Process StartChild()
+    {
+        string assemblyPath = Assembly.GetExecutingAssembly().Location;
+        ProcessStartInfo startInfo = new()
+        {
+            FileName = "dotnet",
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add(assemblyPath);
+        startInfo.ArgumentList.Add("child-hang");
+        return Process.Start(startInfo)
+            ?? throw new InvalidOperationException("The process probe child could not start.");
     }
 
     private static async Task WriteCoreFailureStreamAsync(TextWriter writer, string prefix)

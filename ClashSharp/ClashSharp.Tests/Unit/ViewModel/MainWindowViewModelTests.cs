@@ -20,6 +20,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Links", viewModel.LinksText);
         Assert.Equal("Rules", viewModel.RulesText);
         Assert.Equal("Triggers", viewModel.TriggersText);
+        Assert.Equal("Connections", viewModel.ConnectionsText);
         Assert.Equal("Statistics", viewModel.StatisticsText);
         Assert.Equal("About", viewModel.AboutText);
         Assert.Equal("Settings", viewModel.SettingsText);
@@ -107,6 +108,7 @@ public sealed class MainWindowViewModelTests
             ["Nav.Links"] = "Links",
             ["Nav.Rules"] = "Rules",
             ["Nav.Triggers"] = "Triggers",
+            ["Nav.Connections"] = "Connections",
             ["Nav.Statistics"] = "Statistics",
             ["Nav.About"] = "About",
             ["Nav.Settings"] = "Settings",

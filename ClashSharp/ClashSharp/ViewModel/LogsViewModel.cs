@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net.WebSockets;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.Diagnostics;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -19,6 +24,10 @@ internal sealed class LogsViewModel : ObservableObject
 {
     private const int VisibleLogLimit = 1000;
 
+    private const int ServiceLogIdentityLimit = 1024;
+
+    private static readonly TimeSpan RuntimeLogReconnectDelay = TimeSpan.FromSeconds(1);
+
     /// <summary>Localization resolver used by visible labels.</summary>
     private readonly Func<string, string> _getString;
 
@@ -27,6 +36,16 @@ internal sealed class LogsViewModel : ObservableObject
 
     /// <summary>Reports unexpected log interaction failures.</summary>
     private readonly IApplicationErrorSink _errorSink;
+
+    /// <summary>Optional page-visible mihomo log stream.</summary>
+    private readonly Func<CancellationToken, IAsyncEnumerable<(string Level, string Message)>>?
+        _streamRuntimeLogs;
+
+    /// <summary>Optional bounded, already-redacted Service-host log snapshot reader.</summary>
+    private readonly Func<CancellationToken, Task<IReadOnlyList<string>>>? _readServiceHostLogs;
+
+    /// <summary>Bounded, non-persistent runtime log window owned by this page view model.</summary>
+    private readonly List<LogRecord> _liveRuntimeLogs = [];
 
     /// <summary>Backing field for <see cref="StorageUsageText"/>.</summary>
     private string _storageUsageText = string.Empty;
@@ -54,15 +73,22 @@ internal sealed class LogsViewModel : ObservableObject
     /// <param name="getString">Localization resolver. Must not be null.</param>
     /// <param name="logStorage">Log storage service. Must not be null.</param>
     /// <param name="errorSink">Unexpected error sink. Must not be null.</param>
+    /// <param name="streamRuntimeLogs">
+    /// Optional live mihomo log source. The page owns its cancellation and reconnect lifecycle.
+    /// </param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public LogsViewModel(
         Func<string, string> getString,
         ILogManagementStore logStorage,
-        IApplicationErrorSink errorSink)
+        IApplicationErrorSink errorSink,
+        Func<CancellationToken, IAsyncEnumerable<(string Level, string Message)>>? streamRuntimeLogs = null,
+        Func<CancellationToken, Task<IReadOnlyList<string>>>? readServiceHostLogs = null)
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
+        _streamRuntimeLogs = streamRuntimeLogs;
+        _readServiceHostLogs = readServiceHostLogs;
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -182,6 +208,101 @@ internal sealed class LogsViewModel : ObservableObject
             cancellationToken);
     }
 
+    /// <summary>Consumes live mihomo logs until the owning page is unloaded.</summary>
+    /// <param name="cancellationToken">Cancels connection, reconnect delay, and message reads.</param>
+    /// <returns>A task that normally completes only after cancellation.</returns>
+    /// <remarks>
+    /// Runtime logs are intentionally kept in a bounded in-memory window. Persisting an unbounded
+    /// core stream would turn the diagnostic database into a high-volume packet-adjacent sink.
+    /// </remarks>
+    public async Task WatchRuntimeLogsAsync(CancellationToken cancellationToken)
+    {
+        List<Task> watchers = [];
+        if (_streamRuntimeLogs is not null)
+        {
+            watchers.Add(WatchCoreLogsAsync(cancellationToken));
+        }
+
+        if (_readServiceHostLogs is not null)
+        {
+            watchers.Add(WatchServiceHostLogsAsync(cancellationToken));
+        }
+
+        if (watchers.Count == 0)
+        {
+            return;
+        }
+
+        await Task.WhenAll(watchers);
+    }
+
+    private async Task WatchCoreLogsAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await foreach ((string level, string message) in
+                    _streamRuntimeLogs!(cancellationToken).WithCancellation(cancellationToken))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    AppendRuntimeLog("Core", level, message);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (IsRecoverableRuntimeStreamFailure(exception))
+            {
+                // A stopped/restarting core is normal. Keep the last stable window and reconnect.
+            }
+
+            await Task.Delay(RuntimeLogReconnectDelay, cancellationToken);
+        }
+    }
+
+    private async Task WatchServiceHostLogsAsync(CancellationToken cancellationToken)
+    {
+        HashSet<string> seen = new(StringComparer.Ordinal);
+        Queue<string> order = new(ServiceLogIdentityLimit);
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                IReadOnlyList<string> snapshot = await _readServiceHostLogs!(cancellationToken);
+                foreach (string entry in snapshot)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (string.IsNullOrWhiteSpace(entry) || !seen.Add(entry))
+                    {
+                        continue;
+                    }
+
+                    order.Enqueue(entry);
+                    if (order.Count > ServiceLogIdentityLimit)
+                    {
+                        _ = seen.Remove(order.Dequeue());
+                    }
+
+                    AppendRuntimeLog("Service", "Info", entry);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (IsRecoverableRuntimeStreamFailure(exception))
+            {
+                // A missing/stopped Service is a normal App-owned runtime state.
+            }
+
+            await Task.Delay(RuntimeLogReconnectDelay, cancellationToken);
+        }
+    }
+
     private LogLoadRequest CaptureLoadRequest()
     {
         return new LogLoadRequest(
@@ -200,7 +321,7 @@ internal sealed class LogsViewModel : ObservableObject
                 request.CategoryFilter,
                 request.LevelFilter,
                 request.SearchText),
-            request.CategoryFilter);
+            request);
     }
 
     private void ApplyLoadSnapshot(LogLoadSnapshot snapshot)
@@ -213,9 +334,101 @@ internal sealed class LogsViewModel : ObservableObject
             summary.LogCount,
             summary.ConnectionCount);
         RefreshLevelFilterOptions();
-        RefreshCategoryFilterOptions(snapshot.Sources, snapshot.CategoryFilter);
-        _recentLogs = snapshot.Logs;
+        IReadOnlyList<string> sources = snapshot.Sources
+            .Concat(_liveRuntimeLogs.Select(static log => log.Source))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        RefreshCategoryFilterOptions(sources, snapshot.Request.CategoryFilter);
+        _recentLogs = MergeVisibleRuntimeLogs(snapshot.Logs, snapshot.Request);
         OnPropertyChanged(nameof(RecentLogs));
+    }
+
+    private void AppendRuntimeLog(string source, string level, string message)
+    {
+        string normalizedSource = string.IsNullOrWhiteSpace(source) ? "Core" : source.Trim();
+        string normalizedLevel = string.IsNullOrWhiteSpace(level) ? "Info" : level.Trim();
+        string normalizedMessage = string.IsNullOrWhiteSpace(message)
+            ? string.Empty
+            : RuntimeLogText.Normalize(message);
+        if (normalizedMessage.Length == 0)
+        {
+            return;
+        }
+
+        LogRecord record = new(
+            DateTimeOffset.UtcNow,
+            normalizedLevel,
+            normalizedSource,
+            normalizedMessage,
+            string.Empty);
+        _liveRuntimeLogs.Insert(0, record);
+        if (_liveRuntimeLogs.Count > VisibleLogLimit)
+        {
+            _liveRuntimeLogs.RemoveRange(VisibleLogLimit, _liveRuntimeLogs.Count - VisibleLogLimit);
+        }
+
+        LogLoadRequest currentRequest = CaptureLoadRequest();
+        if (Matches(record, currentRequest))
+        {
+            _recentLogs = _recentLogs
+                .Prepend(record)
+                .OrderByDescending(static item => item.CreatedAt)
+                .Take(VisibleLogLimit)
+                .ToList();
+            OnPropertyChanged(nameof(RecentLogs));
+        }
+
+        if (!_categoryFilterValues.Values.Contains(normalizedSource, StringComparer.Ordinal))
+        {
+            List<string> sources = _categoryFilterValues.Values
+                .OfType<string>()
+                .Append(normalizedSource)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            RefreshCategoryFilterOptions(sources, currentRequest.CategoryFilter);
+        }
+    }
+
+    private IReadOnlyList<LogRecord> MergeVisibleRuntimeLogs(
+        IReadOnlyList<LogRecord> storedLogs,
+        LogLoadRequest request)
+    {
+        return storedLogs
+            .Concat(_liveRuntimeLogs.Where(record => Matches(record, request)))
+            .OrderByDescending(static record => record.CreatedAt)
+            .Take(VisibleLogLimit)
+            .ToList();
+    }
+
+    private static bool Matches(LogRecord record, LogLoadRequest request)
+    {
+        if (request.CategoryFilter is not null
+            && !StringComparer.Ordinal.Equals(record.Source, request.CategoryFilter))
+        {
+            return false;
+        }
+
+        if (request.LevelFilter is not null
+            && !StringComparer.Ordinal.Equals(record.Level, request.LevelFilter))
+        {
+            return false;
+        }
+
+        return string.IsNullOrWhiteSpace(request.SearchText)
+            || record.Source.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase)
+            || record.Message.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase)
+            || record.Detail.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRecoverableRuntimeStreamFailure(Exception exception)
+    {
+        return exception is HttpRequestException
+            or WebSocketException
+            or IOException
+            or JsonException
+            or InvalidOperationException
+            or TimeoutException
+            or UnauthorizedAccessException;
     }
 
     public void ApplySearchText(string? searchText)
@@ -539,6 +752,9 @@ internal sealed class LogsViewModel : ObservableObject
             "Profiles" => _getString("Nav.Profiles"),
             "Links" => _getString("Nav.Links"),
             "Connections" => _getString("Nav.Connections"),
+            "Core" => _getString("Logs.Source.Core"),
+            "Service" => _getString("Logs.Source.Service"),
+            "Mihomo" => _getString("About.Mihomo.Title"),
             "MihomoService" => _getString("About.Mihomo.Title"),
             "StartupRestoreFallback" => _getString("Settings.StartupRestoreFallback.Title"),
             _ => source,
@@ -585,5 +801,5 @@ internal sealed class LogsViewModel : ObservableObject
         LogStorageSnapshot Summary,
         IReadOnlyList<string> Sources,
         IReadOnlyList<LogRecord> Logs,
-        string? CategoryFilter);
+        LogLoadRequest Request);
 }

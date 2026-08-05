@@ -145,15 +145,28 @@ internal static class StartupConflictDialogPresenter
             Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
             TextWrapping = TextWrapping.Wrap,
         });
+        string initialStatus = getString(issue.HasRepairAction
+            ? "StartupConflict.Status.Ready"
+            : "StartupConflict.Status.ManualReview");
+        if (RuntimeFailureDiagnostics.IsStableCode(issue.DiagnosticCode))
+        {
+            initialStatus += $" [{issue.DiagnosticCode}]";
+        }
+
         TextBlock statusText = new()
         {
-            Text = getString("StartupConflict.Status.Ready"),
+            Text = initialStatus,
             Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
             Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
             TextWrapping = TextWrapping.Wrap,
         };
         textPanel.Children.Add(statusText);
         row.Children.Add(textPanel);
+
+        if (!issue.HasRepairAction)
+        {
+            return row;
+        }
 
         StackPanel actionPanel = new()
         {

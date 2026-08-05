@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
@@ -66,11 +67,21 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Callback invoked when the display style changes.</summary>
     private readonly Action<AppThemeMode> _applyTheme;
 
+    /// <summary>Callback invoked when the application accent color changes.</summary>
+    private readonly Action<AppAccentColorMode, string> _applyAccentColor;
+
     /// <summary>Callback invoked when launch-at-startup changes.</summary>
     private readonly Func<bool, CancellationToken, Task> _applyLaunchAtStartupAsync;
 
     /// <summary>Callback invoked when background connection sampling settings change.</summary>
     private readonly Func<CancellationToken, Task> _restartConnectionSamplingAsync;
+
+    /// <summary>Applies requested TUN and mixed-port values through the verified runtime transaction.</summary>
+    private readonly Func<bool, int, CancellationToken, Task> _applyNetworkSettingsAsync;
+
+    /// <summary>Drains process-wide mutations for full settings commit and compensation.</summary>
+    private readonly Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>
+        _beginDestructiveRuntimeMutationAsync;
 
     private bool _appliedLaunchAtStartup;
 
@@ -81,6 +92,21 @@ internal sealed class SettingsViewModel : ObservableObject
     private int _appliedConnectionSamplingIntervalSeconds;
 
     private int _connectionSamplingRevision;
+
+    private bool _appliedTransparentProxyEnabled;
+
+    private int _appliedMixedPort;
+
+    private int _networkSettingsRevision;
+
+    private int _appliedNetworkSettingsRevision;
+
+    private readonly SemaphoreSlim _networkSettingsGate = new(1, 1);
+
+    /// <summary>Serializes full reset commit points within this view model.</summary>
+    private readonly SemaphoreSlim _resetSettingsGate = new(1, 1);
+
+    private Task _networkSettingsRequeueTask = Task.CompletedTask;
 
     /// <summary>Localization resolver used by bindable settings labels.</summary>
     private readonly Func<string, string> _getString;
@@ -103,12 +129,18 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Callback that resets persisted settings.</summary>
     private readonly Action _resetAllSettings;
 
+    /// <summary>Starts a reset generation while retaining the complete previous settings snapshot.</summary>
+    private readonly Func<ISettingsResetTransactionReceipt> _beginResetSettings;
+
     /// <summary>Callback that clears all local application data.</summary>
     private readonly Func<CancellationToken, Task> _clearAllDataAsync;
 
     private readonly Action _exitApplication;
 
     private readonly Action _restartApplication;
+
+    /// <summary>Requests the mandatory process restart used after reset compensation cannot converge.</summary>
+    private readonly Func<bool> _requestResetRecoveryRestart;
 
     private readonly Func<bool> _isStartupRestoreFallbackRegistered;
 
@@ -329,7 +361,12 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
         Func<CancellationToken, Task>? clearAllDataAsync = null,
-        IReadOnlyList<(AppLanguage Language, string DisplayName)>? supportedLanguages = null)
+        IReadOnlyList<(AppLanguage Language, string DisplayName)>? supportedLanguages = null,
+        Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync = null,
+        Func<bool>? requestResetRecoveryRestart = null,
+        Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
+            beginDestructiveRuntimeMutationAsync = null,
+        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null)
         : this(
             settings,
             applyLanguage,
@@ -357,7 +394,11 @@ internal sealed class SettingsViewModel : ObservableObject
             isStartupRestoreFallbackRegistered,
             registerStartupRestoreFallback,
             uninstallStartupRestoreFallback,
-            supportedLanguages)
+            supportedLanguages,
+            applyNetworkSettingsAsync,
+            requestResetRecoveryRestart,
+            beginDestructiveRuntimeMutationAsync,
+            beginResetSettings)
     {
     }
 
@@ -389,12 +430,18 @@ internal sealed class SettingsViewModel : ObservableObject
         Func<bool>? isStartupRestoreFallbackRegistered,
         Action? registerStartupRestoreFallback,
         Action? uninstallStartupRestoreFallback,
-        IReadOnlyList<(AppLanguage Language, string DisplayName)>? supportedLanguages)
+        IReadOnlyList<(AppLanguage Language, string DisplayName)>? supportedLanguages,
+        Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync,
+        Func<bool>? requestResetRecoveryRestart,
+        Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
+            beginDestructiveRuntimeMutationAsync = null,
+        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
         _applyTheme = applyTheme ?? throw new ArgumentNullException(nameof(applyTheme));
+        _applyAccentColor = applyAccentColor ?? ((_, _) => { });
         ArgumentNullException.ThrowIfNull(applyLaunchAtStartup);
         ArgumentNullException.ThrowIfNull(restartConnectionSampling);
         _applyLaunchAtStartupAsync = applyLaunchAtStartupAsync ?? ((isEnabled, cancellationToken) =>
@@ -409,6 +456,43 @@ internal sealed class SettingsViewModel : ObservableObject
             restartConnectionSampling();
             return Task.CompletedTask;
         });
+        _applyNetworkSettingsAsync = applyNetworkSettingsAsync
+            ?? ((transparentProxyEnabled, mixedPort, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                settings.TransparentProxyEnabled = transparentProxyEnabled;
+                settings.MixedPort = mixedPort;
+                return Task.CompletedTask;
+            });
+        _resetAllSettings = resetAllSettings ?? (() => { });
+        _beginResetSettings = beginResetSettings
+            ?? new Func<ISettingsResetTransactionReceipt>(
+                () => new LegacySettingsResetTransactionReceipt(_resetAllSettings));
+        _beginDestructiveRuntimeMutationAsync = beginDestructiveRuntimeMutationAsync
+            ?? (cancellationToken =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return ValueTask.FromResult<ISettingsDestructiveRuntimeScope>(
+                    new PassthroughDestructiveRuntimeScope(
+                        _applyLaunchAtStartupAsync,
+                        _restartConnectionSamplingAsync,
+                        _applyNetworkSettingsAsync,
+                        () => _beginResetSettings(),
+                        snapshot =>
+                        {
+                            settings.DisplayLanguage = snapshot.DisplayLanguage;
+                            settings.AppThemeMode = snapshot.AppThemeMode;
+                            settings.AppAccentColorMode = snapshot.AppAccentColorMode;
+                            settings.AppAccentColorValue = snapshot.AppAccentColorValue;
+                            settings.LaunchAtStartupEnabled = snapshot.LaunchAtStartupEnabled;
+                            settings.ConnectionSamplingEnabled = snapshot.ConnectionSamplingEnabled;
+                            settings.ConnectionSamplingIntervalSeconds = snapshot.ConnectionSamplingIntervalSeconds;
+                            settings.CurrentMode = snapshot.CurrentMode;
+                            settings.ActiveProfileId = snapshot.ActiveProfileId;
+                            settings.TransparentProxyEnabled = snapshot.TransparentProxyEnabled;
+                            settings.MixedPort = snapshot.MixedPort;
+                        }));
+            });
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
 #if UNIT_TESTS
         supportedLanguages ??= TestSupportedLanguages;
@@ -419,7 +503,6 @@ internal sealed class SettingsViewModel : ObservableObject
         _testConnectionAsync = testConnectionAsync ?? throw new ArgumentNullException(nameof(testConnectionAsync));
         _notifyConnectionTestTimeout = notifyConnectionTestTimeout ?? (_ => { });
         _appendLog = appendLog ?? ((_, _, _, _) => { });
-        _resetAllSettings = resetAllSettings ?? (() => { });
         _clearAllDataAsync = clearAllDataAsync ?? (cancellationToken =>
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -428,6 +511,11 @@ internal sealed class SettingsViewModel : ObservableObject
         });
         _exitApplication = exitApplication ?? throw new ArgumentNullException(nameof(exitApplication));
         _restartApplication = restartApplication ?? throw new ArgumentNullException(nameof(restartApplication));
+        _requestResetRecoveryRestart = requestResetRecoveryRestart ?? (() =>
+        {
+            _restartApplication();
+            return true;
+        });
         _isStartupRestoreFallbackRegistered = isStartupRestoreFallbackRegistered
             ?? throw new ArgumentNullException(nameof(isStartupRestoreFallbackRegistered));
         _registerStartupRestoreFallback = registerStartupRestoreFallback
@@ -448,14 +536,6 @@ internal sealed class SettingsViewModel : ObservableObject
             ExecuteWindowsDiagnosticCommandAsync,
             errorSink,
             operationName: "settings-windows-diagnostic");
-        DeployMihomoServiceCommand = new AsyncRelayCommand(
-            DeployMihomoServiceAsync,
-            errorSink,
-            operationName: "settings-deploy-mihomo-service");
-        UninstallMihomoServiceCommand = new AsyncRelayCommand(
-            UninstallMihomoServiceAsync,
-            errorSink,
-            operationName: "settings-uninstall-mihomo-service");
         RefreshMihomoServiceStatusCommand = new AsyncRelayCommand(
             RefreshMihomoServiceStatusAsync,
             errorSink,
@@ -468,6 +548,10 @@ internal sealed class SettingsViewModel : ObservableObject
             SynchronizeConnectionSamplingAsync,
             errorSink,
             operationName: "settings-connection-sampling");
+        ApplyNetworkSettingsCommand = new AsyncRelayCommand(
+            SynchronizeNetworkSettingsAsync,
+            errorSink,
+            operationName: "settings-network-runtime");
         ExitApplicationCommand = new RelayCommand(ExitApplication);
         RestartApplicationCommand = new RelayCommand(RestartApplication);
         ResetDiagnosticStatusText();
@@ -576,9 +660,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string TransparentProxyServiceDescriptionText => _getString("Settings.TransparentProxy.Service.Description");
 
-    public string DeployMihomoServiceText => _getString("Command.Deploy");
-
-    public string UninstallMihomoServiceText => _getString("Command.Uninstall");
+    public string UninstallText => _getString("Command.Uninstall");
 
     public string MixedPortTitleText => _getString("Settings.MixedPort.Title");
 
@@ -905,6 +987,8 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="MihomoServiceStatusText"/>.</summary>
     private string _mihomoServiceStatusText = string.Empty;
 
+    private string _mihomoServiceDiagnosticText = string.Empty;
+
     /// <summary>Backing field for <see cref="NotificationLevel"/>.</summary>
     private NotificationLevel _notificationLevel;
 
@@ -997,17 +1081,17 @@ internal sealed class SettingsViewModel : ObservableObject
 
     private string _operationErrorText = string.Empty;
 
+    private bool _isResetRecoveryRequired;
+
     public AsyncRelayCommand WindowsDiagnosticCommand { get; }
-
-    public AsyncRelayCommand DeployMihomoServiceCommand { get; }
-
-    public AsyncRelayCommand UninstallMihomoServiceCommand { get; }
 
     public AsyncRelayCommand RefreshMihomoServiceStatusCommand { get; }
 
     public AsyncRelayCommand ApplyLaunchAtStartupCommand { get; }
 
     public AsyncRelayCommand RestartConnectionSamplingCommand { get; }
+
+    public AsyncRelayCommand ApplyNetworkSettingsCommand { get; }
 
     public string OperationErrorText
     {
@@ -1022,6 +1106,16 @@ internal sealed class SettingsViewModel : ObservableObject
     }
 
     public bool HasOperationError => !string.IsNullOrWhiteSpace(OperationErrorText);
+
+    /// <summary>
+    /// Gets whether a full settings reset could not be compensated and the process must restart
+    /// before further in-process state can be trusted.
+    /// </summary>
+    public bool IsResetRecoveryRequired
+    {
+        get => _isResetRecoveryRequired;
+        private set => SetProperty(ref _isResetRecoveryRequired, value);
+    }
 
     public RelayCommand ExitApplicationCommand { get; }
 
@@ -1132,12 +1226,21 @@ internal sealed class SettingsViewModel : ObservableObject
     }
 
     public bool CanToggleTransparentProxy =>
-        _mihomoServiceStatus.IsKnown && _mihomoServiceStatus.IsInstalled;
+        _mihomoServiceStatus.IsKnown
+        && _mihomoServiceStatus.IsInstalled
+        && string.IsNullOrEmpty(_mihomoServiceStatus.ProvisioningFailureCode);
 
     public string MihomoServiceStatusText
     {
         get => _mihomoServiceStatusText;
         private set => SetProperty(ref _mihomoServiceStatusText, value);
+    }
+
+    /// <summary>Gets the full stable diagnostic shown as the service-status tooltip.</summary>
+    public string MihomoServiceDiagnosticText
+    {
+        get => _mihomoServiceDiagnosticText;
+        private set => SetProperty(ref _mihomoServiceDiagnosticText, value);
     }
 
     public int MixedPort
@@ -1378,8 +1481,13 @@ internal sealed class SettingsViewModel : ObservableObject
         _pendingLaunchAtStartup = _appliedLaunchAtStartup;
         SetProperty(ref _launchAtStartupEnabled, _appliedLaunchAtStartup, nameof(LaunchAtStartupEnabled));
         RefreshMihomoServiceStatus();
-        SetProperty(ref _transparentProxyEnabled, _settings.TransparentProxyEnabled, nameof(TransparentProxyEnabled));
-        MixedPort = _settings.MixedPort;
+        _appliedTransparentProxyEnabled = _settings.TransparentProxyEnabled;
+        _appliedMixedPort = _settings.MixedPort;
+        SetProperty(
+            ref _transparentProxyEnabled,
+            _appliedTransparentProxyEnabled,
+            nameof(TransparentProxyEnabled));
+        MixedPort = _appliedMixedPort;
         _appliedConnectionSamplingEnabled = _settings.ConnectionSamplingEnabled;
         _appliedConnectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
         SetProperty(
@@ -1702,8 +1810,7 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(TransparentProxyDescriptionText),
             nameof(TransparentProxyServiceTitleText),
             nameof(TransparentProxyServiceDescriptionText),
-            nameof(DeployMihomoServiceText),
-            nameof(UninstallMihomoServiceText),
+            nameof(UninstallText),
             nameof(MihomoServiceStatusText),
             nameof(MixedPortTitleText),
             nameof(MixedPortDescriptionText),
@@ -1835,61 +1942,9 @@ internal sealed class SettingsViewModel : ObservableObject
             return;
         }
 
-        _settings.TransparentProxyEnabled = isEnabled;
-        SetProperty(ref _transparentProxyEnabled, isEnabled, nameof(TransparentProxyEnabled));
-    }
-
-    /// <summary>Deploys the mihomo Windows service and refreshes transparent proxy availability.</summary>
-    /// <param name="cancellationToken">Cancels deployment wait when requested.</param>
-    /// <returns>A task that completes after service status is refreshed.</returns>
-    public async Task DeployMihomoServiceAsync(CancellationToken cancellationToken)
-    {
-        OperationErrorText = string.Empty;
-        try
+        if (SetProperty(ref _transparentProxyEnabled, isEnabled, nameof(TransparentProxyEnabled)))
         {
-            MihomoServiceStatus status = await _mihomoServiceController.DeployAsync(cancellationToken);
-            SetMihomoServiceStatus(status);
-            _appendLog(
-                status.IsInstalled ? "Info" : "Warning",
-                "MihomoService",
-                MihomoServiceStatusText,
-                null);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            OperationErrorText = _getString("Application.UnexpectedError");
-            throw;
-        }
-    }
-
-    /// <summary>Uninstalls the mihomo Windows service and preserves transparent proxy preference.</summary>
-    /// <param name="cancellationToken">Cancels uninstall wait when requested.</param>
-    /// <returns>A task that completes after service status is refreshed.</returns>
-    public async Task UninstallMihomoServiceAsync(CancellationToken cancellationToken)
-    {
-        OperationErrorText = string.Empty;
-        try
-        {
-            MihomoServiceStatus status = await _mihomoServiceController.UninstallAsync(cancellationToken);
-            SetMihomoServiceStatus(status);
-            _appendLog(
-                status.IsInstalled ? "Warning" : "Info",
-                "MihomoService",
-                MihomoServiceStatusText,
-                null);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            OperationErrorText = _getString("Application.UnexpectedError");
-            throw;
+            RequestNetworkSettingsApply();
         }
     }
 
@@ -1926,15 +1981,11 @@ internal sealed class SettingsViewModel : ObservableObject
         MihomoServiceStatusText = string.IsNullOrWhiteSpace(status.Message)
             ? _getString("MihomoService.Status.Unknown")
             : status.Message;
-        if (status.IsKnown && !status.IsInstalled && _settings.TransparentProxyEnabled)
-        {
-            _settings.TransparentProxyEnabled = false;
-            SetProperty(ref _transparentProxyEnabled, false, nameof(TransparentProxyEnabled));
-        }
-
+        MihomoServiceDiagnosticText = RuntimeFailureDiagnostics.Format(
+            status.ProvisioningFailureCode ?? status.IpcFailureCode,
+            _getString,
+            MihomoServiceStatusText);
         OnPropertyChanged(nameof(CanToggleTransparentProxy));
-        DeployMihomoServiceCommand?.NotifyCanExecuteChanged();
-        UninstallMihomoServiceCommand?.NotifyCanExecuteChanged();
     }
 
     /// <summary>Persists the launch-at-startup switch and requests system registration sync.</summary>
@@ -2001,9 +2052,13 @@ internal sealed class SettingsViewModel : ObservableObject
             return false;
         }
 
-        _settings.MixedPort = port;
-        MixedPort = port;
-        RefreshProxyInformation();
+        if (port != MixedPort)
+        {
+            MixedPort = port;
+            RefreshProxyInformation();
+            RequestNetworkSettingsApply();
+        }
+
         return true;
     }
 
@@ -2116,12 +2171,127 @@ internal sealed class SettingsViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>Re-applies imported settings that affect external application services.</summary>
-    public void ReapplyRuntimeSettings()
+    /// <summary>
+    /// Reloads a transactionally activated package without claiming that restart-bound
+    /// tray or regional resources were rebuilt in the current process.
+    /// </summary>
+    public void ReloadAfterDataImport()
     {
-        _pendingLaunchAtStartup = _settings.LaunchAtStartupEnabled;
-        ApplyLaunchAtStartupCommand.Execute(null);
-        RequestConnectionSamplingRestart();
+        RestartRequiredSettingsBaseline baseline = CaptureRestartRequiredSettingsBaseline();
+        ReloadAfterSettingsReset(baseline);
+    }
+
+    /// <summary>Queues one coalesced runtime transaction for the latest requested TUN and port values.</summary>
+    private void RequestNetworkSettingsApply()
+    {
+        Interlocked.Increment(ref _networkSettingsRevision);
+        if (ApplyNetworkSettingsCommand.IsRunning
+            && ApplyNetworkSettingsCommand.ExecutionTask is Task activeExecution)
+        {
+            if (_networkSettingsRequeueTask.IsCompleted)
+            {
+                _networkSettingsRequeueTask = RequeueNetworkSettingsApplyAsync(activeExecution);
+            }
+
+            return;
+        }
+
+        ApplyNetworkSettingsCommand.Execute(null);
+    }
+
+    /// <summary>Re-enters through the caller's UI context after the busy command releases itself.</summary>
+    private async Task RequeueNetworkSettingsApplyAsync(Task activeExecution)
+    {
+        await activeExecution;
+        if (Volatile.Read(ref _networkSettingsRevision)
+                != Volatile.Read(ref _appliedNetworkSettingsRevision)
+            && !ApplyNetworkSettingsCommand.IsRunning)
+        {
+            ApplyNetworkSettingsCommand.Execute(null);
+        }
+    }
+
+    /// <summary>Applies the latest network preferences and restores the last verified request on failure.</summary>
+    private async Task SynchronizeNetworkSettingsAsync(CancellationToken cancellationToken)
+    {
+        await _networkSettingsGate.WaitAsync(cancellationToken);
+        try
+        {
+            OperationErrorText = string.Empty;
+            while (true)
+            {
+                int requestedRevision = Volatile.Read(ref _networkSettingsRevision);
+                bool desiredTransparentProxyEnabled = _transparentProxyEnabled;
+                int desiredMixedPort = MixedPort;
+                try
+                {
+                    await _applyNetworkSettingsAsync(
+                            desiredTransparentProxyEnabled,
+                            desiredMixedPort,
+                            cancellationToken);
+                    if (_settings.TransparentProxyEnabled != desiredTransparentProxyEnabled
+                        || _settings.MixedPort != desiredMixedPort)
+                    {
+                        throw new InvalidOperationException(
+                            "The verified network runtime did not commit its requested settings.");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    ReloadCommittedNetworkSettings();
+                    Volatile.Write(
+                        ref _appliedNetworkSettingsRevision,
+                        Volatile.Read(ref _networkSettingsRevision));
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    ReloadCommittedNetworkSettings();
+                    Volatile.Write(
+                        ref _appliedNetworkSettingsRevision,
+                        Volatile.Read(ref _networkSettingsRevision));
+                    string fallbackMessage = _getString("Application.UnexpectedError");
+                    OperationErrorText = RuntimeFailureDiagnostics.TryExtractCode(
+                        exception,
+                        out string? diagnosticCode)
+                        ? RuntimeFailureDiagnostics.Format(
+                            diagnosticCode,
+                            _getString,
+                            fallbackMessage)
+                        : fallbackMessage;
+                    throw;
+                }
+
+                _appliedTransparentProxyEnabled = desiredTransparentProxyEnabled;
+                _appliedMixedPort = desiredMixedPort;
+                Volatile.Write(ref _appliedNetworkSettingsRevision, requestedRevision);
+                if (requestedRevision == Volatile.Read(ref _networkSettingsRevision))
+                {
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            _networkSettingsGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reloads the durable state chosen by the mutation coordinator. It deliberately does not
+    /// overwrite the store: a recovery-required outcome may have committed either side of the
+    /// transition, and the ViewModel must not invent a successful compensation.
+    /// </summary>
+    private void ReloadCommittedNetworkSettings()
+    {
+        _appliedTransparentProxyEnabled = _settings.TransparentProxyEnabled;
+        _appliedMixedPort = _settings.MixedPort;
+        SetProperty(
+            ref _transparentProxyEnabled,
+            _appliedTransparentProxyEnabled,
+            nameof(TransparentProxyEnabled));
+        MixedPort = _appliedMixedPort;
+        RefreshProxyInformation();
     }
 
     /// <summary>Queues a coalesced sampling restart for the latest persisted sampling settings.</summary>
@@ -2699,10 +2869,12 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Restores proxy runtime settings to defaults.</summary>
     public void ResetProxySettingsToDefaults()
     {
-        SetTransparentProxyEnabled(CanToggleTransparentProxy);
-
-        _settings.MixedPort = DefaultMixedPort;
+        SetProperty(
+            ref _transparentProxyEnabled,
+            CanToggleTransparentProxy,
+            nameof(TransparentProxyEnabled));
         MixedPort = DefaultMixedPort;
+        RequestNetworkSettingsApply();
 
         _settings.ConnectionSamplingEnabled = true;
         SetProperty(ref _connectionSamplingEnabled, true, nameof(ConnectionSamplingEnabled));
@@ -2740,11 +2912,537 @@ internal sealed class SettingsViewModel : ObservableObject
         RaiseSelectorBindingsChanged();
     }
 
-    /// <summary>Resets all persisted settings through the injected maintenance action and reloads the view model.</summary>
-    public void ResetAllSettings()
+    /// <summary>
+    /// Resets durable settings, then converges every external settings participant to the committed defaults.
+    /// </summary>
+    /// <remarks>
+    /// Cancellation is honored only before the durable reset starts. Once the reset callback has been invoked,
+    /// all activation and compensation work uses a non-cancelable token so caller lifetime cannot strand a
+    /// partially applied reset.
+    /// </remarks>
+    public async Task ResetAllSettingsAsync(CancellationToken cancellationToken)
     {
-        _resetAllSettings();
-        ReloadAfterMaintenance();
+        await _resetSettingsGate.WaitAsync(cancellationToken);
+        bool durableResetStarted = false;
+        RestartRequiredSettingsBaseline? restartRequiredBaseline = null;
+        ISettingsDestructiveRuntimeScope? runtimeMutation = null;
+        ISettingsResetTransactionReceipt? resetReceipt = null;
+        try
+        {
+            await WaitForOutstandingRuntimeSettingsAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            runtimeMutation = await _beginDestructiveRuntimeMutationAsync(cancellationToken);
+
+            ExternalSettingsSnapshot baseline = CaptureExternalSettingsSnapshot();
+            restartRequiredBaseline = CaptureRestartRequiredSettingsBaseline();
+            durableResetStarted = true;
+            try
+            {
+                resetReceipt = runtimeMutation.BeginResetSettings()
+                    ?? throw new InvalidOperationException(
+                        "The settings reset transaction did not return a receipt.");
+            }
+            catch (Exception resetFailure) when (!ExceptionGraphClassifier.IsProcessFatal(resetFailure))
+            {
+                // The maintenance callback can fail after removing one or more durable values. Treat
+                // the values that remain readable as authoritative and converge every participant to
+                // that state before reporting the incomplete reset.
+                ExternalSettingsSnapshot partialCommit = CaptureExternalSettingsSnapshot();
+                Exception? convergenceFailure = await TryApplyExternalSettingsSnapshotAsync(
+                    partialCommit,
+                    runtimeMutation);
+                if (convergenceFailure is not null)
+                {
+                    throw EnterResetRecoveryState(resetFailure, convergenceFailure);
+                }
+
+                MarkExternalSettingsApplied(partialCommit);
+                IsResetRecoveryRequired = false;
+                OperationErrorText = _getString("Application.UnexpectedError");
+                ExceptionDispatchInfo.Capture(resetFailure).Throw();
+                throw;
+            }
+
+            ExternalSettingsSnapshot committedDefaults = CaptureExternalSettingsSnapshot();
+            Exception? activationFailure = await TryApplyExternalSettingsSnapshotAsync(
+                committedDefaults,
+                runtimeMutation);
+            if (activationFailure is null)
+            {
+                MarkExternalSettingsApplied(committedDefaults);
+                IsResetRecoveryRequired = false;
+                OperationErrorText = string.Empty;
+                await CompleteResetReceiptWithRetryAsync(
+                    resetReceipt.CommitAsync,
+                    CancellationToken.None);
+                return;
+            }
+
+            Exception? durableRollbackFailure = await TryCompleteResetReceiptWithRetryAsync(
+                resetReceipt.RollbackAsync,
+                CancellationToken.None);
+            if (durableRollbackFailure is not null)
+            {
+                throw EnterResetRecoveryState(activationFailure, durableRollbackFailure);
+            }
+
+            Exception? compensationFailure = await TryRestoreExternalSettingsSnapshotAsync(
+                baseline,
+                runtimeMutation);
+            if (compensationFailure is not null)
+            {
+                throw EnterResetRecoveryState(activationFailure, compensationFailure);
+            }
+
+            MarkExternalSettingsApplied(baseline);
+            IsResetRecoveryRequired = false;
+            OperationErrorText = _getString("Application.UnexpectedError");
+            ExceptionDispatchInfo.Capture(activationFailure).Throw();
+            throw new UnreachableException();
+        }
+        finally
+        {
+            try
+            {
+                if (resetReceipt is not null)
+                {
+                    await resetReceipt.DisposeAsync();
+                }
+            }
+            finally
+            {
+                try
+                {
+                    if (runtimeMutation is not null)
+                    {
+                        await runtimeMutation.DisposeAsync();
+                    }
+                }
+                finally
+                {
+                    try
+                    {
+                        if (durableResetStarted)
+                        {
+                            ReloadAfterSettingsReset(restartRequiredBaseline!.Value);
+                        }
+                    }
+                    finally
+                    {
+                        _resetSettingsGate.Release();
+                    }
+                }
+            }
+
+        }
+    }
+
+    private static async Task CompleteResetReceiptWithRetryAsync(
+        Func<CancellationToken, Task> completion,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await completion(cancellationToken);
+        }
+        catch (Exception firstFailure) when (!ExceptionGraphClassifier.IsProcessFatal(firstFailure))
+        {
+            try
+            {
+                await completion(CancellationToken.None);
+            }
+            catch (Exception retryFailure) when (!ExceptionGraphClassifier.IsProcessFatal(retryFailure))
+            {
+                throw new AggregateException(
+                    "The retained settings reset decision could not be finalized after retry.",
+                    firstFailure,
+                    retryFailure);
+            }
+        }
+    }
+
+    private static async Task<Exception?> TryCompleteResetReceiptWithRetryAsync(
+        Func<CancellationToken, Task> completion,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await CompleteResetReceiptWithRetryAsync(completion, cancellationToken);
+            return null;
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            return exception;
+        }
+    }
+
+    /// <summary>Waits until view-model-owned runtime commands have quiesced before the reset commit point.</summary>
+    private async Task WaitForOutstandingRuntimeSettingsAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            List<Task> activeTasks = new[]
+            {
+                ApplyLaunchAtStartupCommand,
+                RestartConnectionSamplingCommand,
+                ApplyNetworkSettingsCommand,
+            }
+                .Where(static command => command.IsRunning && command.ExecutionTask is not null)
+                .Select(static command => command.ExecutionTask!)
+                .ToList();
+            Task networkRequeueTask = _networkSettingsRequeueTask;
+            if (!networkRequeueTask.IsCompleted)
+            {
+                activeTasks.Add(networkRequeueTask);
+            }
+
+            if (activeTasks.Count == 0)
+            {
+                return;
+            }
+
+            await Task.WhenAll(activeTasks).WaitAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>Captures durable values that have process-external or immediately visible participants.</summary>
+    private ExternalSettingsSnapshot CaptureExternalSettingsSnapshot()
+    {
+        return new ExternalSettingsSnapshot(
+            _settings.DisplayLanguage,
+            _settings.AppThemeMode,
+            _settings.AppAccentColorMode,
+            _settings.AppAccentColorValue,
+            _settings.LaunchAtStartupEnabled,
+            _settings.ConnectionSamplingEnabled,
+            _settings.ConnectionSamplingIntervalSeconds,
+            _settings.CurrentMode,
+            _settings.ActiveProfileId,
+            _settings.TransparentProxyEnabled,
+            _settings.MixedPort);
+    }
+
+    /// <summary>Applies every participant, collecting failures so one broken participant cannot hide another split.</summary>
+    private async Task ApplyExternalSettingsSnapshotAsync(
+        ExternalSettingsSnapshot snapshot,
+        ISettingsDestructiveRuntimeScope runtimeMutation)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeMutation);
+        List<Exception> failures = [];
+        CaptureParticipantFailure(
+            () => _applyLanguage(snapshot.DisplayLanguage),
+            failures);
+        CaptureParticipantFailure(
+            () => _applyTheme(snapshot.AppThemeMode),
+            failures);
+        CaptureParticipantFailure(
+            () => _applyAccentColor(snapshot.AppAccentColorMode, snapshot.AppAccentColorValue),
+            failures);
+        await CaptureParticipantFailureAsync(
+            () => runtimeMutation.ApplyLaunchAtStartupAsync(
+                snapshot.LaunchAtStartupEnabled,
+                CancellationToken.None),
+            failures);
+        await CaptureParticipantFailureAsync(
+            () => runtimeMutation.RestartConnectionSamplingAsync(CancellationToken.None),
+            failures);
+        await CaptureParticipantFailureAsync(
+            () => ApplyResetNetworkSettingsAsync(snapshot, runtimeMutation),
+            failures);
+        CaptureParticipantFailure(
+            () => VerifyExternalSettingsSnapshot(snapshot),
+            failures);
+
+        if (failures.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
+
+        if (failures.Count > 1)
+        {
+            throw new AggregateException(
+                "One or more settings reset participants failed to apply the durable state.",
+                failures);
+        }
+    }
+
+    private async Task ApplyResetNetworkSettingsAsync(
+        ExternalSettingsSnapshot snapshot,
+        ISettingsDestructiveRuntimeScope runtimeMutation)
+    {
+        await _networkSettingsGate.WaitAsync(CancellationToken.None);
+        try
+        {
+            await runtimeMutation.ApplyNetworkSettingsAsync(
+                snapshot.TransparentProxyEnabled,
+                snapshot.MixedPort,
+                CancellationToken.None);
+        }
+        finally
+        {
+            _networkSettingsGate.Release();
+        }
+    }
+
+    private static void CaptureParticipantFailure(Action action, ICollection<Exception> failures)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            failures.Add(exception);
+        }
+    }
+
+    private static async Task CaptureParticipantFailureAsync(
+        Func<Task> action,
+        ICollection<Exception> failures)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            failures.Add(exception);
+        }
+    }
+
+    private async Task<Exception?> TryApplyExternalSettingsSnapshotAsync(
+        ExternalSettingsSnapshot snapshot,
+        ISettingsDestructiveRuntimeScope runtimeMutation)
+    {
+        try
+        {
+            await ApplyExternalSettingsSnapshotAsync(snapshot, runtimeMutation);
+            return null;
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            return exception;
+        }
+    }
+
+    private async Task<Exception?> TryRestoreExternalSettingsSnapshotAsync(
+        ExternalSettingsSnapshot baseline,
+        ISettingsDestructiveRuntimeScope runtimeMutation)
+    {
+        List<Exception> failures = [];
+        CaptureParticipantFailure(
+            () => runtimeMutation.RestoreDurableSettings(new SettingsExternalDurableSnapshot(
+                baseline.DisplayLanguage,
+                baseline.AppThemeMode,
+                baseline.AppAccentColorMode,
+                baseline.AppAccentColorValue,
+                baseline.LaunchAtStartupEnabled,
+                baseline.ConnectionSamplingEnabled,
+                baseline.ConnectionSamplingIntervalSeconds,
+                baseline.CurrentMode,
+                baseline.ActiveProfileId,
+                baseline.TransparentProxyEnabled,
+                baseline.MixedPort)),
+            failures);
+        ExternalSettingsSnapshot durableTarget = CaptureExternalSettingsSnapshot();
+        if (durableTarget != baseline)
+        {
+            failures.Add(new InvalidOperationException(
+                "The retained reset receipt did not restore the previous durable settings."));
+        }
+
+        Exception? activationFailure = await TryApplyExternalSettingsSnapshotAsync(
+            durableTarget,
+            runtimeMutation);
+        if (activationFailure is not null)
+        {
+            failures.Add(activationFailure);
+        }
+
+        if (durableTarget != baseline)
+        {
+            failures.Add(new InvalidOperationException(
+                "The previous durable external settings could not be restored completely."));
+        }
+
+        return failures.Count switch
+        {
+            0 => null,
+            1 => failures[0],
+            _ => new AggregateException(
+                "Settings reset compensation did not restore every participant.",
+                failures),
+        };
+    }
+
+    private void VerifyExternalSettingsSnapshot(ExternalSettingsSnapshot snapshot)
+    {
+        if (CaptureExternalSettingsSnapshot() != snapshot)
+        {
+            throw new InvalidOperationException(
+                "A settings reset participant did not preserve the durable external settings snapshot.");
+        }
+    }
+
+    private void MarkExternalSettingsApplied(ExternalSettingsSnapshot snapshot)
+    {
+        _appliedLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
+        _pendingLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
+        _appliedConnectionSamplingEnabled = snapshot.ConnectionSamplingEnabled;
+        _appliedConnectionSamplingIntervalSeconds = snapshot.ConnectionSamplingIntervalSeconds;
+        _appliedTransparentProxyEnabled = snapshot.TransparentProxyEnabled;
+        _appliedMixedPort = snapshot.MixedPort;
+        int networkRevision = Interlocked.Increment(ref _networkSettingsRevision);
+        Volatile.Write(ref _appliedNetworkSettingsRevision, networkRevision);
+    }
+
+    private Exception EnterResetRecoveryState(Exception activationFailure, Exception compensationFailure)
+    {
+        IsResetRecoveryRequired = true;
+        OperationErrorText = _getString("Application.UnexpectedError");
+        List<Exception> failures = [activationFailure, compensationFailure];
+        try
+        {
+            if (!_requestResetRecoveryRestart())
+            {
+                failures.Add(new InvalidOperationException(
+                    "The mandatory restart request was rejected after settings reset compensation failed."));
+            }
+        }
+        catch (Exception restartFailure) when (!ExceptionGraphClassifier.IsProcessFatal(restartFailure))
+        {
+            failures.Add(restartFailure);
+        }
+
+        return new AggregateException(
+            "Settings reset could not converge or compensate every external participant; restart recovery is required.",
+            failures);
+    }
+
+    private readonly record struct ExternalSettingsSnapshot(
+        AppLanguage DisplayLanguage,
+        AppThemeMode AppThemeMode,
+        AppAccentColorMode AppAccentColorMode,
+        string AppAccentColorValue,
+        bool LaunchAtStartupEnabled,
+        bool ConnectionSamplingEnabled,
+        int ConnectionSamplingIntervalSeconds,
+        ClashSharpMode CurrentMode,
+        string ActiveProfileId,
+        bool TransparentProxyEnabled,
+        int MixedPort);
+
+    /// <summary>
+    /// Captures the process-applied baseline for settings whose existing UI resources are not rebuilt by
+    /// the reset transaction. Reloading persisted values must not claim these values are already active.
+    /// </summary>
+    private RestartRequiredSettingsBaseline CaptureRestartRequiredSettingsBaseline()
+    {
+        return new RestartRequiredSettingsBaseline(
+            _loadedTrayUseMonochromeInactiveIcon,
+            _loadedMainlandChinaFeatureMode,
+            _loadedMainlandChinaUrlBlockingEnabled);
+    }
+
+    private void ReloadAfterSettingsReset(RestartRequiredSettingsBaseline baseline)
+    {
+        Load();
+        _loadedTrayUseMonochromeInactiveIcon = baseline.TrayUseMonochromeInactiveIcon;
+        _loadedMainlandChinaFeatureMode = baseline.MainlandChinaFeatureMode;
+        _loadedMainlandChinaUrlBlockingEnabled = baseline.MainlandChinaUrlBlockingEnabled;
+        RaiseTrayIconRestartStateChanged();
+        RaiseMainlandChinaRestartStateChanged();
+        RaiseLocalizedTextChanges();
+        RaiseSelectorBindingsChanged();
+        ResetDiagnosticStatusText();
+    }
+
+    private readonly record struct RestartRequiredSettingsBaseline(
+        bool TrayUseMonochromeInactiveIcon,
+        MainlandChinaFeatureMode MainlandChinaFeatureMode,
+        bool MainlandChinaUrlBlockingEnabled);
+
+    private sealed class PassthroughDestructiveRuntimeScope(
+        Func<bool, CancellationToken, Task> applyLaunchAtStartupAsync,
+        Func<CancellationToken, Task> restartConnectionSamplingAsync,
+        Func<bool, int, CancellationToken, Task> applyNetworkSettingsAsync,
+        Func<ISettingsResetTransactionReceipt> beginResetSettings,
+        Action<SettingsExternalDurableSnapshot> restoreDurableSettings)
+        : ISettingsDestructiveRuntimeScope
+    {
+        public Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(
+            string packagePath,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromException<ISettingsDataPackageTransactionReceipt>(
+                new NotSupportedException(
+                    "The legacy settings runtime scope does not provide data-package imports."));
+        }
+
+        public ISettingsResetTransactionReceipt BeginResetSettings()
+        {
+            return beginResetSettings();
+        }
+
+        public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
+        {
+            restoreDurableSettings(snapshot);
+        }
+
+        public Task ApplyLaunchAtStartupAsync(
+            bool isEnabled,
+            CancellationToken cancellationToken)
+        {
+            return applyLaunchAtStartupAsync(isEnabled, cancellationToken);
+        }
+
+        public Task RestartConnectionSamplingAsync(CancellationToken cancellationToken)
+        {
+            return restartConnectionSamplingAsync(cancellationToken);
+        }
+
+        public Task ApplyNetworkSettingsAsync(
+            bool transparentProxyEnabled,
+            int mixedPort,
+            CancellationToken cancellationToken)
+        {
+            return applyNetworkSettingsAsync(
+                transparentProxyEnabled,
+                mixedPort,
+                cancellationToken);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class LegacySettingsResetTransactionReceipt : ISettingsResetTransactionReceipt
+    {
+        public LegacySettingsResetTransactionReceipt(Action resetSettings)
+        {
+            ArgumentNullException.ThrowIfNull(resetSettings);
+            resetSettings();
+        }
+
+        public Task CommitAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task RollbackAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
     }
 
     /// <summary>Clears all local application data through the injected maintenance action and reloads the view model.</summary>

@@ -310,8 +310,14 @@ internal sealed class ProxiesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeUnavailable");
-            _log.Append("Warning", "ProxyNodes", RuntimeStatusText, exception.Message);
+            string code = RuntimeFailureDiagnostics.ExtractCode(
+                exception,
+                RuntimeFailureDiagnostics.ControllerUnavailable);
+            RuntimeStatusText = RuntimeFailureDiagnostics.Format(
+                code,
+                _localization.GetString,
+                _localization.GetString("ProxyNodes.Status.RuntimeUnavailable"));
+            _log.Append("Warning", "ProxyNodes", RuntimeStatusText, code);
         }
     }
 
@@ -337,8 +343,14 @@ internal sealed class ProxiesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeUnavailable");
-            _log.Append("Warning", "ProxyNodes", RuntimeStatusText, exception.Message);
+            string code = RuntimeFailureDiagnostics.ExtractCode(
+                exception,
+                RuntimeFailureDiagnostics.ProviderUpdateFailed);
+            RuntimeStatusText = RuntimeFailureDiagnostics.Format(
+                code,
+                _localization.GetString,
+                _localization.GetString("ProxyNodes.Status.RuntimeUnavailable"));
+            _log.Append("Warning", "ProxyNodes", RuntimeStatusText, code);
         }
     }
 

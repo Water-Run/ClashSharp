@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,10 +18,12 @@ namespace ClashSharp.ViewModel;
 /// <remarks>
 /// Invariants: <see cref="Connections"/> is never null after construction.
 /// Thread safety: Not thread-safe; intended for UI-thread binding and command execution.
-/// Side effects: Commands call injected services that may query mihomo and write SQLite rows.
+/// Side effects: Commands call injected services that query mihomo and append application logs.
 /// </remarks>
 internal sealed class ConnectionsViewModel : ObservableObject
 {
+    private static readonly TimeSpan StreamReconnectDelay = TimeSpan.FromSeconds(1);
+
     /// <summary>Localization provider used by visible text.</summary>
     private readonly IConnectionsLocalization _localization;
 
@@ -60,10 +64,6 @@ internal sealed class ConnectionsViewModel : ObservableObject
             RefreshConnectionsAsync,
             errorSink,
             operationName: "connections-refresh");
-        PersistConnectionsCommand = new AsyncRelayCommand(
-            PersistConnectionsAsync,
-            errorSink,
-            operationName: "connections-persist");
         CloseConnectionCommand = new AsyncRelayCommand(
             CloseConnectionCommandAsync,
             errorSink,
@@ -85,10 +85,6 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <summary>Gets the refresh command label.</summary>
     /// <value>Localized command label.</value>
     public string RefreshConnectionsText => _localization.GetString("Command.Refresh");
-
-    /// <summary>Gets the persist snapshot command label.</summary>
-    /// <value>Localized command label.</value>
-    public string PersistConnectionsText => _localization.GetString("Command.PersistSnapshot");
 
     /// <summary>Gets the close-all command label.</summary>
     /// <value>Localized command label.</value>
@@ -118,10 +114,6 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <value>Asynchronous refresh command.</value>
     public AsyncRelayCommand RefreshConnectionsCommand { get; }
 
-    /// <summary>Gets the command that persists a refreshed connection snapshot.</summary>
-    /// <value>Asynchronous persistence command.</value>
-    public AsyncRelayCommand PersistConnectionsCommand { get; }
-
     /// <summary>Gets the command that closes one active connection.</summary>
     /// <value>Asynchronous close-one command.</value>
     public AsyncRelayCommand CloseConnectionCommand { get; }
@@ -135,15 +127,68 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <returns>Active connection rows; empty when refresh fails.</returns>
     /// <remarks>
     /// Cancellation semantics: Passed through to the connection client.
-    /// Thread / reentrancy: UI callers should use <see cref="RefreshConnectionsCommand"/> to prevent reentrancy.
+    /// Thread / reentrancy: The page serializes visible operations through its load-session lifetime.
     /// </remarks>
     public async Task<IReadOnlyList<ActiveConnection>> RefreshConnectionsAsync(CancellationToken cancellationToken)
+    {
+        return await TryRefreshConnectionsAsync(cancellationToken) ?? [];
+    }
+
+    /// <summary>Consumes live controller snapshots until the page lifetime is canceled.</summary>
+    /// <param name="cancellationToken">Cancels the active socket and reconnect delay.</param>
+    /// <returns>A task that completes when cancellation stops the stream.</returns>
+    public async Task WatchConnectionsAsync(CancellationToken cancellationToken)
+    {
+        bool unavailableLogged = false;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await foreach (IReadOnlyList<ActiveConnection> connections in
+                    _connectionClient.StreamActiveConnectionsAsync(cancellationToken))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    ApplyConnections(connections);
+                    unavailableLogged = false;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!unavailableLogged)
+                {
+                    ApplyUnavailableStatus("The mihomo connection stream closed.");
+                    unavailableLogged = true;
+                }
+            }
+            catch (Exception exception) when (
+                exception is HttpRequestException
+                    or WebSocketException
+                    or IOException
+                    or JsonException
+                    or InvalidOperationException
+                && !ExceptionGraphClassifier.IsProcessFatal(exception)
+                && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+            {
+                if (!unavailableLogged)
+                {
+                    ApplyUnavailableStatus(exception.Message);
+                    unavailableLogged = true;
+                }
+            }
+
+            await Task.Delay(StreamReconnectDelay, cancellationToken);
+        }
+    }
+
+    /// <summary>Refreshes active connections and distinguishes an unavailable controller from an empty list.</summary>
+    private async Task<IReadOnlyList<ActiveConnection>?> TryRefreshConnectionsAsync(
+        CancellationToken cancellationToken)
     {
         try
         {
             IReadOnlyList<ActiveConnection> connections = await _connectionClient.GetActiveConnectionsAsync(cancellationToken);
-            Connections = connections.Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter)).ToArray();
-            ConnectionStatusText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Connections.Status.Active.Format"), connections.Count);
+            cancellationToken.ThrowIfCancellationRequested();
+            ApplyConnections(connections);
             return connections;
         }
         catch (Exception exception) when (
@@ -151,26 +196,27 @@ internal sealed class ConnectionsViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            Connections = [];
-            ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
-            _log.Append("Warning", "Connections", _localization.GetString("Connections.Status.Unavailable"), exception.Message);
-            return [];
+            ApplyUnavailableStatus(exception.Message);
+            return null;
         }
     }
 
-    /// <summary>Refreshes active connections and persists them as a snapshot.</summary>
-    /// <param name="cancellationToken">Cancels the refresh when requested.</param>
-    /// <returns>A task that completes after persistence and logging finish.</returns>
-    /// <remarks>
-    /// Cancellation semantics: Passed through to the refresh operation.
-    /// Thread / reentrancy: UI callers should use <see cref="PersistConnectionsCommand"/> to prevent reentrancy.
-    /// </remarks>
-    public async Task PersistConnectionsAsync(CancellationToken cancellationToken)
+    private void ApplyConnections(IReadOnlyList<ActiveConnection> connections)
     {
-        IReadOnlyList<ActiveConnection> connections = await RefreshConnectionsAsync(cancellationToken);
-        int insertedCount = _log.AppendConnectionSnapshot(connections);
-        ConnectionStatusText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Connections.Status.Persisted.Format"), insertedCount);
-        _log.Append("Info", "Connections", ConnectionStatusText, null);
+        Connections = connections
+            .Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter))
+            .ToArray();
+        ConnectionStatusText = string.Format(
+            CultureInfo.CurrentCulture,
+            _localization.GetString("Connections.Status.Active.Format"),
+            connections.Count);
+    }
+
+    private void ApplyUnavailableStatus(string detail)
+    {
+        Connections = [];
+        ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
+        _log.Append("Warning", "Connections", ConnectionStatusText, detail);
     }
 
     /// <summary>Closes one active connection and refreshes the visible list.</summary>
@@ -182,7 +228,12 @@ internal sealed class ConnectionsViewModel : ObservableObject
         try
         {
             await _connectionClient.CloseConnectionAsync(connection.Id, cancellationToken);
-            await RefreshConnectionsAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await TryRefreshConnectionsAsync(cancellationToken) is null)
+            {
+                return;
+            }
+
             ConnectionStatusText = _localization.GetString("Connections.Status.Closed");
             _log.Append("Info", "Connections", ConnectionStatusText, connection.Id);
         }
@@ -204,7 +255,12 @@ internal sealed class ConnectionsViewModel : ObservableObject
         try
         {
             await _connectionClient.CloseAllConnectionsAsync(cancellationToken);
-            await RefreshConnectionsAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await TryRefreshConnectionsAsync(cancellationToken) is null)
+            {
+                return;
+            }
+
             ConnectionStatusText = _localization.GetString("Connections.Status.ClosedAll");
             _log.Append("Info", "Connections", ConnectionStatusText, null);
         }

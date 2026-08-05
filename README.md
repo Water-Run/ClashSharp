@@ -8,17 +8,19 @@
 
 ## Installation
 
-Download the release package from [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases), extract it, and run the installer. A release contains `ClashSharp-Installer.exe` and its sibling `payload` directory.
+Download the release package from [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases), extract it, and run the Authenticode-signed `ClashSharp-Installer.exe` normally—not with “Run as administrator.” The certificate and MSIX stay in the current-user context; the installer requests UAC separately only for machine-service work. Confirm that UAC shows the expected verified publisher, not “Unknown publisher.” A release contains the installer and its sibling `payload` directory.
 
-The installer checks Windows 11 x64 compatibility, installs the package certificate when needed, and deploys the MSIX package. If Clash# is already installed, the installer enters maintenance mode for check, repair by redeploying the current payload, or uninstall.
+The installer checks Windows 11 x64 compatibility, installs the package certificate when needed, and deploys the MSIX package. If Clash# is already installed, the installer enters maintenance mode for check, in-place update/repair, or uninstall. Use this Installer for a complete uninstall; removing only the MSIX from Windows Settings can leave the machine-level service resources behind.
 
-Maintainers can run `Tools\Update-Mihomo.ps1` to fetch or refresh the Windows x64 mihomo core. Release builds download the core when it is missing and probe its version before packaging.
+Release dependency resolution and payload assembly are offline: `dotnet publish` uses the prior locked restore, and Cargo uses its frozen lock/cache. The build fails closed unless a checked-in Mihomo version/length/SHA-256 manifest matches the bundled ordinary binary and all four pinned GeoData assets have been prepared with `Tools\Prepare-GeoData.ps1`; `Tools\Update-Mihomo.ps1` is an explicit maintainer utility, never an implicit release-build download. Official packaging also requires controlled MSIX signing material, a trusted timestamped Authenticode certificate, and an explicit `CLASHSHARP_WINDOWS_SDK_VERSION`; SignTool is accepted only from that Microsoft-signed Windows Kits x64 directory, and signing contacts only the explicitly configured HTTPS timestamp endpoint. Unsigned Cargo output stays in a disposable staging directory and is promoted to `target\release-artifacts` only after signature verification. `build.ps1 -Development` produces an explicitly named, non-publishable unsigned artifact.
 
 ## Windows-Native Features
 
 Clash# uses native WinUI 3 controls, Fluent icons, and Windows 11 acrylic surfaces. The application is designed around Windows networking behavior rather than generic cross-platform proxy terminology.
 
-Windows-focused tools include WSL network repair, terminal proxy diagnostics, Microsoft Store network repair, proxy residue cleanup after abnormal exits, system proxy restoration on exit, transparent proxy fallback when TUN is unavailable, and a tile-based master control surface for status and common actions.
+Windows-focused tools include WSL network repair, terminal proxy diagnostics, Microsoft Store network repair, proxy residue cleanup after abnormal exits, system proxy restoration on exit, fail-closed transparent proxy activation through TUN, and a tile-based master control surface for status and common actions.
+
+TUN takeover is machine-wide. Clash# currently supports one interactive user and one Core owner per machine; it does not provide multi-session traffic isolation. To re-associate ownership, run Repair from the ClashSharp Installer as the target user.
 
 ## Basic Usage
 

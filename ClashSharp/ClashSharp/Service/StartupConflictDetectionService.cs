@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,11 +13,15 @@ internal interface IStartupConflictEnvironment
 {
     IReadOnlyList<StartupConflictProcess> GetExternalMihomoProcesses();
 
+    IReadOnlyList<string> GetActiveTunInterfaces();
+
     bool IsTcpPortInUse(int port);
 
     WindowsProxyState GetWindowsProxyState();
 
-    Task TerminateProcessAsync(int processId, CancellationToken cancellationToken);
+    Task TerminateProcessAsync(
+        StartupConflictProcess process,
+        CancellationToken cancellationToken);
 
     Task DisableWindowsProxyAsync(CancellationToken cancellationToken);
 }
@@ -66,7 +71,27 @@ internal sealed class StartupConflictDetectionService
                 _getString("StartupConflict.Mihomo.Title"),
                 string.Format(CultureInfo.CurrentCulture, _getString("StartupConflict.Mihomo.Description"), processes.Count),
                 _getString("StartupConflict.Mihomo.Repair"),
-                token => TerminateExternalMihomoProcessesAsync(processes, token)));
+                token => TerminateExternalMihomoProcessesAsync(processes, token))
+            {
+                DiagnosticCode = "tun.conflict.external_mihomo",
+            });
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        IReadOnlyList<string> activeTunInterfaces = _environment.GetActiveTunInterfaces();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (activeTunInterfaces.Count > 0)
+        {
+            issues.Add(new StartupConflictIssue(
+                StartupConflictKind.ActiveTunInterface,
+                _getString("StartupConflict.Tun.Title"),
+                string.Format(
+                    CultureInfo.CurrentCulture,
+                    _getString("StartupConflict.Tun.Description"),
+                    string.Join(", ", activeTunInterfaces)))
+            {
+                DiagnosticCode = RuntimeFailureDiagnostics.TunConflict,
+            });
         }
 
         if (_environment.IsTcpPortInUse(mixedPort))
@@ -83,7 +108,10 @@ internal sealed class StartupConflictDetectionService
                     return Task.FromResult(new StartupConflictRepairResult(
                         false,
                         _getString("StartupConflict.Port.RepairFailed")));
-                }));
+                })
+            {
+                DiagnosticCode = RuntimeFailureDiagnostics.MixedPortOccupied,
+            });
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -96,7 +124,10 @@ internal sealed class StartupConflictDetectionService
                 _getString("StartupConflict.Proxy.Title"),
                 string.Format(CultureInfo.CurrentCulture, _getString("StartupConflict.Proxy.Description"), proxyState.ProxyServer, mixedPort),
                 _getString("StartupConflict.Proxy.Repair"),
-                DisableWindowsProxyAsync));
+                DisableWindowsProxyAsync)
+            {
+                DiagnosticCode = "route.system_proxy_mismatch",
+            });
         }
 
         return issues;
@@ -122,12 +153,14 @@ internal sealed class StartupConflictDetectionService
         {
             foreach (StartupConflictProcess process in processes)
             {
-                await _environment.TerminateProcessAsync(process.ProcessId, cancellationToken);
+                await _environment.TerminateProcessAsync(process, cancellationToken);
             }
 
             return new StartupConflictRepairResult(true, _getString("StartupConflict.Mihomo.RepairSucceeded"));
         }
-        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is InvalidOperationException
+            or UnauthorizedAccessException
+            or Win32Exception)
         {
             return new StartupConflictRepairResult(false, _getString("StartupConflict.Status.Failed"));
         }

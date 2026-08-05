@@ -21,7 +21,9 @@ internal static class LegacyNetworkPlanPersistence
         string desiredHash,
         string baselineProxyServer,
         string desiredProxyServer,
-        ClashSharpMode durableBaselineMode)
+        ClashSharpMode durableBaselineMode,
+        bool durableBaselineTransparentProxyEnabled,
+        int durableBaselineMixedPort)
     {
         PersistedNetworkPlan persisted = new(
             SchemaVersion,
@@ -32,7 +34,9 @@ internal static class LegacyNetworkPlanPersistence
             desiredHash,
             baselineProxyServer,
             desiredProxyServer,
-            durableBaselineMode);
+            durableBaselineMode,
+            durableBaselineTransparentProxyEnabled,
+            durableBaselineMixedPort);
         return JsonSerializer.Serialize(persisted, SerializerOptions);
     }
 
@@ -83,7 +87,9 @@ internal static class LegacyNetworkPlanPersistence
         string DesiredHash,
         string BaselineProxyServer,
         string DesiredProxyServer,
-        ClashSharpMode DurableBaselineMode)
+        ClashSharpMode DurableBaselineMode,
+        bool? DurableBaselineTransparentProxyEnabled = null,
+        int? DurableBaselineMixedPort = null)
     {
         public NetworkPlan ToPlan(string compensationData)
         {

@@ -105,15 +105,34 @@ public sealed class MasterControlRuntimeCatalogBoundaryTests
     {
         return new ProfileCatalogService(
             path,
+            Path.Combine(Path.GetDirectoryName(path)!, "mihomo", "history"),
             new FixedProfileSettings(),
             new UnusedProfileCoreConfiguration(),
+            new UnusedProfileCatalogRuntime(),
             new NullProfileLog(),
             static key => key switch
             {
                 "ProfileCatalog.BuiltInDirect.Name" => "Direct",
                 "ProfileCatalog.Status.Available" => "Available",
                 _ => key,
-            });
+            },
+            UncoordinatedProfileCatalogMutationCoordinator.Instance);
+    }
+
+    private sealed class UnusedProfileCatalogRuntime : IProfileCatalogRuntime
+    {
+        public Task<bool> ApplyProfileAsync(string profileId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ProfileCatalogRuntimeImportResult> ImportAndApplyProfileAsync(
+            string profileId,
+            string profileName,
+            string configurationText,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> DeleteImportedProfileAsync(string profileId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private static void WriteCatalog(string path, string? catalogJson)
@@ -154,6 +173,13 @@ public sealed class MasterControlRuntimeCatalogBoundaryTests
         }
 
         public CoreConfigurationState EnsureDefaultConfiguration()
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<string?> ReadImportedProfileConfigurationAsync(
+            string profileId,
+            CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }

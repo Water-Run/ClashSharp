@@ -785,8 +785,16 @@ public sealed partial class Settings : Page
                 return;
             }
 
-            await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
-            ApplyImportedSettings();
+            IsEnabled = false;
+            try
+            {
+                await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
+                ApplyImportedSettings();
+            }
+            finally
+            {
+                IsEnabled = true;
+            }
         }
         catch (OperationCanceledException exception)
             when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
@@ -986,9 +994,7 @@ public sealed partial class Settings : Page
     /// <summary>Re-applies settings that affect running application services after package import.</summary>
     private void ApplyImportedSettings()
     {
-        _operations.ApplyImportedPresentationSettings();
-        _viewModel.Load();
-        _viewModel.ReapplyRuntimeSettings();
+        _viewModel.ReloadAfterDataImport();
     }
 
     /// <summary>Associates a WinUI picker with the application window so it can be shown from unpackaged desktop context.</summary>
@@ -1116,7 +1122,25 @@ public sealed partial class Settings : Page
             return;
         }
 
-        _viewModel.ResetAllSettings();
+        try
+        {
+            IsEnabled = false;
+            try
+            {
+                await _viewModel.ResetAllSettingsAsync(CancellationToken.None);
+            }
+            finally
+            {
+                IsEnabled = true;
+            }
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await _operations.ReportUnexpectedErrorAsync(
+                "settings-reset-all",
+                exception,
+                CancellationToken.None);
+        }
     }
 
     /// <summary>Shows a three-step confirmation and clears all local application data.</summary>

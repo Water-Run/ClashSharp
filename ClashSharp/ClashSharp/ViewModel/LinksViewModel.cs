@@ -71,6 +71,14 @@ internal sealed class LinksViewModel : ObservableObject
             UpdateSelectedLinkAsync,
             _errorSink,
             operationName: "links-update");
+        EditLinkCommand = new AsyncRelayCommand(
+            EditSubscriptionLinkFromCommandAsync,
+            _errorSink,
+            operationName: "links-edit");
+        DeleteLinkCommand = new AsyncRelayCommand(
+            DeleteSelectedLinkAsync,
+            _errorSink,
+            operationName: "links-delete");
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -92,6 +100,10 @@ internal sealed class LinksViewModel : ObservableObject
     /// <summary>Gets the update command label.</summary>
     /// <value>Localized command label.</value>
     public string UpdateLinksText => _getString("Command.Update");
+
+    public string EditLinkText => _getString("Command.Edit");
+
+    public string DeleteLinkText => _getString("Command.Delete");
 
     /// <summary>Gets subscription link rows.</summary>
     /// <value>Subscription link rows; never null.</value>
@@ -120,6 +132,10 @@ internal sealed class LinksViewModel : ObservableObject
     /// <summary>Gets the command that imports the selected link.</summary>
     /// <value>Asynchronous update command.</value>
     public AsyncRelayCommand UpdateLinkCommand { get; }
+
+    public AsyncRelayCommand EditLinkCommand { get; }
+
+    public AsyncRelayCommand DeleteLinkCommand { get; }
 
     /// <summary>Loads subscription links without blocking the UI thread.</summary>
     /// <param name="cancellationToken">Cancels this page-load attempt.</param>
@@ -246,6 +262,71 @@ internal sealed class LinksViewModel : ObservableObject
         await LoadAsync(cancellationToken);
     }
 
+    /// <summary>Edits one subscription link and refreshes visible rows.</summary>
+    public async Task EditSubscriptionLinkAsync(
+        SubscriptionLinkEditRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            bool updated = await _profiles.TryUpdateSubscriptionLinkAsync(request, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (updated)
+            {
+                _log.Append("Info", "Links", "Subscription link updated.", request.LinkId);
+                await LoadAsync(cancellationToken);
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or SecurityException
+                or InvalidOperationException
+                or OperationCanceledException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            _log.Append("Warning", "Links", "Subscription link could not be edited.", exception.Message);
+        }
+    }
+
+    /// <summary>Deletes the selected subscription link and refreshes visible rows.</summary>
+    public async Task DeleteSelectedLinkAsync(CancellationToken cancellationToken)
+    {
+        if (SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink)
+        {
+            _log.Append("Info", "Links", "No subscription link selected.", null);
+            return;
+        }
+
+        try
+        {
+            bool deleted = await _profiles.TryDeleteSubscriptionLinkAsync(
+                selectedLink.Model.Id,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (deleted)
+            {
+                SelectedLink = null;
+                _log.Append("Info", "Links", "Subscription link deleted.", selectedLink.Model.Id);
+                await LoadAsync(cancellationToken);
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or SecurityException
+                or InvalidOperationException
+                or OperationCanceledException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            _log.Append("Warning", "Links", "Subscription link could not be deleted.", exception.Message);
+        }
+    }
+
     private Task AddSubscriptionLinkFromCommandAsync(
         object? parameter,
         CancellationToken cancellationToken)
@@ -261,6 +342,20 @@ internal sealed class LinksViewModel : ObservableObject
             linkInput.Item1,
             linkInput.Item2,
             cancellationToken);
+    }
+
+    private Task EditSubscriptionLinkFromCommandAsync(
+        object? parameter,
+        CancellationToken cancellationToken)
+    {
+        if (parameter is not SubscriptionLinkEditRequest request)
+        {
+            throw new ArgumentException(
+                "The edit-link command requires subscription link input.",
+                nameof(parameter));
+        }
+
+        return EditSubscriptionLinkAsync(request, cancellationToken);
     }
 
     private void ApplyLinks(IReadOnlyList<ProfileSubscriptionLink> links)

@@ -64,6 +64,32 @@ public sealed class MainWindowCompositionArchitectureTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>Guards the connections page against becoming an orphaned implementation again.</summary>
+    [Fact]
+    public void ConnectionsPage_IsReachableAndOwnsItsInitialLoadLifetime()
+    {
+        string windowXaml = ReadApplicationSource("MainWindow.xaml");
+        string windowCode = ReadApplicationSource("MainWindow.xaml.cs");
+        string composition = ReadApplicationSource(
+            "Presentation",
+            "Composition",
+            "MainWindowComposition.cs");
+        string tray = ReadApplicationSource("Service", "TrayMenuStateBuilder.cs");
+        string pageXaml = ReadApplicationSource("View", "Connections.xaml");
+        string pageCode = ReadApplicationSource("View", "Connections.xaml.cs");
+
+        Assert.Contains("Tag=\"Connections\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("[\"Connections\"] = typeof(View.Connections)", composition, StringComparison.Ordinal);
+        Assert.Contains("\"Connections\" => NavConnectionsItem", windowCode, StringComparison.Ordinal);
+        Assert.Contains("new(\"Connections\", getString(\"Nav.Connections\"))", tray, StringComparison.Ordinal);
+        Assert.Contains("Loaded=\"Page_Loaded\"", pageXaml, StringComparison.Ordinal);
+        Assert.Contains("Unloaded=\"Page_Unloaded\"", pageXaml, StringComparison.Ordinal);
+        Assert.Contains("_loadSession.RunAsync", pageCode, StringComparison.Ordinal);
+        Assert.Contains("_loadSession.Cancel()", pageCode, StringComparison.Ordinal);
+        Assert.Contains("_streamSession.RunAsync(_viewModel.WatchConnectionsAsync)", pageCode, StringComparison.Ordinal);
+        Assert.Contains("_streamSession.Cancel()", pageCode, StringComparison.Ordinal);
+    }
+
     /// <summary>Guards tray callbacks against continuing through a closed window runtime.</summary>
     [Fact]
     public void MainWindow_TrayAsyncCallbacksSnapshotRuntimeAndObserveWindowLifetime()

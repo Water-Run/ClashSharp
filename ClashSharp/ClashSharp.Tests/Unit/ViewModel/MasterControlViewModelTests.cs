@@ -1,4 +1,6 @@
+using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.Diagnostics;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -79,7 +81,7 @@ public sealed class MasterControlViewModelTests
 
         Assert.Equal("Core ready: v1.19.11", viewModel.CoreStatusText);
         Assert.Equal("On", viewModel.SystemProxyStatusText);
-        Assert.Equal("Standby", viewModel.TransparentProxyStatusText);
+        Assert.Equal("Unavailable", viewModel.TransparentProxyStatusText);
         Assert.Equal("Ready", viewModel.BasicStatusText);
         Assert.Equal("HK-01", viewModel.CurrentNodeText);
         Assert.Equal("82 ms", viewModel.LatencySummaryText);
@@ -276,6 +278,23 @@ public sealed class MasterControlViewModelTests
         Assert.Equal(string.Empty, viewModel.CoreStatusText);
         Assert.Equal("Mode failed", viewModel.OperationErrorText);
         Assert.Contains(log.Entries, entry => entry.Level == "Error" && entry.Detail == "missing core");
+    }
+
+    [Fact]
+    public async Task ApplyModeAsync_WhenTakeoverHasStableCode_ShowsActionableDiagnostic()
+    {
+        FakeMasterTakeover takeover = new()
+        {
+            ExceptionToThrow = new TestStableRuntimeDiagnosticException(
+                RuntimeFailureDiagnostics.GeoAssetsMissing),
+        };
+        MasterControlViewModel viewModel = CreateViewModel(takeover: takeover);
+
+        await viewModel.ApplyModeAsync(ClashSharpMode.Standby, CancellationToken.None);
+
+        Assert.Equal(
+            "Geo data unavailable [geo.assets_missing]",
+            viewModel.OperationErrorText);
     }
 
     /// <summary>Verifies post-apply publication failures cannot leave optimistic mode presentation behind.</summary>
@@ -618,7 +637,26 @@ public sealed class MasterControlViewModelTests
     public async Task ToggleTransparentProxyCommand_UpdatesSettingsAndTile()
     {
         FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
-        MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+        FakeMasterRuntime runtime = new()
+        {
+            Snapshot = MasterControlRuntimeSnapshot.Unavailable with
+            {
+                RuntimeOwnershipKnown = true,
+                EffectiveOwner = MihomoCoreOwner.None,
+            },
+        };
+        FakeApplicationActionDispatcher actions = new()
+        {
+            OnDispatch = (_, value, _) =>
+            {
+                settings.TransparentProxyEnabled = bool.Parse(value);
+                return Task.CompletedTask;
+            },
+        };
+        MasterControlViewModel viewModel = CreateViewModel(
+            settings: settings,
+            runtime: runtime,
+            actions: actions);
         await viewModel.LoadAsync(CancellationToken.None);
         MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "transparent-proxy");
 
@@ -651,11 +689,39 @@ public sealed class MasterControlViewModelTests
 
         Assert.True(settings.TransparentProxyEnabled);
         Assert.True(tile.IsToggleOn);
-        Assert.Equal("Standby", viewModel.TransparentProxyStatusText);
+        Assert.Equal("Unavailable", viewModel.TransparentProxyStatusText);
         Assert.Equal("Unexpected error", viewModel.OperationErrorText);
         Assert.True(viewModel.HasOperationError);
         ApplicationError error = Assert.Single(errorSink.Errors);
         Assert.Equal("master-transparent-proxy-setting", error.OperationName);
+        Assert.Same(failure, error.Exception);
+    }
+
+    [Fact]
+    public async Task ToggleTransparentProxyCommand_WhenDispatchHasStableCode_ShowsActionableDiagnostic()
+    {
+        FakeMasterSettings settings = new() { TransparentProxyEnabled = true };
+        TestStableRuntimeDiagnosticException failure = new("geo.assets_missing");
+        FakeApplicationActionDispatcher actions = new() { ExceptionToThrow = failure };
+        FakeApplicationErrorSink errorSink = new();
+        MasterControlViewModel viewModel = CreateViewModel(
+            settings: settings,
+            actions: actions,
+            errorSink: errorSink);
+        await viewModel.LoadAsync(CancellationToken.None);
+        MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(
+            static item => item.Id == "transparent-proxy");
+        AsyncRelayCommand command = Assert.IsAssignableFrom<AsyncRelayCommand>(tile.TileCommand);
+
+        command.Execute(null);
+        await Assert.IsAssignableFrom<Task>(command.ExecutionTask);
+
+        Assert.True(settings.TransparentProxyEnabled);
+        Assert.True(tile.IsToggleOn);
+        Assert.Equal(
+            "Geo data unavailable [geo.assets_missing]",
+            viewModel.OperationErrorText);
+        ApplicationError error = Assert.Single(errorSink.Errors);
         Assert.Same(failure, error.Exception);
     }
 
@@ -908,6 +974,7 @@ public sealed class MasterControlViewModelTests
                 "About.Runtime.Title" => "Runtime",
                 "About.Runtime.Value" => ".NET 10 + WinUI 3",
                 "Master.Log.ApplyModeFailed" => "Mode failed",
+                "RuntimeFailure.GeoData" => "Geo data unavailable",
                 "Master.Status.Seconds.Format" => "{0} s",
                 "Master.Status.CurrentNodeUnavailable" => "No node",
                 "Master.Status.LatencyUnavailable" => "Not tested",
@@ -935,15 +1002,20 @@ public sealed class MasterControlViewModelTests
     {
         public Exception? ExceptionToThrow { get; set; }
 
+        public Func<ApplicationActionKind, string, CancellationToken, Task>? OnDispatch { get; set; }
+
         public Task DispatchAsync(
             ApplicationActionKind kind,
             string value,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return ExceptionToThrow is null
-                ? Task.CompletedTask
-                : Task.FromException(ExceptionToThrow);
+            if (ExceptionToThrow is not null)
+            {
+                return Task.FromException(ExceptionToThrow);
+            }
+
+            return OnDispatch?.Invoke(kind, value, cancellationToken) ?? Task.CompletedTask;
         }
     }
 
@@ -1228,5 +1300,11 @@ public sealed class MasterControlViewModelTests
                 .ToArray();
             return SavedLayout;
         }
+    }
+
+    private sealed class TestStableRuntimeDiagnosticException(string diagnosticCode)
+        : InvalidOperationException("typed runtime failure"), IStableDiagnosticCodeProvider
+    {
+        public string DiagnosticCode { get; } = diagnosticCode;
     }
 }

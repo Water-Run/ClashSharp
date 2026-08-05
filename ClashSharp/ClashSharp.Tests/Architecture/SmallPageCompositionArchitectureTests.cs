@@ -74,7 +74,7 @@ public sealed class SmallPageCompositionArchitectureTests
         string bridge = ReadApplicationSource(
             "Presentation/Composition/LegacyPageServiceBridge.cs");
 
-        Assert.Equal(12, Regex.Count(bridge, @"\.Instance\b", RegexOptions.CultureInvariant));
+        Assert.Equal(13, Regex.Count(bridge, @"\.Instance\b", RegexOptions.CultureInvariant));
         Assert.Contains("intentionally lazy", bridge, StringComparison.Ordinal);
     }
 

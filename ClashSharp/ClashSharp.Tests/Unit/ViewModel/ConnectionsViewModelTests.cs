@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Runtime.CompilerServices;
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
 
@@ -20,7 +21,6 @@ public sealed class ConnectionsViewModelTests
         Assert.Equal("Connections", viewModel.PageTitleText);
         Assert.Equal("Description", viewModel.DescriptionText);
         Assert.Equal("Refresh", viewModel.RefreshConnectionsText);
-        Assert.Equal("Persist", viewModel.PersistConnectionsText);
         Assert.Equal("Close all", viewModel.CloseAllConnectionsText);
         Assert.Equal("Close", viewModel.CloseConnectionText);
         Assert.Equal("Not refreshed", viewModel.ConnectionStatusText);
@@ -70,23 +70,59 @@ public sealed class ConnectionsViewModelTests
         Assert.Contains(log.Entries, entry => entry.Level == "Warning" && entry.Detail == "offline");
     }
 
-    /// <summary>Verifies persisting snapshots refreshes first and logs inserted row count.</summary>
+    /// <summary>Verifies a canceled stale response cannot overwrite page state after navigation or a newer action.</summary>
     [Fact]
-    public async Task PersistConnectionsAsync_RefreshesAndPersistsSnapshot()
+    public async Task RefreshConnectionsAsync_WhenCancellationWins_DoesNotPublishStaleRows()
     {
-        FakeConnectionClient client = new();
-        FakeConnectionLog log = new() { InsertedCount = 2 };
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            new FakeConnectionClient(),
+            new FakeConnectionLog(),
+            new TestApplicationErrorSink());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => viewModel.RefreshConnectionsAsync(cancellation.Token));
+
+        Assert.Empty(viewModel.Connections);
+        Assert.Equal("Not refreshed", viewModel.ConnectionStatusText);
+    }
+
+    /// <summary>Verifies live snapshots replace the visible REST snapshot until page cancellation.</summary>
+    [Fact]
+    public async Task WatchConnectionsAsync_PublishesStreamSnapshotUntilCancelled()
+    {
+        FakeConnectionClient client = new()
+        {
+            StreamConnections =
+            [
+                new("live", "stream", "host", "rule", "", "proxy", 1, 2, DateTimeOffset.UnixEpoch),
+            ],
+        };
         ConnectionsViewModel viewModel = new(
             new FakeConnectionsLocalization(),
             client,
-            log,
+            new FakeConnectionLog(),
             new TestApplicationErrorSink());
+        TaskCompletionSource applied = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ConnectionsViewModel.Connections)
+                && viewModel.Connections.Count == 1
+                && viewModel.Connections[0].Connection.Id == "live")
+            {
+                applied.TrySetResult();
+            }
+        };
+        using CancellationTokenSource cancellation = new();
 
-        await viewModel.PersistConnectionsAsync(CancellationToken.None);
+        Task watch = viewModel.WatchConnectionsAsync(cancellation.Token);
+        await applied.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellation.Cancel();
 
-        Assert.Equal(client.Connections, log.LastSnapshot);
-        Assert.Equal("Persisted 2", viewModel.ConnectionStatusText);
-        Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Message == "Persisted 2" && entry.Detail is null);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watch);
+        Assert.Equal("1 active", viewModel.ConnectionStatusText);
     }
 
     /// <summary>Verifies closing one connection calls mihomo and refreshes the visible list.</summary>
@@ -109,6 +145,26 @@ public sealed class ConnectionsViewModelTests
         Assert.Contains(log.Entries, entry => entry.Level == "Info" && entry.Message == "Closed" && entry.Detail == "1");
     }
 
+    /// <summary>Verifies a failed post-close refresh remains visible instead of being overwritten by success text.</summary>
+    [Fact]
+    public async Task CloseConnectionAsync_WhenRefreshFails_PreservesUnavailableStatus()
+    {
+        FakeConnectionClient client = new() { ExceptionToThrow = new HttpRequestException("offline") };
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            client,
+            log,
+            new TestApplicationErrorSink());
+
+        await viewModel.CloseConnectionAsync(client.Connections[0], CancellationToken.None);
+
+        Assert.Equal("1", client.ClosedConnectionId);
+        Assert.Equal("Unavailable", viewModel.ConnectionStatusText);
+        Assert.DoesNotContain(log.Entries, entry => entry.Message == "Closed");
+        Assert.Contains(log.Entries, entry => entry.Level == "Warning" && entry.Detail == "offline");
+    }
+
     /// <summary>Verifies closing all connections calls mihomo and refreshes the visible list.</summary>
     [Fact]
     public async Task CloseAllConnectionsAsync_WhenSuccessful_ClosesAllConnectionsAndRefreshes()
@@ -127,6 +183,23 @@ public sealed class ConnectionsViewModelTests
         Assert.Equal("Closed all", viewModel.ConnectionStatusText);
     }
 
+    /// <summary>Verifies a failed refresh after close-all is not masked by a close-all success status.</summary>
+    [Fact]
+    public async Task CloseAllConnectionsAsync_WhenRefreshFails_PreservesUnavailableStatus()
+    {
+        FakeConnectionClient client = new() { ExceptionToThrow = new HttpRequestException("offline") };
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(),
+            client,
+            new FakeConnectionLog(),
+            new TestApplicationErrorSink());
+
+        await viewModel.CloseAllConnectionsAsync(CancellationToken.None);
+
+        Assert.True(client.CloseAllCalled);
+        Assert.Equal("Unavailable", viewModel.ConnectionStatusText);
+    }
+
     /// <summary>Fake localization provider for connection tests.</summary>
     private sealed class FakeConnectionsLocalization : IConnectionsLocalization
     {
@@ -140,13 +213,11 @@ public sealed class ConnectionsViewModelTests
                 "Nav.Connections" => "Connections",
                 "Page.Connections.Description" => "Description",
                 "Command.Refresh" => "Refresh",
-                "Command.PersistSnapshot" => "Persist",
                 "Command.CloseAll" => "Close all",
                 "Command.Close" => "Close",
                 "Connections.Status.NotRefreshed" => "Not refreshed",
                 "Connections.Status.Active.Format" => "{0} active",
                 "Connections.Status.Unavailable" => "Unavailable",
-                "Connections.Status.Persisted.Format" => "Persisted {0}",
                 "Connections.Status.Closed" => "Closed",
                 "Connections.Status.ClosedAll" => "Closed all",
                 _ => key,
@@ -169,6 +240,8 @@ public sealed class ConnectionsViewModelTests
         /// <value>Exception thrown when non-null.</value>
         public Exception? ExceptionToThrow { get; set; }
 
+        public IReadOnlyList<ActiveConnection>? StreamConnections { get; set; }
+
         /// <summary>Gets the number of refresh calls.</summary>
         /// <value>Refresh call count.</value>
         public int RefreshCount { get; private set; }
@@ -190,6 +263,13 @@ public sealed class ConnectionsViewModelTests
             return ExceptionToThrow is null
                 ? Task.FromResult(Connections)
                 : Task.FromException<IReadOnlyList<ActiveConnection>>(ExceptionToThrow);
+        }
+
+        public async IAsyncEnumerable<IReadOnlyList<ActiveConnection>> StreamActiveConnectionsAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            yield return StreamConnections ?? Connections;
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         }
 
         /// <summary>Closes one fake connection.</summary>
@@ -215,26 +295,9 @@ public sealed class ConnectionsViewModelTests
     /// <summary>Fake connection log for connection tests.</summary>
     private sealed class FakeConnectionLog : IConnectionLog
     {
-        /// <summary>Gets or sets inserted snapshot row count.</summary>
-        /// <value>Inserted row count returned by snapshot append.</value>
-        public int InsertedCount { get; set; }
-
-        /// <summary>Gets last persisted snapshot.</summary>
-        /// <value>Last snapshot passed to append.</value>
-        public IReadOnlyList<ActiveConnection>? LastSnapshot { get; private set; }
-
         /// <summary>Gets captured log entries.</summary>
         /// <value>Mutable captured log entries.</value>
         public List<LogEntry> Entries { get; } = [];
-
-        /// <summary>Appends a fake connection snapshot.</summary>
-        /// <param name="connections">Connections to persist. Must not be null.</param>
-        /// <returns>Configured inserted count.</returns>
-        public int AppendConnectionSnapshot(IReadOnlyList<ActiveConnection> connections)
-        {
-            LastSnapshot = connections;
-            return InsertedCount;
-        }
 
         /// <summary>Captures one log entry.</summary>
         /// <param name="level">Log level. Must not be null.</param>

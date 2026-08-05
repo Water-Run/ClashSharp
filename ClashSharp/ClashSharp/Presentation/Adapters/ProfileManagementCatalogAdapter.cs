@@ -23,6 +23,11 @@ internal sealed class ProfileManagementCatalogAdapter : IProfileManagementCatalo
         return _catalog.GetProfiles();
     }
 
+    public IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId)
+    {
+        return _catalog.GetProfileHistory(profileId);
+    }
+
     public Task<ProfileImportResult> ImportLocalProfileAsync(
         string filePath,
         CancellationToken cancellationToken)
@@ -41,8 +46,28 @@ internal sealed class ProfileManagementCatalogAdapter : IProfileManagementCatalo
         string profileId,
         CancellationToken cancellationToken)
     {
-        return Task.Run(
-            () => _catalog.TrySetActiveProfile(profileId),
-            cancellationToken);
+        return _catalog.TryApplyActiveProfileAsync(profileId, cancellationToken);
+    }
+
+    public Task<bool> TryRenameProfileAsync(
+        string profileId,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        return _catalog.TryRenameProfileAsync(profileId, name, cancellationToken);
+    }
+
+    public Task<bool> TryDeleteProfileAsync(
+        string profileId,
+        CancellationToken cancellationToken)
+    {
+        return _catalog.TryDeleteProfileAsync(profileId, cancellationToken);
+    }
+
+    public Task<ProfileImportResult> RollbackProfileAsync(
+        ProfileHistoryEntry historyEntry,
+        CancellationToken cancellationToken)
+    {
+        return _catalog.RollbackProfileAsync(historyEntry, cancellationToken);
     }
 }

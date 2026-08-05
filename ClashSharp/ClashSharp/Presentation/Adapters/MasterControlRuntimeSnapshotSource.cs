@@ -26,6 +26,9 @@ internal sealed class MasterControlRuntimeSnapshotSource : IMasterControlRuntime
     private readonly Func<RuntimeTrafficRateSnapshot> _getRuntimeTrafficRate;
     private readonly Func<TriggerPresentationSummary> _getTriggerSummary;
     private readonly Func<long> _getWorkingSetBytes;
+    private readonly Func<bool> _getAppCoreRunning;
+    private readonly Func<bool> _getTunRequested;
+    private readonly Func<RuntimeConfigurationIntegrityObservation> _observeRuntimeConfigurationIntegrity;
 
     internal MasterControlRuntimeSnapshotSource(
         Func<string> getActiveProfileId,
@@ -38,7 +41,10 @@ internal sealed class MasterControlRuntimeSnapshotSource : IMasterControlRuntime
         Func<StartupRestoreFallbackStatus> getStartupRestoreFallbackStatus,
         Func<RuntimeTrafficRateSnapshot> getRuntimeTrafficRate,
         Func<TriggerPresentationSummary> getTriggerSummary,
-        Func<long> getWorkingSetBytes)
+        Func<long> getWorkingSetBytes,
+        Func<bool>? getAppCoreRunning = null,
+        Func<bool>? getTunRequested = null,
+        Func<RuntimeConfigurationIntegrityObservation>? observeRuntimeConfigurationIntegrity = null)
     {
         _getActiveProfileId = getActiveProfileId ?? throw new ArgumentNullException(nameof(getActiveProfileId));
         _getCoreConfiguration = getCoreConfiguration ?? throw new ArgumentNullException(nameof(getCoreConfiguration));
@@ -54,6 +60,10 @@ internal sealed class MasterControlRuntimeSnapshotSource : IMasterControlRuntime
         _getRuntimeTrafficRate = getRuntimeTrafficRate ?? throw new ArgumentNullException(nameof(getRuntimeTrafficRate));
         _getTriggerSummary = getTriggerSummary ?? throw new ArgumentNullException(nameof(getTriggerSummary));
         _getWorkingSetBytes = getWorkingSetBytes ?? throw new ArgumentNullException(nameof(getWorkingSetBytes));
+        _getAppCoreRunning = getAppCoreRunning ?? (static () => false);
+        _getTunRequested = getTunRequested ?? (static () => false);
+        _observeRuntimeConfigurationIntegrity = observeRuntimeConfigurationIntegrity
+            ?? (static () => RuntimeConfigurationIntegrityObservation.Unknown);
     }
 
     public IMasterControlRuntimeSnapshotWork Capture()
@@ -75,6 +85,9 @@ internal sealed class MasterControlRuntimeSnapshotSource : IMasterControlRuntime
             _getMihomoServiceStatus(),
             _getRuntimeTrafficRate(),
             _getStartupRestoreFallbackStatus,
-            _getWorkingSetBytes);
+            _getWorkingSetBytes,
+            _getAppCoreRunning(),
+            _getTunRequested(),
+            _observeRuntimeConfigurationIntegrity);
     }
 }

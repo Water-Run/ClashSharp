@@ -43,14 +43,19 @@ public partial class App : Microsoft.UI.Xaml.Application
         new(HeadlessShutdownMaximumAttempts);
     private readonly HeadlessShutdownPolicy _dispatcherUnavailableShutdownPolicy =
         new(DispatcherUnavailableShutdownMaximumAttempts);
+    private readonly IInstallerTransactionStateReader _installerTransactionStateReader =
+        new InstallerTransactionStateReader();
     private readonly object _shutdownSyncLock = new();
     private WindowsPrimaryInstanceBootstrap? _primaryInstanceBootstrap;
+    private RecoveryWatchdogCoordinator? _recoveryWatchdog;
     private Task<bool>? _shutdownTask;
     private Task? _lifetimeRequestConsumer;
     private long _shutdownAttemptVersion;
     private bool _activationPending;
     private bool _primaryOwnershipConfirmed;
     private bool _startupShellSuppressed;
+    private InstallerTransactionState _installerTransactionState =
+        InstallerTransactionState.Invalid;
 
     /// <summary>Gets the primary application window instance for global access.</summary>
     /// <value>The live primary <see cref="Window"/>; null before attachment, in a secondary process, and after close.</value>
@@ -77,7 +82,8 @@ public partial class App : Microsoft.UI.Xaml.Application
                 () => ClashSharpAppHostFactory.Build(launchRequest,
                     CompleteMainWindowStartup,
                     _lifetimeRequests,
-                    _startupDiagnostics),
+                    _startupDiagnostics,
+                    _installerTransactionState),
                 _lifetimeRunner,
                 CreatePrimaryStartupShell);
             ApplicationLaunchResult result = await bootstrapper.LaunchAsync(
@@ -144,9 +150,20 @@ public partial class App : Microsoft.UI.Xaml.Application
         _startupShellSuppressed = request.Arguments.Contains(
             StartupRestoreFallbackService.HelperArgument,
             StringComparison.OrdinalIgnoreCase);
+        _recoveryWatchdog = await RecoveryWatchdogCoordinator
+            .AcquireAsync(cancellationToken)
+            .ConfigureAwait(true);
+        _installerTransactionState = _installerTransactionStateReader.Read();
         if (_startupShellSuppressed)
         {
             return;
+        }
+
+        if (_installerTransactionState == InstallerTransactionState.Clear
+            && !_recoveryWatchdog.TryArm())
+        {
+            Debug.WriteLine(
+                "ClashSharp recovery watchdog was unavailable; next-start proxy recovery remains active.");
         }
 
         MainWindow window = new(_lifetimeRequests);
@@ -386,6 +403,10 @@ public partial class App : Microsoft.UI.Xaml.Application
         {
             TryLogForcedShutdown(request.Source);
         }
+        else
+        {
+            CompleteRecoveryWatchdogNormalExit();
+        }
 
         _startupCompletion.Abandon();
         await CompleteStartupDiagnosticsAsync().ConfigureAwait(false);
@@ -575,6 +596,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
 
         _startupCompletion.Abandon();
+        CompleteRecoveryWatchdogNormalExit();
         await CompleteStartupDiagnosticsAsync();
         ReleasePrimaryInstanceOwnership();
 
@@ -633,6 +655,19 @@ public partial class App : Microsoft.UI.Xaml.Application
         {
             _primaryInstanceBootstrap = null;
         }
+    }
+
+    private void CompleteRecoveryWatchdogNormalExit()
+    {
+        RecoveryWatchdogCoordinator? watchdog = _recoveryWatchdog;
+        if (watchdog is null)
+        {
+            return;
+        }
+
+        watchdog.Disarm();
+        watchdog.Dispose();
+        _recoveryWatchdog = null;
     }
 
     private static void ApproveWindowCloseForApplicationExit()

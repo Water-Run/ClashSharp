@@ -52,6 +52,18 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.LaunchAtStartupEnabled = value;
     }
 
+    public ClashSharpMode CurrentMode
+    {
+        get => _settings.CurrentMode;
+        set => _settings.CurrentMode = value;
+    }
+
+    public string ActiveProfileId
+    {
+        get => _settings.ActiveProfileId;
+        set => _settings.ActiveProfileId = value;
+    }
+
     public int MixedPort
     {
         get => _settings.MixedPort;

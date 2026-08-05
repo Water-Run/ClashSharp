@@ -18,6 +18,9 @@ internal interface ICoreConfigurationSettings
 
     /// <summary>Gets the active profile identifier.</summary>
     string ActiveProfileId { get; }
+
+    /// <summary>Gets the private bearer secret for the Clash#-owned mihomo controller.</summary>
+    string MihomoControllerSecret { get; }
 }
 
 /// <summary>Counts profile preview rows from configuration text.</summary>
@@ -122,11 +125,36 @@ public sealed partial class CoreConfigurationService
         }
     }
 
-    /// <summary>Ensures the local configuration directory and default configuration file exist.</summary>
-    /// <returns>A <see cref="CoreConfigurationState"/> snapshot after the ensure operation completes.</returns>
+    /// <summary>Creates the built-in profile validation candidate without replacing the live runtime configuration.</summary>
+    /// <returns>A <see cref="CoreConfigurationState"/> snapshot for the isolated validation candidate.</returns>
     public CoreConfigurationState EnsureDefaultConfiguration()
     {
-        return EnsureConfiguration(ClashSharpMode.Standby);
+        _runtimeConfigurationGate.Wait();
+        try
+        {
+            lock (_syncLock)
+            {
+                string candidateDirectory = Path.Combine(
+                    _configurationDirectoryPath,
+                    "validation-candidates");
+                string candidatePath = Path.Combine(candidateDirectory, "built-in-direct.yaml");
+                Directory.CreateDirectory(candidateDirectory);
+                string candidateText = BuildRuntimeConfiguration(
+                    ProfileCatalogIds.BuiltInDirect,
+                    _settings.MixedPort,
+                    ClashSharpMode.Standby,
+                    transparentProxyEnabled: false);
+                _writeAllText(
+                    candidatePath,
+                    candidateText,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                return new CoreConfigurationState(candidateDirectory, candidatePath, true);
+            }
+        }
+        finally
+        {
+            _runtimeConfigurationGate.Release();
+        }
     }
 
     /// <summary>Ensures the local configuration directory and managed configuration file match <paramref name="mode"/>.</summary>
@@ -156,17 +184,25 @@ public sealed partial class CoreConfigurationService
         bool transparentProxyEnabled,
         int mixedPort)
     {
-        lock (_syncLock)
+        _runtimeConfigurationGate.Wait();
+        try
         {
-            Directory.CreateDirectory(_configurationDirectoryPath);
+            lock (_syncLock)
+            {
+                Directory.CreateDirectory(_configurationDirectoryPath);
 
-            string configText = BuildRuntimeConfiguration(mixedPort, mode, transparentProxyEnabled);
-            _writeAllText(
-                _configurationFilePath,
-                configText,
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                string configText = BuildRuntimeConfiguration(mixedPort, mode, transparentProxyEnabled);
+                _writeAllText(
+                    _configurationFilePath,
+                    configText,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-            return GetState();
+                return GetState();
+            }
+        }
+        finally
+        {
+            _runtimeConfigurationGate.Release();
         }
     }
 
@@ -359,21 +395,52 @@ public sealed partial class CoreConfigurationService
             GetString("CoreConfiguration.Validated"));
     }
 
-    /// <summary>Builds runtime configuration from the active imported profile when available, otherwise from the default profile.</summary>
+    /// <summary>Builds runtime configuration from the selected imported or built-in profile.</summary>
     /// <param name="mixedPort">Mixed HTTP and SOCKS proxy port in range [1, 65535].</param>
     /// <param name="mode">Master takeover mode whose equivalent mihomo mode should be emitted.</param>
     /// <returns>Runtime configuration text with deterministic line endings.</returns>
     private string BuildRuntimeConfiguration(int mixedPort, ClashSharpMode mode, bool transparentProxyEnabled)
     {
-        string activeProfileId = _settings.ActiveProfileId;
-        string profileConfigPath = GetProfileConfigurationPath(activeProfileId);
-        if (File.Exists(profileConfigPath) && !StringComparer.Ordinal.Equals(activeProfileId, ProfileCatalogIds.BuiltInDirect))
+        return BuildRuntimeConfiguration(
+            _settings.ActiveProfileId,
+            mixedPort,
+            mode,
+            transparentProxyEnabled);
+    }
+
+    /// <summary>Builds runtime configuration for an explicit desired profile without mutating active-profile settings.</summary>
+    private string BuildRuntimeConfiguration(
+        string profileId,
+        int mixedPort,
+        ClashSharpMode mode,
+        bool transparentProxyEnabled)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
+
+        if (StringComparer.Ordinal.Equals(profileId, ProfileCatalogIds.BuiltInDirect))
         {
-            string profileText = _readAllText(profileConfigPath);
-            return MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(profileText, mixedPort, mode, transparentProxyEnabled);
+            return MihomoRuntimeConfigurationBuilder.BuildDefaultConfiguration(
+                mixedPort,
+                mode,
+                transparentProxyEnabled,
+                _settings.MihomoControllerSecret);
         }
 
-        return MihomoRuntimeConfigurationBuilder.BuildDefaultConfiguration(mixedPort, mode, transparentProxyEnabled);
+        string profileConfigPath = GetProfileConfigurationPath(profileId);
+        if (!File.Exists(profileConfigPath))
+        {
+            throw new FileNotFoundException(
+                "The selected imported profile configuration was not found.",
+                profileConfigPath);
+        }
+
+        string profileText = _readAllText(profileConfigPath);
+        return MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(
+            profileText,
+            mixedPort,
+            mode,
+            transparentProxyEnabled,
+            _settings.MihomoControllerSecret);
     }
 
     /// <summary>Restores the previous committed configuration and removes only this transaction's sidecars.</summary>

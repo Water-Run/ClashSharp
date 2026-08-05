@@ -31,6 +31,34 @@ public sealed class CoreConfigurationServiceTests
         Assert.Contains("tun:\n", configurationText, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void EnsureDefaultConfiguration_WritesIsolatedCandidateWithoutReplacingLiveGeneration()
+    {
+        using TempDirectory tempDirectory = new();
+        FakeCoreConfigurationSettings settings = new()
+        {
+            ActiveProfileId = ProfileCatalogIds.BuiltInDirect,
+            MixedPort = 19091,
+            TransparentProxyEnabled = true,
+        };
+        CoreConfigurationService service = CreateService(tempDirectory.Path, settings);
+        CoreConfigurationState live = service.EnsureConfiguration(
+            ClashSharpMode.FullTakeover,
+            transparentProxyEnabled: true,
+            mixedPort: settings.MixedPort);
+        string liveText = File.ReadAllText(live.ConfigPath);
+
+        CoreConfigurationState candidate = service.EnsureDefaultConfiguration();
+
+        Assert.True(candidate.Exists);
+        Assert.NotEqual(live.ConfigPath, candidate.ConfigPath);
+        Assert.Contains("validation-candidates", candidate.ConfigPath, StringComparison.Ordinal);
+        Assert.Equal(liveText, File.ReadAllText(live.ConfigPath));
+        string candidateText = File.ReadAllText(candidate.ConfigPath);
+        Assert.Contains("mode: direct", candidateText, StringComparison.Ordinal);
+        Assert.DoesNotContain("tun:\n", candidateText, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies profile import uses injected metrics, validation, and localization dependencies.</summary>
     [Fact]
     public async Task ImportProfileConfigurationAsync_UsesInjectedMetricsValidatorAndLocalization()
@@ -412,6 +440,9 @@ public sealed class CoreConfigurationServiceTests
         public int MixedPort { get; init; } = 7890;
 
         public string ActiveProfileId { get; init; } = ProfileCatalogIds.BuiltInDirect;
+
+        public string MihomoControllerSecret { get; init; } =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     }
 
     private sealed class FakeCoreConfigurationProfileMetrics : ICoreConfigurationProfileMetrics

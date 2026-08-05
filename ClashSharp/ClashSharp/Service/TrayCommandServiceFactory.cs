@@ -10,25 +10,8 @@ internal static class TrayCommandServiceFactory
     public static TrayCommandService CreateDefault(ApplicationActionService actions)
     {
         return new TrayCommandService(
-            new TrayCommandSettingsAdapter(AppSettingsService.Instance),
             new TrayCommandTakeoverAdapter(actions),
             new TrayCommandLogAdapter(LogStorageService.Instance));
-    }
-}
-
-/// <summary>Adapts application settings to tray command settings.</summary>
-internal sealed class TrayCommandSettingsAdapter(AppSettingsService settings) : ITrayCommandSettings
-{
-    public ClashSharpMode CurrentMode
-    {
-        get => settings.CurrentMode;
-        set => settings.CurrentMode = value;
-    }
-
-    public bool TransparentProxyEnabled
-    {
-        get => settings.TransparentProxyEnabled;
-        set => settings.TransparentProxyEnabled = value;
     }
 }
 
@@ -40,6 +23,15 @@ internal sealed class TrayCommandTakeoverAdapter(ApplicationActionService action
         CancellationToken cancellationToken)
     {
         return actions.ApplyNetworkModeAsync(mode, cancellationToken);
+    }
+
+    public Task<NetworkTakeoverResult> ApplyTransparentProxyAsync(
+        bool transparentProxyEnabled,
+        CancellationToken cancellationToken)
+    {
+        return actions.ApplyTransparentProxyAsync(
+            transparentProxyEnabled,
+            cancellationToken);
     }
 }
 

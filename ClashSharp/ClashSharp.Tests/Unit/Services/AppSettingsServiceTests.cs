@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
 using ClashSharp.Service;
 
@@ -6,6 +7,99 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Tests defaults exposed by application settings.</summary>
 public sealed class AppSettingsServiceTests
 {
+    [Fact]
+    public async Task OrdinarySetter_EnteredBeforeExclusiveClose_MustDrainBeforeExclusiveLease()
+    {
+        MutationAdmissionBarrier barrier = new();
+        AppSettingsService settings = AppSettingsService.Instance;
+        settings.ConfigureMutationAdmission(barrier);
+        settings.ResetAllSettings();
+        ValueTask<MutationAdmissionLease> pendingExclusive = default;
+        void OnChanged(object? sender, AppSettingChangedEventArgs change)
+        {
+            if (change.Key != "MixedPort")
+            {
+                return;
+            }
+
+            pendingExclusive = barrier.CloseAndDrainAsync(
+                MutationAdmissionClosure.Destructive,
+                CancellationToken.None);
+            Assert.False(pendingExclusive.IsCompleted);
+        }
+
+        settings.SettingChanged += OnChanged;
+        try
+        {
+            settings.MixedPort = 12003;
+            await using MutationAdmissionLease exclusive = await pendingExclusive;
+            Assert.True(exclusive.IsExclusive);
+            Assert.Equal(12003, settings.MixedPort);
+        }
+        finally
+        {
+            settings.SettingChanged -= OnChanged;
+            if (barrier.State == MutationAdmissionState.Open)
+            {
+                settings.ResetAllSettings();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ExclusiveAdmission_RejectsOrdinarySetter_ButAcceptsOneAdmittedBatch()
+    {
+        MutationAdmissionBarrier barrier = new();
+        AppSettingsService settings = AppSettingsService.Instance;
+        settings.ConfigureMutationAdmission(barrier);
+        settings.ResetAllSettings();
+        await using (MutationAdmissionLease exclusive = await barrier.CloseAndDrainAsync(
+            MutationAdmissionClosure.Destructive,
+            CancellationToken.None))
+        {
+            Assert.Throws<MutationAdmissionRejectedException>(
+                () => settings.MixedPort = 12004);
+
+            settings.WriteAdmitted(exclusive, editor =>
+            {
+                editor.MixedPort = 12005;
+                editor.ConnectionSamplingIntervalSeconds = 45;
+            });
+
+            Assert.Equal(12005, settings.MixedPort);
+            Assert.Equal(45, settings.ConnectionSamplingIntervalSeconds);
+        }
+
+        settings.ResetAllSettings();
+    }
+
+    [Fact]
+    public async Task AdmittedBatch_WhenValidationFails_DoesNotApplyAnyStagedKey()
+    {
+        MutationAdmissionBarrier barrier = new();
+        AppSettingsService settings = AppSettingsService.Instance;
+        settings.ConfigureMutationAdmission(barrier);
+        settings.ResetAllSettings();
+        int baselinePort = settings.MixedPort;
+        int baselineInterval = settings.ConnectionSamplingIntervalSeconds;
+        await using (MutationAdmissionLease exclusive = await barrier.CloseAndDrainAsync(
+            MutationAdmissionClosure.Destructive,
+            CancellationToken.None))
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                settings.WriteAdmitted(exclusive, editor =>
+                {
+                    editor.MixedPort = 12006;
+                    editor.ConnectionSamplingIntervalSeconds = 301;
+                }));
+
+            Assert.Equal(baselinePort, settings.MixedPort);
+            Assert.Equal(baselineInterval, settings.ConnectionSamplingIntervalSeconds);
+        }
+
+        settings.ResetAllSettings();
+    }
+
     /// <summary>Verifies the default mixed proxy port avoids common proxy/VPN defaults.</summary>
     [Fact]
     public void MixedPort_DefaultsTo10000()
@@ -114,6 +208,36 @@ public sealed class AppSettingsServiceTests
         Assert.Equal(MainlandChinaFeatureMode.FlagReplacementAndTextCompletion, AppSettingsService.Instance.MainlandChinaFeatureMode);
     }
 
+    /// <summary>Verifies the persisted hero layout default matches the effective eight-slot product layout.</summary>
+    [Fact]
+    public void MasterHeroStatusLayout_DefaultsToCanonicalProductLayout()
+    {
+        ResetSettings();
+
+        Assert.Equal(
+            "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability",
+            AppSettingsService.Instance.MasterHeroStatusLayout);
+    }
+
+    /// <summary>Verifies direct hero layout writes use the same registry normalization as data packages.</summary>
+    [Fact]
+    public void MasterHeroStatusLayout_WhenPartial_PersistsCanonicalEightSlotLayout()
+    {
+        ResetSettings();
+        try
+        {
+            AppSettingsService.Instance.MasterHeroStatusLayout = " Latency,CoreStatus,LATENCY ";
+
+            Assert.Equal(
+                "Latency,CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic",
+                AppSettingsService.Instance.MasterHeroStatusLayout);
+        }
+        finally
+        {
+            ResetSettings();
+        }
+    }
+
     /// <summary>Verifies direct layout writes persist the registry's canonical text.</summary>
     [Fact]
     public void MasterInfoTileLayout_WhenNoncanonical_PersistsCanonicalText()
@@ -168,6 +292,8 @@ public sealed class AppSettingsServiceTests
         AppSettingsService.Instance.LaunchAtStartupEnabled = true;
         AppSettingsService.Instance.StartupBehaviorMode = StartupBehaviorMode.StartRuleProxy;
         AppSettingsService.Instance.StartupConflictCheckEnabled = false;
+        AppSettingsService.Instance.MasterHeroStatusLayout =
+            "Latency,ActiveConnections,CurrentMode,ActiveProfile,MihomoService,StartupLaunch,SystemProxy,Availability";
         WriteShowStartupGuideOnStartup(false);
 
         AppSettingsService.Instance.ResetAllSettings();
@@ -183,7 +309,26 @@ public sealed class AppSettingsServiceTests
         Assert.False(AppSettingsService.Instance.LaunchAtStartupEnabled);
         Assert.Equal(StartupBehaviorMode.LastSetting, AppSettingsService.Instance.StartupBehaviorMode);
         Assert.True(AppSettingsService.Instance.StartupConflictCheckEnabled);
+        Assert.Equal(
+            "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability",
+            AppSettingsService.Instance.MasterHeroStatusLayout);
         Assert.True(ReadShowStartupGuideOnStartup());
+    }
+
+    /// <summary>Verifies ordinary reset preserves the internal credential while clear-all rotates it.</summary>
+    [Fact]
+    public void ClearAllSettings_RemovesInternalControllerCredential()
+    {
+        AppSettingsService.Instance.ClearAllSettings();
+        string firstSecret = AppSettingsService.Instance.MihomoControllerSecret;
+
+        AppSettingsService.Instance.ResetAllSettings();
+        Assert.Equal(firstSecret, AppSettingsService.Instance.MihomoControllerSecret);
+
+        AppSettingsService.Instance.ClearAllSettings();
+        string rotatedSecret = AppSettingsService.Instance.MihomoControllerSecret;
+
+        Assert.NotEqual(firstSecret, rotatedSecret);
     }
 
     /// <summary>Verifies settings writes expose one auditable change event and suppress no-op writes.</summary>

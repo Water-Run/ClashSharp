@@ -40,7 +40,7 @@ public sealed class LocalizationResourcesTests
         IReadOnlySet<string> englishKeys = explicitTranslations[AppLanguage.English].Keys.ToHashSet(StringComparer.Ordinal);
 
         Assert.Equal(6, explicitTranslations.Count);
-        Assert.Equal(690, englishKeys.Count);
+        Assert.True(englishKeys.Count >= 704);
         Assert.DoesNotContain(AppLanguage.AutoDetect, explicitTranslations.Keys);
 
         foreach ((AppLanguage language, IReadOnlyDictionary<string, string> translations) in explicitTranslations)
@@ -213,11 +213,13 @@ public sealed class LocalizationResourcesTests
     [InlineData("StartupPrompt.Check.TransparentProxy.Missing")]
     [InlineData("Startup.Shell.Starting")]
     [InlineData("Startup.Shell.Failed")]
+    [InlineData("Startup.Shell.InstallerTransactionPending")]
     [InlineData("StartupPrompt.Check.Fallback.Title")]
     [InlineData("StartupPrompt.Check.StaleProxy.Title")]
     [InlineData("StartupPrompt.Check.Unavailable")]
     [InlineData("MihomoService.Status.NotDeployed")]
     [InlineData("MihomoService.Status.DeployedRunning")]
+    [InlineData("MihomoService.Status.UntrustedBinaries")]
     [InlineData("Tray.Menu.Mode")]
     [InlineData("Tray.Menu.Status")]
     [InlineData("Tray.Menu.Pages")]

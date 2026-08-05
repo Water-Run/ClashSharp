@@ -16,7 +16,11 @@ internal sealed record MasterControlRuntimeSnapshot(
     MihomoServiceStatus MihomoService,
     StartupRestoreFallbackStatus StartupRestoreFallback,
     RuntimeTrafficRateSnapshot RuntimeTraffic = default,
-    long AppWorkingSetBytes = 0)
+    long AppWorkingSetBytes = 0,
+    bool RuntimeOwnershipKnown = false,
+    MihomoCoreOwner EffectiveOwner = MihomoCoreOwner.None,
+    bool TunRequested = false,
+    bool TunEffective = false)
 {
     public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
         new CoreConfigurationState(string.Empty, string.Empty, false),

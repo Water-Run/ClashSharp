@@ -43,6 +43,54 @@ public sealed class StartupConflictDetectionServiceTests
         Assert.Empty(issues);
     }
 
+    /// <summary>Verifies active known TUN interfaces are reported without an automatic repair.</summary>
+    [Fact]
+    public void CheckConflicts_ActiveTunInterfaces_AreInformationalAndBoundedToOneIssue()
+    {
+        FakeStartupConflictEnvironment environment = new()
+        {
+            TunInterfaces = ["WireGuard Tunnel", "Tailscale"],
+        };
+        StartupConflictDetectionService service = CreateService(environment, key => key switch
+        {
+            "StartupConflict.Tun.Title" => "TUN title",
+            "StartupConflict.Tun.Description" => "Review: {0}",
+            _ => key,
+        });
+
+        StartupConflictIssue issue = Assert.Single(service.CheckConflicts(10000));
+
+        Assert.Equal(StartupConflictKind.ActiveTunInterface, issue.Kind);
+        Assert.Equal("TUN title", issue.Title);
+        Assert.Equal("Review: WireGuard Tunnel, Tailscale", issue.Description);
+        Assert.False(issue.HasRepairAction);
+        Assert.Empty(issue.RepairText);
+        Assert.Equal(RuntimeFailureDiagnostics.TunConflict, issue.DiagnosticCode);
+    }
+
+    [Fact]
+    public void ProcessRepairIdentity_RejectsPidReuseAndIncompleteSnapshots()
+    {
+        StartupConflictProcess expected = new(42, "mihomo", 638900000000000000);
+
+        Assert.True(DefaultStartupConflictEnvironment.MatchesProcessIdentity(
+            expected,
+            "MIHOMO",
+            expected.StartTimeUtcTicks));
+        Assert.False(DefaultStartupConflictEnvironment.MatchesProcessIdentity(
+            expected,
+            "unrelated",
+            expected.StartTimeUtcTicks));
+        Assert.False(DefaultStartupConflictEnvironment.MatchesProcessIdentity(
+            expected,
+            "mihomo",
+            expected.StartTimeUtcTicks + 1));
+        Assert.False(DefaultStartupConflictEnvironment.MatchesProcessIdentity(
+            expected with { StartTimeUtcTicks = 0 },
+            "mihomo",
+            expected.StartTimeUtcTicks));
+    }
+
     /// <summary>Verifies loopback and target port must belong to the same endpoint before treating a proxy as Clash# owned.</summary>
     [Fact]
     public void CheckConflicts_WhenLoopbackAndTargetPortAreOnDifferentEndpoints_ReportsWrongManualProxy()
@@ -286,6 +334,8 @@ public sealed class StartupConflictDetectionServiceTests
 
         public IReadOnlyList<StartupConflictProcess> Processes { get; init; } = [];
 
+        public IReadOnlyList<string> TunInterfaces { get; init; } = [];
+
         public bool IsPortInUse { get; init; }
 
         public WindowsProxyState ProxyState { get; init; } = new(false, string.Empty);
@@ -304,6 +354,11 @@ public sealed class StartupConflictDetectionServiceTests
             return Processes;
         }
 
+        public IReadOnlyList<string> GetActiveTunInterfaces()
+        {
+            return TunInterfaces;
+        }
+
         public bool IsTcpPortInUse(int port)
         {
             return IsPortInUse;
@@ -314,7 +369,9 @@ public sealed class StartupConflictDetectionServiceTests
             return ProxyState;
         }
 
-        public Task TerminateProcessAsync(int processId, CancellationToken cancellationToken)
+        public Task TerminateProcessAsync(
+            StartupConflictProcess process,
+            CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (TerminateProcessException is not null)
@@ -322,7 +379,7 @@ public sealed class StartupConflictDetectionServiceTests
                 return Task.FromException(TerminateProcessException);
             }
 
-            TerminatedProcessIds.Add(processId);
+            TerminatedProcessIds.Add(process.ProcessId);
             return Task.CompletedTask;
         }
 

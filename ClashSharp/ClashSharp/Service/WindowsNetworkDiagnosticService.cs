@@ -44,7 +44,7 @@ internal readonly record struct WindowsDiagnosticProcessResult(int ExitCode, str
 /// <summary>Provides independent WSL, terminal, and Microsoft Store network diagnostics, apply, and reset actions.</summary>
 /// <remarks>
 /// Invariants: Each target diagnosis reports its own readiness; WSL repair also writes proxy environment variables required by WSLENV bridging.
-/// Thread safety: Stateless service; process launches are delegated to an injected runner.
+/// Thread safety: Apply and reset transactions are serialized per service instance; process launches are delegated to an injected runner.
 /// Side effects: Apply and reset methods may update user environment variables or Microsoft Store loopback exemptions through injected dependencies.
 /// </remarks>
 public sealed partial class WindowsNetworkDiagnosticService
@@ -58,24 +58,34 @@ public sealed partial class WindowsNetworkDiagnosticService
     /// <summary>Loopback hosts excluded from terminal and WSL proxy routing.</summary>
     private const string NoProxyValue = "localhost,127.0.0.1,::1";
 
+    /// <summary>User environment variables written by terminal and WSL repair actions.</summary>
+    private static readonly string[] ProxyEnvironmentVariableNames = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"];
+
     private readonly IWindowsDiagnosticSettings _settings;
 
     private readonly IWindowsDiagnosticEnvironment _environment;
 
     private readonly IWindowsDiagnosticProcessRunner _processRunner;
 
+    private readonly IWindowsDiagnosticMutationJournalStore _mutationJournal;
+
     private readonly Func<string, string> _getString;
+
+    /// <summary>Serializes journal-backed apply and reset transactions.</summary>
+    private readonly SemaphoreSlim _mutationGate = new(1, 1);
 
     /// <summary>Initializes the Windows network diagnostic service.</summary>
     internal WindowsNetworkDiagnosticService(
         IWindowsDiagnosticSettings settings,
         IWindowsDiagnosticEnvironment environment,
         IWindowsDiagnosticProcessRunner processRunner,
+        IWindowsDiagnosticMutationJournalStore mutationJournal,
         Func<string, string> getString)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+        _mutationJournal = mutationJournal ?? throw new ArgumentNullException(nameof(mutationJournal));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
@@ -102,20 +112,26 @@ public sealed partial class WindowsNetworkDiagnosticService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="target"/> is not supported.</exception>
     public async Task<WindowsDiagnosticResult> ApplyAsync(WindowsDiagnosticTarget target, CancellationToken cancellationToken)
     {
-        switch (target)
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            case WindowsDiagnosticTarget.Wsl:
-                ApplyTerminalProxyEnvironment();
-                ApplyWslProxyBridge();
-                return await DiagnoseWslAsync(cancellationToken).ConfigureAwait(false);
-            case WindowsDiagnosticTarget.Terminal:
-                ApplyTerminalProxyEnvironment();
-                return DiagnoseTerminal();
-            case WindowsDiagnosticTarget.MicrosoftStore:
-                await ApplyMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
-                return await DiagnoseMicrosoftStoreAsync(cancellationToken).ConfigureAwait(false);
-            default:
-                throw new ArgumentOutOfRangeException(nameof(target), target, "Unsupported Windows diagnostic target.");
+            switch (target)
+            {
+                case WindowsDiagnosticTarget.Wsl:
+                    ApplyEnvironmentMutations(WindowsDiagnosticMutationOwner.Wsl, includeWslBridge: true);
+                    return await DiagnoseWslAsync(cancellationToken).ConfigureAwait(false);
+                case WindowsDiagnosticTarget.Terminal:
+                    ApplyEnvironmentMutations(WindowsDiagnosticMutationOwner.Terminal, includeWslBridge: false);
+                    return DiagnoseTerminal();
+                case WindowsDiagnosticTarget.MicrosoftStore:
+                    return await ApplyOwnedMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(target), target, "Unsupported Windows diagnostic target.");
+            }
+        }
+        finally
+        {
+            _mutationGate.Release();
         }
     }
 
@@ -126,19 +142,26 @@ public sealed partial class WindowsNetworkDiagnosticService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="target"/> is not supported.</exception>
     public async Task<WindowsDiagnosticResult> ResetAsync(WindowsDiagnosticTarget target, CancellationToken cancellationToken)
     {
-        switch (target)
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            case WindowsDiagnosticTarget.Wsl:
-                ResetWslProxyBridge();
-                return await DiagnoseWslAsync(cancellationToken).ConfigureAwait(false);
-            case WindowsDiagnosticTarget.Terminal:
-                ResetTerminalProxyEnvironment();
-                return DiagnoseTerminal();
-            case WindowsDiagnosticTarget.MicrosoftStore:
-                await ResetMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
-                return await DiagnoseMicrosoftStoreAsync(cancellationToken).ConfigureAwait(false);
-            default:
-                throw new ArgumentOutOfRangeException(nameof(target), target, "Unsupported Windows diagnostic target.");
+            switch (target)
+            {
+                case WindowsDiagnosticTarget.Wsl:
+                    ResetEnvironmentMutations(WindowsDiagnosticMutationOwner.Wsl, includeWslBridge: true);
+                    return await DiagnoseWslAsync(cancellationToken).ConfigureAwait(false);
+                case WindowsDiagnosticTarget.Terminal:
+                    ResetEnvironmentMutations(WindowsDiagnosticMutationOwner.Terminal, includeWslBridge: false);
+                    return DiagnoseTerminal();
+                case WindowsDiagnosticTarget.MicrosoftStore:
+                    return await ResetOwnedMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(target), target, "Unsupported Windows diagnostic target.");
+            }
+        }
+        finally
+        {
+            _mutationGate.Release();
         }
     }
 
@@ -211,20 +234,167 @@ public sealed partial class WindowsNetworkDiagnosticService
             : GetString("WindowsDiagnostic.Wsl.BridgeMissing");
     }
 
-    /// <summary>Applies terminal proxy environment variables for newly launched shells.</summary>
-    private void ApplyTerminalProxyEnvironment()
+    /// <summary>Captures and applies environment mutations owned by one diagnostic target.</summary>
+    private void ApplyEnvironmentMutations(WindowsDiagnosticMutationOwner owner, bool includeWslBridge)
     {
-        string proxyUrl = BuildLocalProxyUrl();
-        SetEnvironment("HTTP_PROXY", proxyUrl);
-        SetEnvironment("HTTPS_PROXY", proxyUrl);
-        SetEnvironment("ALL_PROXY", proxyUrl);
-        SetEnvironment("NO_PROXY", NoProxyValue);
+        WindowsDiagnosticMutationJournal journal = _mutationJournal.Read();
+        Dictionary<string, WindowsDiagnosticEnvironmentMutation> mutations = new(
+            journal.EnvironmentVariables,
+            StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> desiredValues = BuildDesiredEnvironmentValues(includeWslBridge);
+
+        foreach ((string name, string desiredValue) in desiredValues)
+        {
+            string? currentValue = _environment.GetUserEnvironmentVariable(name);
+            if (mutations.TryGetValue(name, out WindowsDiagnosticEnvironmentMutation? existing))
+            {
+                bool externalChange = !IsOwnedEnvironmentValue(currentValue, existing);
+                mutations[name] = existing with
+                {
+                    BaselineExists = externalChange ? currentValue is not null : existing.BaselineExists,
+                    BaselineValue = externalChange ? currentValue : existing.BaselineValue,
+                    AppliedValue = currentValue,
+                    Owners = existing.Owners | owner,
+                    Phase = WindowsDiagnosticMutationPhase.Applying,
+                    PendingAppliedValue = desiredValue,
+                };
+            }
+            else
+            {
+                mutations[name] = new WindowsDiagnosticEnvironmentMutation(
+                    currentValue is not null,
+                    currentValue,
+                    currentValue,
+                    owner,
+                    WindowsDiagnosticMutationPhase.Applying,
+                    desiredValue);
+            }
+        }
+
+        WindowsDiagnosticMutationJournal plannedJournal = journal with { EnvironmentVariables = mutations };
+
+        // Persist every prior/pending pair before the first environment variable changes.
+        _mutationJournal.Write(plannedJournal);
+
+        foreach ((string name, string desiredValue) in desiredValues)
+        {
+            SetEnvironment(name, desiredValue);
+        }
+
+        foreach (string name in desiredValues.Keys)
+        {
+            WindowsDiagnosticEnvironmentMutation mutation = mutations[name];
+            mutations[name] = mutation with
+            {
+                AppliedValue = mutation.PendingAppliedValue,
+                Phase = WindowsDiagnosticMutationPhase.Applied,
+                PendingAppliedValue = null,
+            };
+        }
+
+        _mutationJournal.Write(journal with { EnvironmentVariables = mutations });
     }
 
-    /// <summary>Applies WSL proxy environment variable bridging through WSLENV.</summary>
-    private void ApplyWslProxyBridge()
+    /// <summary>Restores environment baselines only while Clash# still owns the last applied values.</summary>
+    private void ResetEnvironmentMutations(WindowsDiagnosticMutationOwner owner, bool includeWslBridge)
     {
-        string currentValue = GetEnvironment("WSLENV");
+        WindowsDiagnosticMutationJournal journal = _mutationJournal.Read();
+        Dictionary<string, WindowsDiagnosticEnvironmentMutation> mutations = new(
+            journal.EnvironmentVariables,
+            StringComparer.OrdinalIgnoreCase);
+        List<string> names = [.. ProxyEnvironmentVariableNames];
+        if (includeWslBridge)
+        {
+            names.Add("WSLENV");
+        }
+
+        foreach (string name in names)
+        {
+            if (!mutations.TryGetValue(name, out WindowsDiagnosticEnvironmentMutation? mutation)
+                || (mutation.Owners & owner) == 0)
+            {
+                continue;
+            }
+
+            WindowsDiagnosticMutationOwner remainingOwners = mutation.Owners & ~owner;
+            if (remainingOwners != WindowsDiagnosticMutationOwner.None)
+            {
+                string? remainingOwnerValue = _environment.GetUserEnvironmentVariable(name);
+                mutations[name] = FinalizeObservedEnvironmentMutation(
+                    mutation,
+                    remainingOwnerValue,
+                    remainingOwners);
+                continue;
+            }
+
+            string? currentValue = _environment.GetUserEnvironmentVariable(name);
+            if (IsOwnedEnvironmentValue(currentValue, mutation))
+            {
+                SetEnvironment(name, mutation.BaselineExists ? mutation.BaselineValue : null);
+            }
+
+            mutations.Remove(name);
+        }
+
+        _mutationJournal.Write(journal with { EnvironmentVariables = mutations });
+    }
+
+    /// <summary>Returns whether a value matches either durable side of an in-flight apply.</summary>
+    private static bool IsOwnedEnvironmentValue(
+        string? currentValue,
+        WindowsDiagnosticEnvironmentMutation mutation)
+    {
+        return StringComparer.Ordinal.Equals(currentValue, mutation.AppliedValue)
+            || mutation.Phase == WindowsDiagnosticMutationPhase.Applying
+                && StringComparer.Ordinal.Equals(currentValue, mutation.PendingAppliedValue);
+    }
+
+    /// <summary>Collapses an in-flight value while another diagnostic owner remains.</summary>
+    private static WindowsDiagnosticEnvironmentMutation FinalizeObservedEnvironmentMutation(
+        WindowsDiagnosticEnvironmentMutation mutation,
+        string? currentValue,
+        WindowsDiagnosticMutationOwner remainingOwners)
+    {
+        if (mutation.Phase != WindowsDiagnosticMutationPhase.Applying)
+        {
+            return mutation with { Owners = remainingOwners };
+        }
+
+        string appliedValue = StringComparer.Ordinal.Equals(currentValue, mutation.PendingAppliedValue)
+            ? mutation.PendingAppliedValue!
+            : mutation.AppliedValue ?? mutation.PendingAppliedValue!;
+        return mutation with
+        {
+            AppliedValue = appliedValue,
+            Owners = remainingOwners,
+            Phase = WindowsDiagnosticMutationPhase.Applied,
+            PendingAppliedValue = null,
+        };
+    }
+
+    /// <summary>Builds the exact environment values written by one repair action.</summary>
+    private Dictionary<string, string> BuildDesiredEnvironmentValues(bool includeWslBridge)
+    {
+        string proxyUrl = BuildLocalProxyUrl();
+        Dictionary<string, string> desiredValues = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["HTTP_PROXY"] = proxyUrl,
+            ["HTTPS_PROXY"] = proxyUrl,
+            ["ALL_PROXY"] = proxyUrl,
+            ["NO_PROXY"] = NoProxyValue,
+        };
+
+        if (includeWslBridge)
+        {
+            desiredValues["WSLENV"] = BuildWslEnvironmentValue(GetEnvironment("WSLENV"));
+        }
+
+        return desiredValues;
+    }
+
+    /// <summary>Adds the required proxy bridge tokens while retaining unrelated WSLENV entries.</summary>
+    private static string BuildWslEnvironmentValue(string currentValue)
+    {
         List<string> tokens = [.. currentValue.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
         foreach (string token in WslEnvProxyTokens)
         {
@@ -234,25 +404,7 @@ public sealed partial class WindowsNetworkDiagnosticService
             }
         }
 
-        SetEnvironment("WSLENV", string.Join(':', tokens));
-    }
-
-    /// <summary>Removes WSL proxy bridge tokens from the user's WSLENV value.</summary>
-    private void ResetWslProxyBridge()
-    {
-        string currentValue = GetEnvironment("WSLENV");
-        List<string> tokens = [.. currentValue.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
-        tokens.RemoveAll(token => Array.Exists(WslEnvProxyTokens, proxyToken => StringComparer.OrdinalIgnoreCase.Equals(proxyToken, token)));
-        SetEnvironment("WSLENV", tokens.Count == 0 ? null : string.Join(':', tokens));
-    }
-
-    /// <summary>Clears terminal proxy environment variables for newly launched shells.</summary>
-    private void ResetTerminalProxyEnvironment()
-    {
-        SetEnvironment("HTTP_PROXY", null);
-        SetEnvironment("HTTPS_PROXY", null);
-        SetEnvironment("ALL_PROXY", null);
-        SetEnvironment("NO_PROXY", null);
+        return string.Join(':', tokens);
     }
 
     /// <summary>Applies Microsoft Store loopback exemption through CheckNetIsolation.</summary>
@@ -291,6 +443,91 @@ public sealed partial class WindowsNetworkDiagnosticService
         {
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error);
         }
+    }
+
+    /// <summary>Captures Store exemption baseline before applying the Clash#-owned state.</summary>
+    private async Task<WindowsDiagnosticResult> ApplyOwnedMicrosoftStoreLoopbackAsync(CancellationToken cancellationToken)
+    {
+        WindowsDiagnosticMutationJournal journal = _mutationJournal.Read();
+        bool currentState = await GetMicrosoftStoreLoopbackStateAsync(cancellationToken).ConfigureAwait(false);
+        bool baselineState = journal.MicrosoftStore is { } existing
+            && IsOwnedMicrosoftStoreState(currentState, existing)
+                ? existing.BaselinePresent
+                : currentState;
+        WindowsDiagnosticStoreMutation mutation = new(
+            baselineState,
+            currentState,
+            WindowsDiagnosticMutationPhase.Applying,
+            PendingAppliedPresent: true);
+
+        // Persist the recovery proof before CheckNetIsolation changes the exemption.
+        _mutationJournal.Write(journal with { MicrosoftStore = mutation });
+        if (!currentState)
+        {
+            await ApplyMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        _mutationJournal.Write(journal with
+        {
+            MicrosoftStore = mutation with
+            {
+                AppliedPresent = true,
+                Phase = WindowsDiagnosticMutationPhase.Applied,
+                PendingAppliedPresent = null,
+            },
+        });
+
+        return await DiagnoseMicrosoftStoreAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Restores Store exemption baseline only while the last Clash#-applied state remains present.</summary>
+    private async Task<WindowsDiagnosticResult> ResetOwnedMicrosoftStoreLoopbackAsync(CancellationToken cancellationToken)
+    {
+        WindowsDiagnosticMutationJournal journal = _mutationJournal.Read();
+        if (journal.MicrosoftStore is not { } mutation)
+        {
+            return await DiagnoseMicrosoftStoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        bool currentState = await GetMicrosoftStoreLoopbackStateAsync(cancellationToken).ConfigureAwait(false);
+        if (IsOwnedMicrosoftStoreState(currentState, mutation) && currentState != mutation.BaselinePresent)
+        {
+            if (mutation.BaselinePresent)
+            {
+                await ApplyMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await ResetMicrosoftStoreLoopbackAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        _mutationJournal.Write(journal with { MicrosoftStore = null });
+        return await DiagnoseMicrosoftStoreAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Returns whether the Store state matches the prior or pending owned state.</summary>
+    private static bool IsOwnedMicrosoftStoreState(
+        bool currentState,
+        WindowsDiagnosticStoreMutation mutation)
+    {
+        return currentState == mutation.AppliedPresent
+            || mutation.Phase == WindowsDiagnosticMutationPhase.Applying
+                && currentState == mutation.PendingAppliedPresent;
+    }
+
+    /// <summary>Reads the Microsoft Store loopback exemption state and requires a successful system query.</summary>
+    private async Task<bool> GetMicrosoftStoreLoopbackStateAsync(CancellationToken cancellationToken)
+    {
+        WindowsDiagnosticProcessResult result = await _processRunner
+            .RunAsync("CheckNetIsolation.exe", ["LoopbackExempt", "-s"], TimeSpan.FromSeconds(5), cancellationToken)
+            .ConfigureAwait(false);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.Error) ? result.Output : result.Error);
+        }
+
+        return result.Output.Contains(MicrosoftStorePackageFamilyName, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Builds the local proxy URL used by Windows diagnostic apply actions.</summary>

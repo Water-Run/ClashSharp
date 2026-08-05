@@ -5,7 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
 using System.Xml.Linq;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
 using ClashSharp.Settings;
 
@@ -14,6 +17,9 @@ namespace ClashSharp.Service;
 /// <summary>Settings contract required by <see cref="ClashDataPackageService"/>.</summary>
 internal interface IClashDataPackageSettings
 {
+    /// <summary>Resets every persisted setting to its product default.</summary>
+    void ResetAllSettings();
+
     AppLanguage DisplayLanguage { get; set; }
 
     AppThemeMode AppThemeMode { get; set; }
@@ -72,7 +78,17 @@ internal interface IClashDataPackageSettings
 
     string ConnectionTestDirectUrl { get; set; }
 
+    string MasterHeroStatusLayout { get; set; }
+
     string MasterInfoTileLayout { get; set; }
+}
+
+/// <summary>Executes package settings batches under an explicitly owned process admission lease.</summary>
+internal interface IClashDataPackageAdmittedSettings
+{
+    void WriteAdmitted(
+        MutationAdmissionLease admissionLease,
+        Action<IClashDataPackageSettings> mutation);
 }
 
 /// <summary>Imports and exports Clash# user settings and local data as a versioned XML package.</summary>
@@ -88,8 +104,22 @@ internal sealed partial class ClashDataPackageService
     private const string PackageVersion = "1";
     private const string ProfileCatalogFileName = "ProfileCatalog.json";
     private const string MihomoDirectoryName = "mihomo";
+    private const string GeneratedMihomoConfigFileName = "config.yaml";
+
+    private const string GeneratedMihomoStateFileName = "config.runtime-state.json";
+
+    private const string RuntimeGenerationsDirectoryName = "runtime-generations";
+
+    internal const long MaxPackageBytes = 192L * 1024 * 1024;
+
+    private const int MaxPackageFileCount = 4096;
+
+    private const int MaxPackageEntryBytes = 16 * 1024 * 1024;
+
+    private const long MaxPackageDecodedBytes = 128L * 1024 * 1024;
 
     private readonly IClashDataPackageSettings _settings;
+    private readonly IClashDataPackageAdmittedSettings? _admittedSettings;
     private readonly string _localDataDirectory;
 
     private static readonly SettingDescriptor[] SettingDescriptors =
@@ -99,7 +129,11 @@ internal sealed partial class ClashDataPackageService
         EnumSetting(nameof(IClashDataPackageSettings.AppAccentColorMode), settings => settings.AppAccentColorMode, (settings, value) => settings.AppAccentColorMode = value),
         StringSetting(nameof(IClashDataPackageSettings.AppAccentColorValue), settings => settings.AppAccentColorValue, (settings, value) => settings.AppAccentColorValue = value),
         BoolSetting(nameof(IClashDataPackageSettings.LaunchAtStartupEnabled), settings => settings.LaunchAtStartupEnabled, (settings, value) => settings.LaunchAtStartupEnabled = value),
-        EnumSetting(nameof(IClashDataPackageSettings.CurrentMode), settings => settings.CurrentMode, (settings, value) => settings.CurrentMode = value),
+        EnumSetting(
+            nameof(IClashDataPackageSettings.CurrentMode),
+            settings => settings.CurrentMode,
+            (settings, value) => settings.CurrentMode = value,
+            static value => value != ClashSharpMode.Faulted),
         StringSetting(nameof(IClashDataPackageSettings.ActiveProfileId), settings => settings.ActiveProfileId, (settings, value) => settings.ActiveProfileId = value),
         BoolSetting(nameof(IClashDataPackageSettings.TransparentProxyEnabled), settings => settings.TransparentProxyEnabled, (settings, value) => settings.TransparentProxyEnabled = value),
         RangedIntSetting(nameof(IClashDataPackageSettings.MixedPort), settings => settings.MixedPort, (settings, value) => settings.MixedPort = value, 1, 65535),
@@ -123,6 +157,7 @@ internal sealed partial class ClashDataPackageService
         StringSetting(nameof(IClashDataPackageSettings.ConnectionTestProxyUrl1), settings => settings.ConnectionTestProxyUrl1, (settings, value) => settings.ConnectionTestProxyUrl1 = value),
         StringSetting(nameof(IClashDataPackageSettings.ConnectionTestProxyUrl2), settings => settings.ConnectionTestProxyUrl2, (settings, value) => settings.ConnectionTestProxyUrl2 = value),
         StringSetting(nameof(IClashDataPackageSettings.ConnectionTestDirectUrl), settings => settings.ConnectionTestDirectUrl, (settings, value) => settings.ConnectionTestDirectUrl = value),
+        RegisteredStringSetting(SettingsRegistry.Keys.MasterHeroStatusLayout, settings => settings.MasterHeroStatusLayout, (settings, value) => settings.MasterHeroStatusLayout = value),
         RegisteredStringSetting(SettingsRegistry.Keys.MasterInfoTileLayout, settings => settings.MasterInfoTileLayout, (settings, value) => settings.MasterInfoTileLayout = value),
     ];
 
@@ -130,11 +165,22 @@ internal sealed partial class ClashDataPackageService
     /// <param name="settings">Settings store to read from and write to. Must not be null.</param>
     /// <param name="localDataDirectory">Local application data root. Must not be null or empty.</param>
     public ClashDataPackageService(IClashDataPackageSettings settings, string localDataDirectory)
+        : this(settings, localDataDirectory, checkpoint: null)
+    {
+    }
+
+    /// <summary>Initializes a data package service with an optional crash-test checkpoint.</summary>
+    internal ClashDataPackageService(
+        IClashDataPackageSettings settings,
+        string localDataDirectory,
+        Action<DataPackageTransactionCheckpoint>? checkpoint)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(localDataDirectory);
 
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _admittedSettings = settings as IClashDataPackageAdmittedSettings;
         _localDataDirectory = Path.GetFullPath(localDataDirectory);
+        _checkpoint = checkpoint;
     }
 
     /// <summary>Exports settings and selected local files into an XML package.</summary>
@@ -164,6 +210,7 @@ internal sealed partial class ClashDataPackageService
         await File.WriteAllTextAsync(fullPackagePath, document.ToString(SaveOptions.DisableFormatting), cancellationToken);
     }
 
+#if UNIT_TESTS
     /// <summary>Imports settings and file payloads from an XML package.</summary>
     /// <param name="packagePath">Source XML path. Must not be null or whitespace.</param>
     /// <param name="cancellationToken">Cancels file writes.</param>
@@ -171,134 +218,136 @@ internal sealed partial class ClashDataPackageService
     /// <exception cref="InvalidDataException">The package format is invalid or contains unsafe file paths.</exception>
     public async Task ImportAsync(string packagePath, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
-
-        XDocument document = XDocument.Load(packagePath);
-        XElement root = ValidatePackageRoot(document);
-        IReadOnlyList<ImportFilePayload> files = BuildImportFilePayloads(root.Element("Files"), cancellationToken);
-        IReadOnlyDictionary<string, string> settings = ValidateSettings(root.Element("Settings"));
-        Dictionary<string, string> settingSnapshot = CaptureSettings();
-
+        DataPackageTransactionReceipt receipt = await BeginImportAsync(
+            packagePath,
+            cancellationToken).ConfigureAwait(false);
         try
         {
-            ImportSettings(settings);
-            await WriteImportFilesAsync(files, cancellationToken);
+            await receipt.CommitAsync(CancellationToken.None).ConfigureAwait(false);
         }
-        catch
+        finally
         {
-            RestoreSettings(settingSnapshot);
-            throw;
+            await receipt.DisposeAsync().ConfigureAwait(false);
         }
     }
 
-    private IReadOnlyList<ImportFilePayload> BuildImportFilePayloads(XElement? filesElement, CancellationToken cancellationToken)
+    /// <summary>
+    /// Applies an imported settings/files generation while retaining its previous generation until
+    /// external runtime activation explicitly commits or rolls it back.
+    /// </summary>
+    internal async Task<DataPackageTransactionReceipt> BeginImportAsync(
+        string packagePath,
+        CancellationToken cancellationToken)
+    {
+        return await BeginImportCoreAsync(
+            packagePath,
+            admissionLease: null,
+            cancellationToken).ConfigureAwait(false);
+    }
+#endif
+
+    /// <summary>Begins an import under the caller's already-drained settings lease.</summary>
+    internal Task<DataPackageTransactionReceipt> BeginImportAdmittedAsync(
+        string packagePath,
+        MutationAdmissionLease admissionLease,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(admissionLease);
+        return BeginImportCoreAsync(packagePath, admissionLease, cancellationToken);
+    }
+
+    private async Task<DataPackageTransactionReceipt> BeginImportCoreAsync(
+        string packagePath,
+        MutationAdmissionLease? admissionLease,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
+
+        XDocument document = LoadBoundedPackage(packagePath);
+        XElement root = ValidatePackageRoot(document);
+        ClashDataPackageScope scope = ParsePackageScope(root);
+        IReadOnlyList<ImportFilePayload> files = BuildImportFilePayloads(
+            root.Element("Files"),
+            scope,
+            cancellationToken);
+        IReadOnlyDictionary<string, string> settings = ValidateSettings(root.Element("Settings"));
+        return await BeginValidatedImportAsync(
+            files,
+            settings,
+            admissionLease,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private IReadOnlyList<ImportFilePayload> BuildImportFilePayloads(
+        XElement? filesElement,
+        ClashDataPackageScope scope,
+        CancellationToken cancellationToken)
     {
         List<ImportFilePayload> files = [];
+        HashSet<string> targetPaths = new(StringComparer.OrdinalIgnoreCase);
+        long decodedBytes = 0;
+        int encounteredFileCount = 0;
         foreach (XElement fileElement in filesElement?.Elements("File") ?? [])
         {
             cancellationToken.ThrowIfCancellationRequested();
+            encounteredFileCount++;
+            if (encounteredFileCount > MaxPackageFileCount)
+            {
+                throw new InvalidDataException("Clash# data package contains too many file entries.");
+            }
+
             string relativePath = fileElement.Attribute("Path")?.Value ?? string.Empty;
             string targetPath = ResolveImportFilePath(relativePath);
-            byte[] content = Convert.FromBase64String(fileElement.Value);
+            if (scope != ClashDataPackageScope.SettingsAndProxyConfiguration
+                || !IsProxyConfigurationImportPath(targetPath))
+            {
+                throw new InvalidDataException(
+                    "Clash# data package contains a file outside its declared scope.");
+            }
+
+            if (IsTransactionInfrastructurePath(targetPath))
+            {
+                throw new InvalidDataException(
+                    "Clash# data packages cannot target private transaction state.");
+            }
+
+            if (IsGeneratedRuntimeConfigPath(targetPath))
+            {
+                continue;
+            }
+
+            if (!targetPaths.Add(targetPath))
+            {
+                throw new InvalidDataException("Clash# data package contains duplicate file targets.");
+            }
+
+            string encodedContent = fileElement.Value;
+            if (encodedContent.Length > ((MaxPackageEntryBytes + 2L) / 3L) * 4L + 4096L)
+            {
+                throw new InvalidDataException("Clash# data package file entry exceeds the size limit.");
+            }
+
+            byte[] content;
+            try
+            {
+                content = Convert.FromBase64String(encodedContent);
+            }
+            catch (FormatException exception)
+            {
+                throw new InvalidDataException("Clash# data package contains invalid file content.", exception);
+            }
+
+            if (content.Length > MaxPackageEntryBytes
+                || decodedBytes > MaxPackageDecodedBytes - content.Length)
+            {
+                throw new InvalidDataException("Clash# data package decoded file budget was exceeded.");
+            }
+
+            decodedBytes += content.Length;
             files.Add(new ImportFilePayload(targetPath, content));
         }
 
         return files;
-    }
-
-    private async Task WriteImportFilesAsync(IReadOnlyList<ImportFilePayload> files, CancellationToken cancellationToken)
-    {
-        if (files.Count == 0)
-        {
-            return;
-        }
-
-        string stagingDirectory = Path.Combine(_localDataDirectory, $".import-{Guid.NewGuid():N}");
-        List<StagedImportFile> stagedFiles = [];
-        List<ImportFileBackup> backups = [];
-
-        try
-        {
-            Directory.CreateDirectory(stagingDirectory);
-            foreach (ImportFilePayload file in files)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                string stagedPath = Path.Combine(stagingDirectory, Guid.NewGuid().ToString("N"));
-                await File.WriteAllBytesAsync(stagedPath, file.Content, cancellationToken);
-                stagedFiles.Add(new StagedImportFile(file.TargetPath, stagedPath));
-            }
-
-            foreach (StagedImportFile file in stagedFiles)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                string? targetDirectory = Path.GetDirectoryName(file.TargetPath);
-                if (!string.IsNullOrEmpty(targetDirectory))
-                {
-                    Directory.CreateDirectory(targetDirectory);
-                }
-
-                string? backupPath = null;
-                if (File.Exists(file.TargetPath))
-                {
-                    backupPath = Path.Combine(stagingDirectory, Guid.NewGuid().ToString("N") + ".bak");
-                    File.Move(file.TargetPath, backupPath, overwrite: true);
-                }
-
-                backups.Add(new ImportFileBackup(file.TargetPath, backupPath));
-                File.Move(file.StagedPath, file.TargetPath, overwrite: true);
-            }
-        }
-        catch
-        {
-            RestoreBackups(backups);
-            throw;
-        }
-        finally
-        {
-            TryDeleteDirectory(stagingDirectory);
-        }
-    }
-
-    private static void RestoreBackups(IEnumerable<ImportFileBackup> backups)
-    {
-        foreach (ImportFileBackup backup in backups.Reverse())
-        {
-            try
-            {
-                if (File.Exists(backup.TargetPath))
-                {
-                    File.Delete(backup.TargetPath);
-                }
-
-                if (backup.BackupPath is not null && File.Exists(backup.BackupPath))
-                {
-                    File.Move(backup.BackupPath, backup.TargetPath, overwrite: true);
-                }
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-        }
-    }
-
-    private static void TryDeleteDirectory(string directoryPath)
-    {
-        try
-        {
-            if (Directory.Exists(directoryPath))
-            {
-                Directory.Delete(directoryPath, recursive: true);
-            }
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
     }
 
     private XElement ExportSettings()
@@ -314,11 +363,32 @@ internal sealed partial class ClashDataPackageService
     private async Task<XElement> ExportFilesAsync(string packagePath, ClashDataPackageScope scope, CancellationToken cancellationToken)
     {
         List<XElement> files = [];
+        long totalBytes = 0;
         foreach (string filePath in EnumerateScopedFiles(scope, packagePath))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (files.Count >= MaxPackageFileCount)
+            {
+                throw new InvalidDataException("Clash# data package export contains too many files.");
+            }
+
+            long fileLength = new FileInfo(filePath).Length;
+            if (fileLength > MaxPackageEntryBytes
+                || totalBytes > MaxPackageDecodedBytes - fileLength)
+            {
+                throw new InvalidDataException("Clash# data package export exceeds the file budget.");
+            }
+
             string relativePath = ToPackageRelativePath(filePath);
             byte[] bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+            if (bytes.Length > MaxPackageEntryBytes
+                || totalBytes > MaxPackageDecodedBytes - bytes.Length)
+            {
+                throw new InvalidDataException(
+                    "Clash# data package export changed while reading and exceeded the file budget.");
+            }
+
+            totalBytes += bytes.Length;
             files.Add(new XElement(
                 "File",
                 new XAttribute("Path", relativePath),
@@ -326,6 +396,32 @@ internal sealed partial class ClashDataPackageService
         }
 
         return new XElement("Files", files);
+    }
+
+    internal static XDocument LoadBoundedPackage(string packagePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
+        FileInfo package = new(Path.GetFullPath(packagePath));
+        if (!package.Exists)
+        {
+            throw new FileNotFoundException("Clash# data package was not found.", package.FullName);
+        }
+
+        if (package.Length > MaxPackageBytes)
+        {
+            throw new InvalidDataException("Clash# data package exceeds the size limit.");
+        }
+
+        XmlReaderSettings settings = new()
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            MaxCharactersInDocument = MaxPackageBytes,
+            IgnoreComments = true,
+            IgnoreProcessingInstructions = true,
+        };
+        using XmlReader reader = XmlReader.Create(package.FullName, settings);
+        return XDocument.Load(reader, LoadOptions.None);
     }
 
     private IEnumerable<string> EnumerateScopedFiles(ClashDataPackageScope scope, string packagePath)
@@ -353,6 +449,12 @@ internal sealed partial class ClashDataPackageService
         string profileCatalogPath = Path.Combine(_localDataDirectory, ProfileCatalogFileName);
         if (File.Exists(profileCatalogPath))
         {
+            if ((File.GetAttributes(profileCatalogPath) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidDataException(
+                    "Clash# data package export cannot include a reparse-point profile catalog.");
+            }
+
             yield return profileCatalogPath;
         }
 
@@ -362,21 +464,73 @@ internal sealed partial class ClashDataPackageService
             yield break;
         }
 
-        foreach (string filePath in Directory.EnumerateFiles(mihomoDirectory, "*", SearchOption.AllDirectories))
+        foreach (string filePath in EnumerateFilesWithoutReparsePoints(mihomoDirectory))
         {
-            yield return filePath;
+            if (!IsGeneratedRuntimeConfigPath(filePath))
+            {
+                yield return filePath;
+            }
         }
     }
 
-    private void ImportSettings(IReadOnlyDictionary<string, string> values)
+    /// <summary>Enumerates a managed tree without following file or directory reparse points.</summary>
+    private static IEnumerable<string> EnumerateFilesWithoutReparsePoints(string rootDirectory)
     {
-        foreach (SettingDescriptor descriptor in SettingDescriptors)
+        Stack<string> pendingDirectories = new();
+        pendingDirectories.Push(Path.GetFullPath(rootDirectory));
+        while (pendingDirectories.Count > 0)
         {
-            if (values.TryGetValue(descriptor.Name, out string? value))
+            string currentDirectory = pendingDirectories.Pop();
+            if ((File.GetAttributes(currentDirectory) & FileAttributes.ReparsePoint) != 0)
             {
-                descriptor.Write(_settings, value);
+                throw new InvalidDataException(
+                    "Clash# data package export cannot traverse a directory reparse point.");
+            }
+
+            foreach (string filePath in Directory.EnumerateFiles(
+                currentDirectory,
+                "*",
+                SearchOption.TopDirectoryOnly))
+            {
+                if ((File.GetAttributes(filePath) & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidDataException(
+                        "Clash# data package export cannot include a file reparse point.");
+                }
+
+                yield return filePath;
+            }
+
+            foreach (string directoryPath in Directory.EnumerateDirectories(
+                currentDirectory,
+                "*",
+                SearchOption.TopDirectoryOnly))
+            {
+                if ((File.GetAttributes(directoryPath) & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidDataException(
+                        "Clash# data package export cannot traverse a directory reparse point.");
+                }
+
+                pendingDirectories.Push(directoryPath);
             }
         }
+    }
+
+    private void ImportSettings(
+        IReadOnlyDictionary<string, string> values,
+        MutationAdmissionLease? admissionLease)
+    {
+        WriteSettings(admissionLease, settings =>
+        {
+            foreach (SettingDescriptor descriptor in SettingDescriptors)
+            {
+                if (values.TryGetValue(descriptor.Name, out string? value))
+                {
+                    descriptor.Write(settings, value);
+                }
+            }
+        });
     }
 
     private IReadOnlyDictionary<string, string> ValidateSettings(XElement? settingsElement)
@@ -386,19 +540,23 @@ internal sealed partial class ClashDataPackageService
             return new Dictionary<string, string>(StringComparer.Ordinal);
         }
 
-        Dictionary<string, string> values = settingsElement
-            .Elements("Setting")
-            .Where(element => element.Attribute("Name") is not null)
-            .ToDictionary(
-                element => element.Attribute("Name")!.Value,
-                element => element.Attribute("Value")?.Value ?? string.Empty,
-                StringComparer.Ordinal);
-
-        foreach (SettingDescriptor descriptor in SettingDescriptors)
+        Dictionary<string, SettingDescriptor> descriptors = SettingDescriptors.ToDictionary(
+            static descriptor => descriptor.Name,
+            StringComparer.Ordinal);
+        Dictionary<string, string> values = new(StringComparer.Ordinal);
+        foreach (XElement element in settingsElement.Elements("Setting"))
         {
-            if (values.TryGetValue(descriptor.Name, out string? value))
+            string? name = element.Attribute("Name")?.Value;
+            if (name is null || !descriptors.TryGetValue(name, out SettingDescriptor descriptor))
             {
-                values[descriptor.Name] = descriptor.Normalize(value);
+                continue;
+            }
+
+            string value = descriptor.Normalize(element.Attribute("Value")?.Value ?? string.Empty);
+            if (!values.TryAdd(name, value))
+            {
+                throw new InvalidDataException(
+                    $"Clash# data package contains duplicate setting '{name}'.");
             }
         }
 
@@ -416,15 +574,37 @@ internal sealed partial class ClashDataPackageService
         return values;
     }
 
-    private void RestoreSettings(IReadOnlyDictionary<string, string> values)
+    private void RestoreSettings(
+        IReadOnlyDictionary<string, string> values,
+        MutationAdmissionLease? admissionLease)
     {
-        foreach (SettingDescriptor descriptor in SettingDescriptors)
+        WriteSettings(admissionLease, settings =>
         {
-            if (values.TryGetValue(descriptor.Name, out string? value))
+            foreach (SettingDescriptor descriptor in SettingDescriptors)
             {
-                descriptor.Write(_settings, value);
+                if (values.TryGetValue(descriptor.Name, out string? value))
+                {
+                    descriptor.Write(settings, value);
+                }
             }
+        });
+    }
+
+    private void WriteSettings(
+        MutationAdmissionLease? admissionLease,
+        Action<IClashDataPackageSettings> mutation)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+        if (admissionLease is null)
+        {
+            mutation(_settings);
+            return;
         }
+
+        IClashDataPackageAdmittedSettings admittedSettings = _admittedSettings
+            ?? throw new InvalidOperationException(
+                "The configured package settings store does not support admitted settings batches.");
+        admittedSettings.WriteAdmitted(admissionLease, mutation);
     }
 
     private XElement ValidatePackageRoot(XDocument document)
@@ -441,6 +621,31 @@ internal sealed partial class ClashDataPackageService
         return root;
     }
 
+    private static ClashDataPackageScope ParsePackageScope(XElement root)
+    {
+        string? scopeText = root.Attribute("Scope")?.Value;
+        if (!Enum.TryParse(scopeText, ignoreCase: false, out ClashDataPackageScope scope)
+            || !Enum.IsDefined(scope))
+        {
+            throw new InvalidDataException("Clash# data package scope is not supported.");
+        }
+
+        return scope;
+    }
+
+    private bool IsProxyConfigurationImportPath(string path)
+    {
+        string normalizedPath = Path.GetFullPath(path);
+        string profileCatalogPath = Path.GetFullPath(Path.Combine(
+            _localDataDirectory,
+            ProfileCatalogFileName));
+        string mihomoRoot = EnsureTrailingSeparator(Path.GetFullPath(Path.Combine(
+            _localDataDirectory,
+            MihomoDirectoryName)));
+        return StringComparer.OrdinalIgnoreCase.Equals(normalizedPath, profileCatalogPath)
+            || normalizedPath.StartsWith(mihomoRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
     private string ToPackageRelativePath(string filePath)
     {
         return Path.GetRelativePath(_localDataDirectory, filePath).Replace('\\', '/');
@@ -455,7 +660,10 @@ internal sealed partial class ClashDataPackageService
             throw new InvalidDataException("Clash# data package contains an unsafe file path.");
         }
 
-        string normalizedRelativePath = relativePath.Replace('/', Path.DirectorySeparatorChar);
+        ValidateImportRelativePathSyntax(relativePath);
+        string normalizedRelativePath = relativePath
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
         string root = EnsureTrailingSeparator(Path.GetFullPath(_localDataDirectory));
         string targetPath = Path.GetFullPath(Path.Combine(root, normalizedRelativePath));
         if (!targetPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
@@ -463,7 +671,114 @@ internal sealed partial class ClashDataPackageService
             throw new InvalidDataException("Clash# data package contains an unsafe file path.");
         }
 
+        EnsureImportPathHasNoReparsePoints(root, targetPath);
         return targetPath;
+    }
+
+    /// <summary>Rejects path aliases, alternate data streams, and Windows device names.</summary>
+    private static void ValidateImportRelativePathSyntax(string relativePath)
+    {
+        char[] separators = ['/', '\\'];
+        foreach (string segment in relativePath.Split(separators, StringSplitOptions.None))
+        {
+            if (segment.Length == 0
+                || segment is "." or ".."
+                || segment.Contains(':', StringComparison.Ordinal)
+                || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                throw new InvalidDataException("Clash# data package contains an unsafe file path.");
+            }
+
+            if (!OperatingSystem.IsWindows())
+            {
+                continue;
+            }
+
+            if (segment.EndsWith(' ') || segment.EndsWith('.'))
+            {
+                throw new InvalidDataException("Clash# data package contains an unsafe file path.");
+            }
+
+            string deviceName = segment.Split('.', 2)[0];
+            bool isReservedDeviceName = deviceName.Equals("CON", StringComparison.OrdinalIgnoreCase)
+                || deviceName.Equals("PRN", StringComparison.OrdinalIgnoreCase)
+                || deviceName.Equals("AUX", StringComparison.OrdinalIgnoreCase)
+                || deviceName.Equals("NUL", StringComparison.OrdinalIgnoreCase)
+                || deviceName.Length == 4
+                    && (deviceName.StartsWith("COM", StringComparison.OrdinalIgnoreCase)
+                        || deviceName.StartsWith("LPT", StringComparison.OrdinalIgnoreCase))
+                    && deviceName[3] is >= '1' and <= '9';
+            if (isReservedDeviceName)
+            {
+                throw new InvalidDataException("Clash# data package contains an unsafe file path.");
+            }
+        }
+    }
+
+    /// <summary>Rejects existing junctions/symlinks below LocalData before staging an import target.</summary>
+    private static void EnsureImportPathHasNoReparsePoints(string root, string targetPath)
+    {
+        string rootPath = Path.TrimEndingDirectorySeparator(root);
+        string relativePath = Path.GetRelativePath(rootPath, targetPath);
+        string currentPath = rootPath;
+        foreach (string segment in relativePath.Split(
+            Path.DirectorySeparatorChar,
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            currentPath = Path.Combine(currentPath, segment);
+            FileAttributes attributes;
+            try
+            {
+                attributes = File.GetAttributes(currentPath);
+            }
+            catch (FileNotFoundException)
+            {
+                break;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                break;
+            }
+
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidDataException(
+                    "Clash# data package import targets cannot traverse a reparse point.");
+            }
+        }
+    }
+
+    private bool IsGeneratedRuntimeConfigPath(string path)
+    {
+        string mihomoDirectoryPath = Path.Combine(
+            _localDataDirectory,
+            MihomoDirectoryName);
+        string normalizedPath = Path.GetFullPath(path);
+        string generatedRuntimeConfigPath = Path.Combine(
+            mihomoDirectoryPath,
+            GeneratedMihomoConfigFileName);
+        string generatedRuntimeStatePath = Path.Combine(
+            mihomoDirectoryPath,
+            GeneratedMihomoStateFileName);
+        string runtimeGenerationsRoot = EnsureTrailingSeparator(Path.Combine(
+            mihomoDirectoryPath,
+            RuntimeGenerationsDirectoryName));
+        string fileName = Path.GetFileName(normalizedPath);
+        bool isPrivateConfigurationSidecar =
+            fileName.StartsWith("config.yaml.runtime-staging.", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("config.yaml.runtime-backup.", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("config.yaml.staging.", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("config.yaml.backup.", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(normalizedPath, generatedRuntimeConfigPath, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalizedPath, generatedRuntimeStatePath, StringComparison.OrdinalIgnoreCase)
+            || normalizedPath.StartsWith(runtimeGenerationsRoot, StringComparison.OrdinalIgnoreCase)
+            || isPrivateConfigurationSidecar
+            || string.Equals(
+                Path.GetDirectoryName(normalizedPath),
+                mihomoDirectoryPath,
+                StringComparison.OrdinalIgnoreCase)
+                && (fileName.StartsWith("config.yaml.restore.", StringComparison.OrdinalIgnoreCase)
+                    || fileName.StartsWith("config.runtime-state.json.tmp.", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string EnsureTrailingSeparator(string path)
@@ -550,7 +865,11 @@ internal sealed partial class ClashDataPackageService
             });
     }
 
-    private static SettingDescriptor EnumSetting<TEnum>(string name, Func<IClashDataPackageSettings, TEnum> read, Action<IClashDataPackageSettings, TEnum> write)
+    private static SettingDescriptor EnumSetting<TEnum>(
+        string name,
+        Func<IClashDataPackageSettings, TEnum> read,
+        Action<IClashDataPackageSettings, TEnum> write,
+        Func<TEnum, bool>? isAllowed = null)
         where TEnum : struct, Enum
     {
         return new SettingDescriptor(
@@ -559,8 +878,15 @@ internal sealed partial class ClashDataPackageService
             (settings, value) => write(settings, Enum.Parse<TEnum>(value)),
             value =>
             {
-                _ = Enum.Parse<TEnum>(value);
-                return value;
+                if (!Enum.TryParse(value, ignoreCase: false, out TEnum parsed)
+                    || !Enum.IsDefined(parsed)
+                    || isAllowed is not null && !isAllowed(parsed))
+                {
+                    throw new InvalidDataException(
+                        $"Clash# data package setting '{name}' is not a supported {typeof(TEnum).Name} value.");
+                }
+
+                return parsed.ToString();
             });
     }
 
@@ -571,8 +897,4 @@ internal sealed partial class ClashDataPackageService
         Func<string, string> Normalize);
 
     private readonly record struct ImportFilePayload(string TargetPath, byte[] Content);
-
-    private readonly record struct StagedImportFile(string TargetPath, string StagedPath);
-
-    private readonly record struct ImportFileBackup(string TargetPath, string? BackupPath);
 }

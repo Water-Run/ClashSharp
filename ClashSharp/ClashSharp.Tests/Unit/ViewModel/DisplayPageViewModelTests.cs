@@ -110,6 +110,7 @@ public sealed class DisplayPageViewModelTests
         AboutViewModel viewModel = new(
             new FakeDisplayLocalization(),
             core,
+            new FakeApplicationUpdateChecker(),
             new FakeUriLauncher(),
             new TestApplicationErrorSink());
 
@@ -141,14 +142,56 @@ public sealed class DisplayPageViewModelTests
         AboutViewModel viewModel = new(
             new FakeDisplayLocalization(),
             new FakeAboutCore(),
+            new FakeApplicationUpdateChecker(),
             launcher,
             new TestApplicationErrorSink());
 
         await viewModel.OpenGitHubCommand.ExecuteAsync(null);
         await viewModel.OpenMihomoCommand.ExecuteAsync(null);
+        await viewModel.OpenReleasesCommand.ExecuteAsync(null);
 
         Assert.Contains("https://github.com/Water-Run/ClashSharp", launcher.LaunchedUris.Select(uri => uri.ToString()));
         Assert.Contains("https://github.com/MetaCubeX/mihomo", launcher.LaunchedUris.Select(uri => uri.ToString()));
+        Assert.Contains("https://github.com/Water-Run/ClashSharp/releases/latest", launcher.LaunchedUris.Select(uri => uri.ToString()));
+    }
+
+    /// <summary>Verifies the about page displays a newer stable release without consuming a remote URL.</summary>
+    [Fact]
+    public async Task AboutViewModel_LoadAsync_WhenUpdateExists_DisplaysLatestVersion()
+    {
+        FakeApplicationUpdateChecker updateChecker = new()
+        {
+            Result = ApplicationUpdateCheckResult.UpdateAvailable("1.2.3"),
+        };
+        AboutViewModel viewModel = new(
+            new FakeDisplayLocalization(),
+            new FakeAboutCore(),
+            updateChecker,
+            new FakeUriLauncher(),
+            new TestApplicationErrorSink());
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("A new version is available: 1.2.3", viewModel.UpdateStatusText);
+        Assert.Equal(1, updateChecker.CallCount);
+    }
+
+    /// <summary>Verifies release-service failures remain a quiet about-page status.</summary>
+    [Fact]
+    public async Task AboutViewModel_LoadAsync_WhenUpdateCheckFails_DegradesWithoutReportingApplicationError()
+    {
+        TestApplicationErrorSink errorSink = new();
+        AboutViewModel viewModel = new(
+            new FakeDisplayLocalization(),
+            new FakeAboutCore(),
+            new ThrowingApplicationUpdateChecker(),
+            new FakeUriLauncher(),
+            errorSink);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("Unavailable", viewModel.UpdateStatusText);
+        Assert.Empty(errorSink.Errors);
     }
 
     /// <summary>Fake localization provider shared by display page tests.</summary>
@@ -190,6 +233,13 @@ public sealed class DisplayPageViewModelTests
                 "About.GitHub.Title" => "GitHub",
                 "About.GitHub.Description" => "Project",
                 "About.OpenGitHub" => "Open GitHub",
+                "About.Update.Title" => "Software update",
+                "About.Update.Description" => "Installer-owned update",
+                "About.Update.Checking" => "Checking",
+                "About.Update.Available.Format" => "A new version is available: {0}",
+                "About.Update.Current" => "Current",
+                "About.Update.Unavailable" => "Unavailable",
+                "About.Update.OpenReleases" => "View releases",
                 "About.Mihomo.Title" => "mihomo",
                 "About.Mihomo.Description" => "Core",
                 "About.OpenMihomo" => "Open mihomo",
@@ -314,6 +364,33 @@ public sealed class DisplayPageViewModelTests
         public Task<string> GetVersionTextAsync(CancellationToken cancellationToken)
         {
             return Task.FromResult(VersionText);
+        }
+    }
+
+    /// <summary>Fake read-only application update checker.</summary>
+    private sealed class FakeApplicationUpdateChecker : IApplicationUpdateChecker
+    {
+        public string CurrentVersion { get; set; } = "1.0.0.0";
+
+        public ApplicationUpdateCheckResult Result { get; set; } =
+            ApplicationUpdateCheckResult.Current();
+
+        public int CallCount { get; private set; }
+
+        public Task<ApplicationUpdateCheckResult> CheckAsync(CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class ThrowingApplicationUpdateChecker : IApplicationUpdateChecker
+    {
+        public string CurrentVersion => "1.0.0.0";
+
+        public Task<ApplicationUpdateCheckResult> CheckAsync(CancellationToken cancellationToken)
+        {
+            throw new HttpRequestException("Synthetic GitHub outage.");
         }
     }
 

@@ -225,6 +225,7 @@ internal sealed class MainWindowComposition
                 ["Links"] = typeof(View.Links),
                 ["Rules"] = typeof(View.Rules),
                 ["Triggers"] = typeof(View.Triggers),
+                ["Connections"] = typeof(View.Connections),
                 ["Statistics"] = typeof(View.Statistics),
                 ["Logs"] = typeof(View.Logs),
                 ["About"] = typeof(View.About),

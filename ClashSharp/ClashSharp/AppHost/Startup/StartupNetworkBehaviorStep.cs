@@ -29,7 +29,10 @@ internal sealed class StartupNetworkBehaviorStep(
         CancellationToken cancellationToken)
     {
         NetworkIntent intent = intents.CreateStartupBehavior();
-        if (conflicts.HasBlockingConflicts && intent.Mode != ClashSharpMode.Disabled)
+        bool tunRequested = intent.TransparentProxyEnabled
+            && intent.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
+        if (conflicts.HasBlockingConflicts(tunRequested)
+            && intent.Mode != ClashSharpMode.Disabled)
         {
             return StartupStepResult.Warning("startup-network-conflicts-pending");
         }
@@ -44,15 +47,21 @@ internal sealed class StartupNetworkBehaviorStep(
             return StartupStepResult.Succeeded();
         }
         catch (NetworkTransitionFailedException exception)
-            when (exception.Outcome is MutationOutcome.RecoveryRequired
-                or MutationOutcome.CommittedRecoveryRequired)
         {
+            bool recoveryRequired = exception.Outcome is MutationOutcome.RecoveryRequired
+                or MutationOutcome.CommittedRecoveryRequired;
             logStorage.AppendLog(
-                "Error",
+                recoveryRequired ? "Error" : "Warning",
                 "Startup",
                 localization.GetString("Startup.Log.ProxyBehaviorFailed"),
                 exception.Message);
-            return StartupStepResult.Fatal(exception.ErrorCode ?? "startup-network-recovery-required");
+            string errorCode = exception.ErrorCode
+                ?? (recoveryRequired
+                    ? "startup-network-recovery-required"
+                    : "startup-network-behavior-failed");
+            return recoveryRequired
+                ? StartupStepResult.Fatal(errorCode)
+                : StartupStepResult.Warning(errorCode);
         }
         catch (Exception exception) when (exception is InvalidOperationException
             or FileNotFoundException

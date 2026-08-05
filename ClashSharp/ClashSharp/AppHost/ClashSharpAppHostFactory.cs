@@ -22,7 +22,8 @@ internal static class ClashSharpAppHostFactory
         AppLaunchRequest launchRequest,
         Action<MainWindowStartupContext> completeWindow,
         IApplicationLifetimeRequestSink lifetimeRequests,
-        IStartupDiagnosticSink startupDiagnostics)
+        IStartupDiagnosticSink startupDiagnostics,
+        InstallerTransactionState installerTransactionState)
     {
         ArgumentNullException.ThrowIfNull(launchRequest);
         ArgumentNullException.ThrowIfNull(completeWindow);
@@ -35,17 +36,32 @@ internal static class ClashSharpAppHostFactory
         string triggerDatabasePath = Path.Combine(triggerRoot, "Triggers.db");
         string legacyTriggerPath = Path.Combine(triggerRoot, "Triggers.json");
         Guid triggerProcessEpoch = Guid.NewGuid();
+        MutationAdmissionBarrier mutationAdmission = new();
+        AppSettingsService.Instance.ConfigureMutationAdmission(mutationAdmission);
         return AppHost.Build(services =>
         {
             services.AddSingleton(completeWindow);
             services.AddSingleton(lifetimeRequests);
             services.AddSingleton(startupDiagnostics);
             services.AddSingleton(TimeProvider.System);
-            services.AddSingleton(_ => AppSettingsService.Instance);
+            services.AddSingleton(_ =>
+            {
+                AppSettingsService settings = AppSettingsService.Instance;
+                settings.ConfigureMutationAdmission(mutationAdmission);
+                return settings;
+            });
+            services.AddSingleton(_ => ClashDataPackageService.Instance);
             services.AddSingleton(_ => AppSettingsAuditLogService.Instance);
             services.AddSingleton(_ => LocalizationService.Instance);
             services.AddSingleton(_ => LogStorageService.Instance);
             services.AddSingleton(_ => ConnectionSamplingService.Instance);
+            services.AddSingleton(provider =>
+            {
+                LateBoundProfileCatalogMutationCoordinator.Instance.Configure(
+                    provider.GetRequiredService<MutationAdmissionBarrier>(),
+                    provider.GetRequiredService<FairAsyncMutationGate>());
+                return ProfileCatalogService.Instance;
+            });
             services.AddSingleton(_ => StartupLaunchServiceFactory.CreateDefault());
             services.AddSingleton(_ => MihomoConnectionService.Instance);
             services.AddSingleton(_ => NetworkTakeoverService.Instance);
@@ -62,7 +78,7 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<TriggerRuntimeEventHub>());
             services.AddSingleton<ITriggerRuntimeEventPublisher>(provider =>
                 provider.GetRequiredService<TriggerRuntimeEventHub>());
-            services.AddSingleton<MutationAdmissionBarrier>();
+            services.AddSingleton(mutationAdmission);
             services.AddSingleton<FairAsyncMutationGate>();
             services.AddSingleton<MutationDeadlines>(_ => MutationDeadlines.Default);
             services.AddSingleton<IMutationJournalStore>(_ => new FileMutationJournalStore(
@@ -84,6 +100,7 @@ internal static class ClashSharpAppHostFactory
                 installAsPrimaryInstance: true));
             services.AddSingleton(provider => new ApplicationActionService(
                 provider.GetRequiredService<AppSettingsService>(),
+                provider.GetRequiredService<MutationAdmissionBarrier>(),
                 provider.GetRequiredService<NetworkStateCoordinator>(),
                 provider.GetRequiredService<ConnectionSamplingService>(),
                 MihomoConnectionService.Instance,
@@ -92,6 +109,7 @@ internal static class ClashSharpAppHostFactory
                 LogStorageService.Instance.AppendLog,
                 LocalizationService.Instance.GetString,
                 provider.GetRequiredService<ApplicationLifecycleService>(),
+                provider.GetRequiredService<IApplicationShutdownCoordinator>(),
                 provider.GetRequiredService<StartupLaunchService>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
@@ -178,6 +196,15 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<TriggerScheduler>());
             services.AddSingleton<IRuntimeParticipant>(provider =>
                 provider.GetRequiredService<ConnectionSamplingService>());
+            services.AddSingleton<IProfileSubscriptionSchedulerCatalog>(provider =>
+                new ProfileSubscriptionSchedulerCatalogAdapter(
+                    provider.GetRequiredService<ProfileCatalogService>()));
+            services.AddSingleton(provider => new ProfileSubscriptionScheduler(
+                provider.GetRequiredService<IProfileSubscriptionSchedulerCatalog>(),
+                provider.GetRequiredService<TimeProvider>(),
+                provider.GetRequiredService<LogStorageService>().AppendLog));
+            services.AddSingleton<IRuntimeParticipant>(provider =>
+                provider.GetRequiredService<ProfileSubscriptionScheduler>());
             services.AddSingleton(provider =>
             {
                 LegacyNetworkIntentSource intents =
@@ -198,7 +225,12 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(_ => StartupConflictDetectionService.Instance);
             services.AddSingleton<StartupConflictSnapshot>();
             services.AddSingleton<IApplicationStartupCoordinator, StartupCoordinator>();
+            services.AddSingleton<IStartupStep, DataPackageRecoveryStartupStep>();
             services.AddSingleton<IStartupStep, ConfigureLocalizationStartupStep>();
+            services.AddSingleton<IStartupStep>(provider =>
+                new InstallerTransactionStartupGate(
+                    installerTransactionState,
+                    provider.GetRequiredService<MutationAdmissionBarrier>()));
             services.AddSingleton<IStartupStep, MutationRecoveryStartupStep>();
             services.AddSingleton<IStartupStep, StartupRestoreFallbackStep>();
             services.AddSingleton<IStartupStep, ProxyRecoveryStartupStep>();
@@ -209,6 +241,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IStartupStep, TriggerPresentationStartupStep>();
             services.AddSingleton<IStartupStep, WindowShellStartupStep>();
             services.AddSingleton<IStartupStep, ConnectionSamplingStartupStep>();
+            services.AddSingleton<IStartupStep, ProfileSubscriptionSchedulerStartupStep>();
         });
     }
 }

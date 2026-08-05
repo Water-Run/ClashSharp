@@ -342,16 +342,24 @@ public sealed class NetworkMutationConcurrencyTests
     {
         public string CurrentHash { get; private set; } = "baseline:Disabled:False:7890";
 
-        public Task PromoteDesiredAsync(NetworkPlan plan, CancellationToken cancellationToken)
+        public Task PromoteDesiredAsync(
+            NetworkPlan plan,
+            MutationAdmissionLease admissionLease,
+            CancellationToken cancellationToken)
         {
+            Assert.NotNull(admissionLease);
             cancellationToken.ThrowIfCancellationRequested();
             CurrentHash = plan.DesiredHash;
             trace.Add($"commit:{CurrentHash}");
             return Task.CompletedTask;
         }
 
-        public Task RestoreBaselineAsync(NetworkPlan plan, CancellationToken cancellationToken)
+        public Task RestoreBaselineAsync(
+            NetworkPlan plan,
+            MutationAdmissionLease admissionLease,
+            CancellationToken cancellationToken)
         {
+            Assert.NotNull(admissionLease);
             cancellationToken.ThrowIfCancellationRequested();
             CurrentHash = plan.BaselineHash;
             trace.Add($"restore-commit:{CurrentHash}");

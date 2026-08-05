@@ -21,9 +21,9 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
     private readonly StartupLaunchService _startupLaunch;
     private readonly ConnectionSamplingService _sampling;
     private readonly MihomoConnectionService _connections;
-    private readonly MihomoCoreService _core;
     private readonly NetworkStateCoordinator _network;
     private readonly INetworkStateObserver _networkObserver;
+    private readonly MihomoServiceManager? _mihomoService;
     private readonly IIdempotentTriggerNotificationSink _notifications;
     private readonly ITriggerLifecycleHandoff _exitHandoff;
 
@@ -32,19 +32,19 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         StartupLaunchService startupLaunch,
         ConnectionSamplingService sampling,
         MihomoConnectionService connections,
-        MihomoCoreService core,
         NetworkStateCoordinator network,
         INetworkStateObserver networkObserver,
         IIdempotentTriggerNotificationSink notifications,
-        ITriggerLifecycleHandoff exitHandoff)
+        ITriggerLifecycleHandoff exitHandoff,
+        MihomoServiceManager? mihomoService = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
         _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
-        _core = core ?? throw new ArgumentNullException(nameof(core));
         _network = network ?? throw new ArgumentNullException(nameof(network));
         _networkObserver = networkObserver ?? throw new ArgumentNullException(nameof(networkObserver));
+        _mihomoService = mihomoService;
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _exitHandoff = exitHandoff ?? throw new ArgumentNullException(nameof(exitHandoff));
     }
@@ -65,13 +65,14 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
             bool? desired = action.DesiredEffect.Kind switch
             {
                 TriggerActionKind.CloseConnections =>
-                    !_core.IsRunning
-                    || (await _connections.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false)).Count == 0,
+                    (await _connections.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false)).Count == 0,
                 TriggerActionKind.SetLaunchAtStartup => await ProbeStartupLaunchAsync(
                     RequireBoolean(action),
                     cancellationToken).ConfigureAwait(false),
                 TriggerActionKind.SetTransparentProxy =>
-                    _settings.TransparentProxyEnabled == RequireBoolean(action),
+                    await ProbeTransparentProxyAsync(
+                        RequireBoolean(action),
+                        cancellationToken).ConfigureAwait(false),
                 TriggerActionKind.SetConnectionSampling => ProbeConnectionSampling(RequireBoolean(action)),
                 TriggerActionKind.SwitchProxyMode => await ProbeNetworkModeAsync(
                     RequireMode(action),
@@ -105,24 +106,26 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         switch (action.DesiredEffect.Kind)
         {
             case TriggerActionKind.CloseConnections:
-                if (_core.IsRunning)
-                {
-                    await _connections.CloseAllConnectionsAsync(cancellationToken).ConfigureAwait(false);
-                }
-
+                await _connections.CloseAllConnectionsAsync(cancellationToken).ConfigureAwait(false);
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SetLaunchAtStartup:
                 bool launchAtStartup = RequireBoolean(action);
                 await _startupLaunch
                     .SetEnabledAsync(launchAtStartup, cancellationToken)
                     .ConfigureAwait(false);
-                _settings.LaunchAtStartupEnabled = launchAtStartup;
+                _settings.WriteAdmitted(
+                    admissionLease,
+                    editor => editor.LaunchAtStartupEnabled = launchAtStartup);
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SetTransparentProxy:
-                _settings.TransparentProxyEnabled = RequireBoolean(action);
-                return TriggerActionApplyResult.Applied();
+                return await ApplyTransparentProxyAsync(
+                    RequireBoolean(action),
+                    admissionLease,
+                    cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.SetConnectionSampling:
-                _settings.ConnectionSamplingEnabled = RequireBoolean(action);
+                _settings.WriteAdmitted(
+                    admissionLease,
+                    editor => editor.ConnectionSamplingEnabled = RequireBoolean(action));
                 await _sampling.RestartFromSettingsAsync(cancellationToken).ConfigureAwait(false);
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SwitchProxyMode:
@@ -162,6 +165,65 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         return _settings.ConnectionSamplingEnabled == desired && _sampling.IsRunning == desired;
     }
 
+    private async Task<bool?> ProbeTransparentProxyAsync(
+        bool desired,
+        CancellationToken cancellationToken)
+    {
+        if (_settings.TransparentProxyEnabled != desired)
+        {
+            return false;
+        }
+
+        NetworkStateSnapshot observed = await _networkObserver
+            .ObserveAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (!observed.IsKnown)
+        {
+            return null;
+        }
+
+        bool takeoverMode = _settings.CurrentMode is
+            ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
+        bool expectedTransparentProxy = false;
+        if (desired && takeoverMode)
+        {
+            if (_mihomoService is null)
+            {
+                return null;
+            }
+
+            MihomoServiceStatus serviceStatus = await _mihomoService
+                .GetStatusAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (!serviceStatus.IsKnown)
+            {
+                return null;
+            }
+
+            expectedTransparentProxy = serviceStatus.IsInstalled;
+        }
+
+        return observed.Mode == _settings.CurrentMode
+            && observed.MixedPort == _settings.MixedPort
+            && observed.TransparentProxyEnabled == expectedTransparentProxy
+            && IsEffectiveModeState(observed);
+    }
+
+    private async Task<TriggerActionApplyResult> ApplyTransparentProxyAsync(
+        bool transparentProxyEnabled,
+        MutationAdmissionLease admissionLease,
+        CancellationToken cancellationToken)
+    {
+        MutationResult<NetworkTransitionResult> result = await _network.ApplyAdmittedAsync(
+            () => NetworkIntent.ChangeMode(
+                _settings.CurrentMode,
+                transparentProxyEnabled,
+                _settings.MixedPort),
+            admissionLease,
+            cancellationToken).ConfigureAwait(false);
+        return ClassifyNetworkMutationResult(result, cancellationToken);
+    }
+
     private async Task<bool?> ProbeNetworkModeAsync(
         ClashSharpMode desiredMode,
         CancellationToken cancellationToken)
@@ -186,9 +248,19 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         CancellationToken cancellationToken)
     {
         MutationResult<NetworkTransitionResult> result = await _network.ApplyAdmittedAsync(
-            NetworkIntent.ChangeMode(mode, _settings.TransparentProxyEnabled, _settings.MixedPort),
+            () => NetworkIntent.ChangeMode(
+                mode,
+                _settings.TransparentProxyEnabled,
+                _settings.MixedPort),
             admissionLease,
             cancellationToken).ConfigureAwait(false);
+        return ClassifyNetworkMutationResult(result, cancellationToken);
+    }
+
+    private static TriggerActionApplyResult ClassifyNetworkMutationResult(
+        MutationResult<NetworkTransitionResult> result,
+        CancellationToken cancellationToken)
+    {
         if (result.Outcome == MutationOutcome.Succeeded)
         {
             return TriggerActionApplyResult.Applied();

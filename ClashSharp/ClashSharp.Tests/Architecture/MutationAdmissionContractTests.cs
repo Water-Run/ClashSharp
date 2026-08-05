@@ -133,10 +133,12 @@ public sealed class MutationAdmissionContractTests
 
         Assert.Equal(MutationAdmissionState.Closing, barrier.State);
         Assert.False(exclusiveTask.IsCompleted);
+        barrier.EnsureActiveLease(ordinary);
         await Assert.ThrowsAsync<MutationAdmissionRejectedException>(
             async () => await barrier.AcquireOrdinaryAsync(CancellationToken.None));
 
         await ordinary.DisposeAsync();
+        Assert.Throws<InvalidOperationException>(() => barrier.EnsureActiveLease(ordinary));
         await using MutationAdmissionLease exclusive = await exclusiveTask;
         Assert.True(exclusive.IsExclusive);
 
@@ -183,6 +185,28 @@ public sealed class MutationAdmissionContractTests
             async () => await barrier.AcquireOrdinaryAsync(CancellationToken.None));
         await Assert.ThrowsAsync<MutationAdmissionRejectedException>(
             async () => await barrier.AcquireRecoveryAsync(CancellationToken.None));
+    }
+
+    /// <summary>Verifies terminal maintenance can write under an explicit shutdown lease without reopening admission.</summary>
+    [Fact]
+    public async Task AdmissionBarrier_AfterShutdown_PermitsExplicitTerminalMaintenanceOnly()
+    {
+        MutationAdmissionBarrier barrier = new();
+        await using (MutationAdmissionLease shutdown = await barrier.CloseAndDrainAsync(
+                         MutationAdmissionClosure.Shutdown,
+                         CancellationToken.None))
+        {
+            Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+        }
+
+        using MutationAdmissionLease maintenance = barrier.AcquireShutdownMaintenance();
+        barrier.EnsureActiveExclusiveLease(maintenance);
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+        Assert.Throws<MutationAdmissionRejectedException>(() => barrier.AcquireOrdinary());
+
+        maintenance.Dispose();
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+        Assert.Throws<InvalidOperationException>(() => barrier.EnsureActiveLease(maintenance));
     }
 
     /// <summary>Verifies shutdown pending during recovery wins atomically over a successful completion.</summary>

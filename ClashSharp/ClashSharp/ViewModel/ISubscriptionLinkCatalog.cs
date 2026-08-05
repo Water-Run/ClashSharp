@@ -15,6 +15,14 @@ internal interface ISubscriptionLinkCatalog
         string uri,
         CancellationToken cancellationToken);
 
+    Task<bool> TryUpdateSubscriptionLinkAsync(
+        SubscriptionLinkEditRequest request,
+        CancellationToken cancellationToken);
+
+    Task<bool> TryDeleteSubscriptionLinkAsync(
+        string linkId,
+        CancellationToken cancellationToken);
+
     Task<string> CheckSubscriptionLinkAsync(
         ProfileSubscriptionLink link,
         CancellationToken cancellationToken);

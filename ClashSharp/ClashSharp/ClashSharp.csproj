@@ -54,6 +54,12 @@
     <Content Include="Binaries\mihomo-NOTICE.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Binaries\mihomo-manifest.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Binaries\GeoData\**\*" Condition="Exists('Binaries\GeoData\manifest.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -69,16 +75,33 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\ClashSharp.RecoveryWatchdog\RecoveryWatchdogProtocol.cs" Link="Service\RecoveryWatchdogProtocol.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
     <ProjectReference Include="..\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <ProjectReference Include="..\ClashSharp.RecoveryWatchdog\ClashSharp.RecoveryWatchdog.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1721" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
+
+  <Target Name="CopyRecoveryWatchdog" AfterTargets="Build" Condition="'$(DesignTimeBuild)'!='true'">
+    <ItemGroup>
+      <RecoveryWatchdogFiles Include="..\ClashSharp.RecoveryWatchdog\bin\$(Platform)\$(Configuration)\net10.0-windows\win-x64\ClashSharp.RecoveryWatchdog.*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(RecoveryWatchdogFiles)"
+      DestinationFiles="@(RecoveryWatchdogFiles->'$(OutDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+      Condition="'@(RecoveryWatchdogFiles)'!=''" />
+  </Target>
 
   <Target Name="CopyMihomoServiceHost" AfterTargets="Build" Condition="'$(DesignTimeBuild)'!='true'">
     <ItemGroup>

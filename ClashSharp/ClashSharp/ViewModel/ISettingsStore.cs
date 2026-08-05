@@ -20,6 +20,10 @@ internal interface ISettingsStore
 
     bool LaunchAtStartupEnabled { get; set; }
 
+    ClashSharpMode CurrentMode { get; set; }
+
+    string ActiveProfileId { get; set; }
+
     bool TransparentProxyEnabled { get; set; }
 
     int MixedPort { get; set; }

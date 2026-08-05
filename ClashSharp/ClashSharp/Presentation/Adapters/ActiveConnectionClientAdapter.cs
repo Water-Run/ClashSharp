@@ -39,6 +39,15 @@ internal sealed class ActiveConnectionClientAdapter : IActiveConnectionClient
         return _connections.GetActiveConnectionsAsync(cancellationToken);
     }
 
+    /// <summary>Streams active connection snapshots while the caller owns the page lifetime.</summary>
+    /// <param name="cancellationToken">Cancels the WebSocket and enumeration.</param>
+    /// <returns>Authenticated controller snapshots.</returns>
+    public IAsyncEnumerable<IReadOnlyList<ActiveConnection>> StreamActiveConnectionsAsync(
+        CancellationToken cancellationToken)
+    {
+        return _connections.StreamActiveConnectionsAsync(cancellationToken);
+    }
+
     /// <summary>Closes one active connection.</summary>
     /// <param name="connectionId">Connection id. Must not be null or empty.</param>
     /// <param name="cancellationToken">Cancels the local API request when requested.</param>

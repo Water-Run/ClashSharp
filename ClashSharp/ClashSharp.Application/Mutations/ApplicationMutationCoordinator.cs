@@ -1,5 +1,7 @@
 using ClashSharp.ApplicationModel.Diagnostics;
 
+using ClashSharp.Diagnostics;
+
 namespace ClashSharp.ApplicationModel.Mutations;
 
 internal interface IAdmittedApplicationMutationCoordinator
@@ -108,6 +110,7 @@ public sealed class ApplicationMutationCoordinator :
                     request.OperationId,
                     async (context, _) =>
                     {
+                        context.BindAdmissionLease(admissionLease);
                         ExecutionEnvelope<T> result;
                         try
                         {
@@ -200,6 +203,7 @@ public sealed class ApplicationMutationCoordinator :
                 request.OperationId,
                 async (context, gateToken) =>
                 {
+                    context.BindAdmissionLease(admissionLease);
                     ExecutionEnvelope<T> result;
                     try
                     {
@@ -283,7 +287,11 @@ public sealed class ApplicationMutationCoordinator :
             {
                 execution = await _mutationGate.ExecuteAsync(
                     operationId,
-                    (context, _) => _recoveryExecutor.ExecuteAsync(operationId, context, cancellationToken),
+                    (context, _) =>
+                    {
+                        context.BindAdmissionLease(recoveryLease);
+                        return _recoveryExecutor.ExecuteAsync(operationId, context, cancellationToken);
+                    },
                     cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException exception) when (
@@ -329,7 +337,11 @@ public sealed class ApplicationMutationCoordinator :
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
-                CreateResult<T>(request.OperationId, MutationOutcome.Failed, default, "mutation-plan-failed"),
+                CreateResult<T>(
+                    request.OperationId,
+                    MutationOutcome.Failed,
+                    default,
+                    ClassifyError(exception, "mutation-plan-failed")),
                 RetainRecovery: false);
         }
 
@@ -532,7 +544,11 @@ public sealed class ApplicationMutationCoordinator :
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return new ExecutionEnvelope<T>(
-                CreateResult<T>(request.OperationId, MutationOutcome.Failed, default, "mutation-plan-failed"),
+                CreateResult<T>(
+                    request.OperationId,
+                    MutationOutcome.Failed,
+                    default,
+                    ClassifyError(exception, "mutation-plan-failed")),
                 RetainRecovery: false);
         }
 
@@ -633,7 +649,9 @@ public sealed class ApplicationMutationCoordinator :
                     operationId,
                     MutationOutcome.RecoveryRequired,
                     default,
-                    ClassifyError(compensationException, "mutation-recovery-required")),
+                    ClassifyError(
+                        new AggregateException(compensationException, failure),
+                        "mutation-recovery-required")),
                 RetainRecovery: true);
         }
     }
@@ -698,6 +716,12 @@ public sealed class ApplicationMutationCoordinator :
 
     private static string ClassifyError(Exception? exception, string fallback)
     {
+        string? diagnosticCode = RuntimeDiagnosticCode.Extract(exception);
+        if (diagnosticCode is not null)
+        {
+            return diagnosticCode;
+        }
+
         return exception switch
         {
             OperationCanceledException => $"{fallback}-cancelled",

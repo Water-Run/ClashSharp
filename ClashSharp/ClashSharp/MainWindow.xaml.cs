@@ -174,9 +174,15 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         StartupOverlay.Visibility = Visibility.Visible;
         StartupProgressRing.IsActive = false;
         StartupProgressRing.Visibility = Visibility.Collapsed;
+        bool installerTransactionBlocked =
+            InstallerTransactionStartupGate.IsBlockingDiagnosticCode(diagnostic);
         StartupStatusText.Text = _composition.ResolveStartupText(
-            "Startup.Shell.Failed",
-            "Clash# could not finish starting.");
+            installerTransactionBlocked
+                ? "Startup.Shell.InstallerTransactionPending"
+                : "Startup.Shell.Failed",
+            installerTransactionBlocked
+                ? "Clash# detected an unfinished Installer transaction. Close Clash#, rerun the same ClashSharp Installer, and choose Repair. Clash# will not start the proxy core, transparent proxy (TUN), or Mihomo service until Repair finishes."
+                : "Clash# could not finish starting.");
         StartupDiagnosticText.Text = diagnostic;
         StartupDiagnosticText.Visibility = Visibility.Visible;
         PrimaryWindowActivation.BringToFront(this);
@@ -333,6 +339,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             "Links" => NavLinksItem,
             "Rules" => NavRulesItem,
             "Triggers" => NavTriggersItem,
+            "Connections" => NavConnectionsItem,
             "Statistics" => NavStatisticsItem,
             "Logs" => null,
             "About" => NavAboutItem,

@@ -5,67 +5,73 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Loaded="Page_Loaded"
+    Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
-    <Grid Padding="{StaticResource ClashPagePadding}">
-        <StackPanel Spacing="18">
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
+    <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-            <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton x:Name="RefreshConnectionsButton" Label="{Binding RefreshConnectionsText}" Command="{Binding RefreshConnectionsCommand}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE72C;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="PersistConnectionsButton" Label="{Binding PersistConnectionsText}" Command="{Binding PersistConnectionsCommand}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE74E;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="CloseAllConnectionsButton" Label="{Binding CloseAllConnectionsText}" Command="{Binding CloseAllConnectionsCommand}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE711;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-            </CommandBar>
-
-            <TextBlock x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-            <ListView x:Name="ConnectionsList" ItemsSource="{Binding Connections}">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Padding="4,10" ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="170" />
-                                <ColumnDefinition Width="140" />
-                                <ColumnDefinition Width="90" />
-                                <ColumnDefinition Width="90" />
-                                <ColumnDefinition Width="72" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBlock Text="{Binding ProcessNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="1" Text="{Binding HostDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="2" Text="{Binding RuleDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="3" Text="{Binding ProxyNameDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="4" Text="{Binding UploadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Column="5" Text="{Binding DownloadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <Button
-                                Grid.Column="6"
-                                Padding="8,4"
-                                HorizontalAlignment="Right"
-                                Command="{Binding DataContext.CloseConnectionCommand, ElementName=ConnectionsList}"
-                                CommandParameter="{Binding}">
-                                <FontIcon Glyph="&#xE711;" FontSize="14" />
-                            </Button>
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
+
+        <CommandBar Grid.Row="1" DefaultLabelPosition="Right" Background="Transparent">
+            <AppBarButton x:Name="RefreshConnectionsButton" Label="{Binding RefreshConnectionsText}" Click="RefreshConnectionsButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE72C;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="CloseAllConnectionsButton" Label="{Binding CloseAllConnectionsText}" Click="CloseAllConnectionsButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE711;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+        </CommandBar>
+
+        <TextBlock Grid.Row="2" x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+        <ListView
+            x:Name="ConnectionsList"
+            Grid.Row="3"
+            HorizontalContentAlignment="Stretch"
+            ItemsSource="{Binding Connections}">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="4,10" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="{Binding ProcessNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="1" Text="{Binding HostDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="2" Text="{Binding RuleDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="3" Text="{Binding ProxyNameDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="4" Text="{Binding UploadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="5" Text="{Binding DownloadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Button
+                            Grid.Column="6"
+                            Padding="8,4"
+                            HorizontalAlignment="Right"
+                            AutomationProperties.Name="{Binding DataContext.CloseConnectionText, ElementName=ConnectionsList}"
+                            Click="CloseConnectionButton_Click">
+                            <FontIcon Glyph="&#xE711;" FontSize="14" />
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
     </Grid>
 </Page>

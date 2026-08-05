@@ -1,16 +1,26 @@
 extern alias ClashSharpUi;
 using Microsoft.Data.Sqlite;
+using ClashSharpMode = global::ClashSharp.Model.ClashSharpMode;
 using CoreConfigurationState = ClashSharpUi::ClashSharp.Model.CoreConfigurationState;
 using IProfileCatalogCoreConfiguration = ClashSharpUi::ClashSharp.Service.IProfileCatalogCoreConfiguration;
 using IProfileCatalogLog = ClashSharpUi::ClashSharp.Service.IProfileCatalogLog;
+using IProfileCatalogRuntime = ClashSharpUi::ClashSharp.Service.IProfileCatalogRuntime;
 using IProfileCatalogSettings = ClashSharpUi::ClashSharp.Service.IProfileCatalogSettings;
 using LogStorageService = ClashSharpUi::ClashSharp.Service.LogStorageService;
+using MihomoCoreOwner = global::ClashSharp.Model.MihomoCoreOwner;
 using MihomoServiceStatus = ClashSharpUi::ClashSharp.Model.MihomoServiceStatus;
 using ProductionRuntimeSnapshotSource =
     ClashSharpUi::ClashSharp.Presentation.Adapters.MasterControlRuntimeSnapshotSource;
+using ProfileCatalogRuntimeImportResult = ClashSharpUi::ClashSharp.Service.ProfileCatalogRuntimeImportResult;
 using ProfileCatalogService = ClashSharpUi::ClashSharp.Service.ProfileCatalogService;
 using ProfileImportResult = ClashSharpUi::ClashSharp.Model.ProfileImportResult;
+using ProfileMutationCoordinator =
+    ClashSharpUi::ClashSharp.Service.UncoordinatedProfileCatalogMutationCoordinator;
 using RuntimeAdapter = ClashSharpUi::ClashSharp.Presentation.Adapters.MasterControlRuntimeAdapter;
+using RuntimeConfigurationActivationPlan =
+    ClashSharpUi::ClashSharp.Service.RuntimeConfigurationActivationPlan;
+using RuntimeConfigurationIntegrityObservation =
+    ClashSharpUi::ClashSharp.Service.RuntimeConfigurationIntegrityObservation;
 using RuntimeSnapshot = ClashSharpUi::ClashSharp.ViewModel.MasterControlRuntimeSnapshot;
 using RuntimeSnapshotSource =
     ClashSharpUi::ClashSharp.Presentation.Adapters.IMasterControlRuntimeSnapshotSource;
@@ -68,10 +78,13 @@ public sealed class MasterControlRuntimeAdapterTests
             string logDatabasePath = Path.Combine(testDirectory, "logs.sqlite3");
             ProfileCatalogService profileCatalog = new(
                 profileCatalogPath,
+                Path.Combine(testDirectory, "mihomo", "history"),
                 new FixedProfileCatalogSettings(),
                 new UnusedProfileCatalogCoreConfiguration(),
+                new UnusedProfileCatalogRuntime(),
                 new NullProfileCatalogLog(),
-                static key => key);
+                static key => key,
+                ProfileMutationCoordinator.Instance);
             LogStorageService logStorage = new(logDatabasePath, static () => "built-in-direct");
             int localizationCallCount = 0;
             ProductionRuntimeSnapshotSource source = new(
@@ -164,10 +177,13 @@ public sealed class MasterControlRuntimeAdapterTests
         {
             ProfileCatalogService profileCatalog = new(
                 Path.Combine(testDirectory, "ProfileCatalog.json"),
+                Path.Combine(testDirectory, "mihomo", "history"),
                 new FixedProfileCatalogSettings(),
                 new UnusedProfileCatalogCoreConfiguration(),
+                new UnusedProfileCatalogRuntime(),
                 new NullProfileCatalogLog(),
-                static key => key);
+                static key => key,
+                ProfileMutationCoordinator.Instance);
             LogStorageService logStorage = new(
                 Path.Combine(testDirectory, "logs.sqlite3"),
                 static () => "profile-one");
@@ -222,6 +238,83 @@ public sealed class MasterControlRuntimeAdapterTests
             {
                 Directory.Delete(testDirectory, recursive: true);
             }
+        }
+    }
+
+    [Theory]
+    [InlineData(false, true, true, true, (int)MihomoCoreOwner.Service, true)]
+    [InlineData(true, true, true, false, (int)MihomoCoreOwner.None, true)]
+    [InlineData(true, false, true, false, (int)MihomoCoreOwner.None, true)]
+    [InlineData(false, true, false, false, (int)MihomoCoreOwner.None, true)]
+    [InlineData(true, false, false, false, (int)MihomoCoreOwner.None, false)]
+    public void Execute_ClassifiesOnlyOneOwnerThatMatchesSemanticTunPlan(
+        bool appCoreRunning,
+        bool serviceCoreRunning,
+        bool configurationTunEnabled,
+        bool expectedKnown,
+        int expectedOwnerValue,
+        bool integrityKnown)
+    {
+        string testDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "ClashSharp.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDirectory);
+        try
+        {
+            string configurationPath = Path.Combine(testDirectory, "config.yaml");
+            File.WriteAllText(
+                configurationPath,
+                configurationTunEnabled
+                    ? "mixed-port: 7890\nmode: rule\ntun:\n  enable: true\n"
+                    : "mixed-port: 7890\nmode: rule\n");
+            ProfileCatalogService profileCatalog = new(
+                Path.Combine(testDirectory, "ProfileCatalog.json"),
+                Path.Combine(testDirectory, "mihomo", "history"),
+                new FixedProfileCatalogSettings(),
+                new UnusedProfileCatalogCoreConfiguration(),
+                new UnusedProfileCatalogRuntime(),
+                new NullProfileCatalogLog(),
+                static key => key,
+                ProfileMutationCoordinator.Instance);
+            LogStorageService logStorage = new(
+                Path.Combine(testDirectory, "logs.sqlite3"),
+                static () => "built-in-direct");
+            ProductionRuntimeSnapshotSource source = new(
+                static () => "built-in-direct",
+                () => new CoreConfigurationState(testDirectory, configurationPath, true),
+                static _ => null,
+                profileCatalog,
+                logStorage,
+                static key => key,
+                () => new MihomoServiceStatus(true, serviceCoreRunning, string.Empty),
+                static () => new StartupRestoreFallbackStatus(false, string.Empty),
+                static () => new RuntimeTrafficRateSnapshot(0, 0, 0, 0, 0),
+                static () => new TriggerPresentationSummary(0, 0),
+                static () => 0,
+                () => appCoreRunning,
+                static () => true,
+                () => integrityKnown
+                    ? new RuntimeConfigurationIntegrityObservation(
+                        true,
+                        new RuntimeConfigurationActivationPlan(
+                            ClashSharpMode.RuleTakeover,
+                            configurationTunEnabled,
+                            7890,
+                            "built-in-direct"))
+                    : RuntimeConfigurationIntegrityObservation.Unknown);
+
+            RuntimeSnapshot snapshot = source.Capture().Execute(CancellationToken.None);
+
+            Assert.Equal(expectedKnown, snapshot.RuntimeOwnershipKnown);
+            Assert.Equal((MihomoCoreOwner)expectedOwnerValue, snapshot.EffectiveOwner);
+            Assert.Equal(expectedKnown && serviceCoreRunning, snapshot.TunEffective);
+            Assert.True(snapshot.TunRequested);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(testDirectory, recursive: true);
         }
     }
 
@@ -314,12 +407,35 @@ public sealed class MasterControlRuntimeAdapterTests
             throw new NotSupportedException();
         }
 
+        public Task<string?> ReadImportedProfileConfigurationAsync(
+            string profileId,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
         public Task<ProfileImportResult> ValidateImportedProfileAsync(
             string profileId,
             CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }
+    }
+
+    private sealed class UnusedProfileCatalogRuntime : IProfileCatalogRuntime
+    {
+        public Task<bool> ApplyProfileAsync(string profileId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ProfileCatalogRuntimeImportResult> ImportAndApplyProfileAsync(
+            string profileId,
+            string profileName,
+            string configurationText,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> DeleteImportedProfileAsync(string profileId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class NullProfileCatalogLog : IProfileCatalogLog

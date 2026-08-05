@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace ClashSharp.Tests.Unit.Resources;
@@ -656,7 +658,12 @@ public sealed class AppResourcePackagingTests
     [Fact]
     public void ActiveConnectionModel_DoesNotAccessDisplayServices()
     {
-        string modelPath = FindSourceFile("ClashSharp", "ClashSharp", "Model", "ActiveConnection.cs");
+        string modelPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Core",
+            "Domain",
+            "Connections",
+            "ActiveConnection.cs");
 
         string modelCode = File.ReadAllText(modelPath);
 
@@ -714,7 +721,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("AppDataMaintenanceService.ResetAllSettings()", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("AppDataMaintenanceService.ClearAllData()", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("AppSettingsService.Instance.DisplayLanguage", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("_viewModel.ResetAllSettings()", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.ResetAllSettingsAsync(", settingsCode, StringComparison.Ordinal);
         Assert.Contains("await _viewModel.ClearAllDataAsync(cancellationToken)", settingsCode, StringComparison.Ordinal);
     }
 
@@ -940,6 +947,31 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("StartupConflictDetectionService.Instance.CheckConflicts", mainWindow, StringComparison.Ordinal);
         Assert.Contains("MutationOutcome.RecoveryRequired", startupBehaviorStep, StringComparison.Ordinal);
         Assert.Contains("StartupStepResult.Fatal", startupBehaviorStep, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StartupNetworkBehavior_PreservesStableCodeForNonRecoveryFailure()
+    {
+        string source = File.ReadAllText(FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "AppHost",
+            "Startup",
+            "StartupNetworkBehaviorStep.cs"));
+        int typedCatchStart = source.IndexOf(
+            "catch (NetworkTransitionFailedException exception)",
+            StringComparison.Ordinal);
+        Assert.True(typedCatchStart >= 0);
+        int genericCatchStart = source.IndexOf(
+            "catch (Exception exception)",
+            typedCatchStart,
+            StringComparison.Ordinal);
+        Assert.True(genericCatchStart > typedCatchStart);
+        string typedFailurePolicy = source[typedCatchStart..genericCatchStart];
+
+        Assert.Contains("exception.ErrorCode", typedFailurePolicy, StringComparison.Ordinal);
+        Assert.Contains("StartupStepResult.Fatal", typedFailurePolicy, StringComparison.Ordinal);
+        Assert.Contains("StartupStepResult.Warning", typedFailurePolicy, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies process shutdown is owned by the awaited lifecycle and outer request channel.</summary>
@@ -1215,29 +1247,92 @@ public sealed class AppResourcePackagingTests
             serviceCode,
             StringComparison.Ordinal);
 
+        int actionMutationStart = actionService.IndexOf(
+            "private async Task ApplyLaunchAtStartupAsync(",
+            StringComparison.Ordinal);
+        int actionAdmission = actionService.IndexOf(
+            ".AcquireOrdinaryAsync(cancellationToken)",
+            actionMutationStart,
+            StringComparison.Ordinal);
         int actionPlatformUpdate = actionService.IndexOf(
-            ".SetEnabledAsync(launchAtStartup, cancellationToken)",
+            "await _startupLaunch.SetEnabledAsync(isEnabled, cancellationToken)",
+            actionAdmission,
             StringComparison.Ordinal);
         int actionPreferenceCommit = actionService.IndexOf(
-            "_settings.LaunchAtStartupEnabled = launchAtStartup;",
+            "_settings.WriteAdmitted(",
+            actionPlatformUpdate,
             StringComparison.Ordinal);
+        int actionPreferenceLease = actionService.IndexOf(
+            "admissionLease,",
+            actionPreferenceCommit,
+            StringComparison.Ordinal);
+        int actionPreferenceValue = actionService.IndexOf(
+            "editor => editor.LaunchAtStartupEnabled = isEnabled",
+            actionPreferenceLease,
+            StringComparison.Ordinal);
+        Assert.True(actionMutationStart >= 0, "Application action startup mutation boundary is missing.");
+        Assert.True(
+            actionAdmission > actionMutationStart,
+            "Application action startup updates must acquire ordinary mutation admission.");
         Assert.True(actionPlatformUpdate >= 0, "Application action startup platform update is missing.");
         Assert.True(
             actionPreferenceCommit > actionPlatformUpdate,
             "Application actions must leave the previous preference unchanged when the platform update fails.");
+        Assert.True(
+            actionPreferenceLease > actionPreferenceCommit && actionPreferenceValue > actionPreferenceLease,
+            "Application action startup preference writes must use the admitted settings editor.");
+        Assert.Contains(
+            "editor => editor.LaunchAtStartupEnabled = baseline",
+            actionService,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "_settings.LaunchAtStartupEnabled = isEnabled;",
+            actionService,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "_settings.LaunchAtStartupEnabled = baseline;",
+            actionService,
+            StringComparison.Ordinal);
         Assert.Contains("StartupLaunchService startupLaunch", actionService, StringComparison.Ordinal);
         Assert.DoesNotContain("StartupLaunchService.Instance", actionService, StringComparison.Ordinal);
 
+        int triggerMutationStart = triggerAdapter.IndexOf(
+            "case TriggerActionKind.SetLaunchAtStartup:",
+            StringComparison.Ordinal);
+        int triggerAdmission = triggerAdapter.LastIndexOf(
+            "MutationAdmissionLease admissionLease",
+            triggerMutationStart,
+            StringComparison.Ordinal);
         int triggerPlatformUpdate = triggerAdapter.IndexOf(
             ".SetEnabledAsync(launchAtStartup, cancellationToken)",
+            triggerMutationStart,
             StringComparison.Ordinal);
         int triggerPreferenceCommit = triggerAdapter.IndexOf(
-            "_settings.LaunchAtStartupEnabled = launchAtStartup;",
+            "_settings.WriteAdmitted(",
+            triggerPlatformUpdate,
             StringComparison.Ordinal);
+        int triggerPreferenceLease = triggerAdapter.IndexOf(
+            "admissionLease,",
+            triggerPreferenceCommit,
+            StringComparison.Ordinal);
+        int triggerPreferenceValue = triggerAdapter.IndexOf(
+            "editor => editor.LaunchAtStartupEnabled = launchAtStartup",
+            triggerPreferenceLease,
+            StringComparison.Ordinal);
+        Assert.True(
+            triggerAdmission >= 0 && triggerAdmission < triggerMutationStart,
+            "Trigger startup updates must receive an admitted mutation lease.");
         Assert.True(triggerPlatformUpdate >= 0, "Trigger startup platform update is missing.");
         Assert.True(
             triggerPreferenceCommit > triggerPlatformUpdate,
             "Trigger actions must leave the previous preference unchanged when the platform update fails.");
+        Assert.True(
+            triggerPreferenceLease > triggerPreferenceCommit && triggerPreferenceValue > triggerPreferenceLease,
+            "Trigger startup preference writes must use the admitted settings editor.");
+        Assert.DoesNotContain(
+            "_settings.LaunchAtStartupEnabled = launchAtStartup;",
+            triggerAdapter,
+            StringComparison.Ordinal);
 
         Assert.Contains(
             "StartupLaunchServiceFactory.CreateDefault()",
@@ -1682,11 +1777,14 @@ public sealed class AppResourcePackagingTests
         string binaryDirectory = FindSourceDirectory("ClashSharp", "ClashSharp", "Binaries");
         string licensePath = Path.Combine(binaryDirectory, "mihomo-LICENSE.txt");
         string noticePath = Path.Combine(binaryDirectory, "mihomo-NOTICE.txt");
+        string manifestPath = Path.Combine(binaryDirectory, "mihomo-manifest.json");
+        string binaryPath = Path.Combine(binaryDirectory, "mihomo.exe");
         string projectPath = FindSourceFile("ClashSharp", "ClashSharp", "ClashSharp.csproj");
 
-        Assert.True(File.Exists(Path.Combine(binaryDirectory, "mihomo.exe")), "Bundled mihomo.exe is missing.");
+        Assert.True(File.Exists(binaryPath), "Bundled mihomo.exe is missing.");
         Assert.True(File.Exists(licensePath), "Bundled mihomo license file is missing.");
         Assert.True(File.Exists(noticePath), "Bundled mihomo notice file is missing.");
+        Assert.True(File.Exists(manifestPath), "Pinned mihomo release manifest is missing.");
 
         string licenseText = File.ReadAllText(licensePath);
         string noticeText = File.ReadAllText(noticePath);
@@ -1698,6 +1796,16 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("SHA256", noticeText, StringComparison.Ordinal);
         Assert.Contains("Binaries\\mihomo-LICENSE.txt", projectXml, StringComparison.Ordinal);
         Assert.Contains("Binaries\\mihomo-NOTICE.txt", projectXml, StringComparison.Ordinal);
+        Assert.Contains("Binaries\\mihomo-manifest.json", projectXml, StringComparison.Ordinal);
+
+        using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        JsonElement root = manifest.RootElement;
+        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("v1.19.27", root.GetProperty("version").GetString());
+        Assert.Equal(new FileInfo(binaryPath).Length, root.GetProperty("length").GetInt64());
+        using FileStream binary = File.OpenRead(binaryPath);
+        string actualHash = Convert.ToHexString(SHA256.HashData(binary)).ToLowerInvariant();
+        Assert.Equal(root.GetProperty("sha256").GetString(), actualHash);
     }
 
     /// <summary>Verifies settings page uses the compact RunOnce-style scrolling and row spacing.</summary>
@@ -2052,20 +2160,17 @@ public sealed class AppResourcePackagingTests
         Assert.True(CountOccurrences(settingsCode, "await ShowSettingsOperationFailureAsync(") >= 3);
     }
 
-    /// <summary>Verifies process termination paths swallow expected exit-race and access-denied exceptions.</summary>
+    /// <summary>Verifies helper-process races and Mihomo Job ownership cleanup use their distinct safety contracts.</summary>
     [Fact]
     public void ProcessTerminationHelpers_HandleExpectedRaceAndAccessFailures()
     {
-        string[] sourcePaths =
+        string[] helperSourcePaths =
         [
-            FindSourceFile("ClashSharp", "ClashSharp", "Service", "MihomoCoreService.cs"),
             FindSourceFile("ClashSharp", "ClashSharp", "Service", "CoreConfigurationServiceFactory.cs"),
             FindSourceFile("ClashSharp", "ClashSharp", "Service", "WindowsNetworkDiagnosticServiceFactory.cs"),
-            FindSourceFile("ClashSharp", "ClashSharp", "Service", "StartupConflictDetectionServiceFactory.cs"),
-            FindSourceFile("ClashSharp", "ClashSharp.MihomoService", "MihomoWorker.cs"),
         ];
 
-        foreach (string sourcePath in sourcePaths)
+        foreach (string sourcePath in helperSourcePaths)
         {
             string source = File.ReadAllText(sourcePath);
             Assert.Contains("IsExpectedProcessTerminationException", source, StringComparison.Ordinal);
@@ -2073,6 +2178,70 @@ public sealed class AppResourcePackagingTests
             Assert.Contains("Win32Exception", source, StringComparison.Ordinal);
             Assert.Contains("UnauthorizedAccessException", source, StringComparison.Ordinal);
         }
+
+        string conflictRepair = File.ReadAllText(FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Service",
+            "StartupConflictDetectionServiceFactory.cs"));
+        Assert.Contains("MatchesProcessIdentity", conflictRepair, StringComparison.Ordinal);
+        Assert.Contains("StartTimeUtcTicks", conflictRepair, StringComparison.Ordinal);
+        Assert.Contains("WaitForExitAsync", conflictRepair, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsExpectedProcessTerminationException", conflictRepair, StringComparison.Ordinal);
+
+        string appOwner = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "Service", "MihomoCoreService.cs"));
+        string serviceWorker = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp.MihomoService", "MihomoWorker.cs"));
+        string serviceSupervisor = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp.MihomoService", "MihomoChildSupervisor.cs"));
+        string serviceProcess = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp.MihomoService", "MihomoChildProcess.cs"));
+        string jobLauncher = File.ReadAllText(
+            FindSourceFile(
+                "ClashSharp",
+                "ClashSharp.Infrastructure",
+                "Processes",
+                "WindowsJobProcessLauncher.cs"));
+
+        Assert.Contains("IWindowsProcessJob? _processJob", appOwner, StringComparison.Ordinal);
+        Assert.Contains("private static void TerminateGenerationAndWait(", appOwner, StringComparison.Ordinal);
+        Assert.Contains("IWindowsProcessJob job,", appOwner, StringComparison.Ordinal);
+        Assert.Contains("TerminateJobAndWaitForEmpty(job);", appOwner, StringComparison.Ordinal);
+        Assert.Contains("_processOwnershipFault", appOwner, StringComparison.Ordinal);
+        Assert.DoesNotContain("process.Kill(entireProcessTree: true)", appOwner, StringComparison.Ordinal);
+
+        int assignToJob = jobLauncher.IndexOf("job.AssignProcess(processHandle);", StringComparison.Ordinal);
+        int resumeProcess = jobLauncher.IndexOf("NativeMethods.ResumeThread(threadHandle);", StringComparison.Ordinal);
+        Assert.Contains("uint creationFlags = CreateSuspended | CreateNoWindow;", jobLauncher, StringComparison.Ordinal);
+        Assert.True(assignToJob >= 0, "The suspended Mihomo child must be assigned to its Job.");
+        Assert.True(
+            resumeProcess > assignToJob,
+            "The Mihomo child must not execute before Job ownership is committed.");
+        Assert.Contains("TerminateAndWaitForEmptyAsync", jobLauncher, StringComparison.Ordinal);
+        Assert.Contains("GetActiveProcessCount() != 0", jobLauncher, StringComparison.Ordinal);
+        Assert.Contains("WindowsJobProcessCleanupException", jobLauncher, StringComparison.Ordinal);
+
+        Assert.Contains("WindowsKillOnCloseJob.Create()", serviceProcess, StringComparison.Ordinal);
+        Assert.Contains(
+            "await _job.TerminateAndWaitForEmptyAsync(timeout, cancellationToken)",
+            serviceProcess,
+            StringComparison.Ordinal);
+        int supervisorStopTree = serviceSupervisor.IndexOf(
+            "await process.StopTreeAsync(_stopTimeout, CancellationToken.None)",
+            StringComparison.Ordinal);
+        int supervisorDispose = serviceSupervisor.IndexOf(
+            "process.Dispose();",
+            supervisorStopTree,
+            StringComparison.Ordinal);
+        Assert.True(supervisorStopTree >= 0, "The service supervisor must stop the complete Mihomo Job tree.");
+        Assert.True(
+            supervisorDispose > supervisorStopTree,
+            "The service supervisor must confirm Job termination before releasing ownership.");
+        Assert.Contains("ownership retained", serviceSupervisor, StringComparison.Ordinal);
+        Assert.Contains("_activeProcess = process;", serviceSupervisor, StringComparison.Ordinal);
+        Assert.Contains("finally", serviceWorker, StringComparison.Ordinal);
+        Assert.Contains("await _supervisor.ShutdownAsync()", serviceWorker, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies subscription import uses a bounded streaming HTTP read instead of unbounded string download.</summary>

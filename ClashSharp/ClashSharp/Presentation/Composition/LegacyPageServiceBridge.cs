@@ -27,6 +27,8 @@ internal static class LegacyPageServiceBridge
 
     public static MihomoCoreService MihomoCore => MihomoCoreService.Instance;
 
+    public static MihomoServiceManager MihomoService => MihomoServiceManager.Instance;
+
     public static ProfileCatalogService Profiles => ProfileCatalogService.Instance;
 
     public static ProxyLatencyService ProxyLatency => ProxyLatencyService.Instance;

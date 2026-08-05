@@ -252,7 +252,7 @@ public sealed class SettingsViewModelTests
 
     /// <summary>Verifies transparent proxy cannot be enabled before the mihomo service is deployed.</summary>
     [Fact]
-    public void TransparentProxyEnabled_Setter_WhenMihomoServiceMissing_DoesNotPersistPreference()
+    public void TransparentProxyEnabled_Setter_WhenMihomoServiceMissing_RejectsRequestedPreference()
     {
         FakeSettingsStore store = new() { TransparentProxyEnabled = false };
         FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"));
@@ -267,50 +267,9 @@ public sealed class SettingsViewModelTests
         Assert.Equal("Not installed", viewModel.MihomoServiceStatusText);
     }
 
-    /// <summary>Verifies deploying the mihomo service refreshes status and allows transparent proxy toggling.</summary>
-    [Fact]
-    public async Task DeployMihomoServiceAsync_WhenSuccessful_AllowsTransparentProxy()
-    {
-        FakeSettingsStore store = new() { TransparentProxyEnabled = false };
-        FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"))
-        {
-            DeployResult = new MihomoServiceStatus(true, true, "Installed"),
-        };
-        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
-
-        await viewModel.DeployMihomoServiceAsync(CancellationToken.None);
-        viewModel.TransparentProxyEnabled = true;
-
-        Assert.True(service.DeployCalled);
-        Assert.True(viewModel.CanToggleTransparentProxy);
-        Assert.Equal("Installed", viewModel.MihomoServiceStatusText);
-        Assert.True(store.TransparentProxyEnabled);
-        Assert.True(viewModel.TransparentProxyEnabled);
-    }
-
-    /// <summary>Verifies uninstalling the mihomo service disables the transparent proxy preference.</summary>
-    [Fact]
-    public async Task UninstallMihomoServiceAsync_DisablesTransparentProxyPreference()
-    {
-        FakeSettingsStore store = new() { TransparentProxyEnabled = true };
-        FakeMihomoServiceController service = new(new MihomoServiceStatus(true, true, "Installed"))
-        {
-            UninstallResult = new MihomoServiceStatus(false, false, "Removed"),
-        };
-        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
-
-        await viewModel.UninstallMihomoServiceAsync(CancellationToken.None);
-
-        Assert.True(service.UninstallCalled);
-        Assert.False(viewModel.CanToggleTransparentProxy);
-        Assert.False(store.TransparentProxyEnabled);
-        Assert.False(viewModel.TransparentProxyEnabled);
-        Assert.Equal("Removed", viewModel.MihomoServiceStatusText);
-    }
-
     /// <summary>Verifies loading settings disables a stale transparent proxy preference when the service is missing.</summary>
     [Fact]
-    public void Load_WhenTransparentProxyPreferenceEnabledAndServiceMissing_DisablesPreference()
+    public void Load_WhenTransparentProxyPreferenceEnabledAndServiceMissing_PreservesRequestedPreference()
     {
         FakeSettingsStore store = new() { TransparentProxyEnabled = true };
         FakeMihomoServiceController service = new(new MihomoServiceStatus(false, false, "Not installed"));
@@ -318,8 +277,8 @@ public sealed class SettingsViewModelTests
 
         viewModel.Load();
 
-        Assert.False(store.TransparentProxyEnabled);
-        Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
         Assert.False(viewModel.CanToggleTransparentProxy);
     }
 
@@ -357,6 +316,29 @@ public sealed class SettingsViewModelTests
         Assert.False(viewModel.CanToggleTransparentProxy);
     }
 
+    /// <summary>Verifies an installed service cannot enable TUN without a valid Installer association.</summary>
+    [Fact]
+    public void Load_WhenInstalledServiceHasProvisioningFailure_DisablesTransparentProxyToggle()
+    {
+        FakeSettingsStore store = new() { TransparentProxyEnabled = true };
+        MihomoServiceStatus unprovisioned = new(true, false, "Association invalid")
+        {
+            ProvisioningFailureCode = "service.provisioning.association_invalid",
+        };
+        FakeMihomoServiceController service = new(unprovisioned);
+
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, service);
+        viewModel.Load();
+
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
+        Assert.False(viewModel.CanToggleTransparentProxy);
+        Assert.Contains(
+            "[service.provisioning.association_invalid]",
+            viewModel.MihomoServiceDiagnosticText,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Load_WhenServiceStatusIsDefault_UsesUnknownStatusText()
     {
@@ -373,20 +355,17 @@ public sealed class SettingsViewModelTests
 
     /// <summary>Verifies the default mihomo service controller uses injected localization instead of global resources.</summary>
     [Fact]
-    public async Task AlwaysAvailableMihomoServiceController_UsesInjectedLocalization()
+    public void AlwaysAvailableMihomoServiceController_UsesInjectedLocalization()
     {
         AlwaysAvailableMihomoServiceController controller = new(key => key switch
         {
             "MihomoService.Status.Deployed" => "localized deployed",
-            "MihomoService.Status.NotDeployed" => "localized not deployed",
             _ => key,
         });
 
         MihomoServiceStatus status = controller.GetLatestStatus();
-        MihomoServiceStatus uninstallStatus = await controller.UninstallAsync(CancellationToken.None);
 
         Assert.Equal("localized deployed", status.Message);
-        Assert.Equal("localized not deployed", uninstallStatus.Message);
     }
 
     /// <summary>Verifies app theme selection persists and notifies the shell theme controller.</summary>
@@ -515,6 +494,91 @@ public sealed class SettingsViewModelTests
         Assert.Equal(7892, store.MixedPort);
         Assert.Equal(7892, viewModel.MixedPort);
         Assert.Equal(7892d, viewModel.MixedPortValue);
+    }
+
+    [Fact]
+    public async Task NetworkSettings_WhenRuntimeTransactionSucceeds_CommitsLatestRequest()
+    {
+        FakeSettingsStore store = new()
+        {
+            TransparentProxyEnabled = false,
+            MixedPort = 10000,
+        };
+        List<(bool TunEnabled, int MixedPort)> requests = [];
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            applyNetworkSettingsAsync: (tunEnabled, mixedPort, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                requests.Add((tunEnabled, mixedPort));
+                store.TransparentProxyEnabled = tunEnabled;
+                store.MixedPort = mixedPort;
+                return Task.CompletedTask;
+            });
+
+        viewModel.TransparentProxyEnabled = true;
+        await viewModel.ApplyNetworkSettingsCommand.ExecutionTask!;
+        viewModel.MixedPortValue = 12345;
+        await viewModel.ApplyNetworkSettingsCommand.ExecutionTask!;
+
+        Assert.Equal([(true, 10000), (true, 12345)], requests);
+        Assert.True(store.TransparentProxyEnabled);
+        Assert.Equal(12345, store.MixedPort);
+    }
+
+    [Fact]
+    public async Task NetworkSettings_WhenRuntimeTransactionFails_RestoresAppliedRequest()
+    {
+        FakeSettingsStore store = new()
+        {
+            TransparentProxyEnabled = false,
+            MixedPort = 10000,
+        };
+        FakeApplicationErrorSink errorSink = new();
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            errorSink: errorSink,
+            applyNetworkSettingsAsync: (_, _, _) =>
+                Task.FromException(new InvalidOperationException("runtime rejected")));
+
+        viewModel.TransparentProxyEnabled = true;
+        await viewModel.ApplyNetworkSettingsCommand.ExecutionTask!;
+
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.False(viewModel.TransparentProxyEnabled);
+        Assert.Equal(10000, viewModel.MixedPort);
+        Assert.True(viewModel.HasOperationError);
+        Assert.Single(errorSink.Errors);
+    }
+
+    [Fact]
+    public async Task NetworkSettings_WhenRuntimeTransactionHasStableCode_ShowsActionableDiagnostic()
+    {
+        FakeSettingsStore store = new()
+        {
+            TransparentProxyEnabled = false,
+            MixedPort = 10000,
+        };
+        FakeApplicationErrorSink errorSink = new();
+        StableRuntimeDiagnosticException failure = new(
+            "geo.assets_missing",
+            "runtime rejected");
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            errorSink: errorSink,
+            applyNetworkSettingsAsync: (_, _, _) => Task.FromException(failure));
+
+        viewModel.MixedPortValue = 12000;
+        await viewModel.ApplyNetworkSettingsCommand.ExecutionTask!;
+
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.Equal(10000, store.MixedPort);
+        Assert.Equal(10000, viewModel.MixedPort);
+        Assert.Equal(
+            "RuntimeFailure.GeoData [geo.assets_missing]",
+            viewModel.OperationErrorText);
+        ApplicationError error = Assert.Single(errorSink.Errors);
+        Assert.Same(failure, error.Exception);
     }
 
     /// <summary>Verifies sampling changes restart the sampling service after persistence.</summary>
@@ -1140,34 +1204,441 @@ public sealed class SettingsViewModelTests
         Assert.False(ReadProperty<bool>(viewModel, "IsConnectionTestRunning"));
     }
 
-    /// <summary>Verifies reset-all settings delegates maintenance work and reloads the current settings snapshot.</summary>
+    /// <summary>Verifies reset-all converges every external participant to the durable defaults.</summary>
     [Fact]
-    public void ResetAllSettings_RunsInjectedMaintenanceAndReloadsSettings()
+    public async Task ResetAllSettings_AppliesEveryExternalParticipantAndReloadsDefaults()
     {
         FakeSettingsStore store = new()
         {
             DisplayLanguage = AppLanguage.German,
+            AppThemeMode = AppThemeMode.Dark,
+            AppAccentColorMode = AppAccentColorMode.Custom,
+            AppAccentColorValue = "#FF00AA00",
+            LaunchAtStartupEnabled = true,
+            ConnectionSamplingEnabled = false,
+            ConnectionSamplingIntervalSeconds = 90,
+            CurrentMode = ClashSharpMode.RuleTakeover,
+            ActiveProfileId = "profile-before-reset",
+            TransparentProxyEnabled = false,
+            MixedPort = 7890,
             ConnectionTestUrl = "https://example.com/old",
         };
         bool resetCalled = false;
-        AppLanguage? appliedLanguage = null;
+        List<AppLanguage> languages = [];
+        List<AppThemeMode> themes = [];
+        List<(AppAccentColorMode Mode, string Value)> accents = [];
+        List<bool> startupRegistrations = [];
+        List<(bool Enabled, int IntervalSeconds)> samplingStates = [];
+        List<(bool TunEnabled, int MixedPort)> networkStates = [];
         SettingsViewModel viewModel = CreateMaintenanceViewModel(
             store,
-            language => appliedLanguage = language,
+            languages.Add,
             resetAllSettings: () =>
             {
                 resetCalled = true;
-                store.DisplayLanguage = AppLanguage.English;
+                ResetExternalSettingsToDefaults(store);
                 store.ConnectionTestUrl = "https://example.com/reset";
             },
-            clearAllData: () => { });
+            clearAllData: () => { },
+            applyTheme: themes.Add,
+            applyAccentColor: (mode, value) => accents.Add((mode, value)),
+            restartConnectionSamplingAsync: _ =>
+            {
+                samplingStates.Add((store.ConnectionSamplingEnabled, store.ConnectionSamplingIntervalSeconds));
+                return Task.CompletedTask;
+            },
+            applyLaunchAtStartupAsync: (enabled, _) =>
+            {
+                startupRegistrations.Add(enabled);
+                return Task.CompletedTask;
+            },
+            applyNetworkSettingsAsync: (tunEnabled, mixedPort, _) =>
+            {
+                networkStates.Add((tunEnabled, mixedPort));
+                return Task.CompletedTask;
+            });
 
-        InvokeMethod<object?>(viewModel, "ResetAllSettings", Array.Empty<object>());
+        await viewModel.ResetAllSettingsAsync(CancellationToken.None);
 
         Assert.True(resetCalled);
-        Assert.Null(appliedLanguage);
-        Assert.Equal(AppLanguage.English, viewModel.DisplayLanguage);
+        Assert.Equal([AppLanguage.AutoDetect], languages);
+        Assert.Equal([AppThemeMode.FollowSystem], themes);
+        Assert.Equal([(AppAccentColorMode.FollowSystem, "#FF0078D4")], accents);
+        Assert.Equal([false], startupRegistrations);
+        Assert.Equal([(true, 30)], samplingStates);
+        Assert.Equal([(true, 10000)], networkStates);
+        Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
+        Assert.Equal(AppThemeMode.FollowSystem, viewModel.AppThemeMode);
+        Assert.Equal(AppAccentColorMode.FollowSystem, viewModel.AppAccentColorMode);
+        Assert.False(viewModel.LaunchAtStartupEnabled);
+        Assert.True(viewModel.ConnectionSamplingEnabled);
+        Assert.Equal(30, viewModel.ConnectionSamplingIntervalSeconds);
+        Assert.True(viewModel.TransparentProxyEnabled);
+        Assert.Equal(10000, viewModel.MixedPort);
         Assert.Equal("https://example.com/reset", viewModel.ConnectionTestUrl);
+        Assert.False(viewModel.IsResetRecoveryRequired);
+        Assert.False(viewModel.HasOperationError);
+    }
+
+    /// <summary>Verifies caller cancellation cannot interrupt participants after durable reset begins.</summary>
+    [Fact]
+    public async Task ResetAllSettings_CallerCancelsAfterDurableReset_CompletesWithNonCancelableParticipants()
+    {
+        FakeSettingsStore store = new()
+        {
+            DisplayLanguage = AppLanguage.French,
+            LaunchAtStartupEnabled = true,
+            TransparentProxyEnabled = false,
+            MixedPort = 7890,
+        };
+        using CancellationTokenSource cancellation = new();
+        List<string> participants = [];
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => participants.Add("language"),
+            resetAllSettings: () =>
+            {
+                ResetExternalSettingsToDefaults(store);
+                cancellation.Cancel();
+            },
+            clearAllData: () => { },
+            applyTheme: _ => participants.Add("theme"),
+            applyAccentColor: (_, _) => participants.Add("accent"),
+            applyLaunchAtStartupAsync: (_, token) =>
+            {
+                Assert.False(token.CanBeCanceled);
+                participants.Add("startup");
+                return Task.CompletedTask;
+            },
+            restartConnectionSamplingAsync: token =>
+            {
+                Assert.False(token.CanBeCanceled);
+                participants.Add("sampling");
+                return Task.CompletedTask;
+            },
+            applyNetworkSettingsAsync: (_, _, token) =>
+            {
+                Assert.False(token.CanBeCanceled);
+                participants.Add("network");
+                return Task.CompletedTask;
+            });
+
+        await viewModel.ResetAllSettingsAsync(cancellation.Token);
+
+        Assert.True(cancellation.IsCancellationRequested);
+        Assert.Equal(["language", "theme", "accent", "startup", "sampling", "network"], participants);
+        Assert.False(viewModel.IsResetRecoveryRequired);
+    }
+
+    /// <summary>Verifies a participant failure restores and re-applies the previous external baseline.</summary>
+    [Fact]
+    public async Task ResetAllSettings_ParticipantFails_CompensatesEveryExternalSetting()
+    {
+        FakeSettingsStore store = CreateNonDefaultExternalSettings();
+        store.ConnectionTestUrl = "https://example.com/before";
+        List<bool> startupRegistrations = [];
+        List<(bool TunEnabled, int MixedPort)> networkStates = [];
+        bool restartRequested = false;
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () =>
+            {
+                ResetExternalSettingsToDefaults(store);
+                store.ConnectionTestUrl = "https://example.com/reset";
+            },
+            clearAllData: () => { },
+            restartApplication: () => restartRequested = true,
+            applyLaunchAtStartupAsync: (enabled, _) =>
+            {
+                startupRegistrations.Add(enabled);
+                return !enabled && startupRegistrations.Count == 1
+                    ? Task.FromException(new InvalidOperationException("default startup registration failed"))
+                    : Task.CompletedTask;
+            },
+            applyNetworkSettingsAsync: (tunEnabled, mixedPort, _) =>
+            {
+                networkStates.Add((tunEnabled, mixedPort));
+                return Task.CompletedTask;
+            });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => viewModel.ResetAllSettingsAsync(CancellationToken.None));
+
+        Assert.Equal([false, true], startupRegistrations);
+        Assert.Equal([(true, 10000), (false, 7890)], networkStates);
+        AssertExternalSettingsMatchNonDefaultBaseline(store);
+        Assert.Equal("https://example.com/reset", store.ConnectionTestUrl);
+        Assert.False(restartRequested);
+        Assert.False(viewModel.IsResetRecoveryRequired);
+        Assert.True(viewModel.HasOperationError);
+    }
+
+    /// <summary>Verifies production-style reset rollback restores the complete retained settings generation.</summary>
+    [Fact]
+    public async Task ResetAllSettings_ParticipantFails_RollsBackRetainedCompleteGeneration()
+    {
+        FakeSettingsStore store = CreateNonDefaultExternalSettings();
+        store.ConnectionTestUrl = "https://example.com/before";
+        TrackingSettingsResetReceipt? receipt = null;
+        int startupCalls = 0;
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () => throw new InvalidOperationException("legacy reset must not run"),
+            clearAllData: () => { },
+            applyLaunchAtStartupAsync: (_, _) =>
+            {
+                startupCalls++;
+                return startupCalls == 1
+                    ? Task.FromException(new InvalidOperationException("activation failed"))
+                    : Task.CompletedTask;
+            },
+            beginResetSettings: () =>
+            {
+                FakeSettingsStoreSnapshot baseline = FakeSettingsStoreSnapshot.Capture(store);
+                ResetExternalSettingsToDefaults(store);
+                store.ConnectionTestUrl = "https://example.com/reset";
+                receipt = new TrackingSettingsResetReceipt(
+                    rollback: () => baseline.Restore(store));
+                return receipt;
+            });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => viewModel.ResetAllSettingsAsync(CancellationToken.None));
+
+        Assert.NotNull(receipt);
+        Assert.Equal(0, receipt.CommitCalls);
+        Assert.Equal(1, receipt.RollbackCalls);
+        Assert.True(receipt.Disposed);
+        Assert.Equal("https://example.com/before", store.ConnectionTestUrl);
+        AssertExternalSettingsMatchNonDefaultBaseline(store);
+    }
+
+    /// <summary>Verifies cleanup failure after a commit decision never changes the reset to rollback.</summary>
+    [Fact]
+    public async Task ResetAllSettings_CommitCleanupFails_DoesNotRollbackActivatedDefaults()
+    {
+        FakeSettingsStore store = CreateNonDefaultExternalSettings();
+        TrackingSettingsResetReceipt? receipt = null;
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () => throw new InvalidOperationException("legacy reset must not run"),
+            clearAllData: () => { },
+            beginResetSettings: () =>
+            {
+                ResetExternalSettingsToDefaults(store);
+                receipt = new TrackingSettingsResetReceipt(
+                    commitFailure: new IOException("cleanup unavailable"));
+                return receipt;
+            });
+
+        AggregateException failure = await Assert.ThrowsAsync<AggregateException>(
+            () => viewModel.ResetAllSettingsAsync(CancellationToken.None));
+
+        Assert.Contains("could not be finalized", failure.Message, StringComparison.Ordinal);
+        Assert.NotNull(receipt);
+        Assert.Equal(2, receipt.CommitCalls);
+        Assert.Equal(0, receipt.RollbackCalls);
+        Assert.True(receipt.Disposed);
+        Assert.Equal(AppLanguage.AutoDetect, store.DisplayLanguage);
+        Assert.False(store.LaunchAtStartupEnabled);
+        Assert.Equal(10000, store.MixedPort);
+    }
+
+    /// <summary>Verifies failed compensation exposes recovery state and requests a forced restart.</summary>
+    [Fact]
+    public async Task ResetAllSettings_CompensationFails_RequiresRecoveryAndRequestsRestart()
+    {
+        FakeSettingsStore store = CreateNonDefaultExternalSettings();
+        bool restartRequested = false;
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () => ResetExternalSettingsToDefaults(store),
+            clearAllData: () => { },
+            restartApplication: () => restartRequested = true,
+            applyLaunchAtStartupAsync: (_, _) =>
+                Task.FromException(new InvalidOperationException("startup registration unavailable")));
+
+        AggregateException failure = await Assert.ThrowsAsync<AggregateException>(
+            () => viewModel.ResetAllSettingsAsync(CancellationToken.None));
+
+        Assert.Contains("restart recovery is required", failure.Message, StringComparison.Ordinal);
+        Assert.True(restartRequested);
+        Assert.True(viewModel.IsResetRecoveryRequired);
+        Assert.True(viewModel.HasOperationError);
+    }
+
+    /// <summary>Verifies a rejected mandatory restart remains visible in the recovery failure graph.</summary>
+    [Fact]
+    public async Task ResetAllSettings_RecoveryRestartRejected_ReportsTheRejectedRequest()
+    {
+        FakeSettingsStore store = CreateNonDefaultExternalSettings();
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () => ResetExternalSettingsToDefaults(store),
+            clearAllData: () => { },
+            applyLaunchAtStartupAsync: (_, _) =>
+                Task.FromException(new InvalidOperationException("startup registration unavailable")),
+            requestResetRecoveryRestart: () => false);
+
+        AggregateException failure = await Assert.ThrowsAsync<AggregateException>(
+            () => viewModel.ResetAllSettingsAsync(CancellationToken.None));
+
+        Assert.Contains(
+            failure.Flatten().InnerExceptions,
+            exception => exception.Message.Contains("restart request was rejected", StringComparison.Ordinal));
+        Assert.True(viewModel.IsResetRecoveryRequired);
+    }
+
+    /// <summary>Verifies cancellation before the commit point leaves durable settings untouched.</summary>
+    [Fact]
+    public async Task ResetAllSettings_PreCanceled_DoesNotStartDurableReset()
+    {
+        FakeSettingsStore store = CreateNonDefaultExternalSettings();
+        bool resetCalled = false;
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () => resetCalled = true,
+            clearAllData: () => { });
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => viewModel.ResetAllSettingsAsync(cancellation.Token));
+
+        Assert.False(resetCalled);
+        AssertExternalSettingsMatchNonDefaultBaseline(store);
+    }
+
+    /// <summary>Verifies a scheduled coalesced network write is drained before reset crosses its commit point.</summary>
+    [Fact]
+    public async Task ResetAllSettings_PendingNetworkRequeue_DrainsBeforeDurableReset()
+    {
+        FakeSettingsStore store = CreateNonDefaultExternalSettings();
+        bool resetCalled = false;
+        TaskCompletionSource pendingRequeue = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () =>
+            {
+                resetCalled = true;
+                ResetExternalSettingsToDefaults(store);
+            },
+            clearAllData: () => { });
+        FieldInfo? requeueField = typeof(SettingsViewModel).GetField(
+            "_networkSettingsRequeueTask",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(requeueField);
+        requeueField.SetValue(viewModel, pendingRequeue.Task);
+
+        Task reset = viewModel.ResetAllSettingsAsync(CancellationToken.None);
+        await Task.Yield();
+        Assert.False(resetCalled);
+
+        pendingRequeue.SetResult();
+        await reset;
+        Assert.True(resetCalled);
+    }
+
+    /// <summary>Verifies reset owns one destructive runtime scope through commit and compensation participants.</summary>
+    [Fact]
+    public async Task ResetAllSettings_HoldsOneDestructiveRuntimeScopeAcrossEveryParticipant()
+    {
+        FakeSettingsStore store = CreateNonDefaultExternalSettings();
+        TrackingDestructiveRuntimeScope? scope = null;
+        int acquisitionCount = 0;
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => Assert.True(scope?.IsActive),
+            resetAllSettings: () =>
+            {
+                Assert.True(scope?.IsActive);
+                ResetExternalSettingsToDefaults(store);
+            },
+            clearAllData: () => { },
+            applyTheme: _ => Assert.True(scope?.IsActive),
+            applyAccentColor: (_, _) => Assert.True(scope?.IsActive),
+            beginDestructiveRuntimeMutationAsync: cancellationToken =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                acquisitionCount++;
+                scope = new TrackingDestructiveRuntimeScope
+                {
+                    Reset = () => ResetExternalSettingsToDefaults(store),
+                };
+                return ValueTask.FromResult<ISettingsDestructiveRuntimeScope>(scope);
+            });
+
+        await viewModel.ResetAllSettingsAsync(CancellationToken.None);
+
+        Assert.Equal(1, acquisitionCount);
+        Assert.NotNull(scope);
+        Assert.False(scope.IsActive);
+        Assert.Equal(["startup", "sampling", "network"], scope.Calls);
+    }
+
+    /// <summary>
+    /// Verifies reset reload does not claim process-owned tray and display resources already use the new defaults.
+    /// </summary>
+    [Fact]
+    public async Task ResetAllSettings_RetainsRestartBaselineForSettingsNotAppliedByTransaction()
+    {
+        FakeSettingsStore store = new()
+        {
+            TrayUseMonochromeInactiveIcon = true,
+            MainlandChinaFeatureMode = MainlandChinaFeatureMode.Disabled,
+            MainlandChinaUrlBlockingEnabled = true,
+        };
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () =>
+            {
+                ResetExternalSettingsToDefaults(store);
+                store.TrayUseMonochromeInactiveIcon = false;
+                store.MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
+                store.MainlandChinaUrlBlockingEnabled = false;
+            },
+            clearAllData: () => { });
+        Assert.False(viewModel.HasRestartRequiredSettings);
+
+        await viewModel.ResetAllSettingsAsync(CancellationToken.None);
+
+        Assert.True(viewModel.IsTrayIconRestartPending);
+        Assert.True(viewModel.IsMainlandChinaDisplayRestartPending);
+        Assert.True(viewModel.HasRestartRequiredSettings);
+    }
+
+    /// <summary>Verifies imported restart-bound values remain pending after the package runtime is activated.</summary>
+    [Fact]
+    public void ReloadAfterDataImport_RetainsProcessAppliedRestartBaseline()
+    {
+        FakeSettingsStore store = new()
+        {
+            TrayUseMonochromeInactiveIcon = true,
+            MainlandChinaFeatureMode = MainlandChinaFeatureMode.Disabled,
+            MainlandChinaUrlBlockingEnabled = true,
+        };
+        SettingsViewModel viewModel = CreateMaintenanceViewModel(
+            store,
+            _ => { },
+            resetAllSettings: () => { },
+            clearAllData: () => { });
+        store.TrayUseMonochromeInactiveIcon = false;
+        store.MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
+        store.MainlandChinaUrlBlockingEnabled = false;
+
+        viewModel.ReloadAfterDataImport();
+
+        Assert.True(viewModel.IsTrayIconRestartPending);
+        Assert.True(viewModel.IsMainlandChinaDisplayRestartPending);
+        Assert.True(viewModel.HasRestartRequiredSettings);
     }
 
     /// <summary>Verifies clear-all data delegates maintenance work and reloads the current settings snapshot.</summary>
@@ -1346,6 +1817,10 @@ public sealed class SettingsViewModelTests
 
         public bool LaunchAtStartupEnabled { get; set; }
 
+        public ClashSharpMode CurrentMode { get; set; } = ClashSharpMode.Disabled;
+
+        public string ActiveProfileId { get; set; } = ProfileCatalogIds.BuiltInDirect;
+
         public bool TransparentProxyEnabled { get; set; } = true;
 
         public int MixedPort { get; set; } = 10000;
@@ -1442,7 +1917,8 @@ public sealed class SettingsViewModelTests
         FakeSettingsStore store,
         Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
-        IApplicationErrorSink? errorSink = null)
+        IApplicationErrorSink? errorSink = null,
+        Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync = null)
     {
         SettingsViewModel viewModel = new(
             store,
@@ -1460,7 +1936,8 @@ public sealed class SettingsViewModelTests
             () => { },
             (_, _) => Task.FromResult(204),
             restartConnectionSamplingAsync: restartConnectionSamplingAsync,
-            applyLaunchAtStartupAsync: applyLaunchAtStartupAsync);
+            applyLaunchAtStartupAsync: applyLaunchAtStartupAsync,
+            applyNetworkSettingsAsync: applyNetworkSettingsAsync);
         viewModel.Load();
         return viewModel;
     }
@@ -1481,30 +1958,242 @@ public sealed class SettingsViewModelTests
         FakeSettingsStore store,
         Action<AppLanguage> applyLanguage,
         Action resetAllSettings,
-        Action clearAllData)
+        Action clearAllData,
+        Action<AppThemeMode>? applyTheme = null,
+        Action<AppAccentColorMode, string>? applyAccentColor = null,
+        Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
+        Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
+        Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync = null,
+        Action? restartApplication = null,
+        Func<bool>? requestResetRecoveryRestart = null,
+        Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
+            beginDestructiveRuntimeMutationAsync = null,
+        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null)
     {
         SettingsViewModel viewModel = new(
             store,
             applyLanguage,
-            _ => { },
+            applyTheme ?? (_ => { }),
             () => { },
             _ => { },
             key => key,
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
             new FakeApplicationErrorSink(),
             () => { },
-            () => { },
+            restartApplication ?? (() => { }),
             () => false,
             () => { },
             () => { },
             testConnectionAsync: (_, _) => Task.FromResult(204),
+            applyAccentColor: applyAccentColor,
             resetAllSettings: resetAllSettings,
             clearAllData: clearAllData,
             checkStartupConflictsAsync: NoStartupConflictsAsync,
             notifyConnectionTestTimeout: _ => { },
-            appendLog: (_, _, _, _) => { });
+            appendLog: (_, _, _, _) => { },
+            restartConnectionSamplingAsync: restartConnectionSamplingAsync,
+            applyLaunchAtStartupAsync: applyLaunchAtStartupAsync,
+            applyNetworkSettingsAsync: applyNetworkSettingsAsync,
+            requestResetRecoveryRestart: requestResetRecoveryRestart,
+            beginDestructiveRuntimeMutationAsync: beginDestructiveRuntimeMutationAsync,
+            beginResetSettings: beginResetSettings);
         viewModel.Load();
         return viewModel;
+    }
+
+    private static FakeSettingsStore CreateNonDefaultExternalSettings()
+    {
+        return new FakeSettingsStore
+        {
+            DisplayLanguage = AppLanguage.German,
+            AppThemeMode = AppThemeMode.Dark,
+            AppAccentColorMode = AppAccentColorMode.Custom,
+            AppAccentColorValue = "#FF00AA00",
+            LaunchAtStartupEnabled = true,
+            ConnectionSamplingEnabled = false,
+            ConnectionSamplingIntervalSeconds = 90,
+            CurrentMode = ClashSharpMode.RuleTakeover,
+            ActiveProfileId = "profile-before-reset",
+            TransparentProxyEnabled = false,
+            MixedPort = 7890,
+        };
+    }
+
+    private sealed class TrackingDestructiveRuntimeScope : ISettingsDestructiveRuntimeScope
+    {
+        public Action? Reset { get; init; }
+
+        public bool IsActive { get; private set; } = true;
+
+        public List<string> Calls { get; } = [];
+
+        public Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(
+            string packagePath,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ISettingsResetTransactionReceipt BeginResetSettings()
+        {
+            Assert.True(IsActive);
+            Reset?.Invoke();
+            return new TrackingSettingsResetReceipt();
+        }
+
+        public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
+        {
+            Assert.True(IsActive);
+        }
+
+        public Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken)
+        {
+            _ = isEnabled;
+            AssertActive(cancellationToken);
+            Calls.Add("startup");
+            return Task.CompletedTask;
+        }
+
+        public Task RestartConnectionSamplingAsync(CancellationToken cancellationToken)
+        {
+            AssertActive(cancellationToken);
+            Calls.Add("sampling");
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyNetworkSettingsAsync(
+            bool transparentProxyEnabled,
+            int mixedPort,
+            CancellationToken cancellationToken)
+        {
+            _ = transparentProxyEnabled;
+            _ = mixedPort;
+            AssertActive(cancellationToken);
+            Calls.Add("network");
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Assert.True(IsActive);
+            IsActive = false;
+            return ValueTask.CompletedTask;
+        }
+
+        private void AssertActive(CancellationToken cancellationToken)
+        {
+            Assert.True(IsActive);
+            Assert.False(cancellationToken.CanBeCanceled);
+        }
+    }
+
+    private sealed class TrackingSettingsResetReceipt(
+        Action? rollback = null,
+        Exception? commitFailure = null) : ISettingsResetTransactionReceipt
+    {
+        public int CommitCalls { get; private set; }
+
+        public int RollbackCalls { get; private set; }
+
+        public bool Disposed { get; private set; }
+
+        public Task CommitAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CommitCalls++;
+            return commitFailure is null
+                ? Task.CompletedTask
+                : Task.FromException(commitFailure);
+        }
+
+        public Task RollbackAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RollbackCalls++;
+            rollback?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed record FakeSettingsStoreSnapshot(
+        AppLanguage DisplayLanguage,
+        AppThemeMode AppThemeMode,
+        AppAccentColorMode AppAccentColorMode,
+        string AppAccentColorValue,
+        bool LaunchAtStartupEnabled,
+        bool ConnectionSamplingEnabled,
+        int ConnectionSamplingIntervalSeconds,
+        ClashSharpMode CurrentMode,
+        string ActiveProfileId,
+        bool TransparentProxyEnabled,
+        int MixedPort,
+        string ConnectionTestUrl)
+    {
+        public static FakeSettingsStoreSnapshot Capture(FakeSettingsStore store) => new(
+            store.DisplayLanguage,
+            store.AppThemeMode,
+            store.AppAccentColorMode,
+            store.AppAccentColorValue,
+            store.LaunchAtStartupEnabled,
+            store.ConnectionSamplingEnabled,
+            store.ConnectionSamplingIntervalSeconds,
+            store.CurrentMode,
+            store.ActiveProfileId,
+            store.TransparentProxyEnabled,
+            store.MixedPort,
+            store.ConnectionTestUrl);
+
+        public void Restore(FakeSettingsStore store)
+        {
+            store.DisplayLanguage = DisplayLanguage;
+            store.AppThemeMode = AppThemeMode;
+            store.AppAccentColorMode = AppAccentColorMode;
+            store.AppAccentColorValue = AppAccentColorValue;
+            store.LaunchAtStartupEnabled = LaunchAtStartupEnabled;
+            store.ConnectionSamplingEnabled = ConnectionSamplingEnabled;
+            store.ConnectionSamplingIntervalSeconds = ConnectionSamplingIntervalSeconds;
+            store.CurrentMode = CurrentMode;
+            store.ActiveProfileId = ActiveProfileId;
+            store.TransparentProxyEnabled = TransparentProxyEnabled;
+            store.MixedPort = MixedPort;
+            store.ConnectionTestUrl = ConnectionTestUrl;
+        }
+    }
+
+    private static void ResetExternalSettingsToDefaults(FakeSettingsStore store)
+    {
+        store.DisplayLanguage = AppLanguage.AutoDetect;
+        store.AppThemeMode = AppThemeMode.FollowSystem;
+        store.AppAccentColorMode = AppAccentColorMode.FollowSystem;
+        store.AppAccentColorValue = "#FF0078D4";
+        store.LaunchAtStartupEnabled = false;
+        store.ConnectionSamplingEnabled = true;
+        store.ConnectionSamplingIntervalSeconds = 30;
+        store.CurrentMode = ClashSharpMode.Disabled;
+        store.ActiveProfileId = ProfileCatalogIds.BuiltInDirect;
+        store.TransparentProxyEnabled = true;
+        store.MixedPort = 10000;
+    }
+
+    private static void AssertExternalSettingsMatchNonDefaultBaseline(FakeSettingsStore store)
+    {
+        Assert.Equal(AppLanguage.German, store.DisplayLanguage);
+        Assert.Equal(AppThemeMode.Dark, store.AppThemeMode);
+        Assert.Equal(AppAccentColorMode.Custom, store.AppAccentColorMode);
+        Assert.Equal("#FF00AA00", store.AppAccentColorValue);
+        Assert.True(store.LaunchAtStartupEnabled);
+        Assert.False(store.ConnectionSamplingEnabled);
+        Assert.Equal(90, store.ConnectionSamplingIntervalSeconds);
+        Assert.Equal(ClashSharpMode.RuleTakeover, store.CurrentMode);
+        Assert.Equal("profile-before-reset", store.ActiveProfileId);
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.Equal(7890, store.MixedPort);
     }
 
     private static SettingsViewModel CreateStartupConflictViewModel(
@@ -1627,29 +2316,11 @@ public sealed class SettingsViewModelTests
         public FakeMihomoServiceController(MihomoServiceStatus status)
         {
             CurrentStatus = status;
-            DeployResult = status;
-            UninstallResult = status;
         }
 
         /// <summary>Gets or sets current service status.</summary>
         /// <value>Current fake status.</value>
         public MihomoServiceStatus CurrentStatus { get; set; }
-
-        /// <summary>Gets or sets deploy result.</summary>
-        /// <value>Result returned by deploy.</value>
-        public MihomoServiceStatus DeployResult { get; set; }
-
-        /// <summary>Gets or sets uninstall result.</summary>
-        /// <value>Result returned by uninstall.</value>
-        public MihomoServiceStatus UninstallResult { get; set; }
-
-        /// <summary>Gets whether deploy was called.</summary>
-        /// <value>True when deploy was called.</value>
-        public bool DeployCalled { get; private set; }
-
-        /// <summary>Gets whether uninstall was called.</summary>
-        /// <value>True when uninstall was called.</value>
-        public bool UninstallCalled { get; private set; }
 
         /// <summary>Gets current fake service status.</summary>
         /// <returns>Current fake status.</returns>
@@ -1664,24 +2335,5 @@ public sealed class SettingsViewModelTests
             return Task.FromResult(CurrentStatus);
         }
 
-        /// <summary>Deploys the fake service.</summary>
-        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
-        /// <returns>Configured deploy result.</returns>
-        public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
-        {
-            DeployCalled = true;
-            CurrentStatus = DeployResult;
-            return Task.FromResult(CurrentStatus);
-        }
-
-        /// <summary>Uninstalls the fake service.</summary>
-        /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
-        /// <returns>Configured uninstall result.</returns>
-        public Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
-        {
-            UninstallCalled = true;
-            CurrentStatus = UninstallResult;
-            return Task.FromResult(CurrentStatus);
-        }
     }
 }

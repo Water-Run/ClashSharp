@@ -174,6 +174,7 @@ public static class TrayMenuStateBuilder
             new("Links", getString("Nav.Links")),
             new("Rules", getString("Nav.Rules")),
             new("Triggers", getString("Nav.Triggers")),
+            new("Connections", getString("Nav.Connections")),
             new("Statistics", getString("Nav.Statistics")),
             new("Logs", getString("Nav.Logs")),
             new("About", getString("Nav.About")),

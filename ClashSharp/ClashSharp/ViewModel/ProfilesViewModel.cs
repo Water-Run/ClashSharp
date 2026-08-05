@@ -80,6 +80,18 @@ internal sealed class ProfilesViewModel : ObservableObject
             SetSelectedProfileActiveAsync,
             _errorSink,
             operationName: "profiles-set-active");
+        RenameProfileCommand = new AsyncRelayCommand(
+            RenameProfileFromCommandAsync,
+            _errorSink,
+            operationName: "profiles-rename");
+        DeleteProfileCommand = new AsyncRelayCommand(
+            DeleteProfileFromCommandAsync,
+            _errorSink,
+            operationName: "profiles-delete");
+        RollbackProfileCommand = new AsyncRelayCommand(
+            RollbackProfileFromCommandAsync,
+            _errorSink,
+            operationName: "profiles-rollback");
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -101,6 +113,15 @@ internal sealed class ProfilesViewModel : ObservableObject
     /// <summary>Gets the set-active command label.</summary>
     /// <value>Localized command label.</value>
     public string SetActiveProfileText => _getString("Command.SetActive");
+
+    /// <summary>Gets the rename command label.</summary>
+    public string RenameProfileText => _getString("Command.Rename");
+
+    /// <summary>Gets the delete command label.</summary>
+    public string DeleteProfileText => _getString("Command.Delete");
+
+    /// <summary>Gets the retained-history command label.</summary>
+    public string ProfileHistoryText => _getString("Command.History");
 
     /// <summary>Gets the current-profile label.</summary>
     /// <value>Localized label text.</value>
@@ -141,6 +162,15 @@ internal sealed class ProfilesViewModel : ObservableObject
     /// <summary>Gets the command that activates the selected profile.</summary>
     /// <value>Asynchronous activation command.</value>
     public AsyncRelayCommand SetActiveProfileCommand { get; }
+
+    /// <summary>Gets the command that renames a user profile.</summary>
+    public AsyncRelayCommand RenameProfileCommand { get; }
+
+    /// <summary>Gets the command that deletes a user profile.</summary>
+    public AsyncRelayCommand DeleteProfileCommand { get; }
+
+    /// <summary>Gets the command that restores a retained profile version.</summary>
+    public AsyncRelayCommand RollbackProfileCommand { get; }
 
     /// <summary>Loads the current profile catalog without blocking the UI thread.</summary>
     /// <param name="cancellationToken">Cancels this page-load attempt.</param>
@@ -267,6 +297,114 @@ internal sealed class ProfilesViewModel : ObservableObject
         }
     }
 
+    /// <summary>Returns retained versions for one profile, or an empty snapshot when history cannot be read.</summary>
+    public IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId)
+    {
+        try
+        {
+            return _profiles.GetProfileHistory(profileId);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or SecurityException
+                or InvalidOperationException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            _log.Append("Warning", "Profiles", "Profile history could not be loaded.", exception.Message);
+            return [];
+        }
+    }
+
+    /// <summary>Renames one user profile and refreshes visible rows.</summary>
+    public async Task RenameProfileAsync(
+        string profileId,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            bool renamed = await _profiles
+                .TryRenameProfileAsync(profileId, name, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (renamed)
+            {
+                _log.Append("Info", "Profiles", "Profile renamed.", profileId);
+                await LoadAsync(cancellationToken);
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or SecurityException
+                or InvalidOperationException
+                or OperationCanceledException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            _log.Append("Warning", "Profiles", "Profile could not be renamed.", exception.Message);
+        }
+    }
+
+    /// <summary>Deletes one user profile and refreshes visible rows.</summary>
+    public async Task DeleteProfileAsync(string profileId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            bool deleted = await _profiles.TryDeleteProfileAsync(profileId, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (deleted)
+            {
+                SelectedProfile = null;
+                _log.Append("Info", "Profiles", "Profile deleted.", profileId);
+                await LoadAsync(cancellationToken);
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or SecurityException
+                or InvalidOperationException
+                or AggregateException
+                or OperationCanceledException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            _log.Append("Warning", "Profiles", "Profile could not be deleted.", exception.Message);
+        }
+    }
+
+    /// <summary>Restores one retained profile version and refreshes visible rows.</summary>
+    public async Task RollbackProfileAsync(
+        ProfileHistoryEntry historyEntry,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            ProfileImportResult result = await _profiles
+                .RollbackProfileAsync(historyEntry, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            _log.Append("Info", "Profiles", "Profile history version restored.", result.ConfigPath);
+            await LoadAsync(cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or SecurityException
+                or InvalidOperationException
+                or AggregateException
+                or OperationCanceledException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            _log.Append("Warning", "Profiles", "Profile history version could not be restored.", exception.Message);
+        }
+    }
+
     /// <summary>Resolves active profile display text from current rows.</summary>
     /// <param name="profiles">Current profile rows. Must not be null.</param>
     /// <returns>Active profile display text.</returns>
@@ -324,6 +462,48 @@ internal sealed class ProfilesViewModel : ObservableObject
         }
 
         return ImportLocalProfileAsync(filePath, cancellationToken);
+    }
+
+    private Task RenameProfileFromCommandAsync(
+        object? parameter,
+        CancellationToken cancellationToken)
+    {
+        if (parameter is not ValueTuple<string, string> renameInput)
+        {
+            throw new ArgumentException(
+                "The profile rename command requires a profile identifier and name.",
+                nameof(parameter));
+        }
+
+        return RenameProfileAsync(renameInput.Item1, renameInput.Item2, cancellationToken);
+    }
+
+    private Task DeleteProfileFromCommandAsync(
+        object? parameter,
+        CancellationToken cancellationToken)
+    {
+        if (parameter is not string profileId)
+        {
+            throw new ArgumentException(
+                "The profile delete command requires a profile identifier.",
+                nameof(parameter));
+        }
+
+        return DeleteProfileAsync(profileId, cancellationToken);
+    }
+
+    private Task RollbackProfileFromCommandAsync(
+        object? parameter,
+        CancellationToken cancellationToken)
+    {
+        if (parameter is not ProfileHistoryEntry historyEntry)
+        {
+            throw new ArgumentException(
+                "The profile rollback command requires a history entry.",
+                nameof(parameter));
+        }
+
+        return RollbackProfileAsync(historyEntry, cancellationToken);
     }
 
     private sealed record ProfileLoadSnapshot(

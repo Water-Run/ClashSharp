@@ -32,6 +32,22 @@
                         <FontIcon Glyph="&#xE73E;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
+                <AppBarSeparator />
+                <AppBarButton x:Name="RenameProfileButton" Label="{Binding RenameProfileText}" Click="RenameProfileButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE70F;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="DeleteProfileButton" Label="{Binding DeleteProfileText}" Click="DeleteProfileButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE74D;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="ProfileHistoryButton" Label="{Binding ProfileHistoryText}" Click="ProfileHistoryButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE81C;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
             </CommandBar>
 
             <Grid Style="{StaticResource ClashCardGridStyle}">

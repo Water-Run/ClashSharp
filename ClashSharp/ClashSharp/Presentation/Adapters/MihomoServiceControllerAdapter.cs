@@ -7,7 +7,7 @@ using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
 
-/// <summary>Adapts <see cref="MihomoServiceManager"/> to settings transparent proxy service controls.</summary>
+/// <summary>Adapts <see cref="MihomoServiceManager"/> to read-only service status for settings.</summary>
 internal sealed class MihomoServiceControllerAdapter : IMihomoServiceController
 {
     /// <summary>Wrapped service manager.</summary>
@@ -28,15 +28,5 @@ internal sealed class MihomoServiceControllerAdapter : IMihomoServiceController
     public Task<MihomoServiceStatus> RefreshStatusAsync(CancellationToken cancellationToken)
     {
         return _manager.GetStatusAsync(cancellationToken);
-    }
-
-    public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
-    {
-        return _manager.DeployAsync(cancellationToken);
-    }
-
-    public Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
-    {
-        return _manager.UninstallAsync(cancellationToken);
     }
 }

@@ -521,7 +521,9 @@ internal sealed class MasterControlViewModel : ObservableObject
             SystemProxyStatusText = result.SystemProxyEnabled
                 ? _localization.GetString("Master.Status.On")
                 : _localization.GetString("Master.Status.Off");
-            TransparentProxyStatusText = ResolveTransparentProxyStatus(result.TransparentProxyEnabled);
+            TransparentProxyStatusText = ResolveTransparentProxyStatus(
+                result.TunEffective,
+                result.TunRequested);
             _log.Append("Info", "MasterControl", result.Message, null);
             await _modeApplied(result.Mode);
             _isCoreAvailable = true;
@@ -537,8 +539,16 @@ internal sealed class MasterControlViewModel : ObservableObject
                 baselineSystemProxyStatus,
                 baselineTransparentProxyStatus,
                 baselineCoreAvailable);
-            OperationErrorText = _localization.GetString("Master.Log.ApplyModeFailed");
-            _log.Append("Error", "MasterControl", _localization.GetString("Master.Log.ApplyModeFailed"), exception.Message);
+            string fallbackMessage = _localization.GetString("Master.Log.ApplyModeFailed");
+            OperationErrorText = RuntimeFailureDiagnostics.TryExtractCode(
+                exception,
+                out string? diagnosticCode)
+                ? RuntimeFailureDiagnostics.Format(
+                    diagnosticCode,
+                    _localization.GetString,
+                    fallbackMessage)
+                : fallbackMessage;
+            _log.Append("Error", "MasterControl", fallbackMessage, exception.Message);
         }
         catch (OperationCanceledException)
         {
@@ -643,9 +653,9 @@ internal sealed class MasterControlViewModel : ObservableObject
             SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
         }
 
-        TransparentProxyStatusText = _settings.TransparentProxyEnabled
-            ? _localization.GetString("Master.Status.Standby")
-            : _localization.GetString("Master.Status.Off");
+        TransparentProxyStatusText = ResolveTransparentProxyStatus(
+            isTransparentProxyRunning: false,
+            tunRequested: false);
     }
 
     private async Task RefreshTrayStatusAsync(CancellationToken cancellationToken)
@@ -668,6 +678,9 @@ internal sealed class MasterControlViewModel : ObservableObject
                 await _runtime.GetSnapshotAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             _runtimeSnapshot = snapshot;
+            TransparentProxyStatusText = snapshot.RuntimeOwnershipKnown
+                ? ResolveTransparentProxyStatus(snapshot.TunEffective, snapshot.TunRequested)
+                : _localization.GetString("Master.Status.Unavailable");
         }
         catch (Exception exception) when (
             exception is MasterControlRuntimeUnavailableException
@@ -679,6 +692,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         {
             cancellationToken.ThrowIfCancellationRequested();
             _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
+            TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
         }
     }
 
@@ -996,8 +1010,7 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private async Task ToggleTransparentProxyAsync(CancellationToken cancellationToken)
     {
-        bool baseline = _settings.TransparentProxyEnabled;
-        bool desired = !baseline;
+        bool desired = !_settings.TransparentProxyEnabled;
         OperationErrorText = string.Empty;
         try
         {
@@ -1005,20 +1018,25 @@ internal sealed class MasterControlViewModel : ObservableObject
                 ApplicationActionKind.SetTransparentProxy,
                 desired.ToString(),
                 cancellationToken);
-            _settings.TransparentProxyEnabled = desired;
-            TransparentProxyStatusText = desired
-                ? _localization.GetString("Master.Status.Standby")
-                : _localization.GetString("Master.Status.Off");
+            await RefreshRuntimeSnapshotAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {
-            RestoreTransparentProxySetting(baseline);
+            await RefreshRuntimeSnapshotAsync(CancellationToken.None);
             throw;
         }
-        catch
+        catch (Exception exception)
         {
-            RestoreTransparentProxySetting(baseline);
-            OperationErrorText = _localization.GetString("Application.UnexpectedError");
+            await RefreshRuntimeSnapshotAsync(CancellationToken.None);
+            string fallbackMessage = _localization.GetString("Application.UnexpectedError");
+            OperationErrorText = RuntimeFailureDiagnostics.TryExtractCode(
+                exception,
+                out string? diagnosticCode)
+                ? RuntimeFailureDiagnostics.Format(
+                    diagnosticCode,
+                    _localization.GetString,
+                    fallbackMessage)
+                : fallbackMessage;
             throw;
         }
         finally
@@ -1027,20 +1045,11 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
     }
 
-    private void RestoreTransparentProxySetting(bool baseline)
-    {
-        _settings.TransparentProxyEnabled = baseline;
-        TransparentProxyStatusText = baseline
-            ? _localization.GetString("Master.Status.Standby")
-            : _localization.GetString("Master.Status.Off");
-    }
-
     private async Task ToggleStartupLaunchAsync(CancellationToken cancellationToken)
     {
         await ToggleSettingAsync(
             ApplicationActionKind.SetLaunchAtStartup,
             () => _settings.LaunchAtStartupEnabled,
-            value => _settings.LaunchAtStartupEnabled = value,
             cancellationToken);
     }
 
@@ -1049,14 +1058,12 @@ internal sealed class MasterControlViewModel : ObservableObject
         await ToggleSettingAsync(
             ApplicationActionKind.SetConnectionSampling,
             () => _settings.ConnectionSamplingEnabled,
-            value => _settings.ConnectionSamplingEnabled = value,
             cancellationToken);
     }
 
     private async Task ToggleSettingAsync(
         ApplicationActionKind kind,
         Func<bool> getValue,
-        Action<bool> setValue,
         CancellationToken cancellationToken)
     {
         bool baseline = getValue();
@@ -1065,16 +1072,13 @@ internal sealed class MasterControlViewModel : ObservableObject
         try
         {
             await _actions.DispatchAsync(kind, desired.ToString(), cancellationToken);
-            setValue(desired);
         }
         catch (OperationCanceledException)
         {
-            setValue(baseline);
             throw;
         }
         catch
         {
-            setValue(baseline);
             OperationErrorText = _localization.GetString("Application.UnexpectedError");
             throw;
         }
@@ -1327,14 +1331,16 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Resolves transparent proxy status after mode application.</summary>
     /// <param name="isTransparentProxyRunning">True when the takeover result reports TUN as running.</param>
     /// <returns>User-facing transparent proxy status text.</returns>
-    private string ResolveTransparentProxyStatus(bool isTransparentProxyRunning)
+    private string ResolveTransparentProxyStatus(
+        bool isTransparentProxyRunning,
+        bool tunRequested)
     {
         if (isTransparentProxyRunning)
         {
             return _localization.GetString("Master.Status.Running");
         }
 
-        return _settings.TransparentProxyEnabled
+        return tunRequested
             ? _localization.GetString("Master.Status.Fallback")
             : _localization.GetString("Master.Status.Off");
     }

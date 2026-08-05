@@ -16,6 +16,8 @@ public sealed class ProfileAndLinkLifecycleArchitectureTests
 
         Assert.DoesNotContain("CancellationToken.None", source, StringComparison.Ordinal);
         Assert.Contains("_loadSession.Cancel()", source, StringComparison.Ordinal);
+        Assert.Contains("_operationGate.WaitAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("SetOperationBusy(isBusy: true)", source, StringComparison.Ordinal);
         Assert.Contains("cancellationToken.ThrowIfCancellationRequested()", source, StringComparison.Ordinal);
         Assert.Contains(
             "_viewModel.ImportProfileCommand.ExecuteObservedAsync(",
@@ -29,8 +31,14 @@ public sealed class ProfileAndLinkLifecycleArchitectureTests
             "_viewModel.SetActiveProfileCommand.ExecuteObservedAsync(",
             source,
             StringComparison.Ordinal);
+        Assert.Contains("_viewModel.RenameProfileCommand.ExecuteObservedAsync(", source, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.DeleteProfileCommand.ExecuteObservedAsync(", source, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.RollbackProfileCommand.ExecuteObservedAsync(", source, StringComparison.Ordinal);
         Assert.Contains("Click=\"ValidateProfileButton_Click\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"SetActiveProfileButton_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"RenameProfileButton_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"DeleteProfileButton_Click\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"ProfileHistoryButton_Click\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "Command=\"{Binding ValidateProfileCommand}\"",
             xaml,
@@ -49,6 +57,8 @@ public sealed class ProfileAndLinkLifecycleArchitectureTests
 
         Assert.DoesNotContain("CancellationToken.None", source, StringComparison.Ordinal);
         Assert.Contains("_loadSession.Cancel()", source, StringComparison.Ordinal);
+        Assert.Contains("_operationGate.WaitAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("SetOperationBusy(isBusy: true)", source, StringComparison.Ordinal);
         Assert.Contains("dialog.ShowManagedAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("cancellationToken.ThrowIfCancellationRequested()", source, StringComparison.Ordinal);
         Assert.Contains(
@@ -92,8 +102,32 @@ public sealed class ProfileAndLinkLifecycleArchitectureTests
             "Task<ProfileSubscriptionLink> AddSubscriptionLinkAsync(",
             linksContract,
             StringComparison.Ordinal);
-        Assert.Contains("Task.Run(", profilesAdapter, StringComparison.Ordinal);
-        Assert.Contains("Task.Run(", linksAdapter, StringComparison.Ordinal);
+        Assert.Contains("TryApplyActiveProfileAsync(", profilesAdapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("TrySetActiveProfile(", profilesAdapter, StringComparison.Ordinal);
+        Assert.Contains("AddSubscriptionLinkAsync(name, uri, cancellationToken)", linksAdapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run(", linksAdapter, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProfileCatalogMutationAdmission_ReusesProcessWideBarrierAndFairGate()
+    {
+        string host = ReadApplicationSource("AppHost/ClashSharpAppHostFactory.cs");
+        string coordinator = ReadApplicationSource("Service/ProfileCatalogMutationCoordinator.cs");
+
+        Assert.Contains(
+            "LateBoundProfileCatalogMutationCoordinator.Instance.Configure(",
+            host,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "provider.GetRequiredService<MutationAdmissionBarrier>()",
+            host,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "provider.GetRequiredService<FairAsyncMutationGate>()",
+            host,
+            StringComparison.Ordinal);
+        Assert.Contains("AcquireOrdinaryAsync(cancellationToken)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("_mutationGate", coordinator, StringComparison.Ordinal);
     }
 
     private static string ReadApplicationSource(string relativePath)

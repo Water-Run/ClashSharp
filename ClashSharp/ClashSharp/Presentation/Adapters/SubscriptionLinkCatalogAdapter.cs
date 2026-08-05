@@ -28,9 +28,7 @@ internal sealed class SubscriptionLinkCatalogAdapter : ISubscriptionLinkCatalog
         string uri,
         CancellationToken cancellationToken)
     {
-        return Task.Run(
-            () => _catalog.AddSubscriptionLink(name, uri),
-            cancellationToken);
+        return _catalog.AddSubscriptionLinkAsync(name, uri, cancellationToken);
     }
 
     public Task<string> CheckSubscriptionLinkAsync(
@@ -38,6 +36,26 @@ internal sealed class SubscriptionLinkCatalogAdapter : ISubscriptionLinkCatalog
         CancellationToken cancellationToken)
     {
         return _catalog.CheckSubscriptionLinkAsync(link, cancellationToken);
+    }
+
+    public Task<bool> TryUpdateSubscriptionLinkAsync(
+        SubscriptionLinkEditRequest request,
+        CancellationToken cancellationToken)
+    {
+        return _catalog.TryUpdateSubscriptionLinkAsync(
+            request.LinkId,
+            request.Name,
+            request.Uri,
+            request.IsEnabled,
+            request.UpdateIntervalHours,
+            cancellationToken);
+    }
+
+    public Task<bool> TryDeleteSubscriptionLinkAsync(
+        string linkId,
+        CancellationToken cancellationToken)
+    {
+        return _catalog.TryDeleteSubscriptionLinkAsync(linkId, cancellationToken);
     }
 
     public Task<ProfileImportResult> ImportSubscriptionLinkAsync(

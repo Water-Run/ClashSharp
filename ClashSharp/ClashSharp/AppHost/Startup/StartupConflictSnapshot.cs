@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ClashSharp.Model;
 
 namespace ClashSharp.Hosting.Startup;
@@ -11,7 +12,17 @@ internal sealed class StartupConflictSnapshot
 
     public bool ProbeFailed { get; private set; }
 
-    public bool HasBlockingConflicts => ProbeFailed || Issues.Count > 0;
+    /// <summary>
+    /// Returns whether the captured conditions must prevent the requested startup transition.
+    /// Third-party TUN interfaces are advisory when Clash# is not itself about to acquire TUN;
+    /// all other conflicts and an incomplete probe remain fail-closed.
+    /// </summary>
+    public bool HasBlockingConflicts(bool tunRequested)
+    {
+        return ProbeFailed
+            || Issues.Any(issue =>
+                issue.Kind != StartupConflictKind.ActiveTunInterface || tunRequested);
+    }
 
     public void Capture(IReadOnlyList<StartupConflictIssue> issues)
     {

@@ -10,6 +10,16 @@ internal interface IAppDataMaintenanceSettings
 {
     /// <summary>Resets all settings to defaults.</summary>
     void ResetAllSettings();
+
+    /// <summary>Clears both user settings and internal credentials.</summary>
+    void ClearAllSettings();
+}
+
+/// <summary>Clears settings under terminal shutdown admission owned by the host.</summary>
+internal interface ITerminalShutdownSettingsMaintenance
+{
+    /// <summary>Clears settings after the mutation barrier has committed terminal shutdown.</summary>
+    void ClearAllSettingsAfterShutdown();
 }
 
 /// <summary>Coordinates runtime shutdown before deleting application data.</summary>
@@ -93,7 +103,24 @@ internal sealed partial class AppDataMaintenanceService
     {
         await _runtime.ShutdownAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        _settings.ResetAllSettings();
+        ClearDataAfterRuntimeShutdown(cancellationToken);
+    }
+
+    /// <summary>Deletes data after the host mutation barrier and producers have already quiesced.</summary>
+    internal void ClearDataAfterRuntimeShutdown(
+        CancellationToken cancellationToken,
+        bool useTerminalSettingsAdmission = false)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (useTerminalSettingsAdmission && _settings is ITerminalShutdownSettingsMaintenance terminalSettings)
+        {
+            terminalSettings.ClearAllSettingsAfterShutdown();
+        }
+        else
+        {
+            _settings.ClearAllSettings();
+        }
+
         TryClearLogStorage();
         _localData.ClearAll();
         _logStorage.ResetAfterDataDeletion();

@@ -13,7 +13,7 @@
 
 - 定制的安装, 卸载管理程序
 - 启动时的代理冲突检测和修复
-- 异常退出时可选驻留自启动修复服务, 解决常见的关机后重启未关闭手动代理造成无法上网等问题
+- 异常退出时由一次性 Recovery Watchdog 立即恢复仍归 Clash# 所有的系统代理；登录恢复助手仅作为下次登录兜底
 - WSL, 终端和微软商店的快速网络修正
 - 主控页使用类似 Windows 快捷设置的磁贴呈现状态与常用操作
 
@@ -23,9 +23,11 @@
 
 ### 安装
 
-从 [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases) 下载发布包，解压后运行安装工具。运行`ClashSharp-Installer.exe`(需要管理员权限), 根据指引完成安装.
+从 [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases) 下载发布包，解压后直接运行带 Authenticode 签名的 `ClashSharp-Installer.exe`。不要手动“以管理员身份运行”；应用证书与 MSIX 始终安装到当前用户，仅在配置机器级本地服务时由安装器单独请求 UAC 确认。UAC 必须显示预期的已验证发布者，不能是“未知发布者”。
 
-> 可再次运行`ClashSharp-Installer.exe`修补或卸载程序. 卸载程序也可使用Windows管理.
+> 修复、升级和完整卸载请重新运行 `ClashSharp-Installer.exe`。不要只从 Windows 应用管理移除 MSIX，否则机器级 Service 资源可能无法同步清理。
+
+正式构建的依赖解析与 payload 装配保持离线：`dotnet publish` 使用预先完成的 locked restore，Cargo 使用 frozen lock/cache；构建不会联网追踪 Mihomo `latest`。仓库内固定的版本、长度和 SHA-256 必须与普通二进制完全一致，并须先通过 `Tools\Prepare-GeoData.ps1` 准备四项固定 GeoData 资产。正式产物还要求受控的 MSIX 证书、可信且带时间戳的 Installer Authenticode 签名，以及显式的 `CLASHSHARP_WINDOWS_SDK_VERSION`；SignTool 只接受该固定 Windows Kits x64 目录中通过 Microsoft 签名信任校验的版本，签名阶段仅联系显式配置的 HTTPS 时间戳服务。未签名 Cargo 输出只存在于可清理的 staging 目录，通过签名验证后才发布到 `target\release-artifacts`。`build.ps1 -Development` 只生成明确标记为不可发布的未签名开发产物。
 
 ### 快速上手
 
@@ -44,7 +46,7 @@
 | 接管所有         | 全局             | 开启代理, 全局模式      |
 | 透明代理         | TUN模式          | 开启代理, 且使用TUN模式 |
 
-> 其中, 透明代理需要在设置中打开
+> 其中，透明代理需要在设置中打开。TUN 会接管整台机器的路由与 DNS；Clash# 当前按“一台机器、一个交互用户、一个 Core 所有者”设计，不支持多用户会话隔离。需要更换所有者时，请由目标用户重新运行 ClashSharp 安装器进行修复/关联。
 
 `Clash#`预设的默认端口是`10000`.
 

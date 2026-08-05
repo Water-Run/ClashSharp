@@ -17,7 +17,9 @@ internal static class LogsPageComposition
         LogsViewModel viewModel = new(
             localization.GetString,
             new LogManagementStoreAdapter(LegacyPageServiceBridge.LogStorage),
-            errorSink);
+            errorSink,
+            LegacyPageServiceBridge.MihomoController.StreamLogsAsync,
+            LegacyPageServiceBridge.MihomoService.ReadHostLogsAsync);
         return new Dependencies(viewModel, localization.GetString, errorSink);
     }
 

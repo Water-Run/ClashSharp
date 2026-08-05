@@ -20,13 +20,29 @@ internal static class ClashDataPackageServiceFactory
     }
 }
 
-internal sealed class ClashDataPackageSettingsAdapter : IClashDataPackageSettings
+internal sealed class ClashDataPackageSettingsAdapter :
+    IClashDataPackageSettings,
+    IClashDataPackageAdmittedSettings
 {
     private readonly AppSettingsService _settings;
 
     public ClashDataPackageSettingsAdapter(AppSettingsService settings)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+    }
+
+    public void ResetAllSettings()
+    {
+        _settings.ResetAllSettings();
+    }
+
+    public void WriteAdmitted(
+        ClashSharp.ApplicationModel.Mutations.MutationAdmissionLease admissionLease,
+        Action<IClashDataPackageSettings> mutation)
+    {
+        ArgumentNullException.ThrowIfNull(admissionLease);
+        ArgumentNullException.ThrowIfNull(mutation);
+        _settings.WriteAdmitted(admissionLease, editor => mutation(editor));
     }
 
     public AppLanguage DisplayLanguage
@@ -201,6 +217,12 @@ internal sealed class ClashDataPackageSettingsAdapter : IClashDataPackageSetting
     {
         get => _settings.ConnectionTestDirectUrl;
         set => _settings.ConnectionTestDirectUrl = value;
+    }
+
+    public string MasterHeroStatusLayout
+    {
+        get => _settings.MasterHeroStatusLayout;
+        set => _settings.MasterHeroStatusLayout = value;
     }
 
     public string MasterInfoTileLayout

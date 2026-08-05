@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -49,13 +47,18 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     public async Task<NetworkPlan> PlanAsync(NetworkIntent intent, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ObservedNetworkState observed = Observe();
+        MihomoServiceStatus serviceStatus = await _mihomoService
+            .GetStatusAsync(cancellationToken)
+            .ConfigureAwait(false);
+        ObservedNetworkState observed = Observe(serviceStatus);
         if (!observed.Snapshot.IsKnown)
         {
-            throw new InvalidOperationException("The current network baseline cannot be classified safely.");
+            throw CreateServiceObservationFailure(
+                serviceStatus,
+                "The current network baseline cannot be classified safely.");
         }
 
-        bool useTransparentProxy = await ShouldUseTransparentProxyAsync(intent, cancellationToken).ConfigureAwait(false);
+        bool useTransparentProxy = ShouldUseTransparentProxy(intent, serviceStatus);
         NetworkStateSnapshot desired = BuildDesired(intent, observed, useTransparentProxy);
         string desiredProxyServer = DetermineDesiredProxyServer(intent, observed, desired);
         string baselineHash = ComputeAggregateHash(
@@ -66,8 +69,12 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         string desiredHash = ComputeAggregateHash(
             desired.StateHash,
             intent.Kind == NetworkIntentKind.ModeTransition ? intent.Mode : _settings.CurrentMode,
-            _settings.TransparentProxyEnabled,
-            _settings.MixedPort);
+            intent.Kind == NetworkIntentKind.ModeTransition
+                ? intent.TransparentProxyEnabled
+                : _settings.TransparentProxyEnabled,
+            intent.Kind == NetworkIntentKind.ModeTransition
+                ? intent.MixedPort
+                : _settings.MixedPort);
         string compensationData = LegacyNetworkPlanPersistence.Serialize(
             intent,
             observed.Snapshot,
@@ -76,7 +83,9 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             desiredHash,
             observed.ProxyServer,
             desiredProxyServer,
-            _settings.CurrentMode);
+            _settings.CurrentMode,
+            _settings.TransparentProxyEnabled,
+            _settings.MixedPort);
         return new NetworkPlan(
             intent,
             observed.Snapshot,
@@ -86,10 +95,13 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             compensationData);
     }
 
-    public Task<NetworkStateSnapshot> ObserveAsync(CancellationToken cancellationToken)
+    public async Task<NetworkStateSnapshot> ObserveAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Observe().Snapshot);
+        MihomoServiceStatus serviceStatus = await _mihomoService
+            .GetStatusAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return Observe(serviceStatus).Snapshot;
     }
 
     public Task<NetworkPlan> RestorePlanAsync(MutationJournal journal, CancellationToken cancellationToken)
@@ -101,23 +113,45 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         return Task.FromResult(persisted.ToPlan(compensationData));
     }
 
-    public Task ValidateAsync(NetworkPlan plan, CancellationToken cancellationToken)
+    public async Task ValidateAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ObservedNetworkState current = Observe();
+        MihomoServiceStatus serviceStatus = await _mihomoService
+            .GetStatusAsync(cancellationToken)
+            .ConfigureAwait(false);
+        ObservedNetworkState current = Observe(serviceStatus);
         string currentAggregateHash = ComputeAggregateHash(
             current.Snapshot.StateHash,
             _settings.CurrentMode,
             _settings.TransparentProxyEnabled,
             _settings.MixedPort);
-        if (!current.Snapshot.IsKnown
-            || !string.Equals(current.Snapshot.StateHash, plan.Baseline.StateHash, StringComparison.Ordinal)
+        if (!current.Snapshot.IsKnown)
+        {
+            throw CreateServiceObservationFailure(
+                serviceStatus,
+                "The current network baseline cannot be classified safely.");
+        }
+
+        if (!string.Equals(current.Snapshot.StateHash, plan.Baseline.StateHash, StringComparison.Ordinal)
             || !string.Equals(currentAggregateHash, plan.BaselineHash, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("The network baseline changed after planning.");
         }
 
-        return Task.CompletedTask;
+    }
+
+    private static StableRuntimeDiagnosticException CreateServiceObservationFailure(
+        MihomoServiceStatus status,
+        string message)
+    {
+        string code = new[]
+        {
+            status.CleanupFailureCode,
+            status.IpcFailureCode,
+            status.ProvisioningFailureCode,
+        }.FirstOrDefault(RuntimeFailureDiagnostics.IsStableCode)
+            ?? RuntimeFailureDiagnostics.ServiceUnavailable;
+        return new StableRuntimeDiagnosticException(code, message);
     }
 
     public Task StageAsync(NetworkPlan plan, CancellationToken cancellationToken)
@@ -147,10 +181,13 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         }
     }
 
-    public Task<NetworkStateSnapshot> ProbeAsync(NetworkPlan plan, CancellationToken cancellationToken)
+    public async Task<NetworkStateSnapshot> ProbeAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Observe().Snapshot);
+        MihomoServiceStatus serviceStatus = await _mihomoService
+            .GetStatusAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return Observe(serviceStatus).Snapshot;
     }
 
     public async Task CompensateAsync(NetworkPlan plan, CancellationToken cancellationToken)
@@ -170,7 +207,11 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             }
             else
             {
-                await RunLegacyAsync(_core.Stop, cancellationToken).ConfigureAwait(false);
+                await _takeover.ApplyModeAsync(
+                    ClashSharpMode.Disabled,
+                    transparentProxyEnabled: false,
+                    persisted.Baseline.MixedPort,
+                    cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -255,9 +296,9 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             isKnown: true);
     }
 
-    private async Task<bool> ShouldUseTransparentProxyAsync(
+    private static bool ShouldUseTransparentProxy(
         NetworkIntent intent,
-        CancellationToken cancellationToken)
+        MihomoServiceStatus serviceStatus)
     {
         if (!intent.TransparentProxyEnabled
             || intent.Mode is not (ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover))
@@ -265,10 +306,9 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             return false;
         }
 
-        MihomoServiceStatus status = await _mihomoService
-            .GetStatusAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return status.IsInstalled && status.IsRunning;
+        // Installed-but-stopped is available: NetworkTakeoverService starts it as
+        // part of the mutually exclusive App-to-service ownership handoff.
+        return serviceStatus.IsKnown && serviceStatus.IsInstalled;
     }
 
     private static string DetermineDesiredProxyServer(
@@ -285,99 +325,71 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         return $"127.0.0.1:{intent.MixedPort.ToString(CultureInfo.InvariantCulture)}";
     }
 
-    private ObservedNetworkState Observe()
+    private ObservedNetworkState Observe(MihomoServiceStatus serviceStatus)
     {
         WindowsProxyState proxy = _windowsProxy.GetCurrentState();
-        bool coreRunning = _core.IsRunning;
+        bool appCoreRunning = _core.IsRunning;
+        bool appCoreOwnershipKnown = !_core.HasOwnershipFault;
+        bool serviceCoreRunning = serviceStatus.IsKnown
+            && serviceStatus.IsInstalled
+            && serviceStatus.IsRunning;
+        bool coreRunning = appCoreRunning || serviceCoreRunning;
         CoreConfigurationObservation configuration = ObserveConfiguration(coreRunning);
+        bool singleOwner = !(appCoreRunning && serviceCoreRunning);
+        bool ownerMatchesConfiguration = !coreRunning
+            || (appCoreRunning && !configuration.TransparentProxyEnabled)
+            || (serviceCoreRunning
+                && configuration.TransparentProxyEnabled
+                && configuration.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover);
+        bool isKnown = serviceStatus.IsKnown
+            && appCoreOwnershipKnown
+            && configuration.IsKnown
+            && singleOwner
+            && ownerMatchesConfiguration;
         NetworkStateSnapshot snapshot = CreateSnapshot(
-            configuration.Mode,
+            isKnown ? configuration.Mode : ClashSharpMode.Faulted,
             coreRunning,
             proxy.IsEnabled,
-            coreRunning && configuration.TransparentProxyEnabled,
+            isKnown && serviceCoreRunning && configuration.TransparentProxyEnabled,
             configuration.MixedPort,
             proxy.ProxyServer,
-            configuration.IsKnown);
+            isKnown);
         return new ObservedNetworkState(snapshot, proxy.ProxyServer);
     }
 
     private CoreConfigurationObservation ObserveConfiguration(bool coreRunning)
     {
-        CoreConfigurationState state = _configuration.GetState();
-        if (!coreRunning)
-        {
-            return new CoreConfigurationObservation(
-                ClashSharpMode.Disabled,
-                _settings.MixedPort,
-                TransparentProxyEnabled: false,
-                IsKnown: true);
-        }
-
-        if (!state.Exists)
+        RuntimeConfigurationIntegrityObservation integrity =
+            _configuration.ObserveRuntimeConfigurationIntegrity();
+        if (!integrity.IsKnown)
         {
             return CoreConfigurationObservation.Unknown(_settings.MixedPort);
         }
 
-        try
+        RuntimeConfigurationActivationPlan? plan = integrity.AppliedPlan;
+        if (plan is null)
         {
-            string[] lines = File.ReadAllLines(state.ConfigPath);
-            string? modeValue = ReadTopLevelValue(lines, "mode");
-            string? portValue = ReadTopLevelValue(lines, "mixed-port");
-            ClashSharpMode mode = modeValue?.Trim().ToLowerInvariant() switch
-            {
-                "direct" => ClashSharpMode.Standby,
-                "rule" => ClashSharpMode.RuleTakeover,
-                "global" => ClashSharpMode.FullTakeover,
-                _ => ClashSharpMode.Faulted,
-            };
-            bool validPort = int.TryParse(portValue, NumberStyles.None, CultureInfo.InvariantCulture, out int mixedPort)
-                && mixedPort is >= 1 and <= 65535;
-            bool tunEnabled = HasEnabledTunSection(lines);
-            return new CoreConfigurationObservation(
-                mode,
-                validPort ? mixedPort : _settings.MixedPort,
-                tunEnabled,
-                mode != ClashSharpMode.Faulted && validPort);
+            return coreRunning
+                ? CoreConfigurationObservation.Unknown(_settings.MixedPort)
+                : new CoreConfigurationObservation(
+                    ClashSharpMode.Disabled,
+                    _settings.MixedPort,
+                    TransparentProxyEnabled: false,
+                    IsKnown: true);
         }
-        catch (IOException)
+
+        bool planRequiresOwner = plan.Mode != ClashSharpMode.Disabled;
+        if (planRequiresOwner != coreRunning
+            || !StringComparer.Ordinal.Equals(plan.ProfileId, _settings.ActiveProfileId))
         {
             return CoreConfigurationObservation.Unknown(_settings.MixedPort);
         }
-        catch (UnauthorizedAccessException)
-        {
-            return CoreConfigurationObservation.Unknown(_settings.MixedPort);
-        }
-    }
 
-    private static string? ReadTopLevelValue(IEnumerable<string> lines, string key)
-    {
-        string prefix = key + ":";
-        string? line = lines.FirstOrDefault(candidate =>
-            candidate.Length == candidate.TrimStart().Length
-            && candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-        return line is null ? null : line[prefix.Length..].Trim();
-    }
-
-    private static bool HasEnabledTunSection(IReadOnlyList<string> lines)
-    {
-        for (int index = 0; index < lines.Count; index++)
-        {
-            if (!string.Equals(lines[index].Trim(), "tun:", StringComparison.OrdinalIgnoreCase)
-                || lines[index].Length != lines[index].TrimStart().Length)
-            {
-                continue;
-            }
-
-            for (int child = index + 1; child < lines.Count && lines[child].Length != lines[child].TrimStart().Length; child++)
-            {
-                if (string.Equals(lines[child].Trim(), "enable: true", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return new CoreConfigurationObservation(
+            plan.Mode,
+            plan.MixedPort,
+            plan.TunEnabled,
+            IsKnown: true);
     }
 
     private static NetworkStateSnapshot CreateSnapshot(

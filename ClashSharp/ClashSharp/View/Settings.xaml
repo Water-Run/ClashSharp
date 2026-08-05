@@ -154,19 +154,7 @@
             <components:SettingRow x:Name="TransparentProxyServiceRow" Title="{Binding TransparentProxyServiceTitleText}" Description="{Binding TransparentProxyServiceDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock x:Name="MihomoServiceStatusText" Text="{Binding MihomoServiceStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                        <Button x:Name="DeployMihomoServiceButton" Command="{Binding DeployMihomoServiceCommand}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE898;" FontSize="14" />
-                                <TextBlock Text="{Binding DeployMihomoServiceText}" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="UninstallMihomoServiceButton" Command="{Binding UninstallMihomoServiceCommand}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                                <TextBlock Text="{Binding UninstallMihomoServiceText}" />
-                            </StackPanel>
-                        </Button>
+                        <TextBlock x:Name="MihomoServiceStatusText" Text="{Binding MihomoServiceStatusText}" ToolTipService.ToolTip="{Binding MihomoServiceDiagnosticText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                     </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
@@ -230,7 +218,7 @@
                         <Button x:Name="UninstallStartupRestoreFallbackButton" Click="UninstallStartupRestoreFallbackButton_Click">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                                <TextBlock Text="{Binding UninstallMihomoServiceText}" />
+                                <TextBlock Text="{Binding UninstallText}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

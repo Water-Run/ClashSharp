@@ -16,10 +16,19 @@ public sealed class LogsInteractionArchitectureTests
             ApplicationRoot,
             "View",
             "Logs.xaml.cs"));
+        string compositionSource = File.ReadAllText(Path.Combine(
+            ApplicationRoot,
+            "Presentation",
+            "Composition",
+            "LogsPageComposition.cs"));
 
         Assert.Contains("CleanupPreviewDebounceDelay", pageSource, StringComparison.Ordinal);
         Assert.Contains("_cleanupPreviewSession", pageSource, StringComparison.Ordinal);
         Assert.Contains("_cleanupPreviewSession.Cancel();", pageSource, StringComparison.Ordinal);
+        Assert.Contains("_runtimeLogStreamSession", pageSource, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.WatchRuntimeLogsAsync", pageSource, StringComparison.Ordinal);
+        Assert.Contains("LegacyPageServiceBridge.MihomoService.ReadHostLogsAsync", compositionSource, StringComparison.Ordinal);
+        Assert.Contains("_runtimeLogStreamSession.Cancel();", pageSource, StringComparison.Ordinal);
         Assert.Contains("RunObservedPageEventAsync(", pageSource, StringComparison.Ordinal);
         Assert.Contains("RunLatestPageOperationAsync(", pageSource, StringComparison.Ordinal);
         Assert.Contains("dialog.ShowManagedAsync(pageToken)", pageSource, StringComparison.Ordinal);
@@ -64,6 +73,14 @@ public sealed class LogsInteractionArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains(
             "\"logs-cleanup-preview\"",
+            viewModelSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Task WatchRuntimeLogsAsync(",
+            viewModelSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "_liveRuntimeLogs.Count > VisibleLogLimit",
             viewModelSource,
             StringComparison.Ordinal);
         Assert.DoesNotContain("public void RefreshLogs(", viewModelSource, StringComparison.Ordinal);

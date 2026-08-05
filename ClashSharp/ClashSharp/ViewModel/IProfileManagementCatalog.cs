@@ -10,6 +10,8 @@ internal interface IProfileManagementCatalog
 {
     IReadOnlyList<ConfigurationProfile> GetProfiles();
 
+    IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId);
+
     Task<ProfileImportResult> ImportLocalProfileAsync(
         string filePath,
         CancellationToken cancellationToken);
@@ -20,5 +22,18 @@ internal interface IProfileManagementCatalog
 
     Task<bool> TrySetActiveProfileAsync(
         string profileId,
+        CancellationToken cancellationToken);
+
+    Task<bool> TryRenameProfileAsync(
+        string profileId,
+        string name,
+        CancellationToken cancellationToken);
+
+    Task<bool> TryDeleteProfileAsync(
+        string profileId,
+        CancellationToken cancellationToken);
+
+    Task<ProfileImportResult> RollbackProfileAsync(
+        ProfileHistoryEntry historyEntry,
         CancellationToken cancellationToken);
 }

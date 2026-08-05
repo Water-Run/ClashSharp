@@ -23,19 +23,9 @@ internal sealed class AlwaysAvailableMihomoServiceController : IMihomoServiceCon
         return new MihomoServiceStatus(true, false, _getString("MihomoService.Status.Deployed"));
     }
 
-    public Task<MihomoServiceStatus> DeployAsync(CancellationToken cancellationToken)
-    {
-        return Task.FromResult(GetLatestStatus());
-    }
-
     public Task<MihomoServiceStatus> RefreshStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(GetLatestStatus());
-    }
-
-    public Task<MihomoServiceStatus> UninstallAsync(CancellationToken cancellationToken)
-    {
-        return Task.FromResult(new MihomoServiceStatus(false, false, _getString("MihomoService.Status.NotDeployed")));
     }
 }

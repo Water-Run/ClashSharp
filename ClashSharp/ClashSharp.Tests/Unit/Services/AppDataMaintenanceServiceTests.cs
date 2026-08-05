@@ -29,7 +29,7 @@ public sealed class AppDataMaintenanceServiceTests
         Assert.Equal(
             [
                 "runtime.shutdown",
-                "settings.reset",
+                "settings.clear",
                 "logs.clear",
                 "local.clear",
                 "logs.reset",
@@ -94,6 +94,11 @@ public sealed class AppDataMaintenanceServiceTests
         public void ResetAllSettings()
         {
             calls.Add("settings.reset");
+        }
+
+        public void ClearAllSettings()
+        {
+            calls.Add("settings.clear");
         }
     }
 

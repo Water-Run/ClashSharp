@@ -1,0 +1,33 @@
+using System;
+
+namespace ClashSharp.Model;
+
+/// <summary>How one retained profile version reached durable state.</summary>
+public enum ProfileHistoryApplyOutcome
+{
+    Stored,
+    Applied,
+    RollbackApplied,
+}
+
+/// <summary>Describes one immutable, locally archived profile configuration version.</summary>
+/// <param name="VersionId">Stable version identifier; never null.</param>
+/// <param name="ProfileId">Owning profile identifier; never null.</param>
+/// <param name="CreatedAt">Time when the version was successfully imported.</param>
+/// <param name="SourceName">Profile source display name at import time; never null.</param>
+/// <param name="NodeCount">Validated proxy node count.</param>
+/// <param name="RuleCount">Validated rule count.</param>
+/// <remarks>
+/// Invariants: String values are never null and count values are non-negative.
+/// Thread safety: Immutable value type and inherently thread-safe after construction.
+/// Side effects: None.
+/// </remarks>
+public readonly record struct ProfileHistoryEntry(
+    string VersionId,
+    string ProfileId,
+    DateTimeOffset CreatedAt,
+    string SourceName,
+    int NodeCount,
+    int RuleCount,
+    string ContentSha256,
+    ProfileHistoryApplyOutcome ApplyOutcome);

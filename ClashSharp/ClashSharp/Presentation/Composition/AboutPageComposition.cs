@@ -1,4 +1,5 @@
 using System;
+using System.Net.Http;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.Service;
@@ -9,6 +10,8 @@ namespace ClashSharp.Presentation.Composition;
 /// <summary>Builds the explicit dependency graph for the about page.</summary>
 internal static class AboutPageComposition
 {
+    private static readonly HttpClient ReleaseHttpClient = GitHubReleaseUpdateChecker.CreateHttpClient();
+
     /// <summary>Creates dependencies from the current application-owned services.</summary>
     public static Dependencies Create()
     {
@@ -16,9 +19,12 @@ internal static class AboutPageComposition
         AppSettingsService settings = LegacyPageServiceBridge.Settings;
         CoreConfigurationService coreConfiguration = LegacyPageServiceBridge.CoreConfiguration;
         MihomoCoreService core = LegacyPageServiceBridge.MihomoCore;
+        string applicationVersion = typeof(AboutPageComposition).Assembly.GetName().Version?.ToString()
+            ?? "1.0.0.0";
         AboutViewModel viewModel = new(
             new DisplayPageLocalizationAdapter(localization),
             new AboutCoreAdapter(core),
+            new GitHubReleaseUpdateChecker(ReleaseHttpClient, applicationVersion),
             new WindowsUriLauncher(),
             LegacyPageServiceBridge.CreateErrorSink());
 

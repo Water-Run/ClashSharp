@@ -13,11 +13,11 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace ClashSharp.View;
 
-/// <summary>Page reserved for SQLite-backed logs, storage usage, and cleanup actions.</summary>
+/// <summary>Page for SQLite-backed app logs, a bounded live mihomo log window, and cleanup actions.</summary>
 /// <remarks>
 /// Invariants: The page has a non-null <see cref="LogsViewModel"/> after construction.
 /// Thread safety: Must be accessed from the UI thread only.
-/// Side effects: Loads and mutates log storage only through explicit UI lifecycle and commands.
+/// Side effects: Loads and mutates log storage and opens a page-owned mihomo log WebSocket.
 /// </remarks>
 public sealed partial class Logs : Page
 {
@@ -31,6 +31,8 @@ public sealed partial class Logs : Page
     private readonly LogsViewModel _viewModel;
 
     private readonly PageLoadSession _loadSession = new();
+
+    private readonly PageLoadSession _runtimeLogStreamSession = new();
 
     private readonly PageLoadSession _cleanupPreviewSession = new();
 
@@ -62,16 +64,25 @@ public sealed partial class Logs : Page
         ResetPageLifetime();
         await RunObservedPageEventAsync(
             "logs-page-load",
-            pageToken => RunLatestPageOperationAsync(
-                _loadSession,
-                _viewModel.LoadAsync,
-                pageToken));
+            async pageToken =>
+            {
+                Task runtimeLogStream = RunLatestPageOperationAsync(
+                    _runtimeLogStreamSession,
+                    _viewModel.WatchRuntimeLogsAsync,
+                    pageToken);
+                await RunLatestPageOperationAsync(
+                    _loadSession,
+                    _viewModel.LoadAsync,
+                    pageToken);
+                await runtimeLogStream;
+            });
     }
 
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
         _pageLifetime.Cancel();
         _loadSession.Cancel();
+        _runtimeLogStreamSession.Cancel();
         _cleanupPreviewSession.Cancel();
     }
 

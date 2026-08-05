@@ -10,6 +10,9 @@ internal interface IActiveConnectionClient
 {
     Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken);
 
+    IAsyncEnumerable<IReadOnlyList<ActiveConnection>> StreamActiveConnectionsAsync(
+        CancellationToken cancellationToken);
+
     Task CloseConnectionAsync(string connectionId, CancellationToken cancellationToken);
 
     Task CloseAllConnectionsAsync(CancellationToken cancellationToken);

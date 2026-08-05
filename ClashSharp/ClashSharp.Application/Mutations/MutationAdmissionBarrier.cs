@@ -41,7 +41,7 @@ public sealed class MutationAdmissionLease : IDisposable, IAsyncDisposable
 
     internal bool IsOwnedBy(MutationAdmissionBarrier barrier)
     {
-        return ReferenceEquals(_owner, barrier);
+        return ReferenceEquals(Volatile.Read(ref _owner), barrier);
     }
 
     /// <summary>Atomically makes a drained destructive lease terminal after shutdown commits.</summary>
@@ -113,6 +113,17 @@ public sealed class MutationAdmissionBarrier
     /// <returns>An ordinary lease that must be disposed.</returns>
     public ValueTask<MutationAdmissionLease> AcquireOrdinaryAsync(CancellationToken cancellationToken)
     {
+        return ValueTask.FromResult(AcquireOrdinary(cancellationToken));
+    }
+
+    /// <summary>
+    /// Immediately acquires one ordinary admission lease or rejects it when admission is closed.
+    /// This method never waits for an exclusive lease and is safe for synchronous presentation setters.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels acquisition before the lease is granted.</param>
+    /// <returns>An ordinary lease that must be disposed.</returns>
+    public MutationAdmissionLease AcquireOrdinary(CancellationToken cancellationToken = default)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_syncLock)
         {
@@ -122,10 +133,37 @@ public sealed class MutationAdmissionBarrier
             }
 
             _ordinaryLeaseCount++;
-            return ValueTask.FromResult(new MutationAdmissionLease(
+            return new MutationAdmissionLease(
                 this,
                 MutationAdmissionLeaseKind.Ordinary,
-                _ordinaryRevocationSource.Token));
+                _ordinaryRevocationSource.Token);
+        }
+    }
+
+    /// <summary>Verifies that a caller still owns an active lease issued by this barrier.</summary>
+    /// <param name="lease">Lease presented as write authority.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="lease"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The lease is foreign, disposed, or no longer active.</exception>
+    public void EnsureActiveLease(MutationAdmissionLease lease)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        lock (_syncLock)
+        {
+            if (!lease.IsOwnedBy(this) || !IsLeaseKindActiveUnderLock(lease.Kind))
+            {
+                throw new InvalidOperationException(
+                    "The supplied mutation admission lease is foreign, disposed, or no longer active.");
+            }
+        }
+    }
+
+    /// <summary>Verifies that a caller owns the active exclusive lease issued by this barrier.</summary>
+    public void EnsureActiveExclusiveLease(MutationAdmissionLease lease)
+    {
+        EnsureActiveLease(lease);
+        if (!lease.IsExclusive)
+        {
+            throw new InvalidOperationException("The supplied mutation admission lease is not exclusive.");
         }
     }
 
@@ -200,6 +238,21 @@ public sealed class MutationAdmissionBarrier
 
             _exclusiveLeaseActive = true;
             return ValueTask.FromResult(new MutationAdmissionLease(this, MutationAdmissionLeaseKind.Recovery));
+        }
+    }
+
+    /// <summary>Acquires exclusive maintenance authority after shutdown has committed terminally.</summary>
+    public MutationAdmissionLease AcquireShutdownMaintenance()
+    {
+        lock (_syncLock)
+        {
+            if (_state != MutationAdmissionState.ClosedForShutdown || _exclusiveLeaseActive)
+            {
+                throw new MutationAdmissionRejectedException(_state);
+            }
+
+            _exclusiveLeaseActive = true;
+            return new MutationAdmissionLease(this, MutationAdmissionLeaseKind.Shutdown);
         }
     }
 
@@ -449,6 +502,24 @@ public sealed class MutationAdmissionBarrier
         _ordinaryRevocationSource.Dispose();
         _ordinaryRevocationSource = new CancellationTokenSource();
         _state = MutationAdmissionState.Open;
+    }
+
+    private bool IsLeaseKindActiveUnderLock(MutationAdmissionLeaseKind kind)
+    {
+        return kind switch
+        {
+            MutationAdmissionLeaseKind.Ordinary =>
+                (_state is MutationAdmissionState.Open or MutationAdmissionState.Closing)
+                    && _ordinaryLeaseCount > 0,
+            MutationAdmissionLeaseKind.Destructive =>
+                _state == MutationAdmissionState.Closing && _exclusiveLeaseActive,
+            MutationAdmissionLeaseKind.Recovery =>
+                (_state is MutationAdmissionState.RecoveryOnly or MutationAdmissionState.RecoveryClosing)
+                    && _exclusiveLeaseActive,
+            MutationAdmissionLeaseKind.Shutdown =>
+                _state == MutationAdmissionState.ClosedForShutdown && _exclusiveLeaseActive,
+            _ => false,
+        };
     }
 }
 

@@ -1,4 +1,5 @@
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.Diagnostics;
 
 namespace ClashSharp.Tests.Integration;
 
@@ -51,6 +52,42 @@ public sealed class ApplicationMutationCoordinatorTests
         Assert.Equal(["validate"], fixture.Trace);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_TypedValidationFailure_PreservesStableDiagnosticCode()
+    {
+        Fixture fixture = new();
+        fixture.ValidateException = new TestRuntimeDiagnosticException("service.ipc.timeout");
+
+        MutationResult<string> result = await fixture.Coordinator.ExecuteAsync(
+            fixture.Request,
+            fixture.Plan,
+            (_, _) => Task.FromResult("unused"),
+            CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.Failed, result.Outcome);
+        Assert.Equal("service.ipc.timeout", result.ErrorCode);
+        Assert.Null(fixture.Store.Current);
+        Assert.Equal(["validate"], fixture.Trace);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_TypedPlanFactoryFailure_PreservesStableDiagnosticCode()
+    {
+        Fixture fixture = new();
+
+        MutationResult<string> result = await fixture.Coordinator.ExecuteAsync(
+            fixture.Request,
+            (_, _) => Task.FromException<MutationPlan>(
+                new TestRuntimeDiagnosticException("service.provisioning.association_invalid")),
+            (_, _) => Task.FromResult("unused"),
+            CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.Failed, result.Outcome);
+        Assert.Equal("service.provisioning.association_invalid", result.ErrorCode);
+        Assert.Null(fixture.Store.Current);
+        Assert.Empty(fixture.Trace);
+    }
+
     /// <summary>Verifies a wrapped process-fatal plan failure is never converted into a failed result.</summary>
     [Fact]
     public async Task ExecuteAsync_PlanningFailsFatally_PropagatesFailure()
@@ -93,6 +130,43 @@ public sealed class ApplicationMutationCoordinatorTests
         Assert.Contains("restore-baseline", fixture.Trace);
         Assert.Contains("verify-baseline", fixture.Trace);
         Assert.False(fixture.Participant.LastCompensationTokenWasCancelled);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_TypedRuntimeFailure_PreservesStableDiagnosticCode()
+    {
+        Fixture fixture = new();
+        fixture.Participant.ApplyException = new TestRuntimeDiagnosticException(
+            "geo.assets_missing");
+
+        MutationResult<string> result = await fixture.Coordinator.ExecuteAsync(
+            fixture.Request,
+            fixture.Plan,
+            (_, _) => Task.FromResult("unused"),
+            CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.Compensated, result.Outcome);
+        Assert.Equal("geo.assets_missing", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenericCompensationFailure_PreservesOriginalStableDiagnosticCode()
+    {
+        Fixture fixture = new();
+        fixture.Participant.ApplyException = new TestRuntimeDiagnosticException(
+            "geo.assets_missing");
+        fixture.Participant.CompensationFailuresRemaining = 1;
+
+        MutationResult<string> result = await fixture.Coordinator.ExecuteAsync(
+            fixture.Request,
+            fixture.Plan,
+            (_, _) => Task.FromResult("unused"),
+            CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.RecoveryRequired, result.Outcome);
+        Assert.Equal("geo.assets_missing", result.ErrorCode);
+        Assert.NotNull(fixture.Store.Current);
+        Assert.Equal(MutationAdmissionState.RecoveryOnly, fixture.Barrier.State);
     }
 
     /// <summary>Verifies cancellation wrapping a fatal side-effect failure retains recovery and propagates.</summary>
@@ -389,6 +463,12 @@ public sealed class ApplicationMutationCoordinatorTests
         Assert.Equal(generation, fixture.Store.Current!.Journal.Generation);
         Assert.Equal(compensationCalls, fixture.Trace.Count(item => item == "compensate"));
         Assert.Equal(MutationAdmissionState.RecoveryOnly, fixture.Barrier.State);
+    }
+
+    private sealed class TestRuntimeDiagnosticException(string diagnosticCode)
+        : InvalidOperationException("typed runtime failure"), IStableDiagnosticCodeProvider
+    {
+        public string DiagnosticCode { get; } = diagnosticCode;
     }
 
     private sealed class Fixture

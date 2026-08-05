@@ -284,6 +284,11 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
             return Profiles;
         }
 
+        public IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId)
+        {
+            return [];
+        }
+
         public Task<ProfileImportResult> ImportLocalProfileAsync(
             string filePath,
             CancellationToken cancellationToken)
@@ -303,6 +308,28 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
             CancellationToken cancellationToken)
         {
             return SetActiveProfile(profileId, cancellationToken);
+        }
+
+        public Task<bool> TryRenameProfileAsync(
+            string profileId,
+            string name,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<bool> TryDeleteProfileAsync(
+            string profileId,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<ProfileImportResult> RollbackProfileAsync(
+            ProfileHistoryEntry historyEntry,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
         }
     }
 
@@ -331,6 +358,20 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
 
         public Task<string> CheckSubscriptionLinkAsync(
             ProfileSubscriptionLink link,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<bool> TryUpdateSubscriptionLinkAsync(
+            SubscriptionLinkEditRequest request,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<bool> TryDeleteSubscriptionLinkAsync(
+            string linkId,
             CancellationToken cancellationToken)
         {
             throw new NotSupportedException();

@@ -32,12 +32,16 @@ internal static class AppDataMaintenanceServiceFactory
     {
         AppDataMaintenanceLogStorageAdapter logStorage = new(LogStorageService.Instance);
         return new AppDataMaintenanceService(
-            new AppDataMaintenanceSettingsAdapter(AppSettingsService.Instance),
+            new AppDataMaintenanceSettingsAdapter(
+                AppSettingsService.Instance),
             new LegacyAppDataMaintenanceRuntimeAdapter(
                 ConnectionSamplingService.Instance,
-                MihomoCoreService.Instance,
-                AppSettingsService.Instance,
-                WindowsProxyService.Instance,
+                async cancellationToken =>
+                {
+                    _ = await ApplicationActionService.Instance
+                        .ApplyNetworkModeAsync(ClashSharp.Model.ClashSharpMode.Disabled, cancellationToken)
+                        .ConfigureAwait(false);
+                },
                 LogStorageService.Instance,
                 LocalizationService.Instance.GetString),
             logStorage,
@@ -47,11 +51,22 @@ internal static class AppDataMaintenanceServiceFactory
     }
 }
 
-internal sealed class AppDataMaintenanceSettingsAdapter(AppSettingsService settings) : IAppDataMaintenanceSettings
+internal sealed class AppDataMaintenanceSettingsAdapter(
+    AppSettingsService settings) : IAppDataMaintenanceSettings, ITerminalShutdownSettingsMaintenance
 {
     public void ResetAllSettings()
     {
         settings.ResetAllSettings();
+    }
+
+    public void ClearAllSettings()
+    {
+        settings.ClearAllSettings();
+    }
+
+    public void ClearAllSettingsAfterShutdown()
+    {
+        settings.ClearAllSettingsAfterShutdown();
     }
 }
 

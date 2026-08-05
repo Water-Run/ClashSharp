@@ -93,6 +93,12 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
+                <NavigationViewItem x:Name="NavConnectionsItem" Content="{Binding ConnectionsText}" Tag="Connections">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
                 <NavigationViewItem x:Name="NavStatisticsItem" Content="{Binding StatisticsText}" Tag="Statistics">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D2;" />

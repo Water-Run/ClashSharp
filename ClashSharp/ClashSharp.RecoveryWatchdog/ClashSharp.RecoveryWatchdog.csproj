@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>ClashSharp</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <LangVersion>14</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ClashSharp\Service\WindowsProxyMutationJournal.cs" Link="Service\WindowsProxyMutationJournal.cs" />
+    <Compile Include="..\ClashSharp\Service\WindowsProxyOwnershipRestorer.cs" Link="Service\WindowsProxyOwnershipRestorer.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ClashSharp.Tests" />
+  </ItemGroup>
+</Project>

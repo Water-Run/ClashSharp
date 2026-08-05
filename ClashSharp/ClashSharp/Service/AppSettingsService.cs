@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
+using System.Security.Cryptography;
+using System.Threading;
+using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
 using ClashSharp.Settings;
 using Windows.Storage;
@@ -13,10 +15,13 @@ namespace ClashSharp.Service;
 /// Thread safety: Public members serialize access through a private lock.
 /// Side effects: Writes setting changes to Windows local settings when available, otherwise to an in-memory fallback.
 /// </remarks>
-public sealed class AppSettingsService :
+public sealed partial class AppSettingsService :
     IMasterHeroStatusLayoutSettings,
     IMasterInfoTileLayoutSettings
 {
+    private static readonly SettingDefinition MasterHeroStatusLayoutDefinition =
+        SettingsRegistry.Default.Get(SettingsRegistry.Keys.MasterHeroStatusLayout.Value);
+
     private static readonly SettingDefinition MasterInfoTileLayoutDefinition =
         SettingsRegistry.Default.Get(SettingsRegistry.Keys.MasterInfoTileLayout.Value);
 
@@ -26,6 +31,9 @@ public sealed class AppSettingsService :
 
     /// <summary>Synchronization object guarding settings access for this service lifetime.</summary>
     private readonly object _syncLock = new();
+
+    /// <summary>Process-wide write admission; replaced with the AppHost-owned instance during composition.</summary>
+    private MutationAdmissionBarrier _mutationAdmission = new();
 
     /// <summary>Fallback settings map used when Windows application local settings are unavailable.</summary>
     private readonly Dictionary<string, object> _fallbackValues = [];
@@ -59,6 +67,10 @@ public sealed class AppSettingsService :
 
     /// <summary>Storage key for the local mixed proxy port.</summary>
     private const string KeyMixedPort = "MixedPort";
+
+    /// <summary>Storage key for the private mihomo controller bearer secret.</summary>
+    /// <remarks>This internal credential is intentionally excluded from user settings reset, export, and audit events.</remarks>
+    private const string KeyMihomoControllerSecret = "MihomoControllerSecret";
 
     /// <summary>Storage key for background connection sampling.</summary>
     private const string KeyConnectionSamplingEnabled = "ConnectionSamplingEnabled";
@@ -179,6 +191,16 @@ public sealed class AppSettingsService :
         _localSettings = TryResolveLocalSettings();
     }
 
+    /// <summary>Binds settings writes to the process-wide mutation admission authority.</summary>
+    internal void ConfigureMutationAdmission(MutationAdmissionBarrier mutationAdmission)
+    {
+        ArgumentNullException.ThrowIfNull(mutationAdmission);
+        lock (_syncLock)
+        {
+            _mutationAdmission = mutationAdmission;
+        }
+    }
+
     /// <summary>Raised after one persisted setting value is changed or removed.</summary>
     public event EventHandler<AppSettingChangedEventArgs>? SettingChanged;
 
@@ -187,7 +209,7 @@ public sealed class AppSettingsService :
     public AppLanguage DisplayLanguage
     {
         get => GetEnum(KeyDisplayLanguage, AppLanguage.AutoDetect);
-        set => SetEnum(KeyDisplayLanguage, value);
+        set => WriteOrdinary(editor => editor.DisplayLanguage = value);
     }
 
     /// <summary>Gets or sets the selected application display style.</summary>
@@ -195,7 +217,7 @@ public sealed class AppSettingsService :
     public AppThemeMode AppThemeMode
     {
         get => GetEnum(KeyAppThemeMode, AppThemeMode.FollowSystem);
-        set => SetEnum(KeyAppThemeMode, value);
+        set => WriteOrdinary(editor => editor.AppThemeMode = value);
     }
 
     /// <summary>Gets or sets the selected application accent color behavior.</summary>
@@ -203,7 +225,7 @@ public sealed class AppSettingsService :
     public AppAccentColorMode AppAccentColorMode
     {
         get => GetEnum(KeyAppAccentColorMode, AppAccentColorMode.FollowSystem);
-        set => SetEnum(KeyAppAccentColorMode, value);
+        set => WriteOrdinary(editor => editor.AppAccentColorMode = value);
     }
 
     /// <summary>Gets or sets the custom application accent color in ARGB hex format.</summary>
@@ -212,7 +234,7 @@ public sealed class AppSettingsService :
     public string AppAccentColorValue
     {
         get => GetString(KeyAppAccentColorValue, DefaultAppAccentColorValue);
-        set => SetString(KeyAppAccentColorValue, NormalizeAccentColorValue(value));
+        set => WriteOrdinary(editor => editor.AppAccentColorValue = value);
     }
 
     /// <summary>Gets or sets whether Clash# should launch when the user signs in.</summary>
@@ -220,7 +242,7 @@ public sealed class AppSettingsService :
     public bool LaunchAtStartupEnabled
     {
         get => GetBoolean(KeyLaunchAtStartupEnabled, false);
-        set => SetBoolean(KeyLaunchAtStartupEnabled, value);
+        set => WriteOrdinary(editor => editor.LaunchAtStartupEnabled = value);
     }
 
     /// <summary>Gets or sets the currently selected master takeover mode.</summary>
@@ -228,7 +250,7 @@ public sealed class AppSettingsService :
     public ClashSharpMode CurrentMode
     {
         get => GetEnum(KeyCurrentMode, ClashSharpMode.Disabled);
-        set => SetEnum(KeyCurrentMode, value);
+        set => WriteOrdinary(editor => editor.CurrentMode = value);
     }
 
     /// <summary>Gets or sets the active configuration profile identifier.</summary>
@@ -236,7 +258,7 @@ public sealed class AppSettingsService :
     public string ActiveProfileId
     {
         get => GetString(KeyActiveProfileId, ProfileCatalogIds.BuiltInDirect);
-        set => SetString(KeyActiveProfileId, value);
+        set => WriteOrdinary(editor => editor.ActiveProfileId = value);
     }
 
     /// <summary>Gets or sets whether transparent proxy mode is enabled.</summary>
@@ -244,7 +266,7 @@ public sealed class AppSettingsService :
     public bool TransparentProxyEnabled
     {
         get => GetBoolean(KeyTransparentProxyEnabled, true);
-        set => SetBoolean(KeyTransparentProxyEnabled, value);
+        set => WriteOrdinary(editor => editor.TransparentProxyEnabled = value);
     }
 
     /// <summary>Gets or sets the local mixed HTTP and SOCKS proxy port.</summary>
@@ -260,8 +282,17 @@ public sealed class AppSettingsService :
                 throw new ArgumentOutOfRangeException(nameof(value), "Port must be in the range [1, 65535].");
             }
 
-            SetInt32(KeyMixedPort, value);
+            WriteOrdinary(editor => editor.MixedPort = value);
         }
+    }
+
+    /// <summary>Gets the private bearer secret shared with the local mihomo controller.</summary>
+    /// <value>A persistent 256-bit secret encoded as 64 lowercase hexadecimal characters.</value>
+    internal string MihomoControllerSecret
+    {
+        get => GetOrCreateInternalSecret(
+            KeyMihomoControllerSecret,
+            MihomoControllerEndpoint.IsValidSecret);
     }
 
     /// <summary>Gets or sets whether active connections are periodically sampled into SQLite.</summary>
@@ -269,7 +300,7 @@ public sealed class AppSettingsService :
     public bool ConnectionSamplingEnabled
     {
         get => GetBoolean(KeyConnectionSamplingEnabled, true);
-        set => SetBoolean(KeyConnectionSamplingEnabled, value);
+        set => WriteOrdinary(editor => editor.ConnectionSamplingEnabled = value);
     }
 
     /// <summary>Gets or sets the background connection sampling interval in seconds.</summary>
@@ -285,7 +316,7 @@ public sealed class AppSettingsService :
                 throw new ArgumentOutOfRangeException(nameof(value), "Sampling interval must be in the range [3, 300] seconds.");
             }
 
-            SetInt32(KeyConnectionSamplingIntervalSeconds, value);
+            WriteOrdinary(editor => editor.ConnectionSamplingIntervalSeconds = value);
         }
     }
 
@@ -294,7 +325,7 @@ public sealed class AppSettingsService :
     public bool RestoreProxyOnExit
     {
         get => GetBoolean(KeyRestoreProxyOnExit, true);
-        set => SetBoolean(KeyRestoreProxyOnExit, value);
+        set => WriteOrdinary(editor => editor.RestoreProxyOnExit = value);
     }
 
     /// <summary>Gets or sets whether Clash# checks stale Windows proxy state on startup.</summary>
@@ -302,7 +333,7 @@ public sealed class AppSettingsService :
     public bool CheckStaleProxyOnStartup
     {
         get => GetBoolean(KeyCheckStaleProxyOnStartup, true);
-        set => SetBoolean(KeyCheckStaleProxyOnStartup, value);
+        set => WriteOrdinary(editor => editor.CheckStaleProxyOnStartup = value);
     }
 
     /// <summary>Gets or sets whether Clash# checks for startup conflicts before applying proxy mode.</summary>
@@ -310,7 +341,7 @@ public sealed class AppSettingsService :
     public bool StartupConflictCheckEnabled
     {
         get => GetBoolean(KeyStartupConflictCheckEnabled, true);
-        set => SetBoolean(KeyStartupConflictCheckEnabled, value);
+        set => WriteOrdinary(editor => editor.StartupConflictCheckEnabled = value);
     }
 
     /// <summary>Gets or sets the proxy behavior applied when Clash# starts.</summary>
@@ -318,7 +349,7 @@ public sealed class AppSettingsService :
     public StartupBehaviorMode StartupBehaviorMode
     {
         get => GetEnum(KeyStartupBehaviorMode, StartupBehaviorMode.LastSetting);
-        set => SetEnum(KeyStartupBehaviorMode, value);
+        set => WriteOrdinary(editor => editor.StartupBehaviorMode = value);
     }
 
     /// <summary>Gets or sets whether Clash# should show the startup guide during application startup.</summary>
@@ -326,42 +357,42 @@ public sealed class AppSettingsService :
     public bool ShowStartupGuideOnStartup
     {
         get => GetBoolean(KeyShowStartupGuideOnStartup, true);
-        set => SetBoolean(KeyShowStartupGuideOnStartup, value);
+        set => WriteOrdinary(editor => editor.ShowStartupGuideOnStartup = value);
     }
 
     /// <summary>Gets or sets whether trigger tasks are evaluated.</summary>
     public bool TriggersEnabled
     {
         get => GetBoolean(KeyTriggersEnabled, true);
-        set => SetBoolean(KeyTriggersEnabled, value);
+        set => WriteOrdinary(editor => editor.TriggersEnabled = value);
     }
 
     /// <summary>Gets or sets whether fired triggers send dedicated system notifications.</summary>
     public bool TriggerNotificationsEnabled
     {
         get => GetBoolean(KeyTriggerNotificationsEnabled, true);
-        set => SetBoolean(KeyTriggerNotificationsEnabled, value);
+        set => WriteOrdinary(editor => editor.TriggerNotificationsEnabled = value);
     }
 
     /// <summary>Gets or sets how the main window handles user close requests.</summary>
     public CloseBehaviorMode CloseBehaviorMode
     {
         get => GetEnum(KeyCloseBehaviorMode, CloseBehaviorMode.MinimizeToTray);
-        set => SetEnum(KeyCloseBehaviorMode, value);
+        set => WriteOrdinary(editor => editor.CloseBehaviorMode = value);
     }
 
     /// <summary>Gets or sets whether the tray icon uses the monochrome logo when proxy takeover is inactive.</summary>
     public bool TrayUseMonochromeInactiveIcon
     {
         get => GetBoolean(KeyTrayUseMonochromeInactiveIcon, false);
-        set => SetBoolean(KeyTrayUseMonochromeInactiveIcon, value);
+        set => WriteOrdinary(editor => editor.TrayUseMonochromeInactiveIcon = value);
     }
 
     /// <summary>Gets or sets comma-separated ids for tray menu features that should be displayed.</summary>
     public string TrayVisibleFeatureIds
     {
         get => GetString(KeyTrayVisibleFeatureIds, DefaultTrayVisibleFeatureIds);
-        set => SetString(KeyTrayVisibleFeatureIds, NormalizeTrayVisibleFeatureIds(value));
+        set => WriteOrdinary(editor => editor.TrayVisibleFeatureIds = value);
     }
 
     /// <summary>Gets or sets the mainland China specific display feature level.</summary>
@@ -381,11 +412,7 @@ public sealed class AppSettingsService :
 
         set
         {
-            MainlandChinaFeatureMode persistedMode = value == MainlandChinaFeatureMode.AllIncludingUrlBlacklist
-                ? MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter
-                : value;
-            SetEnum(KeyMainlandChinaFeatureMode, persistedMode);
-            SetBoolean(KeyMainlandChinaDisplayEnabled, persistedMode != MainlandChinaFeatureMode.Disabled);
+            WriteOrdinary(editor => editor.MainlandChinaFeatureMode = value);
         }
     }
 
@@ -407,7 +434,7 @@ public sealed class AppSettingsService :
             return GetBoolean(KeyMainlandChinaUrlBlockingEnabled, false);
         }
 
-        set => SetBoolean(KeyMainlandChinaUrlBlockingEnabled, value);
+        set => WriteOrdinary(editor => editor.MainlandChinaUrlBlockingEnabled = value);
     }
 
     /// <summary>Gets or sets the URL used for proxy connection tests.</summary>
@@ -415,14 +442,16 @@ public sealed class AppSettingsService :
     public string ConnectionTestUrl
     {
         get => GetString(KeyConnectionTestUrl, DefaultConnectionTestUrl);
-        set => SetString(KeyConnectionTestUrl, NormalizeConnectionTestUrl(value));
+        set => WriteOrdinary(editor => editor.ConnectionTestUrl = value);
     }
 
     /// <summary>Gets or sets the comma-separated master hero status slot layout.</summary>
     public string MasterHeroStatusLayout
     {
-        get => GetString(KeyMasterHeroStatusLayout, string.Empty);
-        set => SetString(KeyMasterHeroStatusLayout, value);
+        get => GetString(
+            KeyMasterHeroStatusLayout,
+            MasterHeroStatusLayoutDefinition.DefaultValue.CanonicalText);
+        set => WriteOrdinary(editor => editor.MasterHeroStatusLayout = value);
     }
 
     /// <summary>Gets or sets the ordered comma-separated identifiers of visible master-control information tiles.</summary>
@@ -431,25 +460,25 @@ public sealed class AppSettingsService :
         get => GetString(
             KeyMasterInfoTileLayout,
             MasterInfoTileLayoutDefinition.DefaultValue.CanonicalText);
-        set => SetString(KeyMasterInfoTileLayout, NormalizeMasterInfoTileLayout(value));
+        set => WriteOrdinary(editor => editor.MasterInfoTileLayout = value);
     }
 
     public string ConnectionTestProxyUrl1
     {
         get => GetString(KeyConnectionTestProxyUrl1, DefaultConnectionTestProxyUrl1);
-        set => SetString(KeyConnectionTestProxyUrl1, NormalizeConnectionTestUrl(value));
+        set => WriteOrdinary(editor => editor.ConnectionTestProxyUrl1 = value);
     }
 
     public string ConnectionTestProxyUrl2
     {
         get => GetString(KeyConnectionTestProxyUrl2, DefaultConnectionTestProxyUrl2);
-        set => SetString(KeyConnectionTestProxyUrl2, NormalizeConnectionTestUrl(value));
+        set => WriteOrdinary(editor => editor.ConnectionTestProxyUrl2 = value);
     }
 
     public string ConnectionTestDirectUrl
     {
         get => GetString(KeyConnectionTestDirectUrl, DefaultConnectionTestDirectUrl);
-        set => SetString(KeyConnectionTestDirectUrl, NormalizeConnectionTestUrl(value));
+        set => WriteOrdinary(editor => editor.ConnectionTestDirectUrl = value);
     }
 
     /// <summary>Gets or sets whether mainland China display replacement is enabled.</summary>
@@ -457,9 +486,7 @@ public sealed class AppSettingsService :
     public bool MainlandChinaDisplayEnabled
     {
         get => MainlandChinaFeatureMode != MainlandChinaFeatureMode.Disabled;
-        set => MainlandChinaFeatureMode = value
-            ? MainlandChinaFeatureMode.FlagReplacementAndTextCompletion
-            : MainlandChinaFeatureMode.Disabled;
+        set => WriteOrdinary(editor => editor.MainlandChinaDisplayEnabled = value);
     }
 
     /// <summary>Gets or sets the Windows system notification verbosity.</summary>
@@ -467,35 +494,34 @@ public sealed class AppSettingsService :
     public NotificationLevel NotificationLevel
     {
         get => GetEnum(KeyNotificationLevel, NotificationLevel.Default);
-        set => SetEnum(KeyNotificationLevel, value);
+        set => WriteOrdinary(editor => editor.NotificationLevel = value);
     }
 
     /// <summary>Gets or sets whether Windows system notifications are enabled.</summary>
     public bool NotificationEnabled
     {
         get => GetBoolean(KeyNotificationEnabled, true);
-        set => SetBoolean(KeyNotificationEnabled, value);
+        set => WriteOrdinary(editor => editor.NotificationEnabled = value);
     }
 
     /// <summary>Removes all persisted settings owned by Clash#, restoring default values on subsequent reads.</summary>
     public void ResetAllSettings()
     {
-        List<AppSettingChangedEventArgs> changes = [];
-        lock (_syncLock)
-        {
-            foreach (string key in KnownKeys)
-            {
-                if (RemoveValue(key) is AppSettingChangedEventArgs change)
-                {
-                    changes.Add(change);
-                }
-            }
-        }
+        WriteOrdinary(static editor => editor.ResetAllSettings());
+    }
 
-        foreach (AppSettingChangedEventArgs change in changes)
-        {
-            NotifySettingChanged(change);
-        }
+    /// <summary>Clears user settings and internal credentials for the destructive clear-all-data operation.</summary>
+    internal void ClearAllSettings()
+    {
+        WriteOrdinary(static editor => editor.ClearAllSettings());
+    }
+
+    /// <summary>Clears settings after the application mutation barrier has committed terminal shutdown.</summary>
+    internal void ClearAllSettingsAfterShutdown()
+    {
+        MutationAdmissionBarrier admission = Volatile.Read(ref _mutationAdmission);
+        using MutationAdmissionLease lease = admission.AcquireShutdownMaintenance();
+        WriteAdmitted(lease, static editor => editor.ClearAllSettings());
     }
 
     /// <summary>Reads a boolean setting from storage or returns <paramref name="defaultValue"/>.</summary>
@@ -513,23 +539,6 @@ public sealed class AppSettingsService :
         }
     }
 
-    /// <summary>Writes a boolean setting to storage.</summary>
-    /// <param name="key">Storage key. Must not be null.</param>
-    /// <param name="value">Boolean value to persist.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="key"/> is null.</exception>
-    private void SetBoolean(string key, bool value)
-    {
-        ArgumentNullException.ThrowIfNull(key);
-
-        AppSettingChangedEventArgs? change;
-        lock (_syncLock)
-        {
-            change = SetValue(key, value);
-        }
-
-        NotifySettingChanged(change);
-    }
-
     /// <summary>Reads a 32-bit integer setting from storage or returns <paramref name="defaultValue"/>.</summary>
     /// <param name="key">Storage key. Must not be null.</param>
     /// <param name="defaultValue">Default value used when no valid stored value exists.</param>
@@ -543,23 +552,6 @@ public sealed class AppSettingsService :
         {
             return GetValue(key) is int value ? value : defaultValue;
         }
-    }
-
-    /// <summary>Writes a 32-bit integer setting to storage.</summary>
-    /// <param name="key">Storage key. Must not be null.</param>
-    /// <param name="value">Integer value to persist.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="key"/> is null.</exception>
-    private void SetInt32(string key, int value)
-    {
-        ArgumentNullException.ThrowIfNull(key);
-
-        AppSettingChangedEventArgs? change;
-        lock (_syncLock)
-        {
-            change = SetValue(key, value);
-        }
-
-        NotifySettingChanged(change);
     }
 
     /// <summary>Reads a string setting from storage or returns <paramref name="defaultValue"/>.</summary>
@@ -578,24 +570,6 @@ public sealed class AppSettingsService :
         }
     }
 
-    /// <summary>Writes a string setting to storage.</summary>
-    /// <param name="key">Storage key. Must not be null.</param>
-    /// <param name="value">String value to persist. Must not be null.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="value"/> is null.</exception>
-    private void SetString(string key, string value)
-    {
-        ArgumentNullException.ThrowIfNull(key);
-        ArgumentNullException.ThrowIfNull(value);
-
-        AppSettingChangedEventArgs? change;
-        lock (_syncLock)
-        {
-            change = SetValue(key, value);
-        }
-
-        NotifySettingChanged(change);
-    }
-
     private static string NormalizeMasterInfoTileLayout(string value)
     {
         SettingNormalizationResult normalized = MasterInfoTileLayoutDefinition.Normalize(value);
@@ -603,6 +577,19 @@ public sealed class AppSettingsService :
         {
             throw new ArgumentException(
                 $"Master information tile layout is invalid: {normalized.Error!.Code}.",
+                nameof(value));
+        }
+
+        return normalized.Value!.CanonicalText;
+    }
+
+    private static string NormalizeMasterHeroStatusLayout(string value)
+    {
+        SettingNormalizationResult normalized = MasterHeroStatusLayoutDefinition.Normalize(value);
+        if (!normalized.IsSuccess)
+        {
+            throw new ArgumentException(
+                $"Master hero status layout is invalid: {normalized.Error!.Code}.",
                 nameof(value));
         }
 
@@ -632,27 +619,6 @@ public sealed class AppSettingsService :
         }
     }
 
-    /// <summary>Writes an enum setting to storage as its integer representation.</summary>
-    /// <typeparam name="TEnum">Enum type represented by the stored setting.</typeparam>
-    /// <param name="key">Storage key. Must not be null.</param>
-    /// <param name="value">Enum value to persist.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="key"/> is null.</exception>
-    private void SetEnum<TEnum>(string key, TEnum value)
-        where TEnum : struct, Enum
-    {
-        ArgumentNullException.ThrowIfNull(key);
-
-        AppSettingChangedEventArgs? change;
-        lock (_syncLock)
-        {
-            change = SetValue(
-                key,
-                Convert.ToInt32(value, CultureInfo.InvariantCulture));
-        }
-
-        NotifySettingChanged(change);
-    }
-
     /// <summary>Reads a raw setting value from the preferred backing store.</summary>
     /// <param name="key">Storage key. Must not be null.</param>
     /// <returns>The stored value when present; otherwise null.</returns>
@@ -667,6 +633,37 @@ public sealed class AppSettingsService :
         }
 
         return _fallbackValues.TryGetValue(key, out object? fallbackValue) ? fallbackValue : null;
+    }
+
+    /// <summary>Reads or atomically creates one internal 256-bit credential while the settings lock is held.</summary>
+    private string GetOrCreateInternalSecret(
+        string key,
+        Func<string?, bool> validator)
+    {
+        lock (_syncLock)
+        {
+            if (GetValue(key) is string storedSecret && validator(storedSecret))
+            {
+                return storedSecret;
+            }
+        }
+
+        MutationAdmissionBarrier admission = Volatile.Read(ref _mutationAdmission);
+        using MutationAdmissionLease lease = admission.AcquireOrdinary();
+        admission.EnsureActiveLease(lease);
+        lock (_syncLock)
+        {
+            admission.EnsureActiveLease(lease);
+            if (GetValue(key) is string storedSecret && validator(storedSecret))
+            {
+                return storedSecret;
+            }
+
+            string generatedSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32))
+                .ToLowerInvariant();
+            _ = SetValue(key, generatedSecret);
+            return generatedSecret;
+        }
     }
 
     /// <summary>Writes a raw setting value to the preferred backing store.</summary>

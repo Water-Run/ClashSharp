@@ -20,10 +20,13 @@ public sealed class ProfilesViewModelTests
         };
         ProfileCatalogService profiles = new(
             Path.Combine(tempDirectory.Path, "profiles.json"),
+            Path.Combine(tempDirectory.Path, "mihomo", "history"),
             settings,
             new FakeProfileCatalogCoreConfiguration(),
+            new FakeProfileCatalogRuntime(),
             new FakeProfileCatalogLog(),
-            static key => key);
+            static key => key,
+            UncoordinatedProfileCatalogMutationCoordinator.Instance);
         LogStorageService logStorage = new(
             Path.Combine(tempDirectory.Path, "logs.db"),
             static () => "unused-log-profile");
@@ -56,7 +59,10 @@ public sealed class ProfilesViewModelTests
     {
         using TempDirectory tempDirectory = new();
         ProfileCatalogService profiles = CreateProfileCatalog(tempDirectory);
-        profiles.AddSubscriptionLink("Example", "https://example.com/profile.yaml");
+        await profiles.AddSubscriptionLinkAsync(
+            "Example",
+            "https://example.com/profile.yaml",
+            CancellationToken.None);
         LogStorageService logStorage = new(
             Path.Combine(tempDirectory.Path, "links-logs.db"),
             static () => "unused-log-profile");
@@ -102,10 +108,13 @@ public sealed class ProfilesViewModelTests
     {
         return new ProfileCatalogService(
             Path.Combine(tempDirectory.Path, "profiles.json"),
+            Path.Combine(tempDirectory.Path, "mihomo", "history"),
             new FakeProfileCatalogSettings(),
             new FakeProfileCatalogCoreConfiguration(),
+            new FakeProfileCatalogRuntime(),
             new FakeProfileCatalogLog(),
-            static key => key);
+            static key => key,
+            UncoordinatedProfileCatalogMutationCoordinator.Instance);
     }
 
     private sealed class FakeProfileCatalogSettings : IProfileCatalogSettings
@@ -129,6 +138,13 @@ public sealed class ProfilesViewModelTests
             throw new NotSupportedException();
         }
 
+        public Task<string?> ReadImportedProfileConfigurationAsync(
+            string profileId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
         public Task<ProfileImportResult> ValidateImportedProfileAsync(
             string profileId,
             CancellationToken cancellationToken)
@@ -142,6 +158,22 @@ public sealed class ProfilesViewModelTests
         public void AppendLog(string level, string category, string message, string? detail)
         {
         }
+    }
+
+    private sealed class FakeProfileCatalogRuntime : IProfileCatalogRuntime
+    {
+        public Task<bool> ApplyProfileAsync(string profileId, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<ProfileCatalogRuntimeImportResult> ImportAndApplyProfileAsync(
+            string profileId,
+            string profileName,
+            string configurationText,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> DeleteImportedProfileAsync(string profileId, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
     }
 
     private sealed class TempDirectory : IDisposable

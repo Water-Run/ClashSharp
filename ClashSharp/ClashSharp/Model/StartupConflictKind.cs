@@ -11,4 +11,7 @@ internal enum StartupConflictKind
 
     /// <summary>Windows manual proxy is enabled but points to a different port.</summary>
     WindowsProxyWrongPort,
+
+    /// <summary>A known third-party TUN or VPN interface is currently active.</summary>
+    ActiveTunInterface,
 }

@@ -36,12 +36,32 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
         CancellationToken cancellationToken)
     {
         NetworkIntent.Validate(intent);
+        return ApplyAsync(() => intent, cancellationToken);
+    }
+
+    /// <summary>
+    /// Composes the intent only after this operation owns the process-wide fair mutation gate.
+    /// This prevents a mode-only or TUN-only request from overwriting fields committed while it waited.
+    /// </summary>
+    public Task<MutationResult<NetworkTransitionResult>> ApplyAsync(
+        Func<NetworkIntent> intentFactory,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(intentFactory);
         NetworkMutationParticipant? participant = null;
         MutationRequest request = MutationRequest.Create(OperationType);
         return _mutations.ExecuteAsync(
             request,
             async (context, token) =>
             {
+                NetworkIntent intent = intentFactory();
+                NetworkIntent.Validate(intent);
+                if (intent.Kind == NetworkIntentKind.Shutdown)
+                {
+                    throw new InvalidOperationException(
+                        "Shutdown network intents require the drained shutdown path.");
+                }
+
                 NetworkPlan plan = await PlanAsync(context, intent, token).ConfigureAwait(false);
                 participant = new NetworkMutationParticipant(_adapter, plan);
                 return NetworkMutationPlanFactory.Create(participant, _committer);
@@ -68,7 +88,6 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
         CancellationToken cancellationToken)
     {
         NetworkIntent.Validate(intent);
-        ArgumentNullException.ThrowIfNull(admissionLease);
         if (intent.Kind == NetworkIntentKind.Shutdown)
         {
             throw new ArgumentException(
@@ -76,7 +95,22 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
                 nameof(intent));
         }
 
-        return ApplyWithAdmissionAsync(intent, admissionLease, cancellationToken);
+        return ApplyAdmittedAsync(() => intent, admissionLease, cancellationToken);
+    }
+
+    /// <summary>Composes an admitted ordinary intent only after acquiring fair mutation ownership.</summary>
+    public Task<MutationResult<NetworkTransitionResult>> ApplyAdmittedAsync(
+        Func<NetworkIntent> intentFactory,
+        MutationAdmissionLease admissionLease,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(intentFactory);
+        ArgumentNullException.ThrowIfNull(admissionLease);
+        return ApplyWithAdmissionAsync(
+            intentFactory,
+            admissionLease,
+            requireShutdown: false,
+            cancellationToken);
     }
 
     /// <inheritdoc />
@@ -91,12 +125,17 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
             throw new ArgumentException("The runtime shutdown path requires a shutdown network intent.", nameof(intent));
         }
 
-        return ApplyWithAdmissionAsync(intent, admissionLease, cancellationToken);
+        return ApplyWithAdmissionAsync(
+            () => intent,
+            admissionLease,
+            requireShutdown: true,
+            cancellationToken);
     }
 
     private Task<MutationResult<NetworkTransitionResult>> ApplyWithAdmissionAsync(
-        NetworkIntent intent,
+        Func<NetworkIntent> intentFactory,
         MutationAdmissionLease admissionLease,
+        bool requireShutdown,
         CancellationToken cancellationToken)
     {
         if (_mutations is not IAdmittedApplicationMutationCoordinator admittedMutations)
@@ -112,6 +151,16 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
             request,
             async (context, token) =>
             {
+                NetworkIntent intent = intentFactory();
+                NetworkIntent.Validate(intent);
+                bool isShutdown = intent.Kind == NetworkIntentKind.Shutdown;
+                if (isShutdown != requireShutdown)
+                {
+                    throw new InvalidOperationException(requireShutdown
+                        ? "The runtime shutdown path requires a shutdown network intent."
+                        : "Shutdown network intents require the drained shutdown path.");
+                }
+
                 NetworkPlan plan = await PlanAsync(context, intent, token).ConfigureAwait(false);
                 participant = new NetworkMutationParticipant(_adapter, plan);
                 return NetworkMutationPlanFactory.Create(participant, _committer);
@@ -193,8 +242,14 @@ internal static class NetworkMutationPlanFactory
             plan.DesiredHash,
             [participant],
             token => participant.ValidateAsync(token),
-            (_, token) => committer.PromoteDesiredAsync(plan, token),
-            (_, token) => committer.RestoreBaselineAsync(plan, token),
+            (context, token) => committer.PromoteDesiredAsync(
+                plan,
+                context.AdmissionLease,
+                token),
+            (context, token) => committer.RestoreBaselineAsync(
+                plan,
+                context.AdmissionLease,
+                token),
             (_, token) => committer.VerifyDesiredAsync(plan, token),
             (_, token) => committer.VerifyBaselineAsync(plan, token));
     }

@@ -44,6 +44,7 @@ internal static class MasterControlPageComposition
         StartupRestoreFallbackService startupRestoreFallback = StartupRestoreFallbackService.Instance;
         ProfileCatalogService profileCatalog = ProfileCatalogService.Instance;
         LogStorageService logStorage = LogStorageService.Instance;
+        MihomoCoreService mihomoCore = MihomoCoreService.Instance;
         MihomoServiceManager mihomoServiceManager = MihomoServiceManager.Instance;
         RuntimeTrafficRateService runtimeTrafficRate = RuntimeTrafficRateService.Instance;
         IApplicationErrorSink errorSink = ApplicationErrorSink.CreateDefault();
@@ -62,10 +63,14 @@ internal static class MasterControlPageComposition
             startupRestoreFallback.GetStatus,
             runtimeTrafficRate.GetLatestSnapshot,
             () => TriggerPresentationCompatibilityFactory.RequireActive().GetSummary(),
-            GetWorkingSetBytes);
+            GetWorkingSetBytes,
+            () => mihomoCore.IsRunning && !mihomoCore.HasOwnershipFault,
+            () => settings.TransparentProxyEnabled
+                && settings.CurrentMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover,
+            coreConfiguration.ObserveRuntimeConfigurationIntegrity);
         MasterControlViewModel viewModel = new(
             new MasterControlLocalizationAdapter(localization),
-            new MasterControlCoreAdapter(MihomoCoreService.Instance),
+            new MasterControlCoreAdapter(mihomoCore),
             new MasterControlWindowsProxyAdapter(WindowsProxyService.Instance),
             new MasterControlSettingsAdapter(settings),
             new MasterControlTakeoverAdapter(applicationActions),

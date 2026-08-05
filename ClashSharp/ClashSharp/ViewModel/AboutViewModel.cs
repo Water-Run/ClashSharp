@@ -28,11 +28,17 @@ internal sealed class AboutViewModel : ObservableObject
     /// <summary>Core provider used by status loading.</summary>
     private readonly IAboutCore _core;
 
+    /// <summary>Read-only application release checker.</summary>
+    private readonly IApplicationUpdateChecker _updateChecker;
+
     /// <summary>URI launcher used by link commands.</summary>
     private readonly IUriLauncher _launcher;
 
     /// <summary>Backing field for <see cref="MihomoStatusText"/>.</summary>
     private string _mihomoStatusText = string.Empty;
+
+    /// <summary>Backing field for <see cref="UpdateStatusText"/>.</summary>
+    private string _updateStatusText = string.Empty;
 
     /// <summary>Initializes an about view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
@@ -42,14 +48,17 @@ internal sealed class AboutViewModel : ObservableObject
     public AboutViewModel(
         IDisplayPageLocalization localization,
         IAboutCore core,
+        IApplicationUpdateChecker updateChecker,
         IUriLauncher launcher,
         IApplicationErrorSink errorSink)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
+        _updateChecker = updateChecker ?? throw new ArgumentNullException(nameof(updateChecker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         ArgumentNullException.ThrowIfNull(errorSink);
         MihomoStatusText = _localization.GetString("About.Mihomo.Loading");
+        UpdateStatusText = _localization.GetString("About.Update.Checking");
         LoadCommand = new AsyncRelayCommand(
             LoadAsync,
             errorSink,
@@ -62,6 +71,10 @@ internal sealed class AboutViewModel : ObservableObject
             (_, token) => _launcher.LaunchAsync(MihomoUri, token),
             errorSink,
             operationName: "about-open-mihomo");
+        OpenReleasesCommand = new AsyncRelayCommand(
+            (_, token) => _launcher.LaunchAsync(GitHubReleaseUpdateCheckerUri, token),
+            errorSink,
+            operationName: "about-open-releases");
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -82,7 +95,7 @@ internal sealed class AboutViewModel : ObservableObject
 
     /// <summary>Gets the application version text.</summary>
     /// <value>Application package or assembly version.</value>
-    public string VersionText => "1.0.0.0";
+    public string VersionText => _updateChecker.CurrentVersion;
 
     /// <summary>Gets the application version summary text.</summary>
     /// <value>Localized version summary.</value>
@@ -144,6 +157,15 @@ internal sealed class AboutViewModel : ObservableObject
     /// <value>Localized GitHub button text.</value>
     public string GitHubButtonText => _localization.GetString("About.OpenGitHub");
 
+    /// <summary>Gets the software update title.</summary>
+    public string UpdateTitleText => _localization.GetString("About.Update.Title");
+
+    /// <summary>Gets the software update policy description.</summary>
+    public string UpdateDescriptionText => _localization.GetString("About.Update.Description");
+
+    /// <summary>Gets the button text for the fixed project releases page.</summary>
+    public string OpenReleasesButtonText => _localization.GetString("About.Update.OpenReleases");
+
     /// <summary>Gets the mihomo title text.</summary>
     /// <value>Localized mihomo title.</value>
     public string MihomoTitleText => _localization.GetString("About.Mihomo.Title");
@@ -176,6 +198,13 @@ internal sealed class AboutViewModel : ObservableObject
         private set => SetProperty(ref _mihomoStatusText, value);
     }
 
+    /// <summary>Gets the current application release availability text.</summary>
+    public string UpdateStatusText
+    {
+        get => _updateStatusText;
+        private set => SetProperty(ref _updateStatusText, value);
+    }
+
     /// <summary>Gets the command that loads mihomo status.</summary>
     /// <value>Asynchronous load command.</value>
     public AsyncRelayCommand LoadCommand { get; }
@@ -188,6 +217,9 @@ internal sealed class AboutViewModel : ObservableObject
     /// <value>Asynchronous URI launch command.</value>
     public AsyncRelayCommand OpenMihomoCommand { get; }
 
+    /// <summary>Gets the command that opens the fixed project releases page.</summary>
+    public AsyncRelayCommand OpenReleasesCommand { get; }
+
     /// <summary>Loads bundled mihomo version status.</summary>
     /// <param name="cancellationToken">Cancels version probing when requested.</param>
     /// <returns>A task that completes after status text is updated.</returns>
@@ -196,6 +228,13 @@ internal sealed class AboutViewModel : ObservableObject
     /// Thread / reentrancy: UI callers should use <see cref="LoadCommand"/> to prevent reentrancy.
     /// </remarks>
     public async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(
+            LoadCoreStatusAsync(cancellationToken),
+            LoadUpdateStatusAsync(cancellationToken));
+    }
+
+    private async Task LoadCoreStatusAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -210,5 +249,34 @@ internal sealed class AboutViewModel : ObservableObject
             MihomoStatusText = _localization.GetString("About.Mihomo.Unavailable");
         }
     }
+
+    private async Task LoadUpdateStatusAsync(CancellationToken cancellationToken)
+    {
+        ApplicationUpdateCheckResult result;
+        try
+        {
+            result = await _updateChecker.CheckAsync(cancellationToken);
+        }
+        catch (Exception exception) when (
+            !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            result = ApplicationUpdateCheckResult.Unavailable();
+        }
+
+        UpdateStatusText = result.Availability switch
+        {
+            ApplicationUpdateAvailability.Current => _localization.GetString("About.Update.Current"),
+            ApplicationUpdateAvailability.UpdateAvailable => string.Format(
+                CultureInfo.CurrentCulture,
+                _localization.GetString("About.Update.Available.Format"),
+                result.LatestVersion),
+            _ => _localization.GetString("About.Update.Unavailable"),
+        };
+    }
+
+    /// <summary>Fixed human-facing releases URI; never obtained from a remote response.</summary>
+    private static readonly Uri GitHubReleaseUpdateCheckerUri =
+        new("https://github.com/Water-Run/ClashSharp/releases/latest");
 
 }

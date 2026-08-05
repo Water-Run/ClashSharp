@@ -32,6 +32,16 @@
                         <FontIcon Glyph="&#xE72C;" />
                     </AppBarButton.Icon>
                 </AppBarButton>
+                <AppBarButton x:Name="EditLinkButton" Label="{Binding EditLinkText}" Click="EditLinkButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE70F;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="DeleteLinkButton" Label="{Binding DeleteLinkText}" Click="DeleteLinkButton_Click">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE74D;" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
             </CommandBar>
 
             <ListView x:Name="SubscriptionLinksList" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single">

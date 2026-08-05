@@ -44,10 +44,16 @@ public interface INetworkStateAdapter
 public interface INetworkStateCommitter
 {
     /// <summary>Atomically promotes the desired durable target.</summary>
-    Task PromoteDesiredAsync(NetworkPlan plan, CancellationToken cancellationToken);
+    Task PromoteDesiredAsync(
+        NetworkPlan plan,
+        MutationAdmissionLease admissionLease,
+        CancellationToken cancellationToken);
 
     /// <summary>Restores the durable baseline before the commit marker.</summary>
-    Task RestoreBaselineAsync(NetworkPlan plan, CancellationToken cancellationToken);
+    Task RestoreBaselineAsync(
+        NetworkPlan plan,
+        MutationAdmissionLease admissionLease,
+        CancellationToken cancellationToken);
 
     /// <summary>Verifies the promoted durable desired target.</summary>
     Task VerifyDesiredAsync(NetworkPlan plan, CancellationToken cancellationToken);

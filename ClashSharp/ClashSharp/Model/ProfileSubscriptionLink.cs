@@ -8,8 +8,9 @@ namespace ClashSharp.Model;
 /// <param name="Uri">Subscription URI display text; never null.</param>
 /// <param name="IsEnabled">True when automatic update is enabled for this link.</param>
 /// <param name="UpdateIntervalHours">Automatic update interval in hours.</param>
-/// <param name="LastUpdatedAt">Last update attempt time.</param>
+/// <param name="LastUpdatedAt">Last successful update time.</param>
 /// <param name="Status">Current link status display text; never null.</param>
+/// <param name="Revision">Monotonic editable-definition revision used to reject stale imports.</param>
 /// <remarks>
 /// Invariants: String values are never null; update interval is positive.
 /// Thread safety: Immutable value type and inherently thread-safe after construction.
@@ -22,4 +23,5 @@ public readonly record struct ProfileSubscriptionLink(
     bool IsEnabled,
     int UpdateIntervalHours,
     DateTimeOffset LastUpdatedAt,
-    string Status);
+    string Status,
+    long Revision = 0);

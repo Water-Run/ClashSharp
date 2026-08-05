@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -25,6 +26,8 @@ internal static class WindowsNetworkDiagnosticServiceFactory
             new WindowsDiagnosticSettingsAdapter(AppSettingsService.Instance),
             new WindowsDiagnosticEnvironmentAdapter(),
             new WindowsDiagnosticProcessRunner(),
+            new WindowsDiagnosticMutationJournalFileStore(
+                Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "WindowsNetworkMutationJournal.json")),
             LocalizationService.Instance.GetString);
     }
 }

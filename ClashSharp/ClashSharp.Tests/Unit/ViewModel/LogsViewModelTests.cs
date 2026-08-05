@@ -1,6 +1,8 @@
+using System.Runtime.CompilerServices;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Lifecycle;
+using ClashSharp.ServiceProtocol;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
@@ -8,6 +10,90 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Verifies asynchronous log maintenance and preview presentation boundaries.</summary>
 public sealed class LogsViewModelTests
 {
+    /// <summary>Verifies page-owned runtime streaming publishes a bounded display row and honors cancellation.</summary>
+    [Fact]
+    public async Task WatchRuntimeLogsAsync_PublishesRuntimeLogUntilCancelled()
+    {
+        TaskCompletionSource<bool> streamAdvanced = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        LogsViewModel viewModel = new(
+            GetString,
+            new FakeLogManagementStore(),
+            new TestApplicationErrorSink(),
+            cancellationToken => StreamRuntimeLogsAsync(streamAdvanced, cancellationToken));
+        using CancellationTokenSource cancellation = new();
+
+        Task watchTask = viewModel.WatchRuntimeLogsAsync(cancellation.Token);
+        await streamAdvanced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        LogRecordDisplay row = Assert.Single(viewModel.RecentLogs);
+        Assert.Equal("Warning", row.Record.Level);
+        Assert.Equal("Core", row.Record.Source);
+        Assert.Equal("runtime message", row.Message);
+        Assert.Contains("Logs.Source.Core", viewModel.CategoryFilterOptions, StringComparer.Ordinal);
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watchTask);
+    }
+
+    [Fact]
+    public async Task WatchRuntimeLogsAsync_DefensivelyBoundsRuntimeMessage()
+    {
+        TaskCompletionSource<bool> streamAdvanced = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        string oversized = new('x',
+            MihomoServiceIpcProtocol.MaximumRuntimeLogMessageCharacters + 1024);
+        LogsViewModel viewModel = new(
+            GetString,
+            new FakeLogManagementStore(),
+            new TestApplicationErrorSink(),
+            cancellationToken => StreamOneRuntimeLogAsync(
+                oversized,
+                streamAdvanced,
+                cancellationToken));
+        using CancellationTokenSource cancellation = new();
+
+        Task watchTask = viewModel.WatchRuntimeLogsAsync(cancellation.Token);
+        await streamAdvanced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        LogRecordDisplay row = Assert.Single(viewModel.RecentLogs);
+        Assert.Equal(MihomoServiceIpcProtocol.MaximumRuntimeLogMessageCharacters, row.Message.Length);
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watchTask);
+    }
+
+    [Fact]
+    public async Task WatchRuntimeLogsAsync_PublishesAndDeduplicatesServiceHostSnapshot()
+    {
+        int reads = 0;
+        LogsViewModel viewModel = new(
+            GetString,
+            new FakeLogManagementStore(),
+            new TestApplicationErrorSink(),
+            streamRuntimeLogs: null,
+            _ =>
+            {
+                Interlocked.Increment(ref reads);
+                return Task.FromResult<IReadOnlyList<string>>(["service host entry"]);
+            });
+        using CancellationTokenSource cancellation = new(TimeSpan.FromSeconds(5));
+
+        Task watchTask = viewModel.WatchRuntimeLogsAsync(cancellation.Token);
+        while (Volatile.Read(ref reads) < 2)
+        {
+            await Task.Delay(25, cancellation.Token);
+        }
+
+        LogRecordDisplay row = Assert.Single(viewModel.RecentLogs);
+        Assert.Equal("Service", row.Record.Source);
+        Assert.Equal("service host entry", row.Message);
+        Assert.Contains("Logs.Source.Service", viewModel.CategoryFilterOptions, StringComparer.Ordinal);
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watchTask);
+    }
+
     /// <summary>Verifies cleanup and its post-mutation snapshot never block the calling thread.</summary>
     [Fact]
     public async Task ApplyCleanupModeAsync_DoesNotBlockCaller_AndAppliesPostCleanupSnapshot()
@@ -296,6 +382,25 @@ public sealed class LogsViewModelTests
         TestApplicationErrorSink errorSink)
     {
         return new LogsViewModel(GetString, store, errorSink);
+    }
+
+    private static async IAsyncEnumerable<(string Level, string Message)> StreamRuntimeLogsAsync(
+        TaskCompletionSource<bool> streamAdvanced,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        yield return ("Warning", "runtime message");
+        streamAdvanced.TrySetResult(true);
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+    }
+
+    private static async IAsyncEnumerable<(string Level, string Message)> StreamOneRuntimeLogAsync(
+        string message,
+        TaskCompletionSource<bool> streamAdvanced,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        yield return ("Info", message);
+        streamAdvanced.TrySetResult(true);
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
     }
 
     private static string GetString(string key)

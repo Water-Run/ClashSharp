@@ -45,6 +45,15 @@ public sealed class MihomoConnectionService
         return await _controllerClient.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Streams active connection snapshots from the local controller.</summary>
+    /// <param name="cancellationToken">Cancels the WebSocket connection.</param>
+    /// <returns>An asynchronous sequence that completes when the socket closes.</returns>
+    public IAsyncEnumerable<IReadOnlyList<ActiveConnection>> StreamActiveConnectionsAsync(
+        CancellationToken cancellationToken)
+    {
+        return _controllerClient.StreamActiveConnectionsAsync(cancellationToken);
+    }
+
     /// <summary>Closes one active connection through mihomo.</summary>
     /// <param name="connectionId">Connection id. Must not be null or empty.</param>
     /// <param name="cancellationToken">Cancels the HTTP request.</param>

@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
@@ -10,7 +8,7 @@ namespace ClashSharp.Presentation.Adapters;
 /// <remarks>
 /// Invariants: Wraps a non-null log storage service.
 /// Thread safety: Matches the wrapped service.
-/// Side effects: Writes snapshots and logs to persistent storage.
+/// Side effects: Writes application logs to persistent storage.
 /// </remarks>
 internal sealed class ConnectionLogAdapter : IConnectionLog
 {
@@ -23,15 +21,6 @@ internal sealed class ConnectionLogAdapter : IConnectionLog
     public ConnectionLogAdapter(LogStorageService log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
-    }
-
-    /// <summary>Appends active connection snapshot rows.</summary>
-    /// <param name="connections">Connections to persist. Must not be null.</param>
-    /// <returns>Number of inserted rows.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="connections"/> is null.</exception>
-    public int AppendConnectionSnapshot(IReadOnlyList<ActiveConnection> connections)
-    {
-        return _log.AppendConnectionSnapshot(connections);
     }
 
     /// <summary>Appends one log entry.</summary>

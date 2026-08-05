@@ -16,6 +16,8 @@
     <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
+    <ProjectReference Include="..\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj" />
+    <ProjectReference Include="..\ClashSharp.RecoveryWatchdog\ClashSharp.RecoveryWatchdog.csproj" Aliases="RecoveryWatchdog" />
     <ProjectReference Include="..\ClashSharp.StartupProbe\ClashSharp.StartupProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <ProjectReference Include="..\ClashSharp.ProcessProbe\ClashSharp.ProcessProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <ProjectReference Include="..\ClashSharp.TriggerProbe\ClashSharp.TriggerProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
@@ -29,6 +31,7 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,6 +54,7 @@
     <Compile Include="..\ClashSharp\Model\ConfigurationProfile.cs" Link="Model\ConfigurationProfile.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileImportResult.cs" Link="Model\ProfileImportResult.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileSubscriptionLink.cs" Link="Model\ProfileSubscriptionLink.cs" />
+    <Compile Include="..\ClashSharp\Model\ProfileHistoryEntry.cs" Link="Model\ProfileHistoryEntry.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsProxyState.cs" Link="Model\WindowsProxyState.cs" />
     <Compile Include="..\ClashSharp\Model\MihomoProviderKind.cs" Link="Model\MihomoProviderKind.cs" />
     <Compile Include="..\ClashSharp\Model\MihomoProxyGroup.cs" Link="Model\MihomoProxyGroup.cs" />
@@ -72,9 +76,13 @@
     <Compile Include="..\ClashSharp\Model\StartupConflictProcess.cs" Link="Model\StartupConflictProcess.cs" />
     <Compile Include="..\ClashSharp\Model\StartupConflictRepairResult.cs" Link="Model\StartupConflictRepairResult.cs" />
     <Compile Include="..\ClashSharp\Model\StartupConflictIssue.cs" Link="Model\StartupConflictIssue.cs" />
+    <Compile Include="..\ClashSharp\Model\RuntimeFailureDiagnostics.cs" Link="Model\RuntimeFailureDiagnostics.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Startup\StartupConflictSnapshot.cs" Link="Hosting\Startup\StartupConflictSnapshot.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.cs" Link="Service\AppSettingsService.cs" />
+    <Compile Include="..\ClashSharp\Service\AppSettingsService.Mutations.cs" Link="Service\AppSettingsService.Mutations.cs" />
     <Compile Include="..\ClashSharp\Service\ApplicationLifecycleService.cs" Link="Service\ApplicationLifecycleService.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageService.cs" Link="Service\ClashDataPackageService.cs" />
+    <Compile Include="..\ClashSharp\Service\ClashDataPackageService.Transaction.cs" Link="Service\ClashDataPackageService.Transaction.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageServiceFactory.cs" Link="Service\ClashDataPackageServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\AppDataMaintenanceService.cs" Link="Service\AppDataMaintenanceService.cs" />
     <Compile Include="..\ClashSharp\Service\AppDataPathService.cs" Link="Service\AppDataPathService.cs" />
@@ -90,6 +98,7 @@
     <Compile Include="..\ClashSharp\Service\RuntimeTrafficRateService.cs" Link="Service\RuntimeTrafficRateService.cs" />
     <Compile Include="..\ClashSharp\Service\IApplicationActionDispatcher.cs" Link="Service\IApplicationActionDispatcher.cs" />
     <Compile Include="..\ClashSharp\Service\LocalizationService.cs" Link="Service\LocalizationService.cs" />
+    <Compile Include="..\ClashSharp\Service\GitHubReleaseUpdateChecker.cs" Link="Service\GitHubReleaseUpdateChecker.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayServiceFactory.cs" Link="Service\MainlandChinaTextDisplayServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\MasterHeroStatusLayoutService.cs" Link="Service\MasterHeroStatusLayoutService.cs" />
@@ -108,17 +117,35 @@
     <Compile Include="..\ClashSharp\Service\RegionDisplayService.cs" Link="Service\RegionDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\RegionDisplayServiceFactory.cs" Link="Service\RegionDisplayServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoControllerClient.cs" Link="Service\MihomoControllerClient.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoControllerEndpoint.cs" Link="Service\MihomoControllerEndpoint.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoAppControllerTransport.cs" Link="Service\MihomoAppControllerTransport.cs" />
+    <Compile Include="..\ClashSharp\Service\WindowsTcpOwnerVerifier.cs" Link="Service\WindowsTcpOwnerVerifier.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoControllerServiceBroker.cs" Link="Service\MihomoControllerServiceBroker.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoConnectionService.cs" Link="Service\MihomoConnectionService.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoCoreService.cs" Link="Service\MihomoCoreService.cs" />
+    <Compile Include="..\ClashSharp\Service\SynchronousProcessOutputDrain.cs" Link="Service\SynchronousProcessOutputDrain.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoServiceManager.cs" Link="Service\MihomoServiceManager.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoServiceBinaryTrustValidator.cs" Link="Service\MihomoServiceBinaryTrustValidator.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoServiceManager.Ipc.cs" Link="Service\MihomoServiceManager.Ipc.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoServiceManager.Diagnostics.cs" Link="Service\MihomoServiceManager.Diagnostics.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoServiceManagerFactory.cs" Link="Service\MihomoServiceManagerFactory.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoServiceIpcClient.cs" Link="Service\MihomoServiceIpcClient.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoServicePipeServerIdentity.cs" Link="Service\MihomoServicePipeServerIdentity.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoServiceIpcEndpoint.cs" Link="Service\MihomoServiceIpcEndpoint.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoRuntimeConfigurationBuilder.cs" Link="Service\MihomoRuntimeConfigurationBuilder.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoYamlSemanticValidator.cs" Link="Service\MihomoYamlSemanticValidator.cs" />
+    <Compile Include="..\ClashSharp\Service\RuntimeConfigurationTransaction.cs" Link="Service\RuntimeConfigurationTransaction.cs" />
+    <Compile Include="..\ClashSharp\Service\CoreConfigurationService.RuntimeTransaction.cs" Link="Service\CoreConfigurationService.RuntimeTransaction.cs" />
+    <Compile Include="..\ClashSharp\Service\CoreConfigurationService.ProfileRuntimeTransaction.cs" Link="Service\CoreConfigurationService.ProfileRuntimeTransaction.cs" />
     <Compile Include="..\ClashSharp\Service\NetworkTakeoverService.cs" Link="Service\NetworkTakeoverService.cs" />
     <Compile Include="..\ClashSharp\Service\NetworkTakeoverServiceFactory.cs" Link="Service\NetworkTakeoverServiceFactory.cs" />
+    <Compile Include="..\ClashSharp\Service\NetworkTakeoverService.ProfileTransactions.cs" Link="Service\NetworkTakeoverService.ProfileTransactions.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogIds.cs" Link="Service\ProfileCatalogIds.cs" />
+    <Compile Include="..\ClashSharp\Service\ProfileCatalogMutationCoordinator.cs" Link="Service\ProfileCatalogMutationCoordinator.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.cs" Link="Service\ProfileCatalogService.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileImportGate.cs" Link="Service\ProfileImportGate.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogServiceFactory.cs" Link="Service\ProfileCatalogServiceFactory.cs" />
+    <Compile Include="..\ClashSharp\Service\ProfileSubscriptionScheduler.cs" Link="Service\ProfileSubscriptionScheduler.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyNodeCatalogService.cs" Link="Service\ProxyNodeCatalogService.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyRecoveryService.cs" Link="Service\ProxyRecoveryService.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyRecoveryServiceFactory.cs" Link="Service\ProxyRecoveryServiceFactory.cs" />
@@ -135,6 +162,9 @@
     <Compile Include="..\ClashSharp\Service\TrayMenuStateBuilder.cs" Link="Service\TrayMenuStateBuilder.cs" />
     <Compile Include="..\ClashSharp\Service\TrayStatusService.cs" Link="Service\TrayStatusService.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsNetworkDiagnosticService.cs" Link="Service\WindowsNetworkDiagnosticService.cs" />
+    <Compile Include="..\ClashSharp\Service\WindowsDiagnosticMutationJournal.cs" Link="Service\WindowsDiagnosticMutationJournal.cs" />
+    <Compile Include="..\ClashSharp\Service\WindowsProxyMutationJournal.cs" Link="Service\WindowsProxyMutationJournal.cs" />
+    <Compile Include="..\ClashSharp\Service\WindowsProxyOwnershipRestorer.cs" Link="Service\WindowsProxyOwnershipRestorer.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsProxyService.cs" Link="Service\WindowsProxyService.cs" />
     <Compile Include="..\ClashSharp\Strings\LocalizationResources.cs" Link="Strings\LocalizationResources.cs" />
     <Compile Include="..\ClashSharp\Strings\Catalogs\LocalizationResources.English.cs" Link="Strings\Catalogs\LocalizationResources.English.cs" />
@@ -149,6 +179,7 @@
     <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticStatus.cs" Link="ViewModel\SettingsDiagnosticStatus.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.cs" Link="ViewModel\SettingsViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ISettingsStore.cs" Link="ViewModel\ISettingsStore.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ISettingsDestructiveRuntimeScope.cs" Link="ViewModel\ISettingsDestructiveRuntimeScope.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsProxyInformation.cs" Link="ViewModel\SettingsProxyInformation.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsTrayFeatureDefinition.cs" Link="ViewModel\SettingsTrayFeatureDefinition.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ConnectionTestTargetResult.cs" Link="ViewModel\ConnectionTestTargetResult.cs" />
@@ -209,6 +240,7 @@
     <Compile Include="..\ClashSharp\ViewModel\IStatisticsStore.cs" Link="ViewModel\IStatisticsStore.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IStatisticsProfiles.cs" Link="ViewModel\IStatisticsProfiles.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IAboutCore.cs" Link="ViewModel\IAboutCore.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\IApplicationUpdateChecker.cs" Link="ViewModel\IApplicationUpdateChecker.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IUriLauncher.cs" Link="ViewModel\IUriLauncher.cs" />
     <Compile Include="..\ClashSharp\ViewModel\RulesViewModel.cs" Link="ViewModel\RulesViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\StatisticsViewModel.cs" Link="ViewModel\StatisticsViewModel.cs" />
@@ -225,6 +257,7 @@
     <Compile Include="..\ClashSharp\ViewModel\IPageLog.cs" Link="ViewModel\IPageLog.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IProfileManagementCatalog.cs" Link="ViewModel\IProfileManagementCatalog.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ISubscriptionLinkCatalog.cs" Link="ViewModel\ISubscriptionLinkCatalog.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SubscriptionLinkEditRequest.cs" Link="ViewModel\SubscriptionLinkEditRequest.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ILogManagementStore.cs" Link="ViewModel\ILogManagementStore.cs" />
     <Compile Include="..\ClashSharp\ViewModel\LogStorageSnapshot.cs" Link="ViewModel\LogStorageSnapshot.cs" />
     <Compile Include="..\ClashSharp\ViewModel\LogCleanupEstimate.cs" Link="ViewModel\LogCleanupEstimate.cs" />

@@ -36,6 +36,8 @@ internal sealed class CoreConfigurationSettingsAdapter(AppSettingsService settin
     public int MixedPort => settings.MixedPort;
 
     public string ActiveProfileId => settings.ActiveProfileId;
+
+    public string MihomoControllerSecret => settings.MihomoControllerSecret;
 }
 
 internal sealed class CoreConfigurationProfileMetricsAdapter : ICoreConfigurationProfileMetrics

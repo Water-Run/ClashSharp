@@ -1,8 +1,8 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Model;
-using Microsoft.Win32;
 
 namespace ClashSharp.Service;
 
@@ -16,19 +16,22 @@ public sealed class WindowsProxyService
 {
     /// <summary>Shared singleton instance created once at type initialization.</summary>
     /// <value>A non-null <see cref="WindowsProxyService"/> instance.</value>
-    public static WindowsProxyService Instance { get; } = new();
+    public static WindowsProxyService Instance { get; } = new(
+        new WindowsProxyRegistryStore(NotifyProxySettingsChanged),
+        new WindowsProxyMutationJournalFileStore(
+            System.IO.Path.Combine(
+                AppDataPathService.ResolveLocalDataDirectory(),
+                "WindowsProxyMutationJournal.json")),
+        () => AppSettingsService.Instance.MixedPort);
 
     /// <summary>Synchronization object guarding registry writes for this service lifetime.</summary>
     private readonly object _syncLock = new();
 
-    /// <summary>Registry path for current-user Windows Internet proxy settings.</summary>
-    private const string InternetSettingsKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
+    private readonly IWindowsProxyRegistryStore _registry;
 
-    /// <summary>Registry value name for the Windows proxy enabled switch.</summary>
-    private const string ProxyEnableValueName = "ProxyEnable";
+    private readonly IWindowsProxyMutationJournalStore _mutationJournal;
 
-    /// <summary>Registry value name for the Windows proxy server string.</summary>
-    private const string ProxyServerValueName = "ProxyServer";
+    private readonly Func<int> _getManagedPort;
 
     /// <summary>WinINet option notifying consumers that settings changed.</summary>
     private const int InternetOptionSettingsChanged = 39;
@@ -37,8 +40,14 @@ public sealed class WindowsProxyService
     private const int InternetOptionRefresh = 37;
 
     /// <summary>Initializes a new Windows proxy service instance.</summary>
-    private WindowsProxyService()
+    internal WindowsProxyService(
+        IWindowsProxyRegistryStore registry,
+        IWindowsProxyMutationJournalStore mutationJournal,
+        Func<int>? getManagedPort = null)
     {
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+        _mutationJournal = mutationJournal ?? throw new ArgumentNullException(nameof(mutationJournal));
+        _getManagedPort = getManagedPort ?? (() => -1);
     }
 
     /// <summary>Reads the current user's Windows proxy state from the registry.</summary>
@@ -46,10 +55,10 @@ public sealed class WindowsProxyService
     /// <exception cref="InvalidOperationException">The Windows Internet Settings registry key cannot be opened.</exception>
     public WindowsProxyState GetCurrentState()
     {
-        using RegistryKey key = OpenInternetSettingsKey(writable: false);
-        bool isEnabled = key.GetValue(ProxyEnableValueName) is int enabledValue && enabledValue != 0;
-        string proxyServer = key.GetValue(ProxyServerValueName) as string ?? string.Empty;
-        return new WindowsProxyState(isEnabled, proxyServer);
+        WindowsProxyRegistrySnapshot snapshot = _registry.Read();
+        return new WindowsProxyState(
+            snapshot.ProxyEnable.Exists && snapshot.ProxyEnable.Value != 0,
+            snapshot.ProxyServer.Value ?? string.Empty);
     }
 
     /// <summary>Enables Windows system proxy for the current user with <paramref name="proxyServer"/>.</summary>
@@ -69,34 +78,123 @@ public sealed class WindowsProxyService
 
         lock (_syncLock)
         {
-            using RegistryKey key = OpenInternetSettingsKey(writable: true);
-            key.SetValue(ProxyServerValueName, proxyServer, RegistryValueKind.String);
-            key.SetValue(ProxyEnableValueName, 1, RegistryValueKind.DWord);
-            NotifyProxySettingsChanged();
+            WindowsProxyRegistrySnapshot current = _registry.Read();
+            WindowsProxyMutationJournal? existing = _mutationJournal.Read();
+            WindowsProxyRegistrySnapshot baseline = existing is null
+                ? current
+                : WindowsProxyOwnershipRestorer.MergeOwnedRestore(current, existing);
+            WindowsProxyRegistrySnapshot applied = current with
+            {
+                ProxyEnable = new WindowsProxyDwordValue(true, 1),
+                ProxyServer = new WindowsProxyStringValue(true, proxyServer, WindowsProxyStringKind.String),
+                ProxyOverride = new WindowsProxyStringValue(true, "<local>", WindowsProxyStringKind.String),
+                AutoConfigUrl = new WindowsProxyStringValue(false, null, WindowsProxyStringKind.None),
+            };
+            WindowsProxyMutationJournal pendingJournal = new(
+                WindowsProxyMutationJournal.CurrentSchemaVersion,
+                baseline,
+                current,
+                WindowsProxyMutationPhase.Applying,
+                applied);
+
+            // The recovery proof must reach durable storage before the first registry field changes.
+            _mutationJournal.Write(pendingJournal);
+            try
+            {
+                _registry.Write(applied);
+                if (_registry.Read() != applied)
+                {
+                    throw new InvalidOperationException("Windows proxy settings did not match the journaled pending tuple after apply.");
+                }
+
+                _mutationJournal.Write(pendingJournal with
+                {
+                    Applied = applied,
+                    Phase = WindowsProxyMutationPhase.Applied,
+                    PendingApplied = null,
+                });
+            }
+            catch (Exception applyFailure) when (!ExceptionGraphClassifier.IsProcessFatal(applyFailure))
+            {
+                try
+                {
+                    RestoreOwnedFields(pendingJournal);
+                    _mutationJournal.Clear();
+                }
+                catch (Exception rollbackFailure) when (!ExceptionGraphClassifier.IsProcessFatal(rollbackFailure))
+                {
+                    throw new AggregateException(
+                        "Windows proxy apply failed and its owned fields could not be restored.",
+                        applyFailure,
+                        rollbackFailure);
+                }
+
+                throw;
+            }
         }
     }
 
-    /// <summary>Disables Windows system proxy for the current user while preserving the stored server string.</summary>
+    /// <summary>Releases Clash#-owned WinINet fields and restores their captured baseline values.</summary>
     /// <exception cref="InvalidOperationException">The Windows Internet Settings registry key cannot be opened.</exception>
     /// <exception cref="Win32Exception">Windows rejects the proxy change notification.</exception>
     public void DisableProxy()
     {
         lock (_syncLock)
         {
-            using RegistryKey key = OpenInternetSettingsKey(writable: true);
-            key.SetValue(ProxyEnableValueName, 0, RegistryValueKind.DWord);
-            NotifyProxySettingsChanged();
+            WindowsProxyRegistrySnapshot current = _registry.Read();
+            WindowsProxyMutationJournal? journal = _mutationJournal.Read();
+            if (journal is not null)
+            {
+                WindowsProxyOwnershipRestorer.Restore(_registry, _mutationJournal);
+                return;
+            }
+
+            if (IsLegacyManagedLoopbackProxy(current))
+            {
+                _registry.Write(current with
+                {
+                    ProxyEnable = new WindowsProxyDwordValue(true, 0),
+                });
+            }
         }
     }
 
-    /// <summary>Opens the current user's Windows Internet Settings registry key.</summary>
-    /// <param name="writable">True to request write access; false to request read-only access.</param>
-    /// <returns>An opened registry key owned by the caller.</returns>
-    /// <exception cref="InvalidOperationException">The registry key cannot be opened.</exception>
-    private static RegistryKey OpenInternetSettingsKey(bool writable)
+    /// <summary>
+    /// Restores only state proven by a durable ownership journal. Emergency crash recovery must
+    /// not use the legacy loopback heuristic because an unowned same-port proxy is ambiguous.
+    /// </summary>
+    internal void RestoreOwnedProxy()
     {
-        return Registry.CurrentUser.OpenSubKey(InternetSettingsKeyPath, writable)
-            ?? throw new InvalidOperationException("Windows Internet Settings registry key could not be opened.");
+        lock (_syncLock)
+        {
+            WindowsProxyOwnershipRestorer.Restore(_registry, _mutationJournal);
+        }
+    }
+
+    /// <summary>Restores every field that still equals the corresponding Clash#-applied value.</summary>
+    private void RestoreOwnedFields(WindowsProxyMutationJournal journal)
+    {
+        WindowsProxyRegistrySnapshot current = _registry.Read();
+        _registry.Write(WindowsProxyOwnershipRestorer.MergeOwnedRestore(current, journal));
+    }
+
+    /// <summary>Recognizes only the exact current-port loopback endpoint used by pre-journal Clash# versions.</summary>
+    private bool IsLegacyManagedLoopbackProxy(WindowsProxyRegistrySnapshot snapshot)
+    {
+        if (!snapshot.ProxyEnable.Exists
+            || snapshot.ProxyEnable.Value == 0
+            || !snapshot.ProxyServer.Exists
+            || !Uri.TryCreate("http://" + snapshot.ProxyServer.Value, UriKind.Absolute, out Uri? uri))
+        {
+            return false;
+        }
+
+        return StringComparer.OrdinalIgnoreCase.Equals(uri.Host, "127.0.0.1")
+            && uri.Port == _getManagedPort()
+            && string.Equals(uri.AbsolutePath, "/", StringComparison.Ordinal)
+            && string.IsNullOrEmpty(uri.Query)
+            && string.IsNullOrEmpty(uri.Fragment)
+            && string.IsNullOrEmpty(uri.UserInfo);
     }
 
     /// <summary>Notifies WinINet consumers that Windows proxy settings changed.</summary>
