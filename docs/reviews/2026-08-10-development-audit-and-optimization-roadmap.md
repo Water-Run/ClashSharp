@@ -4,7 +4,7 @@
 - 审查基线：`main@8a69c27`
 - 审查范围：解决方案结构、MVVM、WinUI 3、编码规范、现代 C#、LINQ、文档注释、主体与 Installer 权限边界、构建发布、安全、测试
 - 审查方式：源码与配置静态审计、Release 构建、格式验证、.NET/Rust 测试、分析器基线、依赖与漏洞检查
-- 当前状态：这是后续开发的权威待办汇总；P0-01 已于 2026-08-24 完成源码与程序集边界收口，其余整改、正式签名 Installer 和 Windows 真机矩阵尚未验收
+- 当前状态：这是后续开发的权威待办汇总；P0-01 与 MVVM 组合根/页面工厂/类型安全导航核心节点已于 2026-08-24 完成，其余页面绑定、全局 Window 获取、Installer 安全整改、正式签名和 Windows 真机矩阵尚未验收
 
 ## 1. 总体结论
 
@@ -14,7 +14,7 @@ ClashSharp 已具备可工作的分层、较强的运行时所有权保护、大
 
 1. **产品只有一个用户可见 Installer 和一个主体应用。** 当前用户可见入口符合方向，且 P0-01 已移除主体内的服务注册部署、配置和删除权限；Installer 的版本、身份、payload 与完整事务 authority 仍需继续收口。
 2. **所有人写声明都有高质量文档。** C# 仍有 7,454 个声明点完全缺失文档，Installer Rust 约有 392 个声明缺失；现有文档也存在参数、返回值、异常和线程语义缺口。
-3. **MVVM 与组合根完全收敛。** 分层方向正确，但 Presentation 仍存在静态 Service Locator，导航、页面生命周期和部分系统服务获取仍散落。
+3. **MVVM 与组合根继续收敛。** Presentation 静态 Service Locator、参数less 页面激活和分散的 `Frame.Navigate(Type)` 已清除；全局 Window/XamlRoot 获取、Connections 并发所有权、绑定命令化、`x:Bind` 和可访问性仍待完成。
 4. **Installer 可以作为安全发布入口。** 防降级、身份单一来源、payload provenance、TOCTOU、子进程超时、证书/卸载事务及真实 E2E 门禁仍需完成。
 5. **分析器和现代化改造有明确语义。** 项目已经大量使用 C# 14 和 LINQ；后续应修复真正问题，不能机械追求 LINQ、`ConfigureAwait(false)`、`internal` 或空洞注释。
 
@@ -51,7 +51,7 @@ ClashSharp-Installer.exe                 唯一用户可见安装/修复/升级/
 | `ClashSharp.Core` | 领域模型、稳定基础契约 | 依赖方向正确 |
 | `ClashSharp.Application` | 用例、协调、端口接口 | 方向正确，仍可继续承接主体业务编排 |
 | `ClashSharp.Infrastructure` | SQLite、文件、进程、网络等适配器 | 方向正确，需继续吸收主体中的 IO 实现 |
-| `ClashSharp` | WinUI 3、ViewModel、组合根及部分遗留服务 | 主体过重，服务注册权限已移除，静态单例等 MVVM 债务仍存在 |
+| `ClashSharp` | WinUI 3、ViewModel、组合根及部分遗留服务 | 主体过重，服务注册权限和 Presentation 静态定位器已移除；全局 Window 获取、绑定与大类拆分仍待完成 |
 | `ClashSharp.MihomoService` | LocalSystem 内部服务宿主 | 内部组件，必须仅由 Installer 部署 |
 | `ClashSharp.RecoveryWatchdog` | 同用户一次性恢复助手 | 内部组件，必须纳入包内容契约 |
 | 四个 `*Probe` | 跨进程测试探针 | 测试专用，必须不可发布/不可打包 |
@@ -373,21 +373,30 @@ cargo doc --manifest-path ClashSharp/Installer/Cargo.toml --no-deps --document-p
 
 ### 7.1 组合根与依赖注入
 
-- [ ] 删除 `Presentation/Composition/LegacyPageServiceBridge.cs` 的静态 `.Instance` 解析。
-- [ ] AppHost 成为唯一 composition root，负责创建 window scope、page factory 和 navigation service。
-- [ ] View/Page 只接收窄依赖，不暴露 `IServiceProvider`。
-- [ ] 用 `IPageFactory` 或受控 route descriptor 解决 `Frame.Navigate(Type)` 对参数less page 的依赖。
+- [x] 删除 `Presentation/Composition/LegacyPageServiceBridge.cs` 的静态 `.Instance` 解析。
+- [x] AppHost 成为唯一交互式运行时 composition root，负责创建单窗口生命周期、page factory 和 navigation service；Host 前仅保留显式依赖的最小首帧启动壳。
+- [x] View/Page 只接收窄依赖，不暴露 `IServiceProvider`。
+- [x] 用 `IPageFactory` 和 `ShellRoute` 解决 `Frame.Navigate(Type)` 对参数less page 的依赖。
 - [ ] 把主体 `Service/` 中纯业务编排迁入 Application，把 SQLite、文件、网络、进程和系统 API 适配迁入 Infrastructure。
 - [ ] 注入 initiating Window/XamlRoot/dispatcher，逐步移除全局 `App.MainWindow` 获取。
 
 ### 7.2 导航与页面生命周期
 
-- [ ] 集中维护 route、back stack、NavigationView selection 和 NavigationFailed。
-- [ ] 页面不再直接跳转其他页面；由 navigation service 接收语义化目标。
-- [ ] `Frame.Navigate` 返回 false 或 NavigationFailed 时提供稳定诊断。
-- [ ] About 页面使用 PageLoadSession，离页取消网络更新检查。
+- [x] 集中维护 route、back stack、NavigationView selection 和页面工厂激活失败诊断。
+- [x] 页面不再直接跳转其他页面；由 navigation service 接收语义化目标。
+- [x] 已移除 `Frame.Navigate` 激活路径；页面工厂异常由 shell 统一写入稳定诊断。
+- [x] About 页面使用 PageLoadSession，离页取消网络更新检查。
 - [ ] Connections 将 latest-wins refresh session 与 serialized mutation gate 分离。
 - [ ] 页面事件和命令使用明确 owner；Loaded/Unloaded 必须对称且可重复。
+
+**核心节点关闭证据（2026-08-24）**
+
+- `ClashSharpAppHostFactory` 统一注册 `PageCompositionContext`、`ShellNavigationService`、`IPageFactory` 与 `MainWindowComposition.Runtime`；页面和 ViewModel 均不接收 `IServiceProvider`。
+- 删除 `LegacyPageServiceBridge`、Trigger 静态 active compatibility factory 及其启动激活步骤；Presentation/View/ViewModel 中 `*Service.Instance` 架构债务清零并由测试禁止回归。
+- 11 个可导航页面全部移除公开参数less 构造；`ApplicationPageFactory` 以 `ShellRoute` 显式创建页面并注入页面级窄依赖。
+- `MainWindow` 集中拥有 route 解析、back stack、NavigationView selection、页面激活和失败诊断；MasterControl、Statistics、Triggers、Logs 不再直接调用 `Frame.Navigate/GoBack`。
+- About 的 update/core 探测改由 `PageLoadSession` 管理，Loaded/Unloaded 对称取消。
+- 无系统 mutation 验证：Release x64 构建 0 warning / 0 error；.NET 2,208 项通过、0 失败、0 跳过；未启动 App、Installer、Service 或 mihomo。
 
 ### 7.3 绑定、命令和可访问性
 

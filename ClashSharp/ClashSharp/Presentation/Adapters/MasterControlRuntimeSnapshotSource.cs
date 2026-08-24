@@ -1,6 +1,6 @@
 using System;
-using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Model;
+using ClashSharp.Presentation.Composition;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 

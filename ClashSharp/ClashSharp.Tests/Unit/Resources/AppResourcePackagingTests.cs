@@ -226,15 +226,24 @@ public sealed class AppResourcePackagingTests
             "Presentation",
             "Composition",
             "AboutPageComposition.cs");
+        string pageFactoryPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Navigation",
+            "ApplicationPageFactory.cs");
         string settingsXaml = File.ReadAllText(settingsXamlPath);
         string aboutXaml = File.ReadAllText(aboutXamlPath);
         string aboutCode = File.ReadAllText(aboutCodePath);
         string composition = File.ReadAllText(compositionPath);
+        string pageFactory = File.ReadAllText(pageFactoryPath);
 
         Assert.DoesNotContain("x:Name=\"ProxyInformationTitleText\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ProxyInformationButton\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("OpenProxyInformationButton_Click", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains(": this(AboutPageComposition.Create())", aboutCode, StringComparison.Ordinal);
+        Assert.Contains("internal About(AboutPageComposition.Dependencies dependencies)", aboutCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("public About()", aboutCode, StringComparison.Ordinal);
+        Assert.Contains("ShellRoute.About => new View.About(", pageFactory, StringComparison.Ordinal);
         Assert.Contains("_readProxyInformation()", aboutCode, StringComparison.Ordinal);
         Assert.Contains("ReadProxyInformation", composition, StringComparison.Ordinal);
         Assert.Contains("new ProxyInformation(", composition, StringComparison.Ordinal);
@@ -1600,7 +1609,7 @@ public sealed class AppResourcePackagingTests
         string settingsViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "SettingsViewModel.cs");
         string appSettingsPath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.cs");
         string triggerViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "TriggersViewModel.cs");
-        string triggerFactoryPath = FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Compatibility", "TriggerPresentationCompatibilityFactory.cs");
+        string triggerFactoryPath = FindSourceFile("ClashSharp", "ClashSharp", "Presentation", "Composition", "TriggerPresentationFactory.cs");
         string triggerViewPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml");
         string triggerCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Triggers.xaml.cs");
 
@@ -2309,16 +2318,16 @@ public sealed class AppResourcePackagingTests
     public void MainWindowXaml_ExposesTriggersAboveStatistics()
     {
         string mainWindowXamlPath = Path.Combine(AppContext.BaseDirectory, "MainWindow.xaml");
-        string mainWindowCompositionPath = FindSourceFile(
+        string pageFactoryPath = FindSourceFile(
             "ClashSharp",
             "ClashSharp",
             "Presentation",
-            "Composition",
-            "MainWindowComposition.cs");
+            "Navigation",
+            "ApplicationPageFactory.cs");
         string mainWindowViewModelPath = FindSourceFile("ClashSharp", "ClashSharp", "ViewModel", "MainWindowViewModel.cs");
 
         string mainWindowXaml = File.ReadAllText(mainWindowXamlPath);
-        string mainWindowComposition = File.ReadAllText(mainWindowCompositionPath);
+        string pageFactory = File.ReadAllText(pageFactoryPath);
         string mainWindowViewModel = File.ReadAllText(mainWindowViewModelPath);
 
         int triggersIndex = mainWindowXaml.IndexOf("x:Name=\"NavTriggersItem\"", StringComparison.Ordinal);
@@ -2326,7 +2335,7 @@ public sealed class AppResourcePackagingTests
         Assert.True(triggersIndex >= 0, "Triggers navigation item is missing.");
         Assert.True(statisticsIndex > triggersIndex, "Triggers must appear above statistics.");
         Assert.Contains("Content=\"{Binding TriggersText}\"", mainWindowXaml, StringComparison.Ordinal);
-        Assert.Contains("[\"Triggers\"] = typeof(View.Triggers)", mainWindowComposition, StringComparison.Ordinal);
+        Assert.Contains("ShellRoute.Triggers => new View.Triggers(", pageFactory, StringComparison.Ordinal);
         Assert.Contains("public string TriggersText", mainWindowViewModel, StringComparison.Ordinal);
     }
 
@@ -2890,7 +2899,8 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("x:Name=\"BackButton\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("BackButton_Click", logsXaml, StringComparison.Ordinal);
-        Assert.Contains("Frame.CanGoBack", logsCode, StringComparison.Ordinal);
+        Assert.Contains("_navigateBack();", logsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Frame.", logsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the logs page exposes search, filters, and complete visible log columns.</summary>

@@ -11,16 +11,17 @@ public sealed class TriggerPresentationArchitectureTests
         "ClashSharp",
         "ClashSharp");
 
-    /// <summary>Verifies WinUI activation delegates dependency lookup to the page composition root.</summary>
+    /// <summary>Verifies the page receives explicit state and semantic navigation.</summary>
     [Fact]
     public void TriggersView_ReceivesDependenciesWithoutResolvingHostOrServices()
     {
         string source = ReadApplicationSource("View", "Triggers.xaml.cs");
 
-        Assert.Contains(": this(TriggersPageComposition.Create())", source, StringComparison.Ordinal);
         Assert.Contains("internal Triggers(TriggersPageDependencies dependencies)", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("TriggerPresentationCompatibilityFactory", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("RequireActive(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("public Triggers()", source, StringComparison.Ordinal);
+        Assert.Contains("_openLogs = dependencies.OpenLogs;", source, StringComparison.Ordinal);
+        Assert.Contains("_openLogs();", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Frame.Navigate", source, StringComparison.Ordinal);
         Assert.DoesNotContain(".Instance", source, StringComparison.Ordinal);
         Assert.DoesNotContain("using ClashSharp.Service;", source, StringComparison.Ordinal);
         Assert.DoesNotContain("using ClashSharp.Hosting.Compatibility;", source, StringComparison.Ordinal);
@@ -31,24 +32,31 @@ public sealed class TriggerPresentationArchitectureTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the temporary host lookup is isolated to the documented composition boundary.</summary>
+    /// <summary>Verifies trigger presentation is an injected AppHost-owned factory.</summary>
     [Fact]
-    public void TriggersComposition_OwnsTheCompatibilityLookup()
+    public void TriggersComposition_UsesInjectedHostOwnedFactory()
     {
         string composition = ReadApplicationSource(
             "Presentation",
             "Composition",
             "TriggersPageComposition.cs");
-        string compatibilityFactory = ReadApplicationSource(
-            "AppHost",
-            "Compatibility",
-            "TriggerPresentationCompatibilityFactory.cs");
+        string factory = ReadApplicationSource(
+            "Presentation",
+            "Composition",
+            "TriggerPresentationFactory.cs");
+        string host = ReadApplicationSource("AppHost", "ClashSharpAppHostFactory.cs");
 
-        Assert.Contains("TriggerPresentationCompatibilityFactory", composition, StringComparison.Ordinal);
-        Assert.Contains(".RequireActive()", composition, StringComparison.Ordinal);
-        Assert.Contains("LegacyPageServiceBridge.CreateErrorSink()", composition, StringComparison.Ordinal);
-        Assert.DoesNotContain("LocalizationService.Instance", compatibilityFactory, StringComparison.Ordinal);
-        Assert.DoesNotContain("ApplicationErrorSink.CreateDefault", compatibilityFactory, StringComparison.Ordinal);
+        Assert.Contains("context.TriggerPresentation.CreateViewModel(", composition, StringComparison.Ordinal);
+        Assert.Contains("context.ErrorSink", composition, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<TriggerPresentationFactory>();", host, StringComparison.Ordinal);
+        Assert.Contains("ITriggerDefinitionStore store", factory, StringComparison.Ordinal);
+        Assert.DoesNotContain("static TriggerPresentationFactory", factory, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Instance", factory, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(
+            ApplicationRoot,
+            "AppHost",
+            "Startup",
+            "TriggerPresentationStartupStep.cs")));
     }
 
     /// <summary>Verifies trigger presentation files retain one matching primary type per source file.</summary>
@@ -68,8 +76,8 @@ public sealed class TriggerPresentationArchitectureTests
             "ViewModel/TriggerTaskItemViewModel.cs",
             "Presentation/Composition/TriggersPageComposition.cs",
             "Presentation/Composition/TriggersPageDependencies.cs",
-            "AppHost/Compatibility/TriggerPresentationCompatibilityFactory.cs",
-            "AppHost/Compatibility/TriggerPresentationSummary.cs",
+            "Presentation/Composition/TriggerPresentationFactory.cs",
+            "Presentation/Composition/TriggerPresentationSummary.cs",
         ];
         Regex typeDeclaration = new(
             @"^\s*(?:public|internal)\s+(?:(?:static|sealed|readonly|partial)\s+)*(?:class|interface|record(?:\s+struct)?|struct|enum)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)",

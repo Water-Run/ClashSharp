@@ -7,14 +7,15 @@ namespace ClashSharp.Presentation.Composition;
 /// <summary>Builds the explicit dependency graph for the rules page.</summary>
 internal static class RulesPageComposition
 {
-    /// <summary>Creates dependencies from the current application-owned services.</summary>
-    public static Dependencies Create()
+    /// <summary>Creates dependencies from the AppHost-owned page context.</summary>
+    public static Dependencies Create(PageCompositionContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
         RulesViewModel viewModel = new(
-            new DisplayPageLocalizationAdapter(LegacyPageServiceBridge.Localization),
-            new RuleCatalogAdapter(LegacyPageServiceBridge.Rules),
-            LegacyPageServiceBridge.CreateErrorSink(),
-            new ModelDisplayMapper(LegacyPageServiceBridge.MainlandChinaTextDisplay.Apply));
+            new DisplayPageLocalizationAdapter(context.Localization),
+            new RuleCatalogAdapter(context.Rules),
+            context.ErrorSink,
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));
         return new Dependencies(viewModel);
     }
 

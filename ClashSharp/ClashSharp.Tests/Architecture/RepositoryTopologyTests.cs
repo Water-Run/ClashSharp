@@ -108,7 +108,8 @@ public sealed class RepositoryTopologyTests
 
         Assert.Contains("ApplicationBootstrapper", app, StringComparison.Ordinal);
         Assert.Contains("WindowsPrimaryInstanceBootstrap", app, StringComparison.Ordinal);
-        Assert.DoesNotContain("new MainWindow", app, StringComparison.Ordinal);
+        Assert.Contains("private MainWindow CreateMainWindow()", app, StringComparison.Ordinal);
+        Assert.Contains("MainWindowComposition.CreateStartupShell(", app, StringComparison.Ordinal);
         Assert.DoesNotContain("Task.Run(ApplyStartupProxyRecovery", app, StringComparison.Ordinal);
         Assert.DoesNotContain("TriggerService.Instance.Start", app, StringComparison.Ordinal);
         Assert.DoesNotContain("AppSettingsAuditLogService.Instance.Start", app, StringComparison.Ordinal);
@@ -152,18 +153,10 @@ public sealed class RepositoryTopologyTests
         Assert.Contains("ConnectionSamplingService sampling", startup, StringComparison.Ordinal);
     }
 
-    /// <summary>Freezes presentation service-locator debt by file so migration can only reduce it.</summary>
+    /// <summary>Prevents presentation service-locator debt from returning after the AppHost cutover.</summary>
     [Fact]
     public void PresentationServiceLocatorDebt_DoesNotIncrease()
     {
-        Dictionary<string, int> maximumOccurrencesByFile = new(StringComparer.Ordinal)
-        {
-            ["Presentation/Composition/LegacyPageServiceBridge.cs"] = 11,
-            ["Presentation/Composition/MainWindowComposition.cs"] = 5,
-            ["Presentation/Composition/MasterControlPageComposition.cs"] = 14,
-            ["Presentation/Composition/SettingsPageComposition.cs"] = 13,
-            ["Presentation/Composition/StartupGuideComposition.cs"] = 6,
-        };
         string presentationRoot = Path.Combine(RepositoryRoot, "ClashSharp", "ClashSharp");
         Dictionary<string, int> actualOccurrencesByFile = Directory
             .EnumerateFiles(presentationRoot, "*.cs", SearchOption.AllDirectories)
@@ -186,18 +179,7 @@ public sealed class RepositoryTopologyTests
             .Where(static item => item.Count > 0)
             .ToDictionary(static item => item.RelativePath, static item => item.Count, StringComparer.Ordinal);
 
-        Assert.True(
-            actualOccurrencesByFile.Values.Sum() <= 49,
-            "Presentation service-locator debt exceeded the 49-reference mid-refactor baseline.");
-        Assert.All(actualOccurrencesByFile, occurrence =>
-        {
-            Assert.True(
-                maximumOccurrencesByFile.TryGetValue(occurrence.Key, out int maximum),
-                $"New presentation service-locator file: {occurrence.Key}");
-            Assert.True(
-                occurrence.Value <= maximum,
-                $"Presentation service-locator debt increased in {occurrence.Key}: {occurrence.Value} > {maximum}.");
-        });
+        Assert.Empty(actualOccurrencesByFile);
     }
 
     /// <summary>Verifies startup steps receive dependencies from the host composition root.</summary>

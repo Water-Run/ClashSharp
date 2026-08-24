@@ -19,18 +19,15 @@ public sealed partial class Triggers : Page
 {
     private readonly TriggersViewModel _viewModel;
     private readonly IApplicationErrorSink _errorSink;
+    private readonly Action _openLogs;
     private CancellationTokenSource? _pageLifetime;
-
-    public Triggers()
-        : this(TriggersPageComposition.Create())
-    {
-    }
 
     internal Triggers(TriggersPageDependencies dependencies)
     {
         ArgumentNullException.ThrowIfNull(dependencies);
         _viewModel = dependencies.ViewModel;
         _errorSink = dependencies.ErrorSink;
+        _openLogs = dependencies.OpenLogs;
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
@@ -71,7 +68,7 @@ public sealed partial class Triggers : Page
 
     private void OpenTriggerLogsButton_Click(object sender, RoutedEventArgs args)
     {
-        Frame.Navigate(typeof(Logs), "Trigger");
+        _openLogs();
     }
 
     private async void EnableAllTriggersButton_Click(object sender, RoutedEventArgs args)

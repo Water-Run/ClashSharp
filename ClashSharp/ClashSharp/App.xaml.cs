@@ -7,6 +7,7 @@ using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Hosting;
 using ClashSharp.Hosting.Startup;
+using ClashSharp.Presentation.Composition;
 using ClashSharp.Service;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -129,7 +130,7 @@ public partial class App : Microsoft.UI.Xaml.Application
 
             if (_mainWindow is null)
             {
-                MainWindow window = new(_lifetimeRequests);
+                MainWindow window = CreateMainWindow();
                 AttachMainWindow(window);
                 window.Activate();
             }
@@ -166,7 +167,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                 "ClashSharp recovery watchdog was unavailable; next-start proxy recovery remains active.");
         }
 
-        MainWindow window = new(_lifetimeRequests);
+        MainWindow window = CreateMainWindow();
         AttachMainWindow(window);
         FirstFrameRenderingGate firstFrame = new();
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendered += OnRendered;
@@ -214,11 +215,20 @@ public partial class App : Microsoft.UI.Xaml.Application
         MainWindowStartupContext context)
     {
         window.CompleteStartup(
+            context.Runtime,
             context.TriggerEvents,
             context.Actions,
             context.Lifecycle,
             context.TrayCommands,
             context.StartupConflicts);
+    }
+
+    private MainWindow CreateMainWindow()
+    {
+        MainWindowComposition composition = MainWindowComposition.CreateStartupShell(
+            AppSettingsService.Instance,
+            LocalizationService.Instance);
+        return new MainWindow(_lifetimeRequests, composition);
     }
 
     private void ShowStartupFailure(string diagnostic)

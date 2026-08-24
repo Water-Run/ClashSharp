@@ -1,6 +1,5 @@
 using System;
 using ClashSharp.Presentation.Adapters;
-using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Composition;
@@ -8,26 +7,25 @@ namespace ClashSharp.Presentation.Composition;
 /// <summary>Builds the explicit dependency graph for the profiles page.</summary>
 internal static class ProfilesPageComposition
 {
-    /// <summary>Creates dependencies from the current application-owned services.</summary>
-    public static Dependencies Create()
+    /// <summary>Creates dependencies from the AppHost-owned page context.</summary>
+    public static Dependencies Create(PageCompositionContext context)
     {
-        LocalizationService localization = LegacyPageServiceBridge.Localization;
-        LogStorageService logStorage = LegacyPageServiceBridge.LogStorage;
+        ArgumentNullException.ThrowIfNull(context);
         ProfilesViewModel viewModel = new(
-            localization.GetString,
-            new ProfileManagementCatalogAdapter(LegacyPageServiceBridge.Profiles),
-            new PageLogAdapter(logStorage),
-            () => LegacyPageServiceBridge.Settings.ActiveProfileId,
-            LegacyPageServiceBridge.CreateErrorSink(),
-            new ModelDisplayMapper(LegacyPageServiceBridge.MainlandChinaTextDisplay.Apply));
+            context.Localization.GetString,
+            new ProfileManagementCatalogAdapter(context.Profiles),
+            new PageLogAdapter(context.LogStorage),
+            () => context.Settings.ActiveProfileId,
+            context.ErrorSink,
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));
 
         return new Dependencies(
             viewModel,
-            localization.GetString,
-            () => logStorage.AppendLog(
+            context.Localization.GetString,
+            () => context.LogStorage.AppendLog(
                 "Warning",
                 "Profiles",
-                localization.GetString("Profiles.Log.FilePickerNoMainWindow"),
+                context.Localization.GetString("Profiles.Log.FilePickerNoMainWindow"),
                 null));
     }
 

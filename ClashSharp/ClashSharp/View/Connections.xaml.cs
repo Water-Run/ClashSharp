@@ -25,12 +25,6 @@ public sealed partial class Connections : Page
     /// <summary>Owns the live WebSocket only while this page is visible.</summary>
     private readonly PageLoadSession _streamSession = new();
 
-    /// <summary>Initializes the connections page and its view model.</summary>
-    public Connections()
-        : this(ConnectionsPageComposition.Create())
-    {
-    }
-
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Connections(ConnectionsPageComposition.Dependencies dependencies)
     {

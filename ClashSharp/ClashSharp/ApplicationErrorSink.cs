@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Presentation;
-using ClashSharp.Service;
 
 namespace ClashSharp;
 
@@ -13,20 +12,12 @@ internal sealed class ApplicationErrorSink : IApplicationErrorSink
     private readonly Action<string, string, string, string?> _appendLog;
     private readonly Func<string, string> _getString;
 
-    private ApplicationErrorSink(
+    public ApplicationErrorSink(
         Action<string, string, string, string?> appendLog,
         Func<string, string> getString)
     {
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
-    }
-
-    /// <summary>Creates the production sink without exposing another service singleton.</summary>
-    public static IApplicationErrorSink CreateDefault()
-    {
-        return new ApplicationErrorSink(
-            LogStorageService.Instance.AppendLog,
-            LocalizationService.Instance.GetString);
     }
 
     /// <inheritdoc />

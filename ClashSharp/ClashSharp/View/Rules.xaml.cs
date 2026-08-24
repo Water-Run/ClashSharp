@@ -20,12 +20,6 @@ public sealed partial class Rules : Page
 
     private readonly PageLoadSession _loadSession = new();
 
-    /// <summary>Initializes the rules page and its view model.</summary>
-    public Rules()
-        : this(RulesPageComposition.Create())
-    {
-    }
-
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Rules(RulesPageComposition.Dependencies dependencies)
     {

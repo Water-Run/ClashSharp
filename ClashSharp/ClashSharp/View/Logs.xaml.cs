@@ -9,7 +9,6 @@ using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Navigation;
 
 namespace ClashSharp.View;
 
@@ -40,13 +39,9 @@ public sealed partial class Logs : Page
 
     private readonly IApplicationErrorSink _errorSink;
 
-    private CancellationTokenSource _pageLifetime = new();
+    private readonly Action _navigateBack;
 
-    /// <summary>Initializes the logs page without reading persistent log storage.</summary>
-    public Logs()
-        : this(LogsPageComposition.Create())
-    {
-    }
+    private CancellationTokenSource _pageLifetime = new();
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Logs(LogsPageComposition.Dependencies dependencies)
@@ -55,6 +50,8 @@ public sealed partial class Logs : Page
         _viewModel = dependencies.ViewModel;
         _getString = dependencies.GetString;
         _errorSink = dependencies.ErrorSink;
+        _navigateBack = dependencies.NavigateBack;
+        _viewModel.SetSourceFilter(dependencies.InitialSourceFilter);
         InitializeComponent();
         DataContext = _viewModel;
     }
@@ -84,12 +81,6 @@ public sealed partial class Logs : Page
         _loadSession.Cancel();
         _runtimeLogStreamSession.Cancel();
         _cleanupPreviewSession.Cancel();
-    }
-
-    protected override void OnNavigatedTo(NavigationEventArgs e)
-    {
-        base.OnNavigatedTo(e);
-        _viewModel.SetSourceFilter(e.Parameter as string);
     }
 
     private async void LogSearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -158,16 +149,10 @@ public sealed partial class Logs : Page
                 pageToken));
     }
 
-    /// <summary>Navigates back to the previous page, falling back to statistics.</summary>
+    /// <summary>Requests semantic back navigation from the owning shell.</summary>
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {
-        if (Frame.CanGoBack)
-        {
-            Frame.GoBack();
-            return;
-        }
-
-        Frame.Navigate(typeof(Statistics));
+        _navigateBack();
     }
 
     /// <summary>Handles cleanup entry clicks by showing available cleanup modes and their parameters.</summary>

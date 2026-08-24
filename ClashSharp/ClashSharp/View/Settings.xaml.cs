@@ -52,12 +52,6 @@ public sealed partial class Settings : Page
     private CancellationTokenSource? _pageLifetime = new();
     private bool _isViewModelSubscribed;
 
-    /// <summary>Initializes the settings page and applies localized text.</summary>
-    public Settings()
-        : this(SettingsPageComposition.Create())
-    {
-    }
-
     internal Settings(SettingsPageDependencies dependencies)
     {
         ArgumentNullException.ThrowIfNull(dependencies);

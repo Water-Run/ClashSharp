@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
+using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -24,11 +25,7 @@ public sealed partial class About : Page
 
     private readonly Func<AboutPageComposition.ProxyInformation> _readProxyInformation;
 
-    /// <summary>Initializes the about page and its view model.</summary>
-    public About()
-        : this(AboutPageComposition.Create())
-    {
-    }
+    private readonly PageLoadSession _loadSession = new();
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal About(AboutPageComposition.Dependencies dependencies)
@@ -40,14 +37,21 @@ public sealed partial class About : Page
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     /// <summary>Starts mihomo status loading when the page enters the visual tree.</summary>
     /// <param name="sender">Loaded page instance. Not null.</param>
     /// <param name="e">Routed event arguments. Not null.</param>
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _viewModel.LoadCommand.Execute(null);
+        await _loadSession.RunAsync(_viewModel.LoadAsync);
+    }
+
+    /// <summary>Cancels update and core probes when the page leaves the visual tree.</summary>
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _loadSession.Cancel();
     }
 
     /// <summary>Opens local proxy and core path information in a dialog.</summary>

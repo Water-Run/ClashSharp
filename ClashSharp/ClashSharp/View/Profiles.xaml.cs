@@ -37,12 +37,6 @@ public sealed partial class Profiles : Page
 
     private readonly Action _reportFilePickerUnavailable;
 
-    /// <summary>Initializes the profiles page and its view model.</summary>
-    public Profiles()
-        : this(ProfilesPageComposition.Create())
-    {
-    }
-
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Profiles(ProfilesPageComposition.Dependencies dependencies)
     {

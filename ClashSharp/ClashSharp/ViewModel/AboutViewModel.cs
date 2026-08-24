@@ -59,10 +59,6 @@ internal sealed class AboutViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(errorSink);
         MihomoStatusText = _localization.GetString("About.Mihomo.Loading");
         UpdateStatusText = _localization.GetString("About.Update.Checking");
-        LoadCommand = new AsyncRelayCommand(
-            LoadAsync,
-            errorSink,
-            operationName: "about-load");
         OpenGitHubCommand = new AsyncRelayCommand(
             (_, token) => _launcher.LaunchAsync(GitHubUri, token),
             errorSink,
@@ -205,10 +201,6 @@ internal sealed class AboutViewModel : ObservableObject
         private set => SetProperty(ref _updateStatusText, value);
     }
 
-    /// <summary>Gets the command that loads mihomo status.</summary>
-    /// <value>Asynchronous load command.</value>
-    public AsyncRelayCommand LoadCommand { get; }
-
     /// <summary>Gets the command that opens the project repository.</summary>
     /// <value>Asynchronous URI launch command.</value>
     public AsyncRelayCommand OpenGitHubCommand { get; }
@@ -225,7 +217,7 @@ internal sealed class AboutViewModel : ObservableObject
     /// <returns>A task that completes after status text is updated.</returns>
     /// <remarks>
     /// Cancellation semantics: Passed through to the core provider.
-    /// Thread / reentrancy: UI callers should use <see cref="LoadCommand"/> to prevent reentrancy.
+    /// Thread / reentrancy: The owning page serializes visits through its page-load session.
     /// </remarks>
     public async Task LoadAsync(CancellationToken cancellationToken)
     {

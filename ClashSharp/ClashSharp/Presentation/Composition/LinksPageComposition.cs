@@ -1,6 +1,5 @@
 using System;
 using ClashSharp.Presentation.Adapters;
-using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Composition;
@@ -8,18 +7,18 @@ namespace ClashSharp.Presentation.Composition;
 /// <summary>Builds the explicit dependency graph for the subscription-links page.</summary>
 internal static class LinksPageComposition
 {
-    /// <summary>Creates dependencies from the current application-owned services.</summary>
-    public static Dependencies Create()
+    /// <summary>Creates dependencies from the AppHost-owned page context.</summary>
+    public static Dependencies Create(PageCompositionContext context)
     {
-        LocalizationService localization = LegacyPageServiceBridge.Localization;
+        ArgumentNullException.ThrowIfNull(context);
         LinksViewModel viewModel = new(
-            localization.GetString,
-            new SubscriptionLinkCatalogAdapter(LegacyPageServiceBridge.Profiles),
-            new PageLogAdapter(LegacyPageServiceBridge.LogStorage),
-            LegacyPageServiceBridge.CreateErrorSink(),
-            new ModelDisplayMapper(LegacyPageServiceBridge.MainlandChinaTextDisplay.Apply));
+            context.Localization.GetString,
+            new SubscriptionLinkCatalogAdapter(context.Profiles),
+            new PageLogAdapter(context.LogStorage),
+            context.ErrorSink,
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));
 
-        return new Dependencies(viewModel, localization.GetString);
+        return new Dependencies(viewModel, context.Localization.GetString);
     }
 
     /// <summary>Injected dependencies used by the subscription-links view.</summary>

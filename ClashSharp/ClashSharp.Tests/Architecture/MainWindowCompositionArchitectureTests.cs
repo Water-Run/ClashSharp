@@ -18,11 +18,13 @@ public sealed class MainWindowCompositionArchitectureTests
         Assert.DoesNotContain(".Instance", source, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies runtime service graphs are constructed only by the shell composition root.</summary>
+    /// <summary>Verifies AppHost owns the interactive shell graph and the window consumes it.</summary>
     [Fact]
-    public void MainWindow_RuntimeObjectsComeFromCompositionRoot()
+    public void MainWindow_RuntimeObjectsComeFromAppHostCompositionRoot()
     {
         string window = ReadApplicationSource("MainWindow.xaml.cs");
+        string app = ReadApplicationSource("App.xaml.cs");
+        string host = ReadApplicationSource("AppHost", "ClashSharpAppHostFactory.cs");
         string composition = ReadApplicationSource(
             "Presentation",
             "Composition",
@@ -39,10 +41,36 @@ public sealed class MainWindowCompositionArchitectureTests
         Assert.All(
             forbiddenWindowConstructions,
             construction => Assert.DoesNotContain(construction, window, StringComparison.Ordinal));
-        Assert.Contains("MainWindowComposition.Create()", window, StringComparison.Ordinal);
-        Assert.Contains("_composition.CreateRuntime()", window, StringComparison.Ordinal);
+        Assert.Contains("MainWindowComposition.CreateStartupShell(", app, StringComparison.Ordinal);
+        Assert.Contains("MainWindowComposition.Runtime runtime", window, StringComparison.Ordinal);
+        Assert.DoesNotContain("_composition.CreateRuntime()", window, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<PageCompositionContext>();", host, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ShellNavigationService>();", host, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IPageFactory, ApplicationPageFactory>();", host, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<MainWindowComposition.Runtime>();", host, StringComparison.Ordinal);
         Assert.Contains("new MainWindowViewModel(", composition, StringComparison.Ordinal);
         Assert.Contains("new SystemTrayService(", composition, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies route activation is factory-owned and no page uses framework type activation.</summary>
+    [Fact]
+    public void ShellNavigation_UsesTypedRoutesAndExplicitPageFactory()
+    {
+        string window = ReadApplicationSource("MainWindow.xaml.cs");
+        string pageFactory = ReadApplicationSource(
+            "Presentation",
+            "Navigation",
+            "ApplicationPageFactory.cs");
+        string viewModel = ReadApplicationSource("ViewModel", "MainWindowViewModel.cs");
+
+        Assert.Contains("ShellNavigationRequest request", window, StringComparison.Ordinal);
+        Assert.Contains("runtime.PageFactory.Create(", window, StringComparison.Ordinal);
+        Assert.Contains("ContentFrame.Content = page;", window, StringComparison.Ordinal);
+        Assert.Contains("_navigationHistory", window, StringComparison.Ordinal);
+        Assert.DoesNotContain("Frame.Navigate", window, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolvePageType", viewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("IServiceProvider", pageFactory, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Instance", pageFactory, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the shell composition root remains in the presentation composition namespace.</summary>
@@ -70,17 +98,17 @@ public sealed class MainWindowCompositionArchitectureTests
     {
         string windowXaml = ReadApplicationSource("MainWindow.xaml");
         string windowCode = ReadApplicationSource("MainWindow.xaml.cs");
-        string composition = ReadApplicationSource(
+        string pageFactory = ReadApplicationSource(
             "Presentation",
-            "Composition",
-            "MainWindowComposition.cs");
+            "Navigation",
+            "ApplicationPageFactory.cs");
         string tray = ReadApplicationSource("Service", "TrayMenuStateBuilder.cs");
         string pageXaml = ReadApplicationSource("View", "Connections.xaml");
         string pageCode = ReadApplicationSource("View", "Connections.xaml.cs");
 
         Assert.Contains("Tag=\"Connections\"", windowXaml, StringComparison.Ordinal);
-        Assert.Contains("[\"Connections\"] = typeof(View.Connections)", composition, StringComparison.Ordinal);
-        Assert.Contains("\"Connections\" => NavConnectionsItem", windowCode, StringComparison.Ordinal);
+        Assert.Contains("ShellRoute.Connections => new View.Connections(", pageFactory, StringComparison.Ordinal);
+        Assert.Contains("ShellRoute.Connections => NavConnectionsItem", windowCode, StringComparison.Ordinal);
         Assert.Contains("new(\"Connections\", getString(\"Nav.Connections\"))", tray, StringComparison.Ordinal);
         Assert.Contains("Loaded=\"Page_Loaded\"", pageXaml, StringComparison.Ordinal);
         Assert.Contains("Unloaded=\"Page_Unloaded\"", pageXaml, StringComparison.Ordinal);

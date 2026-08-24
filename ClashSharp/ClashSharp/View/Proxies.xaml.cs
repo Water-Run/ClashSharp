@@ -22,12 +22,6 @@ public sealed partial class Proxies : Page
 
     private readonly PageLoadSession _selectionSession = new();
 
-    /// <summary>Initializes the proxies page and its view model.</summary>
-    public Proxies()
-        : this(ProxiesPageComposition.Create())
-    {
-    }
-
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Proxies(ProxiesPageComposition.Dependencies dependencies)
     {

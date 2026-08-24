@@ -4,12 +4,15 @@ using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Hosting.Startup;
 using ClashSharp.Infrastructure.Recovery;
 using ClashSharp.Infrastructure.Triggers;
+using ClashSharp.Presentation.Composition;
+using ClashSharp.Presentation.Navigation;
 using ClashSharp.Service;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -54,6 +57,9 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(_ => AppSettingsAuditLogService.Instance);
             services.AddSingleton(_ => LocalizationService.Instance);
             services.AddSingleton(_ => LogStorageService.Instance);
+            services.AddSingleton<IApplicationErrorSink>(provider => new ApplicationErrorSink(
+                provider.GetRequiredService<LogStorageService>().AppendLog,
+                provider.GetRequiredService<LocalizationService>().GetString));
             services.AddSingleton(_ => ConnectionSamplingService.Instance);
             services.AddSingleton(provider =>
             {
@@ -64,13 +70,23 @@ internal static class ClashSharpAppHostFactory
             });
             services.AddSingleton(_ => StartupLaunchServiceFactory.CreateDefault());
             services.AddSingleton(_ => MihomoConnectionService.Instance);
+            services.AddSingleton(_ => MihomoControllerClient.Instance);
             services.AddSingleton(_ => NetworkTakeoverService.Instance);
             services.AddSingleton(_ => WindowsProxyService.Instance);
+            services.AddSingleton(_ => WindowsNetworkDiagnosticService.Instance);
             services.AddSingleton(_ => MihomoCoreService.Instance);
             services.AddSingleton(_ => CoreConfigurationService.Instance);
             services.AddSingleton(_ => MihomoServiceManager.Instance);
             services.AddSingleton(_ => ProxyRecoveryService.Instance);
             services.AddSingleton(_ => NotificationService.Instance);
+            services.AddSingleton(_ => MainlandChinaTextDisplayService.Instance);
+            services.AddSingleton(_ => ProxyLatencyService.Instance);
+            services.AddSingleton(_ => ProxyNodeCatalogService.Instance);
+            services.AddSingleton(_ => RuleCatalogService.Instance);
+            services.AddSingleton(_ => RestartRequiredStateService.Instance);
+            services.AddSingleton(_ => RuntimeTrafficRateService.Instance);
+            services.AddSingleton(_ => StartupRestoreFallbackService.Instance);
+            services.AddSingleton(_ => TrayStatusService.Instance);
             services.AddSingleton<IIdempotentTriggerNotificationSink>(provider =>
                 provider.GetRequiredService<NotificationService>());
             services.AddSingleton(_ => TriggerRuntimeEventHub.Instance);
@@ -103,16 +119,17 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<MutationAdmissionBarrier>(),
                 provider.GetRequiredService<NetworkStateCoordinator>(),
                 provider.GetRequiredService<ConnectionSamplingService>(),
-                MihomoConnectionService.Instance,
-                NotificationService.Instance,
-                TriggerRuntimeEventHub.Instance,
-                LogStorageService.Instance.AppendLog,
-                LocalizationService.Instance.GetString,
+                provider.GetRequiredService<MihomoConnectionService>(),
+                provider.GetRequiredService<NotificationService>(),
+                provider.GetRequiredService<TriggerRuntimeEventHub>(),
+                provider.GetRequiredService<LogStorageService>().AppendLog,
+                provider.GetRequiredService<LocalizationService>().GetString,
                 provider.GetRequiredService<ApplicationLifecycleService>(),
                 provider.GetRequiredService<IApplicationShutdownCoordinator>(),
                 provider.GetRequiredService<StartupLaunchService>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
+            services.AddSingleton<SettingsRuntimeMutationAdapter>();
             services.AddSingleton(_ => new SqliteTriggerRepository(triggerDatabasePath));
             services.AddSingleton<ITriggerRepository>(provider =>
                 provider.GetRequiredService<SqliteTriggerRepository>());
@@ -140,8 +157,10 @@ internal static class ClashSharpAppHostFactory
             {
                 TimeProvider timeProvider = provider.GetRequiredService<TimeProvider>();
                 return new TriggerContextProviderAdapter(
-                    new SqliteTriggerTrafficContextSource(LogStorageService.Instance.DatabasePath),
-                    new RuntimeTriggerContextSource(RuntimeTrafficRateService.Instance),
+                    new SqliteTriggerTrafficContextSource(
+                        provider.GetRequiredService<LogStorageService>().DatabasePath),
+                    new RuntimeTriggerContextSource(
+                        provider.GetRequiredService<RuntimeTrafficRateService>()),
                     timeProvider,
                     timeProvider.GetUtcNow());
             });
@@ -191,7 +210,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<TriggerStartupInitializer>();
             services.AddSingleton<ITriggerStartupInitializer>(provider =>
                 provider.GetRequiredService<TriggerStartupInitializer>());
-            services.AddSingleton<TriggerPresentationCompatibilityFactory>();
+            services.AddSingleton<TriggerPresentationFactory>();
             services.AddSingleton<IRuntimeParticipant>(provider =>
                 provider.GetRequiredService<TriggerScheduler>());
             services.AddSingleton<IRuntimeParticipant>(provider =>
@@ -223,6 +242,13 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(provider => TrayCommandServiceFactory.CreateDefault(
                 provider.GetRequiredService<ApplicationActionService>()));
             services.AddSingleton(_ => StartupConflictDetectionService.Instance);
+            services.AddSingleton<StartupGuideComposition>();
+            services.AddSingleton<PageCompositionContext>();
+            services.AddSingleton<ShellNavigationService>();
+            services.AddSingleton<IShellNavigationService>(provider =>
+                provider.GetRequiredService<ShellNavigationService>());
+            services.AddSingleton<IPageFactory, ApplicationPageFactory>();
+            services.AddSingleton<MainWindowComposition.Runtime>();
             services.AddSingleton<StartupConflictSnapshot>();
             services.AddSingleton<IApplicationStartupCoordinator, StartupCoordinator>();
             services.AddSingleton<IStartupStep, DataPackageRecoveryStartupStep>();
@@ -238,7 +264,6 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IStartupStep, StartupConflictProbeStep>();
             services.AddSingleton<IStartupStep, StartupNetworkBehaviorStep>();
             services.AddSingleton<IStartupStep, TriggerSupervisorStartupStep>();
-            services.AddSingleton<IStartupStep, TriggerPresentationStartupStep>();
             services.AddSingleton<IStartupStep, WindowShellStartupStep>();
             services.AddSingleton<IStartupStep, ConnectionSamplingStartupStep>();
             services.AddSingleton<IStartupStep, ProfileSubscriptionSchedulerStartupStep>();

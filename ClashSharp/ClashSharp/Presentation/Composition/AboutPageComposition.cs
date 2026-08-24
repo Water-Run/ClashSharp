@@ -12,33 +12,30 @@ internal static class AboutPageComposition
 {
     private static readonly HttpClient ReleaseHttpClient = GitHubReleaseUpdateChecker.CreateHttpClient();
 
-    /// <summary>Creates dependencies from the current application-owned services.</summary>
-    public static Dependencies Create()
+    /// <summary>Creates dependencies from the AppHost-owned page context.</summary>
+    public static Dependencies Create(PageCompositionContext context)
     {
-        LocalizationService localization = LegacyPageServiceBridge.Localization;
-        AppSettingsService settings = LegacyPageServiceBridge.Settings;
-        CoreConfigurationService coreConfiguration = LegacyPageServiceBridge.CoreConfiguration;
-        MihomoCoreService core = LegacyPageServiceBridge.MihomoCore;
+        ArgumentNullException.ThrowIfNull(context);
         string applicationVersion = typeof(AboutPageComposition).Assembly.GetName().Version?.ToString()
             ?? "1.0.0.0";
         AboutViewModel viewModel = new(
-            new DisplayPageLocalizationAdapter(localization),
-            new AboutCoreAdapter(core),
+            new DisplayPageLocalizationAdapter(context.Localization),
+            new AboutCoreAdapter(context.MihomoCore),
             new GitHubReleaseUpdateChecker(ReleaseHttpClient, applicationVersion),
             new WindowsUriLauncher(),
-            LegacyPageServiceBridge.CreateErrorSink());
+            context.ErrorSink);
 
         return new Dependencies(
             viewModel,
-            localization.GetString,
+            context.Localization.GetString,
             () =>
             {
-                CoreConfigurationState configuration = coreConfiguration.GetState();
+                CoreConfigurationState configuration = context.CoreConfiguration.GetState();
                 return new ProxyInformation(
-                    settings.MixedPort,
+                    context.Settings.MixedPort,
                     configuration.ConfigPath,
-                    core.IsBinaryAvailable,
-                    core.BinaryPath);
+                    context.MihomoCore.IsBinaryAvailable,
+                    context.MihomoCore.BinaryPath);
             });
     }
 

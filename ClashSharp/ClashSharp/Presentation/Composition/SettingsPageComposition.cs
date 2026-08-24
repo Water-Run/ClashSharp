@@ -50,30 +50,26 @@ internal interface ISettingsPageOperations
         CancellationToken cancellationToken);
 }
 
-/// <summary>Legacy composition boundary for the settings page.</summary>
-/// <remarks>
-/// Process-wide legacy services are adapted only here. The view receives explicit dependencies so
-/// a host-owned page factory can replace this boundary without changing visual code or view-model
-/// behavior.
-/// </remarks>
+/// <summary>Builds the explicit dependency graph for the settings page.</summary>
 internal static class SettingsPageComposition
 {
-    /// <summary>Creates one settings-page dependency graph from application-owned services.</summary>
-    public static SettingsPageDependencies Create()
+    /// <summary>Creates one settings-page dependency graph from the AppHost-owned page context.</summary>
+    public static SettingsPageDependencies Create(PageCompositionContext context)
     {
-        AppSettingsService settings = AppSettingsService.Instance;
-        LocalizationService localization = LocalizationService.Instance;
-        LogStorageService logStorage = LogStorageService.Instance;
-        CoreConfigurationService coreConfiguration = CoreConfigurationService.Instance;
-        MihomoCoreService mihomoCore = MihomoCoreService.Instance;
-        ApplicationActionService applicationActions = ApplicationActionService.Instance;
-        ApplicationLifecycleService applicationLifecycle = ApplicationLifecycleService.Instance;
-        IApplicationErrorSink errorSink = ApplicationErrorSink.CreateDefault();
-        SettingsRuntimeMutationAdapter runtimeMutations = SettingsRuntimeMutationAdapter.CreateDefault();
-        StartupRestoreFallbackService startupRestoreFallback = StartupRestoreFallbackService.Instance;
+        ArgumentNullException.ThrowIfNull(context);
+        AppSettingsService settings = context.Settings;
+        LocalizationService localization = context.Localization;
+        LogStorageService logStorage = context.LogStorage;
+        CoreConfigurationService coreConfiguration = context.CoreConfiguration;
+        MihomoCoreService mihomoCore = context.MihomoCore;
+        ApplicationActionService applicationActions = context.ApplicationActions;
+        ApplicationLifecycleService applicationLifecycle = context.ApplicationLifecycle;
+        IApplicationErrorSink errorSink = context.ErrorSink;
+        SettingsRuntimeMutationAdapter runtimeMutations = context.SettingsRuntimeMutations;
+        StartupRestoreFallbackService startupRestoreFallback = context.StartupRestoreFallback;
         HttpStatusProbe connectionProbe = new(TimeSpan.FromSeconds(4));
         SettingsDiagnosticsViewModel diagnosticsViewModel = new(
-            new WindowsDiagnosticsClient(WindowsNetworkDiagnosticService.Instance),
+            new WindowsDiagnosticsClient(context.WindowsDiagnostics),
             new DiagnosticsLog(logStorage),
             localization.GetString);
         SettingsViewModel viewModel = new(
@@ -99,12 +95,12 @@ internal static class SettingsPageComposition
             startupRestoreFallback.RemoveRegistration,
             connectionProbe.GetStatusCodeAsync,
             diagnosticsViewModel,
-            new MihomoServiceControllerAdapter(MihomoServiceManager.Instance),
+            new MihomoServiceControllerAdapter(context.MihomoService),
             AppThemeService.ApplyAccentColor,
             clearAllDataAsync: applicationActions.ClearAllDataAndRestartAsync,
-            checkStartupConflictsAsync: StartupConflictDetectionService.Instance.CheckConflictsAsync,
+            checkStartupConflictsAsync: context.StartupConflicts.CheckConflictsAsync,
             isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending,
-            notifyConnectionTestTimeout: NotificationService.Instance.NotifyConnectionTestTimeout,
+            notifyConnectionTestTimeout: context.Notifications.NotifyConnectionTestTimeout,
             appendLog: logStorage.AppendLog,
             restartConnectionSamplingAsync: runtimeMutations.RestartConnectionSamplingAsync,
             applyLaunchAtStartupAsync: runtimeMutations.ApplyLaunchAtStartupAsync,
@@ -119,19 +115,20 @@ internal static class SettingsPageComposition
             settings,
             localization,
             logStorage,
-            ClashDataPackageService.Instance,
+            context.DataPackages,
             runtimeMutations,
             applicationLifecycle,
+            context.Profiles,
             errorSink);
 
         return new SettingsPageDependencies(
             viewModel,
             localization.GetString,
-            RestartRequiredStateService.Instance.SetRestartPending,
+            context.RestartState.SetRestartPending,
             AppThemeService.ParseAccentColorOrDefault,
             AppThemeService.FormatAccentColor,
             errorSink,
-            StartupGuideComposition.Create(errorSink),
+            context.StartupGuide.Create(errorSink),
             operations);
     }
 }
@@ -144,6 +141,7 @@ internal sealed class SettingsPageOperations(
     ClashDataPackageService dataPackages,
     SettingsRuntimeMutationAdapter runtimeMutations,
     ApplicationLifecycleService applicationLifecycle,
+    ProfileCatalogService profiles,
     IApplicationErrorSink errorSink) : ISettingsPageOperations
 {
     /// <inheritdoc />
@@ -184,7 +182,7 @@ internal sealed class SettingsPageOperations(
         {
             receipt = await runtimeMutation.BeginImportAsync(packagePath, cancellationToken)
                 .ConfigureAwait(false);
-            LegacyPageServiceBridge.Profiles.ResetAfterDataDeletion();
+            profiles.ResetAfterDataDeletion();
             ExternalSettingsSnapshot imported = CaptureExternalSettingsSnapshot();
             await ApplyExternalSettingsSnapshotAsync(imported, runtimeMutation)
                 .ConfigureAwait(false);
@@ -219,7 +217,7 @@ internal sealed class SettingsPageOperations(
             {
                 try
                 {
-                    LegacyPageServiceBridge.Profiles.ResetAfterDataDeletion();
+                    profiles.ResetAfterDataDeletion();
                     await ApplyExternalSettingsSnapshotAsync(baseline, runtimeMutation)
                         .ConfigureAwait(false);
                 }

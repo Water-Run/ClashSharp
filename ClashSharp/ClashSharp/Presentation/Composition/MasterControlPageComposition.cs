@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Presentation;
-using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.Presentation.Dialogs;
@@ -21,33 +20,33 @@ internal sealed record MasterControlPageDependencies(
     IStartupGuidePresenter StartupGuide,
     Func<Microsoft.UI.Xaml.XamlRoot, CancellationToken, Task> ShowStartupConflicts,
     Func<IReadOnlyList<ProxyNode>> GetProxyNodes,
-    Func<IReadOnlyList<ProxyNode>, CancellationToken, Task<IReadOnlyList<ProxyNode>>> TestProxyLatencyAsync);
+    Func<IReadOnlyList<ProxyNode>, CancellationToken, Task<IReadOnlyList<ProxyNode>>> TestProxyLatencyAsync,
+    Action OpenSettings);
 
-/// <summary>Legacy composition boundary for the master-control page.</summary>
-/// <remarks>
-/// This is the only master-page location allowed to adapt process-wide legacy services. The view
-/// receives explicit dependencies so a future host-owned page factory can replace this boundary
-/// without changing visual code or the view model.
-/// </remarks>
+/// <summary>Builds the explicit dependency graph for the master-control page.</summary>
 internal static class MasterControlPageComposition
 {
-    /// <summary>Creates one page dependency graph from the current application-owned services.</summary>
-    public static MasterControlPageDependencies Create()
+    /// <summary>Creates one page dependency graph from the AppHost-owned page context.</summary>
+    public static MasterControlPageDependencies Create(
+        PageCompositionContext context,
+        Action openSettings)
     {
-        AppSettingsService settings = AppSettingsService.Instance;
-        LocalizationService localization = LocalizationService.Instance;
-        ApplicationActionService applicationActions = ApplicationActionService.Instance;
-        StartupConflictDetectionService conflictDetection = StartupConflictDetectionService.Instance;
-        ProxyNodeCatalogService proxyNodes = ProxyNodeCatalogService.Instance;
-        ProxyLatencyService proxyLatency = ProxyLatencyService.Instance;
-        CoreConfigurationService coreConfiguration = CoreConfigurationService.Instance;
-        StartupRestoreFallbackService startupRestoreFallback = StartupRestoreFallbackService.Instance;
-        ProfileCatalogService profileCatalog = ProfileCatalogService.Instance;
-        LogStorageService logStorage = LogStorageService.Instance;
-        MihomoCoreService mihomoCore = MihomoCoreService.Instance;
-        MihomoServiceManager mihomoServiceManager = MihomoServiceManager.Instance;
-        RuntimeTrafficRateService runtimeTrafficRate = RuntimeTrafficRateService.Instance;
-        IApplicationErrorSink errorSink = ApplicationErrorSink.CreateDefault();
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(openSettings);
+        AppSettingsService settings = context.Settings;
+        LocalizationService localization = context.Localization;
+        ApplicationActionService applicationActions = context.ApplicationActions;
+        StartupConflictDetectionService conflictDetection = context.StartupConflicts;
+        ProxyNodeCatalogService proxyNodes = context.ProxyNodes;
+        ProxyLatencyService proxyLatency = context.ProxyLatency;
+        CoreConfigurationService coreConfiguration = context.CoreConfiguration;
+        StartupRestoreFallbackService startupRestoreFallback = context.StartupRestoreFallback;
+        ProfileCatalogService profileCatalog = context.Profiles;
+        LogStorageService logStorage = context.LogStorage;
+        MihomoCoreService mihomoCore = context.MihomoCore;
+        MihomoServiceManager mihomoServiceManager = context.MihomoService;
+        RuntimeTrafficRateService runtimeTrafficRate = context.RuntimeTraffic;
+        IApplicationErrorSink errorSink = context.ErrorSink;
         IMasterControlRuntimeSnapshotSource runtimeSnapshotSource = new MasterControlRuntimeSnapshotSource(
             () => settings.ActiveProfileId,
             coreConfiguration.GetState,
@@ -62,7 +61,7 @@ internal static class MasterControlPageComposition
             mihomoServiceManager.GetLatestStatus,
             startupRestoreFallback.GetStatus,
             runtimeTrafficRate.GetLatestSnapshot,
-            () => TriggerPresentationCompatibilityFactory.RequireActive().GetSummary(),
+            context.TriggerPresentation.GetSummary,
             GetWorkingSetBytes,
             () => mihomoCore.IsRunning && !mihomoCore.HasOwnershipFault,
             () => settings.TransparentProxyEnabled
@@ -71,14 +70,14 @@ internal static class MasterControlPageComposition
         MasterControlViewModel viewModel = new(
             new MasterControlLocalizationAdapter(localization),
             new MasterControlCoreAdapter(mihomoCore),
-            new MasterControlWindowsProxyAdapter(WindowsProxyService.Instance),
+            new MasterControlWindowsProxyAdapter(context.WindowsProxy),
             new MasterControlSettingsAdapter(settings),
             new MasterControlTakeoverAdapter(applicationActions),
             new MasterControlLogAdapter(logStorage),
             new MasterInfoTileLayoutService(settings),
             new MasterHeroStatusLayoutService(settings),
             errorSink,
-            new MasterControlTrayStatusAdapter(TrayStatusService.Instance),
+            new MasterControlTrayStatusAdapter(context.TrayStatus),
             new MasterControlRuntimeAdapter(runtimeSnapshotSource),
             new MasterControlActionsAdapter(applicationActions),
             mode => applicationActions.PublishProxyModeAppliedAsync(mode, CancellationToken.None));
@@ -87,7 +86,7 @@ internal static class MasterControlPageComposition
             viewModel,
             localization.GetString,
             errorSink,
-            StartupGuideComposition.Create(errorSink),
+            context.StartupGuide.Create(errorSink),
             async (xamlRoot, cancellationToken) =>
             {
                 IReadOnlyList<StartupConflictIssue> issues = await conflictDetection
@@ -101,7 +100,8 @@ internal static class MasterControlPageComposition
                     cancellationToken);
             },
             proxyNodes.GetNodes,
-            proxyLatency.TestNodesAsync);
+            proxyLatency.TestNodesAsync,
+            openSettings);
     }
 
     private static long GetWorkingSetBytes()

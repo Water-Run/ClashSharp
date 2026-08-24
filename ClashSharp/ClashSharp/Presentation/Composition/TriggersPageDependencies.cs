@@ -9,13 +9,17 @@ internal sealed class TriggersPageDependencies
 {
     public TriggersPageDependencies(
         TriggersViewModel viewModel,
-        IApplicationErrorSink errorSink)
+        IApplicationErrorSink errorSink,
+        Action openLogs)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
+        OpenLogs = openLogs ?? throw new ArgumentNullException(nameof(openLogs));
     }
 
     public TriggersViewModel ViewModel { get; }
 
     public IApplicationErrorSink ErrorSink { get; }
+
+    public Action OpenLogs { get; }
 }

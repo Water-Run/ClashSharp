@@ -1,11 +1,10 @@
 using System;
-using System.Collections.Generic;
 
 namespace ClashSharp.ViewModel;
 
 /// <summary>Bindable view model for the main application shell.</summary>
 /// <remarks>
-/// Invariants: Navigation labels are non-null after construction and page resolution uses the injected immutable map.
+/// Invariants: Navigation labels are non-null after construction.
 /// Thread safety: Not thread-safe; intended for UI-thread shell binding.
 /// Side effects: Subscribes to localization change notifications until disposed.
 /// </remarks>
@@ -16,9 +15,6 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>Restart-required state source used by the settings navigation marker.</summary>
     private readonly IShellRestartState _restartState;
-
-    /// <summary>Navigation tag to page-type mapping.</summary>
-    private readonly IReadOnlyDictionary<string, Type> _pageTypes;
 
     /// <summary>Backing field for <see cref="MasterControlText"/>.</summary>
     private string _masterControlText = string.Empty;
@@ -53,17 +49,15 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Backing field for <see cref="SettingsText"/>.</summary>
     private string _settingsText = string.Empty;
 
-    /// <summary>Initializes a shell view model with localization and page mapping dependencies.</summary>
+    /// <summary>Initializes a shell view model with localization dependencies.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
-    /// <param name="pageTypes">Navigation tag to page-type mapping. Must not be null.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="localization"/> or <paramref name="pageTypes"/> is null.</exception>
+    /// <param name="restartState">Optional restart-required state source.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="localization"/> is null.</exception>
     public MainWindowViewModel(
         IShellLocalization localization,
-        IReadOnlyDictionary<string, Type> pageTypes,
         IShellRestartState? restartState = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
-        _pageTypes = pageTypes ?? throw new ArgumentNullException(nameof(pageTypes));
         _restartState = restartState ?? NoShellRestartState.Instance;
         _localization.LanguageChanged += OnLanguageChanged;
         _restartState.RestartPendingChanged += OnRestartPendingChanged;
@@ -156,16 +150,6 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         get => _settingsText;
         private set => SetProperty(ref _settingsText, value);
-    }
-
-    /// <summary>Resolves a navigation tag to a page type.</summary>
-    /// <param name="tag">Navigation item tag. Must not be null.</param>
-    /// <returns>The configured page type when the tag is known; otherwise null.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="tag"/> is null.</exception>
-    public Type? ResolvePageType(string tag)
-    {
-        ArgumentNullException.ThrowIfNull(tag);
-        return _pageTypes.TryGetValue(tag, out Type? pageType) ? pageType : null;
     }
 
     /// <summary>Unsubscribes from localization notifications.</summary>

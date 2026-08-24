@@ -29,12 +29,6 @@ public sealed partial class Links : Page
 
     private readonly Func<string, string> _getString;
 
-    /// <summary>Initializes the links page and its view model.</summary>
-    public Links()
-        : this(LinksPageComposition.Create())
-    {
-    }
-
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Links(LinksPageComposition.Dependencies dependencies)
     {

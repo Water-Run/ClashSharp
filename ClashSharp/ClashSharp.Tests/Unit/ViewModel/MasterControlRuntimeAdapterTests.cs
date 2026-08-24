@@ -31,7 +31,7 @@ using RuntimeUnavailableException =
     ClashSharpUi::ClashSharp.ViewModel.MasterControlRuntimeUnavailableException;
 using StartupRestoreFallbackStatus = ClashSharpUi::ClashSharp.Model.StartupRestoreFallbackStatus;
 using TriggerPresentationSummary =
-    ClashSharpUi::ClashSharp.Hosting.Compatibility.TriggerPresentationSummary;
+    ClashSharpUi::ClashSharp.Presentation.Composition.TriggerPresentationSummary;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
 

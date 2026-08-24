@@ -100,7 +100,7 @@ public sealed class DialogPresentationArchitectureTests
         Assert.Contains("_pageLifetime?.Token", masterPage, StringComparison.Ordinal);
 
         Assert.Contains(
-            "checkStartupConflictsAsync: StartupConflictDetectionService.Instance.CheckConflictsAsync",
+            "checkStartupConflictsAsync: context.StartupConflicts.CheckConflictsAsync",
             settingsComposition,
             StringComparison.Ordinal);
         Assert.Contains(

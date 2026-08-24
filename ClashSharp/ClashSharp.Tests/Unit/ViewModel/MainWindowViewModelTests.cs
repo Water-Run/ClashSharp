@@ -11,7 +11,7 @@ public sealed class MainWindowViewModelTests
     {
         FakeShellLocalization localization = new();
 
-        MainWindowViewModel viewModel = new(localization, CreatePageMap());
+        MainWindowViewModel viewModel = new(localization);
 
         Assert.Equal("Master", viewModel.MasterControlText);
         Assert.Equal("Proxies", viewModel.ProxiesText);
@@ -32,7 +32,7 @@ public sealed class MainWindowViewModelTests
     {
         FakeShellLocalization localization = new();
         FakeShellRestartState restartState = new() { IsRestartPending = true };
-        MainWindowViewModel viewModel = new(localization, CreatePageMap(), restartState);
+        MainWindowViewModel viewModel = new(localization, restartState);
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
@@ -50,7 +50,7 @@ public sealed class MainWindowViewModelTests
     public void LanguageChanged_RefreshesNavigationLabels()
     {
         FakeShellLocalization localization = new();
-        MainWindowViewModel viewModel = new(localization, CreatePageMap());
+        MainWindowViewModel viewModel = new(localization);
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
@@ -59,39 +59,6 @@ public sealed class MainWindowViewModelTests
 
         Assert.Equal("主控", viewModel.MasterControlText);
         Assert.Contains(nameof(MainWindowViewModel.MasterControlText), changedProperties);
-    }
-
-    /// <summary>Verifies known navigation tags resolve to configured page types.</summary>
-    [Fact]
-    public void ResolvePageType_KnownTag_ReturnsConfiguredPageType()
-    {
-        MainWindowViewModel viewModel = new(new FakeShellLocalization(), CreatePageMap());
-
-        Type? pageType = viewModel.ResolvePageType("MasterControl");
-
-        Assert.Equal(typeof(MasterPage), pageType);
-    }
-
-    /// <summary>Verifies unknown navigation tags do not resolve to a page.</summary>
-    [Fact]
-    public void ResolvePageType_UnknownTag_ReturnsNull()
-    {
-        MainWindowViewModel viewModel = new(new FakeShellLocalization(), CreatePageMap());
-
-        Type? pageType = viewModel.ResolvePageType("Unknown");
-
-        Assert.Null(pageType);
-    }
-
-    /// <summary>Creates the test navigation map.</summary>
-    /// <returns>Navigation map keyed by shell tag.</returns>
-    private static IReadOnlyDictionary<string, Type> CreatePageMap()
-    {
-        return new Dictionary<string, Type>
-        {
-            ["MasterControl"] = typeof(MasterPage),
-            ["ProxyNodes"] = typeof(ProxyNodesPage),
-        };
     }
 
     /// <summary>Fake localization provider for shell tests.</summary>
@@ -145,10 +112,4 @@ public sealed class MainWindowViewModelTests
             RestartPendingChanged?.Invoke(this, EventArgs.Empty);
         }
     }
-
-    /// <summary>Placeholder page type used by shell navigation tests.</summary>
-    private sealed class MasterPage;
-
-    /// <summary>Placeholder page type used by shell navigation tests.</summary>
-    private sealed class ProxyNodesPage;
 }

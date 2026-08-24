@@ -52,6 +52,7 @@ public sealed partial class MasterControl : Page
     private readonly Func<XamlRoot, CancellationToken, Task> _showStartupConflicts;
     private readonly Func<IReadOnlyList<ProxyNode>> _getProxyNodes;
     private readonly Func<IReadOnlyList<ProxyNode>, CancellationToken, Task<IReadOnlyList<ProxyNode>>> _testProxyLatencyAsync;
+    private readonly Action _openSettings;
     private readonly MasterHeroStatusSelectionGate _heroStatusSelection = new();
 
     /// <summary>Owns cancellable work for the current visit to this page.</summary>
@@ -62,12 +63,6 @@ public sealed partial class MasterControl : Page
 
     private double _heroStatusItemWidth = PreferredHeroStatusItemWidth;
     private double _infoTileItemWidth = PreferredInfoTileWidth;
-
-    /// <summary>Initializes the master control page and its view model.</summary>
-    public MasterControl()
-        : this(MasterControlPageComposition.Create())
-    {
-    }
 
     internal MasterControl(MasterControlPageDependencies dependencies)
     {
@@ -86,6 +81,8 @@ public sealed partial class MasterControl : Page
             ?? throw new ArgumentException("A proxy-node function is required.", nameof(dependencies));
         _testProxyLatencyAsync = dependencies.TestProxyLatencyAsync
             ?? throw new ArgumentException("A latency-test function is required.", nameof(dependencies));
+        _openSettings = dependencies.OpenSettings
+            ?? throw new ArgumentException("A settings navigation function is required.", nameof(dependencies));
         InitializeComponent();
         DataContext = _viewModel;
         _viewModel.TileActionRequested += OnTileActionRequested;
@@ -260,10 +257,10 @@ public sealed partial class MasterControl : Page
                 await ShowLatencyDialogAsync();
                 break;
             case MasterControlTileAction.ExportConfiguration:
-                Frame.Navigate(typeof(Settings));
+                _openSettings();
                 break;
             case MasterControlTileAction.ImportConfiguration:
-                Frame.Navigate(typeof(Settings));
+                _openSettings();
                 break;
         }
     }

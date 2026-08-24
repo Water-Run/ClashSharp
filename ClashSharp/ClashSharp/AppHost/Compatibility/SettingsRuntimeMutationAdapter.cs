@@ -8,21 +8,25 @@ using ClashSharp.ViewModel;
 
 namespace ClashSharp.Hosting.Compatibility;
 
-/// <summary>Bridges settings presentation actions to the AppHost-owned mutation dispatcher.</summary>
-/// <remarks>This compatibility bridge is removed when settings pages are composed through dependency injection.</remarks>
+/// <summary>Adapts settings presentation actions to AppHost-owned mutation services.</summary>
 internal sealed class SettingsRuntimeMutationAdapter
 {
     private readonly IApplicationActionDispatcher _actions;
+    private readonly ApplicationActionService _applicationActions;
+    private readonly AppSettingsService _settings;
+    private readonly ClashDataPackageService _dataPackages;
 
-    private SettingsRuntimeMutationAdapter(IApplicationActionDispatcher actions)
+    public SettingsRuntimeMutationAdapter(
+        IApplicationActionDispatcher actions,
+        ApplicationActionService applicationActions,
+        AppSettingsService settings,
+        ClashDataPackageService dataPackages)
     {
         _actions = actions ?? throw new ArgumentNullException(nameof(actions));
-    }
-
-    /// <summary>Creates the temporary bridge at the presentation composition boundary.</summary>
-    public static SettingsRuntimeMutationAdapter CreateDefault()
-    {
-        return new SettingsRuntimeMutationAdapter(ApplicationActionService.Instance);
+        _applicationActions = applicationActions
+            ?? throw new ArgumentNullException(nameof(applicationActions));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _dataPackages = dataPackages ?? throw new ArgumentNullException(nameof(dataPackages));
     }
 
     /// <summary>Applies startup registration through the tracked application action boundary.</summary>
@@ -39,7 +43,7 @@ internal sealed class SettingsRuntimeMutationAdapter
     {
         return _actions.DispatchAsync(
             ApplicationActionKind.SetConnectionSampling,
-            AppSettingsService.Instance.ConnectionSamplingEnabled.ToString(),
+            _settings.ConnectionSamplingEnabled.ToString(),
             cancellationToken);
     }
 
@@ -47,10 +51,14 @@ internal sealed class SettingsRuntimeMutationAdapter
     public async ValueTask<ISettingsDestructiveRuntimeScope> BeginDestructiveMutationAsync(
         CancellationToken cancellationToken)
     {
-        MutationAdmissionLease lease = await ApplicationActionService.Instance
+        MutationAdmissionLease lease = await _applicationActions
             .BeginSettingsDestructiveMutationAsync(cancellationToken)
             .ConfigureAwait(false);
-        return new DestructiveRuntimeScope(ApplicationActionService.Instance, lease);
+        return new DestructiveRuntimeScope(
+            _applicationActions,
+            _dataPackages,
+            _settings,
+            lease);
     }
 
     /// <summary>Applies requested TUN and mixed-port values as one verified runtime generation.</summary>
@@ -59,7 +67,7 @@ internal sealed class SettingsRuntimeMutationAdapter
         int mixedPort,
         CancellationToken cancellationToken)
     {
-        _ = await ApplicationActionService.Instance
+        _ = await _applicationActions
             .ApplyNetworkSettingsAsync(
                 transparentProxyEnabled,
                 mixedPort,
@@ -69,16 +77,20 @@ internal sealed class SettingsRuntimeMutationAdapter
 
     private sealed class DestructiveRuntimeScope(
         ApplicationActionService actions,
+        ClashDataPackageService dataPackages,
+        AppSettingsService settings,
         MutationAdmissionLease admissionLease) : ISettingsDestructiveRuntimeScope
     {
         private ApplicationActionService? _actions = actions;
+        private readonly ClashDataPackageService _dataPackages = dataPackages;
+        private readonly AppSettingsService _settings = settings;
         private MutationAdmissionLease? _admissionLease = admissionLease;
 
         public async Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(
             string packagePath,
             CancellationToken cancellationToken)
         {
-            DataPackageTransactionReceipt receipt = await ClashDataPackageService.Instance
+            DataPackageTransactionReceipt receipt = await _dataPackages
                 .BeginImportAdmittedAsync(packagePath, GetLease(), cancellationToken)
                 .ConfigureAwait(false);
             return new DataTransactionReceipt(receipt);
@@ -87,12 +99,12 @@ internal sealed class SettingsRuntimeMutationAdapter
         public ISettingsResetTransactionReceipt BeginResetSettings()
         {
             return new ResetTransactionReceipt(
-                ClashDataPackageService.Instance.BeginResetSettingsAdmitted(GetLease()));
+                _dataPackages.BeginResetSettingsAdmitted(GetLease()));
         }
 
         public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
         {
-            AppSettingsService.Instance.WriteAdmitted(GetLease(), editor =>
+            _settings.WriteAdmitted(GetLease(), editor =>
             {
                 editor.DisplayLanguage = snapshot.DisplayLanguage;
                 editor.AppThemeMode = snapshot.AppThemeMode;

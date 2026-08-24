@@ -7,23 +7,28 @@ using ClashSharp.Service;
 
 namespace ClashSharp.Presentation.Composition;
 
-/// <summary>Composition boundary for startup-guide system probes and presentation.</summary>
-internal static class StartupGuideComposition
+/// <summary>AppHost-owned factory for startup-guide system probes and presentation.</summary>
+internal sealed class StartupGuideComposition(
+    AppSettingsService settings,
+    LocalizationService localization,
+    ProfileCatalogService profileCatalog,
+    MihomoServiceManager mihomoServiceManager,
+    StartupRestoreFallbackService startupRestoreFallback,
+    WindowsProxyService windowsProxy,
+    ProxyRecoveryService proxyRecovery)
 {
-    /// <summary>Creates a presenter backed by the current application-owned services.</summary>
-    public static IStartupGuidePresenter Create(IApplicationErrorSink errorSink)
+    /// <summary>Creates a presenter backed by explicitly composed application services.</summary>
+    public IStartupGuidePresenter Create(IApplicationErrorSink errorSink)
     {
         ArgumentNullException.ThrowIfNull(errorSink);
 
-        AppSettingsService settings = AppSettingsService.Instance;
-        LocalizationService localization = LocalizationService.Instance;
-        IStartupCheckProbe probe = new LegacyStartupCheckProbe(
+        IStartupCheckProbe probe = new StartupCheckProbe(
             settings,
-            ProfileCatalogService.Instance,
-            MihomoServiceManager.Instance,
-            StartupRestoreFallbackService.Instance,
-            WindowsProxyService.Instance,
-            ProxyRecoveryService.Instance);
+            profileCatalog,
+            mihomoServiceManager,
+            startupRestoreFallback,
+            windowsProxy,
+            proxyRecovery);
         StartupCheckService checks = new(
             probe,
             localization.GetString,
@@ -34,8 +39,8 @@ internal static class StartupGuideComposition
             errorSink);
     }
 
-    /// <summary>Adapts legacy process-wide services to background-safe startup probes.</summary>
-    private sealed class LegacyStartupCheckProbe(
+    /// <summary>Adapts application services to background-safe startup probes.</summary>
+    private sealed class StartupCheckProbe(
         AppSettingsService settings,
         ProfileCatalogService profileCatalog,
         MihomoServiceManager mihomoServiceManager,

@@ -22,7 +22,7 @@ public sealed class SmallPageCompositionArchitectureTests
 
     /// <summary>Verifies code-behind consumes explicit dependencies instead of locating services.</summary>
     [Fact]
-    public void GovernedViews_DelegateDefaultConstructionToComposition()
+    public void GovernedViews_RequireExplicitFactoryOwnedDependencies()
     {
         foreach (string pageName in GovernedPageNames)
         {
@@ -36,11 +36,12 @@ public sealed class SmallPageCompositionArchitectureTests
                     @"\bnew\s+[A-Za-z_][A-Za-z0-9_]*(?:Service|Adapter)\b",
                     RegexOptions.CultureInvariant),
                 source);
-            Assert.Matches(
+            Assert.DoesNotMatch(
                 new Regex(
-                    $@"public\s+{pageName}\s*\(\s*\)\s*:\s*this\s*\(\s*{pageName}PageComposition\.Create\s*\(\s*\)\s*\)",
+                    $@"public\s+{pageName}\s*\(\s*\)",
                     RegexOptions.CultureInvariant),
                 source);
+            Assert.DoesNotContain($"{pageName}PageComposition.Create(", source, StringComparison.Ordinal);
             Assert.Contains(
                 $"internal {pageName}({pageName}PageComposition.Dependencies dependencies)",
                 source,
@@ -61,21 +62,40 @@ public sealed class SmallPageCompositionArchitectureTests
                 $"internal static class {pageName}PageComposition",
                 source,
                 StringComparison.Ordinal);
-            Assert.Contains("public static Dependencies Create()", source, StringComparison.Ordinal);
+            Assert.Contains("PageCompositionContext context", source, StringComparison.Ordinal);
             Assert.DoesNotContain(".Instance", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Microsoft.UI.Xaml", source, StringComparison.Ordinal);
         }
     }
 
-    /// <summary>Verifies legacy singletons remain isolated to one documented lazy bridge.</summary>
+    /// <summary>Verifies the legacy presentation service locator is deleted rather than renamed.</summary>
     [Fact]
-    public void LegacyPageServices_AreIsolatedToTheLazyCompositionBridge()
+    public void LegacyPageServiceBridge_IsDeletedAndPresentationHasNoServiceLocator()
     {
-        string bridge = ReadApplicationSource(
-            "Presentation/Composition/LegacyPageServiceBridge.cs");
+        string bridgePath = Path.Combine(
+            ApplicationRoot,
+            "Presentation",
+            "Composition",
+            "LegacyPageServiceBridge.cs");
+        Assert.False(File.Exists(bridgePath));
 
-        Assert.Equal(13, Regex.Count(bridge, @"\.Instance\b", RegexOptions.CultureInvariant));
-        Assert.Contains("intentionally lazy", bridge, StringComparison.Ordinal);
+        string[] offenders = Directory
+            .EnumerateFiles(ApplicationRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path =>
+            {
+                string relative = Path.GetRelativePath(ApplicationRoot, path).Replace('\\', '/');
+                return relative.StartsWith("Presentation/", StringComparison.Ordinal)
+                    || relative.StartsWith("View/", StringComparison.Ordinal)
+                    || relative.StartsWith("ViewModel/", StringComparison.Ordinal);
+            })
+            .Where(path => Regex.IsMatch(
+                File.ReadAllText(path),
+                @"\b[A-Za-z_][A-Za-z0-9_]*Service\.Instance\b",
+                RegexOptions.CultureInvariant))
+            .Select(path => Path.GetRelativePath(ApplicationRoot, path))
+            .ToArray();
+
+        Assert.Empty(offenders);
     }
 
     /// <summary>Verifies profile fallback state crosses the composition boundary explicitly.</summary>
@@ -87,11 +107,25 @@ public sealed class SmallPageCompositionArchitectureTests
         string viewModel = ReadApplicationSource("ViewModel/ProfilesViewModel.cs");
 
         Assert.Contains(
-            "() => LegacyPageServiceBridge.Settings.ActiveProfileId",
+            "() => context.Settings.ActiveProfileId",
             composition,
             StringComparison.Ordinal);
         Assert.Contains("_getActiveProfileId()", viewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("AppSettingsService.Instance", viewModel, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies About owns a cancellable load session for remote update checks.</summary>
+    [Fact]
+    public void About_UsesSymmetricCancellablePageLifetime()
+    {
+        string source = ReadApplicationSource("View/About.xaml.cs");
+
+        Assert.Contains("private readonly PageLoadSession _loadSession = new();", source, StringComparison.Ordinal);
+        Assert.Contains("Loaded += OnLoaded;", source, StringComparison.Ordinal);
+        Assert.Contains("Unloaded += OnUnloaded;", source, StringComparison.Ordinal);
+        Assert.Contains("await _loadSession.RunAsync(_viewModel.LoadAsync);", source, StringComparison.Ordinal);
+        Assert.Contains("_loadSession.Cancel();", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("LoadCommand.Execute", source, StringComparison.Ordinal);
     }
 
     private static string ReadApplicationSource(string relativePath)

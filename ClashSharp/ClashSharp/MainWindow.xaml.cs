@@ -12,6 +12,7 @@ using ClashSharp.Hosting.Startup;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
+using ClashSharp.Presentation.Navigation;
 using ClashSharp.Service;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -50,6 +51,10 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private readonly IApplicationLifetimeRequestSink _startupLifetimeRequests;
 
     private readonly MainWindowComposition _composition;
+
+    private readonly Stack<ShellNavigationEntry> _navigationHistory = new();
+
+    private ShellNavigationEntry? _currentNavigation;
 
     /// <summary>Delegate instance preventing garbage collection of the custom window procedure.</summary>
     private WndProcDelegate? _wndProcDelegate;
@@ -101,12 +106,6 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private readonly CancellationTokenSource _windowLifetime = new();
     private Task? _mihomoServiceStatusRefreshTask;
 
-    /// <summary>Initializes the minimal visible startup shell without exposing runtime navigation.</summary>
-    internal MainWindow(IApplicationLifetimeRequestSink startupLifetimeRequests)
-        : this(startupLifetimeRequests, MainWindowComposition.Create())
-    {
-    }
-
     internal MainWindow(
         IApplicationLifetimeRequestSink startupLifetimeRequests,
         MainWindowComposition composition)
@@ -124,6 +123,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     /// <summary>Supplies runtime dependencies and unlocks navigation after critical startup steps finish.</summary>
     internal void CompleteStartup(
+        MainWindowComposition.Runtime runtime,
         ITriggerRuntimeEventPublisher triggerEvents,
         ApplicationActionService applicationActions,
         ApplicationLifecycleService applicationLifecycle,
@@ -140,7 +140,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _applicationLifecycle = applicationLifecycle ?? throw new ArgumentNullException(nameof(applicationLifecycle));
         _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
         _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
-        _runtime = _composition.CreateRuntime();
+        _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _runtime.Navigation.NavigationRequested += OnNavigationRequested;
         _runtime.ApplyTheme((FrameworkElement)Content);
         NavView.DataContext = _runtime.ViewModel;
 
@@ -149,7 +150,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         NavView.Visibility = Visibility.Visible;
         NavView.IsEnabled = true;
         NavView.SelectedItem = NavMasterControlItem;
-        NavigateToTag("MasterControl");
+        _runtime.Navigation.Navigate(ShellRoute.MasterControl);
         _nativeCapabilities.TryCreateWindowMessageFeature(
             CreateTrayService,
             out _trayService);
@@ -286,7 +287,10 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             return;
         }
 
-        NavigateToTag(tag);
+        if (ShellRouteCatalog.TryParse(tag, out ShellRoute route))
+        {
+            Runtime.Navigation.Navigate(route);
+        }
     }
 
     /// <summary>Toggles the navigation pane when the shell title bar pane button is requested.</summary>
@@ -302,49 +306,99 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         NavView.IsPaneOpen = !NavView.IsPaneOpen;
     }
 
-    /// <summary>Navigates the content frame to the page represented by <paramref name="tag"/>.</summary>
-    /// <param name="tag">Navigation item tag. Must not be null.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="tag"/> is null.</exception>
-    private void NavigateToTag(string tag)
+    /// <summary>Handles one typed navigation request from the shell or a composed page.</summary>
+    private async void OnNavigationRequested(ShellNavigationRequest request)
     {
-        ArgumentNullException.ThrowIfNull(tag);
-
-        Type? pageType = _runtime?.ViewModel.ResolvePageType(tag);
-
-        if (pageType is not null && ContentFrame.CurrentSourcePageType != pageType)
+        MainWindowComposition.Runtime? runtime = _runtime;
+        if (runtime is null)
         {
-            ContentFrame.Navigate(pageType);
+            return;
+        }
+
+        try
+        {
+            NavigateCore(runtime, request);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            await ReportShellOperationFailureAsync(
+                runtime.ErrorSink,
+                $"shell-navigation-{ShellRouteCatalog.GetTag(request.Route)}",
+                exception);
+        }
+    }
+
+    private void NavigateCore(
+        MainWindowComposition.Runtime runtime,
+        ShellNavigationRequest request)
+    {
+        ShellNavigationEntry destination = new(request.Route, request.Parameter);
+        ShellNavigationEntry previous = default;
+        bool usesHistory = request.IsBackNavigation
+            && _navigationHistory.TryPeek(out previous);
+        if (usesHistory)
+        {
+            destination = previous;
+        }
+
+        if (_currentNavigation is ShellNavigationEntry current && current == destination)
+        {
+            SelectNavigationItem(destination.Route);
+            return;
+        }
+
+        Page page = runtime.PageFactory.Create(destination.Route, destination.Parameter);
+        if (usesHistory)
+        {
+            _navigationHistory.Pop();
+        }
+        else if (!request.IsBackNavigation
+            && _currentNavigation is ShellNavigationEntry currentEntry)
+        {
+            _navigationHistory.Push(currentEntry);
+        }
+
+        ContentFrame.Content = page;
+        _currentNavigation = destination;
+        SelectNavigationItem(destination.Route);
+    }
+
+    private void SelectNavigationItem(ShellRoute route)
+    {
+        if (FindNavigationItem(route) is NavigationViewItem item
+            && !ReferenceEquals(NavView.SelectedItem, item))
+        {
+            NavView.SelectedItem = item;
         }
     }
 
     /// <summary>Navigates from tray callbacks and brings the window forward.</summary>
     private void NavigateFromTray(string tag)
     {
-        if (FindNavigationItemByTag(tag) is NavigationViewItem item)
+        if (ShellRouteCatalog.TryParse(tag, out ShellRoute route))
         {
-            NavView.SelectedItem = item;
+            Runtime.Navigation.Navigate(route);
         }
 
-        NavigateToTag(tag);
         PrimaryWindowActivation.BringToFront(this);
     }
 
-    private NavigationViewItem? FindNavigationItemByTag(string tag)
+    private NavigationViewItem? FindNavigationItem(ShellRoute route)
     {
-        return tag switch
+        return route switch
         {
-            "MasterControl" => NavMasterControlItem,
-            "ProxyNodes" => NavProxyNodesItem,
-            "Profiles" => NavProfilesItem,
-            "Links" => NavLinksItem,
-            "Rules" => NavRulesItem,
-            "Triggers" => NavTriggersItem,
-            "Connections" => NavConnectionsItem,
-            "Statistics" => NavStatisticsItem,
-            "Logs" => null,
-            "About" => NavAboutItem,
-            "Settings" => NavSettingsItem,
-            _ => null,
+            ShellRoute.MasterControl => NavMasterControlItem,
+            ShellRoute.ProxyNodes => NavProxyNodesItem,
+            ShellRoute.Profiles => NavProfilesItem,
+            ShellRoute.Links => NavLinksItem,
+            ShellRoute.Rules => NavRulesItem,
+            ShellRoute.Triggers => NavTriggersItem,
+            ShellRoute.Connections => NavConnectionsItem,
+            ShellRoute.Statistics => NavStatisticsItem,
+            ShellRoute.Logs => null,
+            ShellRoute.About => NavAboutItem,
+            ShellRoute.Settings => NavSettingsItem,
+            _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Unsupported shell route."),
         };
     }
 
@@ -363,6 +417,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _appWindow = null;
         MainWindowComposition.Runtime? runtime = _runtime;
         _runtime = null;
+        _currentNavigation = null;
+        _navigationHistory.Clear();
 
         try
         {
@@ -387,6 +443,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
                     if (runtime is not null)
                     {
+                        runtime.Navigation.NavigationRequested -= OnNavigationRequested;
                         _ = StartupShellSetupPolicy.TryRun(runtime.Dispose);
                     }
                 }
@@ -818,6 +875,10 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             ? CallWindowProc(previousWindowProcedure, hWnd, uMsg, wParam, lParam)
             : DefWindowProc(hWnd, uMsg, wParam, lParam);
     }
+
+    private readonly record struct ShellNavigationEntry(
+        ShellRoute Route,
+        string? Parameter);
 
     #region Win32 Interop Declarations
 

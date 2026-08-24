@@ -27,7 +27,7 @@ public sealed class LogsInteractionArchitectureTests
         Assert.Contains("_cleanupPreviewSession.Cancel();", pageSource, StringComparison.Ordinal);
         Assert.Contains("_runtimeLogStreamSession", pageSource, StringComparison.Ordinal);
         Assert.Contains("_viewModel.WatchRuntimeLogsAsync", pageSource, StringComparison.Ordinal);
-        Assert.Contains("LegacyPageServiceBridge.MihomoService.ReadHostLogsAsync", compositionSource, StringComparison.Ordinal);
+        Assert.Contains("context.MihomoService.ReadHostLogsAsync", compositionSource, StringComparison.Ordinal);
         Assert.Contains("_runtimeLogStreamSession.Cancel();", pageSource, StringComparison.Ordinal);
         Assert.Contains("RunObservedPageEventAsync(", pageSource, StringComparison.Ordinal);
         Assert.Contains("RunLatestPageOperationAsync(", pageSource, StringComparison.Ordinal);
