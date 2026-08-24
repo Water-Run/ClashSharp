@@ -106,6 +106,65 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("actual_sha256 != &asset.sha256", buildScript, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies the final MSIX is the sole generated package-identity source.</summary>
+    [Fact]
+    public void NativeInstallerBuild_GeneratesCompleteIdentityFromFinalMsix()
+    {
+        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
+        string servicePlanPath = FindSourceFile(
+            "ClashSharp",
+            "Installer",
+            "src",
+            "service_plan.rs");
+
+        string buildScript = File.ReadAllText(buildScriptPath);
+        string servicePlan = File.ReadAllText(servicePlanPath);
+
+        Assert.Contains("extract_trusted_package_identity", buildScript, StringComparison.Ordinal);
+        Assert.Contains("parse_final_appx_identity", buildScript, StringComparison.Ordinal);
+        Assert.Contains("ProcessorArchitecture", buildScript, StringComparison.Ordinal);
+        Assert.Contains("Application Executable", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_PACKAGE_IDENTITY_NAME", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_PACKAGE_PUBLISHER", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_PACKAGE_PUBLISHER_ID", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_PACKAGE_FAMILY_NAME", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_PACKAGE_VERSION", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_PACKAGE_ARCHITECTURE", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_APPLICATION_ID", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_APPLICATION_EXECUTABLE", buildScript, StringComparison.Ordinal);
+        Assert.Contains("PackageFamilyNameFromId", buildScript, StringComparison.Ordinal);
+        Assert.Contains("derive_publisher_id", buildScript, StringComparison.Ordinal);
+
+        Assert.Contains("pub use crate::trust_anchor", servicePlan, StringComparison.Ordinal);
+        Assert.DoesNotContain("pub const PACKAGE_IDENTITY_NAME: &str =", servicePlan, StringComparison.Ordinal);
+        Assert.DoesNotContain("pub const PACKAGE_PUBLISHER: &str =", servicePlan, StringComparison.Ordinal);
+        Assert.DoesNotContain("pub const PACKAGE_PUBLISHER_ID: &str =", servicePlan, StringComparison.Ordinal);
+        Assert.DoesNotContain("pub const PACKAGE_FAMILY_NAME: &str =", servicePlan, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies ordinary Repair cannot opt into package downgrade semantics.</summary>
+    [Fact]
+    public void NativeInstallerRepair_RejectsDowngradeByDefault()
+    {
+        string installerPath = FindSourceFile("ClashSharp", "Installer", "src", "main.rs");
+        string identityPath = FindSourceFile(
+            "ClashSharp",
+            "Installer",
+            "src",
+            "package_identity.rs");
+
+        string installer = File.ReadAllText(installerPath);
+        string identity = File.ReadAllText(identityPath);
+
+        Assert.Contains("query_current_user_package_registration", installer, StringComparison.Ordinal);
+        Assert.Contains("installer.package.downgrade_rejected", installer, StringComparison.Ordinal);
+        Assert.Contains("classify_deployment_version", installer, StringComparison.Ordinal);
+        Assert.Contains("PackageVersion", identity, StringComparison.Ordinal);
+        Assert.Contains("DeploymentVersionChange::Downgrade", identity, StringComparison.Ordinal);
+        Assert.Contains(" -Update -RetainFilesOnFailure", installer, StringComparison.Ordinal);
+        Assert.DoesNotContain("ForceUpdateFromAnyVersion", installer, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies MSIX signing identity is derived from and bound to the manifest Publisher.</summary>
     [Fact]
     public void NativeInstallerBuild_BindsSigningCertificateToManifestPublisher()

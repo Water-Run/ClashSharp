@@ -121,6 +121,45 @@ pub fn trusted_package_version() -> Result<&'static str, String> {
     Ok(TRUSTED_PACKAGE_VERSION)
 }
 
+/// Gets the complete package identity generated from the trusted final MSIX manifest.
+pub fn trusted_package_identity() -> Result<TrustedPackageIdentity, String> {
+    ensure_anchor_available()?;
+    Ok(TrustedPackageIdentity {
+        name: TRUSTED_PACKAGE_IDENTITY_NAME,
+        publisher: TRUSTED_PACKAGE_PUBLISHER,
+        publisher_id: TRUSTED_PACKAGE_PUBLISHER_ID,
+        family_name: TRUSTED_PACKAGE_FAMILY_NAME,
+        version: TRUSTED_PACKAGE_VERSION,
+        architecture: TRUSTED_PACKAGE_ARCHITECTURE,
+        application_id: TRUSTED_APPLICATION_ID,
+        application_executable: TRUSTED_APPLICATION_EXECUTABLE,
+        application_entry_point: TRUSTED_APPLICATION_ENTRY_POINT,
+    })
+}
+
+/// Complete immutable identity contract embedded from the final MSIX.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrustedPackageIdentity {
+    /// Package Identity Name.
+    pub name: &'static str,
+    /// Certificate-subject Publisher from the package manifest.
+    pub publisher: &'static str,
+    /// Windows-derived PublisherId.
+    pub publisher_id: &'static str,
+    /// Package family name derived from Name and PublisherId.
+    pub family_name: &'static str,
+    /// Canonical four-component package version.
+    pub version: &'static str,
+    /// Final package processor architecture.
+    pub architecture: &'static str,
+    /// Package-relative application identifier.
+    pub application_id: &'static str,
+    /// Final packaged application executable.
+    pub application_executable: &'static str,
+    /// Final packaged application entry point.
+    pub application_entry_point: &'static str,
+}
+
 /// Verifies the complete machine-executable subset of one registered package.
 pub fn verify_registered_machine_payload(install_root: &Path) -> Result<(), String> {
     ensure_anchor_available()?;
@@ -149,6 +188,7 @@ pub fn verify_registered_machine_payload(install_root: &Path) -> Result<(), Stri
 fn ensure_anchor_available() -> Result<(), String> {
     if !TRUST_ANCHOR_AVAILABLE
         || TRUSTED_MSIX_SHA256.len() != 64
+        || !package_identity_is_canonical()
         || !is_canonical_package_version(TRUSTED_PACKAGE_VERSION)
         || TRUSTED_CERTIFICATE_SHA256.len() != 64
         || TRUSTED_PAYLOAD_FILES.is_empty()
@@ -157,6 +197,24 @@ fn ensure_anchor_available() -> Result<(), String> {
         return Err(String::from("installer.trust.anchor_unavailable"));
     }
     Ok(())
+}
+
+fn package_identity_is_canonical() -> bool {
+    !TRUSTED_PACKAGE_IDENTITY_NAME.is_empty()
+        && !TRUSTED_PACKAGE_PUBLISHER.is_empty()
+        && TRUSTED_PACKAGE_PUBLISHER_ID.len() == 13
+        && TRUSTED_PACKAGE_PUBLISHER_ID
+            .bytes()
+            .all(|value| b"0123456789abcdefghjkmnpqrstvwxyz".contains(&value))
+        && TRUSTED_PACKAGE_FAMILY_NAME
+            == format!(
+                "{}_{}",
+                TRUSTED_PACKAGE_IDENTITY_NAME, TRUSTED_PACKAGE_PUBLISHER_ID
+            )
+        && TRUSTED_PACKAGE_ARCHITECTURE == "x64"
+        && TRUSTED_APPLICATION_ID == "App"
+        && TRUSTED_APPLICATION_EXECUTABLE == "ClashSharp.exe"
+        && TRUSTED_APPLICATION_ENTRY_POINT == "Windows.FullTrustApplication"
 }
 
 fn is_canonical_package_version(version: &str) -> bool {
@@ -378,16 +436,32 @@ mod tests {
 
     #[test]
     fn embedded_anchor_is_canonical_or_deliberately_unavailable() {
+        assert!(package_identity_is_canonical());
         if TRUST_ANCHOR_AVAILABLE {
             assert_eq!(TRUSTED_MSIX_SHA256.len(), 64);
             assert!(is_canonical_package_version(TRUSTED_PACKAGE_VERSION));
             assert_eq!(trusted_package_version().unwrap(), TRUSTED_PACKAGE_VERSION);
+            assert_eq!(
+                trusted_package_identity().unwrap(),
+                TrustedPackageIdentity {
+                    name: TRUSTED_PACKAGE_IDENTITY_NAME,
+                    publisher: TRUSTED_PACKAGE_PUBLISHER,
+                    publisher_id: TRUSTED_PACKAGE_PUBLISHER_ID,
+                    family_name: TRUSTED_PACKAGE_FAMILY_NAME,
+                    version: TRUSTED_PACKAGE_VERSION,
+                    architecture: TRUSTED_PACKAGE_ARCHITECTURE,
+                    application_id: TRUSTED_APPLICATION_ID,
+                    application_executable: TRUSTED_APPLICATION_EXECUTABLE,
+                    application_entry_point: TRUSTED_APPLICATION_ENTRY_POINT,
+                }
+            );
             assert_eq!(TRUSTED_CERTIFICATE_SHA256.len(), 64);
             assert!(!TRUSTED_PAYLOAD_FILES.is_empty());
             assert!(!TRUSTED_MACHINE_FILES.is_empty());
         } else {
             assert!(verify_installer_payload(Path::new("missing")).is_err());
             assert!(trusted_package_version().is_err());
+            assert!(trusted_package_identity().is_err());
         }
     }
 

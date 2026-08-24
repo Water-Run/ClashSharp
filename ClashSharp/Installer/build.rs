@@ -14,6 +14,14 @@ const MAX_GEODATA_ASSET_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_GEODATA_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_APPX_MANIFEST_BYTES: u64 = 1024 * 1024;
 const APPX_MANIFEST_PATH: &str = "AppxManifest.xml";
+const APPX_MANIFEST_NAMESPACE: &str =
+    "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
+const EXPECTED_PACKAGE_ARCHITECTURE: &str = "x64";
+const EXPECTED_APPLICATION_ID: &str = "App";
+const EXPECTED_APPLICATION_EXECUTABLE: &str = "ClashSharp.exe";
+const EXPECTED_APPLICATION_ENTRY_POINT: &str = "Windows.FullTrustApplication";
+const SOURCE_APPLICATION_EXECUTABLE: &str = "$targetnametoken$.exe";
+const SOURCE_APPLICATION_ENTRY_POINT: &str = "$targetentrypoint$";
 const GEODATA_MANIFEST_PATH: &str = "Binaries/GeoData/manifest.json";
 const REQUIRED_GEODATA_ASSETS: [(&str, &str); 4] = [
     ("Country.mmdb", "binaries/geodata/country.mmdb"),
@@ -45,11 +53,32 @@ struct GeoDataManifestEntry {
     sha256: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AppxPackageIdentity {
+    name: String,
+    publisher: String,
+    publisher_id: String,
+    family_name: String,
+    version: String,
+    architecture: String,
+    application_id: String,
+    application_executable: String,
+    application_entry_point: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ManifestIdentity {
+    name: String,
+    publisher: String,
+    version: String,
+}
+
 #[cfg(not(test))]
 fn main() {
     println!("cargo:rerun-if-changed=payload");
     println!("cargo:rerun-if-changed=ui/main.slint");
     println!("cargo:rerun-if-changed=LogoInstaller.ico");
+    println!("cargo:rerun-if-changed=../ClashSharp/Package.appxmanifest");
     println!("cargo:rerun-if-env-changed=CLASHSHARP_INSTALLER_PACKAGING_MODE");
 
     let profile = env::var("PROFILE").unwrap_or_default();
@@ -75,7 +104,13 @@ fn main() {
         }
         Err(error) => {
             println!("cargo:warning=Installer machine trust anchor unavailable: {error}");
-            fs::write(&output, unavailable_anchor()).expect("write unavailable trust anchor");
+            let source = unavailable_anchor(Path::new("../ClashSharp/Package.appxmanifest"))
+                .unwrap_or_else(|fallback_error| {
+                    panic!(
+                        "Installer source identity fallback generation failed after {error}: {fallback_error}"
+                    )
+                });
+            fs::write(&output, source).expect("write unavailable trust anchor");
         }
     }
 
@@ -125,7 +160,7 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
     let package = File::open(&packages[0]).map_err(|error| format!("open MSIX failed: {error}"))?;
     let mut archive =
         ZipArchive::new(package).map_err(|error| format!("open MSIX ZIP failed: {error}"))?;
-    let package_version = extract_trusted_package_version(&mut archive)?;
+    let package_identity = extract_trusted_package_identity(&mut archive)?;
     let mut trusted_files = BTreeMap::<String, (u64, String)>::new();
     let mut geodata_manifest_bytes = None;
     let mut total_bytes = 0_u64;
@@ -235,11 +270,7 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
         "pub const TRUSTED_MSIX_SHA256: &str = \"{msix_hash}\";"
     )
     .unwrap();
-    writeln!(
-        source,
-        "pub const TRUSTED_PACKAGE_VERSION: &str = \"{package_version}\";"
-    )
-    .unwrap();
+    write_package_identity_constants(&mut source, &package_identity);
     writeln!(
         source,
         "pub const TRUSTED_CERTIFICATE_SHA256: &str = \"{certificate_hash}\";"
@@ -268,7 +299,9 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
     Ok(source)
 }
 
-fn extract_trusted_package_version(archive: &mut ZipArchive<File>) -> Result<String, String> {
+fn extract_trusted_package_identity(
+    archive: &mut ZipArchive<File>,
+) -> Result<AppxPackageIdentity, String> {
     let manifest_entries = archive
         .file_names()
         .enumerate()
@@ -308,139 +341,342 @@ fn extract_trusted_package_version(archive: &mut ZipArchive<File>) -> Result<Str
     let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes);
     let manifest = std::str::from_utf8(bytes)
         .map_err(|_| String::from("AppxManifest.xml is not canonical UTF-8"))?;
-    parse_appx_identity_version(manifest)
+    parse_final_appx_identity(manifest)
 }
 
-fn parse_appx_identity_version(manifest: &str) -> Result<String, String> {
-    let mut cursor = 0;
-    let mut package_version = None;
-    while let Some(relative_start) = manifest[cursor..].find('<') {
-        let start = cursor + relative_start;
-        if manifest[start..].starts_with("<!--") {
-            let relative_end = manifest[start + 4..]
-                .find("-->")
-                .ok_or_else(|| String::from("AppxManifest.xml comment is unterminated"))?;
-            cursor = start + 4 + relative_end + 3;
-            continue;
-        }
-        if manifest[start..].starts_with("<?") {
-            let relative_end = manifest[start + 2..]
-                .find("?>")
-                .ok_or_else(|| String::from("AppxManifest.xml declaration is unterminated"))?;
-            cursor = start + 2 + relative_end + 2;
-            continue;
-        }
-        if manifest[start..].starts_with("<!") {
-            return Err(String::from(
-                "AppxManifest.xml contains unsupported declarations",
-            ));
-        }
-
-        let end = find_xml_tag_end(manifest, start + 1)?;
-        let tag = manifest[start + 1..end].trim();
-        cursor = end + 1;
-        if tag.is_empty() || tag.starts_with('/') {
-            continue;
-        }
-        let name_end = tag
-            .find(|value: char| value.is_ascii_whitespace() || value == '/')
-            .unwrap_or(tag.len());
-        if &tag[..name_end] != "Identity" {
-            continue;
-        }
-        if package_version.is_some() {
-            return Err(String::from(
-                "AppxManifest.xml contains duplicate Identity elements",
-            ));
-        }
-        package_version = Some(parse_identity_version_attribute(&tag[name_end..])?);
-    }
-
-    package_version.ok_or_else(|| String::from("AppxManifest.xml Identity version is missing"))
-}
-
-fn find_xml_tag_end(manifest: &str, start: usize) -> Result<usize, String> {
-    let mut quote = None;
-    for (offset, value) in manifest[start..].char_indices() {
-        match quote {
-            Some(expected) if value == expected => quote = None,
-            Some(_) => {}
-            None if matches!(value, '\'' | '"') => quote = Some(value),
-            None if value == '>' => return Ok(start + offset),
-            None => {}
-        }
-    }
-    Err(String::from("AppxManifest.xml tag is unterminated"))
-}
-
-fn parse_identity_version_attribute(attributes: &str) -> Result<String, String> {
-    let bytes = attributes.trim_end_matches('/').as_bytes();
-    let mut cursor = 0;
-    let mut version = None;
-    while cursor < bytes.len() {
-        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
-            cursor += 1;
-        }
-        if cursor == bytes.len() {
-            break;
-        }
-        let name_start = cursor;
-        while cursor < bytes.len()
-            && (bytes[cursor].is_ascii_alphanumeric()
-                || matches!(bytes[cursor], b':' | b'_' | b'-' | b'.'))
-        {
-            cursor += 1;
-        }
-        if name_start == cursor {
-            return Err(String::from(
-                "AppxManifest.xml Identity attribute is invalid",
-            ));
-        }
-        let name = &attributes[name_start..cursor];
-        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
-            cursor += 1;
-        }
-        if bytes.get(cursor) != Some(&b'=') {
-            return Err(String::from(
-                "AppxManifest.xml Identity attribute is invalid",
-            ));
-        }
-        cursor += 1;
-        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
-            cursor += 1;
-        }
-        let Some(delimiter @ (b'\'' | b'"')) = bytes.get(cursor).copied() else {
-            return Err(String::from(
-                "AppxManifest.xml Identity attribute is unquoted",
-            ));
-        };
-        cursor += 1;
-        let value_start = cursor;
-        while cursor < bytes.len() && bytes[cursor] != delimiter {
-            cursor += 1;
-        }
-        if cursor == bytes.len() {
-            return Err(String::from(
-                "AppxManifest.xml Identity attribute is unterminated",
-            ));
-        }
-        let value = &attributes[value_start..cursor];
-        cursor += 1;
-        if name == "Version" && version.replace(value.to_owned()).is_some() {
-            return Err(String::from(
-                "AppxManifest.xml Identity version is duplicated",
-            ));
-        }
-    }
-
-    let version =
-        version.ok_or_else(|| String::from("AppxManifest.xml Identity version is missing"))?;
-    if !is_canonical_package_version(&version) {
-        return Err(String::from(
-            "AppxManifest.xml Identity version is noncanonical",
+fn parse_final_appx_identity(manifest: &str) -> Result<AppxPackageIdentity, String> {
+    let document = parse_appx_document(manifest)?;
+    let package = canonical_package_element(&document)?;
+    let manifest_identity = parse_manifest_identity(package)?;
+    let identity = one_direct_child(package, "Identity")?;
+    let architecture = required_attribute(identity, "ProcessorArchitecture")?;
+    if architecture != EXPECTED_PACKAGE_ARCHITECTURE {
+        return Err(format!(
+            "AppxManifest.xml package architecture must be {EXPECTED_PACKAGE_ARCHITECTURE}"
         ));
     }
-    Ok(version)
+
+    let applications = one_direct_child(package, "Applications")?;
+    let application = one_direct_child(applications, "Application")?;
+    let application_id = required_attribute(application, "Id")?;
+    let application_executable = required_attribute(application, "Executable")?;
+    let application_entry_point = required_attribute(application, "EntryPoint")?;
+    validate_application_contract(
+        &application_id,
+        &application_executable,
+        &application_entry_point,
+        EXPECTED_APPLICATION_EXECUTABLE,
+        EXPECTED_APPLICATION_ENTRY_POINT,
+    )?;
+
+    complete_package_identity(
+        manifest_identity,
+        architecture,
+        application_id,
+        application_executable,
+        application_entry_point,
+    )
+}
+
+fn parse_source_appx_identity(manifest: &str) -> Result<AppxPackageIdentity, String> {
+    let document = parse_appx_document(manifest)?;
+    let package = canonical_package_element(&document)?;
+    let manifest_identity = parse_manifest_identity(package)?;
+    let applications = one_direct_child(package, "Applications")?;
+    let application = one_direct_child(applications, "Application")?;
+    let application_id = required_attribute(application, "Id")?;
+    let application_executable = required_attribute(application, "Executable")?;
+    let application_entry_point = required_attribute(application, "EntryPoint")?;
+    validate_application_contract(
+        &application_id,
+        &application_executable,
+        &application_entry_point,
+        SOURCE_APPLICATION_EXECUTABLE,
+        SOURCE_APPLICATION_ENTRY_POINT,
+    )?;
+
+    complete_package_identity(
+        manifest_identity,
+        String::from(EXPECTED_PACKAGE_ARCHITECTURE),
+        application_id,
+        String::from(EXPECTED_APPLICATION_EXECUTABLE),
+        String::from(EXPECTED_APPLICATION_ENTRY_POINT),
+    )
+}
+
+fn parse_appx_document(manifest: &str) -> Result<roxmltree::Document<'_>, String> {
+    if manifest.contains("<!DOCTYPE") || manifest.contains("<!ENTITY") {
+        return Err(String::from(
+            "AppxManifest.xml contains unsupported declarations",
+        ));
+    }
+    roxmltree::Document::parse(manifest)
+        .map_err(|error| format!("AppxManifest.xml XML is invalid: {error}"))
+}
+
+fn canonical_package_element<'a, 'input>(
+    document: &'a roxmltree::Document<'input>,
+) -> Result<roxmltree::Node<'a, 'input>, String> {
+    let package = document.root_element();
+    if package.tag_name().name() != "Package"
+        || package.tag_name().namespace() != Some(APPX_MANIFEST_NAMESPACE)
+    {
+        return Err(String::from(
+            "AppxManifest.xml root Package namespace is invalid",
+        ));
+    }
+    Ok(package)
+}
+
+fn one_direct_child<'a, 'input>(
+    parent: roxmltree::Node<'a, 'input>,
+    name: &str,
+) -> Result<roxmltree::Node<'a, 'input>, String> {
+    let matches = parent
+        .children()
+        .filter(|node| {
+            node.is_element()
+                && node.tag_name().name() == name
+                && node.tag_name().namespace() == Some(APPX_MANIFEST_NAMESPACE)
+        })
+        .collect::<Vec<_>>();
+    if matches.len() != 1 {
+        return Err(format!(
+            "AppxManifest.xml must contain exactly one direct {name} element"
+        ));
+    }
+    Ok(matches[0])
+}
+
+fn parse_manifest_identity(package: roxmltree::Node<'_, '_>) -> Result<ManifestIdentity, String> {
+    let identity = one_direct_child(package, "Identity")?;
+    let name = required_attribute(identity, "Name")?;
+    if !(3..=50).contains(&name.len())
+        || !name
+            .bytes()
+            .all(|value| value.is_ascii_alphanumeric() || matches!(value, b'.' | b'-'))
+    {
+        return Err(String::from(
+            "AppxManifest.xml Identity Name is noncanonical",
+        ));
+    }
+    let publisher = required_attribute(identity, "Publisher")?;
+    if publisher.encode_utf16().count() > 8192 {
+        return Err(String::from(
+            "AppxManifest.xml Identity Publisher is too long",
+        ));
+    }
+    let version = required_attribute(identity, "Version")?;
+    if !is_canonical_package_version(&version) {
+        return Err(String::from(
+            "AppxManifest.xml Identity Version is noncanonical",
+        ));
+    }
+    Ok(ManifestIdentity {
+        name,
+        publisher,
+        version,
+    })
+}
+
+fn required_attribute(node: roxmltree::Node<'_, '_>, name: &str) -> Result<String, String> {
+    let value = node.attribute(name).ok_or_else(|| {
+        format!(
+            "AppxManifest.xml {} {name} is missing",
+            node.tag_name().name()
+        )
+    })?;
+    if value.is_empty() || value.chars().any(char::is_control) {
+        return Err(format!(
+            "AppxManifest.xml {} {name} is invalid",
+            node.tag_name().name()
+        ));
+    }
+    Ok(value.to_owned())
+}
+
+fn validate_application_contract(
+    application_id: &str,
+    executable: &str,
+    entry_point: &str,
+    expected_executable: &str,
+    expected_entry_point: &str,
+) -> Result<(), String> {
+    if application_id != EXPECTED_APPLICATION_ID {
+        return Err(format!(
+            "AppxManifest.xml Application Id must be {EXPECTED_APPLICATION_ID}"
+        ));
+    }
+    if executable != expected_executable {
+        return Err(format!(
+            "AppxManifest.xml Application Executable must be {expected_executable}"
+        ));
+    }
+    if entry_point != expected_entry_point {
+        return Err(format!(
+            "AppxManifest.xml Application EntryPoint must be {expected_entry_point}"
+        ));
+    }
+    Ok(())
+}
+
+fn complete_package_identity(
+    manifest: ManifestIdentity,
+    architecture: String,
+    application_id: String,
+    application_executable: String,
+    application_entry_point: String,
+) -> Result<AppxPackageIdentity, String> {
+    let publisher_id = derive_publisher_id(&manifest.publisher)?;
+    let family_name = format!("{}_{}", manifest.name, publisher_id);
+    verify_package_family_name_with_windows(&manifest.name, &manifest.publisher, &family_name)?;
+    Ok(AppxPackageIdentity {
+        name: manifest.name,
+        publisher: manifest.publisher,
+        publisher_id,
+        family_name,
+        version: manifest.version,
+        architecture,
+        application_id,
+        application_executable,
+        application_entry_point,
+    })
+}
+
+fn derive_publisher_id(publisher: &str) -> Result<String, String> {
+    if publisher.is_empty()
+        || publisher
+            .chars()
+            .any(|value| value == '\0' || value.is_control())
+    {
+        return Err(String::from(
+            "AppxManifest.xml Identity Publisher is invalid",
+        ));
+    }
+    let mut encoded = Vec::with_capacity(publisher.encode_utf16().count() * 2);
+    for value in publisher.encode_utf16() {
+        encoded.extend_from_slice(&value.to_le_bytes());
+    }
+    let digest = Sha256::digest(&encoded);
+    const ALPHABET: &[u8; 32] = b"0123456789abcdefghjkmnpqrstvwxyz";
+    let mut publisher_id = String::with_capacity(13);
+    for chunk in 0..13 {
+        let mut value = 0_u8;
+        for offset in 0..5 {
+            let bit_index = chunk * 5 + offset;
+            let bit = if bit_index < 64 {
+                (digest[bit_index / 8] >> (7 - bit_index % 8)) & 1
+            } else {
+                0
+            };
+            value = (value << 1) | bit;
+        }
+        publisher_id.push(ALPHABET[value as usize] as char);
+    }
+    Ok(publisher_id)
+}
+
+#[cfg(windows)]
+fn verify_package_family_name_with_windows(
+    name: &str,
+    publisher: &str,
+    expected_family: &str,
+) -> Result<(), String> {
+    const ERROR_SUCCESS: i32 = 0;
+    const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
+    const PROCESSOR_ARCHITECTURE_AMD64: u32 = 9;
+
+    #[repr(C)]
+    struct PackageId {
+        reserved: u32,
+        processor_architecture: u32,
+        version: u64,
+        name: *mut u16,
+        publisher: *mut u16,
+        resource_id: *mut u16,
+        publisher_id: *mut u16,
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn PackageFamilyNameFromId(
+            package_id: *const PackageId,
+            package_family_name_length: *mut u32,
+            package_family_name: *mut u16,
+        ) -> i32;
+    }
+
+    let mut name_wide = name.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+    let mut publisher_wide = publisher.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+    let package_id = PackageId {
+        reserved: 0,
+        processor_architecture: PROCESSOR_ARCHITECTURE_AMD64,
+        version: 0,
+        name: name_wide.as_mut_ptr(),
+        publisher: publisher_wide.as_mut_ptr(),
+        resource_id: std::ptr::null_mut(),
+        publisher_id: std::ptr::null_mut(),
+    };
+    let mut length = 0_u32;
+    // SAFETY: package_id points to live NUL-terminated strings, and a null output buffer is
+    // the documented size-query form of PackageFamilyNameFromId.
+    let first = unsafe {
+        PackageFamilyNameFromId(&raw const package_id, &raw mut length, std::ptr::null_mut())
+    };
+    if first != ERROR_INSUFFICIENT_BUFFER || !(2..=256).contains(&length) {
+        return Err(format!(
+            "PackageFamilyNameFromId size query failed: {first}"
+        ));
+    }
+    let mut buffer = vec![0_u16; length as usize];
+    // SAFETY: buffer has the exact character capacity requested by the first API call and
+    // all PACKAGE_ID backing strings remain live and unmoved.
+    let second = unsafe {
+        PackageFamilyNameFromId(&raw const package_id, &raw mut length, buffer.as_mut_ptr())
+    };
+    if second != ERROR_SUCCESS || length as usize != buffer.len() || buffer.last() != Some(&0) {
+        return Err(format!("PackageFamilyNameFromId failed: {second}"));
+    }
+    buffer.pop();
+    let actual = String::from_utf16(&buffer)
+        .map_err(|_| String::from("PackageFamilyNameFromId returned invalid UTF-16"))?;
+    if actual != expected_family {
+        return Err(format!(
+            "derived package family does not match Windows: {actual}"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn verify_package_family_name_with_windows(
+    _name: &str,
+    _publisher: &str,
+    _expected_family: &str,
+) -> Result<(), String> {
+    Ok(())
+}
+
+fn write_package_identity_constants(source: &mut String, identity: &AppxPackageIdentity) {
+    for (name, value) in [
+        ("TRUSTED_PACKAGE_IDENTITY_NAME", &identity.name),
+        ("TRUSTED_PACKAGE_PUBLISHER", &identity.publisher),
+        ("TRUSTED_PACKAGE_PUBLISHER_ID", &identity.publisher_id),
+        ("TRUSTED_PACKAGE_FAMILY_NAME", &identity.family_name),
+        ("TRUSTED_PACKAGE_VERSION", &identity.version),
+        ("TRUSTED_PACKAGE_ARCHITECTURE", &identity.architecture),
+        ("TRUSTED_APPLICATION_ID", &identity.application_id),
+        (
+            "TRUSTED_APPLICATION_EXECUTABLE",
+            &identity.application_executable,
+        ),
+        (
+            "TRUSTED_APPLICATION_ENTRY_POINT",
+            &identity.application_entry_point,
+        ),
+    ] {
+        writeln!(source, "pub const {name}: &str = {value:?};").unwrap();
+    }
 }
 
 fn is_canonical_package_version(version: &str) -> bool {
@@ -519,15 +755,19 @@ pub(crate) fn validate_geodata_manifest(
     Ok(())
 }
 
-fn unavailable_anchor() -> &'static str {
-    "pub const TRUST_ANCHOR_AVAILABLE: bool = false;\n\
-     pub const TRUSTED_MSIX_SHA256: &str = \"\";\n\
-     pub const TRUSTED_PACKAGE_VERSION: &str = \"\";\n\
-     pub const TRUSTED_CERTIFICATE_SHA256: &str = \"\";\n\
-     pub const TRUSTED_PRIMARY_MSIX_RELATIVE_PATH: &str = \"\";\n\
-     pub const TRUSTED_CERTIFICATE_RELATIVE_PATH: &str = \"\";\n\
-     pub const TRUSTED_PAYLOAD_FILES: &[(&str, u64, &str)] = &[];\n\
-     pub const TRUSTED_MACHINE_FILES: &[(&str, u64, &str)] = &[];\n"
+fn unavailable_anchor(source_manifest: &Path) -> Result<String, String> {
+    let manifest = fs::read_to_string(source_manifest)
+        .map_err(|error| format!("read source Appx manifest failed: {error}"))?;
+    let identity = parse_source_appx_identity(&manifest)?;
+    let mut source = String::from("pub const TRUST_ANCHOR_AVAILABLE: bool = false;\n");
+    source.push_str("pub const TRUSTED_MSIX_SHA256: &str = \"\";\n");
+    write_package_identity_constants(&mut source, &identity);
+    source.push_str("pub const TRUSTED_CERTIFICATE_SHA256: &str = \"\";\n");
+    source.push_str("pub const TRUSTED_PRIMARY_MSIX_RELATIVE_PATH: &str = \"\";\n");
+    source.push_str("pub const TRUSTED_CERTIFICATE_RELATIVE_PATH: &str = \"\";\n");
+    source.push_str("pub const TRUSTED_PAYLOAD_FILES: &[(&str, u64, &str)] = &[];\n");
+    source.push_str("pub const TRUSTED_MACHINE_FILES: &[(&str, u64, &str)] = &[];\n");
+    Ok(source)
 }
 
 fn enumerate_payload_files(payload: &Path) -> Result<BTreeMap<String, (u64, String)>, String> {
@@ -628,32 +868,78 @@ fn lower_hex(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn appx_identity_version_parser_ignores_comments_and_requires_one_identity() {
-        let manifest = r#"<?xml version="1.0" encoding="utf-8"?>
-            <!-- <Identity Version="9.9.9.9" /> -->
-            <Package>
-              <Identity Name="ClashSharp" Publisher="CN=linzh" Version="1.2.3.4" />
-              <mp:PhoneIdentity PhoneProductId="x" />
-            </Package>"#;
-
-        assert_eq!(parse_appx_identity_version(manifest).unwrap(), "1.2.3.4");
-        assert!(
-            parse_appx_identity_version(
-                r#"<Package><Identity Version="1.0.0.0"/><Identity Version="2.0.0.0"/></Package>"#
-            )
-            .is_err()
-        );
+    fn final_manifest(identity_attributes: &str, application_attributes: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+            <Package xmlns="{APPX_MANIFEST_NAMESPACE}">
+              <!-- <Identity Version="9.9.9.9" /> -->
+              <Identity {identity_attributes} />
+              <Applications><Application {application_attributes} /></Applications>
+            </Package>"#
+        )
     }
 
     #[test]
-    fn appx_identity_version_parser_rejects_noncanonical_versions() {
+    fn final_appx_identity_is_complete_and_derived_from_manifest() {
+        let manifest = final_manifest(
+            r#"Name="67dc1dc3-13fd-46c5-84f4-2932d94b566f" Publisher="CN=linzh" Version="1.2.3.4" ProcessorArchitecture="x64""#,
+            r#"Id="App" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication""#,
+        );
+        let identity = parse_final_appx_identity(&manifest).unwrap();
+
+        assert_eq!(identity.version, "1.2.3.4");
+        assert_eq!(identity.publisher_id, "vj7sjtzkt239a");
+        assert_eq!(
+            identity.family_name,
+            "67dc1dc3-13fd-46c5-84f4-2932d94b566f_vj7sjtzkt239a"
+        );
+        assert_eq!(identity.architecture, "x64");
+        assert_eq!(identity.application_id, "App");
+        assert_eq!(identity.application_executable, "ClashSharp.exe");
+    }
+
+    #[test]
+    fn appx_identity_parser_rejects_noncanonical_versions() {
         for version in ["1.2.3", "01.2.3.4", "1.2.3.65536", "1.2.3.four"] {
-            let manifest = format!(r#"<Package><Identity Version="{version}"/></Package>"#);
+            let manifest = final_manifest(
+                &format!(
+                    r#"Name="ClashSharp" Publisher="CN=linzh" Version="{version}" ProcessorArchitecture="x64""#
+                ),
+                r#"Id="App" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication""#,
+            );
             assert!(
-                parse_appx_identity_version(&manifest).is_err(),
+                parse_final_appx_identity(&manifest).is_err(),
                 "accepted {version}"
             );
         }
+    }
+
+    #[test]
+    fn publisher_replacement_derives_a_new_windows_family_without_manual_constants() {
+        let publisher =
+            "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US";
+        let manifest = final_manifest(
+            &format!(
+                r#"Name="ClashSharp.Product" Publisher="{publisher}" Version="2.0.0.0" ProcessorArchitecture="x64""#
+            ),
+            r#"Id="App" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication""#,
+        );
+        let identity = parse_final_appx_identity(&manifest).unwrap();
+
+        assert_eq!(identity.publisher_id, "8wekyb3d8bbwe");
+        assert_eq!(identity.family_name, "ClashSharp.Product_8wekyb3d8bbwe");
+    }
+
+    #[test]
+    fn final_appx_contract_rejects_wrong_architecture_or_executable() {
+        let identity = r#"Name="ClashSharp" Publisher="CN=linzh" Version="1.0.0.0" ProcessorArchitecture="arm64""#;
+        let application =
+            r#"Id="App" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication""#;
+        assert!(parse_final_appx_identity(&final_manifest(identity, application)).is_err());
+
+        let identity = r#"Name="ClashSharp" Publisher="CN=linzh" Version="1.0.0.0" ProcessorArchitecture="x64""#;
+        let application =
+            r#"Id="App" Executable="Other.exe" EntryPoint="Windows.FullTrustApplication""#;
+        assert!(parse_final_appx_identity(&final_manifest(identity, application)).is_err());
     }
 }

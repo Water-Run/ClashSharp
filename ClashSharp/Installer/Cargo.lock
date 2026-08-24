@@ -805,6 +805,7 @@ name = "clashsharp-installer"
 version = "1.0.0"
 dependencies = [
  "getrandom 0.3.4",
+ "roxmltree",
  "serde",
  "serde_json",
  "sha2",

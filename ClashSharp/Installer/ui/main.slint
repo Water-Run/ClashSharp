@@ -106,6 +106,7 @@ export component MainWindow inherits Window {
     in-out property <int> effective-theme: 0;
     in-out property <bool> busy: false;
     in-out property <bool> installed: false;
+    in-out property <bool> repair-allowed: true;
     in-out property <bool> supported: true;
     in-out property <bool> show-details: false;
     in-out property <bool> show-theme-menu: false;
@@ -420,7 +421,7 @@ export component MainWindow inherits Window {
         install-touch := TouchArea { clicked => { root.install(); } }
     }
 
-    if !root.busy && root.supported && root.installed && root.phase != 0 && root.phase != 1 && root.phase != 5 : Rectangle {
+    if !root.busy && root.supported && root.installed && root.repair-allowed && root.phase != 0 && root.phase != 1 && root.phase != 5 : Rectangle {
         x: 34px;
         y: 356px;
         width: 220px;

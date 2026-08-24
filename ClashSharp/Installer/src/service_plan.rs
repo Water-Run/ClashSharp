@@ -10,17 +10,15 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// Fixed MSIX identity queried by the elevated helper.
-pub const PACKAGE_IDENTITY_NAME: &str = "67dc1dc3-13fd-46c5-84f4-2932d94b566f";
-
-/// Fixed manifest Publisher; package identity checks supplement, but do not replace, content hashes.
-pub const PACKAGE_PUBLISHER: &str = "CN=linzh";
-
-/// PublisherId derived by Windows from the fixed manifest Publisher.
-pub const PACKAGE_PUBLISHER_ID: &str = "vj7sjtzkt239a";
-
-/// Exact package family queried by the elevated helper.
-pub const PACKAGE_FAMILY_NAME: &str = "67dc1dc3-13fd-46c5-84f4-2932d94b566f_vj7sjtzkt239a";
+/// MSIX identity values generated from the final package (or the source manifest for an
+/// intentionally trust-anchor-free development build). No second handwritten identity exists.
+pub use crate::trust_anchor::{
+    TRUSTED_PACKAGE_ARCHITECTURE as PACKAGE_ARCHITECTURE,
+    TRUSTED_PACKAGE_FAMILY_NAME as PACKAGE_FAMILY_NAME,
+    TRUSTED_PACKAGE_IDENTITY_NAME as PACKAGE_IDENTITY_NAME,
+    TRUSTED_PACKAGE_PUBLISHER as PACKAGE_PUBLISHER,
+    TRUSTED_PACKAGE_PUBLISHER_ID as PACKAGE_PUBLISHER_ID,
+};
 
 /// Fixed Windows service name shared with the application.
 pub const SERVICE_NAME: &str = "ClashSharpMihomo";
@@ -389,7 +387,10 @@ fn package_version_from_full_name(package_full_name: &str) -> Result<&str, Strin
     let [version, architecture, resource_id] = components.as_slice() else {
         return Err(String::from("installer.target_package.full_name_invalid"));
     };
-    if *architecture != "x64" || !resource_id.is_empty() || !is_canonical_package_version(version) {
+    if *architecture != PACKAGE_ARCHITECTURE
+        || !resource_id.is_empty()
+        || !is_canonical_package_version(version)
+    {
         return Err(String::from("installer.target_package.full_name_invalid"));
     }
     Ok(version)

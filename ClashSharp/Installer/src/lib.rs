@@ -7,5 +7,6 @@
 
 pub mod installer_transaction;
 pub mod metadata;
+pub mod package_identity;
 pub mod service_plan;
 pub mod trust_anchor;

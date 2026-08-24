@@ -16,6 +16,10 @@ use clashsharp_installer::installer_transaction::{
 use clashsharp_installer::metadata::{
     compact_path, parse_version_from_package_name, read_manifest_version_text,
 };
+use clashsharp_installer::package_identity::{
+    CurrentUserPackageRegistration, DeploymentVersionChange, PackageVersion,
+    classify_deployment_version,
+};
 use clashsharp_installer::service_plan::{
     ApplyDecision, AssociationState, MachineAssociation, MachineHelperInvocation,
     MachinePayloadSource, MachineResourcePlan, MachineServicePlan, MachineTransactionContext,
@@ -200,6 +204,7 @@ struct TextPack {
     not_installed_message: &'static str,
     installed_title: &'static str,
     installed_message: &'static str,
+    downgrade_rejected: &'static str,
     install_button: &'static str,
     repair_button: &'static str,
     uninstall_button: &'static str,
@@ -244,7 +249,13 @@ struct InstallerContext {
     package_path: Option<PathBuf>,
     certificate_path: Option<PathBuf>,
     dependency_paths: Vec<PathBuf>,
-    is_installed: bool,
+    installed_package: Option<CurrentUserPackageRegistration>,
+}
+
+impl InstallerContext {
+    fn is_installed(&self) -> bool {
+        self.installed_package.is_some()
+    }
 }
 
 /// Per-user startup barriers held by the non-elevated parent for one whole package operation.
@@ -284,7 +295,6 @@ impl PackageMutationLocks {
 struct EnvironmentState {
     context: Result<InstallerContext, String>,
     support: Result<SystemInfo, String>,
-    is_installed: bool,
 }
 
 /// Windows platform facts needed before MSIX deployment.
@@ -494,16 +504,20 @@ fn inspect_environment() -> EnvironmentState {
     EnvironmentState {
         context: build_context(),
         support: inspect_supported_system(),
-        is_installed: is_package_installed(),
     }
 }
 
 /// Projects environment inspection results into the UI state machine.
 fn apply_environment_state(handle: &MainWindow, state: &EnvironmentState, text: TextPack) {
     let supported = state.support.is_ok();
+    let installed = state
+        .context
+        .as_ref()
+        .is_ok_and(InstallerContext::is_installed);
     handle.set_busy(false);
     handle.set_supported(supported);
-    handle.set_installed(state.is_installed);
+    handle.set_installed(installed);
+    handle.set_repair_allowed(true);
     handle.set_progress(0.0);
     handle.set_details_text(SharedString::from(format_environment_details(state, text)));
 
@@ -514,11 +528,14 @@ fn apply_environment_state(handle: &MainWindow, state: &EnvironmentState, text: 
         return;
     }
 
-    let Ok(context) = state.context.as_ref() else {
-        handle.set_phase(InstallerPhase::Failed as i32);
-        handle.set_state_title(SharedString::from(text.missing_payload_title));
-        handle.set_state_message(SharedString::from(text.missing_payload_message));
-        return;
+    let context = match state.context.as_ref() {
+        Ok(context) => context,
+        Err(error) => {
+            handle.set_phase(InstallerPhase::Failed as i32);
+            handle.set_state_title(SharedString::from(text.failed_title));
+            handle.set_state_message(SharedString::from(error.as_str()));
+            return;
+        }
     };
 
     if context.package_path.is_none() || context.certificate_path.is_none() {
@@ -529,15 +546,31 @@ fn apply_environment_state(handle: &MainWindow, state: &EnvironmentState, text: 
     }
 
     handle.set_phase(InstallerPhase::Ready as i32);
-    handle.set_state_title(SharedString::from(if state.is_installed {
+    handle.set_state_title(SharedString::from(if installed {
         text.installed_title
     } else {
         text.not_installed_title
     }));
-    handle.set_state_message(SharedString::from(if state.is_installed {
-        text.installed_message
+    let downgrade = context
+        .installed_package
+        .as_ref()
+        .and_then(|registration| deployment_version_change(registration).ok())
+        == Some(DeploymentVersionChange::Downgrade);
+    handle.set_repair_allowed(!downgrade);
+    handle.set_state_message(SharedString::from(if downgrade {
+        format_downgrade_message(
+            text,
+            context
+                .installed_package
+                .as_ref()
+                .expect("downgrade requires an installed package")
+                .version(),
+            trusted_payload_version().expect("downgrade requires a trusted payload version"),
+        )
+    } else if installed {
+        text.installed_message.to_owned()
     } else {
-        text.not_installed_message
+        text.not_installed_message.to_owned()
     }));
 }
 
@@ -564,16 +597,33 @@ fn run_action_async(app_weak: Weak<MainWindow>, action: InstallerAction, text: T
         InstallerAction::Uninstall => text.preparing_uninstall,
     }));
     handle.set_state_message(SharedString::from(text.checking_message));
+    let initially_installed = handle.get_installed();
 
     thread::spawn(move || {
-        let result = run_action(&app_weak, action, text);
-        let installed = final_installed_state(action, &result, is_package_installed());
+        let mut result = run_action(&app_weak, action, text);
+        let refreshed_registration = query_current_user_package_registration();
+        let installed = refreshed_registration
+            .as_ref()
+            .map(|registration| registration.is_some())
+            .unwrap_or(initially_installed);
+        let repair_allowed = refreshed_registration
+            .as_ref()
+            .ok()
+            .and_then(|registration| registration.as_ref())
+            .and_then(|registration| deployment_version_change(registration).ok())
+            != Some(DeploymentVersionChange::Downgrade);
+        if let Err(error) = refreshed_registration
+            && result.is_ok()
+        {
+            result = Err(error);
+        }
         ACTION_RUNNING.store(false, Ordering::SeqCst);
 
         app_weak
             .upgrade_in_event_loop(move |handle| {
                 handle.set_busy(false);
                 handle.set_installed(installed);
+                handle.set_repair_allowed(repair_allowed);
                 handle.set_details_text(SharedString::from(
                     result.as_ref().err().map(String::as_str).unwrap_or(""),
                 ));
@@ -610,9 +660,6 @@ fn run_action(
     let context = build_context()?;
     inspect_supported_system()?;
     ensure_interactive_parent_context()?;
-    let target_sid = query_current_user_sid()?;
-    let mut package_mutation_locks =
-        acquire_installer_mutation_locks(&target_sid, context.is_installed)?;
     let operation = match action {
         InstallerAction::Install => OperationAction::Install,
         InstallerAction::Repair => OperationAction::Repair,
@@ -623,6 +670,20 @@ fn run_action(
     } else {
         Some(verify_installer_payload(&context.payload_dir)?)
     };
+    let payload_version = if trusted_payload.is_some() {
+        let version = trusted_payload_version()?;
+        ensure_action_registration(action, context.installed_package.as_ref(), version, text)?;
+        Some(version)
+    } else {
+        None
+    };
+    let target_sid = query_current_user_sid()?;
+    let mut package_mutation_locks =
+        acquire_installer_mutation_locks(&target_sid, context.is_installed())?;
+    if let Some(version) = payload_version {
+        let registration = query_current_user_package_registration()?;
+        ensure_action_registration(action, registration.as_ref(), version, text)?;
+    }
     for step in operation_steps(operation) {
         match step {
             OperationStep::InstallCurrentUserCertificate => {
@@ -659,8 +720,13 @@ fn run_action(
             }
             OperationStep::DeployCurrentUserPackageInPlace => {
                 set_progress(app_weak, 0.62, text.package_title, text.package_message);
-                let update_existing =
-                    matches!(action, InstallerAction::Repair) && context.is_installed;
+                let registration = query_current_user_package_registration()?;
+                let update_existing = ensure_action_registration(
+                    action,
+                    registration.as_ref(),
+                    payload_version.expect("deployment operation has a trusted payload version"),
+                    text,
+                )?;
                 if let Err(error) = deploy_package(
                     trusted_payload
                         .as_ref()
@@ -693,7 +759,7 @@ fn run_action(
                 )?;
             }
             OperationStep::RemoveCurrentUserPackageIfPresent => {
-                if context.is_installed {
+                if context.is_installed() {
                     // The package-independent lock still blocks the current App while allowing
                     // Remove-AppxPackage to delete LocalState and its recovery-lock file.
                     package_mutation_locks.release_recovery_lock();
@@ -710,15 +776,6 @@ fn run_action(
         InstallerAction::Repair => text.repaired_done,
         InstallerAction::Uninstall => text.uninstalled_done,
     })
-}
-
-/// Returns the UI installation state after an action using a fresh package query result.
-fn final_installed_state(
-    _action: InstallerAction,
-    _result: &Result<&'static str, String>,
-    currently_installed: bool,
-) -> bool {
-    currently_installed
 }
 
 /// Builds installer context from files located next to the running executable.
@@ -738,7 +795,7 @@ fn build_context() -> Result<InstallerContext, String> {
         package_path,
         certificate_path,
         dependency_paths,
-        is_installed: is_package_installed(),
+        installed_package: query_current_user_package_registration()?,
     })
 }
 
@@ -859,6 +916,61 @@ fn deploy_package(
     )
 }
 
+/// Parses the package version embedded from the same final MSIX as all identity constants.
+fn trusted_payload_version() -> Result<PackageVersion, String> {
+    PackageVersion::parse(trusted_package_version()?)
+        .map_err(|_| String::from("installer.trust.package_version_invalid"))
+}
+
+/// Classifies the trusted payload against one already identity-validated registration.
+fn deployment_version_change(
+    installed: &CurrentUserPackageRegistration,
+) -> Result<DeploymentVersionChange, String> {
+    Ok(classify_deployment_version(
+        installed.version(),
+        trusted_payload_version()?,
+    ))
+}
+
+/// Fails closed on stale UI state and rejects every implicit downgrade before deployment.
+fn ensure_action_registration(
+    action: InstallerAction,
+    installed: Option<&CurrentUserPackageRegistration>,
+    payload_version: PackageVersion,
+    text: TextPack,
+) -> Result<bool, String> {
+    if let Some(registration) = installed
+        && classify_deployment_version(registration.version(), payload_version)
+            == DeploymentVersionChange::Downgrade
+    {
+        return Err(format!(
+            "installer.package.downgrade_rejected: {}",
+            format_downgrade_message(text, registration.version(), payload_version)
+        ));
+    }
+
+    match action {
+        InstallerAction::Install if installed.is_some() => Err(String::from(
+            "installer.package.install_target_present: Refresh and choose Repair.",
+        )),
+        InstallerAction::Repair if installed.is_none() => Err(String::from(
+            "installer.package.repair_target_missing: Refresh and choose Install.",
+        )),
+        InstallerAction::Install | InstallerAction::Repair => Ok(installed.is_some()),
+        InstallerAction::Uninstall => Ok(installed.is_some()),
+    }
+}
+
+fn format_downgrade_message(
+    text: TextPack,
+    installed: PackageVersion,
+    payload: PackageVersion,
+) -> String {
+    text.downgrade_rejected
+        .replace("{installed}", &installed.to_string())
+        .replace("{payload}", &payload.to_string())
+}
+
 /// Builds the CurrentUser Add-Appx command so repair semantics can be unit tested without deployment.
 fn render_deploy_package_command(
     package_path: &Path,
@@ -866,7 +978,7 @@ fn render_deploy_package_command(
     update_existing: bool,
 ) -> String {
     let update_options = if update_existing {
-        " -Update -ForceUpdateFromAnyVersion -RetainFilesOnFailure"
+        " -Update -RetainFilesOnFailure"
     } else {
         ""
     };
@@ -1468,14 +1580,36 @@ fn uninstall_startup_restore_fallback(barrier_path: &Path) -> Result<(), String>
     )
 }
 
-/// Returns whether the Clash# package is installed for the current user.
-fn is_package_installed() -> bool {
-    run_powershell_capture(&format!(
-        "if (Get-AppxPackage -Name {}) {{ exit 0 }} else {{ exit 1 }}",
-        powershell_quote_text(PACKAGE_IDENTITY_NAME)
-    ))
-    .map(|output| output.status.success())
-    .unwrap_or(false)
+/// Queries and validates the one Clash# registration for the current Windows user.
+fn query_current_user_package_registration()
+-> Result<Option<CurrentUserPackageRegistration>, String> {
+    let output = run_powershell_capture(&render_current_user_package_query_command())?;
+    let text = successful_output_text(output, "installer.package.query_failed")?;
+    if text == "__ABSENT__" {
+        Ok(None)
+    } else {
+        CurrentUserPackageRegistration::parse_json(&text).map(Some)
+    }
+}
+
+fn render_current_user_package_query_command() -> String {
+    format!(
+        "$ErrorActionPreference = 'Stop'; \
+         $packages = @(Get-AppxPackage -Name {}); \
+         if ($packages.Count -eq 0) {{ [Console]::Out.Write('__ABSENT__'); exit 0 }}; \
+         if ($packages.Count -ne 1) {{ throw 'current-user package registration is not unique' }}; \
+         [PSCustomObject]@{{ \
+             name = [string]$packages[0].Name; \
+             version = [string]$packages[0].Version; \
+             architecture = [string]$packages[0].Architecture; \
+             resourceId = [string]$packages[0].ResourceId; \
+             packageFullName = [string]$packages[0].PackageFullName; \
+             packageFamilyName = [string]$packages[0].PackageFamilyName; \
+             publisher = [string]$packages[0].Publisher; \
+             publisherId = [string]$packages[0].PublisherId \
+         }} | ConvertTo-Json -Compress",
+        powershell_quote_text(PACKAGE_IDENTITY_NAME),
+    )
 }
 
 /// Executes one already-parsed elevated helper action and returns a stable process exit code.
@@ -2539,6 +2673,7 @@ fn localized_text(language: InstallerLanguage) -> TextPack {
             not_installed_message: "安装程序将先安装证书，然后安装 Clash# MSIX 包。",
             installed_title: "Clash# 已经安装。",
             installed_message: "选择你需要执行的操作。",
+            downgrade_rejected: "已安装版本 {installed} 高于此安装程序的 {payload}。普通修补不会降级，请使用相同或更新版本的安装程序。",
             install_button: "安装",
             repair_button: "修补",
             uninstall_button: "卸载",
@@ -2590,6 +2725,7 @@ fn localized_text(language: InstallerLanguage) -> TextPack {
             not_installed_message: "安裝程式會先安裝憑證，然後安裝 Clash# MSIX 包。",
             installed_title: "Clash# 已經安裝。",
             installed_message: "選擇你需要執行的操作。",
+            downgrade_rejected: "已安裝版本 {installed} 高於此安裝程式的 {payload}。一般修補不會降級，請使用相同或更新版本的安裝程式。",
             install_button: "安裝",
             repair_button: "修補",
             uninstall_button: "解除安裝",
@@ -2641,6 +2777,7 @@ fn localized_text(language: InstallerLanguage) -> TextPack {
             not_installed_message: "Setup will install the certificate first, then install the Clash# MSIX package.",
             installed_title: "Clash# is already installed.",
             installed_message: "Choose the action you want to run.",
+            downgrade_rejected: "Installed version {installed} is newer than this Installer payload ({payload}). Repair will not downgrade it; use an equal or newer Installer.",
             install_button: "Install",
             repair_button: "Repair",
             uninstall_button: "Uninstall",
@@ -2692,6 +2829,7 @@ fn localized_text(language: InstallerLanguage) -> TextPack {
             not_installed_message: "Сначала будет установлен сертификат, затем пакет Clash# MSIX.",
             installed_title: "Clash# уже установлен.",
             installed_message: "Выберите действие.",
+            downgrade_rejected: "Установленная версия {installed} новее пакета этого установщика ({payload}). Исправление не выполняет откат; используйте установщик той же или более новой версии.",
             install_button: "Установить",
             repair_button: "Исправить",
             uninstall_button: "Удалить",
@@ -2743,6 +2881,7 @@ fn localized_text(language: InstallerLanguage) -> TextPack {
             not_installed_message: "Le certificat sera installe avant le paquet Clash# MSIX.",
             installed_title: "Clash# est deja installe.",
             installed_message: "Choisissez l'action a executer.",
+            downgrade_rejected: "La version installee {installed} est plus recente que le paquet de cet installateur ({payload}). La reparation ne la retrograde pas ; utilisez un installateur de version egale ou superieure.",
             install_button: "Installer",
             repair_button: "Reparer",
             uninstall_button: "Desinstaller",
@@ -2794,6 +2933,7 @@ fn localized_text(language: InstallerLanguage) -> TextPack {
             not_installed_message: "Zuerst wird das Zertifikat installiert, danach das Clash# MSIX-Paket.",
             installed_title: "Clash# ist bereits installiert.",
             installed_message: "Waehlen Sie die auszufuehrende Aktion.",
+            downgrade_rejected: "Die installierte Version {installed} ist neuer als das Paket dieses Installers ({payload}). Eine Reparatur fuehrt kein Downgrade aus; verwenden Sie einen gleich neuen oder neueren Installer.",
             install_button: "Installieren",
             repair_button: "Reparieren",
             uninstall_button: "Deinstallieren",
@@ -2850,11 +2990,13 @@ fn format_environment_details(state: &EnvironmentState, text: TextPack) -> Strin
         Err(error) => format!("{}\n{}", text.system_unsupported, error),
     };
 
-    let installed = if state.is_installed {
-        text.installed_yes
-    } else {
-        text.installed_no
-    };
+    let installed = state
+        .context
+        .as_ref()
+        .ok()
+        .and_then(|context| context.installed_package.as_ref())
+        .map(|registration| format!("{} ({})", text.installed_yes, registration.version()))
+        .unwrap_or_else(|| text.installed_no.to_owned());
 
     let payload = match state.context.as_ref() {
         Ok(context) => {
@@ -2882,13 +3024,17 @@ fn format_environment_details(state: &EnvironmentState, text: TextPack) -> Strin
     format!("{product}\n{system}\n{installed}\n{payload}")
 }
 
-/// Resolves the Clash# package version from the payload name or project manifest.
+/// Resolves the Clash# package version, preferring the final-MSIX trust anchor.
 fn resolve_clashsharp_version(context: Option<&InstallerContext>) -> String {
-    context
-        .and_then(|context| context.package_path.as_ref())
-        .and_then(|path| parse_version_from_package_name(path))
-        .or_else(find_manifest_version)
-        .unwrap_or_else(|| String::from("unknown"))
+    trusted_package_version()
+        .map(str::to_owned)
+        .unwrap_or_else(|_| {
+            context
+                .and_then(|context| context.package_path.as_ref())
+                .and_then(|path| parse_version_from_package_name(path))
+                .or_else(find_manifest_version)
+                .unwrap_or_else(|| String::from("unknown"))
+        })
 }
 
 /// Finds the main app manifest from nearby repository ancestors and reads its package version.
@@ -3340,6 +3486,30 @@ mod tests {
 
     const TEST_SID: &str = "S-1-5-21-100-200-300-1001";
 
+    fn current_user_registration(version: &str) -> CurrentUserPackageRegistration {
+        use clashsharp_installer::trust_anchor::{
+            TRUSTED_PACKAGE_ARCHITECTURE, TRUSTED_PACKAGE_FAMILY_NAME,
+            TRUSTED_PACKAGE_IDENTITY_NAME, TRUSTED_PACKAGE_PUBLISHER, TRUSTED_PACKAGE_PUBLISHER_ID,
+        };
+
+        CurrentUserPackageRegistration::parse_json(
+            &serde_json::json!({
+                "name": TRUSTED_PACKAGE_IDENTITY_NAME,
+                "version": version,
+                "architecture": "X64",
+                "resourceId": "",
+                "packageFullName": format!(
+                    "{TRUSTED_PACKAGE_IDENTITY_NAME}_{version}_{TRUSTED_PACKAGE_ARCHITECTURE}__{TRUSTED_PACKAGE_PUBLISHER_ID}"
+                ),
+                "packageFamilyName": TRUSTED_PACKAGE_FAMILY_NAME,
+                "publisher": TRUSTED_PACKAGE_PUBLISHER,
+                "publisherId": TRUSTED_PACKAGE_PUBLISHER_ID,
+            })
+            .to_string(),
+        )
+        .unwrap()
+    }
+
     #[cfg(windows)]
     fn assert_powershell_parses(script: &str) {
         let mut child = Command::new("powershell.exe")
@@ -3377,21 +3547,73 @@ mod tests {
     }
 
     #[test]
-    fn final_installed_state_uses_actual_query_after_uninstall_failure() {
-        assert!(final_installed_state(
-            InstallerAction::Uninstall,
-            &Err(String::from("remove failed")),
-            true
-        ));
+    fn repair_rejects_downgrade_but_allows_equal_and_newer_payloads() {
+        let installed = current_user_registration("2.10.3.4");
+        let text = localized_text(InstallerLanguage::English);
+
+        let error = ensure_action_registration(
+            InstallerAction::Repair,
+            Some(&installed),
+            PackageVersion::parse("2.9.65535.0").unwrap(),
+            text,
+        )
+        .unwrap_err();
+        assert!(error.starts_with("installer.package.downgrade_rejected:"));
+        assert!(error.contains("2.10.3.4"));
+        assert!(error.contains("2.9.65535.0"));
+
+        for payload in ["2.10.3.4", "2.11.0.0"] {
+            assert!(
+                ensure_action_registration(
+                    InstallerAction::Repair,
+                    Some(&installed),
+                    PackageVersion::parse(payload).unwrap(),
+                    text,
+                )
+                .unwrap()
+            );
+        }
     }
 
     #[test]
-    fn final_installed_state_uses_actual_query_after_install_failure() {
-        assert!(!final_installed_state(
-            InstallerAction::Install,
-            &Err(String::from("deploy failed")),
-            false
-        ));
+    fn install_and_repair_require_a_fresh_matching_registration_state() {
+        let installed = current_user_registration("1.0.0.0");
+        let payload = PackageVersion::parse("1.0.0.0").unwrap();
+        let text = localized_text(InstallerLanguage::English);
+
+        assert!(
+            !ensure_action_registration(InstallerAction::Install, None, payload, text).unwrap()
+        );
+        assert!(
+            ensure_action_registration(InstallerAction::Install, Some(&installed), payload, text)
+                .is_err()
+        );
+        assert!(ensure_action_registration(InstallerAction::Repair, None, payload, text).is_err());
+    }
+
+    #[test]
+    fn current_user_package_query_returns_complete_identity_or_proven_absence() {
+        let command = render_current_user_package_query_command();
+        for required in [
+            "$ErrorActionPreference = 'Stop'",
+            "Get-AppxPackage -Name",
+            "if ($packages.Count -eq 0)",
+            "if ($packages.Count -ne 1)",
+            "version = [string]$packages[0].Version",
+            "architecture = [string]$packages[0].Architecture",
+            "resourceId = [string]$packages[0].ResourceId",
+            "packageFullName = [string]$packages[0].PackageFullName",
+            "packageFamilyName = [string]$packages[0].PackageFamilyName",
+            "publisherId = [string]$packages[0].PublisherId",
+            "ConvertTo-Json -Compress",
+        ] {
+            assert!(
+                command.contains(required),
+                "missing query contract: {required}"
+            );
+        }
+        #[cfg(windows)]
+        assert_powershell_parses(&command);
     }
 
     #[test]
@@ -3435,7 +3657,8 @@ mod tests {
 
         assert!(command.starts_with("Add-AppxPackage"));
         assert!(command.contains("-Update"));
-        assert!(command.contains("-ForceUpdateFromAnyVersion"));
+        let downgrade_override = ["-ForceUpdate", "FromAnyVersion"].concat();
+        assert!(!command.contains(&downgrade_override));
         assert!(command.contains("-RetainFilesOnFailure"));
         assert!(!command.contains("Remove-AppxPackage"));
         assert!(!command.contains("-PreserveApplicationData"));
@@ -3491,10 +3714,7 @@ mod tests {
     fn package_process_preflight_lock_is_acquired_before_operation_steps_and_uac() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let run_action = source.split_once("fn run_action(").unwrap().1;
-        let run_action = run_action
-            .split_once("fn final_installed_state(")
-            .unwrap()
-            .0;
+        let run_action = run_action.split_once("fn build_context(").unwrap().0;
         let acquire = source
             .split_once("fn acquire_installer_mutation_locks(")
             .unwrap();
@@ -3535,7 +3755,7 @@ mod tests {
             .split_once("fn run_action(")
             .unwrap()
             .1
-            .split_once("fn final_installed_state(")
+            .split_once("fn build_context(")
             .unwrap()
             .0;
 
@@ -3766,7 +3986,7 @@ mod tests {
             .split_once("fn run_action(")
             .unwrap()
             .1
-            .split_once("fn final_installed_state(")
+            .split_once("fn build_context(")
             .unwrap()
             .0;
         let prepare = run_action.find("prepare_machine_transaction(").unwrap();

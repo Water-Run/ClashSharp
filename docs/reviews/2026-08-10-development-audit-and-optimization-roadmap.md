@@ -142,14 +142,21 @@ ClashSharp-Installer.exe                 唯一用户可见安装/修复/升级/
 
 **开发内容**
 
-- [ ] 查询并解析当前注册包的完整数字版本。
-- [ ] 将 installed version 与 Installer 内嵌可信 payload version 比较。
-- [ ] 默认拒绝 `installed > payload`，返回稳定错误码和本地化说明。
-- [ ] 如未来需要回滚，单独设计显式 Rollback 操作、强警告、审计记录及数据兼容协议；不得复用普通 Repair。
+- [x] 查询并解析当前注册包的完整数字版本。
+- [x] 将 installed version 与 Installer 内嵌可信 payload version 比较。
+- [x] 默认拒绝 `installed > payload`，返回稳定错误码和本地化说明。
+- [x] 当前不提供 Rollback；普通 Repair 不再持有任何强制降级开关。未来若新增回滚，必须另建显式操作、强警告、审计记录及数据兼容协议。
+
+**关闭证据（2026-08-24）**
+
+- 新增 canonical `PackageVersion` 与 strict `CurrentUserPackageRegistration`；CurrentUser 查询必须返回“确定不存在”或唯一注册对象，并逐项校验 Name、Version、Architecture、ResourceId、FullName、FamilyName、Publisher 与 PublisherId，查询/JSON/身份异常不再静默折叠为未安装。
+- Install/Repair 在取得操作锁前比较一次版本，取得锁后且证书/UAC/机器事务前再次比较，并在 Add-Appx 前最后复核；`installed > payload` 返回稳定码 `installer.package.downgrade_rejected` 和六语言版本说明，同时 UI 禁用 Repair 而保留卸载入口。
+- Repair 的 Add-Appx 参数只保留 `-Update -RetainFilesOnFailure`，已删除 `-ForceUpdateFromAnyVersion`；Windows 本身的更新版本规则成为额外防线。
+- Rust 契约覆盖新装状态、同版本、升级、降级、错误版本和完整注册身份；C# 源码契约禁止强制降级参数回归。
 
 **验收条件**
 
-- 新装、同版本 Repair、升级均通过；旧 Installer 降级被确定性拒绝。
+- [x] 新装、同版本 Repair、升级均通过；旧 Installer 降级被确定性拒绝。
 
 ### P0-03 MSIX Identity 只有一个真相源
 
@@ -161,14 +168,22 @@ ClashSharp-Installer.exe                 唯一用户可见安装/修复/升级/
 
 **开发内容**
 
-- [ ] 从最终 MSIX 的 AppxManifest 解析 Name、Publisher、PublisherId/FamilyName、Version、ProcessorArchitecture 和 Application/Executable。
-- [ ] 由构建脚本生成 Rust 常量，或与唯一声明源进行完整 fail-closed 比对。
-- [ ] 禁止手工维护第二份 FamilyName/Publisher 常量。
-- [ ] 增加合法更换 Publisher、错误架构、错误 family 和错误 executable 的构建契约测试。
+- [x] 从最终 MSIX 的 AppxManifest 解析 Name、Publisher、PublisherId/FamilyName、Version、ProcessorArchitecture 和 Application/Executable。
+- [x] 由构建脚本生成 Rust 常量，并对完整身份执行 fail-closed 校验。
+- [x] 禁止手工维护第二份 FamilyName/Publisher 常量。
+- [x] 增加合法更换 Publisher、错误架构、错误 family 和错误 executable 的构建/运行期契约测试。
+
+**关闭证据（2026-08-24）**
+
+- `Installer/build.rs` 以有界、canonical 的最终 `AppxManifest.xml` 为输入，解析唯一 Package/Identity/Applications/Application，生成 Name、Publisher、PublisherId、FamilyName、Version、Architecture、Application Id、Executable 与 EntryPoint 常量；x64、`App`、`ClashSharp.exe` 和 `Windows.FullTrustApplication` 产品契约任一漂移即构建失败。
+- PublisherId 由 manifest Publisher 的 Windows package 算法派生，PFN 由 Name + PublisherId 形成；Windows 构建还调用系统 `PackageFamilyNameFromId` 交叉校验结果。无完整 payload 的 Debug 构建只从唯一源码 manifest 生成非信任 fallback 身份，`TRUST_ANCHOR_AVAILABLE` 保持 false；Release 仍直接失败。
+- `service_plan.rs` 删除四项手写 identity 常量，仅 re-export 构建生成的 trust-anchor 常量；CurrentUser 与 elevated target 查询、包 full-name 校验、LocalState family 路径和脚本模板全部消费同一组生成值。
+- Rust 构建契约覆盖完整字段、合法 Publisher 更换（自动得到新 PublisherId/PFN）、错误架构、错误 executable、错误 family 与 canonical 版本；C# 架构契约禁止手写常量回归。
+- 无系统 mutation 验证：Rust fmt/clippy 通过，72 项 Rust 测试通过；Release x64 测试程序集构建通过，.NET 2,210 项通过、0 失败、0 跳过。验证前后正在使用的 mihomo 进程 PID 保持为 25216。
 
 **验收条件**
 
-- Identity 任一字段不一致时构建失败；运行期查询目标完全由已验证的最终包派生。
+- [x] Identity 任一字段不一致时构建失败；运行期查询目标完全由已验证的最终包派生。
 
 ### P0-04 建立精确 payload、来源与签名契约
 
