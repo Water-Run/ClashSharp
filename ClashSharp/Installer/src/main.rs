@@ -29,7 +29,7 @@ use clashsharp_installer::service_plan::{
 };
 use clashsharp_installer::trust_anchor::{
     trusted_machine_manifest_json, trusted_msix_sha256, trusted_package_version,
-    verify_installer_payload, verify_registered_machine_payload,
+    verify_installer_payload, verify_registered_package_payload,
 };
 use slint::{ComponentHandle, SharedString, Weak};
 
@@ -665,7 +665,7 @@ fn run_action(
         InstallerAction::Repair => OperationAction::Repair,
         InstallerAction::Uninstall => OperationAction::Uninstall,
     };
-    let trusted_payload = if matches!(operation, OperationAction::Uninstall) {
+    let mut trusted_payload = if matches!(operation, OperationAction::Uninstall) {
         None
     } else {
         Some(verify_installer_payload(&context.payload_dir)?)
@@ -697,13 +697,15 @@ fn run_action(
                     text.certificate_title,
                     text.certificate_message,
                 );
+                let payload = trusted_payload
+                    .as_mut()
+                    .expect("non-uninstall operation has a trust anchor");
+                payload.reverify()?;
                 install_certificate(
-                    trusted_payload
-                        .as_ref()
-                        .expect("non-uninstall operation has a trust anchor")
-                        .certificate(),
+                    payload.certificate(),
                     package_mutation_locks.installer_mutation_path(),
                 )?;
+                payload.reverify()?;
             }
             OperationStep::PrepareMachineInstall => {
                 set_progress(app_weak, 0.42, text.package_title, text.package_message);
@@ -727,15 +729,13 @@ fn run_action(
                     payload_version.expect("deployment operation has a trusted payload version"),
                     text,
                 )?;
+                let payload = trusted_payload
+                    .as_mut()
+                    .expect("non-uninstall operation has a trust anchor");
+                payload.reverify()?;
                 if let Err(error) = deploy_package(
-                    trusted_payload
-                        .as_ref()
-                        .expect("non-uninstall operation has a trust anchor")
-                        .primary_msix(),
-                    trusted_payload
-                        .as_ref()
-                        .expect("non-uninstall operation has a trust anchor")
-                        .dependencies(),
+                    payload.primary_msix(),
+                    payload.dependencies(),
                     update_existing,
                     package_mutation_locks.installer_mutation_path(),
                 ) {
@@ -743,6 +743,7 @@ fn run_action(
                         "{error}\ninstaller.transaction.package_state_uncertain: The transaction was retained. Run the same Installer and choose Repair."
                     ));
                 }
+                payload.reverify()?;
                 package_mutation_locks.acquire_recovery_lock(&target_sid)?;
             }
             OperationStep::CommitMachineTransaction => {
@@ -1806,7 +1807,7 @@ fn prepare_installer_transaction(
     transaction_path: &Path,
 ) -> Result<i32, String> {
     let payload_directory = fixed_sibling_payload_directory()?;
-    verify_installer_payload(&payload_directory)?;
+    let _trusted_payload = verify_installer_payload(&payload_directory)?;
     let expected_version = trusted_package_version()?;
     let payload_hash = trusted_msix_sha256()?;
 
@@ -1894,7 +1895,7 @@ fn commit_installer_transaction(
     transaction_path: &Path,
 ) -> Result<i32, String> {
     let payload_directory = fixed_sibling_payload_directory()?;
-    let trusted_payload = verify_installer_payload(&payload_directory)?;
+    let mut trusted_payload = verify_installer_payload(&payload_directory)?;
     let expected_version = trusted_package_version()?;
     let payload_hash = trusted_msix_sha256()?;
     let InstallerTransactionState::Valid(mut journal) =
@@ -1913,11 +1914,14 @@ fn commit_installer_transaction(
     let Some(registration) = query_target_package_registration_if_present(target_sid)? else {
         return Ok(MACHINE_TRANSACTION_PACKAGE_NOT_COMMITTED_EXIT_CODE);
     };
-    if !registration.matches_trusted_package_version(expected_version)?
-        || verify_registered_machine_payload(registration.install_location()).is_err()
-    {
+    if !registration.matches_trusted_package_version(expected_version)? {
         return Ok(MACHINE_TRANSACTION_PACKAGE_NOT_COMMITTED_EXIT_CODE);
     }
+    let mut registered_package =
+        match verify_registered_package_payload(registration.install_location()) {
+            Ok(package) => package,
+            Err(_) => return Ok(MACHINE_TRANSACTION_PACKAGE_NOT_COMMITTED_EXIT_CODE),
+        };
     if journal.phase() == InstallerTransactionPhase::Prepared {
         journal.transition_to(InstallerTransactionPhase::PackageCommitted)?;
         write_installer_transaction(common_application_data, transaction_path, &journal)?;
@@ -1961,6 +1965,8 @@ fn commit_installer_transaction(
         return Ok(APP_RUNNING_EXIT_CODE);
     }
 
+    trusted_payload.reverify()?;
+    registered_package.reverify()?;
     let trusted_manifest = trusted_machine_manifest_json()?;
     let plan = MachineServicePlan::new(
         &registration,
@@ -1979,6 +1985,8 @@ fn commit_installer_transaction(
         ),
     )?;
     let script_exit_code = run_powershell_stdin(&plan.render_apply_script()?)?;
+    trusted_payload.reverify()?;
+    registered_package.reverify()?;
     if script_exit_code != 0 {
         return Ok(script_exit_code);
     }
@@ -4007,7 +4015,7 @@ mod tests {
             .find("query_target_package_registration_if_present(target_sid)?")
             .unwrap();
         let payload_verify = helper_commit
-            .find("verify_registered_machine_payload(registration.install_location())")
+            .find("verify_registered_package_payload(registration.install_location())")
             .unwrap();
         let package_phase = helper_commit
             .find("InstallerTransactionPhase::PackageCommitted")

@@ -14,9 +14,14 @@ const MAX_MSIX_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_GEODATA_ASSET_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_GEODATA_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_APPX_MANIFEST_BYTES: u64 = 1024 * 1024;
+const MAX_APPX_BLOCK_MAP_BYTES: u64 = 16 * 1024 * 1024;
 const APPX_MANIFEST_PATH: &str = "AppxManifest.xml";
 const APPX_MANIFEST_NAMESPACE: &str =
     "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
+const APPX_UAP10_NAMESPACE: &str = "http://schemas.microsoft.com/appx/manifest/uap/windows10/10";
+const APPX_BLOCK_MAP_PATH: &str = "AppxBlockMap.xml";
+const APPX_BLOCK_MAP_NAMESPACE: &str = "http://schemas.microsoft.com/appx/2010/blockmap";
+const APPX_BLOCK_MAP_SHA256_METHOD: &str = "http://www.w3.org/2001/04/xmlenc#sha256";
 const EXPECTED_PACKAGE_ARCHITECTURE: &str = "x64";
 const EXPECTED_APPLICATION_ID: &str = "App";
 const EXPECTED_APPLICATION_EXECUTABLE: &str = "ClashSharp.exe";
@@ -71,6 +76,14 @@ const REQUIRED_PACKAGE_EXECUTABLES: [&str; 4] = [
     "ClashSharp.RecoveryWatchdog.exe",
     "Binaries/mihomo.exe",
     "Binaries/Service/ClashSharp.MihomoService.exe",
+];
+// Content_Types is container-only. The other three footprint files are installed, but Windows
+// deployment can rewrite them, so only the block-map payload is safe to compare byte-for-byte.
+const NON_HASH_STABLE_REGISTERED_MSIX_FILES: [&str; 4] = [
+    "[Content_Types].xml",
+    "AppxBlockMap.xml",
+    "AppxMetadata/CodeIntegrity.cat",
+    "AppxSignature.p7x",
 ];
 const REQUIRED_PACKAGE_ASSETS: [&str; 22] = [
     "Assets/LockScreenLogo.scale-200.png",
@@ -297,6 +310,9 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
         ZipArchive::new(package).map_err(|error| format!("open MSIX ZIP failed: {error}"))?;
     let package_contract = extract_trusted_package_manifest(&mut archive)?;
     validate_final_msix_file_contract(&mut archive)?;
+    let block_map_bytes =
+        read_bounded_zip_entry(&mut archive, APPX_BLOCK_MAP_PATH, MAX_APPX_BLOCK_MAP_BYTES)?;
+    let block_map_files = parse_appx_block_map_file_manifest(&block_map_bytes)?;
     validate_payload_provenance_and_dependencies(
         payload,
         &payload_files,
@@ -305,9 +321,11 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
         &package_contract,
         &provenance,
     )?;
+    let mut archive_files = BTreeMap::<String, (u64, String)>::new();
+    let mut registered_package_files = BTreeMap::<String, (u64, String)>::new();
     let mut trusted_files = BTreeMap::<String, (u64, String)>::new();
     let mut geodata_manifest_bytes = None;
-    let mut total_bytes = 0_u64;
+    let mut trusted_total_bytes = 0_u64;
 
     for index in 0..archive.len() {
         let mut entry = archive
@@ -321,9 +339,6 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
         }
         let trusted =
             name == "Binaries/mihomo.exe" || name.starts_with("Binaries/Service/") || is_geodata;
-        if !trusted {
-            continue;
-        }
         if entry.is_dir()
             || name.ends_with('/')
             || name.contains('\\')
@@ -332,20 +347,22 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
                 .unix_mode()
                 .is_some_and(|mode| mode & 0o170_000 == 0o120_000)
         {
-            return Err(format!("unsafe trusted MSIX entry: {name}"));
+            return Err(format!("unsafe final MSIX entry: {name}"));
         }
         if entry.size() == 0 || entry.size() > MAX_TRUSTED_FILE_BYTES {
-            return Err(format!("trusted MSIX entry has invalid length: {name}"));
+            return Err(format!("final MSIX entry has invalid length: {name}"));
         }
         let capture_geodata_manifest = name == GEODATA_MANIFEST_PATH;
         if capture_geodata_manifest && entry.size() > MAX_GEODATA_MANIFEST_BYTES {
             return Err(String::from("GeoData manifest exceeds its size budget"));
         }
-        total_bytes = total_bytes
-            .checked_add(entry.size())
-            .ok_or_else(|| String::from("trusted payload length overflow"))?;
-        if total_bytes > MAX_TRUSTED_TOTAL_BYTES {
-            return Err(String::from("trusted machine payload exceeds size budget"));
+        if trusted {
+            trusted_total_bytes = trusted_total_bytes
+                .checked_add(entry.size())
+                .ok_or_else(|| String::from("trusted payload length overflow"))?;
+            if trusted_total_bytes > MAX_TRUSTED_TOTAL_BYTES {
+                return Err(String::from("trusted machine payload exceeds size budget"));
+            }
         }
 
         let mut hasher = Sha256::new();
@@ -359,25 +376,37 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
         loop {
             let count = entry
                 .read(&mut buffer)
-                .map_err(|error| format!("read trusted MSIX entry failed: {error}"))?;
+                .map_err(|error| format!("read final MSIX entry failed: {error}"))?;
             if count == 0 {
                 break;
             }
             actual_length = actual_length
                 .checked_add(count as u64)
-                .ok_or_else(|| String::from("trusted entry length overflow"))?;
+                .ok_or_else(|| String::from("final MSIX entry length overflow"))?;
             hasher.update(&buffer[..count]);
             if capture_geodata_manifest {
                 captured_bytes.extend_from_slice(&buffer[..count]);
             }
         }
         if actual_length != entry.size() {
-            return Err(format!("trusted MSIX entry length changed: {name}"));
+            return Err(format!("final MSIX entry length changed: {name}"));
         }
-        let key = name.to_ascii_lowercase();
-        if trusted_files
-            .insert(key, (actual_length, lower_hex(&hasher.finalize())))
+        let hash = lower_hex(&hasher.finalize());
+        if archive_files
+            .insert(normalized_name.clone(), (actual_length, hash.clone()))
             .is_some()
+        {
+            return Err(format!("case-colliding final MSIX entry: {name}"));
+        }
+        if !is_non_hash_stable_registered_msix_file(&name) {
+            let previous = registered_package_files
+                .insert(normalized_name.clone(), (actual_length, hash.clone()));
+            debug_assert!(previous.is_none());
+        }
+        if trusted
+            && trusted_files
+                .insert(normalized_name, (actual_length, hash))
+                .is_some()
         {
             return Err(format!("case-colliding trusted MSIX entry: {name}"));
         }
@@ -385,6 +414,8 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
             return Err(String::from("duplicate GeoData manifest MSIX entry"));
         }
     }
+
+    validate_registered_manifest_matches_block_map(&registered_package_files, &block_map_files)?;
 
     for required in [
         "binaries/mihomo.exe",
@@ -432,6 +463,16 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
     .unwrap();
     source.push_str("pub const TRUSTED_PAYLOAD_FILES: &[(&str, u64, &str)] = &[\n");
     for (path, (length, hash)) in payload_files {
+        writeln!(source, "    ({path:?}, {length}, \"{hash}\"),").unwrap();
+    }
+    source.push_str("];\n");
+    source.push_str("pub const TRUSTED_ARCHIVE_FILES: &[(&str, u64, &str)] = &[\n");
+    for (path, (length, hash)) in archive_files {
+        writeln!(source, "    ({path:?}, {length}, \"{hash}\"),").unwrap();
+    }
+    source.push_str("];\n");
+    source.push_str("pub const TRUSTED_REGISTERED_PACKAGE_FILES: &[(&str, u64, &str)] = &[\n");
+    for (path, (length, hash)) in registered_package_files {
         writeln!(source, "    ({path:?}, {length}, \"{hash}\"),").unwrap();
     }
     source.push_str("];\n");
@@ -500,6 +541,7 @@ fn parse_final_appx_identity(manifest: &str) -> Result<AppxPackageIdentity, Stri
 fn parse_final_appx_manifest(manifest: &str) -> Result<AppxManifestContract, String> {
     let document = parse_appx_document(manifest)?;
     let package = canonical_package_element(&document)?;
+    validate_package_integrity_contract(package)?;
     let manifest_identity = parse_manifest_identity(package)?;
     let identity = one_direct_child(package, "Identity")?;
     let architecture = required_attribute(identity, "ProcessorArchitecture")?;
@@ -539,6 +581,7 @@ fn parse_final_appx_manifest(manifest: &str) -> Result<AppxManifestContract, Str
 fn parse_source_appx_identity(manifest: &str) -> Result<AppxPackageIdentity, String> {
     let document = parse_appx_document(manifest)?;
     let package = canonical_package_element(&document)?;
+    validate_package_integrity_contract(package)?;
     let manifest_identity = parse_manifest_identity(package)?;
     let applications = one_direct_child(package, "Applications")?;
     let application = one_direct_child(applications, "Application")?;
@@ -696,6 +739,37 @@ fn parse_package_dependencies(
         publisher,
         min_version,
     }])
+}
+
+fn validate_package_integrity_contract(package: roxmltree::Node<'_, '_>) -> Result<(), String> {
+    let properties = one_direct_child(package, "Properties")?;
+    let integrity = properties
+        .children()
+        .filter(|node| {
+            node.is_element()
+                && node.tag_name().name() == "PackageIntegrity"
+                && node.tag_name().namespace() == Some(APPX_UAP10_NAMESPACE)
+        })
+        .collect::<Vec<_>>();
+    if integrity.len() != 1 {
+        return Err(String::from(
+            "AppxManifest.xml must enable exactly one uap10:PackageIntegrity",
+        ));
+    }
+    let content = integrity[0]
+        .children()
+        .filter(|node| {
+            node.is_element()
+                && node.tag_name().name() == "Content"
+                && node.tag_name().namespace() == Some(APPX_UAP10_NAMESPACE)
+        })
+        .collect::<Vec<_>>();
+    if content.len() != 1 || content[0].attribute("Enforcement") != Some("on") {
+        return Err(String::from(
+            "AppxManifest.xml package content integrity enforcement must be on",
+        ));
+    }
+    Ok(())
 }
 
 fn required_attribute(node: roxmltree::Node<'_, '_>, name: &str) -> Result<String, String> {
@@ -990,6 +1064,90 @@ fn validate_final_msix_entry_name(name: &str) -> Result<(), String> {
             .any(|forbidden| lower.contains(forbidden))
     {
         return Err(format!("forbidden final MSIX entry: {name}"));
+    }
+    Ok(())
+}
+
+fn is_non_hash_stable_registered_msix_file(name: &str) -> bool {
+    NON_HASH_STABLE_REGISTERED_MSIX_FILES.contains(&name)
+}
+
+fn parse_appx_block_map_file_manifest(bytes: &[u8]) -> Result<BTreeMap<String, u64>, String> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|_| String::from("final MSIX block map is not UTF-8"))?;
+    let document = roxmltree::Document::parse(text)
+        .map_err(|_| String::from("final MSIX block map is invalid XML"))?;
+    let root = document.root_element();
+    if root.tag_name().name() != "BlockMap"
+        || root.tag_name().namespace() != Some(APPX_BLOCK_MAP_NAMESPACE)
+        || root.attribute("HashMethod") != Some(APPX_BLOCK_MAP_SHA256_METHOD)
+    {
+        return Err(String::from("final MSIX block map contract is invalid"));
+    }
+
+    let mut files = BTreeMap::new();
+    for file in root.children().filter(|node| {
+        node.is_element()
+            && node.tag_name().name() == "File"
+            && node.tag_name().namespace() == Some(APPX_BLOCK_MAP_NAMESPACE)
+    }) {
+        let name = file
+            .attribute("Name")
+            .ok_or_else(|| String::from("final MSIX block map file name is missing"))?;
+        let normalized = normalize_block_map_file_name(name)?;
+        let length = file
+            .attribute("Size")
+            .ok_or_else(|| String::from("final MSIX block map file size is missing"))?
+            .parse::<u64>()
+            .map_err(|_| String::from("final MSIX block map file size is invalid"))?;
+        if length == 0 || length > MAX_TRUSTED_FILE_BYTES {
+            return Err(String::from(
+                "final MSIX block map file length is outside its budget",
+            ));
+        }
+        if files.insert(normalized, length).is_some() {
+            return Err(String::from(
+                "final MSIX block map contains a case-colliding file",
+            ));
+        }
+    }
+    if files.is_empty() {
+        return Err(String::from("final MSIX block map file manifest is empty"));
+    }
+    Ok(files)
+}
+
+fn normalize_block_map_file_name(name: &str) -> Result<String, String> {
+    if name.is_empty()
+        || name.starts_with(['/', '\\'])
+        || name.ends_with(['/', '\\'])
+        || name.contains('/')
+        || name.contains('%')
+    {
+        return Err(format!("unsafe final MSIX block map path: {name}"));
+    }
+    let mut segments = Vec::new();
+    for segment in name.split('\\') {
+        if segment.is_empty() || matches!(segment, "." | "..") || segment.contains(':') {
+            return Err(format!("unsafe final MSIX block map path: {name}"));
+        }
+        segments.push(segment.to_ascii_lowercase());
+    }
+    Ok(segments.join("/"))
+}
+
+fn validate_registered_manifest_matches_block_map(
+    registered_files: &BTreeMap<String, (u64, String)>,
+    block_map_files: &BTreeMap<String, u64>,
+) -> Result<(), String> {
+    if registered_files.len() != block_map_files.len()
+        || registered_files
+            .iter()
+            .any(|(path, (length, _))| block_map_files.get(path).copied() != Some(*length))
+    {
+        return Err(String::from(
+            "final MSIX registered payload does not match AppxBlockMap.xml",
+        ));
     }
     Ok(())
 }
@@ -1394,6 +1552,8 @@ fn unavailable_anchor(source_manifest: &Path) -> Result<String, String> {
     source.push_str("pub const TRUSTED_PRIMARY_MSIX_RELATIVE_PATH: &str = \"\";\n");
     source.push_str("pub const TRUSTED_CERTIFICATE_RELATIVE_PATH: &str = \"\";\n");
     source.push_str("pub const TRUSTED_PAYLOAD_FILES: &[(&str, u64, &str)] = &[];\n");
+    source.push_str("pub const TRUSTED_ARCHIVE_FILES: &[(&str, u64, &str)] = &[];\n");
+    source.push_str("pub const TRUSTED_REGISTERED_PACKAGE_FILES: &[(&str, u64, &str)] = &[];\n");
     source.push_str("pub const TRUSTED_MACHINE_FILES: &[(&str, u64, &str)] = &[];\n");
     Ok(source)
 }
@@ -1580,9 +1740,12 @@ mod tests {
     fn final_manifest(identity_attributes: &str, application_attributes: &str) -> String {
         format!(
             r#"<?xml version="1.0" encoding="utf-8"?>
-            <Package xmlns="{APPX_MANIFEST_NAMESPACE}">
+            <Package xmlns="{APPX_MANIFEST_NAMESPACE}" xmlns:uap10="{APPX_UAP10_NAMESPACE}">
               <!-- <Identity Version="9.9.9.9" /> -->
               <Identity {identity_attributes} />
+              <Properties>
+                <uap10:PackageIntegrity><uap10:Content Enforcement="on" /></uap10:PackageIntegrity>
+              </Properties>
               <Dependencies>
                 <PackageDependency Name="{EXPECTED_DEPENDENCY_NAME}" Publisher="{EXPECTED_DEPENDENCY_PUBLISHER}" MinVersion="8000.806.2252.0" />
               </Dependencies>
@@ -1710,6 +1873,23 @@ mod tests {
     }
 
     #[test]
+    fn final_appx_contract_requires_package_integrity_enforcement() {
+        let identity = r#"Name="ClashSharp" Publisher="CN=linzh" Version="1.0.0.0" ProcessorArchitecture="x64""#;
+        let application =
+            r#"Id="App" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication""#;
+        let exact = final_manifest(identity, application);
+        assert!(parse_final_appx_manifest(&exact).is_ok());
+        assert!(
+            parse_final_appx_manifest(&exact.replace("<uap10:Content Enforcement=\"on\" />", ""))
+                .is_err()
+        );
+        assert!(
+            parse_final_appx_manifest(&exact.replace("Enforcement=\"on\"", "Enforcement=\"off\""))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn final_appx_contract_requires_one_exact_framework_dependency() {
         let identity = r#"Name="ClashSharp" Publisher="CN=linzh" Version="1.0.0.0" ProcessorArchitecture="x64""#;
         let application =
@@ -1795,6 +1975,48 @@ mod tests {
         let mut archive = ZipArchive::new(file).unwrap();
         let error = validate_final_msix_file_contract(&mut archive).unwrap_err();
         assert!(error.contains("required final MSIX file is missing"));
+    }
+
+    #[test]
+    fn registered_package_manifest_excludes_only_non_hash_stable_deployment_files() {
+        for deployment_managed in NON_HASH_STABLE_REGISTERED_MSIX_FILES {
+            assert!(is_non_hash_stable_registered_msix_file(deployment_managed));
+        }
+        assert!(!is_non_hash_stable_registered_msix_file("AppxManifest.xml"));
+        assert!(!is_non_hash_stable_registered_msix_file("ClashSharp.exe"));
+        assert!(!is_non_hash_stable_registered_msix_file(
+            "Binaries/Service/ClashSharp.MihomoService.exe"
+        ));
+    }
+
+    #[test]
+    fn block_map_payload_manifest_is_canonical_and_exact() {
+        let block_map = br#"<?xml version="1.0" encoding="UTF-8"?>
+            <BlockMap xmlns="http://schemas.microsoft.com/appx/2010/blockmap"
+                HashMethod="http://www.w3.org/2001/04/xmlenc#sha256">
+                <File Name="AppxManifest.xml" Size="10"><Block Hash="AA==" /></File>
+                <File Name="Binaries\Service\Host.exe" Size="20"><Block Hash="AA==" /></File>
+            </BlockMap>"#;
+        let parsed = parse_appx_block_map_file_manifest(block_map).unwrap();
+        assert_eq!(parsed.get("appxmanifest.xml"), Some(&10));
+        assert_eq!(parsed.get("binaries/service/host.exe"), Some(&20));
+
+        let registered = BTreeMap::from([
+            ("appxmanifest.xml".to_owned(), (10, "a".repeat(64))),
+            ("binaries/service/host.exe".to_owned(), (20, "b".repeat(64))),
+        ]);
+        assert!(validate_registered_manifest_matches_block_map(&registered, &parsed).is_ok());
+        assert!(
+            parse_appx_block_map_file_manifest(
+                block_map
+                    .as_slice()
+                    .strip_suffix(b"</BlockMap>")
+                    .unwrap_or(block_map)
+            )
+            .is_err()
+        );
+        assert!(normalize_block_map_file_name(r"Binaries\..\evil.exe").is_err());
+        assert!(normalize_block_map_file_name("Encoded%21Name.dll").is_err());
     }
 
     #[test]

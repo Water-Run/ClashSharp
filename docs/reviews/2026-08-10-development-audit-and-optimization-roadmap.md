@@ -4,7 +4,7 @@
 - 审查基线：`main@8a69c27`
 - 审查范围：解决方案结构、MVVM、WinUI 3、编码规范、现代 C#、LINQ、文档注释、主体与 Installer 权限边界、构建发布、安全、测试
 - 审查方式：源码与配置静态审计、Release 构建、格式验证、.NET/Rust 测试、分析器基线、依赖与漏洞检查
-- 当前状态：这是后续开发的权威待办汇总；P0-01 与 MVVM 组合根/页面工厂/类型安全导航核心节点已于 2026-08-24 完成，其余页面绑定、全局 Window 获取、Installer 安全整改、正式签名和 Windows 真机矩阵尚未验收
+- 当前状态：这是后续开发的权威待办汇总；P0-01～P0-05 与 MVVM 组合根/页面工厂/类型安全导航核心节点已于 2026-08-24 完成，其余页面绑定、全局 Window 获取、P0-06 之后的 Installer 安全整改、正式签名和 Windows 真机矩阵尚未验收
 
 ## 1. 总体结论
 
@@ -228,13 +228,20 @@ ClashSharp-Installer.exe                 唯一用户可见安装/修复/升级/
 
 **开发内容**
 
-- [ ] 验证期间持有禁止写入/删除共享的文件及父目录句柄，直到导入/注册完成；或复制到受保护 immutable staging 后再消费。
-- [ ] 对注册后的 package 做与 archive manifest 对应的完整文件复核，而不是只复核 machine subset。
-- [ ] 添加“验证后替换 CER/MSIX、目录 rename/junction、并发写入”的攻击性测试。
+- [x] 验证期间持有禁止写入/删除共享的文件及父目录句柄，直到导入/注册完成；或复制到受保护 immutable staging 后再消费。
+- [x] 对注册后的 package 做与 archive manifest 对应的完整文件复核，而不是只复核 machine subset。
+- [x] 添加“验证后替换 CER/MSIX、目录 rename/junction、并发写入”的攻击性测试。
+
+**关闭证据（2026-08-24）**
+
+- `VerifiedInstallerPayload` 现在持有 sibling payload 全部普通文件、子目录及祖先目录的 Windows handle；文件以 `FILE_SHARE_READ` + `FILE_FLAG_OPEN_REPARSE_POINT` 打开，目录额外使用 `FILE_FLAG_BACKUP_SEMANTICS`，因此 PowerShell/AppXSVC 仍可读，但写入、删除、替换及目录 rename 在证书导入和 Add-Appx 调用期间被拒绝。每次消费前后均从同一 handle 重新计算 SHA-256，并用 `GetFileInformationByHandle` 的 volume/file index 证明路径仍指向同一对象。
+- 构建时同时固化完整 archive manifest 与 AppxBlockMap payload manifest，并要求两者的 canonical 路径和长度完全对应。Microsoft 的 AppX Packaging API 将 manifest/block map/signature/CI catalog 明确定义为 footprint、其余为 payload；本机只读交叉验证进一步证明同版本 Windows App Runtime 正式包的 286 项 block-map payload 在部署前后长度和 SHA-256 全部一致，而 block map、signature 和 CI catalog 会被部署系统重写并生成受控 `microsoft.system.package.metadata`；该正式包 290 个文件和 94 个目录也全部通过同时持有的相同 share-mode handle 探针。运行期因此逐项复核全部包作者 payload，要求三个部署 footprint 存在，只允许 Windows 当前生成的严格 metadata 文件形态，并拒绝其他文件、目录和 reparse point。[Microsoft AppX package reader](https://learn.microsoft.com/windows/win32/appxpkg/how-to-extract-content-from-a-package)
+- 注册态复核返回 `VerifiedRegisteredPackage`，把完整已验证树的文件/目录 handle 保持到机器事务结束，并在 PowerShell 机器脚本前后再次复核。源码 manifest 同时声明 `uap10:PackageIntegrity`，让 Windows 以签名和 AppxBlockMap 在部署后继续执行包内容完整性检查。[Microsoft MSIX signing and package integrity](https://learn.microsoft.com/windows/msix/package/signing-package-overview)
+- 攻击性测试覆盖 CER/MSIX 并发只读成功、并发写入失败、文件 rename/替换失败、祖先目录 rename 失败、目录 symlink/junction 拒绝、注册树额外/缺失/篡改内容拒绝，以及 Windows 生成 metadata allowlist。无系统 mutation 验证：Rust fmt/clippy 与 85 项测试通过；Release x64 构建 0 warning / 0 error，.NET 2,212 项通过、0 失败、0 跳过，格式检查 0 变更。正式 Installer/Add-Appx E2E 仍留给 P0-07 的隔离 Windows 矩阵，开发机未执行证书库、包注册、SCM、TUN、代理或路由 mutation；正在使用的 mihomo 仍为 PID 25216。
 
 **验收条件**
 
-- PowerShell/AppXSVC 消费的字节与 Installer 验证的字节可被同一不可变性证据证明。
+- [x] PowerShell/AppXSVC 消费路径在调用全程由同一组禁止写入/删除共享的 handle 保护，调用前后再以同一 file object 复核 identity、length 与 SHA-256；真实安装行为另由 P0-07 隔离 E2E 门禁覆盖。
 
 ### P0-06 子进程必须有 deadline 和有界输出
 

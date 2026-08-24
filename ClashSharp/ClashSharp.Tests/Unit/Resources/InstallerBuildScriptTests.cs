@@ -255,6 +255,61 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("Microsoft.Web.WebView2.Core.winmd", buildScript, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies verified payload bytes stay locked through consumers and registration gets a full-file check.</summary>
+    [Fact]
+    public void NativeInstaller_ClosesPayloadConsumptionRaceAndVerifiesFullRegistration()
+    {
+        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
+        string trustAnchorPath = FindSourceFile(
+            "ClashSharp",
+            "Installer",
+            "src",
+            "trust_anchor.rs");
+        string installerPath = FindSourceFile("ClashSharp", "Installer", "src", "main.rs");
+        string packageManifestPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Package.appxmanifest");
+
+        string buildScript = File.ReadAllText(buildScriptPath);
+        string trustAnchor = File.ReadAllText(trustAnchorPath);
+        string installer = File.ReadAllText(installerPath);
+        string packageManifest = File.ReadAllText(packageManifestPath);
+
+        Assert.Contains("TRUSTED_ARCHIVE_FILES", buildScript, StringComparison.Ordinal);
+        Assert.Contains("TRUSTED_REGISTERED_PACKAGE_FILES", buildScript, StringComparison.Ordinal);
+        Assert.Contains("NON_HASH_STABLE_REGISTERED_MSIX_FILES", buildScript, StringComparison.Ordinal);
+        Assert.Contains("AppxMetadata/CodeIntegrity.cat", buildScript, StringComparison.Ordinal);
+        Assert.Contains("parse_appx_block_map_file_manifest", buildScript, StringComparison.Ordinal);
+        Assert.Contains("validate_registered_manifest_matches_block_map", buildScript, StringComparison.Ordinal);
+        Assert.Contains("validate_package_integrity_contract", buildScript, StringComparison.Ordinal);
+
+        Assert.Contains(".share_mode(FILE_SHARE_READ)", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("FILE_FLAG_OPEN_REPARSE_POINT", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("FILE_FLAG_BACKUP_SEMANTICS", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("GetFileInformationByHandle", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("file_guards", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("_directory_guards", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("verify_locked_path_identity", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("verify_open_file", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("pub fn reverify(&mut self)", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("verify_registered_package_payload", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("VerifiedRegisteredPackage", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("DEPLOYED_FOOTPRINT_FILES", trustAnchor, StringComparison.Ordinal);
+        Assert.Contains("is_allowed_system_package_metadata_file", trustAnchor, StringComparison.Ordinal);
+        Assert.DoesNotContain("verify_registered_machine_payload", trustAnchor, StringComparison.Ordinal);
+
+        Assert.Contains("verify_registered_package_payload", installer, StringComparison.Ordinal);
+        Assert.Contains("registered_package.reverify()?", installer, StringComparison.Ordinal);
+        Assert.Contains("let _trusted_payload = verify_installer_payload", installer, StringComparison.Ordinal);
+        Assert.DoesNotContain("verify_registered_machine_payload", installer, StringComparison.Ordinal);
+        Assert.True(
+            installer.Split("payload.reverify()?", StringSplitOptions.None).Length >= 7,
+            "Certificate, package, and machine consumers must remain bracketed by re-verification.");
+        Assert.Contains("uap10:PackageIntegrity", packageManifest, StringComparison.Ordinal);
+        Assert.Contains("uap10:Content Enforcement=\"on\"", packageManifest, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies the explicit Mihomo maintenance tool requires exact release and archive/binary hashes.</summary>
     [Fact]
     public void MihomoMaintenanceTool_RejectsLatestAndWritesPinnedManifest()
