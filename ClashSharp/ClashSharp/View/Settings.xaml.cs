@@ -729,10 +729,10 @@ public sealed partial class Settings : Page
         _viewModel.RefreshStartupRestoreFallbackStatus();
     }
 
-    /// <summary>Uninstalls the startup restore fallback helper.</summary>
-    private void UninstallStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
+    /// <summary>Removes the startup restore fallback registration.</summary>
+    private void RemoveStartupRestoreFallbackRegistrationButton_Click(object sender, RoutedEventArgs e)
     {
-        _viewModel.UninstallStartupRestoreFallback();
+        _viewModel.RemoveStartupRestoreFallbackRegistration();
     }
 
     /// <summary>Exports a Clash# XML data package with the selected scope.</summary>

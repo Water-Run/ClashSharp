@@ -219,7 +219,6 @@ public sealed class LocalizationResourcesTests
     [InlineData("StartupPrompt.Check.Unavailable")]
     [InlineData("MihomoService.Status.NotDeployed")]
     [InlineData("MihomoService.Status.DeployedRunning")]
-    [InlineData("MihomoService.Status.UntrustedBinaries")]
     [InlineData("Tray.Menu.Mode")]
     [InlineData("Tray.Menu.Status")]
     [InlineData("Tray.Menu.Pages")]

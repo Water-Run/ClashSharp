@@ -215,10 +215,10 @@
                                 <TextBlock Text="{Binding DetectText}" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="UninstallStartupRestoreFallbackButton" Click="UninstallStartupRestoreFallbackButton_Click">
+                        <Button x:Name="RemoveStartupRestoreFallbackRegistrationButton" Click="RemoveStartupRestoreFallbackRegistrationButton_Click">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                                <TextBlock Text="{Binding UninstallText}" />
+                                <TextBlock Text="{Binding RemoveRegistrationText}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

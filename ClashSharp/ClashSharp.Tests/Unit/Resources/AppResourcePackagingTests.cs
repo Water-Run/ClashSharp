@@ -805,7 +805,10 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("WaitForExit", serviceCode, StringComparison.Ordinal);
         Assert.Contains("IProcessRunner", serviceCode, StringComparison.Ordinal);
         Assert.Contains("ProcessRunOutcome", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("IMihomoServiceDeploymentContext", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("RunScQueryAsync", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("RunScStopElevatedAsync", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IMihomoServiceDeploymentContext", serviceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MihomoServiceBinaryTrustValidator", serviceCode, StringComparison.Ordinal);
         Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
     }
 

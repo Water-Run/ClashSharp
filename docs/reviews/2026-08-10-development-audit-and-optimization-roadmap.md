@@ -4,7 +4,7 @@
 - 审查基线：`main@8a69c27`
 - 审查范围：解决方案结构、MVVM、WinUI 3、编码规范、现代 C#、LINQ、文档注释、主体与 Installer 权限边界、构建发布、安全、测试
 - 审查方式：源码与配置静态审计、Release 构建、格式验证、.NET/Rust 测试、分析器基线、依赖与漏洞检查
-- 当前状态：这是后续开发的权威待办汇总；源码整改尚未实施，正式签名 Installer 和 Windows 真机矩阵尚未验收
+- 当前状态：这是后续开发的权威待办汇总；P0-01 已于 2026-08-24 完成源码与程序集边界收口，其余整改、正式签名 Installer 和 Windows 真机矩阵尚未验收
 
 ## 1. 总体结论
 
@@ -12,7 +12,7 @@ ClashSharp 已具备可工作的分层、较强的运行时所有权保护、大
 
 但项目尚未满足以下发布目标：
 
-1. **产品只有一个用户可见 Installer 和一个主体应用。** 当前用户可见入口基本符合要求，但主体仍编译了服务部署、配置和卸载权限，Installer 还不是严格唯一的安装状态 authority。
+1. **产品只有一个用户可见 Installer 和一个主体应用。** 当前用户可见入口符合方向，且 P0-01 已移除主体内的服务注册部署、配置和删除权限；Installer 的版本、身份、payload 与完整事务 authority 仍需继续收口。
 2. **所有人写声明都有高质量文档。** C# 仍有 7,454 个声明点完全缺失文档，Installer Rust 约有 392 个声明缺失；现有文档也存在参数、返回值、异常和线程语义缺口。
 3. **MVVM 与组合根完全收敛。** 分层方向正确，但 Presentation 仍存在静态 Service Locator，导航、页面生命周期和部分系统服务获取仍散落。
 4. **Installer 可以作为安全发布入口。** 防降级、身份单一来源、payload provenance、TOCTOU、子进程超时、证书/卸载事务及真实 E2E 门禁仍需完成。
@@ -51,7 +51,7 @@ ClashSharp-Installer.exe                 唯一用户可见安装/修复/升级/
 | `ClashSharp.Core` | 领域模型、稳定基础契约 | 依赖方向正确 |
 | `ClashSharp.Application` | 用例、协调、端口接口 | 方向正确，仍可继续承接主体业务编排 |
 | `ClashSharp.Infrastructure` | SQLite、文件、进程、网络等适配器 | 方向正确，需继续吸收主体中的 IO 实现 |
-| `ClashSharp` | WinUI 3、ViewModel、组合根及部分遗留服务 | 主体过重，存在静态单例和安装权限残留 |
+| `ClashSharp` | WinUI 3、ViewModel、组合根及部分遗留服务 | 主体过重，服务注册权限已移除，静态单例等 MVVM 债务仍存在 |
 | `ClashSharp.MihomoService` | LocalSystem 内部服务宿主 | 内部组件，必须仅由 Installer 部署 |
 | `ClashSharp.RecoveryWatchdog` | 同用户一次性恢复助手 | 内部组件，必须纳入包内容契约 |
 | 四个 `*Probe` | 跨进程测试探针 | 测试专用，必须不可发布/不可打包 |
@@ -114,16 +114,24 @@ ClashSharp-Installer.exe                 唯一用户可见安装/修复/升级/
 
 **开发内容**
 
-- [ ] 删除主体中的 `DeployAsync`、`UninstallAsync`、`IMihomoServiceDeploymentContext`、`MihomoServiceDeploymentContext` 和相应提权 `sc.exe` 路径。
-- [ ] 主体只保留服务状态观察、认证 IPC 及运行期 start/stop/restart；不得创建、配置或删除 SCM 注册。
-- [ ] 将部署/卸载测试迁移到 Installer 契约或安装器 E2E。
-- [ ] 架构测试直接禁止主体出现 `sc create/config/delete`、部署上下文和 Installer-owned mutation。
-- [ ] 将 `StartupRestoreFallbackService.Uninstall` 重命名为准确的 startup registration removal 语义，避免被误认为产品卸载。
+- [x] 删除主体中的 `DeployAsync`、`UninstallAsync`、`IMihomoServiceDeploymentContext`、`MihomoServiceDeploymentContext` 和相应提权 `sc.exe` 路径。
+- [x] 主体只保留服务状态观察、认证 IPC 及运行期 start/stop/restart；不得创建、配置或删除 SCM 注册。
+- [x] 将部署/卸载测试迁移到 Installer 契约或安装器 E2E。
+- [x] 架构测试直接禁止主体出现 `sc create/config/delete`、部署上下文和 Installer-owned mutation。
+- [x] 将 `StartupRestoreFallbackService.Uninstall` 重命名为准确的 startup registration removal 语义，避免被误认为产品卸载。
+
+**关闭证据（2026-08-24）**
+
+- `MihomoServiceManager` 的 SCM 边界已收窄为固定 `query` 与运行期故障回收所需的固定 `stop`，不再接受通用命令参数；服务注册、payload 与 owner 变更仅存在于 Installer `service_plan.rs`。
+- 删除主体部署上下文、部署专用二进制信任校验器及相应 C# 部署/卸载测试；Installer 的 service plan/transaction 测试继续覆盖固定路径、owner 检查、create/config/delete、事务顺序和卸载。
+- `InstallerOwnershipArchitectureTests` 同时扫描全部主体源码和生成的 `ClashSharp.dll`，禁止部署类型、内部 `DeployAsync`/`UninstallAsync`、`sc create/config/delete` 与 `binPath` 回归，并证明 Installer 保留唯一实现。
+- 登录恢复 helper 及其 ViewModel/UI 调用统一改为 `RemoveRegistration` 语义。
+- 无系统 mutation 验证：格式检查通过；Release x64 构建 0 warning / 0 error；.NET 2,204 项通过、0 失败、0 跳过；Installer fmt/clippy 与 62 项 Rust 测试通过。
 
 **验收条件**
 
-- 主体程序集源码和 IL 中不存在服务安装、配置、删除能力。
-- 只有 Installer 能修改 MSIX、SCM、Program Files payload、关联 owner 和信任证书。
+- [x] 主体程序集源码和 IL 中不存在服务安装、配置、删除能力。
+- [x] 只有 Installer 能修改 MSIX、SCM 注册、Program Files payload、关联 owner 和信任证书；主体仅保留 SCM 状态查询和运行期 stop 故障回收。
 
 ### P0-02 禁止 Repair 隐式降级
 

@@ -1,3 +1,5 @@
+extern alias ClashSharpUi;
+
 namespace ClashSharp.Tests.Architecture;
 
 /// <summary>Guards the traditional Installer/App ownership boundary.</summary>
@@ -30,14 +32,8 @@ public sealed class InstallerOwnershipArchitectureTests
         Assert.DoesNotContain("UninstallAsync(", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("DeployAsync(", adapter, StringComparison.Ordinal);
         Assert.DoesNotContain("UninstallAsync(", adapter, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "public async Task<MihomoServiceStatus> DeployAsync",
-            manager,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "public async Task<MihomoServiceStatus> UninstallAsync",
-            manager,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("DeployAsync", manager, StringComparison.Ordinal);
+        Assert.DoesNotContain("UninstallAsync", manager, StringComparison.Ordinal);
 
         string serviceRow = ReadElement(view, "TransparentProxyServiceRow");
         Assert.DoesNotContain("<Button", serviceRow, StringComparison.Ordinal);
@@ -60,6 +56,122 @@ public sealed class InstallerOwnershipArchitectureTests
 
         Assert.DoesNotContain("_manager.DeployAsync", adapter, StringComparison.Ordinal);
         Assert.DoesNotContain("_manager.UninstallAsync", adapter, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Proves that the application can only query or stop the Installer-provisioned service and
+    /// that create, configuration, and deletion remain in the privileged Installer plan.
+    /// </summary>
+    [Fact]
+    public void ServiceRegistrationMutation_IsOwnedExclusivelyByInstaller()
+    {
+        string[] applicationFiles = Directory
+            .EnumerateFiles(ApplicationRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains(
+                $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase)
+                && !path.Contains(
+                    $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        string applicationSource = string.Join(
+            Environment.NewLine,
+            applicationFiles.Select(File.ReadAllText));
+
+        string[] forbiddenApplicationTokens =
+        [
+            "IMihomoServiceDeploymentContext",
+            "MihomoServiceDeploymentContext",
+            "MihomoServiceBinaryTrustValidator",
+            "DeployAsync(",
+            "UninstallAsync(",
+            "[\"create\", ServiceName]",
+            "[\"config\", ServiceName]",
+            "[\"delete\", ServiceName]",
+            "\"binPath=\"",
+        ];
+
+        foreach (string token in forbiddenApplicationTokens)
+        {
+            Assert.DoesNotContain(token, applicationSource, StringComparison.Ordinal);
+        }
+
+        string[] scCommandOwners = applicationFiles
+            .Where(path => File.ReadAllText(path).Contains("sc.exe", StringComparison.OrdinalIgnoreCase))
+            .Select(path => Path.GetRelativePath(ApplicationRoot, path).Replace('\\', '/'))
+            .ToArray();
+        Assert.Equal(["Service/MihomoServiceManager.cs"], scCommandOwners);
+
+        string manager = ReadApplicationSource("Service/MihomoServiceManager.cs");
+        Assert.Contains("RunScQueryAsync", manager, StringComparison.Ordinal);
+        Assert.Contains("[\"query\", ServiceName]", manager, StringComparison.Ordinal);
+        Assert.Contains("RunScStopElevatedAsync", manager, StringComparison.Ordinal);
+        Assert.Contains("[\"stop\", ServiceName]", manager, StringComparison.Ordinal);
+        Assert.DoesNotContain("params string[] arguments", manager, StringComparison.Ordinal);
+
+        string fallback = ReadApplicationSource("Service/StartupRestoreFallbackService.cs");
+        Assert.Contains("RemoveRegistration()", fallback, StringComparison.Ordinal);
+        Assert.DoesNotContain("void Uninstall()", fallback, StringComparison.Ordinal);
+
+        string settingsViewModel = ReadApplicationSource("ViewModel/SettingsViewModel.cs");
+        Assert.Contains("RemoveStartupRestoreFallbackRegistration()", settingsViewModel, StringComparison.Ordinal);
+        Assert.Contains("Command.RemoveRegistration", settingsViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("UninstallStartupRestoreFallback", settingsViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command.Uninstall", settingsViewModel, StringComparison.Ordinal);
+
+        string installerPlan = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "ClashSharp",
+            "Installer",
+            "src",
+            "service_plan.rs"));
+        Assert.Contains(
+            "'create', $serviceName, 'binPath=', $serviceBinaryPath",
+            installerPlan,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'config', $serviceName, 'binPath=', $serviceBinaryPath",
+            installerPlan,
+            StringComparison.Ordinal);
+        Assert.Contains("& $scExe delete $serviceName", installerPlan, StringComparison.Ordinal);
+    }
+
+    /// <summary>The built application assembly contains no hidden service-registration authority.</summary>
+    [Fact]
+    public void ApplicationAssembly_HasNoServiceDeploymentOrRemovalCapability()
+    {
+        System.Reflection.Assembly applicationAssembly = typeof(
+            ClashSharpUi::ClashSharp.Presentation.Composition.AboutPageComposition).Assembly;
+        Type manager = applicationAssembly.GetType(
+            "ClashSharp.Service.MihomoServiceManager",
+            throwOnError: true)!;
+
+        string[] forbiddenTypeNames =
+        [
+            "ClashSharp.Service.IMihomoServiceDeploymentContext",
+            "ClashSharp.Service.MihomoServiceDeploymentContext",
+            "ClashSharp.Service.IMihomoServiceBinaryTrustValidator",
+            "ClashSharp.Service.WindowsMihomoServiceBinaryTrustValidator",
+        ];
+        foreach (string typeName in forbiddenTypeNames)
+        {
+            Assert.Null(applicationAssembly.GetType(typeName, throwOnError: false));
+        }
+
+        string[] methodNames = manager
+            .GetMethods(
+                System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.Static)
+            .Select(method => method.Name)
+            .ToArray();
+        Assert.DoesNotContain("DeployAsync", methodNames);
+        Assert.DoesNotContain("UninstallAsync", methodNames);
+        Assert.DoesNotContain("UninstallCoreAsync", methodNames);
+        Assert.Contains("GetStatusAsync", methodNames);
+        Assert.Contains("RestartAsync", methodNames);
+        Assert.Contains("StopAsync", methodNames);
     }
 
     /// <summary>The App consumes only the Installer-owned ProgramData association.</summary>

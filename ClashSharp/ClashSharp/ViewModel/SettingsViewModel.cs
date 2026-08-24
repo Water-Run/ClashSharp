@@ -146,7 +146,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     private readonly Action _registerStartupRestoreFallback;
 
-    private readonly Action _uninstallStartupRestoreFallback;
+    private readonly Action _removeStartupRestoreFallbackRegistration;
 
     /// <summary>Startup conflict checker.</summary>
     private readonly Func<int, CancellationToken, Task<IReadOnlyList<StartupConflictIssue>>> _checkStartupConflictsAsync;
@@ -347,7 +347,7 @@ internal sealed class SettingsViewModel : ObservableObject
         Action restartApplication,
         Func<bool> isStartupRestoreFallbackRegistered,
         Action registerStartupRestoreFallback,
-        Action uninstallStartupRestoreFallback,
+        Action removeStartupRestoreFallbackRegistration,
         Func<Uri, CancellationToken, Task<int>> testConnectionAsync,
         SettingsDiagnosticsViewModel? diagnosticsViewModel = null,
         IMihomoServiceController? mihomoServiceController = null,
@@ -393,7 +393,7 @@ internal sealed class SettingsViewModel : ObservableObject
             restartApplication,
             isStartupRestoreFallbackRegistered,
             registerStartupRestoreFallback,
-            uninstallStartupRestoreFallback,
+            removeStartupRestoreFallbackRegistration,
             supportedLanguages,
             applyNetworkSettingsAsync,
             requestResetRecoveryRestart,
@@ -429,7 +429,7 @@ internal sealed class SettingsViewModel : ObservableObject
         Action? restartApplication,
         Func<bool>? isStartupRestoreFallbackRegistered,
         Action? registerStartupRestoreFallback,
-        Action? uninstallStartupRestoreFallback,
+        Action? removeStartupRestoreFallbackRegistration,
         IReadOnlyList<(AppLanguage Language, string DisplayName)>? supportedLanguages,
         Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync,
         Func<bool>? requestResetRecoveryRestart,
@@ -520,8 +520,8 @@ internal sealed class SettingsViewModel : ObservableObject
             ?? throw new ArgumentNullException(nameof(isStartupRestoreFallbackRegistered));
         _registerStartupRestoreFallback = registerStartupRestoreFallback
             ?? throw new ArgumentNullException(nameof(registerStartupRestoreFallback));
-        _uninstallStartupRestoreFallback = uninstallStartupRestoreFallback
-            ?? throw new ArgumentNullException(nameof(uninstallStartupRestoreFallback));
+        _removeStartupRestoreFallbackRegistration = removeStartupRestoreFallbackRegistration
+            ?? throw new ArgumentNullException(nameof(removeStartupRestoreFallbackRegistration));
         _checkStartupConflictsAsync = checkStartupConflictsAsync
             ?? ((_, cancellationToken) =>
             {
@@ -660,7 +660,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public string TransparentProxyServiceDescriptionText => _getString("Settings.TransparentProxy.Service.Description");
 
-    public string UninstallText => _getString("Command.Uninstall");
+    public string RemoveRegistrationText => _getString("Command.RemoveRegistration");
 
     public string MixedPortTitleText => _getString("Settings.MixedPort.Title");
 
@@ -1810,7 +1810,7 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(TransparentProxyDescriptionText),
             nameof(TransparentProxyServiceTitleText),
             nameof(TransparentProxyServiceDescriptionText),
-            nameof(UninstallText),
+            nameof(RemoveRegistrationText),
             nameof(MihomoServiceStatusText),
             nameof(MixedPortTitleText),
             nameof(MixedPortDescriptionText),
@@ -2461,10 +2461,10 @@ internal sealed class SettingsViewModel : ObservableObject
         RefreshStartupRestoreFallbackStatus();
     }
 
-    /// <summary>Uninstalls the startup restore fallback helper and refreshes status.</summary>
-    public void UninstallStartupRestoreFallback()
+    /// <summary>Removes the startup restore fallback registration and refreshes status.</summary>
+    public void RemoveStartupRestoreFallbackRegistration()
     {
-        _uninstallStartupRestoreFallback();
+        _removeStartupRestoreFallbackRegistration();
         RefreshStartupRestoreFallbackStatus();
     }
 

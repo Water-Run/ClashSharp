@@ -125,7 +125,6 @@
     <Compile Include="..\ClashSharp\Service\MihomoCoreService.cs" Link="Service\MihomoCoreService.cs" />
     <Compile Include="..\ClashSharp\Service\SynchronousProcessOutputDrain.cs" Link="Service\SynchronousProcessOutputDrain.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoServiceManager.cs" Link="Service\MihomoServiceManager.cs" />
-    <Compile Include="..\ClashSharp\Service\MihomoServiceBinaryTrustValidator.cs" Link="Service\MihomoServiceBinaryTrustValidator.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoServiceManager.Ipc.cs" Link="Service\MihomoServiceManager.Ipc.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoServiceManager.Diagnostics.cs" Link="Service\MihomoServiceManager.Diagnostics.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoServiceManagerFactory.cs" Link="Service\MihomoServiceManagerFactory.cs" />

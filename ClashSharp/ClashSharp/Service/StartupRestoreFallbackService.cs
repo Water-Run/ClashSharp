@@ -57,8 +57,8 @@ public sealed class StartupRestoreFallbackService
         }
     }
 
-    /// <summary>Unregisters the login helper.</summary>
-    public void Uninstall()
+    /// <summary>Removes the current-user login-helper registration.</summary>
+    public void RemoveRegistration()
     {
         lock (_syncLock)
         {

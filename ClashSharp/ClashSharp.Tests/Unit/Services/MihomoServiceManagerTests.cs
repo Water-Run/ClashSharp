@@ -52,7 +52,7 @@ public sealed class MihomoServiceManagerTests
         Assert.False(request.RunElevated);
     }
 
-    /// <summary>Verifies an invalid Installer association blocks all SCM lifecycle entry points.</summary>
+    /// <summary>Verifies an invalid Installer association blocks every App-owned runtime entry point.</summary>
     [Fact]
     public async Task LifecycleOperations_WhenAssociationIsInvalid_FailClosedWithoutScmOrIpc()
     {
@@ -69,11 +69,9 @@ public sealed class MihomoServiceManagerTests
             ConfigurationHash,
             CancellationToken.None);
         MihomoServiceStatus stopped = await manager.StopAsync(CancellationToken.None);
-        MihomoServiceStatus deployed = await manager.DeployAsync(CancellationToken.None);
-        MihomoServiceStatus uninstalled = await manager.UninstallAsync(CancellationToken.None);
 
         Assert.All(
-            new[] { initial, queried, restarted, stopped, deployed, uninstalled },
+            new[] { initial, queried, restarted, stopped },
             status =>
             {
                 Assert.False(status.IsKnown);
@@ -184,218 +182,6 @@ public sealed class MihomoServiceManagerTests
             () => manager.GetStatusAsync(cancellation.Token));
 
         Assert.Equal(cancellation.Token, exception.CancellationToken);
-    }
-
-    /// <summary>Verifies deployment trusts the mandatory final SCM query even after a non-zero command exit.</summary>
-    [Fact]
-    public async Task DeployAsync_WhenCreateExitIsNonzeroButScmReportsInstalled_ReturnsObservedStatus()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(1060));
-        runner.Results.Enqueue(Completed(5, standardError: "access denied"));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
-        MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\Program Files\ClashSharp\service.exe");
-
-        MihomoServiceStatus status = await manager.DeployAsync(CancellationToken.None);
-
-        Assert.True(status.IsInstalled);
-        Assert.True(status.IsRunning);
-        Assert.Equal(3, runner.Requests.Count);
-        ProcessRequest create = runner.Requests[1];
-        Assert.True(create.RunElevated);
-        Assert.Equal("create", create.Arguments[0]);
-        Assert.Equal(MihomoServiceManager.ServiceName, create.Arguments[1]);
-        Assert.Equal("binPath=", create.Arguments[2]);
-        Assert.Contains("\"C:\\Program Files\\ClashSharp\\service.exe\"", create.Arguments[3], StringComparison.Ordinal);
-        Assert.Contains("--pipe-name \"ClashSharp.Mihomo.", create.Arguments[3], StringComparison.Ordinal);
-        Assert.Contains($"--ipc-token \"{IpcToken}\"", create.Arguments[3], StringComparison.Ordinal);
-        Assert.DoesNotContain("--workdir", create.Arguments[3], StringComparison.Ordinal);
-        Assert.Contains(
-            "--allowed-sid \"S-1-5-21-100-200-300-1001\"",
-            create.Arguments[3],
-            StringComparison.Ordinal);
-        Assert.Equal(["query", MihomoServiceManager.ServiceName], runner.Requests[2].Arguments);
-    }
-
-    /// <summary>Verifies an untrusted LocalSystem binary path is rejected before elevation.</summary>
-    [Fact]
-    public async Task DeployAsync_WhenBinaryTrustValidationFails_DoesNotMutateScm()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(1060));
-        FakeMihomoServiceBinaryTrustValidator validator = new(
-            MihomoServiceBinaryTrustValidation.Denied(
-                "service host",
-                "path grants modification rights to an untrusted principal"));
-        MihomoServiceManager manager = CreateManager(
-            runner,
-            serviceHostPath: @"C:\Users\example\service.exe",
-            binaryTrustValidator: validator);
-
-        MihomoServiceStatus status = await manager.DeployAsync(CancellationToken.None);
-
-        Assert.True(status.IsKnown);
-        Assert.False(status.IsInstalled);
-        Assert.False(status.IsRunning);
-        Assert.Equal("untrusted binaries", status.Message);
-        Assert.Equal(
-            (@"C:\Users\example\service.exe", @"C:\mihomo.exe"),
-            Assert.Single(validator.Requests));
-        Assert.Single(runner.Requests);
-        Assert.False(runner.Requests[0].RunElevated);
-    }
-
-    /// <summary>Verifies an elevated cancellation is re-queried and then propagated as cancellation.</summary>
-    [Fact]
-    public async Task DeployAsync_WhenCreateIsCancelled_RequeriesScmThenThrowsCancellation()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(1060));
-        runner.Results.Enqueue(Result(ProcessRunOutcome.Cancelled));
-        runner.Results.Enqueue(Completed(1060));
-        MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\service.exe");
-        using CancellationTokenSource cancellation = new();
-        runner.OnRequest = requestCount =>
-        {
-            if (requestCount == 2)
-            {
-                cancellation.Cancel();
-            }
-        };
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            manager.DeployAsync(cancellation.Token));
-
-        Assert.Equal(3, runner.Requests.Count);
-        Assert.False(runner.Requests[2].RunElevated);
-        Assert.Equal(["query", MihomoServiceManager.ServiceName], runner.Requests[2].Arguments);
-    }
-
-    /// <summary>Verifies cancellation before admission cannot start any SCM process.</summary>
-    [Fact]
-    public async Task DeployAsync_WhenAlreadyCancelled_DoesNotRunElevatedCommand()
-    {
-        FakeProcessRunner runner = new() { ObserveCancellation = true };
-        MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\service.exe");
-        using CancellationTokenSource cancellation = new();
-        cancellation.Cancel();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            manager.DeployAsync(cancellation.Token));
-
-        Assert.Empty(runner.Requests);
-    }
-
-    /// <summary>Verifies an inconclusive initial query prevents an unsafe deployment attempt.</summary>
-    [Fact]
-    public async Task DeployAsync_WhenInitialQueryTimesOut_DoesNotRunElevatedCommand()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Result(ProcessRunOutcome.TimedOut));
-        MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\service.exe");
-
-        MihomoServiceStatus status = await manager.DeployAsync(CancellationToken.None);
-
-        Assert.False(status.IsKnown);
-        Assert.False(status.IsInstalled);
-        Assert.Equal("deployment failed", status.Message);
-        Assert.Single(runner.Requests);
-        Assert.False(runner.Requests[0].RunElevated);
-    }
-
-    /// <summary>Verifies a successful create command plus an inconclusive final query is not reported as confirmed absence.</summary>
-    [Fact]
-    public async Task DeployAsync_WhenFinalQueryTimesOut_ReturnsUnknownFailureStatus()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(1060));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Result(ProcessRunOutcome.TimedOut));
-        MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\service.exe");
-
-        MihomoServiceStatus status = await manager.DeployAsync(CancellationToken.None);
-
-        Assert.False(status.IsKnown);
-        Assert.False(status.IsInstalled);
-        Assert.Equal("deployment failed", status.Message);
-        Assert.Equal(3, runner.Requests.Count);
-    }
-
-    /// <summary>Verifies uninstall re-queries after stop and delete and treats externally absent service as success.</summary>
-    [Fact]
-    public async Task UninstallAsync_WhenDeleteExitIsNonzeroButScmReportsAbsent_ReturnsNotDeployed()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        runner.Results.Enqueue(Completed(1060, standardError: "marked for deletion"));
-        runner.Results.Enqueue(Completed(1060, standardOutput: "service does not exist"));
-        MihomoServiceManager manager = CreateManager(runner);
-
-        MihomoServiceStatus status = await manager.UninstallAsync(CancellationToken.None);
-
-        Assert.False(status.IsInstalled);
-        Assert.Equal("not deployed", status.Message);
-        Assert.Equal(5, runner.Requests.Count);
-        Assert.Equal(["stop", MihomoServiceManager.ServiceName], runner.Requests[1].Arguments);
-        Assert.Equal(["query", MihomoServiceManager.ServiceName], runner.Requests[2].Arguments);
-        Assert.Equal(["delete", MihomoServiceManager.ServiceName], runner.Requests[3].Arguments);
-        Assert.Equal(["query", MihomoServiceManager.ServiceName], runner.Requests[4].Arguments);
-    }
-
-    /// <summary>Verifies an externally removed service after stop avoids a redundant delete operation.</summary>
-    [Fact]
-    public async Task UninstallAsync_WhenServiceDisappearsAfterStop_ReturnsIdempotentSuccess()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
-        runner.Results.Enqueue(Completed(1060));
-        runner.Results.Enqueue(Completed(1060));
-        MihomoServiceManager manager = CreateManager(runner);
-
-        MihomoServiceStatus status = await manager.UninstallAsync(CancellationToken.None);
-
-        Assert.False(status.IsInstalled);
-        Assert.Equal(3, runner.Requests.Count);
-        Assert.DoesNotContain(runner.Requests, request => request.Arguments.Contains("delete", StringComparer.Ordinal));
-    }
-
-    /// <summary>Verifies an inconclusive final query cannot be reported as successful removal.</summary>
-    [Fact]
-    public async Task UninstallAsync_WhenFinalQueryTimesOut_ReturnsRemovalFailure()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Result(ProcessRunOutcome.TimedOut));
-        MihomoServiceManager manager = CreateManager(runner);
-
-        MihomoServiceStatus status = await manager.UninstallAsync(CancellationToken.None);
-
-        Assert.True(status.IsInstalled);
-        Assert.False(status.IsRunning);
-        Assert.Equal("removal failed", status.Message);
-        Assert.Equal(5, runner.Requests.Count);
-    }
-
-    /// <summary>Verifies an inconclusive initial query prevents a false idempotent uninstall success.</summary>
-    [Fact]
-    public async Task UninstallAsync_WhenInitialQueryTimesOut_DoesNotClaimSuccessOrRunElevatedCommand()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Result(ProcessRunOutcome.TimedOut));
-        MihomoServiceManager manager = CreateManager(runner);
-
-        MihomoServiceStatus status = await manager.UninstallAsync(CancellationToken.None);
-
-        Assert.False(status.IsKnown);
-        Assert.False(status.IsInstalled);
-        Assert.Equal("removal failed", status.Message);
-        Assert.Single(runner.Requests);
-        Assert.False(runner.Requests[0].RunElevated);
     }
 
     [Fact]
@@ -681,57 +467,6 @@ public sealed class MihomoServiceManagerTests
     }
 
     [Fact]
-    public async Task DeployAsync_WhenOldInstallationExists_ReconcilesFullBinPathWhileStopped()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        FakeMihomoServiceIpcClient ipc = new();
-        MihomoServiceManager manager = CreateManager(
-            runner,
-            serviceHostPath: @"C:\new service\ClashSharp.MihomoService.exe",
-            ipcClient: ipc);
-
-        MihomoServiceStatus status = await manager.DeployAsync(CancellationToken.None);
-
-        Assert.True(status.IsInstalled);
-        Assert.False(status.IsScmRunning);
-        Assert.False(status.IsReady);
-        Assert.Equal(
-            ["query", "stop", "query", "config", "query"],
-            runner.Requests.Select(request => request.Arguments[0]));
-        Assert.Equal(
-            [MihomoServiceIpcCommand.Hello, MihomoServiceIpcCommand.Status, MihomoServiceIpcCommand.Stop],
-            ipc.Requests.Select(request => request.Command));
-        ProcessRequest config = runner.Requests[3];
-        Assert.True(config.RunElevated);
-        Assert.Contains("\"C:\\new service\\ClashSharp.MihomoService.exe\"", config.Arguments[3], StringComparison.Ordinal);
-        Assert.Contains($"--ipc-token \"{IpcToken}\"", config.Arguments[3], StringComparison.Ordinal);
-        Assert.Contains("--allowed-sid \"S-1-5-21-100-200-300-1001\"", config.Arguments[3], StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task DeployAsync_WhenExistingConfigurationUpdateFails_DoesNotClaimReady()
-    {
-        FakeProcessRunner runner = new();
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        runner.Results.Enqueue(Completed(5, standardError: "access denied"));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        MihomoServiceManager manager = CreateManager(runner, serviceHostPath: @"C:\service.exe");
-
-        MihomoServiceStatus status = await manager.DeployAsync(CancellationToken.None);
-
-        Assert.True(status.IsInstalled);
-        Assert.False(status.IsScmRunning);
-        Assert.False(status.IsReady);
-        Assert.Equal("deployment failed", status.Message);
-        Assert.Equal(["query", "config", "query"], runner.Requests.Select(request => request.Arguments[0]));
-    }
-
-    [Fact]
     public async Task RestartAsync_WhenReturnedHashDiffers_StopsScmAndFailsClosed()
     {
         FakeProcessRunner runner = new();
@@ -876,72 +611,6 @@ public sealed class MihomoServiceManagerTests
     }
 
     [Fact]
-    public async Task DeployAsync_WhenCallerCancelsAfterOldChildStop_CompletesScmReconciliationBeforePropagatingCancellation()
-    {
-        using CancellationTokenSource cancellation = new();
-        FakeProcessRunner runner = new() { ObserveCancellation = true };
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        FakeMihomoServiceIpcClient ipc = new()
-        {
-            OnRequest = request =>
-            {
-                if (request.Command == MihomoServiceIpcCommand.Stop)
-                {
-                    cancellation.Cancel();
-                }
-            },
-        };
-        MihomoServiceManager manager = CreateManager(
-            runner,
-            serviceHostPath: @"C:\service.exe",
-            ipcClient: ipc);
-
-        OperationCanceledException exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            manager.DeployAsync(cancellation.Token));
-
-        Assert.Equal(cancellation.Token, exception.CancellationToken);
-        Assert.Equal(
-            ["query", "stop", "query", "config", "query"],
-            runner.Requests.Select(request => request.Arguments[0]));
-        Assert.True(runner.Requests[1].RunElevated);
-        Assert.True(runner.Requests[3].RunElevated);
-        Assert.True(manager.GetLatestStatus().IsInstalled);
-        Assert.False(manager.GetLatestStatus().IsScmRunning);
-    }
-
-    [Fact]
-    public async Task UninstallAsync_WhenCallerCancelsAfterOldChildStop_ConfirmsScmStopButDoesNotDelete()
-    {
-        using CancellationTokenSource cancellation = new();
-        FakeProcessRunner runner = new() { ObserveCancellation = true };
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
-        runner.Results.Enqueue(Completed(0));
-        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
-        FakeMihomoServiceIpcClient ipc = new()
-        {
-            OnRequest = request =>
-            {
-                if (request.Command == MihomoServiceIpcCommand.Stop)
-                {
-                    cancellation.Cancel();
-                }
-            },
-        };
-        MihomoServiceManager manager = CreateManager(runner, ipcClient: ipc);
-
-        OperationCanceledException exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            manager.UninstallAsync(cancellation.Token));
-
-        Assert.Equal(cancellation.Token, exception.CancellationToken);
-        Assert.Equal(["query", "stop", "query"], runner.Requests.Select(request => request.Arguments[0]));
-        Assert.DoesNotContain(runner.Requests, request => request.Arguments[0] == "delete");
-    }
-
-    [Fact]
     public async Task StopAsync_WhenScmLeavesStopPendingAndReturnsRunning_DoesNotReleaseOwner()
     {
         FakeProcessRunner runner = new();
@@ -988,9 +657,7 @@ public sealed class MihomoServiceManagerTests
 
     private static MihomoServiceManager CreateManager(
         FakeProcessRunner runner,
-        string? serviceHostPath = null,
         FakeMihomoServiceIpcClient? ipcClient = null,
-        IMihomoServiceBinaryTrustValidator? binaryTrustValidator = null,
         MihomoServiceIpcEndpoint? endpoint = null)
     {
         endpoint ??= MihomoServiceIpcEndpoint.Create(
@@ -998,9 +665,6 @@ public sealed class MihomoServiceManagerTests
             IpcToken);
         return new MihomoServiceManager(
             runner,
-            new FakeMihomoServiceDeploymentContext(serviceHostPath),
-            binaryTrustValidator ?? new FakeMihomoServiceBinaryTrustValidator(
-                MihomoServiceBinaryTrustValidation.Trusted),
             endpoint,
             ipcClient ?? new FakeMihomoServiceIpcClient(),
             key => key switch
@@ -1009,9 +673,6 @@ public sealed class MihomoServiceManagerTests
                 "MihomoService.Status.Unknown" => "unknown",
                 "MihomoService.Status.DeployedRunning" => "running",
                 "MihomoService.Status.Deployed" => "deployed",
-                "MihomoService.Status.DeploymentFailed" => "deployment failed",
-                "MihomoService.Status.UntrustedBinaries" => "untrusted binaries",
-                "MihomoService.Status.RemovalFailed" => "removal failed",
                 _ => key,
             });
     }
@@ -1131,32 +792,4 @@ public sealed class MihomoServiceManagerTests
         }
     }
 
-    private sealed class FakeMihomoServiceDeploymentContext(string? serviceHostPath) : IMihomoServiceDeploymentContext
-    {
-        public string? ResolveServiceHostPath()
-        {
-            return serviceHostPath;
-        }
-
-        public string MihomoBinaryPath => @"C:\mihomo.exe";
-
-        public CoreConfigurationState EnsureServiceConfiguration()
-        {
-            return new CoreConfigurationState(@"C:\mihomo", @"C:\mihomo\config.yaml", true);
-        }
-    }
-
-    private sealed class FakeMihomoServiceBinaryTrustValidator(
-        MihomoServiceBinaryTrustValidation result) : IMihomoServiceBinaryTrustValidator
-    {
-        public List<(string ServiceHostPath, string MihomoBinaryPath)> Requests { get; } = [];
-
-        public MihomoServiceBinaryTrustValidation Validate(
-            string serviceHostPath,
-            string mihomoBinaryPath)
-        {
-            Requests.Add((serviceHostPath, mihomoBinaryPath));
-            return result;
-        }
-    }
 }

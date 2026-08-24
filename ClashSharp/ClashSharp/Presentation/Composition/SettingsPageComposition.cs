@@ -96,7 +96,7 @@ internal static class SettingsPageComposition
             applicationLifecycle.RestartApplication,
             () => startupRestoreFallback.GetStatus().IsRegistered,
             startupRestoreFallback.Register,
-            startupRestoreFallback.Uninstall,
+            startupRestoreFallback.RemoveRegistration,
             connectionProbe.GetStatusCodeAsync,
             diagnosticsViewModel,
             new MihomoServiceControllerAdapter(MihomoServiceManager.Instance),

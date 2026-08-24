@@ -212,10 +212,7 @@ public sealed partial class MihomoServiceManager
         ServiceQueryResult stoppedQuery;
         try
         {
-            _ = await RunScElevatedAsync(
-                CancellationToken.None,
-                "stop",
-                ServiceName).ConfigureAwait(false);
+            _ = await RunScStopElevatedAsync(CancellationToken.None).ConfigureAwait(false);
             stoppedQuery = await ObserveTerminalStateAsync(
                 shouldBeRunning: false,
                 CancellationToken.None).ConfigureAwait(false);
