@@ -10,6 +10,8 @@ $ErrorActionPreference = "Stop"
 $installerRoot = $PSScriptRoot
 $repoRoot = Resolve-Path (Join-Path $installerRoot "..\..")
 $appProject = Join-Path $repoRoot "ClashSharp\ClashSharp\ClashSharp.csproj"
+$serviceProject = Join-Path $repoRoot "ClashSharp\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj"
+$watchdogProject = Join-Path $repoRoot "ClashSharp\ClashSharp.RecoveryWatchdog\ClashSharp.RecoveryWatchdog.csproj"
 $appManifest = Join-Path (Split-Path -Parent $appProject) "Package.appxmanifest"
 $mihomoBinary = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo.exe"
 $mihomoManifestPath = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo-manifest.json"
@@ -17,13 +19,20 @@ $mihomoLicensePath = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo-
 $mihomoNoticePath = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo-NOTICE.txt"
 $geoDataDirectory = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\GeoData"
 $geoDataManifest = Join-Path $geoDataDirectory "manifest.json"
-$payloadDir = Join-Path $installerRoot "payload"
 $signingDir = Join-Path $installerRoot "signing"
 $rustTarget = "x86_64-pc-windows-msvc"
 $installerTargetRoot = Join-Path $installerRoot "target"
-$cargoStagingRoot = Join-Path $installerTargetRoot "packaging-staging"
+$packagingStagingRoot = Join-Path $installerTargetRoot "packaging-staging"
 $releaseDir = Join-Path $installerTargetRoot "release-artifacts"
 $legacyCargoReleaseDir = Join-Path $installerTargetRoot "release"
+$packagingContractModule = Join-Path $installerRoot "PackagingContract.psm1"
+
+$packagingContractModuleItem = Get-Item -LiteralPath $packagingContractModule -Force
+if ($packagingContractModuleItem.PSIsContainer -or
+    ($packagingContractModuleItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    throw "PackagingContract.psm1 must be an ordinary local file."
+}
+Import-Module -Name $packagingContractModule -Force
 
 function Remove-GeneratedDirectory {
     param(
@@ -38,6 +47,7 @@ function Remove-GeneratedDirectory {
             [StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to clean generated output outside the Installer target directory: $candidateFull"
     }
+    $null = Assert-ClashSharpOrdinaryPath -LiteralPath $candidateFull -AllowMissing
 
     foreach ($ancestor in @($installerRoot, $installerTargetRoot)) {
         if (Test-Path -LiteralPath $ancestor) {
@@ -80,6 +90,7 @@ function Remove-GeneratedFile {
             [StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to clean generated file outside the Installer target directory: $candidateFull"
     }
+    $null = Assert-ClashSharpOrdinaryPath -LiteralPath $candidateFull -AllowMissing
     foreach ($ancestor in @($installerRoot, $installerTargetRoot)) {
         if (Test-Path -LiteralPath $ancestor) {
             $ancestorItem = Get-Item -LiteralPath $ancestor -Force
@@ -125,8 +136,59 @@ function Get-OrdinaryFile {
     return $item
 }
 
+function Confirm-ClashSharpComponentStaging {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $LiteralPath,
+
+        [Parameter(Mandatory)]
+        [string[]] $RequiredFiles,
+
+        [switch] $ExactFileSet
+    )
+
+    $contract = @(Get-ClashSharpDirectoryContract -LiteralPath $LiteralPath)
+    $paths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($entry in $contract) {
+        $relativePath = [string]$entry.RelativePath
+        $null = $paths.Add($relativePath)
+        if ($relativePath.Contains('/', [StringComparison]::Ordinal) -or
+            [IO.Path]::GetExtension($relativePath) -cnotin @('.exe', '.dll', '.json', '.winmd') -or
+            $relativePath -cmatch '(?i)(Probe|SandboxTest|Installer|Updater)' -or
+            $relativePath -ceq 'packages.lock.json') {
+            throw "Component staging contains a forbidden file: $relativePath"
+        }
+    }
+    foreach ($requiredFile in $RequiredFiles) {
+        if (-not $paths.Contains($requiredFile)) {
+            throw "Component staging is missing required file: $requiredFile"
+        }
+    }
+    if ($ExactFileSet -and $paths.Count -ne $RequiredFiles.Count) {
+        throw "Component staging contains files outside its exact allowlist: $LiteralPath"
+    }
+    return $contract
+}
+
+function ConvertTo-ClashSharpPackageVersion {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Value
+    )
+
+    if ($Value -cnotmatch '^(0|[1-9][0-9]{0,4})(\.(0|[1-9][0-9]{0,4})){3}$') {
+        throw "Package version is noncanonical: $Value"
+    }
+    $parts = @($Value.Split('.') | ForEach-Object { [int]$_ })
+    if (@($parts | Where-Object { $_ -gt 65535 }).Count -ne 0) {
+        throw "Package version component exceeds UInt16: $Value"
+    }
+    return [Version]::new($parts[0], $parts[1], $parts[2], $parts[3])
+}
+
 # A failed attempt must not leave an unsigned or stale file under the publishable artifact name.
-Remove-GeneratedDirectory -LiteralPath $cargoStagingRoot
 Remove-GeneratedDirectory -LiteralPath $releaseDir
 if (Test-Path -LiteralPath $legacyCargoReleaseDir) {
     $legacyCargoReleaseItem = Get-Item -LiteralPath $legacyCargoReleaseDir -Force
@@ -145,6 +207,20 @@ foreach ($legacyArtifactName in @(
     Remove-GeneratedFile -LiteralPath (Join-Path $legacyCargoReleaseDir $legacyArtifactName)
 }
 Remove-GeneratedDirectory -LiteralPath (Join-Path $legacyCargoReleaseDir "payload")
+
+$null = Assert-ClashSharpOrdinaryPath -LiteralPath $packagingStagingRoot -AllowMissing
+$null = [IO.Directory]::CreateDirectory($packagingStagingRoot)
+$null = Assert-ClashSharpOrdinaryPath -LiteralPath $packagingStagingRoot -RequireDirectory
+$packagingRunRoot = Join-Path $packagingStagingRoot ([Guid]::NewGuid().ToString('N'))
+$componentStagingRoot = Join-Path $packagingRunRoot "components"
+$servicePublishRoot = Join-Path $componentStagingRoot "service-publish"
+$serviceStagingRoot = Join-Path $componentStagingRoot "service"
+$watchdogPublishRoot = Join-Path $componentStagingRoot "watchdog-publish"
+$watchdogStagingRoot = Join-Path $componentStagingRoot "watchdog"
+$appPackageStagingRoot = Join-Path $packagingRunRoot "app-packages"
+$payloadStagingDir = Join-Path $packagingRunRoot "payload"
+$cargoStagingRoot = Join-Path $packagingRunRoot "cargo"
+$promotionStagingRoot = Join-Path $packagingRunRoot "promotion"
 
 if (-not (Test-Path -LiteralPath $appManifest -PathType Leaf)) {
     throw "Package.appxmanifest was not found at the fixed app project path."
@@ -372,7 +448,61 @@ if (-not $Development -and $signingCertificate.Thumbprint -cne $expectedMsixThum
 $certificatePasswordText = $null
 Remove-Variable -Name certificatePassword -Scope Script -ErrorAction SilentlyContinue
 
-$packageBuildStartedUtc = [DateTime]::UtcNow
+$packagingSucceeded = $false
+try {
+$null = Assert-ClashSharpOrdinaryPath -LiteralPath $packagingRunRoot -AllowMissing
+$null = New-Item -ItemType Directory -Path $packagingRunRoot
+$null = Assert-ClashSharpOrdinaryPath -LiteralPath $packagingRunRoot -RequireDirectory
+Set-Location $installerRoot
+$null = New-Item -ItemType Directory -Path $componentStagingRoot
+dotnet publish $serviceProject `
+    -c Release `
+    --no-restore `
+    -p:Platform=x64 `
+    -r win-x64 `
+    --self-contained false `
+    -p:DebugSymbols=false `
+    -p:DebugType=None `
+    -o $servicePublishRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "MihomoService publish failed with exit code $LASTEXITCODE."
+}
+$null = Copy-ClashSharpComponentPayload `
+    -Source $servicePublishRoot `
+    -Destination $serviceStagingRoot
+$null = Confirm-ClashSharpComponentStaging `
+    -LiteralPath $serviceStagingRoot `
+    -RequiredFiles @(
+        'ClashSharp.MihomoService.exe',
+        'ClashSharp.MihomoService.dll',
+        'ClashSharp.MihomoService.deps.json',
+        'ClashSharp.MihomoService.runtimeconfig.json')
+
+dotnet publish $watchdogProject `
+    -c Release `
+    --no-restore `
+    -p:Platform=x64 `
+    -r win-x64 `
+    --self-contained false `
+    -p:DebugSymbols=false `
+    -p:DebugType=None `
+    -o $watchdogPublishRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "RecoveryWatchdog publish failed with exit code $LASTEXITCODE."
+}
+$null = Copy-ClashSharpComponentPayload `
+    -Source $watchdogPublishRoot `
+    -Destination $watchdogStagingRoot
+$null = Confirm-ClashSharpComponentStaging `
+    -LiteralPath $watchdogStagingRoot `
+    -RequiredFiles @(
+        'ClashSharp.RecoveryWatchdog.exe',
+        'ClashSharp.RecoveryWatchdog.dll',
+        'ClashSharp.RecoveryWatchdog.deps.json',
+        'ClashSharp.RecoveryWatchdog.runtimeconfig.json') `
+    -ExactFileSet
+
+$null = New-Item -ItemType Directory -Path $appPackageStagingRoot
 dotnet publish $appProject `
     -c Release `
     --no-restore `
@@ -380,57 +510,163 @@ dotnet publish $appProject `
     -p:GenerateAppxPackageOnBuild=true `
     -p:AppxBundle=Never `
     -p:AppxPackageSigningEnabled=true `
+    -p:AppxPackageDir=$appPackageStagingRoot `
+    -p:ClashSharpInstallerServiceRoot=$serviceStagingRoot `
+    -p:ClashSharpInstallerWatchdogRoot=$watchdogStagingRoot `
     -p:PackageCertificateThumbprint=$($signingCertificate.Thumbprint)
 if ($LASTEXITCODE -ne 0) {
     throw "MSIX publish failed with exit code $LASTEXITCODE."
 }
 
-New-Item -ItemType Directory -Force -Path $payloadDir | Out-Null
-Get-ChildItem -Path $payloadDir -File -Recurse |
-    Where-Object { $_.Name -ne ".gitkeep" } |
-    Remove-Item -Force
-
-$packageRoot = Join-Path (Split-Path $appProject) "AppPackages"
-$latestPackageDirectory = Get-ChildItem -LiteralPath $packageRoot -Directory |
-    Sort-Object LastWriteTimeUtc -Descending |
-    Select-Object -First 1
-
-if ($null -eq $latestPackageDirectory) {
-    throw "No AppPackages output directory was produced."
-}
-
-$appPackages = @(Get-ChildItem -LiteralPath $latestPackageDirectory.FullName -File |
-    Where-Object {
-        $_.Extension -eq ".msix" -and
-        $_.Name -like "ClashSharp_*" -and
-        $_.LastWriteTimeUtc -ge $packageBuildStartedUtc.AddSeconds(-2)
+$null = Assert-ClashSharpOrdinaryPath -LiteralPath $appPackageStagingRoot -RequireDirectory
+$null = Get-ClashSharpDirectoryContract -LiteralPath $appPackageStagingRoot
+$allPackageFiles = @(Get-ChildItem -LiteralPath $appPackageStagingRoot -File -Recurse |
+    Where-Object { $_.Extension.Equals('.msix', [StringComparison]::OrdinalIgnoreCase) })
+$dependencyPackages = @($allPackageFiles | Where-Object {
+        ([IO.Path]::GetRelativePath(
+                $appPackageStagingRoot,
+                $_.FullName).Replace('\', '/')) -match '(?i)(^|/)Dependencies/[^/]+/[^/]+\.msix$'
     })
-
+$appPackages = @($allPackageFiles | Where-Object {
+        $dependencyPackages.FullName -cnotcontains $_.FullName
+    })
 if ($appPackages.Count -ne 1) {
-    throw "The current build did not produce exactly one fresh Clash# MSIX package."
+    throw "The isolated build did not produce exactly one primary Clash# MSIX package."
 }
 $appPackage = $appPackages[0]
-
-Copy-Item -LiteralPath $appPackage.FullName -Destination (Join-Path $payloadDir $appPackage.Name) -Force
-Copy-Item -LiteralPath $certificateCerPath -Destination (Join-Path $payloadDir (Split-Path $certificateCerPath -Leaf)) -Force
-
-$x64DependencyDir = Join-Path $latestPackageDirectory.FullName "Dependencies\x64"
-if (Test-Path $x64DependencyDir) {
-    $payloadDependencyDir = Join-Path $payloadDir "Dependencies\x64"
-    New-Item -ItemType Directory -Force -Path $payloadDependencyDir | Out-Null
-    Get-ChildItem -Path $x64DependencyDir -File -Filter "*.msix" |
-        ForEach-Object {
-            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $payloadDependencyDir $_.Name) -Force
-        }
+$appIdentity = Get-ClashSharpMsixIdentity -LiteralPath $appPackage.FullName
+if (-not $appIdentity.Publisher.Equals($manifestPublisher, [StringComparison]::Ordinal) -or
+    $appIdentity.Architecture -cne 'x64') {
+    throw "The final main MSIX Publisher or architecture does not match the packaging contract."
+}
+$declaredDependencies = @(Get-ClashSharpMainPackageDependency `
+        -ManifestDocument $appIdentity.Document)
+$windowsAppRuntimePublisher = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
+if ($declaredDependencies.Count -ne 1 -or
+    $declaredDependencies[0].Name -cne 'Microsoft.WindowsAppRuntime.1.8' -or
+    -not $declaredDependencies[0].Publisher.Equals(
+        $windowsAppRuntimePublisher,
+        [StringComparison]::Ordinal)) {
+    throw "The final main MSIX dependency declaration is outside the exact product contract."
 }
 
-Set-Location $installerRoot
-$packagingSucceeded = $false
-try {
+if ($dependencyPackages.Count -ne $declaredDependencies.Count) {
+    throw "The staged dependency package count does not match the final AppxManifest."
+}
+
+$null = New-Item -ItemType Directory -Path $payloadStagingDir
+$primaryPayloadPath = Join-Path $payloadStagingDir $appPackage.Name
+Copy-Item -LiteralPath $appPackage.FullName -Destination $primaryPayloadPath
+$certificatePayloadPath = Join-Path $payloadStagingDir (Split-Path $certificateCerPath -Leaf)
+Copy-Item -LiteralPath $certificateCerPath -Destination $certificatePayloadPath
+$null = Get-OrdinaryFile `
+    -LiteralPath $certificatePayloadPath `
+    -Description "staged payload signing CER" `
+    -MaximumLength 1048576
+$stagedPayloadCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+    $certificatePayloadPath)
+if (-not $stagedPayloadCertificate.Subject.Equals($manifestPublisher, [StringComparison]::Ordinal) -or
+    $stagedPayloadCertificate.Thumbprint -cne $payloadCertificate.Thumbprint) {
+    throw "The staged payload CER does not match the verified MSIX signing identity."
+}
+$payloadDependencyDir = Join-Path $payloadStagingDir "Dependencies\x64"
+$null = New-Item -ItemType Directory -Path $payloadDependencyDir
+
+$dependencyProvenance = [Collections.Generic.List[object]]::new()
+$expectedDependencyThumbprint = [string]$env:CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT
+if ($expectedDependencyThumbprint -cnotmatch '^[0-9A-F]{40}$') {
+    throw "Packaging requires canonical CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT."
+}
+foreach ($declaration in $declaredDependencies) {
+    $matchingPackages = @($dependencyPackages | Where-Object {
+            $_.Name -ceq "$($declaration.Name).msix"
+        })
+    if ($matchingPackages.Count -ne 1) {
+        throw "Dependency payload is missing the exact package for $($declaration.Name)."
+    }
+    $dependencySource = $matchingPackages[0]
+    $dependencyRelativeSource = [IO.Path]::GetRelativePath(
+        $appPackageStagingRoot,
+        $dependencySource.FullName).Replace('\', '/')
+    if ($dependencyRelativeSource -cnotmatch '(^|/)Dependencies/x64/[^/]+\.msix$') {
+        throw "Dependency package is outside the exact x64 dependency directory."
+    }
+    $dependencyIdentity = Get-ClashSharpMsixIdentity -LiteralPath $dependencySource.FullName
+    if ($dependencyIdentity.Name -cne $declaration.Name -or
+        -not $dependencyIdentity.Publisher.Equals($declaration.Publisher, [StringComparison]::Ordinal) -or
+        $dependencyIdentity.Architecture -cne 'x64' -or
+        (ConvertTo-ClashSharpPackageVersion -Value $dependencyIdentity.Version) -lt
+            (ConvertTo-ClashSharpPackageVersion -Value $declaration.MinVersion)) {
+        throw "Dependency identity, publisher, version, or architecture is invalid: $($dependencySource.Name)"
+    }
+
+    $dependencyPayloadPath = Join-Path $payloadDependencyDir $dependencySource.Name
+    Copy-Item -LiteralPath $dependencySource.FullName -Destination $dependencyPayloadPath
+    $dependencySignature = Get-ClashSharpPackageSignature `
+        -LiteralPath $dependencyPayloadPath `
+        -ExpectedSubject $declaration.Publisher `
+        -ExpectedThumbprint $expectedDependencyThumbprint `
+        -RequireTrusted `
+        -RequireTimestamp
+    $dependencyPayloadFile = Get-Item -LiteralPath $dependencyPayloadPath -Force
+    $dependencyProvenance.Add([PSCustomObject]@{
+            path               = "Dependencies/x64/$($dependencySource.Name)"
+            length             = [long]$dependencyPayloadFile.Length
+            sha256             = (Get-FileHash -LiteralPath $dependencyPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            name               = $dependencyIdentity.Name
+            publisher          = $dependencyIdentity.Publisher
+            version            = $dependencyIdentity.Version
+            architecture       = $dependencyIdentity.Architecture
+            signerSubject      = $dependencySignature.Subject
+            signerThumbprint   = $dependencySignature.Thumbprint
+            signatureTimestamp = [bool]$dependencySignature.Timestamp
+        })
+}
+
+$mainSignatureParameters = @{
+    LiteralPath        = $primaryPayloadPath
+    ExpectedSubject    = $manifestPublisher
+    ExpectedThumbprint = $payloadCertificate.Thumbprint
+}
+if (-not $Development) {
+    $mainSignatureParameters.RequireTrusted = $true
+}
+$mainSignature = Get-ClashSharpPackageSignature @mainSignatureParameters
+$primaryPayloadFile = Get-Item -LiteralPath $primaryPayloadPath -Force
+$certificatePayloadFile = Get-Item -LiteralPath $certificatePayloadPath -Force
+$provenance = [ordered]@{
+    schemaVersion = 1
+    primary       = [ordered]@{
+        path             = $appPackage.Name
+        length           = [long]$primaryPayloadFile.Length
+        sha256           = (Get-FileHash -LiteralPath $primaryPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        name             = $appIdentity.Name
+        publisher        = $appIdentity.Publisher
+        version          = $appIdentity.Version
+        architecture     = $appIdentity.Architecture
+        signerSubject    = $mainSignature.Subject
+        signerThumbprint = $mainSignature.Thumbprint
+    }
+    certificate   = [ordered]@{
+        path       = $certificatePayloadFile.Name
+        length     = [long]$certificatePayloadFile.Length
+        sha256     = (Get-FileHash -LiteralPath $certificatePayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        subject    = $stagedPayloadCertificate.Subject
+        thumbprint = $stagedPayloadCertificate.Thumbprint
+    }
+    dependencies  = @($dependencyProvenance)
+}
+$provenancePath = Join-Path $payloadStagingDir 'payload-provenance.json'
+$provenance | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $provenancePath -Encoding utf8NoBOM
+$stagedPayloadCertificate.Dispose()
+$null = Get-ClashSharpDirectoryContract -LiteralPath $payloadStagingDir
+
     New-Item -ItemType Directory -Force -Path $cargoStagingRoot | Out-Null
     $previousPackagingMode = $env:CLASHSHARP_INSTALLER_PACKAGING_MODE
+    $previousPayloadDirectory = $env:CLASHSHARP_INSTALLER_PAYLOAD_DIR
     try {
         $env:CLASHSHARP_INSTALLER_PACKAGING_MODE = if ($Development) { "development" } else { "official" }
+        $env:CLASHSHARP_INSTALLER_PAYLOAD_DIR = $payloadStagingDir
         cargo build --release --frozen --target $rustTarget --target-dir $cargoStagingRoot
         if ($LASTEXITCODE -ne 0) {
             throw "Rust Installer release build failed with exit code $LASTEXITCODE."
@@ -441,6 +677,11 @@ try {
         } else {
             $env:CLASHSHARP_INSTALLER_PACKAGING_MODE = $previousPackagingMode
         }
+        if ($null -eq $previousPayloadDirectory) {
+            Remove-Item Env:\CLASHSHARP_INSTALLER_PAYLOAD_DIR -ErrorAction SilentlyContinue
+        } else {
+            $env:CLASHSHARP_INSTALLER_PAYLOAD_DIR = $previousPayloadDirectory
+        }
     }
 
     $stagedInstallerExecutable = Join-Path `
@@ -449,9 +690,9 @@ try {
     $null = Get-OrdinaryFile `
         -LiteralPath $stagedInstallerExecutable `
         -Description "staged Rust Installer executable"
-    New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
-    $developmentExecutable = Join-Path $releaseDir "ClashSharp-Installer-Development-Unsigned.exe"
-    $developmentMarker = Join-Path $releaseDir "DEVELOPMENT-UNSIGNED.txt"
+    $null = New-Item -ItemType Directory -Path $promotionStagingRoot
+    $developmentExecutable = Join-Path $promotionStagingRoot "ClashSharp-Installer-Development-Unsigned.exe"
+    $developmentMarker = Join-Path $promotionStagingRoot "DEVELOPMENT-UNSIGNED.txt"
 
     if ($Development) {
         Move-Item `
@@ -552,7 +793,7 @@ try {
         }
 
         # The official filename appears only after the staged executable is signed and verified.
-        $installerExecutable = Join-Path $releaseDir "ClashSharp-Installer.exe"
+        $installerExecutable = Join-Path $promotionStagingRoot "ClashSharp-Installer.exe"
         Move-Item -LiteralPath $stagedInstallerExecutable -Destination $installerExecutable
     }
 
@@ -564,9 +805,15 @@ try {
         -Value "$installerSha256 *$(Split-Path -Leaf $installerExecutable)"
     Write-Host "Installer artifact SHA-256: $installerSha256"
 
-    $releasePayloadDir = Join-Path $releaseDir "payload"
-    New-Item -ItemType Directory -Path $releasePayloadDir | Out-Null
-    Copy-Item -Path (Join-Path $payloadDir "*") -Destination $releasePayloadDir -Recurse
+    $promotionPayloadDir = Join-Path $promotionStagingRoot "payload"
+    $null = Copy-ClashSharpVerifiedDirectory `
+        -Source $payloadStagingDir `
+        -Destination $promotionPayloadDir
+    $promotionContract = @(Get-ClashSharpDirectoryContract -LiteralPath $promotionStagingRoot)
+    $releaseContract = @(Copy-ClashSharpVerifiedDirectory `
+            -Source $promotionStagingRoot `
+            -Destination $releaseDir)
+    Compare-ClashSharpDirectoryContract -Expected $promotionContract -Actual $releaseContract
     $packagingSucceeded = $true
 } finally {
     try {
@@ -574,6 +821,6 @@ try {
             Remove-GeneratedDirectory -LiteralPath $releaseDir
         }
     } finally {
-        Remove-GeneratedDirectory -LiteralPath $cargoStagingRoot
+        Remove-GeneratedDirectory -LiteralPath $packagingRunRoot
     }
 }

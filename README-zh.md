@@ -27,7 +27,7 @@
 
 > 修复、升级和完整卸载请重新运行 `ClashSharp-Installer.exe`。不要只从 Windows 应用管理移除 MSIX，否则机器级 Service 资源可能无法同步清理。
 
-正式构建的依赖解析与 payload 装配保持离线：`dotnet publish` 使用预先完成的 locked restore，Cargo 使用 frozen lock/cache；构建不会联网追踪 Mihomo `latest`。仓库内固定的版本、长度和 SHA-256 必须与普通二进制完全一致，并须先通过 `Tools\Prepare-GeoData.ps1` 准备四项固定 GeoData 资产。正式产物还要求受控的 MSIX 证书、可信且带时间戳的 Installer Authenticode 签名，以及显式的 `CLASHSHARP_WINDOWS_SDK_VERSION`；SignTool 只接受该固定 Windows Kits x64 目录中通过 Microsoft 签名信任校验的版本，签名阶段仅联系显式配置的 HTTPS 时间戳服务。未签名 Cargo 输出只存在于可清理的 staging 目录，通过签名验证后才发布到 `target\release-artifacts`。`build.ps1 -Development` 只生成明确标记为不可发布的未签名开发产物。
+正式构建的依赖解析与 payload 装配保持离线：`dotnet publish` 使用预先完成的 locked restore，Cargo 使用 frozen lock/cache；构建不会联网追踪 Mihomo `latest`。仓库内固定的版本、长度和 SHA-256 必须与普通二进制完全一致，并须先通过 `Tools\Prepare-GeoData.ps1` 准备四项固定 GeoData 资产。每次打包都会使用全新随机 staging，只接纳最终 manifest 声明的唯一 x64 Windows App Runtime 依赖，并要求通过 `CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT` 固定其受控 signer thumbprint。正式产物还要求受控的 MSIX 证书、可信且带时间戳的 Installer Authenticode 签名，以及显式的 `CLASHSHARP_WINDOWS_SDK_VERSION`；SignTool 只接受该固定 Windows Kits x64 目录中通过 Microsoft 签名信任校验的版本，签名阶段仅联系显式配置的 HTTPS 时间戳服务。未签名 Cargo 输出只存在于可清理的 staging 目录；精确文件集合、长度与 SHA-256 契约在 promotion 后复核一致，才会发布到 `target\release-artifacts`。`build.ps1 -Development` 只生成明确标记为不可发布的未签名开发产物。
 
 ### 快速上手
 

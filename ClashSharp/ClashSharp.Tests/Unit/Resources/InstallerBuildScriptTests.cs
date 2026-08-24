@@ -120,7 +120,7 @@ public sealed class InstallerBuildScriptTests
         string buildScript = File.ReadAllText(buildScriptPath);
         string servicePlan = File.ReadAllText(servicePlanPath);
 
-        Assert.Contains("extract_trusted_package_identity", buildScript, StringComparison.Ordinal);
+        Assert.Contains("extract_trusted_package_manifest", buildScript, StringComparison.Ordinal);
         Assert.Contains("parse_final_appx_identity", buildScript, StringComparison.Ordinal);
         Assert.Contains("ProcessorArchitecture", buildScript, StringComparison.Ordinal);
         Assert.Contains("Application Executable", buildScript, StringComparison.Ordinal);
@@ -197,6 +197,62 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("$_.Thumbprint -ceq $payloadCertificate.Thumbprint", buildScript, StringComparison.Ordinal);
         Assert.DoesNotContain("CN=ClashSharp Development", buildScript, StringComparison.Ordinal);
         Assert.DoesNotContain($"\"{publisher}\"", buildScript, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies formal packaging uses fresh exact content, dependency, signer, and promotion contracts.</summary>
+    [Fact]
+    public void NativeInstallerBuild_UsesExactIsolatedPayloadAndSignatureContract()
+    {
+        string scriptPath = FindSourceFile("ClashSharp", "Installer", "build.ps1");
+        string modulePath = FindSourceFile(
+            "ClashSharp",
+            "Installer",
+            "PackagingContract.psm1");
+        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
+        string projectPath = FindSourceFile("ClashSharp", "ClashSharp", "ClashSharp.csproj");
+
+        string script = File.ReadAllText(scriptPath);
+        string module = File.ReadAllText(modulePath);
+        string buildScript = File.ReadAllText(buildScriptPath);
+        string project = File.ReadAllText(projectPath);
+
+        Assert.Contains("[Guid]::NewGuid().ToString('N')", script, StringComparison.Ordinal);
+        Assert.Contains("Copy-ClashSharpComponentPayload", script, StringComparison.Ordinal);
+        Assert.Contains("Get-ClashSharpDirectoryContract", script, StringComparison.Ordinal);
+        Assert.Contains("-p:AppxPackageDir=$appPackageStagingRoot", script, StringComparison.Ordinal);
+        Assert.Contains("Get-ClashSharpMsixIdentity", script, StringComparison.Ordinal);
+        Assert.Contains("Get-ClashSharpMainPackageDependency", script, StringComparison.Ordinal);
+        Assert.Contains("CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT", script, StringComparison.Ordinal);
+        Assert.Contains("-ExpectedThumbprint $expectedDependencyThumbprint", script, StringComparison.Ordinal);
+        Assert.Contains("-RequireTrusted", script, StringComparison.Ordinal);
+        Assert.Contains("-RequireTimestamp", script, StringComparison.Ordinal);
+        Assert.Contains("payload-provenance.json", script, StringComparison.Ordinal);
+        Assert.Contains("CLASHSHARP_INSTALLER_PAYLOAD_DIR", script, StringComparison.Ordinal);
+        Assert.Contains("Copy-ClashSharpVerifiedDirectory", script, StringComparison.Ordinal);
+        Assert.Contains("Compare-ClashSharpDirectoryContract", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("LastWriteTimeUtc", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("latestPackageDirectory", script, StringComparison.Ordinal);
+
+        Assert.Contains("Assert-ClashSharpOrdinaryPath", module, StringComparison.Ordinal);
+        Assert.Contains("FileAttributes]::ReparsePoint", module, StringComparison.Ordinal);
+        Assert.Contains("Get-AuthenticodeSignature", module, StringComparison.Ordinal);
+        Assert.Contains("TimeStamperCertificate", module, StringComparison.Ordinal);
+        Assert.Contains("RelativePath", module, StringComparison.Ordinal);
+        Assert.Contains("Sha256", module, StringComparison.Ordinal);
+
+        Assert.Contains("ClashSharpInstallerServiceRoot", project, StringComparison.Ordinal);
+        Assert.Contains("ClashSharpInstallerWatchdogRoot", project, StringComparison.Ordinal);
+        Assert.Contains("Binaries\\Service", project, StringComparison.Ordinal);
+        Assert.Contains("ClashSharp.RecoveryWatchdog.runtimeconfig.json", project, StringComparison.Ordinal);
+        Assert.Contains("Binaries\\GeoData\\ASN.mmdb", project, StringComparison.Ordinal);
+
+        Assert.Contains("validate_final_msix_file_contract", buildScript, StringComparison.Ordinal);
+        Assert.Contains("REQUIRED_PACKAGE_EXECUTABLES", buildScript, StringComparison.Ordinal);
+        Assert.Contains("parse_dependency_package_identity", buildScript, StringComparison.Ordinal);
+        Assert.Contains("payload provenance", buildScript, StringComparison.Ordinal);
+        Assert.Contains("ensure_payload_root_is_ordinary", buildScript, StringComparison.Ordinal);
+        Assert.Contains("unexpected release payload directory", buildScript, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.Web.WebView2.Core.winmd", buildScript, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the explicit Mihomo maintenance tool requires exact release and archive/binary hashes.</summary>

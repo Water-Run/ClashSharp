@@ -196,18 +196,27 @@ ClashSharp-Installer.exe                 唯一用户可见安装/修复/升级/
 
 **开发内容**
 
-- [ ] 将 MihomoService、RecoveryWatchdog、mihomo 和四项 GeoData 声明为明确的最终包内容。
-- [ ] 在全新随机 staging 目录发布；拒绝 payload、dependencies 及祖先目录中的 reparse point。
-- [ ] 解析最终 AppxManifest，要求精确一个 `Application` 且 executable 为 `ClashSharp.exe`。
-- [ ] 建立完整 executable/file allowlist；显式禁止 Probe、SandboxTest、Installer 和第二 updater 进入 MSIX。
-- [ ] 根据包 manifest 建立依赖 exact allowlist/count，并逐个验证 identity、publisher、architecture 和 signer。
-- [ ] 生成 trust anchor 前复核主 MSIX 与依赖的 Authenticode signer/thumbprint。
-- [ ] promotion 到 `release-artifacts` 后重新比较文件集合、长度和 SHA-256。
+- [x] 将 MihomoService、RecoveryWatchdog、mihomo 和四项 GeoData 声明为明确的最终包内容。
+- [x] 在全新随机 staging 目录发布；拒绝 payload、dependencies 及祖先目录中的 reparse point。
+- [x] 解析最终 AppxManifest，要求精确一个 `Application` 且 executable 为 `ClashSharp.exe`。
+- [x] 建立完整 executable/file allowlist；显式禁止 Probe、SandboxTest、Installer 和第二 updater 进入 MSIX。
+- [x] 根据包 manifest 建立依赖 exact allowlist/count，并逐个验证 identity、publisher、architecture 和 signer。
+- [x] 生成 trust anchor 前复核主 MSIX 与依赖的 Authenticode signer/thumbprint。
+- [x] promotion 到 `release-artifacts` 后重新比较文件集合、长度和 SHA-256。
+
+**关闭证据（2026-08-24）**
+
+- 主项目的正式 MSIX 路径只消费独立 Service/Watchdog publish staging，并显式映射 Service 四项宿主文件及其 `.deps.json` 闭包、Watchdog 四项固定文件、mihomo 二进制/许可/notice/manifest 和四项 GeoData；原有 `AfterTargets=Build` loose copy 不再参与正式打包。
+- `PackagingContract.psm1` 对目标及全部已存在祖先逐段拒绝 reparse point，建立 canonical 相对路径、长度和 SHA-256 目录契约；`build.ps1` 每次使用 GUID staging，将原始组件 publish 筛入全新运行时目录，不再按时间选择“最新” AppPackages，也不再复制任意 dependency。
+- 最终 AppxManifest 只允许一个 `Application`/`ClashSharp.exe` 和一个 Microsoft Windows App Runtime 1.8 dependency；依赖文件数量、canonical `Dependencies/x64` 路径、Name、Publisher、MinVersion、x64、Framework 身份、Windows trust、timestamp 及受控 `CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT` 必须全部一致。主 MSIX signer subject/thumbprint 与 staged CER 也在生成 provenance/trust anchor 前复核。
+- Rust 构建契约要求 main、Service、RecoveryWatchdog、mihomo 四个且仅四个 `.exe`，要求完整 MSIX metadata、主程序、运行时、WebView2、图像、mihomo、Service、Watchdog 和 GeoData 文件集；运行时 DLL 只可由三份 `.deps.json` 的 library 闭包引入，PDB、lock file、Probe、SandboxTest、Installer、Updater 及任意额外文件均失败。
+- Cargo 只读取随机 payload 根及 strict `payload-provenance.json`，逐项绑定主包、CER 和 manifest 声明依赖的路径、长度、SHA-256、identity 与 signer 证据；promotion staging 复制到 `release-artifacts` 后再次比较整个产物树的文件集合、长度和 SHA-256。
+- 无系统 mutation 验证：PowerShell 两份脚本解析/import 为 0 error；真实 Service publish 筛得 46 项运行时文件并通过 verified-copy 复核，真实 Microsoft Windows App Runtime MSIX 的 trusted/timestamped signer 与固定 thumbprint 校验通过，临时 junction 攻击被确定性拒绝；Rust fmt/clippy 与 78 项测试通过；Release x64 构建 0 warning / 0 error，.NET 2,211 项通过、0 失败、0 跳过，格式检查 0 变更。正式 `build.ps1` 未在开发机执行，避免触发证书库、签名服务或安装状态变化；正在使用的 mihomo 仍为 PID 25216。
 
 **验收条件**
 
-- 最终 archive 必含 main/service/watchdog/mihomo/GeoData，且不含任何测试探针或第二产品入口。
-- 任一旧文件、额外依赖、错误 signer、错误架构或 reparse 路径都会使构建失败。
+- [x] 最终 archive 必含 main/service/watchdog/mihomo/GeoData，且不含任何测试探针或第二产品入口。
+- [x] 任一旧文件、额外依赖、错误 signer、错误架构或 reparse 路径都会使构建失败。
 
 ### P0-05 关闭 payload 校验与使用之间的 TOCTOU
 

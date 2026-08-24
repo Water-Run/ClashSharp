@@ -10,6 +10,7 @@ use zip::ZipArchive;
 
 const MAX_TRUSTED_FILE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TRUSTED_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
+const MAX_MSIX_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_GEODATA_ASSET_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_GEODATA_MANIFEST_BYTES: u64 = 64 * 1024;
 const MAX_APPX_MANIFEST_BYTES: u64 = 1024 * 1024;
@@ -23,6 +24,10 @@ const EXPECTED_APPLICATION_ENTRY_POINT: &str = "Windows.FullTrustApplication";
 const SOURCE_APPLICATION_EXECUTABLE: &str = "$targetnametoken$.exe";
 const SOURCE_APPLICATION_ENTRY_POINT: &str = "$targetentrypoint$";
 const GEODATA_MANIFEST_PATH: &str = "Binaries/GeoData/manifest.json";
+const PAYLOAD_PROVENANCE_PATH: &str = "payload-provenance.json";
+const EXPECTED_DEPENDENCY_NAME: &str = "Microsoft.WindowsAppRuntime.1.8";
+const EXPECTED_DEPENDENCY_PUBLISHER: &str =
+    "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US";
 const REQUIRED_GEODATA_ASSETS: [(&str, &str); 4] = [
     ("Country.mmdb", "binaries/geodata/country.mmdb"),
     ("GeoIP.dat", "binaries/geodata/geoip.dat"),
@@ -35,6 +40,61 @@ const ALLOWED_GEODATA_PATHS: [&str; 5] = [
     "Binaries/GeoData/GeoIP.dat",
     "Binaries/GeoData/GeoSite.dat",
     "Binaries/GeoData/ASN.mmdb",
+];
+const REQUIRED_PACKAGE_FILES: [&str; 23] = [
+    "[Content_Types].xml",
+    "AppxBlockMap.xml",
+    "AppxManifest.xml",
+    "AppxMetadata/CodeIntegrity.cat",
+    "AppxSignature.p7x",
+    "resources.pri",
+    "ClashSharp.exe",
+    "ClashSharp.dll",
+    "ClashSharp.deps.json",
+    "ClashSharp.runtimeconfig.json",
+    "ClashSharp.RecoveryWatchdog.exe",
+    "ClashSharp.RecoveryWatchdog.dll",
+    "ClashSharp.RecoveryWatchdog.deps.json",
+    "ClashSharp.RecoveryWatchdog.runtimeconfig.json",
+    "Binaries/mihomo.exe",
+    "Binaries/mihomo-LICENSE.txt",
+    "Binaries/mihomo-NOTICE.txt",
+    "Binaries/mihomo-manifest.json",
+    "Binaries/Service/ClashSharp.MihomoService.exe",
+    "Binaries/Service/ClashSharp.MihomoService.dll",
+    "Binaries/Service/ClashSharp.MihomoService.deps.json",
+    "Binaries/Service/ClashSharp.MihomoService.runtimeconfig.json",
+    GEODATA_MANIFEST_PATH,
+];
+const REQUIRED_PACKAGE_EXECUTABLES: [&str; 4] = [
+    "ClashSharp.exe",
+    "ClashSharp.RecoveryWatchdog.exe",
+    "Binaries/mihomo.exe",
+    "Binaries/Service/ClashSharp.MihomoService.exe",
+];
+const REQUIRED_PACKAGE_ASSETS: [&str; 22] = [
+    "Assets/LockScreenLogo.scale-200.png",
+    "Assets/Logo.png",
+    "Assets/SplashScreen.scale-200.png",
+    "Assets/Square150x150Logo.scale-200.png",
+    "Assets/Square44x44Logo.scale-200.png",
+    "Assets/Square44x44Logo.targetsize-24_altform-unplated.png",
+    "Assets/StoreLogo.png",
+    "Assets/Wide310x150Logo.scale-200.png",
+    "Assets/Flags/cn.png",
+    "Assets/Flags/de.png",
+    "Assets/Flags/fr.png",
+    "Assets/Flags/gb.png",
+    "Assets/Flags/hk.png",
+    "Assets/Flags/jp.png",
+    "Assets/Flags/kr.png",
+    "Assets/Flags/mo.png",
+    "Assets/Flags/sg.png",
+    "Assets/Flags/tw.png",
+    "Assets/Flags/un.png",
+    "Assets/Flags/us.png",
+    "Microsoft.Web.WebView2.Core.dll",
+    "Microsoft.Web.WebView2.Core.winmd",
 ];
 
 #[derive(serde::Deserialize)]
@@ -73,9 +133,79 @@ struct ManifestIdentity {
     version: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AppxManifestContract {
+    identity: AppxPackageIdentity,
+    dependencies: Vec<AppxPackageDependency>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AppxPackageDependency {
+    name: String,
+    publisher: String,
+    min_version: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DependencyPackageIdentity {
+    name: String,
+    publisher: String,
+    version: String,
+    architecture: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PayloadProvenance {
+    schema_version: u64,
+    primary: PrimaryPackageProvenance,
+    certificate: CertificateProvenance,
+    dependencies: Vec<DependencyPackageProvenance>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PrimaryPackageProvenance {
+    path: String,
+    length: u64,
+    sha256: String,
+    name: String,
+    publisher: String,
+    version: String,
+    architecture: String,
+    signer_subject: String,
+    signer_thumbprint: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CertificateProvenance {
+    path: String,
+    length: u64,
+    sha256: String,
+    subject: String,
+    thumbprint: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DependencyPackageProvenance {
+    path: String,
+    length: u64,
+    sha256: String,
+    name: String,
+    publisher: String,
+    version: String,
+    architecture: String,
+    signer_subject: String,
+    signer_thumbprint: String,
+    signature_timestamp: bool,
+}
+
 #[cfg(not(test))]
 fn main() {
     println!("cargo:rerun-if-changed=payload");
+    println!("cargo:rerun-if-env-changed=CLASHSHARP_INSTALLER_PAYLOAD_DIR");
     println!("cargo:rerun-if-changed=ui/main.slint");
     println!("cargo:rerun-if-changed=LogoInstaller.ico");
     println!("cargo:rerun-if-changed=../ClashSharp/Package.appxmanifest");
@@ -97,7 +227,10 @@ fn main() {
 
     let output = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is required"))
         .join("payload_trust_anchor.rs");
-    match generate_payload_trust_anchor(Path::new("payload")) {
+    let payload_directory = env::var_os("CLASHSHARP_INSTALLER_PAYLOAD_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("payload"));
+    match generate_payload_trust_anchor(&payload_directory) {
         Ok(source) => fs::write(&output, source).expect("write payload trust anchor"),
         Err(error) if profile == "release" => {
             panic!("release Installer trust anchor generation failed: {error}")
@@ -123,6 +256,7 @@ fn main() {
 }
 
 fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
+    ensure_payload_root_is_ordinary(payload)?;
     let entries = fs::read_dir(payload)
         .map_err(|error| format!("payload directory unavailable: {error}"))?
         .collect::<Result<Vec<_>, _>>()
@@ -150,6 +284,7 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
     let msix_hash = hash_file(&packages[0])?;
     let certificate_hash = hash_file(&certificate)?;
     let payload_files = enumerate_payload_files(payload)?;
+    let provenance = read_payload_provenance(payload)?;
     let primary_relative = relative_payload_path(payload, &packages[0])?;
     let certificate_relative = relative_payload_path(payload, &certificate)?;
     if !payload_files.contains_key(&primary_relative)
@@ -160,7 +295,16 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
     let package = File::open(&packages[0]).map_err(|error| format!("open MSIX failed: {error}"))?;
     let mut archive =
         ZipArchive::new(package).map_err(|error| format!("open MSIX ZIP failed: {error}"))?;
-    let package_identity = extract_trusted_package_identity(&mut archive)?;
+    let package_contract = extract_trusted_package_manifest(&mut archive)?;
+    validate_final_msix_file_contract(&mut archive)?;
+    validate_payload_provenance_and_dependencies(
+        payload,
+        &payload_files,
+        &primary_relative,
+        &certificate_relative,
+        &package_contract,
+        &provenance,
+    )?;
     let mut trusted_files = BTreeMap::<String, (u64, String)>::new();
     let mut geodata_manifest_bytes = None;
     let mut total_bytes = 0_u64;
@@ -270,7 +414,7 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
         "pub const TRUSTED_MSIX_SHA256: &str = \"{msix_hash}\";"
     )
     .unwrap();
-    write_package_identity_constants(&mut source, &package_identity);
+    write_package_identity_constants(&mut source, &package_contract.identity);
     writeln!(
         source,
         "pub const TRUSTED_CERTIFICATE_SHA256: &str = \"{certificate_hash}\";"
@@ -299,9 +443,13 @@ fn generate_payload_trust_anchor(payload: &Path) -> Result<String, String> {
     Ok(source)
 }
 
-fn extract_trusted_package_identity(
+fn extract_trusted_package_manifest(
     archive: &mut ZipArchive<File>,
-) -> Result<AppxPackageIdentity, String> {
+) -> Result<AppxManifestContract, String> {
+    parse_final_appx_manifest(&read_canonical_appx_manifest(archive)?)
+}
+
+fn read_canonical_appx_manifest(archive: &mut ZipArchive<File>) -> Result<String, String> {
     let manifest_entries = archive
         .file_names()
         .enumerate()
@@ -339,12 +487,17 @@ fn extract_trusted_package_identity(
         return Err(String::from("AppxManifest.xml length changed"));
     }
     let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes);
-    let manifest = std::str::from_utf8(bytes)
-        .map_err(|_| String::from("AppxManifest.xml is not canonical UTF-8"))?;
-    parse_final_appx_identity(manifest)
+    std::str::from_utf8(bytes)
+        .map(str::to_owned)
+        .map_err(|_| String::from("AppxManifest.xml is not canonical UTF-8"))
 }
 
+#[cfg(test)]
 fn parse_final_appx_identity(manifest: &str) -> Result<AppxPackageIdentity, String> {
+    Ok(parse_final_appx_manifest(manifest)?.identity)
+}
+
+fn parse_final_appx_manifest(manifest: &str) -> Result<AppxManifestContract, String> {
     let document = parse_appx_document(manifest)?;
     let package = canonical_package_element(&document)?;
     let manifest_identity = parse_manifest_identity(package)?;
@@ -369,13 +522,18 @@ fn parse_final_appx_identity(manifest: &str) -> Result<AppxPackageIdentity, Stri
         EXPECTED_APPLICATION_ENTRY_POINT,
     )?;
 
-    complete_package_identity(
+    let identity = complete_package_identity(
         manifest_identity,
         architecture,
         application_id,
         application_executable,
         application_entry_point,
-    )
+    )?;
+    let dependencies = parse_package_dependencies(package)?;
+    Ok(AppxManifestContract {
+        identity,
+        dependencies,
+    })
 }
 
 fn parse_source_appx_identity(manifest: &str) -> Result<AppxPackageIdentity, String> {
@@ -402,6 +560,30 @@ fn parse_source_appx_identity(manifest: &str) -> Result<AppxPackageIdentity, Str
         String::from(EXPECTED_APPLICATION_EXECUTABLE),
         String::from(EXPECTED_APPLICATION_ENTRY_POINT),
     )
+}
+
+fn parse_dependency_package_identity(manifest: &str) -> Result<DependencyPackageIdentity, String> {
+    let document = parse_appx_document(manifest)?;
+    let package = canonical_package_element(&document)?;
+    let identity = parse_manifest_identity(package)?;
+    let identity_node = one_direct_child(package, "Identity")?;
+    let architecture = required_attribute(identity_node, "ProcessorArchitecture")?;
+    if architecture != EXPECTED_PACKAGE_ARCHITECTURE {
+        return Err(String::from(
+            "dependency MSIX architecture is outside the x64 contract",
+        ));
+    }
+    let properties = one_direct_child(package, "Properties")?;
+    let framework = one_direct_child(properties, "Framework")?;
+    if framework.text().map(str::trim) != Some("true") {
+        return Err(String::from("dependency MSIX is not a framework package"));
+    }
+    Ok(DependencyPackageIdentity {
+        name: identity.name,
+        publisher: identity.publisher,
+        version: identity.version,
+        architecture,
+    })
 }
 
 fn parse_appx_document(manifest: &str) -> Result<roxmltree::Document<'_>, String> {
@@ -477,6 +659,43 @@ fn parse_manifest_identity(package: roxmltree::Node<'_, '_>) -> Result<ManifestI
         publisher,
         version,
     })
+}
+
+fn parse_package_dependencies(
+    package: roxmltree::Node<'_, '_>,
+) -> Result<Vec<AppxPackageDependency>, String> {
+    let dependencies = one_direct_child(package, "Dependencies")?;
+    let package_dependencies = dependencies
+        .children()
+        .filter(|node| {
+            node.is_element()
+                && node.tag_name().name() == "PackageDependency"
+                && node.tag_name().namespace() == Some(APPX_MANIFEST_NAMESPACE)
+        })
+        .collect::<Vec<_>>();
+    if package_dependencies.len() != 1 {
+        return Err(String::from(
+            "AppxManifest.xml must declare exactly one PackageDependency",
+        ));
+    }
+
+    let dependency = package_dependencies[0];
+    let name = required_attribute(dependency, "Name")?;
+    let publisher = required_attribute(dependency, "Publisher")?;
+    let min_version = required_attribute(dependency, "MinVersion")?;
+    if name != EXPECTED_DEPENDENCY_NAME
+        || publisher != EXPECTED_DEPENDENCY_PUBLISHER
+        || !is_canonical_package_version(&min_version)
+    {
+        return Err(String::from(
+            "AppxManifest.xml PackageDependency is outside the exact product contract",
+        ));
+    }
+    Ok(vec![AppxPackageDependency {
+        name,
+        publisher,
+        min_version,
+    }])
 }
 
 fn required_attribute(node: roxmltree::Node<'_, '_>, name: &str) -> Result<String, String> {
@@ -679,6 +898,415 @@ fn write_package_identity_constants(source: &mut String, identity: &AppxPackageI
     }
 }
 
+fn validate_final_msix_file_contract(archive: &mut ZipArchive<File>) -> Result<(), String> {
+    if archive.is_empty() || archive.len() > 4096 {
+        return Err(String::from("final MSIX entry count is outside its budget"));
+    }
+    let mut actual = BTreeMap::<String, String>::new();
+    let mut executables = BTreeSet::<String>::new();
+    let mut total_bytes = 0_u64;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| format!("read final MSIX entry failed: {error}"))?;
+        let name = entry.name();
+        if entry.is_dir()
+            || name.ends_with('/')
+            || name.contains('\\')
+            || entry.enclosed_name().is_none()
+            || entry.size() == 0
+            || entry.size() > MAX_TRUSTED_FILE_BYTES
+            || entry
+                .unix_mode()
+                .is_some_and(|mode| mode & 0o170_000 == 0o120_000)
+        {
+            return Err(format!("unsafe final MSIX entry: {name}"));
+        }
+        let lower = name.to_ascii_lowercase();
+        validate_final_msix_entry_name(name)?;
+        if lower.ends_with(".exe") {
+            executables.insert(name.to_owned());
+        }
+        if actual.insert(lower, name.to_owned()).is_some() {
+            return Err(format!("case-colliding final MSIX entry: {name}"));
+        }
+        total_bytes = total_bytes
+            .checked_add(entry.size())
+            .ok_or_else(|| String::from("final MSIX uncompressed length overflow"))?;
+        if total_bytes > MAX_MSIX_TOTAL_BYTES {
+            return Err(String::from(
+                "final MSIX uncompressed content exceeds its budget",
+            ));
+        }
+    }
+
+    for required in REQUIRED_PACKAGE_FILES
+        .into_iter()
+        .chain(REQUIRED_PACKAGE_ASSETS)
+        .chain(ALLOWED_GEODATA_PATHS)
+    {
+        if actual
+            .get(&required.to_ascii_lowercase())
+            .map(String::as_str)
+            != Some(required)
+        {
+            return Err(format!("required final MSIX file is missing: {required}"));
+        }
+    }
+    validate_final_msix_executable_set(&executables)?;
+
+    let mut allowed = REQUIRED_PACKAGE_FILES
+        .into_iter()
+        .chain(REQUIRED_PACKAGE_ASSETS)
+        .chain(ALLOWED_GEODATA_PATHS)
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    for (deps_path, prefix) in [
+        ("ClashSharp.deps.json", ""),
+        ("ClashSharp.RecoveryWatchdog.deps.json", ""),
+        (
+            "Binaries/Service/ClashSharp.MihomoService.deps.json",
+            "Binaries/Service/",
+        ),
+    ] {
+        let bytes = read_bounded_zip_entry(archive, deps_path, 4 * 1024 * 1024)?;
+        add_dotnet_dependency_assets(&bytes, prefix, &mut allowed)?;
+    }
+    for name in actual.values() {
+        if !allowed.contains(name) {
+            return Err(format!("final MSIX file is outside the allowlist: {name}"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_final_msix_entry_name(name: &str) -> Result<(), String> {
+    let lower = name.to_ascii_lowercase();
+    if lower.ends_with(".pdb")
+        || lower.ends_with("/packages.lock.json")
+        || lower == "packages.lock.json"
+        || ["probe", "sandboxtest", "installer", "updater"]
+            .iter()
+            .any(|forbidden| lower.contains(forbidden))
+    {
+        return Err(format!("forbidden final MSIX entry: {name}"));
+    }
+    Ok(())
+}
+
+fn validate_final_msix_executable_set(executables: &BTreeSet<String>) -> Result<(), String> {
+    let expected = REQUIRED_PACKAGE_EXECUTABLES
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    if executables != &expected {
+        return Err(format!(
+            "final MSIX executable set is invalid: {executables:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn read_bounded_zip_entry(
+    archive: &mut ZipArchive<File>,
+    expected_name: &str,
+    maximum_length: u64,
+) -> Result<Vec<u8>, String> {
+    let matching = archive
+        .file_names()
+        .enumerate()
+        .filter(|(_, name)| name.eq_ignore_ascii_case(expected_name))
+        .map(|(index, name)| (index, name.to_owned()))
+        .collect::<Vec<_>>();
+    if matching.len() != 1 || matching[0].1 != expected_name {
+        return Err(format!(
+            "final MSIX must contain one canonical {expected_name}"
+        ));
+    }
+    let mut entry = archive
+        .by_index(matching[0].0)
+        .map_err(|error| format!("read {expected_name} failed: {error}"))?;
+    if entry.is_dir()
+        || entry.size() == 0
+        || entry.size() > maximum_length
+        || entry.enclosed_name().is_none()
+    {
+        return Err(format!("final MSIX {expected_name} is unsafe"));
+    }
+    let expected_length = entry.size() as usize;
+    let mut bytes = Vec::with_capacity(expected_length);
+    entry
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("read {expected_name} failed: {error}"))?;
+    if bytes.len() != expected_length {
+        return Err(format!("final MSIX {expected_name} length changed"));
+    }
+    Ok(bytes)
+}
+
+fn add_dotnet_dependency_assets(
+    deps_json: &[u8],
+    prefix: &str,
+    allowed: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    let document: serde_json::Value = serde_json::from_slice(deps_json)
+        .map_err(|error| format!("parse .NET dependency manifest failed: {error}"))?;
+    let runtime_target = document
+        .get("runtimeTarget")
+        .and_then(|value| value.get("name"))
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| String::from(".NET dependency manifest runtimeTarget is missing"))?;
+    let target = document
+        .get("targets")
+        .and_then(|value| value.get(runtime_target))
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| String::from(".NET dependency manifest target graph is missing"))?;
+    let mut asset_count = 0_usize;
+    for library in target.values() {
+        let library = library
+            .as_object()
+            .ok_or_else(|| String::from(".NET dependency library entry is invalid"))?;
+        for section in ["runtime", "native", "runtimeTargets"] {
+            let Some(assets) = library.get(section) else {
+                continue;
+            };
+            let assets = assets
+                .as_object()
+                .ok_or_else(|| String::from(".NET dependency asset section is invalid"))?;
+            for asset in assets.keys() {
+                if asset == "_._" {
+                    continue;
+                }
+                add_dotnet_asset_allowlist_paths(asset, prefix, None, allowed)?;
+                asset_count += 1;
+            }
+        }
+        let Some(resources) = library.get("resources") else {
+            continue;
+        };
+        let resources = resources
+            .as_object()
+            .ok_or_else(|| String::from(".NET dependency resources section is invalid"))?;
+        for (asset, metadata) in resources {
+            let locale = metadata
+                .get("locale")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| String::from(".NET dependency resource locale is missing"))?;
+            add_dotnet_asset_allowlist_paths(asset, prefix, Some(locale), allowed)?;
+            asset_count += 1;
+        }
+    }
+    if asset_count == 0 {
+        return Err(String::from(".NET dependency manifest asset set is empty"));
+    }
+    Ok(())
+}
+
+fn add_dotnet_asset_allowlist_paths(
+    asset: &str,
+    prefix: &str,
+    locale: Option<&str>,
+    allowed: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    if asset.is_empty()
+        || asset.contains('\\')
+        || asset.starts_with('/')
+        || asset
+            .split('/')
+            .any(|component| component.is_empty() || matches!(component, "." | ".."))
+    {
+        return Err(String::from(".NET dependency asset path is invalid"));
+    }
+    let file_name = asset
+        .rsplit('/')
+        .next()
+        .ok_or_else(|| String::from(".NET dependency asset file name is missing"))?;
+    let extension = file_name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase());
+    if !matches!(extension.as_deref(), Some("dll" | "winmd")) {
+        return Err(String::from(
+            ".NET dependency asset is outside the runtime library allowlist",
+        ));
+    }
+    let output_path = match locale {
+        Some(locale)
+            if !locale.is_empty()
+                && locale
+                    .bytes()
+                    .all(|value| value.is_ascii_alphanumeric() || value == b'-') =>
+        {
+            format!("{prefix}{locale}/{file_name}")
+        }
+        Some(_) => return Err(String::from(".NET dependency resource locale is invalid")),
+        None => format!("{prefix}{file_name}"),
+    };
+    allowed.insert(output_path);
+    allowed.insert(format!("{prefix}{asset}"));
+    Ok(())
+}
+
+fn read_payload_provenance(payload: &Path) -> Result<PayloadProvenance, String> {
+    let path = payload.join(PAYLOAD_PROVENANCE_PATH);
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|error| format!("payload provenance is unavailable: {error}"))?;
+    if !metadata.is_file() || metadata_is_reparse_point(&metadata) || metadata.len() > 256 * 1024 {
+        return Err(String::from("payload provenance file is unsafe"));
+    }
+    let bytes =
+        fs::read(&path).map_err(|error| format!("read payload provenance failed: {error}"))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| format!("parse payload provenance failed: {error}"))
+}
+
+fn validate_payload_provenance_and_dependencies(
+    payload: &Path,
+    payload_files: &BTreeMap<String, (u64, String)>,
+    primary_relative: &str,
+    certificate_relative: &str,
+    package: &AppxManifestContract,
+    provenance: &PayloadProvenance,
+) -> Result<(), String> {
+    if provenance.schema_version != 1 || package.dependencies.len() != 1 {
+        return Err(String::from("payload provenance schema is unsupported"));
+    }
+    let (primary_length, primary_sha256) = payload_files
+        .get(primary_relative)
+        .ok_or_else(|| String::from("payload provenance primary package is missing"))?;
+    let (certificate_length, certificate_sha256) = payload_files
+        .get(certificate_relative)
+        .ok_or_else(|| String::from("payload provenance certificate is missing"))?;
+    if normalize_provenance_path(&provenance.primary.path)? != primary_relative
+        || provenance.primary.length != *primary_length
+        || provenance.primary.sha256 != *primary_sha256
+        || provenance.primary.name != package.identity.name
+        || provenance.primary.publisher != package.identity.publisher
+        || provenance.primary.version != package.identity.version
+        || provenance.primary.architecture != package.identity.architecture
+        || provenance.primary.signer_subject != package.identity.publisher
+        || normalize_provenance_path(&provenance.certificate.path)? != certificate_relative
+        || provenance.certificate.length != *certificate_length
+        || provenance.certificate.sha256 != *certificate_sha256
+        || provenance.certificate.subject != package.identity.publisher
+        || provenance.certificate.thumbprint != provenance.primary.signer_thumbprint
+        || !is_canonical_thumbprint(&provenance.certificate.thumbprint)
+    {
+        return Err(String::from(
+            "payload provenance primary package or certificate does not match",
+        ));
+    }
+
+    let dependency_paths = payload_files
+        .keys()
+        .filter(|path| path.starts_with("dependencies/") && path.ends_with(".msix"))
+        .collect::<Vec<_>>();
+    if dependency_paths.len() != package.dependencies.len()
+        || provenance.dependencies.len() != package.dependencies.len()
+    {
+        return Err(String::from(
+            "payload dependency set does not match AppxManifest.xml",
+        ));
+    }
+
+    let mut seen_provenance_paths = BTreeSet::new();
+    for declaration in &package.dependencies {
+        let expected_relative = format!(
+            "dependencies/x64/{}.msix",
+            declaration.name.to_ascii_lowercase()
+        );
+        let (expected_length, expected_sha256) = payload_files
+            .get(&expected_relative)
+            .ok_or_else(|| String::from("declared dependency package is missing"))?;
+        let matching = provenance
+            .dependencies
+            .iter()
+            .filter(|entry| {
+                normalize_provenance_path(&entry.path).as_deref() == Ok(expected_relative.as_str())
+            })
+            .collect::<Vec<_>>();
+        if matching.len() != 1 || !seen_provenance_paths.insert(expected_relative.clone()) {
+            return Err(String::from(
+                "payload dependency provenance is missing or duplicated",
+            ));
+        }
+        let recorded = matching[0];
+        if recorded.length != *expected_length
+            || recorded.sha256 != *expected_sha256
+            || recorded.name != declaration.name
+            || recorded.publisher != declaration.publisher
+            || recorded.architecture != EXPECTED_PACKAGE_ARCHITECTURE
+            || recorded.signer_subject != declaration.publisher
+            || !is_canonical_thumbprint(&recorded.signer_thumbprint)
+            || !recorded.signature_timestamp
+        {
+            return Err(String::from(
+                "payload dependency provenance fields are invalid",
+            ));
+        }
+
+        let dependency_path = payload
+            .join("Dependencies")
+            .join("x64")
+            .join(format!("{}.msix", declaration.name));
+        let dependency_file = File::open(&dependency_path)
+            .map_err(|error| format!("open dependency MSIX failed: {error}"))?;
+        let mut dependency_archive = ZipArchive::new(dependency_file)
+            .map_err(|error| format!("open dependency MSIX ZIP failed: {error}"))?;
+        let identity = parse_dependency_package_identity(&read_canonical_appx_manifest(
+            &mut dependency_archive,
+        )?)?;
+        if identity.name != declaration.name
+            || identity.publisher != declaration.publisher
+            || identity.version != recorded.version
+            || identity.architecture != EXPECTED_PACKAGE_ARCHITECTURE
+            || compare_package_versions(&identity.version, &declaration.min_version)?
+                == std::cmp::Ordering::Less
+        {
+            return Err(String::from(
+                "dependency MSIX identity does not match the declared dependency",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_provenance_path(path: &str) -> Result<String, String> {
+    if path.is_empty()
+        || path.contains('\\')
+        || path.starts_with('/')
+        || path
+            .split('/')
+            .any(|component| component.is_empty() || matches!(component, "." | ".."))
+    {
+        return Err(String::from("payload provenance path is invalid"));
+    }
+    Ok(path.to_ascii_lowercase())
+}
+
+fn is_canonical_thumbprint(value: &str) -> bool {
+    value.len() == 40
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'A'..=b'F').contains(&byte))
+}
+
+fn compare_package_versions(left: &str, right: &str) -> Result<std::cmp::Ordering, String> {
+    Ok(parse_package_version_components(left)?.cmp(&parse_package_version_components(right)?))
+}
+
+fn parse_package_version_components(version: &str) -> Result<[u16; 4], String> {
+    if !is_canonical_package_version(version) {
+        return Err(String::from("package version is noncanonical"));
+    }
+    let mut result = [0_u16; 4];
+    for (index, component) in version.split('.').enumerate() {
+        result[index] = component
+            .parse()
+            .map_err(|_| String::from("package version is noncanonical"))?;
+    }
+    Ok(result)
+}
+
 fn is_canonical_package_version(version: &str) -> bool {
     let components = version.split('.').collect::<Vec<_>>();
     components.len() == 4
@@ -779,6 +1407,48 @@ fn enumerate_payload_files(payload: &Path) -> Result<BTreeMap<String, (u64, Stri
     Ok(files)
 }
 
+fn ensure_payload_root_is_ordinary(payload: &Path) -> Result<(), String> {
+    if payload.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::CurDir | std::path::Component::ParentDir
+        )
+    }) {
+        return Err(String::from(
+            "payload path must be lexically absolute and clean",
+        ));
+    }
+    let absolute = if payload.is_absolute() {
+        payload.to_path_buf()
+    } else {
+        env::current_dir()
+            .map_err(|error| format!("read current directory failed: {error}"))?
+            .join(payload)
+    };
+    for ancestor in absolute.ancestors() {
+        let metadata = match fs::symlink_metadata(ancestor) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!(
+                    "read payload ancestor metadata failed for {}: {error}",
+                    ancestor.display()
+                ));
+            }
+        };
+        if metadata_is_reparse_point(&metadata) {
+            return Err(format!(
+                "payload path traverses a reparse point: {}",
+                ancestor.display()
+            ));
+        }
+        if ancestor == absolute && !metadata.is_dir() {
+            return Err(String::from("payload root is not an ordinary directory"));
+        }
+    }
+    Ok(())
+}
+
 fn enumerate_payload_directory(
     root: &Path,
     directory: &Path,
@@ -791,10 +1461,17 @@ fn enumerate_payload_directory(
         let path = entry.path();
         let metadata = fs::symlink_metadata(&path)
             .map_err(|error| format!("read payload metadata failed: {error}"))?;
-        if metadata.file_type().is_symlink() {
-            return Err(format!("payload symlink rejected: {}", path.display()));
+        if metadata_is_reparse_point(&metadata) {
+            return Err(format!(
+                "payload reparse point rejected: {}",
+                path.display()
+            ));
         }
         if metadata.is_dir() {
+            let relative = relative_payload_path(root, &path)?;
+            if !matches!(relative.as_str(), "dependencies" | "dependencies/x64") {
+                return Err(format!("unexpected release payload directory: {relative}"));
+            }
             enumerate_payload_directory(root, &path, files)?;
             continue;
         }
@@ -802,12 +1479,18 @@ fn enumerate_payload_directory(
             return Err(format!("payload path kind rejected: {}", path.display()));
         }
         let relative = relative_payload_path(root, &path)?;
-        if relative == ".gitkeep" {
-            continue;
+        if metadata.len() == 0 || metadata.len() > MAX_TRUSTED_FILE_BYTES {
+            return Err(format!(
+                "release payload file length is invalid: {relative}"
+            ));
         }
+        let dependency_name = relative.strip_prefix("dependencies/x64/");
         let allowed = relative == "clashsharp_temporarykey.cer"
+            || relative == PAYLOAD_PROVENANCE_PATH
             || (!relative.contains('/') && relative.ends_with(".msix"))
-            || (relative.starts_with("dependencies/") && relative.ends_with(".msix"));
+            || dependency_name.is_some_and(|name| {
+                !name.is_empty() && !name.contains('/') && name.ends_with(".msix")
+            });
         if !allowed {
             return Err(format!("unexpected release payload file: {relative}"));
         }
@@ -820,6 +1503,20 @@ fn enumerate_payload_directory(
         }
     }
     Ok(())
+}
+
+fn metadata_is_reparse_point(metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
+    }
 }
 
 fn relative_payload_path(root: &Path, path: &Path) -> Result<String, String> {
@@ -867,6 +1564,18 @@ fn lower_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write as _;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static ARCHIVE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    struct TemporaryArchive(PathBuf);
+
+    impl Drop for TemporaryArchive {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
 
     fn final_manifest(identity_attributes: &str, application_attributes: &str) -> String {
         format!(
@@ -874,9 +1583,66 @@ mod tests {
             <Package xmlns="{APPX_MANIFEST_NAMESPACE}">
               <!-- <Identity Version="9.9.9.9" /> -->
               <Identity {identity_attributes} />
+              <Dependencies>
+                <PackageDependency Name="{EXPECTED_DEPENDENCY_NAME}" Publisher="{EXPECTED_DEPENDENCY_PUBLISHER}" MinVersion="8000.806.2252.0" />
+              </Dependencies>
               <Applications><Application {application_attributes} /></Applications>
             </Package>"#
         )
+    }
+
+    fn dependency_manifest(asset: &str) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "runtimeTarget": { "name": "net10.0/win-x64" },
+            "targets": {
+                "net10.0/win-x64": {
+                    "ClashSharp.Contract/1.0.0": { "runtime": { (asset): {} } }
+                }
+            }
+        }))
+        .unwrap()
+    }
+
+    fn create_final_file_contract_archive(
+        extra: Option<&str>,
+        omitted: Option<&str>,
+    ) -> TemporaryArchive {
+        let sequence = ARCHIVE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = env::temp_dir().join(format!(
+            "clashsharp-installer-file-contract-{}-{sequence}.msix",
+            std::process::id()
+        ));
+        let file = File::create(&path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        let mut names = REQUIRED_PACKAGE_FILES
+            .into_iter()
+            .chain(REQUIRED_PACKAGE_ASSETS)
+            .chain(ALLOWED_GEODATA_PATHS)
+            .collect::<BTreeSet<_>>();
+        if let Some(omitted) = omitted {
+            names.remove(omitted);
+        }
+        if let Some(extra) = extra {
+            names.insert(extra);
+        }
+        for name in names {
+            writer.start_file(name, options).unwrap();
+            let content = match name {
+                "ClashSharp.deps.json" => dependency_manifest("ClashSharp.dll"),
+                "ClashSharp.RecoveryWatchdog.deps.json" => {
+                    dependency_manifest("ClashSharp.RecoveryWatchdog.dll")
+                }
+                "Binaries/Service/ClashSharp.MihomoService.deps.json" => {
+                    dependency_manifest("ClashSharp.MihomoService.dll")
+                }
+                _ => vec![b'x'],
+            };
+            writer.write_all(&content).unwrap();
+        }
+        writer.finish().unwrap();
+        TemporaryArchive(path)
     }
 
     #[test]
@@ -941,5 +1707,135 @@ mod tests {
         let application =
             r#"Id="App" Executable="Other.exe" EntryPoint="Windows.FullTrustApplication""#;
         assert!(parse_final_appx_identity(&final_manifest(identity, application)).is_err());
+    }
+
+    #[test]
+    fn final_appx_contract_requires_one_exact_framework_dependency() {
+        let identity = r#"Name="ClashSharp" Publisher="CN=linzh" Version="1.0.0.0" ProcessorArchitecture="x64""#;
+        let application =
+            r#"Id="App" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication""#;
+        let exact = final_manifest(identity, application);
+        assert!(parse_final_appx_manifest(&exact).is_ok());
+
+        let wrong_name = exact.replace(EXPECTED_DEPENDENCY_NAME, "Microsoft.Other.Framework");
+        assert!(parse_final_appx_manifest(&wrong_name).is_err());
+        let wrong_publisher = exact.replace(EXPECTED_DEPENDENCY_PUBLISHER, "CN=Other");
+        assert!(parse_final_appx_manifest(&wrong_publisher).is_err());
+        let duplicated = exact.replace(
+            "</Dependencies>",
+            &format!(
+                r#"<PackageDependency Name="{EXPECTED_DEPENDENCY_NAME}" Publisher="{EXPECTED_DEPENDENCY_PUBLISHER}" MinVersion="8000.806.2252.0" /></Dependencies>"#,
+            ),
+        );
+        assert!(parse_final_appx_manifest(&duplicated).is_err());
+    }
+
+    #[test]
+    fn dependency_identity_requires_x64_framework_package() {
+        let manifest = |architecture: &str, framework: &str| {
+            format!(
+                r#"<Package xmlns="{APPX_MANIFEST_NAMESPACE}">
+                    <Identity Name="{EXPECTED_DEPENDENCY_NAME}" Publisher="{EXPECTED_DEPENDENCY_PUBLISHER}" Version="8000.900.1.0" ProcessorArchitecture="{architecture}" />
+                    <Properties><Framework>{framework}</Framework></Properties>
+                </Package>"#,
+            )
+        };
+        let identity = parse_dependency_package_identity(&manifest("x64", "true")).unwrap();
+        assert_eq!(identity.name, EXPECTED_DEPENDENCY_NAME);
+        assert_eq!(identity.version, "8000.900.1.0");
+        assert!(parse_dependency_package_identity(&manifest("arm64", "true")).is_err());
+        assert!(parse_dependency_package_identity(&manifest("x64", "false")).is_err());
+    }
+
+    #[test]
+    fn final_file_contract_rejects_probes_installers_and_extra_executables() {
+        for forbidden in [
+            "ClashSharp.ProcessProbe.exe",
+            "SandboxTest.dll",
+            "Binaries/Installer.exe",
+            "SecondUpdater.exe",
+            "ClashSharp.pdb",
+            "packages.lock.json",
+        ] {
+            assert!(
+                validate_final_msix_entry_name(forbidden).is_err(),
+                "accepted {forbidden}"
+            );
+        }
+        assert!(validate_final_msix_entry_name("Microsoft.Extensions.Hosting.dll").is_ok());
+
+        let exact = REQUIRED_PACKAGE_EXECUTABLES
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<BTreeSet<_>>();
+        assert!(validate_final_msix_executable_set(&exact).is_ok());
+        let mut extra = exact;
+        extra.insert(String::from("SecondProduct.exe"));
+        assert!(validate_final_msix_executable_set(&extra).is_err());
+    }
+
+    #[test]
+    fn final_archive_file_contract_is_exact_and_rejects_missing_or_extra_files() {
+        let exact = create_final_file_contract_archive(None, None);
+        let file = File::open(&exact.0).unwrap();
+        let mut archive = ZipArchive::new(file).unwrap();
+        assert!(validate_final_msix_file_contract(&mut archive).is_ok());
+
+        let extra = create_final_file_contract_archive(Some("Arbitrary.dll"), None);
+        let file = File::open(&extra.0).unwrap();
+        let mut archive = ZipArchive::new(file).unwrap();
+        let error = validate_final_msix_file_contract(&mut archive).unwrap_err();
+        assert!(error.contains("outside the allowlist"));
+
+        let missing = create_final_file_contract_archive(
+            None,
+            Some("ClashSharp.RecoveryWatchdog.runtimeconfig.json"),
+        );
+        let file = File::open(&missing.0).unwrap();
+        let mut archive = ZipArchive::new(file).unwrap();
+        let error = validate_final_msix_file_contract(&mut archive).unwrap_err();
+        assert!(error.contains("required final MSIX file is missing"));
+    }
+
+    #[test]
+    fn dotnet_dependency_allowlist_accepts_libraries_but_rejects_scripts() {
+        let document = |asset: &str| {
+            serde_json::to_vec(&serde_json::json!({
+                "runtimeTarget": { "name": "net10.0/win-x64" },
+                "targets": {
+                    "net10.0/win-x64": {
+                        "Example/1.0.0": { "runtime": { (asset): {} } }
+                    }
+                }
+            }))
+            .unwrap()
+        };
+        let mut allowed = BTreeSet::new();
+        assert!(add_dotnet_dependency_assets(&document("Example.dll"), "", &mut allowed).is_ok());
+        assert!(allowed.contains("Example.dll"));
+        assert!(
+            add_dotnet_dependency_assets(&document("post-install.ps1"), "", &mut allowed).is_err()
+        );
+    }
+
+    #[test]
+    fn provenance_primitives_reject_noncanonical_paths_thumbprints_and_versions() {
+        assert_eq!(
+            normalize_provenance_path("Dependencies/x64/Runtime.msix").unwrap(),
+            "dependencies/x64/runtime.msix"
+        );
+        assert!(normalize_provenance_path("Dependencies/../Runtime.msix").is_err());
+        assert!(is_canonical_thumbprint(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        ));
+        assert!(!is_canonical_thumbprint(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ));
+        assert_eq!(
+            compare_package_versions("8000.900.0.0", "8000.806.2252.0").unwrap(),
+            std::cmp::Ordering::Greater
+        );
+        assert!(compare_package_versions("8000.0900.0.0", "8000.806.2252.0").is_err());
+        assert!(ensure_payload_root_is_ordinary(Path::new("../payload")).is_err());
     }
 }

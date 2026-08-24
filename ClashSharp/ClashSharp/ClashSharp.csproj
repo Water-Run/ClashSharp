@@ -47,18 +47,61 @@
     <Content Include="Assets\Flags\*.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Binaries\mihomo.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>Binaries\mihomo.exe</TargetPath>
     </Content>
     <Content Include="Binaries\mihomo-LICENSE.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>Binaries\mihomo-LICENSE.txt</TargetPath>
     </Content>
     <Content Include="Binaries\mihomo-NOTICE.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>Binaries\mihomo-NOTICE.txt</TargetPath>
     </Content>
     <Content Include="Binaries\mihomo-manifest.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>Binaries\mihomo-manifest.json</TargetPath>
     </Content>
     <Content Include="Binaries\GeoData\**\*" Condition="Exists('Binaries\GeoData\manifest.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>Binaries\GeoData\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(ClashSharpInstallerServiceRoot)'!='' and '$(ClashSharpInstallerWatchdogRoot)'!=''">
+    <Content Include="$(ClashSharpInstallerServiceRoot)\**\*">
+      <Link>Binaries\Service\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <TargetPath>Binaries\Service\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.exe">
+      <Link>ClashSharp.RecoveryWatchdog.exe</Link>
+      <TargetPath>ClashSharp.RecoveryWatchdog.exe</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.dll">
+      <Link>ClashSharp.RecoveryWatchdog.dll</Link>
+      <TargetPath>ClashSharp.RecoveryWatchdog.dll</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.deps.json">
+      <Link>ClashSharp.RecoveryWatchdog.deps.json</Link>
+      <TargetPath>ClashSharp.RecoveryWatchdog.deps.json</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.runtimeconfig.json">
+      <Link>ClashSharp.RecoveryWatchdog.runtimeconfig.json</Link>
+      <TargetPath>ClashSharp.RecoveryWatchdog.runtimeconfig.json</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
 
@@ -92,7 +135,28 @@
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
-  <Target Name="CopyRecoveryWatchdog" AfterTargets="Build" Condition="'$(DesignTimeBuild)'!='true'">
+  <Target Name="ValidateInstallerPackageContent" BeforeTargets="PrepareForBuild" Condition="'$(GenerateAppxPackageOnBuild)'=='true'">
+    <Error Condition="'$(ClashSharpInstallerServiceRoot)'=='' or '$(ClashSharpInstallerWatchdogRoot)'==''" Text="Formal MSIX packaging must provide fresh Installer component staging roots." />
+    <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.exe')" Text="Installer service staging is missing ClashSharp.MihomoService.exe." />
+    <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.dll')" Text="Installer service staging is missing ClashSharp.MihomoService.dll." />
+    <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.deps.json')" Text="Installer service staging is missing ClashSharp.MihomoService.deps.json." />
+    <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.runtimeconfig.json')" Text="Installer service staging is missing ClashSharp.MihomoService.runtimeconfig.json." />
+    <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.exe')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.exe." />
+    <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.dll')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.dll." />
+    <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.deps.json')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.deps.json." />
+    <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.runtimeconfig.json')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.runtimeconfig.json." />
+    <Error Condition="!Exists('Binaries\mihomo.exe')" Text="MSIX content is missing Binaries\mihomo.exe." />
+    <Error Condition="!Exists('Binaries\mihomo-LICENSE.txt')" Text="MSIX content is missing the pinned mihomo license." />
+    <Error Condition="!Exists('Binaries\mihomo-NOTICE.txt')" Text="MSIX content is missing the pinned mihomo notice." />
+    <Error Condition="!Exists('Binaries\mihomo-manifest.json')" Text="MSIX content is missing the pinned mihomo manifest." />
+    <Error Condition="!Exists('Binaries\GeoData\manifest.json')" Text="MSIX content is missing the exact GeoData manifest." />
+    <Error Condition="!Exists('Binaries\GeoData\Country.mmdb')" Text="MSIX content is missing Country.mmdb." />
+    <Error Condition="!Exists('Binaries\GeoData\GeoIP.dat')" Text="MSIX content is missing GeoIP.dat." />
+    <Error Condition="!Exists('Binaries\GeoData\GeoSite.dat')" Text="MSIX content is missing GeoSite.dat." />
+    <Error Condition="!Exists('Binaries\GeoData\ASN.mmdb')" Text="MSIX content is missing ASN.mmdb." />
+  </Target>
+
+  <Target Name="CopyRecoveryWatchdog" AfterTargets="Build" Condition="'$(DesignTimeBuild)'!='true' and '$(GenerateAppxPackageOnBuild)'!='true'">
     <ItemGroup>
       <RecoveryWatchdogFiles Include="..\ClashSharp.RecoveryWatchdog\bin\$(Platform)\$(Configuration)\net10.0-windows\win-x64\ClashSharp.RecoveryWatchdog.*" />
     </ItemGroup>
@@ -103,7 +167,7 @@
       Condition="'@(RecoveryWatchdogFiles)'!=''" />
   </Target>
 
-  <Target Name="CopyMihomoServiceHost" AfterTargets="Build" Condition="'$(DesignTimeBuild)'!='true'">
+  <Target Name="CopyMihomoServiceHost" AfterTargets="Build" Condition="'$(DesignTimeBuild)'!='true' and '$(GenerateAppxPackageOnBuild)'!='true'">
     <ItemGroup>
       <MihomoServiceHostFiles Include="..\ClashSharp.MihomoService\bin\$(Platform)\$(Configuration)\$(TargetFramework)\win-x64\*.*" />
     </ItemGroup>
