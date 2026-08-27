@@ -2,12 +2,12 @@
 
 use std::cell::RefCell;
 use std::fs::{File, OpenOptions};
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+use std::time::Duration;
 
 use clashsharp_installer::installer_transaction::{
     INSTALLER_TRANSACTION_RELATIVE_PATH, InstallerTransactionJournal, InstallerTransactionPhase,
@@ -19,6 +19,9 @@ use clashsharp_installer::metadata::{
 use clashsharp_installer::package_identity::{
     CurrentUserPackageRegistration, DeploymentVersionChange, PackageVersion,
     classify_deployment_version,
+};
+use clashsharp_installer::process_runner::{
+    BoundedProcessOutput, ProcessRunOptions, run_bounded_process,
 };
 use clashsharp_installer::service_plan::{
     ApplyDecision, AssociationState, MachineAssociation, MachineHelperInvocation,
@@ -56,11 +59,16 @@ const MACHINE_HELPER_REPAIR_REQUIRED_EXIT_CODE: i32 = 20;
 const APP_RUNNING_EXIT_CODE: i32 = 23;
 const MACHINE_SERVICE_DELETE_PENDING_REBOOT_EXIT_CODE: i32 = 25;
 const MACHINE_TRANSACTION_CONFLICT_EXIT_CODE: i32 = 26;
+const UAC_CANCELLED_EXIT_CODE: i32 = 27;
 const MACHINE_TRANSACTION_PACKAGE_NOT_COMMITTED_EXIT_CODE: i32 = 28;
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 const IMAGE_FILE_MACHINE_ARM64: u16 = 0xaa64;
 const MACHINE_MUTATION_MUTEX_NAME: &str = r"Global\ClashSharp.InstallerMachineMutation.v1";
 const MACHINE_MUTATION_MUTEX_WAIT_MS: u32 = 30_000;
+const PROCESS_OUTPUT_LIMIT_BYTES: usize = 256 * 1024;
+const PROCESS_QUERY_DEADLINE: Duration = Duration::from_secs(45);
+const PROCESS_REGISTRY_DEADLINE: Duration = Duration::from_secs(15);
+const PROCESS_MUTATION_DEADLINE: Duration = Duration::from_secs(15 * 60);
 #[cfg(windows)]
 const FILE_SHARE_READ: u32 = 0x0000_0001;
 #[cfg(windows)]
@@ -387,15 +395,7 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     app.on_open_github(|| {
-        let _ = hidden_command("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                &format!("Start-Process {}", powershell_quote_text(GITHUB_URL)),
-            ])
-            .spawn();
+        let _ = open_external_url(GITHUB_URL);
     });
 
     app.on_refresh_state({
@@ -876,16 +876,20 @@ fn require_native_amd64(native_machine: u16) -> Result<&'static str, String> {
 
 /// Reads the Windows build number from the registry.
 fn read_windows_build() -> Result<u32, String> {
-    let output = hidden_command(trusted_system_directory()?.join("reg.exe"))
-        .args([
-            "query",
-            r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion",
-            "/v",
-            "CurrentBuildNumber",
-        ])
-        .output()
-        .map_err(|error| format!("Windows version query failed: {error}"))?;
-    let text = String::from_utf8_lossy(&output.stdout);
+    let mut command = hidden_command(trusted_system_directory()?.join("reg.exe"));
+    command.args([
+        "query",
+        r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+        "/v",
+        "CurrentBuildNumber",
+    ]);
+    let output = run_bounded_process(
+        &mut command,
+        None,
+        process_run_options(PROCESS_REGISTRY_DEADLINE),
+    )
+    .map_err(|error| format!("installer.windows_build.query_failed: {error}"))?;
+    let text = successful_output_text(output, "installer.windows_build.query_failed")?;
 
     text.split_whitespace()
         .filter_map(|part| part.parse::<u32>().ok())
@@ -1356,6 +1360,9 @@ fn target_user_package_is_running(target_sid: &str) -> Result<bool, String> {
 
 fn package_process_is_running(command: &str) -> Result<bool, String> {
     let output = run_powershell_capture(command)?;
+    if output.stdout_truncated || output.stderr_truncated {
+        return successful_output_text(output, "installer.app.preflight_failed").map(|_| false);
+    }
     match output.status.code() {
         Some(0) => Ok(false),
         Some(APP_RUNNING_EXIT_CODE) => Ok(true),
@@ -1499,6 +1506,7 @@ fn prepare_machine_transaction(
         MACHINE_TRANSACTION_CONFLICT_EXIT_CODE => Err(String::from(
             "installer.transaction.conflict: Another release or user owns the pending transaction. Run the same Installer that created it and choose Repair.",
         )),
+        UAC_CANCELLED_EXIT_CODE => Err(String::from("installer.elevation.cancelled")),
         code => Err(format!(
             "installer.transaction.prepare_failed: exit code {code}"
         )),
@@ -1524,6 +1532,7 @@ fn commit_machine_transaction(target_sid: &str) -> Result<(), String> {
         MACHINE_TRANSACTION_PACKAGE_NOT_COMMITTED_EXIT_CODE => Err(String::from(
             "installer.transaction.package_not_committed: Windows did not register the exact package. Run the same Installer and choose Repair.",
         )),
+        UAC_CANCELLED_EXIT_CODE => Err(String::from("installer.elevation.cancelled")),
         code => Err(format!(
             "installer.transaction.commit_failed: exit code {code}"
         )),
@@ -1543,6 +1552,7 @@ fn uninstall_machine_resources_if_owner(target_sid: &str) -> Result<(), String> 
         MACHINE_TRANSACTION_CONFLICT_EXIT_CODE => Err(String::from(
             "installer.transaction.pending: Finish the pending transaction with the same Installer and Repair before uninstalling.",
         )),
+        UAC_CANCELLED_EXIT_CODE => Err(String::from("installer.elevation.cancelled")),
         code => Err(format!(
             "installer.machine.uninstall_failed: exit code {code}"
         )),
@@ -1558,16 +1568,35 @@ fn invoke_elevated_machine_helper(arguments: &[&str]) -> Result<i32, String> {
         .map(|argument| powershell_quote_text(argument))
         .collect::<Vec<_>>()
         .join(",");
-    let command = format!(
-        "$process = Start-Process -FilePath {} -Verb RunAs -WindowStyle Hidden -Wait -PassThru \
-         -ArgumentList @({argument_list}); exit $process.ExitCode",
-        powershell_quote(&executable),
-    );
-    let output = run_powershell_capture(&command)?;
+    let command = render_elevated_machine_helper_command(&executable, &argument_list);
+    let output = run_powershell_capture_with_deadline(&command, PROCESS_MUTATION_DEADLINE)?;
+    if output.stdout_truncated || output.stderr_truncated {
+        return Err(String::from("installer.machine_helper.output_truncated"));
+    }
     output
         .status
         .code()
         .ok_or_else(|| String::from("installer.machine_helper.no_exit_code"))
+}
+
+/// Renders the narrow runas boundary and maps Win32 ERROR_CANCELLED to a stable exit code.
+fn render_elevated_machine_helper_command(executable: &Path, argument_list: &str) -> String {
+    format!(
+        "$ErrorActionPreference = 'Stop'; \
+         try {{ \
+             $process = Start-Process -FilePath {} -Verb RunAs -WindowStyle Hidden -Wait -PassThru \
+                 -ArgumentList @({argument_list}); \
+             exit $process.ExitCode \
+         }} catch {{ \
+             if ($_.Exception.NativeErrorCode -eq 1223 -or \
+                 $_.Exception.HResult -eq -2147023673) {{ \
+                 exit {UAC_CANCELLED_EXIT_CODE} \
+             }}; \
+             [Console]::Error.Write('installer.elevation.failed: ' + $_.Exception.Message); \
+             exit {MACHINE_HELPER_FAILURE_EXIT_CODE} \
+         }}",
+        powershell_quote(executable),
+    )
 }
 
 /// Deletes the current-user startup restore fallback registration.
@@ -2632,25 +2661,32 @@ fn detect_system_language() -> InstallerLanguage {
 
 /// Reads the Windows app-theme preference.
 fn detect_system_dark_theme() -> bool {
-    hidden_command("reg")
-        .args([
-            "query",
-            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-            "/v",
-            "AppsUseLightTheme",
-        ])
-        .output()
-        .ok()
-        .and_then(|output| {
-            if output.status.success() {
-                String::from_utf8(output.stdout).ok()
-            } else {
-                None
-            }
-        })
-        .and_then(|value| parse_registry_dword_output(&value))
-        .map(|value| value == 0)
-        .unwrap_or(false)
+    let Ok(system_directory) = trusted_system_directory() else {
+        return false;
+    };
+    let mut command = hidden_command(system_directory.join("reg.exe"));
+    command.args([
+        "query",
+        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        "/v",
+        "AppsUseLightTheme",
+    ]);
+    run_bounded_process(
+        &mut command,
+        None,
+        process_run_options(PROCESS_REGISTRY_DEADLINE),
+    )
+    .ok()
+    .and_then(|output| {
+        if output.status.success() && !output.stdout_truncated && !output.stderr_truncated {
+            String::from_utf8(output.stdout).ok()
+        } else {
+            None
+        }
+    })
+    .and_then(|value| parse_registry_dword_output(&value))
+    .map(|value| value == 0)
+    .unwrap_or(false)
 }
 
 /// Parses a `REG_DWORD` value from `reg query` output.
@@ -3108,187 +3144,20 @@ fn render_parent_mutating_powershell_command(command: &str, barrier_path: &Path)
     )
 }
 
-#[cfg(windows)]
-struct KillOnCloseJob {
-    handle: *mut std::ffi::c_void,
-}
-
-#[cfg(windows)]
-impl KillOnCloseJob {
-    fn create() -> Result<Self, String> {
-        const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS: u32 = 9;
-        const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
-
-        #[repr(C)]
-        #[derive(Default)]
-        struct BasicLimitInformation {
-            per_process_user_time_limit: i64,
-            per_job_user_time_limit: i64,
-            limit_flags: u32,
-            minimum_working_set_size: usize,
-            maximum_working_set_size: usize,
-            active_process_limit: u32,
-            affinity: usize,
-            priority_class: u32,
-            scheduling_class: u32,
-        }
-
-        #[repr(C)]
-        #[derive(Default)]
-        struct IoCounters {
-            read_operation_count: u64,
-            write_operation_count: u64,
-            other_operation_count: u64,
-            read_transfer_count: u64,
-            write_transfer_count: u64,
-            other_transfer_count: u64,
-        }
-
-        #[repr(C)]
-        #[derive(Default)]
-        struct ExtendedLimitInformation {
-            basic_limit_information: BasicLimitInformation,
-            io_info: IoCounters,
-            process_memory_limit: usize,
-            job_memory_limit: usize,
-            peak_process_memory_used: usize,
-            peak_job_memory_used: usize,
-        }
-
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn CreateJobObjectW(
-                job_attributes: *mut std::ffi::c_void,
-                name: *const u16,
-            ) -> *mut std::ffi::c_void;
-            fn SetInformationJobObject(
-                job: *mut std::ffi::c_void,
-                information_class: u32,
-                information: *const std::ffi::c_void,
-                information_length: u32,
-            ) -> i32;
-            fn CloseHandle(object: *mut std::ffi::c_void) -> i32;
-        }
-
-        // SAFETY: null attributes/name request a private non-inheritable Job object.
-        let handle = unsafe { CreateJobObjectW(std::ptr::null_mut(), std::ptr::null()) };
-        if handle.is_null() {
-            return Err(format!(
-                "installer.powershell.job_create_failed: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        let mut limits = ExtendedLimitInformation::default();
-        limits.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        // SAFETY: limits has the exact documented layout and remains live for this call.
-        let configured = unsafe {
-            SetInformationJobObject(
-                handle,
-                JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
-                std::ptr::from_ref(&limits).cast(),
-                std::mem::size_of::<ExtendedLimitInformation>() as u32,
-            )
-        };
-        if configured == 0 {
-            let error = std::io::Error::last_os_error();
-            // SAFETY: handle is live and not owned by a guard yet.
-            let _ = unsafe { CloseHandle(handle) };
-            return Err(format!(
-                "installer.powershell.job_configure_failed: {error}"
-            ));
-        }
-        Ok(Self { handle })
-    }
-
-    fn assign(&self, child: &std::process::Child) -> Result<(), String> {
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn AssignProcessToJobObject(
-                job: *mut std::ffi::c_void,
-                process: *mut std::ffi::c_void,
-            ) -> i32;
-        }
-
-        // SAFETY: both handles are live; assignment occurs before any script bytes are written.
-        if unsafe { AssignProcessToJobObject(self.handle, child.as_raw_handle()) } == 0 {
-            return Err(format!(
-                "installer.powershell.job_assign_failed: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        Ok(())
-    }
-}
-
-#[cfg(windows)]
-impl Drop for KillOnCloseJob {
-    fn drop(&mut self) {
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn CloseHandle(object: *mut std::ffi::c_void) -> i32;
-        }
-
-        // SAFETY: this guard owns the only local Job handle. KILL_ON_JOB_CLOSE intentionally
-        // terminates any still-running Installer script during parent/helper teardown or crash.
-        let _ = unsafe { CloseHandle(self.handle) };
-    }
-}
-
-#[cfg(not(windows))]
-struct KillOnCloseJob;
-
-#[cfg(not(windows))]
-impl KillOnCloseJob {
-    fn create() -> Result<Self, String> {
-        Ok(Self)
-    }
-
-    fn assign(&self, _child: &std::process::Child) -> Result<(), String> {
-        Ok(())
-    }
-}
-
 /// Executes an Installer-owned script in a kill-on-close Job through UTF-8 stdin.
 fn run_powershell_stdin(script: &str) -> Result<i32, String> {
-    const STDIN_BOOTSTRAP: &str = "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); \
-         $source=[Console]::In.ReadToEnd(); & ([ScriptBlock]::Create($source))";
-
-    let job = KillOnCloseJob::create()?;
     let mut process = powershell_process()?;
-    process
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            STDIN_BOOTSTRAP,
-        ]);
-    let mut child = process
-        .spawn()
-        .map_err(|error| format!("PowerShell failed to start: {error}"))?;
-    if let Err(error) = job.assign(&child) {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(error);
+    configure_powershell_stdin(&mut process);
+    let output = run_bounded_process(
+        &mut process,
+        Some(script.as_bytes()),
+        process_run_options(PROCESS_MUTATION_DEADLINE),
+    )
+    .map_err(|error| error.to_string())?;
+    if output.stdout_truncated || output.stderr_truncated {
+        return successful_output_text(output, "installer.powershell.stdin_script_failed")
+            .map(|_| 0);
     }
-    let Some(mut stdin) = child.stdin.take() else {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(String::from("installer.powershell.stdin_unavailable"));
-    };
-    if let Err(error) = stdin.write_all(script.as_bytes()) {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(format!("installer.powershell.stdin_failed: {error}"));
-    }
-    drop(stdin);
-    let output = child
-        .wait_with_output()
-        .map_err(|error| format!("PowerShell wait failed: {error}"))?;
     match output.status.code() {
         Some(APP_RUNNING_EXIT_CODE) => return Ok(APP_RUNNING_EXIT_CODE),
         Some(MACHINE_SERVICE_DELETE_PENDING_REBOOT_EXIT_CODE) => {
@@ -3303,9 +3172,21 @@ fn run_powershell_stdin(script: &str) -> Result<i32, String> {
 
 /// Returns trimmed stdout for a successful process or a stable error prefix plus bounded details.
 fn successful_output_text(
-    output: std::process::Output,
+    output: BoundedProcessOutput,
     failure_code: &str,
 ) -> Result<String, String> {
+    if output.stdout_truncated || output.stderr_truncated {
+        let streams = match (output.stdout_truncated, output.stderr_truncated) {
+            (true, true) => "stdout,stderr",
+            (true, false) => "stdout",
+            (false, true) => "stderr",
+            (false, false) => "none",
+        };
+        return Err(format!(
+            "{failure_code}: installer.process.output_truncated: {streams}"
+        ));
+    }
+
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned());
     }
@@ -3320,20 +3201,47 @@ fn successful_output_text(
     })
 }
 
-/// Runs a PowerShell command and returns the raw process output.
-fn run_powershell_capture(command: &str) -> Result<std::process::Output, String> {
+/// Runs a PowerShell command with a query deadline and bounded output capture.
+fn run_powershell_capture(command: &str) -> Result<BoundedProcessOutput, String> {
+    run_powershell_capture_with_deadline(command, PROCESS_QUERY_DEADLINE)
+}
+
+/// Runs a PowerShell command with a caller-selected deadline and bounded output capture.
+fn run_powershell_capture_with_deadline(
+    command: &str,
+    deadline: Duration,
+) -> Result<BoundedProcessOutput, String> {
     let mut process = powershell_process()?;
+    configure_powershell_stdin(&mut process);
+    run_bounded_process(
+        &mut process,
+        Some(command.as_bytes()),
+        process_run_options(deadline),
+    )
+    .map_err(|error| error.to_string())
+}
+
+/// Configures PowerShell to parse a UTF-8 script only after Job assignment and stdin handoff.
+fn configure_powershell_stdin(process: &mut Command) {
+    const STDIN_BOOTSTRAP: &str = "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); \
+         $source=[Console]::In.ReadToEnd(); & ([ScriptBlock]::Create($source))";
     process.args([
         "-NoProfile",
         "-NonInteractive",
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        command,
+        STDIN_BOOTSTRAP,
     ]);
-    process
-        .output()
-        .map_err(|error| format!("PowerShell failed to start: {error}"))
+}
+
+/// Creates bounded execution limits for a caller-selected deadline.
+fn process_run_options(deadline: Duration) -> ProcessRunOptions {
+    ProcessRunOptions::new(
+        deadline,
+        PROCESS_OUTPUT_LIMIT_BYTES,
+        PROCESS_OUTPUT_LIMIT_BYTES,
+    )
 }
 
 /// Creates a minimally inherited absolute-System32 Windows PowerShell process.
@@ -3366,6 +3274,56 @@ fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
         command.creation_flags(CREATE_NO_WINDOW);
     }
     command
+}
+
+/// Opens a fixed external URL through the Windows shell without spawning a script interpreter.
+fn open_external_url(url: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        const SW_SHOWNORMAL: i32 = 1;
+
+        #[link(name = "shell32")]
+        unsafe extern "system" {
+            fn ShellExecuteW(
+                window: *mut std::ffi::c_void,
+                operation: *const u16,
+                file: *const u16,
+                parameters: *const u16,
+                directory: *const u16,
+                show_command: i32,
+            ) -> *mut std::ffi::c_void;
+        }
+
+        let operation = "open\0".encode_utf16().collect::<Vec<_>>();
+        let target = url
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        // SAFETY: operation and target are live null-terminated UTF-16 buffers; all optional
+        // shell parameters are null and no handle ownership is transferred to the caller.
+        let result = unsafe {
+            ShellExecuteW(
+                std::ptr::null_mut(),
+                operation.as_ptr(),
+                target.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if (result as isize) <= 32 {
+            return Err(format!(
+                "installer.shell.open_failed: code {}",
+                result as isize
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = url;
+        Err(String::from("installer.shell.windows_required"))
+    }
 }
 
 /// Resolves System32 through the Windows API instead of inherited environment variables.
@@ -3488,8 +3446,6 @@ fn set_progress(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(windows)]
-    use std::io::Write;
     use std::path::Path;
 
     const TEST_SID: &str = "S-1-5-21-100-200-300-1001";
@@ -3520,33 +3476,26 @@ mod tests {
 
     #[cfg(windows)]
     fn assert_powershell_parses(script: &str) {
-        let mut child = Command::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                "$source=[Console]::In.ReadToEnd(); $tokens=$null; $errors=$null; \
-                 [Management.Automation.Language.Parser]::ParseInput(\
-                    $source,[ref]$tokens,[ref]$errors) | Out-Null; \
-                 if ($errors.Count -ne 0) { \
-                    $errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 \
-                 }",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        child
-            .stdin
-            .as_mut()
-            .unwrap()
-            .write_all(script.as_bytes())
-            .unwrap();
-        drop(child.stdin.take());
-        let output = child.wait_with_output().unwrap();
+        let mut command = Command::new("powershell.exe");
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "$source=[Console]::In.ReadToEnd(); $tokens=$null; $errors=$null; \
+             [Management.Automation.Language.Parser]::ParseInput(\
+                $source,[ref]$tokens,[ref]$errors) | Out-Null; \
+             if ($errors.Count -ne 0) { \
+                $errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 \
+             }",
+        ]);
+        let output = run_bounded_process(
+            &mut command,
+            Some(script.as_bytes()),
+            ProcessRunOptions::new(Duration::from_secs(15), 64 * 1024, 64 * 1024),
+        )
+        .unwrap();
         assert!(
             output.status.success(),
             "PowerShell syntax failed: {}",
@@ -3912,23 +3861,22 @@ mod tests {
 
     #[test]
     fn privileged_powershell_job_is_assigned_before_script_bytes_are_written() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let runner = source
-            .split_once("fn run_powershell_stdin(")
-            .unwrap()
-            .1
-            .split_once("fn successful_output_text(")
-            .unwrap()
-            .0;
+        let runner = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/process_runner.rs"
+        ));
 
-        let create_job = runner.find("KillOnCloseJob::create()?").unwrap();
-        let spawn = runner.find(".spawn()").unwrap();
+        let create_job = runner
+            .find("let mut job = KillOnCloseJob::create()?")
+            .unwrap();
+        let spawn = runner.find("command.spawn()").unwrap();
         let assign = runner.find("job.assign(&child)").unwrap();
-        let write = runner.find("stdin.write_all(script.as_bytes())").unwrap();
+        let write = runner.find("stdin.write_all(&input)").unwrap();
         assert!(create_job < spawn);
         assert!(spawn < assign);
         assert!(assign < write);
-        assert!(source.contains("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE"));
+        assert!(runner.contains("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE"));
+        assert!(runner.contains("TerminateJobObject"));
     }
 
     #[test]
@@ -3948,6 +3896,10 @@ mod tests {
             .split_once("fn successful_output_text(")
             .unwrap()
             .0;
+        let process_runner = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/process_runner.rs"
+        ));
 
         for required in [
             "let script_exit_code = run_powershell_stdin(&plan.render_apply_script()?)?;",
@@ -3966,15 +3918,28 @@ mod tests {
             "fn run_powershell_stdin(script: &str) -> Result<i32, String> {"
         );
         for required in [
-            ".stdin(Stdio::piped())",
-            "[Console]::In.ReadToEnd()",
-            ".write_all(script.as_bytes())",
+            "configure_powershell_stdin(&mut process)",
+            "run_bounded_process(",
+            "Some(script.as_bytes())",
+            "PROCESS_MUTATION_DEADLINE",
             "return Ok(APP_RUNNING_EXIT_CODE)",
             "Ok(0)",
         ] {
             assert!(
                 runner.contains(required),
                 "missing stdin contract: {required}"
+            );
+        }
+        for required in [
+            "Stdio::piped()",
+            "stdin.write_all(&input)",
+            "installer.process.timed_out",
+            "stdout_limit_bytes",
+            "stderr_limit_bytes",
+        ] {
+            assert!(
+                process_runner.contains(required),
+                "missing bounded process contract: {required}"
             );
         }
         let forbidden_apply = ["run_powershell(", "&plan.render_apply_script()"].concat();
@@ -4087,9 +4052,26 @@ mod tests {
                 "Get-Date | Out-Null",
                 Path::new(r"C:\Users\owner\AppData\Local\ClashSharp\InstallerMutation.lock"),
             ),
+            render_elevated_machine_helper_command(
+                Path::new(r"C:\Program Files\ClashSharp\ClashSharp-Installer.exe"),
+                "'--machine-commit','--target-sid','S-1-5-21-100-200-300-1001'",
+            ),
         ] {
             assert_powershell_parses(&script);
         }
+    }
+
+    #[test]
+    fn elevated_helper_distinguishes_uac_cancellation() {
+        let command = render_elevated_machine_helper_command(
+            Path::new(r"C:\Program Files\ClashSharp\ClashSharp-Installer.exe"),
+            "'--machine-commit'",
+        );
+
+        assert!(command.contains("-Verb RunAs"));
+        assert!(command.contains("NativeErrorCode -eq 1223"));
+        assert!(command.contains(&format!("exit {UAC_CANCELLED_EXIT_CODE}")));
+        assert!(command.contains("installer.elevation.failed"));
     }
 
     #[test]
@@ -4110,6 +4092,10 @@ mod tests {
     #[test]
     fn current_user_package_mutation_is_also_kill_on_parent_close() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let process_runner = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/process_runner.rs"
+        ));
         let parent = source
             .split_once("fn run_parent_mutating_powershell(")
             .unwrap()
@@ -4118,7 +4104,26 @@ mod tests {
             .unwrap()
             .0;
         assert!(parent.contains("run_powershell_stdin("));
-        assert!(source.contains("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE"));
+        assert!(process_runner.contains("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE"));
+    }
+
+    #[test]
+    fn production_process_calls_use_deadlines_and_bounded_capture() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let production = source.split_once("#[cfg(test)]").unwrap().0;
+
+        assert!(!production.contains(".output()"));
+        assert!(!production.contains("wait_with_output()"));
+        assert!(!production.contains("hidden_command(\"reg\")"));
+        assert!(production.contains("PROCESS_QUERY_DEADLINE"));
+        assert!(production.contains("PROCESS_MUTATION_DEADLINE"));
+        assert!(production.contains("PROCESS_OUTPUT_LIMIT_BYTES"));
+        assert!(production.contains("run_bounded_process("));
+        assert!(
+            production.contains(
+                "run_powershell_capture_with_deadline(&command, PROCESS_MUTATION_DEADLINE)"
+            )
+        );
     }
 
     #[test]

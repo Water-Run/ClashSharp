@@ -27,6 +27,22 @@ public readonly record struct TrayCheckMenuItem(string Label, bool IsChecked, bo
 /// <param name="Label">Display label; never null.</param>
 public readonly record struct TrayPageMenuItem(string Tag, string Label);
 
+/// <summary>Visual state represented by the notification-area icon.</summary>
+public enum TrayIconVisualState
+{
+    /// <summary>The color-state feature is disabled, so the fixed green brand icon is used.</summary>
+    Default,
+
+    /// <summary>Proxy takeover is disabled or in standby while color indication is enabled.</summary>
+    Inactive,
+
+    /// <summary>Windows system proxy takeover is active.</summary>
+    SystemProxy,
+
+    /// <summary>TUN transparent proxy takeover is active.</summary>
+    Tun,
+}
+
 /// <summary>Complete tray menu state.</summary>
 /// <param name="StatusMenuLabel">Status submenu label.</param>
 /// <param name="StatusItems">Runtime status items.</param>
@@ -35,6 +51,9 @@ public readonly record struct TrayPageMenuItem(string Tag, string Label);
 /// <param name="PagesMenuLabel">Pages submenu label.</param>
 /// <param name="PageItems">Page navigation items.</param>
 /// <param name="TransparentProxyItem">Transparent proxy menu item.</param>
+/// <param name="RuntimeKnown">True when the effective network state was verified.</param>
+/// <param name="SystemProxyEffective">True when Windows system proxy takeover was verified.</param>
+/// <param name="TunEffective">True only when the service-owned TUN runtime is conclusively ready.</param>
 /// <param name="SettingsLabel">Settings command label.</param>
 /// <param name="SafeExitLabel">Safe exit command label.</param>
 public readonly record struct TrayMenuState(
@@ -45,6 +64,9 @@ public readonly record struct TrayMenuState(
     string PagesMenuLabel,
     IReadOnlyList<TrayPageMenuItem> PageItems,
     TrayCheckMenuItem TransparentProxyItem,
+    bool RuntimeKnown,
+    bool SystemProxyEffective,
+    bool TunEffective,
     string SettingsLabel,
     string SafeExitLabel,
     IReadOnlySet<string> VisibleFeatureIds)
@@ -60,6 +82,47 @@ public readonly record struct TrayMenuState(
     public bool ShowSettings => VisibleFeatureIds.Contains("settings");
 
     public bool ShowSafeExit => VisibleFeatureIds.Contains("safe-exit");
+}
+
+/// <summary>Resolves a deterministic tray-icon visual state from current runtime state.</summary>
+public static class TrayIconVisualStateResolver
+{
+    /// <summary>Resolves fixed-brand, inactive gray, system-proxy green, or TUN C# purple.</summary>
+    /// <remarks>When color indication is enabled, TUN has priority over system proxy.</remarks>
+    public static TrayIconVisualState Resolve(
+        TrayMenuState state,
+        bool colorStatusIndicatorEnabled)
+    {
+        if (!colorStatusIndicatorEnabled)
+        {
+            return TrayIconVisualState.Default;
+        }
+
+        bool proxyTakeoverActive = false;
+        foreach (TrayModeMenuItem item in state.ModeItems)
+        {
+            if (item.IsChecked
+                && item.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover)
+            {
+                proxyTakeoverActive = true;
+                break;
+            }
+        }
+
+        if (!proxyTakeoverActive || !state.RuntimeKnown)
+        {
+            return TrayIconVisualState.Inactive;
+        }
+
+        if (state.TunEffective)
+        {
+            return TrayIconVisualState.Tun;
+        }
+
+        return state.SystemProxyEffective
+            ? TrayIconVisualState.SystemProxy
+            : TrayIconVisualState.Inactive;
+    }
 }
 
 /// <summary>Builds deterministic tray menu state from runtime settings.</summary>
@@ -112,6 +175,40 @@ public static class TrayMenuStateBuilder
         IEnumerable<string>? visibleFeatureIds,
         Func<string, string> getString)
     {
+        return Build(
+            currentMode,
+            transparentProxyEnabled,
+            mihomoServiceInstalled,
+            runtimeKnown: false,
+            systemProxyEffective: false,
+            tunEffective: false,
+            status,
+            visibleFeatureIds,
+            getString);
+    }
+
+    /// <summary>Builds tray state while keeping TUN preference separate from effective runtime state.</summary>
+    /// <param name="currentMode">Currently active Clash# mode.</param>
+    /// <param name="transparentProxyEnabled">True when transparent proxy preference is enabled.</param>
+    /// <param name="mihomoServiceInstalled">True when the mihomo service is deployed.</param>
+    /// <param name="runtimeKnown">True when the effective network state was verified.</param>
+    /// <param name="systemProxyEffective">True when Windows system proxy takeover was verified.</param>
+    /// <param name="tunEffective">True only when authenticated service status confirms a ready TUN runtime.</param>
+    /// <param name="status">Current runtime status snapshot.</param>
+    /// <param name="visibleFeatureIds">Optional visible tray feature identifiers.</param>
+    /// <param name="getString">Localization lookup. Must not be null.</param>
+    /// <returns>Tray menu state.</returns>
+    public static TrayMenuState Build(
+        ClashSharpMode currentMode,
+        bool transparentProxyEnabled,
+        bool mihomoServiceInstalled,
+        bool runtimeKnown,
+        bool systemProxyEffective,
+        bool tunEffective,
+        TrayStatusSnapshot status,
+        IEnumerable<string>? visibleFeatureIds,
+        Func<string, string> getString)
+    {
         ArgumentNullException.ThrowIfNull(getString);
         string modeLabel = GetModeLabel(currentMode, getString);
 
@@ -128,6 +225,9 @@ public static class TrayMenuStateBuilder
             getString("Tray.Menu.Pages"),
             BuildPageItems(getString),
             new TrayCheckMenuItem(getString("Settings.TransparentProxy.Title"), transparentProxyEnabled, true),
+            runtimeKnown,
+            systemProxyEffective,
+            tunEffective,
             getString("Tray.Settings"),
             getString("Tray.SafeExit"),
             BuildVisibleFeatureSet(visibleFeatureIds));

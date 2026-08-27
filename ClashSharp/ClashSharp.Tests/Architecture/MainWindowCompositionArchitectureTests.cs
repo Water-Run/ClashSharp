@@ -165,6 +165,60 @@ public sealed class MainWindowCompositionArchitectureTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>Guards verified runtime and relevant setting changes against leaving the tray stale.</summary>
+    [Fact]
+    public void MainWindow_RefreshesTrayFromFilteredAndCoalescedStateNotifications()
+    {
+        string composition = ReadApplicationSource(
+            "Presentation",
+            "Composition",
+            "MainWindowComposition.cs");
+        string window = ReadApplicationSource("MainWindow.xaml.cs");
+        string coordinator = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "ClashSharp",
+            "ClashSharp.Application",
+            "Network",
+            "NetworkStateCoordinator.cs"));
+        string settingsHandler = ReadMethodBoundary(
+            composition,
+            "private void Settings_SettingChanged(",
+            "private void NetworkState_VerifiedStateChanged(");
+        string trayHandler = ReadMethodBoundary(
+            window,
+            "private void OnTrayStateChanged(",
+            "private async void ApplyModeFromTray(");
+
+        Assert.Contains("public event EventHandler? VerifiedStateChanged", coordinator, StringComparison.Ordinal);
+        Assert.Contains("PublishVerifiedState(null)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("PublishVerifiedState(state)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("_settings.SettingChanged += Settings_SettingChanged", composition, StringComparison.Ordinal);
+        Assert.Contains("_settings.SettingChanged -= Settings_SettingChanged", composition, StringComparison.Ordinal);
+        Assert.Contains(
+            "_networkState.VerifiedStateChanged += NetworkState_VerifiedStateChanged",
+            composition,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "_networkState.VerifiedStateChanged -= NetworkState_VerifiedStateChanged",
+            composition,
+            StringComparison.Ordinal);
+        Assert.Contains("_mihomoCore.UnexpectedExit += MihomoCore_UnexpectedExit", composition, StringComparison.Ordinal);
+        Assert.Contains("_mihomoCore.UnexpectedExit -= MihomoCore_UnexpectedExit", composition, StringComparison.Ordinal);
+        Assert.Contains("TrayRelevantSettingKeys.Contains(e.Key)", settingsHandler, StringComparison.Ordinal);
+        Assert.Contains("SettingsRegistry.Keys.CurrentMode.Value", composition, StringComparison.Ordinal);
+        Assert.Contains("SettingsRegistry.Keys.TransparentProxyEnabled.Value", composition, StringComparison.Ordinal);
+        Assert.Contains("SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon.Value", composition, StringComparison.Ordinal);
+        Assert.Contains("SettingsRegistry.Keys.TrayVisibleFeatureIds.Value", composition, StringComparison.Ordinal);
+        Assert.Contains("_runtime.TrayStateChanged += OnTrayStateChanged", window, StringComparison.Ordinal);
+        Assert.Contains("runtime.TrayStateChanged -= OnTrayStateChanged", window, StringComparison.Ordinal);
+        Assert.Contains("Interlocked.Exchange(ref _trayRefreshQueued, 1)", trayHandler, StringComparison.Ordinal);
+        Assert.Contains("Interlocked.Exchange(ref _trayRefreshQueued, 0)", trayHandler, StringComparison.Ordinal);
+        Assert.Contains("DispatcherQueue.TryEnqueue", trayHandler, StringComparison.Ordinal);
+        Assert.Contains("RefreshTrayMenuPreservingReachability()", trayHandler, StringComparison.Ordinal);
+        Assert.Contains("_mihomoCore.IsRunning", composition, StringComparison.Ordinal);
+        Assert.Contains("serviceStatus.IsReady", composition, StringComparison.Ordinal);
+    }
+
     private static string ReadApplicationSource(params string[] relativeSegments)
     {
         return File.ReadAllText(Path.Combine([ApplicationRoot, .. relativeSegments]));

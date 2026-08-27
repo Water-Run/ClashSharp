@@ -63,7 +63,7 @@ public sealed partial class SettingsRegistry
         /// <summary>Main-window close behavior.</summary>
         public static SettingKey CloseBehaviorMode { get; } = new("CloseBehaviorMode");
 
-        /// <summary>Inactive notification-area icon color policy.</summary>
+        /// <summary>Legacy-stable key for the notification-area color status indicator.</summary>
         public static SettingKey TrayUseMonochromeInactiveIcon { get; } =
             new("TrayUseMonochromeInactiveIcon");
 

@@ -12,6 +12,17 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
     private readonly IApplicationMutationCoordinator _mutations;
     private readonly INetworkStateAdapter _adapter;
     private readonly INetworkStateCommitter _committer;
+    private NetworkTransitionResult? _latestVerifiedState;
+
+    /// <summary>
+    /// Raised after the latest verified state is cleared for an in-flight transition or replaced by
+    /// a newly verified state.
+    /// </summary>
+    /// <remarks>
+    /// Observation is best effort: every subscriber exception is isolated so presentation code can
+    /// never alter a durable mutation outcome or prevent later subscribers from observing the state.
+    /// </remarks>
+    public event EventHandler? VerifiedStateChanged;
 
     /// <summary>Initializes the network transition use case.</summary>
     /// <param name="mutations">Sole top-level mutation owner.</param>
@@ -25,6 +36,18 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
         _mutations = mutations ?? throw new ArgumentNullException(nameof(mutations));
         _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
         _committer = committer ?? throw new ArgumentNullException(nameof(committer));
+    }
+
+    /// <summary>Gets the last state verified by the serialized network mutation owner.</summary>
+    /// <remarks>
+    /// Returns <see langword="null"/> before the first externally verified transition and while
+    /// apply/verification is uncertain. A verified committed state remains observable if a later
+    /// journal-cleanup step retains a forward-recovery obligation; consumers still validate live
+    /// process readiness before presenting it.
+    /// </remarks>
+    public NetworkTransitionResult? GetLatestVerifiedState()
+    {
+        return Volatile.Read(ref _latestVerifiedState);
     }
 
     /// <summary>Plans and executes one verified network transition as a top-level mutation.</summary>
@@ -54,6 +77,7 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
             request,
             async (context, token) =>
             {
+                PublishVerifiedState(null);
                 NetworkIntent intent = intentFactory();
                 NetworkIntent.Validate(intent);
                 if (intent.Kind == NetworkIntentKind.Shutdown)
@@ -70,9 +94,10 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
             {
                 _mutations.EnsureContextOwnership(context);
                 token.ThrowIfCancellationRequested();
-                return Task.FromResult(
-                    participant?.CreateResult()
-                    ?? throw new InvalidOperationException("The network mutation participant was not created."));
+                NetworkTransitionResult state = participant?.CreateResult()
+                    ?? throw new InvalidOperationException("The network mutation participant was not created.");
+                PublishVerifiedState(state);
+                return Task.FromResult(state);
             },
             cancellationToken);
     }
@@ -151,6 +176,7 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
             request,
             async (context, token) =>
             {
+                PublishVerifiedState(null);
                 NetworkIntent intent = intentFactory();
                 NetworkIntent.Validate(intent);
                 bool isShutdown = intent.Kind == NetworkIntentKind.Shutdown;
@@ -169,11 +195,36 @@ public sealed class NetworkStateCoordinator : IRuntimeShutdownNetworkCoordinator
             {
                 _mutations.EnsureContextOwnership(context);
                 token.ThrowIfCancellationRequested();
-                return Task.FromResult(
-                    participant?.CreateResult()
-                    ?? throw new InvalidOperationException("The network mutation participant was not created."));
+                NetworkTransitionResult state = participant?.CreateResult()
+                    ?? throw new InvalidOperationException("The network mutation participant was not created.");
+                PublishVerifiedState(state);
+                return Task.FromResult(state);
             },
             cancellationToken);
+    }
+
+    private void PublishVerifiedState(NetworkTransitionResult? state)
+    {
+        Volatile.Write(ref _latestVerifiedState, state);
+        EventHandler? handlers = VerifiedStateChanged;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (Delegate subscriber in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler)subscriber)(this, EventArgs.Empty);
+            }
+            catch (Exception)
+            {
+                // This is an observation-only notification. No subscriber failure, including a
+                // process-fatal classification, may rewrite an already committed mutation outcome
+                // or prevent the remaining observers from seeing the latest state.
+            }
+        }
     }
 
     /// <summary>Builds a network plan only while the owning mutation context is active.</summary>

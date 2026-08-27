@@ -85,9 +85,9 @@ const NON_HASH_STABLE_REGISTERED_MSIX_FILES: [&str; 4] = [
     "AppxMetadata/CodeIntegrity.cat",
     "AppxSignature.p7x",
 ];
-const REQUIRED_PACKAGE_ASSETS: [&str; 22] = [
+const REQUIRED_PACKAGE_ASSETS: [&str; 28] = [
     "Assets/LockScreenLogo.scale-200.png",
-    "Assets/Logo.png",
+    "Assets/Logo.svg",
     "Assets/SplashScreen.scale-200.png",
     "Assets/Square150x150Logo.scale-200.png",
     "Assets/Square44x44Logo.scale-200.png",
@@ -106,6 +106,12 @@ const REQUIRED_PACKAGE_ASSETS: [&str; 22] = [
     "Assets/Flags/tw.png",
     "Assets/Flags/un.png",
     "Assets/Flags/us.png",
+    "Assets/Tray/Logo.Inactive.ico",
+    "Assets/Tray/Logo.Inactive.svg",
+    "Assets/Tray/Logo.SystemProxy.ico",
+    "Assets/Tray/Logo.SystemProxy.svg",
+    "Assets/Tray/Logo.Tun.ico",
+    "Assets/Tray/Logo.Tun.svg",
     "Microsoft.Web.WebView2.Core.dll",
     "Microsoft.Web.WebView2.Core.winmd",
 ];

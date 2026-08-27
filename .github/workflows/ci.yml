@@ -82,7 +82,7 @@ jobs:
 
       - name: Audit Installer dependencies
         if: matrix.name == 'Installer'
-        run: cargo audit --file ${{ matrix.lockfile }} --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195
+        run: cargo audit --file ${{ matrix.lockfile }}
 
       - name: Audit dependencies
         if: matrix.name != 'Installer'

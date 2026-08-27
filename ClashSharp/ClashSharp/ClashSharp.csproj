@@ -36,15 +36,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Remove="Assets\Logo.png" />
     <Content Include="Assets\SplashScreen.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\Logo.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Logo.svg" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Square150x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Square44x44Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\StoreLogo.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Flags\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Tray\*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Tray\*.svg" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Binaries\mihomo.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

@@ -1,30 +1,5 @@
 {
-  "rustsecExceptions": [
-    {
-      "advisoryId": "RUSTSEC-2026-0194",
-      "package": "quick-xml",
-      "version": "0.39.4",
-      "lockFile": "ClashSharp/Installer/Cargo.lock",
-      "introducedBy": "slint 1.17.1 -> winit 0.30.13 -> wayland-scanner 0.31.10",
-      "releaseTarget": "x86_64-pc-windows-msvc",
-      "owner": "Release",
-      "reviewPhase": "Phase 11",
-      "expiresOn": "2026-10-19",
-      "rationale": "The vulnerable XML parser is reachable only from the Wayland code generator recorded for non-Windows targets; it is not compiled into the Windows-only installer. No fixed wayland-scanner release exists as of 2026-07-19."
-    },
-    {
-      "advisoryId": "RUSTSEC-2026-0195",
-      "package": "quick-xml",
-      "version": "0.39.4",
-      "lockFile": "ClashSharp/Installer/Cargo.lock",
-      "introducedBy": "slint 1.17.1 -> winit 0.30.13 -> wayland-scanner 0.31.10",
-      "releaseTarget": "x86_64-pc-windows-msvc",
-      "owner": "Release",
-      "reviewPhase": "Phase 11",
-      "expiresOn": "2026-10-19",
-      "rationale": "The vulnerable XML parser is reachable only from the Wayland code generator recorded for non-Windows targets; it is not compiled into the Windows-only installer. No fixed wayland-scanner release exists as of 2026-07-19."
-    }
-  ],
+  "rustsecExceptions": [],
   "rustsecWarnings": [
     {
       "advisoryId": "RUSTSEC-2025-0141",

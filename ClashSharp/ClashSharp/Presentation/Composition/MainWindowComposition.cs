@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Navigation;
 using ClashSharp.Service;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 
@@ -69,9 +71,19 @@ internal sealed class MainWindowComposition
     /// <summary>Runtime operations exposed to the WinUI shell after startup readiness.</summary>
     internal sealed class Runtime : IDisposable
     {
+        private static readonly HashSet<string> TrayRelevantSettingKeys = new(StringComparer.Ordinal)
+        {
+            SettingsRegistry.Keys.CurrentMode.Value,
+            SettingsRegistry.Keys.TransparentProxyEnabled.Value,
+            SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon.Value,
+            SettingsRegistry.Keys.TrayVisibleFeatureIds.Value,
+        };
+
         private readonly AppSettingsService _settings;
         private readonly LocalizationService _localization;
+        private readonly MihomoCoreService _mihomoCore;
         private readonly MihomoServiceManager _mihomoService;
+        private readonly NetworkStateCoordinator _networkState;
         private readonly LogStorageService _logs;
         private readonly TrayStatusService _trayStatus;
         private readonly IStartupGuidePresenter _startupGuide;
@@ -81,7 +93,9 @@ internal sealed class MainWindowComposition
         public Runtime(
             AppSettingsService settings,
             LocalizationService localization,
+            MihomoCoreService mihomoCore,
             MihomoServiceManager mihomoService,
+            NetworkStateCoordinator networkState,
             LogStorageService logs,
             TrayStatusService trayStatus,
             RestartRequiredStateService restartState,
@@ -92,7 +106,9 @@ internal sealed class MainWindowComposition
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _localization = localization ?? throw new ArgumentNullException(nameof(localization));
+            _mihomoCore = mihomoCore ?? throw new ArgumentNullException(nameof(mihomoCore));
             _mihomoService = mihomoService ?? throw new ArgumentNullException(nameof(mihomoService));
+            _networkState = networkState ?? throw new ArgumentNullException(nameof(networkState));
             _logs = logs ?? throw new ArgumentNullException(nameof(logs));
             _trayStatus = trayStatus ?? throw new ArgumentNullException(nameof(trayStatus));
             ArgumentNullException.ThrowIfNull(restartState);
@@ -105,6 +121,9 @@ internal sealed class MainWindowComposition
             ViewModel = new MainWindowViewModel(
                 new ShellLocalizationAdapter(_localization),
                 new ShellRestartStateAdapter(restartState));
+            _settings.SettingChanged += Settings_SettingChanged;
+            _networkState.VerifiedStateChanged += NetworkState_VerifiedStateChanged;
+            _mihomoCore.UnexpectedExit += MihomoCore_UnexpectedExit;
         }
 
         /// <summary>Bindable shell state and navigation resolution.</summary>
@@ -118,6 +137,9 @@ internal sealed class MainWindowComposition
 
         /// <summary>Application diagnostic sink used by shell-owned asynchronous UI boundaries.</summary>
         public IApplicationErrorSink ErrorSink { get; }
+
+        /// <summary>Raised after a relevant persisted setting or verified network state changes.</summary>
+        public event EventHandler? TrayStateChanged;
 
         /// <summary>Whether the startup health guide is enabled.</summary>
         public bool ShowStartupGuideOnStartup => _settings.ShowStartupGuideOnStartup;
@@ -178,10 +200,19 @@ internal sealed class MainWindowComposition
         public TrayMenuState BuildTrayMenuState()
         {
             MihomoServiceStatus serviceStatus = _mihomoService.GetLatestStatus();
+            NetworkTransitionResult? networkState = _networkState.GetLatestVerifiedState();
+            bool runtimeKnown = networkState is not null && networkState.Mode == CurrentMode;
             return TrayMenuStateBuilder.Build(
                 CurrentMode,
                 TransparentProxyEnabled,
                 serviceStatus.IsInstalled,
+                runtimeKnown,
+                systemProxyEffective: runtimeKnown
+                    && networkState!.SystemProxyEnabled
+                    && _mihomoCore.IsRunning,
+                tunEffective: runtimeKnown
+                    && networkState!.TransparentProxyEnabled
+                    && serviceStatus.IsReady,
                 _trayStatus.GetLatestSnapshot(),
                 _settings.TrayVisibleFeatureIds.Split(
                     ',',
@@ -201,6 +232,7 @@ internal sealed class MainWindowComposition
                 new SystemTrayService(
                     windowHandle,
                     BuildTrayMenuState,
+                    () => _settings.TrayUseMonochromeInactiveIcon,
                     openPage,
                     safeExit,
                     applyMode,
@@ -215,8 +247,31 @@ internal sealed class MainWindowComposition
                 return;
             }
 
+            _settings.SettingChanged -= Settings_SettingChanged;
+            _networkState.VerifiedStateChanged -= NetworkState_VerifiedStateChanged;
+            _mihomoCore.UnexpectedExit -= MihomoCore_UnexpectedExit;
             ViewModel.Dispose();
             _navigation.Dispose();
+        }
+
+        private void Settings_SettingChanged(object? sender, AppSettingChangedEventArgs e)
+        {
+            if (!TrayRelevantSettingKeys.Contains(e.Key))
+            {
+                return;
+            }
+
+            TrayStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void NetworkState_VerifiedStateChanged(object? sender, EventArgs e)
+        {
+            TrayStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void MihomoCore_UnexpectedExit(object? sender, MihomoCoreUnexpectedExitEventArgs e)
+        {
+            TrayStateChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

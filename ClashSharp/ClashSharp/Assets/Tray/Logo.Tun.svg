@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Clash# TUN tray icon">
+  <defs>
+    <linearGradient id="body" x1="0.18" y1="0.12" x2="0.82" y2="0.9">
+      <stop offset="0" stop-color="#7B61E8" />
+      <stop offset="1" stop-color="#512BD4" />
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18" />
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+    <clipPath id="hexClip">
+      <path d="M512 104c25 0 48 6 70 19l263 152c37 21 55 53 55 96v282c0 43-18 75-55 96L582 901c-44 25-96 25-140 0L179 749c-37-21-55-53-55-96V371c0-43 18-75 55-96l263-152c22-13 45-19 70-19Z" />
+    </clipPath>
+  </defs>
+  <path fill="url(#body)" d="M512 104c25 0 48 6 70 19l263 152c37 21 55 53 55 96v282c0 43-18 75-55 96L582 901c-44 25-96 25-140 0L179 749c-37-21-55-53-55-96V371c0-43 18-75 55-96l263-152c22-13 45-19 70-19Z" />
+  <path fill="url(#shine)" clip-path="url(#hexClip)" d="M124 371c0-43 18-75 55-96l263-152c44-25 96-25 140 0l263 152c19 11 33 25 42 42L124 708V371Z" />
+  <g fill="#FFFFFF">
+    <path d="M421 286h76l-17 113h107l17-113h76l-17 113h82v72h-93l-14 91h83v72h-94l-17 114h-76l17-114H444l-17 114h-76l17-114h-82v-72h93l14-91h-83v-72h94l17-113Zm48 185-14 91h107l14-91H469Z" />
+    <path d="M337 668c-11-8-24-12-38-12-36 0-62 27-62 63s26 63 62 63c15 0 28-4 39-13l25 31c-18 15-40 23-66 23-59 0-103-44-103-104s44-104 103-104c25 0 47 8 65 22l-25 31Z" />
+  </g>
+</svg>

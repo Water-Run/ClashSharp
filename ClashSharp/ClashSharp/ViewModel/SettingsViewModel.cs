@@ -764,9 +764,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<string> CloseBehaviorModeOptions => _closeBehaviorModeOptions;
 
-    public string TrayUseMonochromeInactiveIconTitleText => IsTrayIconRestartPending
-        ? $"{_getString("Settings.Tray.MonochromeInactiveIcon.Title")}*"
-        : _getString("Settings.Tray.MonochromeInactiveIcon.Title");
+    public string TrayUseMonochromeInactiveIconTitleText => _getString("Settings.Tray.MonochromeInactiveIcon.Title");
 
     public string TrayUseMonochromeInactiveIconDescriptionText => _getString("Settings.Tray.MonochromeInactiveIcon.Description");
 
@@ -1031,9 +1029,6 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="TrayUseMonochromeInactiveIcon"/>.</summary>
     private bool _trayUseMonochromeInactiveIcon;
 
-    /// <summary>Tray monochrome icon setting loaded when this view model was initialized.</summary>
-    private bool _loadedTrayUseMonochromeInactiveIcon;
-
     /// <summary>Backing field for <see cref="TrayVisibleFeatureIds"/>.</summary>
     private string _trayVisibleFeatureIds = DefaultTrayVisibleFeatureIds;
 
@@ -1201,13 +1196,10 @@ internal sealed class SettingsViewModel : ObservableObject
 
     public bool IsTriggerEngineRestartPending => false;
 
-    public bool IsTrayIconRestartPending => TrayUseMonochromeInactiveIcon != _loadedTrayUseMonochromeInactiveIcon;
-
     public bool HasRestartRequiredSettings =>
         IsDisplayLanguageRestartPending
         || IsAppAccentColorRestartPending
-        || IsMainlandChinaDisplayRestartPending
-        || IsTrayIconRestartPending;
+        || IsMainlandChinaDisplayRestartPending;
 
     public string RestartRequiredNoticeText => _getString("Settings.RestartRequiredNotice");
 
@@ -1502,11 +1494,9 @@ internal sealed class SettingsViewModel : ObservableObject
         SetProperty(ref _triggersEnabled, _loadedTriggersEnabled, nameof(TriggersEnabled));
         SetProperty(ref _triggerNotificationsEnabled, _settings.TriggerNotificationsEnabled, nameof(TriggerNotificationsEnabled));
         CloseBehaviorMode = _settings.CloseBehaviorMode;
-        _loadedTrayUseMonochromeInactiveIcon = _settings.TrayUseMonochromeInactiveIcon;
-        SetProperty(ref _trayUseMonochromeInactiveIcon, _loadedTrayUseMonochromeInactiveIcon, nameof(TrayUseMonochromeInactiveIcon));
+        SetProperty(ref _trayUseMonochromeInactiveIcon, _settings.TrayUseMonochromeInactiveIcon, nameof(TrayUseMonochromeInactiveIcon));
         TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
         RaiseTriggerRestartStateChanged();
-        RaiseTrayIconRestartStateChanged();
         RefreshStartupRestoreFallbackStatus();
         SetProperty(ref _checkStaleProxyOnStartup, _settings.CheckStaleProxyOnStartup, nameof(CheckStaleProxyOnStartup));
         SetProperty(ref _restoreProxyOnExit, _settings.RestoreProxyOnExit, nameof(RestoreProxyOnExit));
@@ -1650,16 +1640,6 @@ internal sealed class SettingsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsTriggerEngineRestartPending));
         OnPropertyChanged(nameof(TriggersEnabledTitleText));
-    }
-
-    /// <summary>Raises bindable notifications for tray icon settings that need a restart.</summary>
-    private void RaiseTrayIconRestartStateChanged()
-    {
-        OnPropertyChanged(nameof(IsTrayIconRestartPending));
-        OnPropertyChanged(nameof(HasRestartRequiredSettings));
-        OnPropertyChanged(nameof(TrayUseMonochromeInactiveIconTitleText));
-        OnPropertyChanged(nameof(RestartRequiredTitleText));
-        OnPropertyChanged(nameof(RestartRequiredNoticeText));
     }
 
     /// <summary>Refreshes stable selector option collections without replacing ComboBox item sources.</summary>
@@ -1854,7 +1834,6 @@ internal sealed class SettingsViewModel : ObservableObject
             nameof(CloseBehaviorModeOptions),
             nameof(TrayUseMonochromeInactiveIconTitleText),
             nameof(TrayUseMonochromeInactiveIconDescriptionText),
-            nameof(IsTrayIconRestartPending),
             nameof(TrayVisibleFeaturesTitleText),
             nameof(TrayVisibleFeaturesDescriptionText),
             nameof(TrayVisibleFeatureSummaryText),
@@ -2173,7 +2152,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// Reloads a transactionally activated package without claiming that restart-bound
-    /// tray or regional resources were rebuilt in the current process.
+    /// regional resources were rebuilt in the current process.
     /// </summary>
     public void ReloadAfterDataImport()
     {
@@ -2410,14 +2389,11 @@ internal sealed class SettingsViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>Persists whether the inactive tray icon uses a monochrome logo.</summary>
+    /// <summary>Persists whether the tray icon indicates runtime state with color.</summary>
     public void SetTrayUseMonochromeInactiveIcon(bool isEnabled)
     {
         _settings.TrayUseMonochromeInactiveIcon = isEnabled;
-        if (SetProperty(ref _trayUseMonochromeInactiveIcon, isEnabled, nameof(TrayUseMonochromeInactiveIcon)))
-        {
-            RaiseTrayIconRestartStateChanged();
-        }
+        SetProperty(ref _trayUseMonochromeInactiveIcon, isEnabled, nameof(TrayUseMonochromeInactiveIcon));
     }
 
     /// <summary>Persists selected tray feature ids.</summary>
@@ -2849,10 +2825,7 @@ internal sealed class SettingsViewModel : ObservableObject
     public void ResetTraySettingsToDefaults()
     {
         _settings.TrayUseMonochromeInactiveIcon = false;
-        if (SetProperty(ref _trayUseMonochromeInactiveIcon, false, nameof(TrayUseMonochromeInactiveIcon)))
-        {
-            RaiseTrayIconRestartStateChanged();
-        }
+        SetProperty(ref _trayUseMonochromeInactiveIcon, false, nameof(TrayUseMonochromeInactiveIcon));
 
         _settings.TrayVisibleFeatureIds = DefaultTrayVisibleFeatureIds;
         TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
@@ -3333,13 +3306,12 @@ internal sealed class SettingsViewModel : ObservableObject
         int MixedPort);
 
     /// <summary>
-    /// Captures the process-applied baseline for settings whose existing UI resources are not rebuilt by
-    /// the reset transaction. Reloading persisted values must not claim these values are already active.
+    /// Captures the process-applied baseline for regional settings whose existing UI resources are not
+    /// rebuilt by the reset transaction. Reloading persisted values must not claim these values are active.
     /// </summary>
     private RestartRequiredSettingsBaseline CaptureRestartRequiredSettingsBaseline()
     {
         return new RestartRequiredSettingsBaseline(
-            _loadedTrayUseMonochromeInactiveIcon,
             _loadedMainlandChinaFeatureMode,
             _loadedMainlandChinaUrlBlockingEnabled);
     }
@@ -3347,10 +3319,8 @@ internal sealed class SettingsViewModel : ObservableObject
     private void ReloadAfterSettingsReset(RestartRequiredSettingsBaseline baseline)
     {
         Load();
-        _loadedTrayUseMonochromeInactiveIcon = baseline.TrayUseMonochromeInactiveIcon;
         _loadedMainlandChinaFeatureMode = baseline.MainlandChinaFeatureMode;
         _loadedMainlandChinaUrlBlockingEnabled = baseline.MainlandChinaUrlBlockingEnabled;
-        RaiseTrayIconRestartStateChanged();
         RaiseMainlandChinaRestartStateChanged();
         RaiseLocalizedTextChanges();
         RaiseSelectorBindingsChanged();
@@ -3358,7 +3328,6 @@ internal sealed class SettingsViewModel : ObservableObject
     }
 
     private readonly record struct RestartRequiredSettingsBaseline(
-        bool TrayUseMonochromeInactiveIcon,
         MainlandChinaFeatureMode MainlandChinaFeatureMode,
         bool MainlandChinaUrlBlockingEnabled);
 

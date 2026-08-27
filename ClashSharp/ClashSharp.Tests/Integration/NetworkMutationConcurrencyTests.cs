@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
@@ -25,6 +26,7 @@ public sealed class NetworkMutationConcurrencyTests
         Assert.Equal("network:RuleTakeover:False:7890", result.Value.StateHash);
         Assert.Equal("network:RuleTakeover:False:7890", fixture.Adapter.Current.StateHash);
         Assert.Equal("desired:RuleTakeover:False:7890", fixture.Committer.CurrentHash);
+        Assert.Equal(result.Value, fixture.Network.GetLatestVerifiedState());
         Assert.Null(fixture.Store.Current);
         Assert.Equal(
             [
@@ -43,6 +45,62 @@ public sealed class NetworkMutationConcurrencyTests
             fixture.Trace);
     }
 
+    /// <summary>Verifies tray consumers observe both the uncertain window and the later verified publication.</summary>
+    [Fact]
+    public async Task ApplyAsync_VerifiedStateChanged_NotifiesClearThenVerifiedPublication()
+    {
+        Fixture fixture = new();
+        List<NetworkTransitionResult?> observedStates = [];
+        fixture.Network.VerifiedStateChanged += (_, _) =>
+            observedStates.Add(fixture.Network.GetLatestVerifiedState());
+
+        MutationResult<NetworkTransitionResult> result = await fixture.Network.ApplyAsync(
+            NetworkIntent.ChangeMode(ClashSharpMode.RuleTakeover, false, 7890),
+            CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
+        Assert.Collection(
+            observedStates,
+            Assert.Null,
+            state => Assert.Equal(result.Value, state));
+    }
+
+    /// <summary>Verifies observation-only subscribers cannot rewrite a committed mutation outcome.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ApplyAsync_VerifiedStateSubscriberThrows_IsolatedPerSubscriber(
+        bool processFatalClassification)
+    {
+        Fixture fixture = new();
+        List<NetworkTransitionResult?> observedStates = [];
+        Exception observerFailure = processFatalClassification
+            ? (Exception)Activator.CreateInstance(
+                typeof(OutOfMemoryException),
+                "fatal observer failure")!
+            : new InvalidOperationException("observer failure");
+        Assert.Equal(
+            processFatalClassification,
+            ExceptionGraphClassifier.IsProcessFatal(observerFailure));
+        fixture.Network.VerifiedStateChanged += (_, _) =>
+            throw observerFailure;
+        fixture.Network.VerifiedStateChanged += (_, _) =>
+            observedStates.Add(fixture.Network.GetLatestVerifiedState());
+
+        MutationResult<NetworkTransitionResult> result = await fixture.Network.ApplyAsync(
+            NetworkIntent.ChangeMode(ClashSharpMode.RuleTakeover, false, 7890),
+            CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
+        Assert.NotNull(result.Value);
+        Assert.Equal(result.Value, fixture.Network.GetLatestVerifiedState());
+        Assert.Null(fixture.Store.Current);
+        Assert.Collection(
+            observedStates,
+            Assert.Null,
+            state => Assert.Equal(result.Value, state));
+    }
+
     /// <summary>Verifies an apply failure restores both external network state and durable desired state.</summary>
     [Fact]
     public async Task ApplyAsync_ApplyFails_CompensatesAndKeepsBaselineAuthoritative()
@@ -56,6 +114,7 @@ public sealed class NetworkMutationConcurrencyTests
 
         Assert.Equal(MutationOutcome.Compensated, result.Outcome);
         Assert.Null(result.Value);
+        Assert.Null(fixture.Network.GetLatestVerifiedState());
         Assert.Equal("network:Disabled:False:7890", fixture.Adapter.Current.StateHash);
         Assert.Equal("baseline:Disabled:False:7890", fixture.Committer.CurrentHash);
         Assert.Contains("compensate:Disabled", fixture.Trace);
@@ -92,6 +151,10 @@ public sealed class NetworkMutationConcurrencyTests
             fixture.Adapter.PlannedModes);
         Assert.Contains("plan:FullTakeover:network:RuleTakeover:False:7890", fixture.Trace);
         Assert.Equal("network:FullTakeover:True:7892", fixture.Adapter.Current.StateHash);
+        NetworkTransitionResult latest = Assert.IsType<NetworkTransitionResult>(
+            fixture.Network.GetLatestVerifiedState());
+        Assert.Equal(ClashSharpMode.FullTakeover, latest.Mode);
+        Assert.True(latest.TransparentProxyEnabled);
     }
 
     /// <summary>Verifies a stale or foreign mutation context cannot invoke network planning.</summary>

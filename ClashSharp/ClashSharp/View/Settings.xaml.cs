@@ -46,9 +46,6 @@ public sealed partial class Settings : Page
     /// <summary>True while initial settings are being bound to controls.</summary>
     private bool _isLoadingSettings = true;
 
-    /// <summary>True while a restart-required switch is being restored after cancellation.</summary>
-    private bool _isRevertingRestartSwitch;
-
     private CancellationTokenSource? _pageLifetime = new();
     private bool _isViewModelSubscribed;
 
@@ -480,25 +477,9 @@ public sealed partial class Settings : Page
         await dialog.ShowManagedAsync();
     }
 
-    /// <summary>Confirms a setting change that is persisted now but only applied after restart.</summary>
-    private async Task<bool> ConfirmRestartRequiredSettingChangeAsync()
-    {
-        ThemedContentDialog dialog = new()
-        {
-            Title = _getString("Settings.RestartSettingConfirm.Title"),
-            Content = _getString("Settings.RestartSettingConfirm.Message"),
-            PrimaryButtonText = _getString("Command.Apply"),
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        return await dialog.ShowManagedAsync() is ContentDialogResult.Primary;
-    }
-
     private void TriggersEnabledToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        if (_isLoadingSettings || _isRevertingRestartSwitch || sender is not ToggleSwitch toggle || toggle.IsOn == _viewModel.TriggersEnabled)
+        if (_isLoadingSettings || sender is not ToggleSwitch toggle || toggle.IsOn == _viewModel.TriggersEnabled)
         {
             return;
         }
@@ -507,35 +488,14 @@ public sealed partial class Settings : Page
         UpdateRestartRequiredState();
     }
 
-    private async void TrayUseMonochromeInactiveIconToggle_Toggled(object sender, RoutedEventArgs e)
+    private void TrayUseMonochromeInactiveIconToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        if (_isLoadingSettings || _isRevertingRestartSwitch || sender is not ToggleSwitch toggle || toggle.IsOn == _viewModel.TrayUseMonochromeInactiveIcon)
+        if (_isLoadingSettings || sender is not ToggleSwitch toggle || toggle.IsOn == _viewModel.TrayUseMonochromeInactiveIcon)
         {
-            return;
-        }
-
-        bool previousValue = _viewModel.TrayUseMonochromeInactiveIcon;
-        if (!await ConfirmRestartRequiredSettingChangeAsync())
-        {
-            RestoreRestartSwitch(toggle, previousValue);
             return;
         }
 
         _viewModel.SetTrayUseMonochromeInactiveIcon(toggle.IsOn);
-        UpdateRestartRequiredState();
-    }
-
-    private void RestoreRestartSwitch(ToggleSwitch toggle, bool value)
-    {
-        _isRevertingRestartSwitch = true;
-        try
-        {
-            toggle.IsOn = value;
-        }
-        finally
-        {
-            _isRevertingRestartSwitch = false;
-        }
     }
 
     private async void ResetBasicSettingsButton_Click(object sender, RoutedEventArgs e)

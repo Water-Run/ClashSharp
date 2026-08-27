@@ -795,6 +795,26 @@ public sealed class SettingsViewModelTests
         Assert.Equal("pages,safe-exit", viewModel.TrayVisibleFeatureIds);
     }
 
+    /// <summary>Verifies tray color indication is process-live and never contributes a restart marker.</summary>
+    [Fact]
+    public void TrayColorStatusIndicator_ChangeAppliesWithoutRestartMarker()
+    {
+        FakeSettingsStore store = new()
+        {
+            TrayUseMonochromeInactiveIcon = true,
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+
+        viewModel.TrayUseMonochromeInactiveIcon = false;
+
+        Assert.False(store.TrayUseMonochromeInactiveIcon);
+        Assert.False(viewModel.TrayUseMonochromeInactiveIcon);
+        Assert.False(viewModel.HasRestartRequiredSettings);
+        Assert.Equal(
+            "Settings.Tray.MonochromeInactiveIcon.Title",
+            viewModel.TrayUseMonochromeInactiveIconTitleText);
+    }
+
     /// <summary>Verifies bindable option lists expose non-empty defaults without relying on ComboBoxItem binding.</summary>
     [Fact]
     public void OptionLists_ExposeNonEmptyText()
@@ -1584,10 +1604,10 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
-    /// Verifies reset reload does not claim process-owned tray and display resources already use the new defaults.
+    /// Verifies reset reload applies the live tray setting while retaining the regional restart baseline.
     /// </summary>
     [Fact]
-    public async Task ResetAllSettings_RetainsRestartBaselineForSettingsNotAppliedByTransaction()
+    public async Task ResetAllSettings_AppliesLiveTraySettingAndRetainsRegionalRestartBaseline()
     {
         FakeSettingsStore store = new()
         {
@@ -1610,14 +1630,14 @@ public sealed class SettingsViewModelTests
 
         await viewModel.ResetAllSettingsAsync(CancellationToken.None);
 
-        Assert.True(viewModel.IsTrayIconRestartPending);
+        Assert.False(viewModel.TrayUseMonochromeInactiveIcon);
         Assert.True(viewModel.IsMainlandChinaDisplayRestartPending);
         Assert.True(viewModel.HasRestartRequiredSettings);
     }
 
-    /// <summary>Verifies imported restart-bound values remain pending after the package runtime is activated.</summary>
+    /// <summary>Verifies import applies the live tray value while regional restart-bound values remain pending.</summary>
     [Fact]
-    public void ReloadAfterDataImport_RetainsProcessAppliedRestartBaseline()
+    public void ReloadAfterDataImport_AppliesLiveTrayValueAndRetainsRegionalRestartBaseline()
     {
         FakeSettingsStore store = new()
         {
@@ -1636,7 +1656,7 @@ public sealed class SettingsViewModelTests
 
         viewModel.ReloadAfterDataImport();
 
-        Assert.True(viewModel.IsTrayIconRestartPending);
+        Assert.False(viewModel.TrayUseMonochromeInactiveIcon);
         Assert.True(viewModel.IsMainlandChinaDisplayRestartPending);
         Assert.True(viewModel.HasRestartRequiredSettings);
     }

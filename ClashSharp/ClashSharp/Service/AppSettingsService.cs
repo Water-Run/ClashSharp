@@ -102,7 +102,7 @@ public sealed partial class AppSettingsService :
     /// <summary>Storage key for the main-window close behavior.</summary>
     private const string KeyCloseBehaviorMode = "CloseBehaviorMode";
 
-    /// <summary>Storage key for using a monochrome tray icon while proxy takeover is inactive.</summary>
+    /// <summary>Legacy-stable storage key for enabling tray color status indication.</summary>
     private const string KeyTrayUseMonochromeInactiveIcon = "TrayUseMonochromeInactiveIcon";
 
     /// <summary>Storage key for comma-separated tray menu feature ids.</summary>
@@ -381,7 +381,7 @@ public sealed partial class AppSettingsService :
         set => WriteOrdinary(editor => editor.CloseBehaviorMode = value);
     }
 
-    /// <summary>Gets or sets whether the tray icon uses the monochrome logo when proxy takeover is inactive.</summary>
+    /// <summary>Gets or sets whether the tray icon indicates runtime state with gray, green, and C# purple.</summary>
     public bool TrayUseMonochromeInactiveIcon
     {
         get => GetBoolean(KeyTrayUseMonochromeInactiveIcon, false);

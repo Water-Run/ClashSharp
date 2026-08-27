@@ -1,10 +1,7 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using ClashSharp.Model;
-using DrawingBitmap = System.Drawing.Bitmap;
-using DrawingColor = System.Drawing.Color;
 using DrawingIcon = System.Drawing.Icon;
 using DrawingSystemIcons = System.Drawing.SystemIcons;
 
@@ -47,6 +44,9 @@ public sealed class SystemTrayService : IDisposable
     /// <summary>Callback that builds current menu state.</summary>
     private readonly Func<TrayMenuState> _getState;
 
+    /// <summary>Callback that returns whether the three-state color indicator is enabled.</summary>
+    private readonly Func<bool> _getColorStatusIndicatorEnabled;
+
     /// <summary>Callback that opens a shell page by navigation tag.</summary>
     private readonly Action<string> _openPage;
 
@@ -75,6 +75,7 @@ public sealed class SystemTrayService : IDisposable
     public SystemTrayService(
         nint ownerWindowHandle,
         Func<TrayMenuState> getState,
+        Func<bool> getColorStatusIndicatorEnabled,
         Action<string> openPage,
         Action safeExit,
         Action<ClashSharpMode> applyMode,
@@ -87,11 +88,13 @@ public sealed class SystemTrayService : IDisposable
 
         _ownerWindowHandle = ownerWindowHandle;
         _getState = getState ?? throw new ArgumentNullException(nameof(getState));
+        _getColorStatusIndicatorEnabled = getColorStatusIndicatorEnabled
+            ?? throw new ArgumentNullException(nameof(getColorStatusIndicatorEnabled));
         _openPage = openPage ?? throw new ArgumentNullException(nameof(openPage));
         _safeExit = safeExit ?? throw new ArgumentNullException(nameof(safeExit));
         _applyMode = applyMode ?? throw new ArgumentNullException(nameof(applyMode));
         _setTransparentProxy = setTransparentProxy ?? throw new ArgumentNullException(nameof(setTransparentProxy));
-        _icon = LoadTrayIcon(isInactive: false, useMonochrome: false);
+        _icon = LoadTrayIcon(TrayIconVisualState.Default);
         SystemTrayInitializationPolicy.Complete(
             _icon,
             AddTrayIcon,
@@ -106,7 +109,7 @@ public sealed class SystemTrayService : IDisposable
         return RefreshTrayIcon();
     }
 
-    /// <summary>Refreshes the tray icon according to the current proxy mode and inactive icon settings.</summary>
+    /// <summary>Refreshes the tray icon according to current proxy mode, TUN, and color-indicator settings.</summary>
     /// <returns><see langword="true"/> only when notification-area reachability was confirmed.</returns>
     public bool RefreshTrayIcon()
     {
@@ -129,23 +132,30 @@ public sealed class SystemTrayService : IDisposable
 
         _isAvailable = SystemTrayAvailabilityPolicy.TryEnsureAvailable(
             TryRefreshTrayIcon,
-            AddTrayIcon);
+            TryAddCurrentTrayIcon);
         return _isAvailable;
     }
 
     private bool TryRefreshTrayIcon()
     {
-        TrayMenuState state = _getState();
-        bool isProxyActive = state.ModeItems.Any(static item =>
-            item.IsChecked && item.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover);
+        return TryReplaceTrayIcon(NimModify);
+    }
+
+    /// <summary>Re-adds an Explorer-lost icon using the visual state resolved at recovery time.</summary>
+    private bool TryAddCurrentTrayIcon()
+    {
+        return TryReplaceTrayIcon(NimAdd);
+    }
+
+    private bool TryReplaceTrayIcon(uint operation)
+    {
+        TrayIconVisualState visualState = ResolveCurrentVisualState();
         DrawingIcon? nextIcon = null;
         try
         {
-            nextIcon = LoadTrayIcon(
-                isInactive: !isProxyActive,
-                useMonochrome: AppSettingsService.Instance.TrayUseMonochromeInactiveIcon);
+            nextIcon = LoadTrayIcon(visualState);
             NOTIFYICONDATA data = CreateNotifyIconData(nextIcon);
-            if (!Shell_NotifyIcon(NimModify, ref data))
+            if (!Shell_NotifyIcon(operation, ref data))
             {
                 return false;
             }
@@ -160,6 +170,14 @@ public sealed class SystemTrayService : IDisposable
         {
             TryDisposeIcon(nextIcon);
         }
+    }
+
+    private TrayIconVisualState ResolveCurrentVisualState()
+    {
+        TrayMenuState state = _getState();
+        return TrayIconVisualStateResolver.Resolve(
+            state,
+            _getColorStatusIndicatorEnabled());
     }
 
     /// <summary>Handles one owner-window message when it belongs to the tray icon.</summary>
@@ -401,55 +419,25 @@ public sealed class SystemTrayService : IDisposable
             : null;
     }
 
-    /// <summary>Loads the Clash# logo as a tray icon.</summary>
-    private static DrawingIcon LoadTrayIcon(bool isInactive, bool useMonochrome)
+    /// <summary>Loads a pre-rendered multi-resolution tray icon derived from the SVG source.</summary>
+    private static DrawingIcon LoadTrayIcon(TrayIconVisualState visualState)
     {
-        string logoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Logo.png");
-        if (!File.Exists(logoPath))
+        string fileName = visualState switch
+        {
+            TrayIconVisualState.Default => "Logo.SystemProxy.ico",
+            TrayIconVisualState.SystemProxy => "Logo.SystemProxy.ico",
+            TrayIconVisualState.Tun => "Logo.Tun.ico",
+            _ => "Logo.Inactive.ico",
+        };
+        string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Tray", fileName);
+        if (!File.Exists(iconPath))
         {
             return (DrawingIcon)DrawingSystemIcons.Application.Clone();
         }
 
-        using DrawingBitmap bitmap = new(logoPath);
-        using DrawingBitmap iconBitmap = isInactive && useMonochrome
-            ? CreateInactiveBitmap(bitmap, useMonochrome)
-            : new DrawingBitmap(bitmap);
-        nint handle = iconBitmap.GetHicon();
-        try
-        {
-            using DrawingIcon icon = DrawingIcon.FromHandle(handle);
-            return (DrawingIcon)icon.Clone();
-        }
-        finally
-        {
-            DestroyIcon(handle);
-        }
+        using DrawingIcon icon = new(iconPath);
+        return (DrawingIcon)icon.Clone();
     }
-
-    private static DrawingBitmap CreateInactiveBitmap(DrawingBitmap source, bool useMonochrome)
-    {
-        DrawingBitmap target = new(source.Width, source.Height);
-        for (int y = 0; y < source.Height; y++)
-        {
-            for (int x = 0; x < source.Width; x++)
-            {
-                DrawingColor color = source.GetPixel(x, y);
-                if (useMonochrome)
-                {
-                    int gray = (int)((color.R * 0.299d) + (color.G * 0.587d) + (color.B * 0.114d));
-                    color = DrawingColor.FromArgb(color.A, gray, gray, gray);
-                }
-
-                target.SetPixel(x, y, color);
-            }
-        }
-
-        return target;
-    }
-
-    /// <summary>Releases an unmanaged icon handle created by Bitmap.GetHicon.</summary>
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool DestroyIcon(nint hIcon);
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATA lpData);

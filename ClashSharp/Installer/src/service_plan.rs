@@ -1889,9 +1889,11 @@ try {
 mod tests {
     use super::*;
     #[cfg(windows)]
-    use std::io::Write;
+    use crate::process_runner::{ProcessRunOptions, run_bounded_process};
     #[cfg(windows)]
-    use std::process::{Command, Stdio};
+    use std::process::Command;
+    #[cfg(windows)]
+    use std::time::Duration;
 
     const SID: &str = "S-1-5-21-100-200-300-1001";
     const OTHER_SID: &str = "S-1-5-21-100-200-300-1002";
@@ -1936,33 +1938,26 @@ mod tests {
 
     #[cfg(windows)]
     fn assert_powershell_parses(script: &str) {
-        let mut child = Command::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                "$source=[Console]::In.ReadToEnd(); $tokens=$null; $errors=$null; \
-                 [Management.Automation.Language.Parser]::ParseInput(\
-                    $source,[ref]$tokens,[ref]$errors) | Out-Null; \
-                 if ($errors.Count -ne 0) { \
-                    $errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 \
-                 }",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        child
-            .stdin
-            .as_mut()
-            .unwrap()
-            .write_all(script.as_bytes())
-            .unwrap();
-        drop(child.stdin.take());
-        let output = child.wait_with_output().unwrap();
+        let mut command = Command::new("powershell.exe");
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "$source=[Console]::In.ReadToEnd(); $tokens=$null; $errors=$null; \
+             [Management.Automation.Language.Parser]::ParseInput(\
+                $source,[ref]$tokens,[ref]$errors) | Out-Null; \
+             if ($errors.Count -ne 0) { \
+                $errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 \
+             }",
+        ]);
+        let output = run_bounded_process(
+            &mut command,
+            Some(script.as_bytes()),
+            ProcessRunOptions::new(Duration::from_secs(15), 64 * 1024, 64 * 1024),
+        )
+        .unwrap();
         assert!(
             output.status.success(),
             "PowerShell syntax failed: {}",

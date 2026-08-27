@@ -183,4 +183,165 @@ public sealed class TrayMenuStateBuilderTests
         Assert.True(state.ShowSafeExit);
         Assert.NotEmpty(state.PageItems);
     }
+
+    /// <summary>Verifies a disabled color indicator preserves the fixed green brand icon.</summary>
+    [Fact]
+    public void ResolveIconState_WhenColorIndicatorDisabled_ReturnsDefault()
+    {
+        TrayMenuState state = BuildIconState(
+            ClashSharpMode.FullTakeover,
+            transparentProxyEnabled: true,
+            runtimeKnown: true,
+            systemProxyEffective: false,
+            tunEffective: true);
+
+        TrayIconVisualState result = TrayIconVisualStateResolver.Resolve(
+            state,
+            colorStatusIndicatorEnabled: false);
+
+        Assert.Equal(TrayIconVisualState.Default, result);
+    }
+
+    /// <summary>Verifies disabled and standby modes share the gray inactive icon.</summary>
+    [Theory]
+    [InlineData(ClashSharpMode.Disabled)]
+    [InlineData(ClashSharpMode.Standby)]
+    public void ResolveIconState_WhenTakeoverInactive_ReturnsInactive(ClashSharpMode mode)
+    {
+        TrayMenuState state = BuildIconState(
+            mode,
+            transparentProxyEnabled: true,
+            runtimeKnown: true,
+            systemProxyEffective: false,
+            tunEffective: true);
+
+        TrayIconVisualState result = TrayIconVisualStateResolver.Resolve(
+            state,
+            colorStatusIndicatorEnabled: true);
+
+        Assert.Equal(TrayIconVisualState.Inactive, result);
+    }
+
+    /// <summary>Verifies active system proxy takeover uses the green icon.</summary>
+    [Theory]
+    [InlineData(ClashSharpMode.RuleTakeover)]
+    [InlineData(ClashSharpMode.FullTakeover)]
+    public void ResolveIconState_WhenSystemProxyActive_ReturnsSystemProxy(ClashSharpMode mode)
+    {
+        TrayMenuState state = BuildIconState(
+            mode,
+            transparentProxyEnabled: false,
+            runtimeKnown: true,
+            systemProxyEffective: true,
+            tunEffective: false);
+
+        TrayIconVisualState result = TrayIconVisualStateResolver.Resolve(
+            state,
+            colorStatusIndicatorEnabled: true);
+
+        Assert.Equal(TrayIconVisualState.SystemProxy, result);
+    }
+
+    /// <summary>Verifies TUN takes priority and uses the C# purple icon.</summary>
+    [Theory]
+    [InlineData(ClashSharpMode.RuleTakeover)]
+    [InlineData(ClashSharpMode.FullTakeover)]
+    public void ResolveIconState_WhenTunActive_ReturnsTun(ClashSharpMode mode)
+    {
+        TrayMenuState state = BuildIconState(
+            mode,
+            transparentProxyEnabled: true,
+            runtimeKnown: true,
+            systemProxyEffective: false,
+            tunEffective: true);
+
+        TrayIconVisualState result = TrayIconVisualStateResolver.Resolve(
+            state,
+            colorStatusIndicatorEnabled: true);
+
+        Assert.Equal(TrayIconVisualState.Tun, result);
+    }
+
+    /// <summary>Verifies effective TUN wins over effective system proxy when both probes report active.</summary>
+    [Theory]
+    [InlineData(ClashSharpMode.RuleTakeover)]
+    [InlineData(ClashSharpMode.FullTakeover)]
+    public void ResolveIconState_WhenTunAndSystemProxyAreActive_ReturnsTun(ClashSharpMode mode)
+    {
+        TrayMenuState state = BuildIconState(
+            mode,
+            transparentProxyEnabled: true,
+            runtimeKnown: true,
+            systemProxyEffective: true,
+            tunEffective: true);
+
+        TrayIconVisualState result = TrayIconVisualStateResolver.Resolve(
+            state,
+            colorStatusIndicatorEnabled: true);
+
+        Assert.Equal(TrayIconVisualState.Tun, result);
+    }
+
+    /// <summary>Verifies a requested TUN mode that fell back to App ownership stays system-proxy green.</summary>
+    [Theory]
+    [InlineData(ClashSharpMode.RuleTakeover)]
+    [InlineData(ClashSharpMode.FullTakeover)]
+    public void ResolveIconState_WhenTunRequestedButNotEffective_ReturnsSystemProxy(ClashSharpMode mode)
+    {
+        TrayMenuState state = BuildIconState(
+            mode,
+            transparentProxyEnabled: true,
+            runtimeKnown: true,
+            systemProxyEffective: true,
+            tunEffective: false);
+
+        TrayIconVisualState result = TrayIconVisualStateResolver.Resolve(
+            state,
+            colorStatusIndicatorEnabled: true);
+
+        Assert.True(state.TransparentProxyItem.IsChecked);
+        Assert.False(state.TunEffective);
+        Assert.Equal(TrayIconVisualState.SystemProxy, result);
+    }
+
+    /// <summary>Verifies unknown or unconfirmed takeover state fails neutral to gray.</summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void ResolveIconState_WhenRuntimeUnknownOrProxyUnconfirmed_ReturnsInactive(
+        bool runtimeKnown,
+        bool systemProxyEffective)
+    {
+        TrayMenuState state = BuildIconState(
+            ClashSharpMode.RuleTakeover,
+            transparentProxyEnabled: true,
+            runtimeKnown,
+            systemProxyEffective,
+            tunEffective: false);
+
+        TrayIconVisualState result = TrayIconVisualStateResolver.Resolve(
+            state,
+            colorStatusIndicatorEnabled: true);
+
+        Assert.Equal(TrayIconVisualState.Inactive, result);
+    }
+
+    private static TrayMenuState BuildIconState(
+        ClashSharpMode mode,
+        bool transparentProxyEnabled,
+        bool runtimeKnown,
+        bool systemProxyEffective,
+        bool tunEffective)
+    {
+        return TrayMenuStateBuilder.Build(
+            mode,
+            transparentProxyEnabled,
+            mihomoServiceInstalled: true,
+            runtimeKnown,
+            systemProxyEffective,
+            tunEffective,
+            TrayStatusSnapshot.Unavailable,
+            visibleFeatureIds: null,
+            key => key);
+    }
 }

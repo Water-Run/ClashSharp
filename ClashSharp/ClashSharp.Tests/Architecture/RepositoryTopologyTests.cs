@@ -85,6 +85,41 @@ public sealed class RepositoryTopologyTests
         Assert.DoesNotContain(compileIncludes, include => include.EndsWith("Model\\ActiveConnection.cs", StringComparison.Ordinal));
     }
 
+    /// <summary>Verifies executable integration probes cannot be published or packed as products.</summary>
+    [Fact]
+    public void IntegrationProbeProjects_AreExplicitlyTestOnlyAndNonPublishable()
+    {
+        string[] probeNames =
+        [
+            "ClashSharp.ProcessProbe",
+            "ClashSharp.SettingsProbe",
+            "ClashSharp.StartupProbe",
+            "ClashSharp.TriggerProbe",
+        ];
+
+        foreach (string probeName in probeNames)
+        {
+            string path = Path.Combine(
+                RepositoryRoot,
+                "ClashSharp",
+                probeName,
+                $"{probeName}.csproj");
+            XDocument project = XDocument.Load(path);
+            Dictionary<string, string> properties = project
+                .Descendants("PropertyGroup")
+                .Elements()
+                .GroupBy(static element => element.Name.LocalName, StringComparer.Ordinal)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => group.Last().Value.Trim(),
+                    StringComparer.Ordinal);
+
+            Assert.Equal("true", properties["IsTestProject"]);
+            Assert.Equal("false", properties["IsPublishable"]);
+            Assert.Equal("false", properties["IsPackable"]);
+        }
+    }
+
     /// <summary>Verifies migrated types are loaded from production assemblies.</summary>
     [Fact]
     public void MigratedTypes_AreLoadedFromProductionAssemblies()
@@ -232,12 +267,14 @@ public sealed class RepositoryTopologyTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Equal(["RUSTSEC-2026-0194", "RUSTSEC-2026-0195"], advisoryIds);
         foreach (JsonElement exception in exceptions.EnumerateArray())
         {
-            Assert.Equal("quick-xml", exception.GetProperty("package").GetString());
-            Assert.Equal("0.39.4", exception.GetProperty("version").GetString());
-            Assert.Equal("ClashSharp/Installer/Cargo.lock", exception.GetProperty("lockFile").GetString());
+            string package = exception.GetProperty("package").GetString()!;
+            string version = exception.GetProperty("version").GetString()!;
+            string lockFile = exception.GetProperty("lockFile").GetString()!;
+            Assert.False(string.IsNullOrWhiteSpace(package));
+            Assert.False(string.IsNullOrWhiteSpace(version));
+            Assert.False(string.IsNullOrWhiteSpace(lockFile));
             Assert.False(string.IsNullOrWhiteSpace(exception.GetProperty("introducedBy").GetString()));
             Assert.Equal("x86_64-pc-windows-msvc", exception.GetProperty("releaseTarget").GetString());
             Assert.Equal("Release", exception.GetProperty("owner").GetString());
@@ -245,6 +282,10 @@ public sealed class RepositoryTopologyTests
             Assert.False(string.IsNullOrWhiteSpace(exception.GetProperty("rationale").GetString()));
             DateOnly expiresOn = DateOnly.Parse(exception.GetProperty("expiresOn").GetString()!, CultureInfo.InvariantCulture);
             Assert.True(expiresOn >= DateOnly.FromDateTime(DateTime.UtcNow), $"RustSec exception expired on {expiresOn:O}.");
+
+            string lockText = File.ReadAllText(Path.Combine(RepositoryRoot, lockFile));
+            Assert.Contains($"name = \"{package}\"", lockText, StringComparison.Ordinal);
+            Assert.Contains($"version = \"{version}\"", lockText, StringComparison.Ordinal);
         }
 
         string workflow = File.ReadAllText(Path.Combine(RepositoryRoot, ".github", "workflows", "ci.yml"));

@@ -159,30 +159,77 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("_hiddenToTray = true;", mainWindowCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Guards the best-effort tray refresh against blocking persistence and swallowed fatal failures.</summary>
+    /// <summary>Guards the tray readiness monitor's cadence, cancellation, and recoverable retry boundary.</summary>
     [Fact]
-    public void MainWindowCode_ContainsTrayStatusRefreshWithoutBlockingUiDiagnostics()
+    public void MainWindowCode_ContinuouslyMonitorsTrayStatusWithoutBlockingUiDiagnostics()
     {
         string mainWindowCode = File.ReadAllText(
             FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs"));
         const string methodMarker =
-            "private async Task RefreshMihomoServiceStatusForTrayAsync(";
+            "private async Task MonitorMihomoServiceStatusForTrayAsync(";
         int methodStart = mainWindowCode.IndexOf(methodMarker, StringComparison.Ordinal);
         int methodEnd = mainWindowCode.IndexOf(
             "\n    /// <summary>Runs post-startup work",
             methodStart + methodMarker.Length,
             StringComparison.Ordinal);
 
-        Assert.True(methodStart >= 0, "The tray status refresh boundary is missing.");
-        Assert.True(methodEnd > methodStart, "The tray status refresh boundary could not be isolated.");
-        string refreshBoundary = mainWindowCode[methodStart..methodEnd];
+        Assert.True(methodStart >= 0, "The tray status monitor boundary is missing.");
+        Assert.True(methodEnd > methodStart, "The tray status monitor boundary could not be isolated.");
+        string monitorBoundary = mainWindowCode[methodStart..methodEnd];
 
+        Assert.Contains("TimeSpan.FromSeconds(5)", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("using PeriodicTimer timer", monitorBoundary, StringComparison.Ordinal);
+        Assert.Contains("while (true)", monitorBoundary, StringComparison.Ordinal);
+        int probeIndex = monitorBoundary.IndexOf(
+            "await Runtime.RefreshMihomoStatusAsync(cancellationToken)",
+            StringComparison.Ordinal);
+        int waitIndex = monitorBoundary.IndexOf(
+            "await timer.WaitForNextTickAsync(cancellationToken)",
+            StringComparison.Ordinal);
+        Assert.True(probeIndex >= 0, "The service status probe is missing.");
+        Assert.True(waitIndex > probeIndex, "The first service probe must run before the periodic wait.");
         Assert.Contains(
             "StartupCompletionFailurePolicy.IsRecoverable(exception)",
-            refreshBoundary,
+            monitorBoundary,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("exception.Message", refreshBoundary, StringComparison.Ordinal);
-        Assert.DoesNotContain("LogStorageService", refreshBoundary, StringComparison.Ordinal);
+        int recoverableCatchStart = monitorBoundary.IndexOf(
+            "catch (Exception exception) when (",
+            StringComparison.Ordinal);
+        int postCatchCancellationCheck = monitorBoundary.IndexOf(
+            "if (cancellationToken.IsCancellationRequested)",
+            recoverableCatchStart,
+            StringComparison.Ordinal);
+        Assert.True(recoverableCatchStart >= 0, "The recoverable probe-failure boundary is missing.");
+        Assert.True(
+            postCatchCancellationCheck > recoverableCatchStart,
+            "The monitor must continue after a recoverable probe failure.");
+        Assert.DoesNotContain(
+            "return;",
+            monitorBoundary[recoverableCatchStart..postCatchCancellationCheck],
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)",
+            monitorBoundary,
+            StringComparison.Ordinal);
+        Assert.Contains("RefreshTrayMenuPreservingReachability();", monitorBoundary, StringComparison.Ordinal);
+        Assert.DoesNotContain("exception.Message", monitorBoundary, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogStorageService", monitorBoundary, StringComparison.Ordinal);
+
+        int closeStart = mainWindowCode.IndexOf(
+            "private async void OnWindowClosed(",
+            StringComparison.Ordinal);
+        Assert.True(closeStart >= 0, "The window-close boundary is missing.");
+        string closeBoundary = mainWindowCode[closeStart..methodStart];
+        int cancelIndex = closeBoundary.IndexOf(
+            "StartupShellSetupPolicy.TryRun(_windowLifetime.Cancel)",
+            StringComparison.Ordinal);
+        int awaitMonitorIndex = closeBoundary.IndexOf(
+            "await statusMonitorTask",
+            StringComparison.Ordinal);
+        Assert.True(cancelIndex >= 0, "Window close must cancel the status monitor.");
+        Assert.True(
+            awaitMonitorIndex > cancelIndex,
+            "Window close must await monitor exit after issuing cancellation.");
     }
 
     /// <summary>Verifies logs are only reachable from statistics and not duplicated in the footer navigation.</summary>
@@ -1677,12 +1724,26 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("CloseBehaviorMode", appSettings, StringComparison.Ordinal);
         Assert.DoesNotContain("fade: AppSettingsService.Instance.TrayFadeInactiveIcon", systemTray, StringComparison.Ordinal);
         Assert.DoesNotContain("color.A * 0.55d", systemTray, StringComparison.Ordinal);
-        Assert.Contains("CreateInactiveBitmap(bitmap, useMonochrome)", systemTray, StringComparison.Ordinal);
+        Assert.Contains("TrayIconVisualStateResolver.Resolve", systemTray, StringComparison.Ordinal);
+        Assert.Contains("Logo.Inactive.ico", systemTray, StringComparison.Ordinal);
+        Assert.Contains("Logo.SystemProxy.ico", systemTray, StringComparison.Ordinal);
+        Assert.Contains("Logo.Tun.ico", systemTray, StringComparison.Ordinal);
+        Assert.Contains("TryReplaceTrayIcon(NimModify)", systemTray, StringComparison.Ordinal);
+        Assert.Contains("TryReplaceTrayIcon(NimAdd)", systemTray, StringComparison.Ordinal);
+        Assert.Contains("TryAddCurrentTrayIcon", systemTray, StringComparison.Ordinal);
+        Assert.Contains("ResolveCurrentVisualState()", systemTray, StringComparison.Ordinal);
+        Assert.Contains("TryDisposeIcon(nextIcon)", systemTray, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateInactiveBitmap", systemTray, StringComparison.Ordinal);
         Assert.Contains("TriggersEnabledToggle_Toggled", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("TrayUseMonochromeInactiveIconToggle_Toggled", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("Mode=OneWay", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("ConfirmRestartRequiredSettingChangeAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("Settings.RestartSettingConfirm.Title", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConfirmRestartRequiredSettingChangeAsync", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("Settings.RestartSettingConfirm.Title", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsTrayIconRestartPending", settingsViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "$\"{_getString(\"Settings.Tray.MonochromeInactiveIcon.Title\")}*\"",
+            settingsViewModel,
+            StringComparison.Ordinal);
 
         int traySectionIndex = settingsXaml.IndexOf("x:Name=\"TraySectionTitleText\"", StringComparison.Ordinal);
         int closeBehaviorIndex = settingsXaml.IndexOf("x:Name=\"CloseBehaviorModeRow\"", StringComparison.Ordinal);
@@ -1876,10 +1937,57 @@ public sealed class AppResourcePackagingTests
         string projectXml = File.ReadAllText(projectPath);
 
         Assert.Contains("x:Name=\"HeaderLogo\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Source=\"ms-appx:///Assets/Logo.png\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Content Include=\"Assets\\Logo.png\" CopyToOutputDirectory=\"PreserveNewest\"", projectXml, StringComparison.Ordinal);
+        Assert.Contains("Source=\"ms-appx:///Assets/Logo.svg\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Content Remove=\"Assets\\Logo.png\"", projectXml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Content Include=\"Assets\\Logo.png\"", projectXml, StringComparison.Ordinal);
+        Assert.Contains("Content Include=\"Assets\\Logo.svg\" CopyToOutputDirectory=\"PreserveNewest\"", projectXml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"PageTitleText\"", masterControlXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DescriptionText\"", masterControlXaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Verifies tray icons are checked-in multi-resolution ICOs derived from color-specific SVG sources.</summary>
+    [Fact]
+    public void TrayIconAssets_UseSvgSourcesAndMultiResolutionIcoDerivatives()
+    {
+        (string Name, string ExpectedColor)[] variants =
+        [
+            ("Logo.Inactive", "#626262"),
+            ("Logo.SystemProxy", "#08723B"),
+            ("Logo.Tun", "#512BD4"),
+        ];
+
+        foreach ((string name, string expectedColor) in variants)
+        {
+            string svgPath = FindSourceFile("ClashSharp", "ClashSharp", "Assets", "Tray", $"{name}.svg");
+            string icoPath = FindSourceFile("ClashSharp", "ClashSharp", "Assets", "Tray", $"{name}.ico");
+            string svg = File.ReadAllText(svgPath);
+            byte[] ico = File.ReadAllBytes(icoPath);
+
+            Assert.Contains("viewBox=\"0 0 1024 1024\"", svg, StringComparison.Ordinal);
+            Assert.Contains(expectedColor, svg, StringComparison.Ordinal);
+            Assert.True(ico.Length >= 6, $"{name}.ico does not contain a complete ICO header.");
+            Assert.Equal(new byte[] { 0, 0, 1, 0 }, ico[..4]);
+
+            int entryCount = ico[4] | (ico[5] << 8);
+            Assert.Equal(8, entryCount);
+            Assert.True(
+                ico.Length >= 6 + (entryCount * 16),
+                $"{name}.ico does not contain all declared directory entries.");
+
+            int[] expectedDimensions = [256, 128, 64, 48, 32, 24, 20, 16];
+            int[] actualDimensions = Enumerable.Range(0, entryCount)
+                .Select(index =>
+                {
+                    int entryOffset = 6 + (index * 16);
+                    int width = ico[entryOffset] == 0 ? 256 : ico[entryOffset];
+                    int height = ico[entryOffset + 1] == 0 ? 256 : ico[entryOffset + 1];
+                    Assert.Equal(width, height);
+                    return width;
+                })
+                .ToArray();
+
+            Assert.Equal(expectedDimensions, actualDimensions);
+        }
     }
 
     /// <summary>Verifies master control page uses extracted reusable mode-button and info-tile components.</summary>
@@ -3000,18 +3108,24 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>", projectXml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the package manifest declares a packaged desktop startup task.</summary>
+    /// <summary>Verifies the package manifest has one product application and its desktop startup task.</summary>
     [Fact]
-    public void PackageManifest_DeclaresStartupTask()
+    public void PackageManifest_DeclaresExactlyOneProductApplicationAndStartupTask()
     {
         string manifestPath = FindSourceFile("ClashSharp", "ClashSharp", "Package.appxmanifest");
 
         string manifestXml = File.ReadAllText(manifestPath);
+        XDocument manifest = XDocument.Parse(manifestXml);
+        XElement application = Assert.Single(
+            manifest.Descendants(),
+            static element => element.Name.LocalName == "Application");
 
+        Assert.Equal("App", (string?)application.Attribute("Id"));
         Assert.Contains("xmlns:uap5=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/5\"", manifestXml, StringComparison.Ordinal);
         Assert.Contains("Category=\"windows.startupTask\"", manifestXml, StringComparison.Ordinal);
         Assert.Contains("TaskId=\"ClashSharpStartup\"", manifestXml, StringComparison.Ordinal);
         Assert.Contains("EntryPoint=\"Windows.FullTrustApplication\"", manifestXml, StringComparison.Ordinal);
+        Assert.DoesNotContain("updater", manifestXml, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Counts non-overlapping occurrences of a string fragment.</summary>

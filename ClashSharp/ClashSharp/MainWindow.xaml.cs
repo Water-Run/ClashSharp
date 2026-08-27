@@ -48,6 +48,10 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <summary>Registered shell message broadcast after Explorer recreates the taskbar.</summary>
     private const string TaskbarCreatedMessageName = "TaskbarCreated";
 
+    /// <summary>Maximum age of the authenticated service readiness used by the tray indicator.</summary>
+    private static readonly TimeSpan MihomoServiceStatusProbeInterval =
+        TimeSpan.FromSeconds(5);
+
     private readonly IApplicationLifetimeRequestSink _startupLifetimeRequests;
 
     private readonly MainWindowComposition _composition;
@@ -104,7 +108,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private bool _runtimeReady;
 
     private readonly CancellationTokenSource _windowLifetime = new();
-    private Task? _mihomoServiceStatusRefreshTask;
+    private Task? _mihomoServiceStatusMonitorTask;
+    private int _trayRefreshQueued;
 
     internal MainWindow(
         IApplicationLifetimeRequestSink startupLifetimeRequests,
@@ -142,6 +147,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _runtime.Navigation.NavigationRequested += OnNavigationRequested;
+        _runtime.TrayStateChanged += OnTrayStateChanged;
         _runtime.ApplyTheme((FrameworkElement)Content);
         NavView.DataContext = _runtime.ViewModel;
 
@@ -156,8 +162,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             out _trayService);
         if (_trayService is not null)
         {
-            _mihomoServiceStatusRefreshTask =
-                RefreshMihomoServiceStatusForTrayAsync(_windowLifetime.Token);
+            _mihomoServiceStatusMonitorTask =
+                MonitorMihomoServiceStatusForTrayAsync(_windowLifetime.Token);
         }
 
         _ = _startupFlow.TrySchedule(
@@ -407,8 +413,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <param name="args">Window close event arguments. Not null.</param>
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        Task? statusRefreshTask = _mihomoServiceStatusRefreshTask;
-        _mihomoServiceStatusRefreshTask = null;
+        Task? statusMonitorTask = _mihomoServiceStatusMonitorTask;
+        _mihomoServiceStatusMonitorTask = null;
         MainWindowComposition.ITray? trayService = _trayService;
         _trayService = null;
         _taskbarCreatedMessage = 0;
@@ -443,6 +449,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
                     if (runtime is not null)
                     {
+                        runtime.TrayStateChanged -= OnTrayStateChanged;
                         runtime.Navigation.NavigationRequested -= OnNavigationRequested;
                         _ = StartupShellSetupPolicy.TryRun(runtime.Dispose);
                     }
@@ -464,9 +471,9 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
                 }
             }
 
-            if (statusRefreshTask is not null)
+            if (statusMonitorTask is not null)
             {
-                await statusRefreshTask;
+                await statusMonitorTask;
             }
         }
         finally
@@ -475,21 +482,43 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         }
     }
 
-    private async Task RefreshMihomoServiceStatusForTrayAsync(CancellationToken cancellationToken)
+    private async Task MonitorMihomoServiceStatusForTrayAsync(CancellationToken cancellationToken)
     {
-        try
+        using PeriodicTimer timer = new(MihomoServiceStatusProbeInterval);
+        while (true)
         {
-            await Runtime.RefreshMihomoStatusAsync(cancellationToken);
+            try
+            {
+                await Runtime.RefreshMihomoStatusAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception) when (
+                StartupCompletionFailurePolicy.IsRecoverable(exception))
+            {
+                TryReportMihomoStatusRefreshFailure(exception);
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             RefreshTrayMenuPreservingReachability();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Window shutdown owns cancellation of this best-effort status refresh.
-        }
-        catch (Exception exception) when (
-            StartupCompletionFailurePolicy.IsRecoverable(exception))
-        {
-            TryReportMihomoStatusRefreshFailure(exception);
+
+            try
+            {
+                if (!await timer.WaitForNextTickAsync(cancellationToken))
+                {
+                    return;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
         }
     }
 
@@ -701,6 +730,26 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             () => _trayService?.RefreshMenu() == true,
             _hiddenToTray,
             () => PrimaryWindowActivation.BringToFront(this));
+    }
+
+    private void OnTrayStateChanged(object? sender, EventArgs e)
+    {
+        if (Interlocked.Exchange(ref _trayRefreshQueued, 1) != 0)
+        {
+            return;
+        }
+
+        if (!DispatcherQueue.TryEnqueue(() =>
+            {
+                Interlocked.Exchange(ref _trayRefreshQueued, 0);
+                if (!_windowLifetime.IsCancellationRequested)
+                {
+                    RefreshTrayMenuPreservingReachability();
+                }
+            }))
+        {
+            Interlocked.Exchange(ref _trayRefreshQueued, 0);
+        }
     }
 
     /// <summary>Applies a mode requested from the tray menu.</summary>
