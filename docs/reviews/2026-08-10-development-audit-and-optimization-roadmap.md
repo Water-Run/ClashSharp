@@ -1,14 +1,16 @@
 # ClashSharp 全量开发审计与优化路线图
 
+> 2026-08-27 冻结说明：本文是 `main@8a69c27` 的历史审计快照，保留原始发现和历史关闭证据，不再承担“当前状态”或执行排序。当前项目状态以 [`2026-08-27-project-development-map.md`](./2026-08-27-project-development-map.md) 为准，生产优先级和 Definition of Done 仅以 [`2026-08-27-production-readiness-execution-plan.md`](./2026-08-27-production-readiness-execution-plan.md) 为准；旧阶段顺序已由基于发布风险和依赖的当前 Gate 顺序取代。
+
 - 审查日期：2026-08-10
 - 审查基线：`main@8a69c27`
 - 审查范围：解决方案结构、MVVM、WinUI 3、编码规范、现代 C#、LINQ、文档注释、主体与 Installer 权限边界、构建发布、安全、测试
 - 审查方式：源码与配置静态审计、Release 构建、格式验证、.NET/Rust 测试、分析器基线、依赖与漏洞检查
-- 当前状态：这是后续开发的权威待办汇总；P0-01～P0-05 与 MVVM 组合根/页面工厂/类型安全导航核心节点已于 2026-08-24 完成，其余页面绑定、全局 Window 获取、P0-06 之后的 Installer 安全整改、正式签名和 Windows 真机矩阵尚未验收
+- 快照后进展：P0-01～P0-05 与 MVVM 组合根/页面工厂/类型安全导航核心节点已于 2026-08-24 完成；后续状态不得从本文未勾选项推断
 
 ## 1. 总体结论
 
-ClashSharp 已具备可工作的分层、较强的运行时所有权保护、大规模自动化测试和严格的 Release 构建基础。当前代码能够干净编译，现有 .NET/Rust 测试全部通过。
+ClashSharp 在本次审计基线已具备可工作的分层、较强的运行时所有权保护、大规模自动化测试和严格的 Release 构建基础；下列构建与测试结论仅描述 `main@8a69c27` 当时的证据。
 
 但项目尚未满足以下发布目标：
 
@@ -259,6 +261,13 @@ ClashSharp-Installer.exe                 唯一用户可见安装/修复/升级/
 - [ ] 区分 UAC 用户取消、超时、进程失败和输出解析失败。
 - [ ] 保证超时或取消后事务 journal 仍可由 Repair 恢复。
 
+**实现进展（2026-08-27，待 Windows CI 关闭）**
+
+- 新增统一 `process_runner`：注册表探测 15 秒、普通查询 45 秒、UAC/机器事务 15 分钟；stdout/stderr 各保留至多 256 KiB，超量继续排空并返回稳定截断诊断。
+- PowerShell 统一改由 UTF-8 stdin 在 Job assignment 后释放；超时使用 `TerminateJobObject` 并 kill/wait 直接 child。Linux 独立测试覆盖挂起、双流大输出和 stdin，Windows 专属测试覆盖孙进程终止。
+- 裸 `reg` 改为绝对 System32 路径；固定 GitHub 外链改用 `ShellExecuteW`；UAC `ERROR_CANCELLED` 映射为独立稳定码。
+- Windows 孙进程测试和 timeout 后 journal Repair cut-point E2E 取得绿色证据前，本项仍不标记最终关闭。
+
 **验收条件**
 
 - 模拟挂起和无限输出的 child process 不会永久卡住 UI，也不会导致内存无界增长。
@@ -489,11 +498,11 @@ cargo doc --manifest-path ClashSharp/Installer/Cargo.toml --no-deps --document-p
 
 ## 9. Probe、测试与发布隔离
 
-- [ ] 四个 Probe 设置 `IsTestProject=true`、`IsPublishable=false`、`IsPackable=false`。
+- [x] 四个 Probe 设置 `IsTestProject=true`、`IsPublishable=false`、`IsPackable=false`，并由 `RepositoryTopologyTests` 阻止回归（2026-08-27）。
 - [ ] 评估移动到 `Tests/Probes` 或测试专用 solution，减少正式解决方案产品歧义。
-- [ ] SandboxTest 明确标记测试工具，release build 不得拷贝到 Installer payload。
-- [ ] 最终 archive 使用 allowlist 与 denylist 双重验证。
-- [ ] 架构测试断言 Manifest 恰好一个 Application、没有第二 updater、Probe 不可发布。
+- [x] SandboxTest 以 README/description 标记为测试工具并设置 `publish=false`；Installer 最终 payload denylist 明确拒绝它（2026-08-27）。
+- [x] 最终 archive 使用 allowlist 与 denylist 双重验证；Rust 契约测试拒绝 Probe、Sandbox、Installer、PDB、lockfile 与额外 updater/executable。
+- [x] 测试断言 Manifest 恰好一个 Application、没有第二 updater、Probe 不可发布（2026-08-27）。
 
 ## 10. 实施里程碑
 

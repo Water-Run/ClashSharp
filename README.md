@@ -2,13 +2,15 @@
 
 *[中文](./README-zh.md)*
 
-![Clash# Logo](./Logo.png)
+![Clash# Logo](./ClashSharp/ClashSharp/Assets/Logo.svg)
 
 `Clash#` is a modern, Windows-native proxy client based on [mihomo](https://github.com/MetaCubeX/mihomo). It targets Windows 11 x64 and is distributed as an MSIX package through the native Clash# installer.
 
+> Development status (2026-08-27): Clash# is undergoing production hardening and has no formal release yet. Source builds and development artifacts are not production-ready. See the [project development map](./docs/reviews/2026-08-27-project-development-map.md) and [production-readiness execution plan](./docs/reviews/2026-08-27-production-readiness-execution-plan.md) for evidence and release gates.
+
 ## Installation
 
-Download the release package from [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases), extract it, and run the Authenticode-signed `ClashSharp-Installer.exe` normally—not with “Run as administrator.” The certificate and MSIX stay in the current-user context; the installer requests UAC separately only for machine-service work. Confirm that UAC shows the expected verified publisher, not “Unknown publisher.” A release contains the installer and its sibling `payload` directory.
+After a formal version is published, download the package from [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases), extract it, and run the Authenticode-signed `ClashSharp-Installer.exe` normally—not with “Run as administrator.” Do not treat current CI intermediates as release packages. The certificate and MSIX stay in the current-user context; the installer requests UAC separately only for machine-service work. Confirm that UAC shows the expected verified publisher, not “Unknown publisher.” A release contains the installer and its sibling `payload` directory.
 
 The installer checks Windows 11 x64 compatibility, installs the package certificate when needed, and deploys the MSIX package. Verified certificate/MSIX files and their directory chain stay read-only locked through each consumer, with identity and SHA-256 checks immediately before and after use. After deployment, the installer verifies every package-authored file against the signed block-map payload, and the MSIX enables Windows package-integrity enforcement. If Clash# is already installed, the installer enters maintenance mode for check, in-place update/repair, or uninstall. Use this Installer for a complete uninstall; removing only the MSIX from Windows Settings can leave the machine-level service resources behind.
 

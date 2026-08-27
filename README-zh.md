@@ -2,10 +2,12 @@
 
 [English](./README.md)
 
-![Clash# Logo](./Logo.png)
+![Clash# Logo](./ClashSharp/ClashSharp/Assets/Logo.svg)
 
 `Clash#` 是一个现代化的 Windows 原生代理客户端，基于 [mihomo](https://github.com/MetaCubeX/mihomo) 构建。
 `Clash#` 以`AGPL-3.0`协议开源于[GitHub](https://github.com/Water-Run/ClashSharp).
+
+> 开发状态（2026-08-27）：项目处于生产加固阶段，尚未发布正式版本，当前源码与开发产物不应视为生产就绪。进度、证据边界和发布 Gate 见[项目开发地图](./docs/reviews/2026-08-27-project-development-map.md)与[生产就绪执行计划](./docs/reviews/2026-08-27-production-readiness-execution-plan.md)。
 
 ## 关于Windows原生
 
@@ -23,7 +25,7 @@
 
 ### 安装
 
-从 [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases) 下载发布包，解压后直接运行带 Authenticode 签名的 `ClashSharp-Installer.exe`。不要手动“以管理员身份运行”；应用证书与 MSIX 始终安装到当前用户，仅在配置机器级本地服务时由安装器单独请求 UAC 确认。UAC 必须显示预期的已验证发布者，不能是“未知发布者”。
+正式版本发布后，从 [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases) 下载发布包，解压后直接运行带 Authenticode 签名的 `ClashSharp-Installer.exe`。不要使用当前 CI 中间产物代替正式发布包，也不要手动“以管理员身份运行”；应用证书与 MSIX 始终安装到当前用户，仅在配置机器级本地服务时由安装器单独请求 UAC 确认。UAC 必须显示预期的已验证发布者，不能是“未知发布者”。
 
 > 修复、升级和完整卸载请重新运行 `ClashSharp-Installer.exe`。安装器会在证书/MSIX 被消费期间持续持有只读锁，并在使用前后复核同一文件对象的身份与 SHA-256；部署完成后还会依据签名 block map 逐项复核全部包作者文件，MSIX 同时启用 Windows package-integrity enforcement。不要只从 Windows 应用管理移除 MSIX，否则机器级 Service 资源可能无法同步清理。
 
