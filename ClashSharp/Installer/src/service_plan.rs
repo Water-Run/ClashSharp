@@ -54,9 +54,9 @@ pub enum OperationStep {
     InstallCurrentUserCertificate,
     /// Add/update the target user's MSIX without removing LocalState first.
     DeployCurrentUserPackageInPlace,
-    /// Durably reserve an ordinary machine transaction before CurrentUser package mutation.
+    /// Durably reserve an ordinary machine transaction before any CurrentUser mutation.
     PrepareMachineInstall,
-    /// Durably reserve an explicit cross-SID repair before CurrentUser package mutation.
+    /// Durably reserve an explicit cross-SID repair before any CurrentUser mutation.
     PrepareMachineRepair,
     /// Independently verify the deployed package and roll the reserved machine transaction forward.
     CommitMachineTransaction,
@@ -66,6 +66,8 @@ pub enum OperationStep {
     RemoveCurrentUserStartupFallback,
     /// Remove the current user's package when present.
     RemoveCurrentUserPackageIfPresent,
+    /// Verify package absence and clear the durable uninstall recovery transaction.
+    FinalizeUninstallTransaction,
 }
 
 /// Builds the only supported operation order for an installer action.
@@ -73,14 +75,14 @@ pub enum OperationStep {
 pub fn operation_steps(action: OperationAction) -> &'static [OperationStep] {
     match action {
         OperationAction::Install => &[
-            OperationStep::InstallCurrentUserCertificate,
             OperationStep::PrepareMachineInstall,
+            OperationStep::InstallCurrentUserCertificate,
             OperationStep::DeployCurrentUserPackageInPlace,
             OperationStep::CommitMachineTransaction,
         ],
         OperationAction::Repair => &[
-            OperationStep::InstallCurrentUserCertificate,
             OperationStep::PrepareMachineRepair,
+            OperationStep::InstallCurrentUserCertificate,
             OperationStep::DeployCurrentUserPackageInPlace,
             OperationStep::CommitMachineTransaction,
         ],
@@ -88,6 +90,7 @@ pub fn operation_steps(action: OperationAction) -> &'static [OperationStep] {
             OperationStep::RemoveMachineResourcesIfOwner,
             OperationStep::RemoveCurrentUserStartupFallback,
             OperationStep::RemoveCurrentUserPackageIfPresent,
+            OperationStep::FinalizeUninstallTransaction,
         ],
     }
 }
@@ -103,6 +106,8 @@ pub enum MachineHelperInvocation {
     Commit { target_sid: String },
     /// Owner-checked machine uninstall.
     Uninstall { target_sid: String },
+    /// Verifies uninstall completion and clears its durable recovery transaction.
+    FinalizeUninstall { target_sid: String },
 }
 
 impl MachineHelperInvocation {
@@ -141,6 +146,14 @@ impl MachineHelperInvocation {
                     target_sid: arguments[2].clone(),
                 }
             }
+            "--machine-finalize-uninstall"
+                if arguments.len() == 3 && arguments[1] == "--target-sid" =>
+            {
+                validate_owner_sid(&arguments[2])?;
+                Self::FinalizeUninstall {
+                    target_sid: arguments[2].clone(),
+                }
+            }
             value if value.starts_with("--machine-") => {
                 return Err(String::from("installer.machine_helper.arguments_invalid"));
             }
@@ -157,7 +170,8 @@ impl MachineHelperInvocation {
             Self::PrepareInstall { target_sid }
             | Self::PrepareRepair { target_sid }
             | Self::Commit { target_sid }
-            | Self::Uninstall { target_sid } => target_sid,
+            | Self::Uninstall { target_sid }
+            | Self::FinalizeUninstall { target_sid } => target_sid,
         }
     }
 }
@@ -535,8 +549,25 @@ impl MachineResourcePlan {
     }
 
     /// Deletes only the fixed service, machine payload, and service-owned ProgramData root.
-    pub fn render_uninstall_script(&self, target_sid: &str) -> Result<String, String> {
+    pub fn render_uninstall_script(
+        &self,
+        target_sid: &str,
+        transaction_path: &Path,
+        transaction_id: &str,
+        expected_package_version: &str,
+        installer_payload_sha256: &str,
+    ) -> Result<String, String> {
         validate_owner_sid(target_sid)?;
+        validate_absolute_path(transaction_path, "installer.transaction.path_invalid")?;
+        validate_token(transaction_id)
+            .map_err(|_| String::from("installer.transaction.id_invalid"))?;
+        if !is_canonical_package_version(expected_package_version) {
+            return Err(String::from(
+                "installer.transaction.package_version_invalid",
+            ));
+        }
+        validate_token(installer_payload_sha256)
+            .map_err(|_| String::from("installer.transaction.payload_hash_invalid"))?;
         Ok(render_template(
             UNINSTALL_SCRIPT_TEMPLATE,
             &[
@@ -566,6 +597,19 @@ impl MachineResourcePlan {
                 (
                     "@@CLASHSHARP_ASSOCIATION_PATH@@",
                     path_text(&self.association_path)?,
+                ),
+                (
+                    "@@CLASHSHARP_TRANSACTION_PATH@@",
+                    path_text(transaction_path)?,
+                ),
+                ("@@CLASHSHARP_TRANSACTION_ID@@", transaction_id),
+                (
+                    "@@CLASHSHARP_EXPECTED_PACKAGE_VERSION@@",
+                    expected_package_version,
+                ),
+                (
+                    "@@CLASHSHARP_INSTALLER_PAYLOAD_SHA256@@",
+                    installer_payload_sha256,
                 ),
             ],
         ))
@@ -1690,8 +1734,13 @@ try {
     $machineRoot = @@CLASHSHARP_MACHINE_ROOT@@
     $serviceDataRoot = @@CLASHSHARP_SERVICE_DATA_ROOT@@
     $associationPath = @@CLASHSHARP_ASSOCIATION_PATH@@
+    $transactionPath = @@CLASHSHARP_TRANSACTION_PATH@@
+    $expectedTransactionId = @@CLASHSHARP_TRANSACTION_ID@@
+    $expectedPackageVersion = @@CLASHSHARP_EXPECTED_PACKAGE_VERSION@@
+    $expectedPayloadSha256 = @@CLASHSHARP_INSTALLER_PAYLOAD_SHA256@@
     $productFilesRoot = Split-Path -Parent $machineRoot
     $productDataRoot = Split-Path -Parent $serviceDataRoot
+    $transactionRoot = Split-Path -Parent $transactionPath
     $scExe = Join-Path ([Environment]::SystemDirectory) 'sc.exe'
 
     function Assert-TargetPackageQuiescent(
@@ -1780,25 +1829,68 @@ try {
 
     Assert-SafeDirectoryChain $programFilesRoot $machineRoot
     Assert-SafeDirectoryChain $programDataRoot $serviceDataRoot
+    Assert-SafeDirectoryChain $programDataRoot $transactionRoot
 
-    if (-not (Test-Path -LiteralPath $associationPath -PathType Leaf)) {
-        throw 'owner association is missing'
+    if (-not (Test-Path -LiteralPath $transactionPath -PathType Leaf)) {
+        throw 'protected uninstall transaction is missing'
     }
-    $associationItem = Get-Item -LiteralPath $associationPath -Force
-    if (($associationItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
-        $associationItem.Length -lt 1 -or $associationItem.Length -gt 4096) {
-        throw 'owner association is unsafe'
+    $transactionItem = Get-Item -LiteralPath $transactionPath -Force
+    if (($transactionItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        $transactionItem.Length -lt 1 -or $transactionItem.Length -gt 4096) {
+        throw 'protected uninstall transaction is unsafe'
     }
-    $association = Get-Content -LiteralPath $associationPath -Raw | ConvertFrom-Json
-    $propertyNames = @($association.PSObject.Properties.Name)
-    if ($propertyNames.Count -ne 3 -or
-        $propertyNames -cnotcontains 'schemaVersion' -or
-        $propertyNames -cnotcontains 'ownerSid' -or
-        $propertyNames -cnotcontains 'authenticationToken' -or
-        $association.schemaVersion -ne 1 -or
-        [string]$association.ownerSid -cne $targetSid -or
-        [string]$association.authenticationToken -cnotmatch '^[0-9a-f]{64}$') {
-        throw 'owner association does not authorize this uninstall'
+    $transaction = Get-Content -LiteralPath $transactionPath -Raw | ConvertFrom-Json
+    $transactionProperties = @($transaction.PSObject.Properties.Name)
+    $requiredTransactionProperties = @(
+        'schema', 'transactionId', 'operation', 'targetSid', 'allowReassociation',
+        'expectedPackageVersion', 'installerPayloadSha256', 'phase', 'generation')
+    $versionParts = @([string]$transaction.expectedPackageVersion -split '\.')
+    $canonicalVersion = $versionParts.Count -eq 4 -and @($versionParts | Where-Object {
+        $_ -cnotmatch '^(0|[1-9][0-9]{0,4})$' -or [uint32]$_ -gt 65535
+    }).Count -eq 0
+    $canonicalPhaseGeneration =
+        ([string]$transaction.phase -ceq 'prepared' -and [uint32]$transaction.generation -eq 1) -or
+        ([string]$transaction.phase -ceq 'machineCommitted' -and [uint32]$transaction.generation -eq 2) -or
+        ([string]$transaction.phase -ceq 'packageCommitted' -and [uint32]$transaction.generation -eq 3) -or
+        ([string]$transaction.phase -ceq 'verified' -and [uint32]$transaction.generation -eq 4)
+    if ($transactionProperties.Count -ne $requiredTransactionProperties.Count -or
+        @($requiredTransactionProperties | Where-Object {
+            $transactionProperties -cnotcontains $_
+        }).Count -ne 0 -or
+        [uint32]$transaction.schema -ne 2 -or
+        [string]$transaction.transactionId -cne $expectedTransactionId -or
+        [string]$transaction.transactionId -cnotmatch '^[0-9a-f]{64}$' -or
+        [string]$transaction.operation -cne 'uninstall' -or
+        [string]$transaction.targetSid -cne $targetSid -or
+        $transaction.allowReassociation -isnot [bool] -or
+        [bool]$transaction.allowReassociation -ne $false -or
+        -not $canonicalVersion -or
+        [string]$transaction.expectedPackageVersion -cne $expectedPackageVersion -or
+        [string]$transaction.installerPayloadSha256 -cne $expectedPayloadSha256 -or
+        [string]$transaction.installerPayloadSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        -not $canonicalPhaseGeneration) {
+        throw 'protected uninstall transaction does not authorize this mutation'
+    }
+
+    if (Test-Path -LiteralPath $associationPath) {
+        $associationItem = Get-Item -LiteralPath $associationPath -Force
+        if (-not $associationItem.PSIsContainer -and
+            ($associationItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0 -and
+            $associationItem.Length -ge 1 -and $associationItem.Length -le 4096) {
+            $association = Get-Content -LiteralPath $associationPath -Raw | ConvertFrom-Json
+            $associationProperties = @($association.PSObject.Properties.Name)
+            if ($associationProperties.Count -ne 3 -or
+                $associationProperties -cnotcontains 'schemaVersion' -or
+                $associationProperties -cnotcontains 'ownerSid' -or
+                $associationProperties -cnotcontains 'authenticationToken' -or
+                $association.schemaVersion -ne 1 -or
+                [string]$association.ownerSid -cne $targetSid -or
+                [string]$association.authenticationToken -cnotmatch '^[0-9a-f]{64}$') {
+                throw 'existing owner association conflicts with uninstall transaction'
+            }
+        } else {
+            throw 'owner association is unsafe'
+        }
     }
 
     $packages = @(Get-AppxPackage -User $targetSid -Name $packageIdentityName)
@@ -1899,6 +1991,7 @@ mod tests {
     const OTHER_SID: &str = "S-1-5-21-100-200-300-1002";
     const TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     const FRESH_TOKEN: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+    const VERSION: &str = "1.2.3.4";
     const TEST_MANIFEST: &str = r#"[
         {"path":"binaries/geodata/manifest.json","length":1,"sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
         {"path":"binaries/mihomo.exe","length":1,"sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
@@ -2012,14 +2105,23 @@ mod tests {
     }
 
     #[test]
-    fn operation_plan_prepares_before_msix_and_commits_machine_afterward() {
+    fn operation_plan_prepares_before_certificate_and_msix_then_commits_machine() {
         assert_eq!(
             operation_steps(OperationAction::Repair),
             [
-                OperationStep::InstallCurrentUserCertificate,
                 OperationStep::PrepareMachineRepair,
+                OperationStep::InstallCurrentUserCertificate,
                 OperationStep::DeployCurrentUserPackageInPlace,
                 OperationStep::CommitMachineTransaction,
+            ]
+        );
+        assert_eq!(
+            operation_steps(OperationAction::Uninstall),
+            [
+                OperationStep::RemoveMachineResourcesIfOwner,
+                OperationStep::RemoveCurrentUserStartupFallback,
+                OperationStep::RemoveCurrentUserPackageIfPresent,
+                OperationStep::FinalizeUninstallTransaction,
             ]
         );
         assert!(
@@ -2052,6 +2154,7 @@ mod tests {
             "--machine-prepare-repair",
             "--machine-commit",
             "--machine-uninstall",
+            "--machine-finalize-uninstall",
         ] {
             let fixed = vec![
                 String::from(mode),
@@ -2244,18 +2347,41 @@ mod tests {
                 .unwrap();
 
         assert_powershell_parses(&plan.render_apply_script().unwrap());
-        assert_powershell_parses(&resources.render_uninstall_script(SID).unwrap());
+        assert_powershell_parses(
+            &resources
+                .render_uninstall_script(
+                    SID,
+                    Path::new(r"C:\ProgramData\ClashSharp\Installer\transaction.json"),
+                    TOKEN,
+                    VERSION,
+                    FRESH_TOKEN,
+                )
+                .unwrap(),
+        );
     }
 
     #[test]
-    fn uninstall_script_rechecks_owner_and_fixed_roots() {
+    fn uninstall_script_rechecks_protected_transaction_owner_and_fixed_roots() {
         let resources =
             MachineResourcePlan::new(Path::new(r"C:\Program Files"), Path::new(r"C:\ProgramData"))
                 .unwrap();
-        let script = resources.render_uninstall_script(SID).unwrap();
+        let script = resources
+            .render_uninstall_script(
+                SID,
+                Path::new(r"C:\ProgramData\ClashSharp\Installer\transaction.json"),
+                TOKEN,
+                VERSION,
+                FRESH_TOKEN,
+            )
+            .unwrap();
 
         assert!(script.contains("ownerSid"));
         assert!(script.contains(SID));
+        assert!(script.contains("protected uninstall transaction"));
+        assert!(script.contains(r"C:\ProgramData\ClashSharp\Installer\transaction.json"));
+        assert!(script.contains("'operation', 'targetSid'"));
+        assert!(script.contains("'machineCommitted'"));
+        assert!(!script.contains("owner association is missing"));
         assert!(script.contains(r"C:\Program Files\ClashSharp\Service"));
         assert!(script.contains(r"C:\ProgramData\ClashSharp\MihomoService"));
         assert!(script.contains("Assert-NoReparseTree"));

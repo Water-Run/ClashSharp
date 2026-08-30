@@ -6,7 +6,7 @@
 
 `Clash#` is a modern, Windows-native proxy client based on [mihomo](https://github.com/MetaCubeX/mihomo). It targets Windows 11 x64 and is distributed as an MSIX package through the native Clash# installer.
 
-> Development status (2026-08-27): Clash# is undergoing production hardening and has no formal release yet. Source builds and development artifacts are not production-ready. See the [project development map](./docs/reviews/2026-08-27-project-development-map.md) and [production-readiness execution plan](./docs/reviews/2026-08-27-production-readiness-execution-plan.md) for evidence and release gates.
+> Development status (2026-08-30): Clash# is undergoing production hardening and has no formal release yet. Source builds and development artifacts are not production-ready. Migration to a self-contained C# / WPF installer has started, but its current runtime deliberately blocks system mutation; the Rust Installer remains the release authority until equivalent Windows VM evidence exists. See the [project development map](./docs/reviews/2026-08-27-project-development-map.md), [production-readiness execution plan](./docs/reviews/2026-08-27-production-readiness-execution-plan.md), and [detailed Installer rewrite audit](./docs/reviews/2026-08-30-installer-wpf-rewrite-audit.md).
 
 ## Installation
 

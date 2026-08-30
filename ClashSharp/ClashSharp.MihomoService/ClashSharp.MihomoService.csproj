@@ -11,6 +11,17 @@
     <LangVersion>14</LangVersion>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(ClashSharpFormalInstallerComponent)'=='true'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>None</DebugType>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
@@ -21,4 +32,17 @@
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
   </ItemGroup>
+
+  <Target Name="ValidateFormalInstallerComponentPublish"
+          AfterTargets="Publish"
+          Condition="'$(ClashSharpFormalInstallerComponent)'=='true'">
+    <ItemGroup>
+      <_UnexpectedInstallerComponentFile Include="$(PublishDir)**\*"
+                                         Exclude="$(PublishDir)ClashSharp.MihomoService.exe" />
+    </ItemGroup>
+    <Error Condition="!Exists('$(PublishDir)ClashSharp.MihomoService.exe')"
+           Text="Formal Installer service publish is missing its self-contained executable." />
+    <Error Condition="'@(_UnexpectedInstallerComponentFile)'!=''"
+           Text="Formal Installer service publish contains sidecars: @(_UnexpectedInstallerComponentFile, ', ')." />
+  </Target>
 </Project>

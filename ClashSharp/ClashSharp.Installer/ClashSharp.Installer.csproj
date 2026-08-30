@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>14</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <StartupHookSupport>false</StartupHookSupport>
+    <DebugType>embedded</DebugType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Installer\LogoInstaller.ico</ApplicationIcon>
+    <AssemblyName>ClashSharp.Installer</AssemblyName>
+    <RootNamespace>ClashSharp.Installer</RootNamespace>
+    <StartupObject>ClashSharp.Installer.Program</StartupObject>
+    <ClashSharpInstallerReleaseManifestLogicalName>ClashSharp.Installer.ReleaseManifest.json</ClashSharpInstallerReleaseManifestLogicalName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ClashSharp.Installer.Core\ClashSharp.Installer.Core.csproj" />
+    <ProjectReference Include="..\ClashSharp.Installer.Presentation\ClashSharp.Installer.Presentation.csproj" />
+    <ProjectReference Include="..\ClashSharp.Installer.Windows\ClashSharp.Installer.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+    <Resource Include="..\ClashSharp\Assets\Logo.svg" Link="Assets\Logo.svg" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(ClashSharpInstallerReleaseManifestPath)' != ''">
+    <EmbeddedResource
+      Include="$(ClashSharpInstallerReleaseManifestPath)"
+      LogicalName="$(ClashSharpInstallerReleaseManifestLogicalName)" />
+  </ItemGroup>
+
+  <Target Name="ValidateClashSharpFormalInstallerManifest" BeforeTargets="PrepareForBuild"
+          Condition="'$(ClashSharpFormalInstallerBuild)' == 'true'">
+    <Error
+      Condition="'$(ClashSharpInstallerReleaseManifestPath)' == ''"
+      Text="A formal Installer build requires ClashSharpInstallerReleaseManifestPath." />
+    <Error
+      Condition="'$(ClashSharpInstallerReleaseManifestPath)' != '' and !Exists('$(ClashSharpInstallerReleaseManifestPath)')"
+      Text="The formal Installer embedded release manifest does not exist." />
+  </Target>
+</Project>

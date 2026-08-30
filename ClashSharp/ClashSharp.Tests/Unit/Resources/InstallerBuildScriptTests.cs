@@ -64,6 +64,54 @@ public sealed class InstallerBuildScriptTests
         Assert.True(signStaged >= 0 && publishOfficialName > signStaged);
     }
 
+    /// <summary>Verifies the WPF migration candidate embeds a generated manifest and stays non-promoted.</summary>
+    [Fact]
+    public void BuildInstallerScript_HasIsolatedCSharpCandidateContract()
+    {
+        string scriptPath = FindSourceFile("ClashSharp", "Installer", "build.ps1");
+        string modulePath = FindSourceFile(
+            "ClashSharp",
+            "Installer",
+            "PackagingContract.psm1");
+        string installerProjectPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer",
+            "ClashSharp.Installer.csproj");
+
+        string script = File.ReadAllText(scriptPath);
+        string module = File.ReadAllText(modulePath);
+        string installerProject = File.ReadAllText(installerProjectPath);
+
+        Assert.Contains("[switch] $CSharpInstallerCandidate", script, StringComparison.Ordinal);
+        Assert.Contains("New-ClashSharpInstallerReleaseManifest", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish $csharpInstallerProject", script, StringComparison.Ordinal);
+        Assert.Contains("-p:ClashSharpFormalInstallerBuild=true", script, StringComparison.Ordinal);
+        Assert.Contains("ClashSharpInstallerReleaseManifestPath", script, StringComparison.Ordinal);
+        Assert.Contains("must publish as one green executable", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Move-Item -LiteralPath $csharpCandidateEntries",
+            script,
+            StringComparison.Ordinal);
+
+        Assert.Contains("Get-ClashSharpPublisherId", module, StringComparison.Ordinal);
+        Assert.Contains("Get-ClashSharpMsixMachineFileContract", module, StringComparison.Ordinal);
+        Assert.Contains("[Security.Cryptography.SHA256]::HashData", module, StringComparison.Ordinal);
+        Assert.Contains("[Security.Cryptography.IncrementalHash]::CreateHash", module, StringComparison.Ordinal);
+        Assert.Contains("New-ClashSharpInstallerReleaseManifest", module, StringComparison.Ordinal);
+        Assert.Contains("machineFiles                  = @($machineFiles)", module, StringComparison.Ordinal);
+        Assert.Contains("binaries/mihomo.exe", module, StringComparison.Ordinal);
+        Assert.Contains(
+            "binaries/service/clashsharp.mihomoservice.exe",
+            module,
+            StringComparison.Ordinal);
+        Assert.Contains("[Array]::Sort($sortedPaths, [StringComparer]::Ordinal)", module, StringComparison.Ordinal);
+        Assert.Contains("ConvertTo-Json -Depth 8 -Compress", module, StringComparison.Ordinal);
+
+        Assert.Contains("<EmbeddedResource", installerProject, StringComparison.Ordinal);
+        Assert.Contains("ClashSharp.Installer.ReleaseManifest.json", installerProject, StringComparison.Ordinal);
+        Assert.Contains("ValidateClashSharpFormalInstallerManifest", installerProject, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies the native Rust installer embeds a Windows executable icon.</summary>
     [Fact]
     public void NativeInstallerBuild_EmbedsWindowsExecutableIcon()
@@ -230,6 +278,13 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("CLASHSHARP_INSTALLER_PAYLOAD_DIR", script, StringComparison.Ordinal);
         Assert.Contains("Copy-ClashSharpVerifiedDirectory", script, StringComparison.Ordinal);
         Assert.Contains("Compare-ClashSharpDirectoryContract", script, StringComparison.Ordinal);
+        Assert.Contains("--self-contained true", script, StringComparison.Ordinal);
+        Assert.Contains("-p:ClashSharpFormalInstallerComponent=true", script, StringComparison.Ordinal);
+        Assert.Contains("-p:PublishSingleFile=true", script, StringComparison.Ordinal);
+        Assert.Contains("-p:PublishTrimmed=false", script, StringComparison.Ordinal);
+        Assert.Contains("-p:PublishReadyToRun=true", script, StringComparison.Ordinal);
+        Assert.Contains("-p:IncludeNativeLibrariesForSelfExtract=true", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("--self-contained false", script, StringComparison.Ordinal);
         Assert.DoesNotContain("LastWriteTimeUtc", script, StringComparison.Ordinal);
         Assert.DoesNotContain("latestPackageDirectory", script, StringComparison.Ordinal);
 
@@ -243,7 +298,8 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("ClashSharpInstallerServiceRoot", project, StringComparison.Ordinal);
         Assert.Contains("ClashSharpInstallerWatchdogRoot", project, StringComparison.Ordinal);
         Assert.Contains("Binaries\\Service", project, StringComparison.Ordinal);
-        Assert.Contains("ClashSharp.RecoveryWatchdog.runtimeconfig.json", project, StringComparison.Ordinal);
+        Assert.Contains("ClashSharp.RecoveryWatchdog.exe", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClashSharp.RecoveryWatchdog.runtimeconfig.json", project, StringComparison.Ordinal);
         Assert.Contains("Binaries\\GeoData\\ASN.mmdb", project, StringComparison.Ordinal);
 
         Assert.Contains("validate_final_msix_file_contract", buildScript, StringComparison.Ordinal);
@@ -253,6 +309,8 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("ensure_payload_root_is_ordinary", buildScript, StringComparison.Ordinal);
         Assert.Contains("unexpected release payload directory", buildScript, StringComparison.Ordinal);
         Assert.Contains("Microsoft.Web.WebView2.Core.winmd", buildScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClashSharp.RecoveryWatchdog.deps.json", buildScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClashSharp.MihomoService.deps.json", buildScript, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies verified payload bytes stay locked through consumers and registration gets a full-file check.</summary>

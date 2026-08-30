@@ -37,15 +37,102 @@ jobs:
       - name: Build Release
         run: dotnet build ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restore
 
+      - name: Verify green runtime component publishes
+        shell: pwsh
+        run: |
+          $componentRoot = Join-Path $env:RUNNER_TEMP 'clashsharp-installer-components'
+          dotnet publish ClashSharp/ClashSharp.MihomoService/ClashSharp.MihomoService.csproj `
+            -c Release -p:Platform=x64 -r win-x64 --self-contained true --no-restore `
+            -p:ClashSharpFormalInstallerComponent=true `
+            -o (Join-Path $componentRoot 'service')
+          if ($LASTEXITCODE -ne 0) { throw 'Self-contained service publish failed.' }
+          dotnet publish ClashSharp/ClashSharp.RecoveryWatchdog/ClashSharp.RecoveryWatchdog.csproj `
+            -c Release -p:Platform=x64 -r win-x64 --self-contained true --no-restore `
+            -p:ClashSharpFormalInstallerComponent=true `
+            -o (Join-Path $componentRoot 'watchdog')
+          if ($LASTEXITCODE -ne 0) { throw 'Self-contained watchdog publish failed.' }
+
       - name: Run tests
         run: dotnet test ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Platform=x64 --no-build --logger "trx;LogFileName=tests.trx"
+
+      - name: Run Installer Core tests
+        run: >-
+          dotnet test ClashSharp/ClashSharp.Installer.Tests/ClashSharp.Installer.Tests.csproj
+          -c Release -p:Platform=x64 --no-build
+          --collect:"XPlat Code Coverage"
+          --results-directory ClashSharp/ClashSharp.Installer.Tests/TestResults
+          --logger "trx;LogFileName=installer-core-tests.trx"
+
+      - name: Run Installer presentation tests
+        run: >-
+          dotnet test ClashSharp/ClashSharp.Installer.Presentation.Tests/ClashSharp.Installer.Presentation.Tests.csproj
+          -c Release -p:Platform=x64 --no-build
+          --collect:"XPlat Code Coverage"
+          --results-directory ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults
+          --logger "trx;LogFileName=installer-presentation-tests.trx"
+
+      - name: Run Installer Windows adapter tests
+        run: >-
+          dotnet test ClashSharp/ClashSharp.Installer.Windows.Tests/ClashSharp.Installer.Windows.Tests.csproj
+          -c Release -p:Platform=x64 --no-build
+          --results-directory ClashSharp/ClashSharp.Installer.Windows.Tests/TestResults
+          --logger "trx;LogFileName=installer-windows-tests.trx"
+
+      - name: Reject empty or skipped .NET test results
+        shell: pwsh
+        run: |
+          $expectedResults = @(
+            'ClashSharp/ClashSharp.Tests/TestResults/tests.trx',
+            'ClashSharp/ClashSharp.Installer.Tests/TestResults/installer-core-tests.trx',
+            'ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults/installer-presentation-tests.trx',
+            'ClashSharp/ClashSharp.Installer.Windows.Tests/TestResults/installer-windows-tests.trx'
+          )
+          foreach ($resultPath in $expectedResults) {
+            if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
+              throw "Expected TRX result is missing: $resultPath"
+            }
+            [xml]$result = Get-Content -LiteralPath $resultPath -Raw
+            $counters = $result.TestRun.ResultSummary.Counters
+            $total = [int]$counters.total
+            $executed = [int]$counters.executed
+            $notExecuted = [int]$counters.notExecuted
+            if ($total -le 0 -or $executed -le 0) {
+              throw "Test result contains no executed tests: $resultPath"
+            }
+            if ($notExecuted -ne 0) {
+              throw "Test result contains $notExecuted skipped/not-executed test(s): $resultPath"
+            }
+          }
+
+      - name: Enforce Installer Core coverage floor
+        shell: pwsh
+        run: |
+          $coverage = Get-ChildItem -LiteralPath 'ClashSharp/ClashSharp.Installer.Tests/TestResults' `
+            -Filter 'coverage.cobertura.xml' -Recurse | Select-Object -First 1
+          if ($null -eq $coverage) { throw 'Installer Core coverage report is missing.' }
+          [xml]$report = Get-Content -LiteralPath $coverage.FullName -Raw
+          $lineRate = [double]::Parse(
+            [string]$report.coverage.'line-rate',
+            [Globalization.CultureInfo]::InvariantCulture)
+          $branchRate = [double]::Parse(
+            [string]$report.coverage.'branch-rate',
+            [Globalization.CultureInfo]::InvariantCulture)
+          "Installer Core coverage: line={0:P2}, branch={1:P2}" -f $lineRate, $branchRate
+          if ($lineRate -lt 0.90) { throw "Installer Core line coverage $lineRate is below 0.90." }
+          if ($branchRate -lt 0.80) { throw "Installer Core branch coverage $branchRate is below 0.80." }
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: dotnet-test-results
-          path: ClashSharp/ClashSharp.Tests/TestResults/**/*.trx
+          path: |
+            ClashSharp/ClashSharp.Tests/TestResults/**/*.trx
+            ClashSharp/ClashSharp.Installer.Tests/TestResults/**/*.trx
+            ClashSharp/ClashSharp.Installer.Tests/TestResults/**/coverage.cobertura.xml
+            ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults/**/*.trx
+            ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults/**/coverage.cobertura.xml
+            ClashSharp/ClashSharp.Installer.Windows.Tests/TestResults/**/*.trx
           if-no-files-found: error
 
   rust:

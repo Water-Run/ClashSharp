@@ -1,11 +1,14 @@
 # ClashSharp 生产就绪执行计划
 
-- 更新日期：2026-08-27
+> 当前 Installer / WPF 接盘入口：[ClashSharp Installer / WPF 接盘开工单](2026-08-30-installer-wpf-handoff.md)。接盘者必须先恢复 512 / 70 / 103 当前源码 checkpoint，再推进 helper-authoritative protected-state P0。
+
+- 更新日期：2026-08-30
 - 审计起始基线：`main@fa72287`（仅标识计划建立时已存在的提交，不是本文自身提交）
 - 当前候选：本文所在候选批次；其最终提交 SHA 由 Git 历史和 CI run 记录，不在本文自引用
 - 目标：先形成可签名、可安装、可恢复、可验证的 Windows 生产闭环，再处理不阻断发布的完美化债务
 - 项目地图：[`2026-08-27-project-development-map.md`](./2026-08-27-project-development-map.md)
 - 详细审计来源：[`2026-08-10-development-audit-and-optimization-roadmap.md`](./2026-08-10-development-audit-and-optimization-roadmap.md)
+- Installer 重写审查：[`2026-08-30-installer-wpf-rewrite-audit.md`](./2026-08-30-installer-wpf-rewrite-audit.md)
 - 状态定义：`完成` = 已有自动化或人工证据；`待 Windows 验证` = 实现完成但未取得 Windows CI/真机证据；`阻断` = 不满足 RC 条件
 
 ## 1. 当前结论
@@ -19,10 +22,12 @@
 - Connections 与 core log 的 WebSocket 实时链路已经存在，早期“尚未实现”的记录不再有效。
 - 审计起始基线 `main@fa72287` 的 Windows CI（2026-08-24，[run 32705511983](https://github.com/Water-Run/ClashSharp/actions/runs/32705511983)）中，.NET build/format/test、Installer fmt/clippy/test、Sandbox fmt/clippy/test 均已通过；唯一失败是 Installer 依赖审计中的 `webbrowser 1.2.1` 安全公告。
 - 本文所在候选批次已把 Installer 锁文件更新到 `webbrowser 1.2.2` 和 `event-listener 5.4.2`，并删除 `quick-xml 0.39.4` 已升级后失效的两个 RustSec ignore；固定版 `cargo-audit 0.22.2` 无 vulnerability ignore 通过本地扫描，恢复主分支绿色仍需候选提交的 CI 证明。
-- 仓库尚无正式 GitHub Release，也没有 release workflow、受保护 branch/tag/environment、签名门禁、真实 Installer VM 门禁或覆盖率阈值。
+- 仓库尚无正式 GitHub Release，也没有 release workflow、受保护 branch/tag/environment、签名门禁或真实 Installer VM 门禁；本候选已为独立 Installer Core 加入 line 90% / branch 80% 阈值，仓库其余关键域仍未统一覆盖率门禁。
 - 干净 Windows 机器的 .NET 10 Runtime 部署策略尚未闭合；正式构建所需四项 GeoData 也缺少固定来源、版本、许可和预期 digest。
 
 因此当前阶段定义为：**功能候选基本成形，发布候选尚未成立。**
+
+2026-08-30 增量：`main@edfd025a5b2237841f09d80d629ed66ff59b0d38` 的 Windows CI run `33069360366` 已全绿，`.NET build, format, and test`、`Rust Installer`、`Rust SandboxTest` 已设为 `main` required checks。新的 C# Installer 迁移已落下 Core、WPF fail-closed shell 和直接引用真实 Core 程序集的测试；完整证据见上方 Installer 重写审查。该增量不改变“尚无正式 Release / E4”的结论。
 
 ## 2. 已推进的当前批次
 
@@ -35,6 +40,11 @@
 | WB-004 | 待 Windows 验证 | Installer 统一 deadline、有界双流 capture、非提权进程树 Job 终止与 UAC 取消分类 | Linux 8 项独立 runner 测试（含 teardown grace/worker detach 上界和无无界 wait/join 静态契约）、Windows target clippy、Windows 非提权孙进程测试待 CI；`RunAs` helper 跨 Job 边界仍需 durable cut-point/VM 证据 |
 | WB-005 | 待 CI 验证 | 四个 integration Probe 显式 test-only、不可 publish/pack；SandboxTest 不可发布 | 项目属性、`RepositoryTopologyTests` 架构门禁与 Cargo `publish=false` |
 | WB-006 | 已完成 | 项目地图、执行计划、历史 roadmap、stabilization ledger 与 README 状态入口对齐 | 内部链接、基线、状态与 Gate 依赖一致性审查 |
+| WB-007 | 进行中 | C# Installer v2 protocol：MachineReserved 前置、卸载 MachineRemovalAuthorized tombstone、operation-specific durable phase、canonical journal digest、helper-authoritative result journal、result + exact protected-store reload 后才推进的 two-phase session、helper-only package commit、CAS store、certificate ownership、Windows 11 x64 policy、embedded payload/package identity/locked lease、Uncertain outcome | 最近 Core 499/499、0 skipped，checkpoint line 94.90% / branch 85.67%；当前静态 512 项新增与 journal identity 分离的 strict parent-PID bootstrap 及 12 项矩阵，并锁定 C# helper 与现有 Rust/App/Service 的 owner/token pipe-name 固定向量，尚待资源门后重验；组合审查确认 asInvoker parent 不能写 protected root，coordinator 还需改为 helper 唯一写/clear、parent 只读 reload；signed NativeAOT helper、persistent broker、machine mutation/SCM authority 尚未接入 |
+| WB-008 | 进行中 | C# / WPF self-contained single-file、asInvoker、参考 VS Installer 产品实例层级的单卡片可访问 shell | 纯 `net10.0` Presentation 固定 Available/Installed/RecoveryRequired 三态，busy 为执行覆盖态；可用仅安装、已安装修复/卸载、恢复仅精确继续动作、busy 仅取消，startup router 在 WPF 创建前分流；最近 39/39 实际全绿，当前静态 70 项已把 package + durable journal 决策展开到全部 15 个合法 phase、非法组合与 blocked state，待资源门重验；WPF Windows 11 x64 Release 交叉编译通过，Windows UIA/publish/签名/VM 待验 |
+| WB-009 | 待 Windows 验证 | 基于 1024/184 PNG 测绘重建 canonical SVG，并由 WPF 使用同一几何 | 1024/256/64/32 预览、设计测绘文档、hexagon/shadow/white mark 三层 SVG↔WPF exact geometry 契约；Explorer/DPI/ICO hinting 待验 |
+| WB-010 | 已完成 | Linux restore/build/test/render 前资源门禁、OOM cooldown 与跨 Agent 原子执行锁 | `eng/check-linux-resource-budget.sh ... -- command` 以 host-wide `flock` 覆盖检查到命令结束，并阻止高 load/PSI/并发 worker 时启动 |
+| WB-011 | 进行中 | Windows SafeFileHandle payload lease、MSIX metadata identity、CurrentUser/TrustedPeople certificate、current/target-user PackageManager、protected ProgramData state root 与 NativeAOT elevation 边界 | 已写 fixed root/store、strict bootstrap、split-token exact-logon + 标准用户 OTS Administrators(ReadWrite) protected pipe DACL、first-instance/单实例 server、双向 pipe PID primitive 与 exact-target-SID package commit inspector；Windows 静态展开 103 项，前 76 项 checkpoint Release 交叉编译 0 warning/0 error，最新 27 项因资源门不足未启动编译；fixed root 必须保持 target-user read-only，并新增 helper-authoritative journal/ledger write/clear + parent read-only view 接线项；固定 helper 名称/drive-qualified 路径/STA ArgumentList/UAC 1223 已有，签名 helper 与 persistent authenticated broker 尚未接入，目标提交 Windows E3 待验证 |
 
 托盘状态契约固定如下：
 
@@ -53,8 +63,8 @@
 
 - [x] 更新存在安全公告的 Installer transitive dependency。
 - [x] 使用固定版 `cargo-audit 0.22.2` 和 2026-08-27 拉取的 1226 条公告完成无 vulnerability ignore 的本地扫描；保留 4 个上游 unmaintained warning 随 Slint 链升级治理。
-- [ ] 在 Windows CI 运行 locked fmt/clippy/test/audit 与完整 .NET build/test。
-- [ ] 把候选 SHA 的 .NET、Rust Installer、Rust SandboxTest 设为 `main` required checks；不得用宽泛 ignore 掩盖可升级漏洞。
+- [x] 在 `main@edfd025a5b2237841f09d80d629ed66ff59b0d38` 的 Windows CI run `33069360366` 运行 locked fmt/clippy/test/audit 与完整 .NET build/test，全部绿色。
+- [x] 把 `.NET build, format, and test`、`Rust Installer`、`Rust SandboxTest` 设为 `main` required checks；不得用宽泛 ignore 掩盖可升级漏洞。
 
 退出条件：本文所在候选提交的全部 CI job 绿色，且 lockfile 可重现。
 
@@ -82,6 +92,7 @@
 ### P0-D：干净机器运行依赖与可信发布输入
 
 - [ ] 为 App、Service、Watchdog 固定 .NET 10 Runtime 策略：全部 self-contained，或由 Installer 以固定可信前置依赖进行可恢复部署。
+- [x] Service 与 RecoveryWatchdog 的正式 staging 改为 `win-x64` self-contained single-file；组件项目和 Windows CI 均拒绝 sidecar，最终 MSIX allowlist 同步收紧。App 策略与干净 VM 证据仍属于上一项未闭环范围。
 - [ ] 在未安装 .NET 10 SDK/Runtime 的干净 Windows 11 x64 VM 证明安装、启动、Repair 和卸载。
 - [ ] 固定四项 GeoData 的 canonical source、版本、许可、长度和 SHA-256；受控构建不能接受 operator 任意选择字节后自签 manifest。
 - [ ] 从干净 runner 取得所有 immutable 输入，保持离线 locked build 与精确 allowlist。
@@ -91,8 +102,14 @@
 ### P0-E：durable install/uninstall 与证书生命周期
 
 - [x] 安装 journal 已有 Prepared、PackageCommitted、MachineCommitted、Verified 和受保护 ProgramData 原子写入。
+- [x] C# v2 Core 候选把 operation 纳入 immutable journal，并以反向阶段顺序覆盖 payload 缺失卸载的 pure coordinator contract；strict codec 明确拒绝未知、重复和非 canonical 字段。
+- [x] C# Core 已实现 exact SID/thumbprint/DER SHA-256/store/pre-existing/Installer-owned/reference/generation 的 certificate ownership ledger、strict codec、CAS file store 和 import/delete write-ahead replay；Rust install/repair 也已把 machine `Prepared` 提前到证书 mutation 之前。
+- [x] C# embedded release manifest 与正式生成器已绑定主 MSIX 内固定 7 项 machine payload 的 canonical path、展开长度和 SHA-256；Core 在主包 lease 仍有效时流式复核并拒绝缺失、额外项、大小写碰撞和 byte mismatch。
 - [ ] 为卸载、association、machine payload 和 certificate 定义对称、持久、可重入阶段。
-- [ ] 持久记录证书是否由 ClashSharp Installer 添加及精确 thumbprint；失败补偿和卸载只删除本 Installer 拥有、且无其他依赖者的证书。
+- [x] C# Windows 层已实现固定 `CurrentUser/TrustedPeople` 的 `X509Store` adapter，只接受 exact request + SID + Windows handle lease，并以 thumbprint + DER SHA-256 双重身份导入/删除；Linux 只取得交叉编译证据。
+- [ ] 重构 C# production composition：`asInvoker` parent 不得直接写/clear protected root；首个 Prepared、后续 journal/ledger transition 与 clear 由同一 authenticated helper session 唯一提交，parent 只读 reload 并 exact-compare。实现 `<exact target SID>\TrustedPeople` 的 `CERT_SYSTEM_STORE_USERS` native adapter，并在 Win11 标准用户 + alternate-admin OTS 场景证明不会落入管理员 CurrentUser；若该路径不能取证，只允许 helper ledger cut-point 包围 parent-side mutation 的显式回退。
+- [ ] 用已改为显式 SID 参数的 Windows PackageManager facade 实现 helper-only target-user package inspector；`CommitPackage` 必须传 journal exact SID + family，不能用 OTS 管理员的 current-user 空 SID，并在 alternate-user Windows VM 证明权限和身份矩阵。
+- [ ] 把 adapter 接入 WPF production composition，并为当前 Rust authority 增加兼容 ledger/remove；目标提交 Windows 测试和真实卸载必须证明只删除本 Installer 拥有、且无其他依赖者的 exact 证书。
 - [ ] payload 缺损时仍可进入安全卸载；Repair 的完整性要求不得阻塞卸载恢复。
 - [ ] action/refresh/language change 使用单一 generation 状态机；RAII 保证 worker panic/spawn failure 后 busy 状态复位。
 - [ ] 逐个识别真实 compensation 与不可达分支；保留有效补偿，只删除有证据证明不可达的虚假保证。
@@ -150,7 +167,8 @@
 
 4. 质量门禁
 
-   - 对 Installer transaction、身份、卸载、日志边界和关键状态机设置 line/branch 覆盖率阈值。
+   - [x] Installer Core transaction、identity、certificate ownership、uninstall 与关键状态机已设置 line 90% / branch 80% CI 阈值；499-test 当前候选实测 line 94.90%（3108/3275）/ branch 85.67%（1495/1745）。
+   - [ ] 将同类阈值扩展到 Windows adapter、日志边界和真实 integration 层。
    - 增加键盘、Narrator、高对比度、200% 文本缩放和托盘高 DPI smoke。
    - 补齐 `SECURITY.md`、发布/支持策略、变更记录和运维 runbook。
 

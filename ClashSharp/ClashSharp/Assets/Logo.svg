@@ -1,24 +1,83 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
-  <title id="title">Clash#</title>
-  <desc id="description">Clash# hexagonal brand mark</desc>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1024 1024"
+     role="img"
+     aria-labelledby="logo-title logo-description"
+     focusable="false">
+  <title id="logo-title">Clash#</title>
+  <desc id="logo-description">White C-sharp mark on a green rounded hexagon</desc>
+
   <defs>
-    <linearGradient id="body" x1="0.18" y1="0.12" x2="0.82" y2="0.9">
-      <stop offset="0" stop-color="#20A95A" />
-      <stop offset="1" stop-color="#08723B" />
+    <!-- The 1024 px source artwork is the geometry master. -->
+    <path id="hexagon"
+          d="M 514 123
+             C 502 123 490 127 479 133
+             L 208 289
+             C 188 301 176 322 176 346
+             L 176 663
+             C 176 688 189 709 210 721
+             L 479 877
+             C 501 889 527 889 548 877
+             L 819 721
+             C 840 709 852 688 852 663
+             L 852 346
+             C 852 322 840 301 819 289
+             L 548 133
+             C 537 127 526 123 514 123 Z" />
+
+    <linearGradient id="hexagon-fill"
+                    gradientUnits="userSpaceOnUse"
+                    x1="307" y1="188" x2="721" y2="842">
+      <stop offset="0" stop-color="#0C7428" />
+      <stop offset="0.48" stop-color="#0B7026" />
+      <stop offset="1" stop-color="#0A6822" />
     </linearGradient>
-    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16" />
-      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0" />
-    </linearGradient>
-    <clipPath id="hexClip">
-      <path d="M512 104c25 0 48 6 70 19l263 152c37 21 55 53 55 96v282c0 43-18 75-55 96L582 901c-44 25-96 25-140 0L179 749c-37-21-55-53-55-96V371c0-43 18-75 55-96l263-152c22-13 45-19 70-19Z" />
+
+    <clipPath id="hexagon-clip">
+      <use href="#hexagon" />
     </clipPath>
   </defs>
-  <path fill="url(#body)" d="M512 104c25 0 48 6 70 19l263 152c37 21 55 53 55 96v282c0 43-18 75-55 96L582 901c-44 25-96 25-140 0L179 749c-37-21-55-53-55-96V371c0-43 18-75 55-96l263-152c22-13 45-19 70-19Z" />
-  <path fill="url(#shine)" clip-path="url(#hexClip)" d="M124 371c0-43 18-75 55-96l263-152c44-25 96-25 140 0l263 152c19 11 33 25 42 42L124 708V371Z" />
+
+  <use href="#hexagon" fill="url(#hexagon-fill)" />
+
+  <!--
+    The original mark uses a hard 45-degree long shadow. Each simple caster is
+    kept separate so overlaps naturally produce the two measured green values
+    (#0A5F1E and #094D1A) without a traced, noisy outline.
+  -->
+  <g clip-path="url(#hexagon-clip)"
+     fill="#033E15"
+     fill-opacity="0.16">
+    <!-- Left and right diagonal stems. -->
+    <path d="M 443 290 H 508 L 988 770 L 915 1214 H 850 L 370 734 Z" />
+    <path d="M 598 290 H 664 L 1144 770 L 1071 1213 H 1006 L 526 733 Z" />
+
+    <!-- Upper and lower horizontal strokes. -->
+    <path d="M 340 402 H 713 L 1193 882 V 949 H 820 L 340 469 Z" />
+    <path d="M 316 556 H 689 L 1169 1036 V 1103 H 796 L 316 623 Z" />
+
+    <!-- Copyright-style C suffix. -->
+    <path d="M 275 649 H 351 L 831 1129 V 1213 H 755 L 275 733 Z" />
+  </g>
+
+  <!-- Hash: two 65/66 px stems and two 67 px crossbars, measured at 1024 px. -->
   <g fill="#FFFFFF">
-    <path d="M421 286h76l-17 113h107l17-113h76l-17 113h82v72h-93l-14 91h83v72h-94l-17 114h-76l17-114H444l-17 114h-76l17-114h-82v-72h93l14-91h-83v-72h94l17-113Zm48 185-14 91h107l14-91H469Z" />
-    <path d="M337 668c-11-8-24-12-38-12-36 0-62 27-62 63s26 63 62 63c15 0 28-4 39-13l25 31c-18 15-40 23-66 23-59 0-103-44-103-104s44-104 103-104c25 0 47 8 65 22l-25 31Z" />
+    <path d="M 443 290 H 508 L 435 733 H 370 Z" />
+    <path d="M 598 290 H 664 L 591 733 H 526 Z" />
+    <path d="M 340 402 H 713 V 469 H 340 Z" />
+    <path d="M 316 556 H 689 V 623 H 316 Z" />
+
+    <!-- Hand-built outline matching the raster C; no runtime font dependency. -->
+    <path d="M 351 662
+             L 339 674
+             C 332 668 324 665 315 665
+             C 301 665 292 676 292 691
+             C 292 706 301 717 315 717
+             C 324 717 332 713 339 707
+             L 351 719
+             C 341 728 329 733 315 733
+             C 291 733 275 715 275 691
+             C 275 667 291 649 315 649
+             C 329 649 341 654 351 662 Z" />
   </g>
 </svg>

@@ -337,13 +337,451 @@ function Get-ClashSharpMsixIdentity {
         @($version.Split('.') | Where-Object { [uint32]$_ -gt [uint16]::MaxValue }).Count -ne 0) {
         throw 'MSIX Identity Version is noncanonical.'
     }
-    return [PSCustomObject]@{
-        Name         = [string]$identity.GetAttribute('Name')
-        Publisher    = [string]$identity.GetAttribute('Publisher')
-        Version      = [string]$identity.GetAttribute('Version')
-        Architecture = ([string]$identity.GetAttribute('ProcessorArchitecture')).ToLowerInvariant()
-        Document     = $document
+    $publisher = [string]$identity.GetAttribute('Publisher')
+    $publisherId = Get-ClashSharpPublisherId -Publisher $publisher
+    $architecture = ([string]$identity.GetAttribute('ProcessorArchitecture')).ToLowerInvariant()
+    $resourceId = [string]$identity.GetAttribute('ResourceId')
+    $packageFullName = "{0}_{1}_{2}_{3}_{4}" -f @(
+        [string]$identity.GetAttribute('Name'),
+        $version,
+        $architecture,
+        $resourceId,
+        $publisherId)
+    $packageFamilyName = "{0}_{1}" -f @(
+        [string]$identity.GetAttribute('Name'),
+        $publisherId)
+
+    $applicationNodes = @($document.SelectNodes(
+            "/*[local-name()='Package']/*[local-name()='Applications']/*[local-name()='Application']"))
+    if ($applicationNodes.Count -gt 1) {
+        throw 'MSIX manifest must not contain multiple primary Application elements.'
     }
+    $applicationId = ''
+    $applicationExecutable = ''
+    $applicationEntryPoint = ''
+    if ($applicationNodes.Count -eq 1) {
+        $applicationId = [string]$applicationNodes[0].GetAttribute('Id')
+        $applicationExecutable = [string]$applicationNodes[0].GetAttribute('Executable')
+        $applicationEntryPoint = [string]$applicationNodes[0].GetAttribute('EntryPoint')
+        if ([string]::IsNullOrWhiteSpace($applicationId) -or
+            [string]::IsNullOrWhiteSpace($applicationExecutable) -or
+            [string]::IsNullOrWhiteSpace($applicationEntryPoint)) {
+            throw 'MSIX primary Application identity is incomplete.'
+        }
+    }
+
+    $frameworkNodes = @($document.SelectNodes(
+            "/*[local-name()='Package']/*[local-name()='Properties']/*[local-name()='Framework']"))
+    if ($frameworkNodes.Count -gt 1 -or
+        ($frameworkNodes.Count -eq 1 -and
+            $frameworkNodes[0].InnerText.Trim() -cnotin @('true', 'false'))) {
+        throw 'MSIX Framework property is invalid.'
+    }
+    $isFramework = $frameworkNodes.Count -eq 1 -and
+        $frameworkNodes[0].InnerText.Trim() -ceq 'true'
+
+    return [PSCustomObject]@{
+        Name                  = [string]$identity.GetAttribute('Name')
+        Publisher             = $publisher
+        PublisherId           = $publisherId
+        Version               = $version
+        Architecture          = $architecture
+        ResourceId            = $resourceId
+        PackageFullName       = $packageFullName
+        PackageFamilyName     = $packageFamilyName
+        ApplicationId         = $applicationId
+        ApplicationExecutable = $applicationExecutable
+        ApplicationEntryPoint = $applicationEntryPoint
+        IsFramework           = $isFramework
+        Document              = $document
+    }
+}
+
+function Get-ClashSharpPublisherId {
+    <#
+    .SYNOPSIS
+        Derives the canonical 13-character Windows package PublisherId.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string] $Publisher
+    )
+
+    if ($Publisher -cne $Publisher.Trim() -or
+        @($Publisher.ToCharArray() | Where-Object { [char]::IsControl($_) }).Count -ne 0) {
+        throw 'Package Publisher is not canonical.'
+    }
+
+    $publisherBytes = [Text.Encoding]::Unicode.GetBytes($Publisher)
+    try {
+        $digest = [Security.Cryptography.SHA256]::HashData($publisherBytes)
+        $alphabet = '0123456789abcdefghjkmnpqrstvwxyz'
+        $result = [Text.StringBuilder]::new(13)
+        for ($chunk = 0; $chunk -lt 13; $chunk++) {
+            $value = 0
+            for ($offset = 0; $offset -lt 5; $offset++) {
+                $bitIndex = ($chunk * 5) + $offset
+                $bit = if ($bitIndex -lt 64) {
+                    ($digest[($bitIndex -shr 3)] -shr (7 - ($bitIndex % 8))) -band 1
+                } else {
+                    0
+                }
+                $value = ($value -shl 1) -bor $bit
+            }
+            $null = $result.Append($alphabet[$value])
+        }
+        return $result.ToString()
+    } finally {
+        [Array]::Clear($publisherBytes, 0, $publisherBytes.Length)
+    }
+}
+
+function Get-ClashSharpMsixMachineFileContract {
+    <#
+    .SYNOPSIS
+        Hashes the exact machine-scope payload inside a bounded ordinary primary MSIX.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string] $LiteralPath
+    )
+
+    $msixPath = Assert-ClashSharpOrdinaryPath -LiteralPath $LiteralPath -RequireFile
+    $requiredPaths = [string[]]@(
+        'binaries/geodata/asn.mmdb',
+        'binaries/geodata/country.mmdb',
+        'binaries/geodata/geoip.dat',
+        'binaries/geodata/geosite.dat',
+        'binaries/geodata/manifest.json',
+        'binaries/mihomo.exe',
+        'binaries/service/clashsharp.mihomoservice.exe'
+    )
+    $requiredSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($requiredPath in $requiredPaths) {
+        $null = $requiredSet.Add($requiredPath)
+    }
+    $observed = [Collections.Generic.Dictionary[string, object]]::new(
+        [StringComparer]::Ordinal)
+    $allPaths = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
+
+    $archive = [IO.Compression.ZipFile]::OpenRead($msixPath)
+    try {
+        if ($archive.Entries.Count -lt 3 -or $archive.Entries.Count -gt 4096) {
+            throw 'Primary MSIX central-directory entry count is outside its budget.'
+        }
+
+        $expandedLength = 0L
+        foreach ($entry in $archive.Entries) {
+            $path = [string]$entry.FullName
+            $segments = @($path.Split('/'))
+            if ($path.Length -lt 1 -or $path.Length -gt 512 -or
+                $path.StartsWith('/', [StringComparison]::Ordinal) -or
+                $path.EndsWith('/', [StringComparison]::Ordinal) -or
+                $path.Contains([char]92) -or
+                $path.Contains('//', [StringComparison]::Ordinal) -or
+                @($segments | Where-Object {
+                        $_ -ceq '.' -or $_ -ceq '..' -or
+                        $_.EndsWith('.', [StringComparison]::Ordinal) -or
+                        $_.EndsWith(' ', [StringComparison]::Ordinal)
+                    }).Count -ne 0 -or
+                [long]$entry.Length -lt 1 -or
+                -not $allPaths.Add($path)) {
+                throw "Primary MSIX contains an unsafe or case-colliding entry: $path"
+            }
+            if ([long]$entry.Length -gt (2147483648L - $expandedLength)) {
+                throw 'Primary MSIX expanded length exceeds its budget.'
+            }
+            $expandedLength += [long]$entry.Length
+
+            $normalizedPath = $path.ToLowerInvariant()
+            $isMachineScope = $normalizedPath -ceq 'binaries/mihomo.exe' -or
+                $normalizedPath.StartsWith('binaries/service/', [StringComparison]::Ordinal) -or
+                $normalizedPath.StartsWith('binaries/geodata/', [StringComparison]::Ordinal)
+            if (-not $isMachineScope) {
+                continue
+            }
+            if (-not $requiredSet.Contains($normalizedPath) -or
+                -not $observed.TryAdd($normalizedPath, $entry)) {
+                throw "Primary MSIX machine payload is outside its exact allowlist: $path"
+            }
+        }
+
+        if ($observed.Count -ne $requiredPaths.Length) {
+            throw 'Primary MSIX machine payload is incomplete.'
+        }
+
+        $contract = [Collections.Generic.List[object]]::new()
+        $machineLength = 0L
+        foreach ($path in $requiredPaths) {
+            $entry = $observed[$path]
+            $maximumLength = if ($path -ceq 'binaries/geodata/manifest.json') {
+                65536L
+            } elseif ($path.StartsWith('binaries/geodata/', [StringComparison]::Ordinal)) {
+                268435456L
+            } else {
+                536870912L
+            }
+            if ([long]$entry.Length -lt 1 -or [long]$entry.Length -gt $maximumLength -or
+                [long]$entry.Length -gt (1073741824L - $machineLength)) {
+                throw "Primary MSIX machine file exceeds its budget: $path"
+            }
+            $machineLength += [long]$entry.Length
+
+            $stream = $entry.Open()
+            $hasher = [Security.Cryptography.IncrementalHash]::CreateHash(
+                [Security.Cryptography.HashAlgorithmName]::SHA256)
+            $buffer = [byte[]]::new(65536)
+            $digest = $null
+            try {
+                $actualLength = 0L
+                while (($count = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    $actualLength += [long]$count
+                    if ($actualLength -gt [long]$entry.Length) {
+                        throw "Primary MSIX machine file length changed while hashing: $path"
+                    }
+                    $hasher.AppendData($buffer, 0, $count)
+                }
+                if ($actualLength -ne [long]$entry.Length) {
+                    throw "Primary MSIX machine file length changed while hashing: $path"
+                }
+                $digest = $hasher.GetHashAndReset()
+                $hash = [Convert]::ToHexString($digest).ToLowerInvariant()
+            } finally {
+                if ($null -ne $digest) {
+                    [Array]::Clear($digest, 0, $digest.Length)
+                }
+                [Array]::Clear($buffer, 0, $buffer.Length)
+                $hasher.Dispose()
+                $stream.Dispose()
+            }
+
+            $contract.Add([PSCustomObject]@{
+                    Path   = $path
+                    Length = [long]$entry.Length
+                    Sha256 = $hash
+                })
+        }
+        return @($contract)
+    } finally {
+        $archive.Dispose()
+    }
+}
+
+function New-ClashSharpInstallerReleaseManifest {
+    <#
+    .SYNOPSIS
+        Generates the compact strict C# Installer release manifest from final staged payload bytes.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string] $PayloadRoot,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [object] $PrimaryIdentity,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string] $PrimaryRelativePath,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNull()]
+        [object[]] $DependencyContracts,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string] $CertificateRelativePath,
+
+        [Parameter(Mandatory)]
+        [ValidatePattern('^[0-9A-F]{40}$')]
+        [string] $CertificateThumbprint,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string] $OutputPath
+    )
+
+    $root = Assert-ClashSharpOrdinaryPath -LiteralPath $PayloadRoot -RequireDirectory
+    $output = Assert-ClashSharpOrdinaryPath -LiteralPath $OutputPath -AllowMissing
+    if (Test-Path -LiteralPath $output) {
+        throw "Installer release manifest output must be new: $output"
+    }
+
+    $canonicalPrimaryPath = $PrimaryRelativePath.Replace('\', '/').ToLowerInvariant()
+    $canonicalCertificatePath = $CertificateRelativePath.Replace('\', '/').ToLowerInvariant()
+    if ($canonicalPrimaryPath.Contains('/') -or
+        -not $canonicalPrimaryPath.EndsWith('.msix', [StringComparison]::Ordinal) -or
+        $canonicalCertificatePath -cne 'clashsharp_temporarykey.cer' -or
+        [string]$PrimaryIdentity.Architecture -cne 'x64' -or
+        -not [string]::IsNullOrEmpty([string]$PrimaryIdentity.ResourceId) -or
+        [string]::IsNullOrWhiteSpace([string]$PrimaryIdentity.ApplicationId) -or
+        [string]::IsNullOrWhiteSpace([string]$PrimaryIdentity.ApplicationExecutable) -or
+        [string]::IsNullOrWhiteSpace([string]$PrimaryIdentity.ApplicationEntryPoint) -or
+        [bool]$PrimaryIdentity.IsFramework) {
+        throw 'Primary package identity is outside the C# Installer release contract.'
+    }
+
+    $dependencyByPath = [Collections.Generic.Dictionary[string, object]]::new(
+        [StringComparer]::Ordinal)
+    foreach ($dependencyContract in $DependencyContracts) {
+        $dependencyPath = ([string]$dependencyContract.Path).Replace('\', '/').ToLowerInvariant()
+        $dependencyIdentity = $dependencyContract.Identity
+        if (-not $dependencyPath.StartsWith('dependencies/x64/', [StringComparison]::Ordinal) -or
+            -not $dependencyPath.EndsWith('.msix', [StringComparison]::Ordinal) -or
+            -not $dependencyByPath.TryAdd($dependencyPath, $dependencyContract) -or
+            [string]$dependencyIdentity.Architecture -cne 'x64' -or
+            -not [string]::IsNullOrEmpty([string]$dependencyIdentity.ResourceId) -or
+            -not [bool]$dependencyIdentity.IsFramework -or
+            -not [string]::IsNullOrEmpty([string]$dependencyIdentity.ApplicationId) -or
+            ([Version][string]$dependencyContract.MinimumVersion) -gt
+                ([Version][string]$dependencyIdentity.Version)) {
+            throw "Dependency identity is outside the C# Installer release contract: $dependencyPath"
+        }
+    }
+    if ($dependencyByPath.Count -lt 1) {
+        throw 'The C# Installer release manifest requires at least one dependency package.'
+    }
+
+    $payloadContract = @(Get-ClashSharpDirectoryContract -LiteralPath $root)
+    if ($payloadContract.Count -lt 4 -or $payloadContract.Count -gt 64) {
+        throw 'The C# Installer payload file count is outside its budget.'
+    }
+    $payloadByPath = [Collections.Generic.Dictionary[string, object]]::new(
+        [StringComparer]::Ordinal)
+    $totalPayloadLength = 0L
+    foreach ($entry in $payloadContract) {
+        $path = ([string]$entry.RelativePath).Replace('\', '/').ToLowerInvariant()
+        if ($path -cnotmatch '^[a-z0-9._/-]{1,240}$' -or
+            -not $payloadByPath.TryAdd($path, $entry) -or
+            [long]$entry.Length -lt 1 -or
+            [long]$entry.Length -gt 536870912) {
+            throw "The C# Installer payload contains a noncanonical path: $path"
+        }
+        $totalPayloadLength += [long]$entry.Length
+        if ($totalPayloadLength -gt 1073741824) {
+            throw 'The C# Installer payload exceeds its combined byte budget.'
+        }
+    }
+
+    $expectedPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $null = $expectedPaths.Add($canonicalPrimaryPath)
+    $null = $expectedPaths.Add($canonicalCertificatePath)
+    $null = $expectedPaths.Add('payload-provenance.json')
+    foreach ($dependencyPath in $dependencyByPath.Keys) {
+        $null = $expectedPaths.Add($dependencyPath)
+    }
+    if (-not $expectedPaths.SetEquals($payloadByPath.Keys)) {
+        throw 'The C# Installer payload does not match its exact role allowlist.'
+    }
+    if ([long]$payloadByPath[$canonicalCertificatePath].Length -gt 1048576 -or
+        [long]$payloadByPath['payload-provenance.json'].Length -gt 65536) {
+        throw 'The C# Installer certificate or provenance document exceeds its role budget.'
+    }
+
+    $primaryMsixPath = Join-Path $root (
+        [string]$payloadByPath[$canonicalPrimaryPath].RelativePath)
+    $machineContract = @(
+        Get-ClashSharpMsixMachineFileContract -LiteralPath $primaryMsixPath)
+
+    $sortedPaths = [string[]]@($payloadByPath.Keys)
+    [Array]::Sort($sortedPaths, [StringComparer]::Ordinal)
+    $files = [Collections.Generic.List[object]]::new()
+    foreach ($path in $sortedPaths) {
+        $entry = $payloadByPath[$path]
+        $role = if ($path -ceq $canonicalPrimaryPath) {
+            'primaryPackage'
+        } elseif ($path -ceq $canonicalCertificatePath) {
+            'certificate'
+        } elseif ($path -ceq 'payload-provenance.json') {
+            'provenance'
+        } elseif ($dependencyByPath.ContainsKey($path)) {
+            'dependencyPackage'
+        } else {
+            throw "The C# Installer payload role is unknown: $path"
+        }
+        $files.Add([ordered]@{
+                path   = $path
+                role   = $role
+                length = [long]$entry.Length
+                sha256 = [string]$entry.Sha256
+            })
+    }
+
+    $sortedDependencyPaths = [string[]]@($dependencyByPath.Keys)
+    [Array]::Sort($sortedDependencyPaths, [StringComparer]::Ordinal)
+    $dependencies = [Collections.Generic.List[object]]::new()
+    foreach ($path in $sortedDependencyPaths) {
+        $contract = $dependencyByPath[$path]
+        $identity = $contract.Identity
+        $dependencies.Add([ordered]@{
+                path              = $path
+                name              = [string]$identity.Name
+                publisher         = [string]$identity.Publisher
+                publisherId       = [string]$identity.PublisherId
+                version           = [string]$identity.Version
+                minimumVersion    = [string]$contract.MinimumVersion
+                architecture      = [string]$identity.Architecture
+                resourceId        = [string]$identity.ResourceId
+                packageFullName   = [string]$identity.PackageFullName
+                packageFamilyName = [string]$identity.PackageFamilyName
+            })
+    }
+
+    $machineFiles = [Collections.Generic.List[object]]::new()
+    foreach ($entry in $machineContract) {
+        $machineFiles.Add([ordered]@{
+                path   = [string]$entry.Path
+                length = [long]$entry.Length
+                sha256 = [string]$entry.Sha256
+            })
+    }
+
+    $manifest = [ordered]@{
+        schema                       = 1
+        expectedPackageVersion       = [string]$PrimaryIdentity.Version
+        installerPayloadSha256       = [string]$payloadByPath[$canonicalPrimaryPath].Sha256
+        packageCertificateThumbprint = $CertificateThumbprint
+        certificateSha256            = [string]$payloadByPath[$canonicalCertificatePath].Sha256
+        packageIdentity               = [ordered]@{
+            name                  = [string]$PrimaryIdentity.Name
+            publisher             = [string]$PrimaryIdentity.Publisher
+            publisherId           = [string]$PrimaryIdentity.PublisherId
+            architecture          = [string]$PrimaryIdentity.Architecture
+            resourceId            = [string]$PrimaryIdentity.ResourceId
+            packageFullName       = [string]$PrimaryIdentity.PackageFullName
+            packageFamilyName     = [string]$PrimaryIdentity.PackageFamilyName
+            applicationId         = [string]$PrimaryIdentity.ApplicationId
+            applicationExecutable = [string]$PrimaryIdentity.ApplicationExecutable
+            applicationEntryPoint = [string]$PrimaryIdentity.ApplicationEntryPoint
+        }
+        dependencies                  = @($dependencies)
+        machineFiles                  = @($machineFiles)
+        files                         = @($files)
+    }
+    $json = $manifest | ConvertTo-Json -Depth 8 -Compress
+    $bytes = [Text.UTF8Encoding]::new($false, $true).GetBytes($json)
+    if ($bytes.Length -lt 1 -or $bytes.Length -gt 65536) {
+        throw 'The generated C# Installer release manifest exceeds its byte budget.'
+    }
+    [IO.File]::WriteAllBytes($output, $bytes)
+    $written = Get-Item -LiteralPath $output -Force
+    $expectedManifestHash = [Convert]::ToHexString(
+        [Security.Cryptography.SHA256]::HashData($bytes))
+    $actualManifestHash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash
+    if ($written.PSIsContainer -or
+        ($written.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        $written.Length -ne $bytes.Length -or
+        $actualManifestHash -cne $expectedManifestHash) {
+        throw 'The generated C# Installer release manifest failed read-back validation.'
+    }
+    return $written
 }
 
 function Get-ClashSharpMainPackageDependency {
@@ -434,6 +872,9 @@ Export-ModuleMember -Function @(
     'Copy-ClashSharpComponentPayload',
     'Get-ClashSharpMsixManifestDocument',
     'Get-ClashSharpMsixIdentity',
+    'Get-ClashSharpPublisherId',
+    'Get-ClashSharpMsixMachineFileContract',
     'Get-ClashSharpMainPackageDependency',
-    'Get-ClashSharpPackageSignature'
+    'Get-ClashSharpPackageSignature',
+    'New-ClashSharpInstallerReleaseManifest'
 )

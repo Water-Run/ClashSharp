@@ -10,6 +10,17 @@
     <LangVersion>14</LangVersion>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(ClashSharpFormalInstallerComponent)'=='true'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>None</DebugType>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="..\ClashSharp\Service\WindowsProxyMutationJournal.cs" Link="Service\WindowsProxyMutationJournal.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsProxyOwnershipRestorer.cs" Link="Service\WindowsProxyOwnershipRestorer.cs" />
@@ -18,4 +29,17 @@
   <ItemGroup>
     <InternalsVisibleTo Include="ClashSharp.Tests" />
   </ItemGroup>
+
+  <Target Name="ValidateFormalInstallerComponentPublish"
+          AfterTargets="Publish"
+          Condition="'$(ClashSharpFormalInstallerComponent)'=='true'">
+    <ItemGroup>
+      <_UnexpectedInstallerComponentFile Include="$(PublishDir)**\*"
+                                         Exclude="$(PublishDir)ClashSharp.RecoveryWatchdog.exe" />
+    </ItemGroup>
+    <Error Condition="!Exists('$(PublishDir)ClashSharp.RecoveryWatchdog.exe')"
+           Text="Formal Installer watchdog publish is missing its self-contained executable." />
+    <Error Condition="'@(_UnexpectedInstallerComponentFile)'!=''"
+           Text="Formal Installer watchdog publish contains sidecars: @(_UnexpectedInstallerComponentFile, ', ')." />
+  </Target>
 </Project>

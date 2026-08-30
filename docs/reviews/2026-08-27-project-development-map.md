@@ -6,6 +6,7 @@
 - 发布目标：`Core Production Ready`，即核心代理、安装/修复/升级/卸载和发布产物具备可恢复、可复现、可验证的 Windows 生产闭环
 - 执行队列：[`2026-08-27-production-readiness-execution-plan.md`](./2026-08-27-production-readiness-execution-plan.md)
 - 历史审计：[`2026-08-10-development-audit-and-optimization-roadmap.md`](./2026-08-10-development-audit-and-optimization-roadmap.md)
+- Installer 重写审查：[`2026-08-30-installer-wpf-rewrite-audit.md`](./2026-08-30-installer-wpf-rewrite-audit.md)
 - 架构关闭证据：[`stabilization-ledger.md`](../architecture/stabilization-ledger.md)
 
 ## 1. 判定口径
@@ -35,7 +36,7 @@
 |---|---|---:|---|
 | 产品功能面 | 主控、节点、配置、订阅、规则、触发器、连接、统计、日志、设置等主体功能已形成 | 候选 E2；审计起始基线 E3 | 真实代理/TUN、恢复、升级与卸载的签名 VM 验收 |
 | 架构与运行时 | 分层、组合根、类型安全导航、Core owner、mutation/journal 基础较成熟 | 候选 E2；审计起始基线 E3 | 生命周期长尾、设置 generation、页面取消/释放和安全边界加固 |
-| Installer 安全基础 | 唯一部署 authority、防降级、identity、payload allowlist、TOCTOU 已关闭 | 候选 E2；审计起始基线 E3 | runner 的 Windows 故障注入、对称 durable uninstall、证书归属 |
+| Installer 安全基础 | Rust 发布 authority 已有防降级、identity、payload allowlist；C# 候选已落地 strict manifest/lease、Windows 11 x64 policy、SafeFileHandle 与证书 adapter | 候选 E1/E2；审计起始基线 E3 | C# package/machine/elevation composition、对称 durable uninstall、Windows/VM 故障注入 |
 | 托盘与品牌资产 | 三态色彩、有效运行态判定、设置名称、SVG Logo、多尺寸 ICO 已在本文所在候选批次实现 | E2 | 候选提交 Windows CI、Explorer/高 DPI 人工 smoke |
 | CI | 单一 Windows CI 覆盖 .NET 与两个 Rust crate 的格式、构建、测试和审计 | E3（审计起始基线） | 审计起始基线总体失败；本文所在候选批次的无-ignore audit 尚未由 CI 验证 |
 | Release | 无 tag、无 GitHub Release、无 release workflow、无受保护发布环境 | E0 | 签名、SBOM、provenance、VM promotion、发布与回滚手册整套闭环 |
@@ -69,7 +70,7 @@ ClashSharp-Installer.exe                 唯一用户可见部署入口
 
 ## 4. 仓库与依赖地图
 
-解决方案包含 11 个 .NET 项目，另有 2 个 Rust crate。
+审计起始基线的解决方案包含 11 个 .NET 项目，另有 2 个 Rust crate。2026-08-30 的迁移候选新增 Core、纯 Presentation、WPF、Windows adapter 及其三组测试工程，因此当前 solution 候选为 18 个 .NET 项目；新 WPF runtime 在 Windows package/machine authority 与 E3/E4 接通前保持 fail-closed。
 
 | 组件 | 责任 | 直接依赖/产物关系 | 发布身份 |
 |---|---|---|---|
@@ -81,6 +82,13 @@ ClashSharp-Installer.exe                 唯一用户可见部署入口
 | `ClashSharp.RecoveryWatchdog` | 同用户一次性恢复助手 | 独立小型宿主 | MSIX 内部资产 |
 | 四个 `*Probe` | 跨进程集成测试探针 | 测试场景依赖 | test-only，不可 publish/pack |
 | `ClashSharp.Tests` | unit/integration/architecture 测试 | 主体、三层库、Service、Watchdog、Probe | 测试项目 |
+| `ClashSharp.Installer.Core` | C# Installer strict protocol、durable coordinator、Windows 11 x64 policy、embedded manifest/locked lease 与平台端口 | 无 Windows UI 依赖 | 迁移候选库 |
+| `ClashSharp.Installer.Presentation` | 单产品卡片的纯状态机、命令和 readiness/result 边界 | `Installer.Core` | 迁移候选库，可在 Linux 直接测试 |
+| `ClashSharp.Installer.Presentation.Tests` | 单卡片状态、single-flight/cancel/progress race 与 executable project contract | Core、Presentation | test-only |
+| `ClashSharp.Installer` | self-contained WPF 单卡片 shell 与 native platform probe | Core、Presentation | 迁移预览；当前不可执行系统 mutation |
+| `ClashSharp.Installer.Tests` | 直接引用 Core 产物的 protocol/coordinator/file-store 测试 | `Installer.Core` | test-only |
+| `ClashSharp.Installer.Windows` | SafeFileHandle payload lease、CurrentUser certificate adapter；后续 Package/SCM/elevation | `Installer.Core` | 迁移候选 Windows adapter |
+| `ClashSharp.Installer.Windows.Tests` | 真实 Win32 sharing/rename/payload/certificate/SID 边界 | Core、Windows adapter | Windows test-only |
 | `Installer` | Rust + Slint 安装/维护入口 | 消费精确签名 payload | 唯一发布 Installer |
 | `SandboxTest` | Windows 安装场景 host | 调用测试脚本/产物 | test-only，`publish=false` |
 
@@ -102,7 +110,7 @@ ClashSharp-Installer.exe                 唯一用户可见部署入口
 | 托盘状态与品牌 | SVG Logo；灰/绿/C# 紫三态；只读取 mutation owner 的 verified effective state；8 帧 ICO；六语言设置文本 | effective/unknown/fallback 状态测试、资源/ICO 契约、SVG XML 校验 | 候选完成，E2 | 本文所在候选批次的 Windows CI；100%/200% DPI、Explorer 重启、设置迁移 smoke | Presentation/QA |
 | Installer 基础安全 | 唯一 authority、防降级、identity 单源、精确 payload、immutable handle | Rust 契约/攻击性测试与此前 Windows CI | 已完成；候选 E2，审计起始基线 E3 | 保持回归门禁 | Installer/Security |
 | Installer 进程执行 | 统一 deadline、有界双流 capture、非提权进程树 Job 终止、稳定诊断码 | 候选批次独立 runner 测试和 Windows target clippy | 候选完成，E2 | Windows 非提权孙进程测试；跨 `RunAs` 提权边界的 durable cut-point/VM 证据；timeout 后 journal Repair 收敛 | Installer |
-| Installer durable lifecycle | 安装 journal 已有 Prepared/Package/Machine/Verified 与受保护 ProgramData 写入 | journal 状态机与保护测试 | 进行中；候选 E2，审计起始基线 E3 | 对称 uninstall、证书 ownership、payload 缺损卸载、故障注入 | Installer |
+| Installer durable lifecycle | install/uninstall v2 journal、受保护 ProgramData 写入；C# MachineReserved 前置、卸载 MachineRemovalAuthorized、canonical journal digest、helper-authoritative result journal、result + protected-store reload 后才推进的 two-phase session、helper-only package commit、certificate ownership、locked release、package identity 与 Windows certificate/MSIX adapter | 最近 Core 499/499、Presentation 39/39 实际全绿；当前 static 512/70/103 已加入 strict parent-PID bootstrap、protected pipe DACL/first-instance、双向 PID primitive、跨 Rust/App/Service 的 pipe-name 固定向量、exact-target-SID package commit inspector 与覆盖全部合法 phase 的单卡片状态决策，前 76 项 Windows checkpoint Release 交叉编译 0 warning/error；Core checkpoint line 94.90% / branch 85.67% | 进行中；候选 E1/E2，审计起始基线 E3 | 先关闭 asInvoker parent 与 protected writer 的 authority mismatch，再接 signed NativeAOT helper、persistent authenticated broker、SCM/machine mutation/final composition，并重验最新 512/70/103 与真实 cut-point/VM | Installer |
 | 本地化与可访问性 | 六语言 catalog 和基础 WinUI 语义 | 资源完整性与部分 UI 测试 | 进行中，E2 | 键盘、Narrator、高对比度、200% 文本与 Installer 控件验收 | Presentation/QA |
 | 发布与运维 | 开发打包脚本具备精确 staging/signing 输入契约 | build/Rust 契约测试 | 未开始，E0/E2 | .NET runtime、可信 GeoData、release workflow、受保护环境、签名 VM、SBOM/provenance/runbook | Release |
 
@@ -117,7 +125,7 @@ ClashSharp-Installer.exe                 唯一用户可见部署入口
 | Logs/Statistics | Runtime | SQLite | maintenance/cleanup | 脱敏与容量门禁不足 |
 | system proxy/TUN | 当前 Core owner + mutation coordinator | Windows 状态和 ownership journal | 正常退出、Watchdog、登录兜底 | 多用户不支持；真实重启证据不足 |
 | Service/machine payload | Installer | 固定 Program Files/ProgramData 根和 association | roll-forward Repair | durable uninstall 尚不对称 |
-| install transaction | Installer | 受保护的 `ProgramData/ClashSharp/Installer/transaction.json` | 同版本/显式 Repair 继续状态机 | 证书归属和所有 cut point 未覆盖 |
+| install transaction | Installer | 受保护的 machine journal；C# 独立 certificate ownership ledger | 同版本/显式 Repair；证书 import/delete write-ahead replay | Windows/Rust authority 接线和真实 cut point 未覆盖 |
 | release artifact | Release pipeline | 随机 staging → hash-identical promotion | 校验和、provenance、重建 | 当前没有正式 pipeline 或发布环境 |
 
 ## 7. 质量与发布证据快照
@@ -141,7 +149,7 @@ ClashSharp-Installer.exe                 唯一用户可见部署入口
 | Installer runner | 8 个独立测试通过（含 teardown grace/worker detach 上界和无无界 wait/join 静态契约）；Windows target all-target clippy `-D warnings` 通过 | Windows Job 非提权孙进程终止；跨 `RunAs` 提权边界的 durable cut-point/VM 证据；journal cut-point 收敛 |
 | 依赖 | locked metadata 和固定版 `cargo-audit 0.22.2` 无 vulnerability ignore 通过 | GitHub CI 候选提交绿色 |
 | Probe/Sandbox 隔离 | 项目属性和架构/manifest 静态门禁 | 最终 release artifact 的 promotion 证明 |
-| .NET 与源码卫生 | 官方 .NET SDK `10.0.201` 的 locked restore、format 和 Application Release build 通过；`git diff --check` 通过 | Windows XAML compiler 驱动的完整 WinUI build/test |
+| .NET 与源码卫生 | 官方 .NET SDK `10.0.201`；最近 Core 499/499、Presentation 39/39，均 0 skipped；Core checkpoint line 94.90%（3108/3275）/ branch 85.67%（1495/1745）；Windows 前 76 项测试 checkpoint 与 WPF 项目 Release 交叉编译 0 warning/error；当前静态 512/70/103，`git diff --check` 通过 | 交接前最新源码 checkpoint 因 6476 MiB < 12288 MiB 被资源门阻止；Windows XAML runtime/UIA、证书/AppXSVC/UAC/SCM、Windows test 与签名 VM；Linux 交叉编译不替代 E3/E4 |
 
 本文所在候选批次已用官方 .NET SDK `10.0.201` 完成上述 Linux 可行验证；Linux 仍不能替代 WinUI XAML compiler、Windows Job、AppXSVC、UAC 和 SCM。因此这里明确保留 E3/E4 缺口，不以局部验证代替 CI/VM。
 
@@ -150,8 +158,8 @@ ClashSharp-Installer.exe                 唯一用户可见部署入口
 - GitHub 仅有一个 active CI workflow。
 - `main` 未启用 branch protection。
 - 没有 GitHub Environment、release workflow、tag 或正式 GitHub Release。
-- 没有覆盖率阈值、签名 promotion 门禁、SBOM/provenance 产出和真实 Installer VM 必需检查。
-- App、Service、Watchdog 为 framework-dependent .NET 10 产物，但 Installer 没有 .NET Runtime 前置依赖闭环。
+- Installer Core 已有 line 90% / branch 80% 阈值；仓库其余关键域仍缺统一阈值，且没有签名 promotion 门禁、SBOM/provenance 产出和真实 Installer VM 必需检查。
+- Service/Watchdog 的正式形态已改为 self-contained single-file；App 与干净 Windows VM 的整体 runtime 证据仍未闭环。
 - 正式构建强制要求四项 GeoData；干净 checkout 不含它们，准备脚本也没有固定可信上游与预期 digest。
 
 这些不是普通文档债务：runtime/GeoData 归入 P0-D，不可变候选与签名供应归入 P0-F，真实 VM 门禁与受保护发布分别归入 P0-G/P0-H；覆盖率等质量门禁归入 RC 加固。

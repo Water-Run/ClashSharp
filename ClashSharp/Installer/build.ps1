@@ -2,7 +2,8 @@
 
 [CmdletBinding()]
 param(
-    [switch] $Development
+    [switch] $Development,
+    [switch] $CSharpInstallerCandidate
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,7 @@ $repoRoot = Resolve-Path (Join-Path $installerRoot "..\..")
 $appProject = Join-Path $repoRoot "ClashSharp\ClashSharp\ClashSharp.csproj"
 $serviceProject = Join-Path $repoRoot "ClashSharp\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj"
 $watchdogProject = Join-Path $repoRoot "ClashSharp\ClashSharp.RecoveryWatchdog\ClashSharp.RecoveryWatchdog.csproj"
+$csharpInstallerProject = Join-Path $repoRoot "ClashSharp\ClashSharp.Installer\ClashSharp.Installer.csproj"
 $appManifest = Join-Path (Split-Path -Parent $appProject) "Package.appxmanifest"
 $mihomoBinary = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo.exe"
 $mihomoManifestPath = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo-manifest.json"
@@ -221,6 +223,8 @@ $appPackageStagingRoot = Join-Path $packagingRunRoot "app-packages"
 $payloadStagingDir = Join-Path $packagingRunRoot "payload"
 $cargoStagingRoot = Join-Path $packagingRunRoot "cargo"
 $promotionStagingRoot = Join-Path $packagingRunRoot "promotion"
+$csharpInstallerPublishRoot = Join-Path $componentStagingRoot "csharp-installer-candidate"
+$csharpInstallerReleaseManifestPath = Join-Path $packagingRunRoot "csharp-installer-release-manifest.json"
 
 if (-not (Test-Path -LiteralPath $appManifest -PathType Leaf)) {
     throw "Package.appxmanifest was not found at the fixed app project path."
@@ -459,8 +463,14 @@ dotnet publish $serviceProject `
     -c Release `
     --no-restore `
     -p:Platform=x64 `
+    -p:ClashSharpFormalInstallerComponent=true `
     -r win-x64 `
-    --self-contained false `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:PublishTrimmed=false `
+    -p:PublishReadyToRun=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true `
     -p:DebugSymbols=false `
     -p:DebugType=None `
     -o $servicePublishRoot
@@ -472,18 +482,21 @@ $null = Copy-ClashSharpComponentPayload `
     -Destination $serviceStagingRoot
 $null = Confirm-ClashSharpComponentStaging `
     -LiteralPath $serviceStagingRoot `
-    -RequiredFiles @(
-        'ClashSharp.MihomoService.exe',
-        'ClashSharp.MihomoService.dll',
-        'ClashSharp.MihomoService.deps.json',
-        'ClashSharp.MihomoService.runtimeconfig.json')
+    -RequiredFiles @('ClashSharp.MihomoService.exe') `
+    -ExactFileSet
 
 dotnet publish $watchdogProject `
     -c Release `
     --no-restore `
     -p:Platform=x64 `
+    -p:ClashSharpFormalInstallerComponent=true `
     -r win-x64 `
-    --self-contained false `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:PublishTrimmed=false `
+    -p:PublishReadyToRun=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true `
     -p:DebugSymbols=false `
     -p:DebugType=None `
     -o $watchdogPublishRoot
@@ -495,11 +508,7 @@ $null = Copy-ClashSharpComponentPayload `
     -Destination $watchdogStagingRoot
 $null = Confirm-ClashSharpComponentStaging `
     -LiteralPath $watchdogStagingRoot `
-    -RequiredFiles @(
-        'ClashSharp.RecoveryWatchdog.exe',
-        'ClashSharp.RecoveryWatchdog.dll',
-        'ClashSharp.RecoveryWatchdog.deps.json',
-        'ClashSharp.RecoveryWatchdog.runtimeconfig.json') `
+    -RequiredFiles @('ClashSharp.RecoveryWatchdog.exe') `
     -ExactFileSet
 
 $null = New-Item -ItemType Directory -Path $appPackageStagingRoot
@@ -573,6 +582,7 @@ $payloadDependencyDir = Join-Path $payloadStagingDir "Dependencies\x64"
 $null = New-Item -ItemType Directory -Path $payloadDependencyDir
 
 $dependencyProvenance = [Collections.Generic.List[object]]::new()
+$csharpDependencyContracts = [Collections.Generic.List[object]]::new()
 $expectedDependencyThumbprint = [string]$env:CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT
 if ($expectedDependencyThumbprint -cnotmatch '^[0-9A-F]{40}$') {
     throw "Packaging requires canonical CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT."
@@ -621,6 +631,11 @@ foreach ($declaration in $declaredDependencies) {
             signerThumbprint   = $dependencySignature.Thumbprint
             signatureTimestamp = [bool]$dependencySignature.Timestamp
         })
+    $csharpDependencyContracts.Add([PSCustomObject]@{
+            Path           = "dependencies/x64/$($dependencySource.Name.ToLowerInvariant())"
+            MinimumVersion = [string]$declaration.MinVersion
+            Identity       = $dependencyIdentity
+        })
 }
 
 $mainSignatureParameters = @{
@@ -660,6 +675,47 @@ $provenancePath = Join-Path $payloadStagingDir 'payload-provenance.json'
 $provenance | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $provenancePath -Encoding utf8NoBOM
 $stagedPayloadCertificate.Dispose()
 $null = Get-ClashSharpDirectoryContract -LiteralPath $payloadStagingDir
+
+if ($CSharpInstallerCandidate) {
+    $csharpInstallerReleaseManifest = New-ClashSharpInstallerReleaseManifest `
+        -PayloadRoot $payloadStagingDir `
+        -PrimaryIdentity $appIdentity `
+        -PrimaryRelativePath ($appPackage.Name.ToLowerInvariant()) `
+        -DependencyContracts @($csharpDependencyContracts) `
+        -CertificateRelativePath ($certificatePayloadFile.Name.ToLowerInvariant()) `
+        -CertificateThumbprint $payloadCertificate.Thumbprint `
+        -OutputPath $csharpInstallerReleaseManifestPath
+
+    dotnet publish $csharpInstallerProject `
+        -c Release `
+        --no-restore `
+        -p:Platform=x64 `
+        -r win-x64 `
+        --self-contained true `
+        -p:PublishSingleFile=true `
+        -p:PublishTrimmed=false `
+        -p:PublishReadyToRun=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
+        -p:EnableCompressionInSingleFile=true `
+        -p:DebugSymbols=false `
+        -p:CopyDocumentationFilesToOutputDirectory=false `
+        -p:CopyDocumentationFilesToPublishDirectory=false `
+        -p:ClashSharpFormalInstallerBuild=true `
+        "-p:ClashSharpInstallerReleaseManifestPath=$($csharpInstallerReleaseManifest.FullName)" `
+        -o $csharpInstallerPublishRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "C# WPF Installer candidate publish failed with exit code $LASTEXITCODE."
+    }
+
+    $csharpCandidateEntries = @(Get-ChildItem -LiteralPath $csharpInstallerPublishRoot -Force)
+    if ($csharpCandidateEntries.Count -ne 1 -or
+        $csharpCandidateEntries[0].PSIsContainer -or
+        ($csharpCandidateEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        $csharpCandidateEntries[0].Name -cne 'ClashSharp.Installer.exe') {
+        throw 'The C# WPF Installer candidate must publish as one green executable.'
+    }
+    Write-Host 'C# WPF Installer migration candidate passed its isolated single-file build contract.'
+}
 
     New-Item -ItemType Directory -Force -Path $cargoStagingRoot | Out-Null
     $previousPackagingMode = $env:CLASHSHARP_INSTALLER_PACKAGING_MODE

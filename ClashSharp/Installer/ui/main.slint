@@ -106,6 +106,7 @@ export component MainWindow inherits Window {
     in-out property <int> effective-theme: 0;
     in-out property <bool> busy: false;
     in-out property <bool> installed: false;
+    in-out property <bool> uninstall-recovery-pending: false;
     in-out property <bool> repair-allowed: true;
     in-out property <bool> supported: true;
     in-out property <bool> show-details: false;
@@ -396,7 +397,7 @@ export component MainWindow inherits Window {
         wrap: word-wrap;
     }
 
-    if !root.busy && root.supported && !root.installed && root.phase != 0 && root.phase != 1 && root.phase != 5 : Rectangle {
+    if !root.busy && root.supported && !root.installed && !root.uninstall-recovery-pending && root.phase != 0 && root.phase != 1 && root.phase != 5 : Rectangle {
         x: 34px;
         y: 386px;
         width: 220px;
@@ -446,7 +447,9 @@ export component MainWindow inherits Window {
         repair-touch := TouchArea { clicked => { root.repair(); } }
     }
 
-    if !root.busy && root.supported && root.installed && root.phase != 0 && root.phase != 1 && root.phase != 5 : Rectangle {
+    // Uninstall is a recovery action. It remains reachable when the sibling payload is damaged
+    // or the original install-target OS gate no longer passes.
+    if !root.busy && root.phase != 0 && (root.installed || root.uninstall-recovery-pending || root.phase == 1 || root.phase == 5) : Rectangle {
         x: 34px;
         y: 392px;
         width: 220px;
@@ -472,7 +475,7 @@ export component MainWindow inherits Window {
 
     if !root.busy && (root.phase == 1 || root.phase == 5) : Rectangle {
         x: 34px;
-        y: 386px;
+        y: 356px;
         width: 220px;
         height: 28px;
         background: refresh-touch.pressed ? Palette.accent-pressed : (refresh-touch.has-hover ? Palette.accent-hover : Palette.accent);

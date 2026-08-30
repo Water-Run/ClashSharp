@@ -5,6 +5,19 @@
   <Project Path="ClashSharp.Core/ClashSharp.Core.csproj" />
   <Project Path="ClashSharp.Application/ClashSharp.Application.csproj" />
   <Project Path="ClashSharp.Infrastructure/ClashSharp.Infrastructure.csproj" />
+  <Project Path="ClashSharp.Installer.Core/ClashSharp.Installer.Core.csproj" />
+  <Project Path="ClashSharp.Installer.Presentation/ClashSharp.Installer.Presentation.csproj" />
+  <Project Path="ClashSharp.Installer.Presentation.Tests/ClashSharp.Installer.Presentation.Tests.csproj" />
+  <Project Path="ClashSharp.Installer.Tests/ClashSharp.Installer.Tests.csproj" />
+  <Project Path="ClashSharp.Installer.Windows/ClashSharp.Installer.Windows.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="ClashSharp.Installer.Windows.Tests/ClashSharp.Installer.Windows.Tests.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="ClashSharp.Installer/ClashSharp.Installer.csproj">
+    <Platform Project="x64" />
+  </Project>
   <Project Path="ClashSharp.Tests/ClashSharp.Tests.csproj">
     <Platform Project="x64" />
   </Project>

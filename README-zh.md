@@ -7,7 +7,7 @@
 `Clash#` 是一个现代化的 Windows 原生代理客户端，基于 [mihomo](https://github.com/MetaCubeX/mihomo) 构建。
 `Clash#` 以`AGPL-3.0`协议开源于[GitHub](https://github.com/Water-Run/ClashSharp).
 
-> 开发状态（2026-08-27）：项目处于生产加固阶段，尚未发布正式版本，当前源码与开发产物不应视为生产就绪。进度、证据边界和发布 Gate 见[项目开发地图](./docs/reviews/2026-08-27-project-development-map.md)与[生产就绪执行计划](./docs/reviews/2026-08-27-production-readiness-execution-plan.md)。
+> 开发状态（2026-08-30）：项目处于生产加固阶段，尚未发布正式版本，当前源码与开发产物不应视为生产就绪。C# / WPF 绿色安装器迁移已经开始，但当前 WPF runtime 明确禁止系统变更；现有 Rust Installer 在取得同等 Windows VM 证据前仍是发布 authority。进度、证据边界和发布 Gate 见[项目开发地图](./docs/reviews/2026-08-27-project-development-map.md)、[生产就绪执行计划](./docs/reviews/2026-08-27-production-readiness-execution-plan.md)与[Installer 重写详细审查](./docs/reviews/2026-08-30-installer-wpf-rewrite-audit.md)。
 
 ## 关于Windows原生
 

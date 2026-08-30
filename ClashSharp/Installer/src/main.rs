@@ -10,8 +10,8 @@ use std::thread;
 use std::time::Duration;
 
 use clashsharp_installer::installer_transaction::{
-    INSTALLER_TRANSACTION_RELATIVE_PATH, InstallerTransactionJournal, InstallerTransactionPhase,
-    MAX_INSTALLER_TRANSACTION_BYTES,
+    INSTALLER_TRANSACTION_RELATIVE_PATH, InstallerTransactionJournal,
+    InstallerTransactionOperation, InstallerTransactionPhase, MAX_INSTALLER_TRANSACTION_BYTES,
 };
 use clashsharp_installer::metadata::{
     compact_path, parse_version_from_package_name, read_manifest_version_text,
@@ -258,11 +258,16 @@ struct InstallerContext {
     certificate_path: Option<PathBuf>,
     dependency_paths: Vec<PathBuf>,
     installed_package: Option<CurrentUserPackageRegistration>,
+    uninstall_recovery_pending: bool,
 }
 
 impl InstallerContext {
     fn is_installed(&self) -> bool {
         self.installed_package.is_some()
+    }
+
+    fn uninstall_recovery_pending(&self) -> bool {
+        self.uninstall_recovery_pending
     }
 }
 
@@ -517,6 +522,12 @@ fn apply_environment_state(handle: &MainWindow, state: &EnvironmentState, text: 
     handle.set_busy(false);
     handle.set_supported(supported);
     handle.set_installed(installed);
+    handle.set_uninstall_recovery_pending(
+        state
+            .context
+            .as_ref()
+            .is_ok_and(InstallerContext::uninstall_recovery_pending),
+    );
     handle.set_repair_allowed(true);
     handle.set_progress(0.0);
     handle.set_details_text(SharedString::from(format_environment_details(state, text)));
@@ -598,10 +609,12 @@ fn run_action_async(app_weak: Weak<MainWindow>, action: InstallerAction, text: T
     }));
     handle.set_state_message(SharedString::from(text.checking_message));
     let initially_installed = handle.get_installed();
+    let initially_uninstall_recovery_pending = handle.get_uninstall_recovery_pending();
 
     thread::spawn(move || {
         let mut result = run_action(&app_weak, action, text);
         let refreshed_registration = query_current_user_package_registration();
+        let refreshed_uninstall_recovery = query_uninstall_recovery_pending();
         let installed = refreshed_registration
             .as_ref()
             .map(|registration| registration.is_some())
@@ -617,12 +630,22 @@ fn run_action_async(app_weak: Weak<MainWindow>, action: InstallerAction, text: T
         {
             result = Err(error);
         }
+        let uninstall_recovery_pending = refreshed_uninstall_recovery
+            .as_ref()
+            .copied()
+            .unwrap_or(initially_uninstall_recovery_pending);
+        if let Err(error) = refreshed_uninstall_recovery
+            && result.is_ok()
+        {
+            result = Err(error);
+        }
         ACTION_RUNNING.store(false, Ordering::SeqCst);
 
         app_weak
             .upgrade_in_event_loop(move |handle| {
                 handle.set_busy(false);
                 handle.set_installed(installed);
+                handle.set_uninstall_recovery_pending(uninstall_recovery_pending);
                 handle.set_repair_allowed(repair_allowed);
                 handle.set_details_text(SharedString::from(
                     result.as_ref().err().map(String::as_str).unwrap_or(""),
@@ -658,7 +681,9 @@ fn run_action(
     text: TextPack,
 ) -> Result<&'static str, String> {
     let context = build_context()?;
-    inspect_supported_system()?;
+    if !matches!(action, InstallerAction::Uninstall) {
+        inspect_supported_system()?;
+    }
     ensure_interactive_parent_context()?;
     let operation = match action {
         InstallerAction::Install => OperationAction::Install,
@@ -690,9 +715,9 @@ fn run_action(
                 set_progress(
                     app_weak,
                     if matches!(action, InstallerAction::Repair) {
-                        0.28
+                        0.38
                     } else {
-                        0.22
+                        0.34
                     },
                     text.certificate_title,
                     text.certificate_message,
@@ -708,7 +733,7 @@ fn run_action(
                 payload.reverify()?;
             }
             OperationStep::PrepareMachineInstall => {
-                set_progress(app_weak, 0.42, text.package_title, text.package_message);
+                set_progress(app_weak, 0.22, text.package_title, text.package_message);
                 if prepare_machine_transaction(&target_sid, false)? {
                     return Err(String::from(
                         "installer.machine.owner_conflict: The machine service belongs to another user. Run Repair to explicitly re-associate it.",
@@ -716,7 +741,7 @@ fn run_action(
                 }
             }
             OperationStep::PrepareMachineRepair => {
-                set_progress(app_weak, 0.42, text.package_title, text.package_message);
+                set_progress(app_weak, 0.22, text.package_title, text.package_message);
                 let repair_required = prepare_machine_transaction(&target_sid, true)?;
                 debug_assert!(!repair_required);
             }
@@ -769,6 +794,10 @@ fn run_action(
                     uninstall_package(package_mutation_locks.installer_mutation_path())?;
                 }
             }
+            OperationStep::FinalizeUninstallTransaction => {
+                set_progress(app_weak, 0.90, text.uninstall_title, text.uninstall_message);
+                finalize_uninstall_transaction(&target_sid)?;
+            }
         }
     }
 
@@ -797,7 +826,24 @@ fn build_context() -> Result<InstallerContext, String> {
         certificate_path,
         dependency_paths,
         installed_package: query_current_user_package_registration()?,
+        uninstall_recovery_pending: query_uninstall_recovery_pending()?,
     })
+}
+
+/// Detects a public uninstall recovery journal without treating it as authorization.
+fn query_uninstall_recovery_pending() -> Result<bool, String> {
+    let (_, common_application_data) = query_machine_folders()?;
+    let transaction_path = common_application_data.join(INSTALLER_TRANSACTION_RELATIVE_PATH);
+    match read_installer_transaction(&transaction_path) {
+        InstallerTransactionState::Missing => Ok(false),
+        InstallerTransactionState::Valid(journal) => Ok(matches!(
+            journal.operation(),
+            InstallerTransactionOperation::Uninstall
+        )),
+        InstallerTransactionState::Invalid => {
+            Err(String::from("installer.transaction.recovery_state_invalid"))
+        }
+    }
 }
 
 /// Verifies that the current device can run the Clash# MSIX package.
@@ -1559,6 +1605,27 @@ fn uninstall_machine_resources_if_owner(target_sid: &str) -> Result<(), String> 
     }
 }
 
+/// Verifies target-package absence and clears only a fully committed uninstall transaction.
+fn finalize_uninstall_transaction(target_sid: &str) -> Result<(), String> {
+    match invoke_elevated_machine_helper(&[
+        "--machine-finalize-uninstall",
+        "--target-sid",
+        target_sid,
+    ])? {
+        0 => Ok(()),
+        MACHINE_TRANSACTION_CONFLICT_EXIT_CODE => Err(String::from(
+            "installer.transaction.uninstall_conflict: Resume uninstall with the same Installer and Windows user.",
+        )),
+        MACHINE_TRANSACTION_PACKAGE_NOT_COMMITTED_EXIT_CODE => Err(String::from(
+            "installer.transaction.package_still_present: Windows still reports the target package. Retry uninstall.",
+        )),
+        UAC_CANCELLED_EXIT_CODE => Err(String::from("installer.elevation.cancelled")),
+        code => Err(format!(
+            "installer.transaction.uninstall_finalize_failed: exit code {code}"
+        )),
+    }
+}
+
 /// Runs the same executable through a narrow `runas` boundary and returns its stable exit code.
 fn invoke_elevated_machine_helper(arguments: &[&str]) -> Result<i32, String> {
     let executable = std::env::current_exe()
@@ -1771,7 +1838,16 @@ fn acquire_machine_mutation_mutex() -> Result<MachineMutationMutexGuard, String>
 
 /// Performs only fixed machine work after independently resolving the target package and profile.
 fn execute_machine_helper(invocation: &MachineHelperInvocation) -> Result<i32, String> {
-    inspect_supported_system()?;
+    // Install/repair/commit target the supported product platform. Uninstall is a recovery
+    // operation and must remain available if the device was downgraded or the install payload
+    // no longer satisfies current release requirements.
+    if !matches!(
+        invocation,
+        MachineHelperInvocation::Uninstall { .. }
+            | MachineHelperInvocation::FinalizeUninstall { .. }
+    ) {
+        inspect_supported_system()?;
+    }
     if !is_current_process_elevated()? {
         return Err(String::from("installer.machine_helper.elevation_required"));
     }
@@ -1806,24 +1882,18 @@ fn execute_machine_helper(invocation: &MachineHelperInvocation) -> Result<i32, S
             &common_application_data,
             &transaction_path,
         ),
-        MachineHelperInvocation::Uninstall { target_sid } => {
-            if !matches!(
-                read_installer_transaction(&transaction_path),
-                InstallerTransactionState::Missing
-            ) {
-                return Ok(MACHINE_TRANSACTION_CONFLICT_EXIT_CODE);
-            }
-            let association = read_machine_association(&resources);
-            if !may_uninstall_machine(target_sid, &association)? {
-                return Ok(0);
-            }
-            if target_user_package_is_running(target_sid)? {
-                return Ok(APP_RUNNING_EXIT_CODE);
-            }
-            let script_exit_code =
-                run_powershell_stdin(&resources.render_uninstall_script(target_sid)?)?;
-            Ok(script_exit_code)
-        }
+        MachineHelperInvocation::Uninstall { target_sid } => prepare_and_commit_machine_uninstall(
+            target_sid,
+            &resources,
+            &common_application_data,
+            &transaction_path,
+        ),
+        MachineHelperInvocation::FinalizeUninstall { target_sid } => finalize_machine_uninstall(
+            target_sid,
+            &resources,
+            &common_application_data,
+            &transaction_path,
+        ),
     }
 }
 
@@ -1839,6 +1909,11 @@ fn prepare_installer_transaction(
     let _trusted_payload = verify_installer_payload(&payload_directory)?;
     let expected_version = trusted_package_version()?;
     let payload_hash = trusted_msix_sha256()?;
+    let requested_operation = if allow_reassociation {
+        InstallerTransactionOperation::Repair
+    } else {
+        InstallerTransactionOperation::Install
+    };
 
     match read_installer_transaction(transaction_path) {
         InstallerTransactionState::Invalid => {
@@ -1862,6 +1937,11 @@ fn prepare_installer_transaction(
             {
                 journal.upgrade_to_explicit_repair()?;
                 write_installer_transaction(common_application_data, transaction_path, &journal)?;
+            }
+            if journal.operation() != requested_operation
+                || journal.allow_reassociation() != allow_reassociation
+            {
+                return Ok(MACHINE_TRANSACTION_CONFLICT_EXIT_CODE);
             }
             return Ok(0);
         }
@@ -1906,6 +1986,7 @@ fn prepare_installer_transaction(
     }
 
     let journal = InstallerTransactionJournal::create(
+        requested_operation,
         target_sid,
         allow_reassociation,
         expected_version,
@@ -1933,7 +2014,10 @@ fn commit_installer_transaction(
         return Ok(MACHINE_TRANSACTION_CONFLICT_EXIT_CODE);
     };
     verify_installer_transaction_protection(transaction_path)?;
-    if journal.target_sid() != target_sid
+    if !matches!(
+        journal.operation(),
+        InstallerTransactionOperation::Install | InstallerTransactionOperation::Repair
+    ) || journal.target_sid() != target_sid
         || journal.expected_package_version() != expected_version
         || journal.installer_payload_sha256() != payload_hash
     {
@@ -2043,6 +2127,146 @@ fn commit_installer_transaction(
     }
     clear_installer_transaction(common_application_data, transaction_path)?;
     Ok(0)
+}
+
+/// Persists owner authorization before deleting machine resources and rolls that step forward.
+fn prepare_and_commit_machine_uninstall(
+    target_sid: &str,
+    resources: &MachineResourcePlan,
+    common_application_data: &Path,
+    transaction_path: &Path,
+) -> Result<i32, String> {
+    let expected_version = trusted_package_version()?;
+    let payload_hash = trusted_msix_sha256()?;
+    let mut journal = match read_installer_transaction(transaction_path) {
+        InstallerTransactionState::Invalid => {
+            return Ok(MACHINE_TRANSACTION_CONFLICT_EXIT_CODE);
+        }
+        InstallerTransactionState::Valid(journal) => {
+            verify_installer_transaction_protection(transaction_path)?;
+            if !journal.matches_same_release(
+                InstallerTransactionOperation::Uninstall,
+                target_sid,
+                false,
+                expected_version,
+                payload_hash,
+            )? {
+                return Ok(MACHINE_TRANSACTION_CONFLICT_EXIT_CODE);
+            }
+            journal
+        }
+        InstallerTransactionState::Missing => {
+            let association = read_machine_association(resources);
+            if !may_uninstall_machine(target_sid, &association)? {
+                return Ok(0);
+            }
+            if target_user_package_is_running(target_sid)? {
+                return Ok(APP_RUNNING_EXIT_CODE);
+            }
+            let journal = InstallerTransactionJournal::create(
+                InstallerTransactionOperation::Uninstall,
+                target_sid,
+                false,
+                expected_version,
+                payload_hash,
+            )?;
+            write_installer_transaction(common_application_data, transaction_path, &journal)?;
+            journal
+        }
+    };
+
+    if target_user_package_is_running(target_sid)? {
+        return Ok(APP_RUNNING_EXIT_CODE);
+    }
+    let script_exit_code = run_powershell_stdin(&resources.render_uninstall_script(
+        target_sid,
+        transaction_path,
+        journal.transaction_id(),
+        expected_version,
+        payload_hash,
+    )?)?;
+    if script_exit_code != 0 {
+        return Ok(script_exit_code);
+    }
+    if !machine_resources_are_absent(resources)? {
+        return Err(String::from(
+            "installer.transaction.machine_removal_verification_failed",
+        ));
+    }
+
+    if journal.phase() == InstallerTransactionPhase::Prepared {
+        journal.transition_to(InstallerTransactionPhase::MachineCommitted)?;
+        write_installer_transaction(common_application_data, transaction_path, &journal)?;
+    }
+    Ok(0)
+}
+
+/// Verifies both halves of uninstall, then clears only a fully verified recovery journal.
+fn finalize_machine_uninstall(
+    target_sid: &str,
+    resources: &MachineResourcePlan,
+    common_application_data: &Path,
+    transaction_path: &Path,
+) -> Result<i32, String> {
+    let mut journal = match read_installer_transaction(transaction_path) {
+        InstallerTransactionState::Missing => return Ok(0),
+        InstallerTransactionState::Invalid => {
+            return Ok(MACHINE_TRANSACTION_CONFLICT_EXIT_CODE);
+        }
+        InstallerTransactionState::Valid(journal) => journal,
+    };
+    verify_installer_transaction_protection(transaction_path)?;
+    if !journal.matches_same_release(
+        InstallerTransactionOperation::Uninstall,
+        target_sid,
+        false,
+        trusted_package_version()?,
+        trusted_msix_sha256()?,
+    )? || journal.phase() == InstallerTransactionPhase::Prepared
+    {
+        return Ok(MACHINE_TRANSACTION_CONFLICT_EXIT_CODE);
+    }
+    if !machine_resources_are_absent(resources)? {
+        return Err(String::from(
+            "installer.transaction.machine_removal_verification_failed",
+        ));
+    }
+    if query_target_package_registration_if_present(target_sid)?.is_some() {
+        return Ok(MACHINE_TRANSACTION_PACKAGE_NOT_COMMITTED_EXIT_CODE);
+    }
+
+    if journal.phase() == InstallerTransactionPhase::MachineCommitted {
+        journal.transition_to(InstallerTransactionPhase::PackageCommitted)?;
+        write_installer_transaction(common_application_data, transaction_path, &journal)?;
+    }
+    if journal.phase() == InstallerTransactionPhase::PackageCommitted {
+        journal.transition_to(InstallerTransactionPhase::Verified)?;
+        write_installer_transaction(common_application_data, transaction_path, &journal)?;
+    }
+    if journal.phase() != InstallerTransactionPhase::Verified {
+        return Err(String::from("installer.transaction.phase_invalid"));
+    }
+    clear_installer_transaction(common_application_data, transaction_path)?;
+    Ok(0)
+}
+
+/// Treats every object at a fixed machine path as residue, including dangling reparse points.
+fn machine_resources_are_absent(resources: &MachineResourcePlan) -> Result<bool, String> {
+    if query_mihomo_service_exists()? {
+        return Ok(false);
+    }
+    for path in [resources.machine_root(), resources.service_data_root()] {
+        match std::fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Ok(_) => return Ok(false),
+            Err(error) => {
+                return Err(format!(
+                    "installer.transaction.machine_path_query_failed: {error}"
+                ));
+            }
+        }
+    }
+    Ok(true)
 }
 
 /// Resolves the only payload directory accepted by the elevated copy of this executable.
@@ -3747,6 +3971,28 @@ mod tests {
 
         assert!(supported < elevation);
         assert!(supported < machine_folders);
+        assert!(helper.contains("MachineHelperInvocation::Uninstall { .. }"));
+        assert!(helper.contains("MachineHelperInvocation::FinalizeUninstall { .. }"));
+    }
+
+    #[test]
+    fn damaged_payload_and_unsupported_os_keep_uninstall_reachable() {
+        let ui = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/ui/main.slint"));
+        assert!(ui.contains(
+            "root.installed || root.uninstall-recovery-pending || root.phase == 1 || root.phase == 5"
+        ));
+        assert!(ui.contains("!root.uninstall-recovery-pending"));
+
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let action = source
+            .split_once("fn run_action(")
+            .unwrap()
+            .1
+            .split_once("fn build_context(")
+            .unwrap()
+            .0;
+        assert!(action.contains("if !matches!(action, InstallerAction::Uninstall)"));
+        assert!(action.contains("None\n    } else {\n        Some(verify_installer_payload"));
     }
 
     #[test]
@@ -3760,37 +4006,36 @@ mod tests {
             .unwrap()
             .0;
 
-        assert_eq!(
-            coordinator
-                .matches("target_user_package_is_running(target_sid)?")
-                .count(),
-            3
-        );
         let commit = coordinator
             .split_once("fn commit_installer_transaction(")
             .unwrap()
-            .1;
+            .1
+            .split_once("/// Persists owner authorization")
+            .unwrap()
+            .0;
         let first_recheck = commit
             .find("target_user_package_is_running(target_sid)?")
             .unwrap();
         let first_script = commit
             .find("let script_exit_code = run_powershell_stdin(&plan.render_apply_script()?)?;")
             .unwrap();
-        let execute = coordinator
-            .split_once("MachineHelperInvocation::Uninstall { target_sid } =>")
+        let uninstall = coordinator
+            .split_once("fn prepare_and_commit_machine_uninstall(")
             .unwrap()
             .1
-            .split_once("/// Creates or resumes the durable reservation")
+            .split_once("/// Verifies both halves of uninstall")
             .unwrap()
             .0;
-        let second_recheck = execute
-            .find("target_user_package_is_running(target_sid)?")
+        let durable_prepare = uninstall.find("write_installer_transaction(").unwrap();
+        let second_recheck = uninstall
+            .rfind("target_user_package_is_running(target_sid)?")
             .unwrap();
-        let second_script = execute
-            .find("run_powershell_stdin(&resources.render_uninstall_script(target_sid)?)?")
+        let second_script = uninstall
+            .find("resources.render_uninstall_script(")
             .unwrap();
 
         assert!(first_recheck < first_script);
+        assert!(durable_prepare < second_recheck);
         assert!(second_recheck < second_script);
     }
 
@@ -3903,12 +4148,12 @@ mod tests {
 
         for required in [
             "let script_exit_code = run_powershell_stdin(&plan.render_apply_script()?)?;",
-            "run_powershell_stdin(&resources.render_uninstall_script(target_sid)?)?",
+            "run_powershell_stdin(&resources.render_uninstall_script(",
         ] {
             assert!(helper.contains(required), "missing stdin call: {required}");
         }
         assert_eq!(helper.matches("let script_exit_code").count(), 2);
-        assert_eq!(helper.matches("Ok(script_exit_code)").count(), 2);
+        assert_eq!(helper.matches("return Ok(script_exit_code)").count(), 2);
         let declaration = source
             .lines()
             .find(|line| line.starts_with("fn run_powershell_stdin("))
@@ -3943,11 +4188,8 @@ mod tests {
             );
         }
         let forbidden_apply = ["run_powershell(", "&plan.render_apply_script()"].concat();
-        let forbidden_uninstall = [
-            "run_powershell(",
-            "&resources.render_uninstall_script(target_sid)",
-        ]
-        .concat();
+        let forbidden_uninstall =
+            ["run_powershell(", "&resources.render_uninstall_script("].concat();
         assert!(!helper.contains(&forbidden_apply));
         assert!(!helper.contains(&forbidden_uninstall));
     }
@@ -3973,7 +4215,7 @@ mod tests {
             .split_once("fn commit_installer_transaction(")
             .unwrap()
             .1
-            .split_once("fn fixed_sibling_payload_directory(")
+            .split_once("/// Persists owner authorization")
             .unwrap()
             .0;
         let registration = helper_commit
@@ -4004,13 +4246,68 @@ mod tests {
     }
 
     #[test]
+    fn uninstall_authorization_survives_association_deletion_until_both_halves_verify() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let machine_uninstall = source
+            .split_once("fn prepare_and_commit_machine_uninstall(")
+            .unwrap()
+            .1
+            .split_once("/// Verifies both halves of uninstall")
+            .unwrap()
+            .0;
+        let authorize = machine_uninstall
+            .find("may_uninstall_machine(target_sid, &association)?")
+            .unwrap();
+        let persist = machine_uninstall
+            .find("write_installer_transaction(")
+            .unwrap();
+        let remove = machine_uninstall
+            .find("resources.render_uninstall_script(")
+            .unwrap();
+        let verify_absent = machine_uninstall
+            .find("machine_resources_are_absent(resources)?")
+            .unwrap();
+        let machine_phase = machine_uninstall
+            .find("transition_to(InstallerTransactionPhase::MachineCommitted)")
+            .unwrap();
+        assert!(authorize < persist && persist < remove);
+        assert!(remove < verify_absent && verify_absent < machine_phase);
+        assert!(machine_uninstall.contains("InstallerTransactionOperation::Uninstall"));
+
+        let finalize = source
+            .split_once("fn finalize_machine_uninstall(")
+            .unwrap()
+            .1
+            .split_once("/// Treats every object at a fixed machine path as residue")
+            .unwrap()
+            .0;
+        let machine_reverify = finalize
+            .find("machine_resources_are_absent(resources)?")
+            .unwrap();
+        let package_absent = finalize
+            .find("query_target_package_registration_if_present(target_sid)?")
+            .unwrap();
+        let package_phase = finalize
+            .find("transition_to(InstallerTransactionPhase::PackageCommitted)")
+            .unwrap();
+        let verified_phase = finalize
+            .find("transition_to(InstallerTransactionPhase::Verified)")
+            .unwrap();
+        let clear = finalize
+            .find("clear_installer_transaction(common_application_data, transaction_path)?")
+            .unwrap();
+        assert!(machine_reverify < package_absent && package_absent < package_phase);
+        assert!(package_phase < verified_phase && verified_phase < clear);
+    }
+
+    #[test]
     fn transaction_journal_script_is_fixed_atomic_write_through_and_user_read_only() {
         let transaction_id = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         let script = render_installer_transaction_write_script(
             Path::new(r"C:\ProgramData"),
             Path::new(r"C:\ProgramData\ClashSharp\Installer\transaction.json"),
             transaction_id,
-            r#"{"schema":1}"#,
+            r#"{"schema":2}"#,
         );
 
         for required in [

@@ -88,24 +88,6 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
-    <Content Include="$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.dll">
-      <Link>ClashSharp.RecoveryWatchdog.dll</Link>
-      <TargetPath>ClashSharp.RecoveryWatchdog.dll</TargetPath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
-    <Content Include="$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.deps.json">
-      <Link>ClashSharp.RecoveryWatchdog.deps.json</Link>
-      <TargetPath>ClashSharp.RecoveryWatchdog.deps.json</TargetPath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
-    <Content Include="$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.runtimeconfig.json">
-      <Link>ClashSharp.RecoveryWatchdog.runtimeconfig.json</Link>
-      <TargetPath>ClashSharp.RecoveryWatchdog.runtimeconfig.json</TargetPath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -141,13 +123,7 @@
   <Target Name="ValidateInstallerPackageContent" BeforeTargets="PrepareForBuild" Condition="'$(GenerateAppxPackageOnBuild)'=='true'">
     <Error Condition="'$(ClashSharpInstallerServiceRoot)'=='' or '$(ClashSharpInstallerWatchdogRoot)'==''" Text="Formal MSIX packaging must provide fresh Installer component staging roots." />
     <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.exe')" Text="Installer service staging is missing ClashSharp.MihomoService.exe." />
-    <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.dll')" Text="Installer service staging is missing ClashSharp.MihomoService.dll." />
-    <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.deps.json')" Text="Installer service staging is missing ClashSharp.MihomoService.deps.json." />
-    <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.runtimeconfig.json')" Text="Installer service staging is missing ClashSharp.MihomoService.runtimeconfig.json." />
     <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.exe')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.exe." />
-    <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.dll')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.dll." />
-    <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.deps.json')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.deps.json." />
-    <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.runtimeconfig.json')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.runtimeconfig.json." />
     <Error Condition="!Exists('Binaries\mihomo.exe')" Text="MSIX content is missing Binaries\mihomo.exe." />
     <Error Condition="!Exists('Binaries\mihomo-LICENSE.txt')" Text="MSIX content is missing the pinned mihomo license." />
     <Error Condition="!Exists('Binaries\mihomo-NOTICE.txt')" Text="MSIX content is missing the pinned mihomo notice." />

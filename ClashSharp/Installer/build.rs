@@ -46,7 +46,7 @@ const ALLOWED_GEODATA_PATHS: [&str; 5] = [
     "Binaries/GeoData/GeoSite.dat",
     "Binaries/GeoData/ASN.mmdb",
 ];
-const REQUIRED_PACKAGE_FILES: [&str; 23] = [
+const REQUIRED_PACKAGE_FILES: [&str; 17] = [
     "[Content_Types].xml",
     "AppxBlockMap.xml",
     "AppxManifest.xml",
@@ -58,17 +58,11 @@ const REQUIRED_PACKAGE_FILES: [&str; 23] = [
     "ClashSharp.deps.json",
     "ClashSharp.runtimeconfig.json",
     "ClashSharp.RecoveryWatchdog.exe",
-    "ClashSharp.RecoveryWatchdog.dll",
-    "ClashSharp.RecoveryWatchdog.deps.json",
-    "ClashSharp.RecoveryWatchdog.runtimeconfig.json",
     "Binaries/mihomo.exe",
     "Binaries/mihomo-LICENSE.txt",
     "Binaries/mihomo-NOTICE.txt",
     "Binaries/mihomo-manifest.json",
     "Binaries/Service/ClashSharp.MihomoService.exe",
-    "Binaries/Service/ClashSharp.MihomoService.dll",
-    "Binaries/Service/ClashSharp.MihomoService.deps.json",
-    "Binaries/Service/ClashSharp.MihomoService.runtimeconfig.json",
     GEODATA_MANIFEST_PATH,
 ];
 const REQUIRED_PACKAGE_EXECUTABLES: [&str; 4] = [
@@ -1041,17 +1035,8 @@ fn validate_final_msix_file_contract(archive: &mut ZipArchive<File>) -> Result<(
         .chain(ALLOWED_GEODATA_PATHS)
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
-    for (deps_path, prefix) in [
-        ("ClashSharp.deps.json", ""),
-        ("ClashSharp.RecoveryWatchdog.deps.json", ""),
-        (
-            "Binaries/Service/ClashSharp.MihomoService.deps.json",
-            "Binaries/Service/",
-        ),
-    ] {
-        let bytes = read_bounded_zip_entry(archive, deps_path, 4 * 1024 * 1024)?;
-        add_dotnet_dependency_assets(&bytes, prefix, &mut allowed)?;
-    }
+    let bytes = read_bounded_zip_entry(archive, "ClashSharp.deps.json", 4 * 1024 * 1024)?;
+    add_dotnet_dependency_assets(&bytes, "", &mut allowed)?;
     for name in actual.values() {
         if !allowed.contains(name) {
             return Err(format!("final MSIX file is outside the allowlist: {name}"));
@@ -1800,12 +1785,6 @@ mod tests {
             writer.start_file(name, options).unwrap();
             let content = match name {
                 "ClashSharp.deps.json" => dependency_manifest("ClashSharp.dll"),
-                "ClashSharp.RecoveryWatchdog.deps.json" => {
-                    dependency_manifest("ClashSharp.RecoveryWatchdog.dll")
-                }
-                "Binaries/Service/ClashSharp.MihomoService.deps.json" => {
-                    dependency_manifest("ClashSharp.MihomoService.dll")
-                }
                 _ => vec![b'x'],
             };
             writer.write_all(&content).unwrap();
@@ -1973,10 +1952,8 @@ mod tests {
         let error = validate_final_msix_file_contract(&mut archive).unwrap_err();
         assert!(error.contains("outside the allowlist"));
 
-        let missing = create_final_file_contract_archive(
-            None,
-            Some("ClashSharp.RecoveryWatchdog.runtimeconfig.json"),
-        );
+        let missing =
+            create_final_file_contract_archive(None, Some("ClashSharp.RecoveryWatchdog.exe"));
         let file = File::open(&missing.0).unwrap();
         let mut archive = ZipArchive::new(file).unwrap();
         let error = validate_final_msix_file_contract(&mut archive).unwrap_err();

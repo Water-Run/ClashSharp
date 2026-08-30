@@ -12,10 +12,22 @@ use crate::service_plan::{generate_token, validate_owner_sid};
 pub const INSTALLER_TRANSACTION_RELATIVE_PATH: &str = r"ClashSharp\Installer\transaction.json";
 
 /// Current strict journal schema.
-pub const INSTALLER_TRANSACTION_SCHEMA: u32 = 1;
+pub const INSTALLER_TRANSACTION_SCHEMA: u32 = 2;
 
 /// Maximum accepted UTF-8 JSON document size.
 pub const MAX_INSTALLER_TRANSACTION_BYTES: usize = 4096;
+
+/// User-requested operation durably bound into the transaction identity.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum InstallerTransactionOperation {
+    /// Deploy the package before committing machine integration.
+    Install,
+    /// Explicitly revalidate and, when necessary, re-associate machine integration.
+    Repair,
+    /// Remove machine integration before removing the target user's package.
+    Uninstall,
+}
 
 /// Durable phase of one Installer package-and-machine transaction.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -32,15 +44,37 @@ pub enum InstallerTransactionPhase {
 }
 
 impl InstallerTransactionPhase {
-    /// Returns whether `next` is an idempotent replay or the single allowed forward step.
+    /// Returns whether `next` is an idempotent replay or the operation's next durable step.
     #[must_use]
-    pub fn can_transition_to(self, next: Self) -> bool {
+    pub fn can_transition_to(self, operation: InstallerTransactionOperation, next: Self) -> bool {
         self == next
             || matches!(
-                (self, next),
-                (Self::Prepared, Self::PackageCommitted)
-                    | (Self::PackageCommitted, Self::MachineCommitted)
-                    | (Self::MachineCommitted, Self::Verified)
+                (operation, self, next),
+                (
+                    InstallerTransactionOperation::Install | InstallerTransactionOperation::Repair,
+                    Self::Prepared,
+                    Self::PackageCommitted
+                ) | (
+                    InstallerTransactionOperation::Install | InstallerTransactionOperation::Repair,
+                    Self::PackageCommitted,
+                    Self::MachineCommitted
+                ) | (
+                    InstallerTransactionOperation::Install | InstallerTransactionOperation::Repair,
+                    Self::MachineCommitted,
+                    Self::Verified
+                ) | (
+                    InstallerTransactionOperation::Uninstall,
+                    Self::Prepared,
+                    Self::MachineCommitted
+                ) | (
+                    InstallerTransactionOperation::Uninstall,
+                    Self::MachineCommitted,
+                    Self::PackageCommitted
+                ) | (
+                    InstallerTransactionOperation::Uninstall,
+                    Self::PackageCommitted,
+                    Self::Verified
+                )
             )
     }
 }
@@ -51,17 +85,20 @@ impl InstallerTransactionPhase {
 pub struct InstallerTransactionJournal {
     schema: u32,
     transaction_id: String,
+    operation: InstallerTransactionOperation,
     target_sid: String,
     allow_reassociation: bool,
     expected_package_version: String,
     installer_payload_sha256: String,
     phase: InstallerTransactionPhase,
+    generation: u32,
 }
 
 impl InstallerTransactionJournal {
     /// Creates a prepared journal with an explicit canonical transaction identifier.
     pub fn new(
         transaction_id: &str,
+        operation: InstallerTransactionOperation,
         target_sid: &str,
         allow_reassociation: bool,
         expected_package_version: &str,
@@ -70,11 +107,13 @@ impl InstallerTransactionJournal {
         let journal = Self {
             schema: INSTALLER_TRANSACTION_SCHEMA,
             transaction_id: transaction_id.to_owned(),
+            operation,
             target_sid: target_sid.to_owned(),
             allow_reassociation,
             expected_package_version: expected_package_version.to_owned(),
             installer_payload_sha256: installer_payload_sha256.to_owned(),
             phase: InstallerTransactionPhase::Prepared,
+            generation: 1,
         };
         journal.validate()?;
         Ok(journal)
@@ -82,6 +121,7 @@ impl InstallerTransactionJournal {
 
     /// Creates a prepared journal with a cryptographically random transaction identifier.
     pub fn create(
+        operation: InstallerTransactionOperation,
         target_sid: &str,
         allow_reassociation: bool,
         expected_package_version: &str,
@@ -89,6 +129,7 @@ impl InstallerTransactionJournal {
     ) -> Result<Self, String> {
         Self::new(
             &generate_transaction_id()?,
+            operation,
             target_sid,
             allow_reassociation,
             expected_package_version,
@@ -121,12 +162,20 @@ impl InstallerTransactionJournal {
 
     /// Advances the phase exactly once, or accepts an idempotent replay of the current phase.
     pub fn transition_to(&mut self, next: InstallerTransactionPhase) -> Result<(), String> {
-        if !self.phase.can_transition_to(next) {
+        if !self.phase.can_transition_to(self.operation, next) {
             return Err(String::from(
                 "installer.transaction.phase_transition_invalid",
             ));
         }
+        if self.phase == next {
+            return Ok(());
+        }
         self.phase = next;
+        self.generation = self
+            .generation
+            .checked_add(1)
+            .ok_or_else(|| String::from("installer.transaction.generation_invalid"))?;
+        self.validate()?;
         Ok(())
     }
 
@@ -137,7 +186,13 @@ impl InstallerTransactionJournal {
     /// closed instead of rewriting committed transaction identity.
     pub fn upgrade_to_explicit_repair(&mut self) -> Result<(), String> {
         if self.allow_reassociation {
+            if self.operation != InstallerTransactionOperation::Repair {
+                return Err(String::from("installer.transaction.operation_invalid"));
+            }
             return Ok(());
+        }
+        if self.operation != InstallerTransactionOperation::Install {
+            return Err(String::from("installer.transaction.repair_upgrade_invalid"));
         }
         if !matches!(
             self.phase,
@@ -145,13 +200,16 @@ impl InstallerTransactionJournal {
         ) {
             return Err(String::from("installer.transaction.repair_upgrade_invalid"));
         }
+        self.operation = InstallerTransactionOperation::Repair;
         self.allow_reassociation = true;
+        self.validate()?;
         Ok(())
     }
 
     /// Returns whether a new Installer invocation is the exact release allowed to resume this journal.
     pub fn matches_same_release(
         &self,
+        operation: InstallerTransactionOperation,
         target_sid: &str,
         allow_reassociation: bool,
         expected_package_version: &str,
@@ -162,7 +220,8 @@ impl InstallerTransactionJournal {
         validate_expected_package_version(expected_package_version)?;
         validate_installer_payload_sha256(installer_payload_sha256)?;
 
-        Ok(self.target_sid == target_sid
+        Ok(self.operation == operation
+            && self.target_sid == target_sid
             && self.allow_reassociation == allow_reassociation
             && self.expected_package_version == expected_package_version
             && self.installer_payload_sha256 == installer_payload_sha256)
@@ -172,6 +231,12 @@ impl InstallerTransactionJournal {
     #[must_use]
     pub fn transaction_id(&self) -> &str {
         &self.transaction_id
+    }
+
+    /// Gets the immutable operation whose phase ordering this journal follows.
+    #[must_use]
+    pub const fn operation(&self) -> InstallerTransactionOperation {
+        self.operation
     }
 
     /// Gets the immutable target interactive-user SID.
@@ -204,15 +269,49 @@ impl InstallerTransactionJournal {
         self.phase
     }
 
+    /// Gets the exact phase generation, starting at one for `Prepared`.
+    #[must_use]
+    pub const fn generation(&self) -> u32 {
+        self.generation
+    }
+
     fn validate(&self) -> Result<(), String> {
         if self.schema != INSTALLER_TRANSACTION_SCHEMA {
             return Err(String::from("installer.transaction.schema_invalid"));
         }
         validate_transaction_id(&self.transaction_id)?;
+        if self.operation != InstallerTransactionOperation::Repair && self.allow_reassociation {
+            return Err(String::from("installer.transaction.reassociation_invalid"));
+        }
         validate_owner_sid(&self.target_sid)
             .map_err(|_| String::from("installer.transaction.target_sid_invalid"))?;
         validate_expected_package_version(&self.expected_package_version)?;
-        validate_installer_payload_sha256(&self.installer_payload_sha256)
+        validate_installer_payload_sha256(&self.installer_payload_sha256)?;
+
+        let expected_generation = match (self.operation, self.phase) {
+            (_, InstallerTransactionPhase::Prepared) => 1,
+            (
+                InstallerTransactionOperation::Install | InstallerTransactionOperation::Repair,
+                InstallerTransactionPhase::PackageCommitted,
+            )
+            | (
+                InstallerTransactionOperation::Uninstall,
+                InstallerTransactionPhase::MachineCommitted,
+            ) => 2,
+            (
+                InstallerTransactionOperation::Install | InstallerTransactionOperation::Repair,
+                InstallerTransactionPhase::MachineCommitted,
+            )
+            | (
+                InstallerTransactionOperation::Uninstall,
+                InstallerTransactionPhase::PackageCommitted,
+            ) => 3,
+            (_, InstallerTransactionPhase::Verified) => 4,
+        };
+        if self.generation != expected_generation {
+            return Err(String::from("installer.transaction.generation_invalid"));
+        }
+        Ok(())
     }
 }
 
@@ -270,8 +369,15 @@ mod tests {
     const VERSION: &str = "1.2.3.4";
 
     fn journal() -> InstallerTransactionJournal {
-        InstallerTransactionJournal::new(TRANSACTION_ID, TARGET_SID, true, VERSION, PAYLOAD_HASH)
-            .unwrap()
+        InstallerTransactionJournal::new(
+            TRANSACTION_ID,
+            InstallerTransactionOperation::Repair,
+            TARGET_SID,
+            true,
+            VERSION,
+            PAYLOAD_HASH,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -283,7 +389,7 @@ mod tests {
         assert_eq!(
             journal().to_json().unwrap(),
             format!(
-                r#"{{"schema":1,"transactionId":"{TRANSACTION_ID}","targetSid":"{TARGET_SID}","allowReassociation":true,"expectedPackageVersion":"{VERSION}","installerPayloadSha256":"{PAYLOAD_HASH}","phase":"prepared"}}"#
+                r#"{{"schema":2,"transactionId":"{TRANSACTION_ID}","operation":"repair","targetSid":"{TARGET_SID}","allowReassociation":true,"expectedPackageVersion":"{VERSION}","installerPayloadSha256":"{PAYLOAD_HASH}","phase":"prepared","generation":1}}"#
             )
         );
     }
@@ -319,13 +425,15 @@ mod tests {
         );
 
         for invalid in [
-            canonical.replace("\"schema\":1", "\"schema\":2"),
+            canonical.replace("\"schema\":2", "\"schema\":1"),
             canonical.replace("\"phase\":\"prepared\"", "\"phase\":\"packageDeployed\""),
             canonical.replace(
                 "\"phase\":\"prepared\"",
                 "\"phase\":\"prepared\",\"extra\":true",
             ),
-            canonical.replacen("\"schema\":1", "\"schema\":1,\"schema\":1", 1),
+            canonical.replacen("\"schema\":2", "\"schema\":2,\"schema\":2", 1),
+            canonical.replace("\"generation\":1", "\"generation\":2"),
+            canonical.replace("\"operation\":\"repair\"", "\"operation\":\"remove\""),
         ] {
             assert!(
                 InstallerTransactionJournal::parse(invalid.as_bytes()).is_err(),
@@ -370,6 +478,7 @@ mod tests {
         assert!(
             InstallerTransactionJournal::new(
                 TRANSACTION_ID,
+                InstallerTransactionOperation::Install,
                 "S-1-5-18",
                 false,
                 VERSION,
@@ -380,23 +489,38 @@ mod tests {
     }
 
     #[test]
-    fn phase_transition_table_allows_only_replay_or_one_forward_step() {
+    fn phase_transition_table_is_operation_specific() {
         use InstallerTransactionPhase::{MachineCommitted, PackageCommitted, Prepared, Verified};
         let phases = [Prepared, PackageCommitted, MachineCommitted, Verified];
-        for current in phases {
-            for next in phases {
-                let expected = current == next
-                    || matches!(
-                        (current, next),
-                        (Prepared, PackageCommitted)
-                            | (PackageCommitted, MachineCommitted)
-                            | (MachineCommitted, Verified)
+        for operation in [
+            InstallerTransactionOperation::Install,
+            InstallerTransactionOperation::Repair,
+            InstallerTransactionOperation::Uninstall,
+        ] {
+            for current in phases {
+                for next in phases {
+                    let expected = current == next
+                        || match operation {
+                            InstallerTransactionOperation::Install
+                            | InstallerTransactionOperation::Repair => matches!(
+                                (current, next),
+                                (Prepared, PackageCommitted)
+                                    | (PackageCommitted, MachineCommitted)
+                                    | (MachineCommitted, Verified)
+                            ),
+                            InstallerTransactionOperation::Uninstall => matches!(
+                                (current, next),
+                                (Prepared, MachineCommitted)
+                                    | (MachineCommitted, PackageCommitted)
+                                    | (PackageCommitted, Verified)
+                            ),
+                        };
+                    assert_eq!(
+                        current.can_transition_to(operation, next),
+                        expected,
+                        "unexpected transition result: {operation:?}: {current:?} -> {next:?}"
                     );
-                assert_eq!(
-                    current.can_transition_to(next),
-                    expected,
-                    "unexpected transition result: {current:?} -> {next:?}"
-                );
+                }
             }
         }
     }
@@ -427,31 +551,80 @@ mod tests {
         let value = journal();
         assert!(
             value
-                .matches_same_release(TARGET_SID, true, VERSION, PAYLOAD_HASH)
+                .matches_same_release(
+                    InstallerTransactionOperation::Repair,
+                    TARGET_SID,
+                    true,
+                    VERSION,
+                    PAYLOAD_HASH,
+                )
                 .unwrap()
         );
 
         let cases = [
-            ("S-1-5-21-100-200-300-1002", true, VERSION, PAYLOAD_HASH),
-            (TARGET_SID, false, VERSION, PAYLOAD_HASH),
-            (TARGET_SID, true, "1.2.3.5", PAYLOAD_HASH),
-            (TARGET_SID, true, VERSION, TRANSACTION_ID),
+            (
+                InstallerTransactionOperation::Repair,
+                "S-1-5-21-100-200-300-1002",
+                true,
+                VERSION,
+                PAYLOAD_HASH,
+            ),
+            (
+                InstallerTransactionOperation::Repair,
+                TARGET_SID,
+                false,
+                VERSION,
+                PAYLOAD_HASH,
+            ),
+            (
+                InstallerTransactionOperation::Install,
+                TARGET_SID,
+                true,
+                VERSION,
+                PAYLOAD_HASH,
+            ),
+            (
+                InstallerTransactionOperation::Repair,
+                TARGET_SID,
+                true,
+                "1.2.3.5",
+                PAYLOAD_HASH,
+            ),
+            (
+                InstallerTransactionOperation::Repair,
+                TARGET_SID,
+                true,
+                VERSION,
+                TRANSACTION_ID,
+            ),
         ];
-        for (sid, allow_reassociation, version, hash) in cases {
+        for (operation, sid, allow_reassociation, version, hash) in cases {
             assert!(
                 !value
-                    .matches_same_release(sid, allow_reassociation, version, hash)
+                    .matches_same_release(operation, sid, allow_reassociation, version, hash)
                     .unwrap()
             );
         }
         assert!(
             value
-                .matches_same_release("not-a-sid", true, VERSION, PAYLOAD_HASH)
+                .matches_same_release(
+                    InstallerTransactionOperation::Repair,
+                    "not-a-sid",
+                    true,
+                    VERSION,
+                    PAYLOAD_HASH,
+                )
                 .is_err()
         );
         assert!(
             value
-                .matches_same_release(TARGET_SID, true, "1.2.3", PAYLOAD_HASH)
+                .matches_same_release(
+                    InstallerTransactionOperation::Repair,
+                    TARGET_SID,
+                    true,
+                    "1.2.3",
+                    PAYLOAD_HASH,
+                )
                 .is_err()
         );
     }
@@ -463,6 +636,7 @@ mod tests {
         for phase in [Prepared, PackageCommitted] {
             let mut value = InstallerTransactionJournal::new(
                 TRANSACTION_ID,
+                InstallerTransactionOperation::Install,
                 TARGET_SID,
                 false,
                 VERSION,
@@ -479,7 +653,13 @@ mod tests {
             assert_eq!(value.phase(), phase);
             assert!(
                 value
-                    .matches_same_release(TARGET_SID, true, VERSION, PAYLOAD_HASH)
+                    .matches_same_release(
+                        InstallerTransactionOperation::Repair,
+                        TARGET_SID,
+                        true,
+                        VERSION,
+                        PAYLOAD_HASH,
+                    )
                     .unwrap()
             );
         }
@@ -487,6 +667,7 @@ mod tests {
         for phase in [MachineCommitted, Verified] {
             let mut value = InstallerTransactionJournal::new(
                 TRANSACTION_ID,
+                InstallerTransactionOperation::Install,
                 TARGET_SID,
                 false,
                 VERSION,
@@ -506,21 +687,73 @@ mod tests {
             assert!(!value.allow_reassociation());
 
             let mut already_promoted = value;
+            already_promoted.operation = InstallerTransactionOperation::Repair;
             already_promoted.allow_reassociation = true;
             already_promoted.upgrade_to_explicit_repair().unwrap();
             assert!(already_promoted.allow_reassociation());
+            assert_eq!(
+                already_promoted.operation(),
+                InstallerTransactionOperation::Repair
+            );
             assert_eq!(already_promoted.phase(), phase);
         }
     }
 
     #[test]
+    fn uninstall_uses_reverse_phase_order_and_monotonic_generations() {
+        let mut value = InstallerTransactionJournal::new(
+            TRANSACTION_ID,
+            InstallerTransactionOperation::Uninstall,
+            TARGET_SID,
+            false,
+            VERSION,
+            PAYLOAD_HASH,
+        )
+        .unwrap();
+
+        assert_eq!(value.generation(), 1);
+        value
+            .transition_to(InstallerTransactionPhase::MachineCommitted)
+            .unwrap();
+        assert_eq!(value.generation(), 2);
+        value
+            .transition_to(InstallerTransactionPhase::PackageCommitted)
+            .unwrap();
+        assert_eq!(value.generation(), 3);
+        value
+            .transition_to(InstallerTransactionPhase::Verified)
+            .unwrap();
+        assert_eq!(value.generation(), 4);
+        assert!(
+            value
+                .to_json()
+                .unwrap()
+                .contains("\"operation\":\"uninstall\"")
+        );
+    }
+
+    #[test]
     fn create_generates_distinct_canonical_ids_and_starts_prepared() {
-        let first =
-            InstallerTransactionJournal::create(TARGET_SID, false, VERSION, PAYLOAD_HASH).unwrap();
-        let second =
-            InstallerTransactionJournal::create(TARGET_SID, false, VERSION, PAYLOAD_HASH).unwrap();
+        let first = InstallerTransactionJournal::create(
+            InstallerTransactionOperation::Install,
+            TARGET_SID,
+            false,
+            VERSION,
+            PAYLOAD_HASH,
+        )
+        .unwrap();
+        let second = InstallerTransactionJournal::create(
+            InstallerTransactionOperation::Install,
+            TARGET_SID,
+            false,
+            VERSION,
+            PAYLOAD_HASH,
+        )
+        .unwrap();
 
         assert_eq!(first.phase(), InstallerTransactionPhase::Prepared);
+        assert_eq!(first.operation(), InstallerTransactionOperation::Install);
+        assert_eq!(first.generation(), 1);
         assert!(validate_transaction_id(first.transaction_id()).is_ok());
         assert!(validate_transaction_id(second.transaction_id()).is_ok());
         assert_ne!(first.transaction_id(), second.transaction_id());
