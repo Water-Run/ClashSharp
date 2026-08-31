@@ -453,12 +453,22 @@ public sealed class RepositoryTopologyTests
     public void ContinuousIntegration_UsesImmutableActionsAndReadOnlyPermissions()
     {
         string workflow = File.ReadAllText(Path.Combine(RepositoryRoot, ".github", "workflows", "ci.yml"));
+        string normalizedWorkflow = workflow.Replace("\r\n", "\n", StringComparison.Ordinal);
         MatchCollection uses = Regex.Matches(workflow, @"uses:\s*[^@\s]+@(?<revision>[^\s#]+)");
 
         Assert.NotEmpty(uses);
         Assert.All(uses.Cast<Match>(), match => Assert.Matches("^[0-9a-f]{40}$", match.Groups["revision"].Value));
-        Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n"), StringComparison.Ordinal);
+        Assert.Contains("permissions:\n  contents: read", normalizedWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n    env:\n      Platform: x64", normalizedWorkflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "ClashSharp.Installer.Tests.csproj\n          -c Release -p:Platform=AnyCPU --no-build",
+            normalizedWorkflow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ClashSharp.Installer.Presentation.Tests.csproj\n          -c Release -p:Platform=AnyCPU --no-build",
+            normalizedWorkflow,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Ensures CI exercises the Sandbox report gate in both supported PowerShell editions.</summary>

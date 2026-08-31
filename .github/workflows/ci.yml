@@ -17,8 +17,6 @@ jobs:
   dotnet:
     name: .NET build, format, and test
     runs-on: windows-2025
-    env:
-      Platform: x64
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -68,7 +66,7 @@ jobs:
       - name: Run Installer Core tests
         run: >-
           dotnet test ClashSharp/ClashSharp.Installer.Tests/ClashSharp.Installer.Tests.csproj
-          -c Release -p:Platform=x64 --no-build
+          -c Release -p:Platform=AnyCPU --no-build
           --collect:"XPlat Code Coverage"
           --results-directory ClashSharp/ClashSharp.Installer.Tests/TestResults
           --logger "trx;LogFileName=installer-core-tests.trx"
@@ -76,7 +74,7 @@ jobs:
       - name: Run Installer presentation tests
         run: >-
           dotnet test ClashSharp/ClashSharp.Installer.Presentation.Tests/ClashSharp.Installer.Presentation.Tests.csproj
-          -c Release -p:Platform=x64 --no-build
+          -c Release -p:Platform=AnyCPU --no-build
           --collect:"XPlat Code Coverage"
           --results-directory ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults
           --logger "trx;LogFileName=installer-presentation-tests.trx"
