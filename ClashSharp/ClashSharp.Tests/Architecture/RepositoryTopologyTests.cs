@@ -26,6 +26,11 @@ public sealed class RepositoryTopologyTests
         ];
 
         Assert.All(paths, path => Assert.True(File.Exists(Path.Combine(RepositoryRoot, path)), path));
+        string ignoreRules = File.ReadAllText(Path.Combine(RepositoryRoot, ".gitignore"));
+        Assert.Contains(
+            "!ClashSharp/ClashSharp.Installer.Windows/Packages/**",
+            ignoreRules,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Verifies every production assembly emits XML documentation and rejects missing public contracts.</summary>

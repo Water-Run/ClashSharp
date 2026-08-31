@@ -40,6 +40,8 @@ packages/
 **/packages/*
 !**/packages/build/
 !**/packages/repositories.config
+!ClashSharp/ClashSharp.Installer.Windows/Packages/
+!ClashSharp/ClashSharp.Installer.Windows/Packages/**
 
 *.log
 *.tmp
