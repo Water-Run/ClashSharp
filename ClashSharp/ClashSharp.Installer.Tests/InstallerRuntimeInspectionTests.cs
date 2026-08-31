@@ -1,4 +1,5 @@
 using ClashSharp.Installer.Contracts;
+using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Tests;
 
@@ -84,7 +85,37 @@ public sealed class InstallerRuntimeInspectionTests
             exception.DiagnosticCode);
     }
 
+    [Fact]
+    public void DurableTransactionMustBelongToTheInspectedRelease()
+    {
+        InstallerTransactionSnapshot durable = InstallerTransactionSnapshot.Create(
+            InstallerTransactionJournal.Create(new InstallerRequest(
+                InstallerOperation.Repair,
+                TargetSid,
+                AllowReassociation: false,
+                "9.9.9.9",
+                PayloadHash)));
+        var inspection = new InstallerRuntimeInspection(
+            new InstallerEnvironmentSnapshot(
+                IsSupported: true,
+                InstalledPackageVersion: Version,
+                IsApplicationRunning: false,
+                BlockingDiagnosticCode: null),
+            durable,
+            Version);
+
+        InstallerProtocolException exception = Assert.Throws<InstallerProtocolException>(
+            inspection.Validate);
+
+        Assert.Equal(
+            "installer.runtime.inspection_result_invalid",
+            exception.DiagnosticCode);
+    }
+
     private const string Version = "1.2.3.4";
+    private const string TargetSid = "S-1-5-21-100-200-300-1001";
+    private const string PayloadHash =
+        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
     private static InstallerRuntimeInspection Inspection(
         bool isSupported,

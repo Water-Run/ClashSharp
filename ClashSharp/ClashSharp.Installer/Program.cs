@@ -29,6 +29,18 @@ internal static class Program
 
     private static int RunMachineHelper(InstallerMachineHelperBootstrap bootstrap)
     {
+#if CLASHSHARP_INSTALLER_MUTATION_RUNTIME
+        return RunEnabledMachineHelper(bootstrap);
+#else
+        _ = bootstrap;
+        return MachineHelperFailedExitCode;
+#endif
+    }
+
+    // Kept outside the conditional so default builds still compile the complete production
+    // integration while the startup route itself remains impossible to enter.
+    private static int RunEnabledMachineHelper(InstallerMachineHelperBootstrap bootstrap)
+    {
         try
         {
             EmbeddedInstallerReleaseManifest release = EmbeddedInstallerReleaseManifest.Load();

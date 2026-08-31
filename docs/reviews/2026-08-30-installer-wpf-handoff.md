@@ -27,10 +27,11 @@
 
 | 范围 | 最近真实证据 | 当前源码状态 | 可以声称什么 |
 |---|---|---|---|
-| Installer Core | Release `547/547`，0 skipped | helper-authoritative coordinator/session、strict manifest、certificate ledger、inspection contract 与 fault matrix 已跑绿 | 当前 Core checkpoint 绿色；旧覆盖率数字不能自动沿用 |
-| Installer Presentation | Release `88/88`，0 skipped | 单卡片三态、精确 allowed-operation、production runtime、并发/取消/异常边界已跑绿 | 当前纯 Presentation checkpoint 绿色 |
+| Installer Core | Release `548/548`，0 skipped | helper-authoritative coordinator/session、strict manifest、certificate ledger、release-bound inspection contract 与 fault matrix 已跑绿 | 当前 Core checkpoint 绿色；旧覆盖率数字不能自动沿用 |
+| Installer Presentation | Release `89/89`，0 skipped | 单卡片三态、精确 allowed-operation、production runtime、packaging activation gate、并发/取消/异常边界已跑绿 | 当前纯 Presentation checkpoint 绿色 |
 | Installer Windows | 安全集 `348/348`，Release build 0 warning / 0 error | authenticated broker/host、target-SID cert、machine operations、environment/process 与 parent engine 已实现 | 明确排除了会改真实 CurrentUser 证书的 3 项测试；不能声称管理员 mutation 通过 |
-| WPF shell | Windows 11 x64 Release 编译通过，0 warning / 0 error | C# 紫色单卡片、helper pre-WPF 分流、关闭取消与 gated production composition 已落地；默认 runtime 仍 fail closed | 没有 UIA、UAC 或生产安装运行证据 |
+| WPF shell | Windows 11 x64 Release 编译通过，0 warning / 0 error | C# 紫色单卡片、helper pre-WPF 分流、关闭取消与 gated production composition 已落地；默认 UI runtime 与 helper authority 都 fail closed | 没有 UIA、UAC 或生产安装运行证据 |
+| Sandbox report gate | Windows PowerShell 5.1 / PowerShell 7 契约测试通过，CI 已接入 | host 只接受精确 schema/scenario/runId、有效时间/环境、全部步骤 passed 与场景专用 checks；当前只有 fixed-package `install-only` 存在通过契约，未实现场景显式 failed/not-executed | 只能声称报告不会把 skipped/未知字段/错配/部分证据当通过；没有启动 Sandbox，也不是 E3/E4 证据 |
 | 仓库纯度 | Rust/Cargo/Slint 源文件扫描为空，`git diff --check` 无 whitespace error | 旧审计文字和打包资产目录可保留，但不得包含 Rust 构建入口 | 当前实现语言是 C#；GitHub 历史统计刷新取决于提交后的重新索引 |
 
 ## 4. 已落地的主要内容
@@ -40,7 +41,7 @@
 - WPF 目标固定 Windows 11+ x64、自包含单文件、`asInvoker`、PerMonitorV2。
 - 主窗口收敛为一个产品卡片：Available 只显示安装；Installed 显示修复和卸载；RecoveryRequired 只显示与 durable journal 精确一致的继续动作；busy 只显示取消。
 - `InstallerProductStatePolicy` 使 durable transaction 优先于 package 观测，并拒绝非法 state / operation 组合。
-- Presentation 测试已覆盖全部合法 operation / phase 组合、非法组合、所有 `CanExecute=false` 状态、受限平台仅卸载、runtime lifetime 与窗口关闭取消；当前 Release checkpoint 为 88/88。
+- Presentation 测试已覆盖全部合法 operation / phase 组合、非法组合、所有 `CanExecute=false` 状态、受限平台仅卸载、runtime lifetime、窗口关闭取消与正式打包不启用 mutation runtime；当前 Release checkpoint 为 89/89。
 - `Logo.svg` 已依据原 PNG 的轮廓、阴影和白色标记重建，并以 WPF geometry 契约锁定。
 
 ### Core / durable protocol
@@ -66,7 +67,7 @@
 - coordinator 已只持有 parent read-only transaction view；Prepared、phase transition、certificate ledger 与 Verified clear 均由 helper authority session 独占，成功空读取不再错误复活内存 fallback。
 - persistent authenticated broker、same-EXE helper host、PID/final-path/Authenticode lease、target-SID package inspector和 target-SID certificate adapter 已落地并通过 deterministic 定向测试。
 - 机器侧 fixed-plan 原语已覆盖 protected roots、locked archive、payload swap、SCM、association、profile resolver、remove 与 postcondition verifier。
-- concrete `WindowsMachineHelperMachineOperations`、helper pre-WPF 启动入口、只读 environment/process inspection、parent engine 和 `ProductionInstallerRuntime` 已完成组合；production runtime 仍由默认关闭的 formal-build gate 隔离。
+- concrete `WindowsMachineHelperMachineOperations`、helper pre-WPF 启动入口、只读 environment/process inspection、parent engine 和 `ProductionInstallerRuntime` 已完成组合；production UI 与 helper authority 由同一个默认关闭的 formal-build mutation gate 隔离。
 
 ### P0：显式 reassociation 与 production activation 证据
 
@@ -101,7 +102,7 @@ rg --files -g '*.rs' -g 'Cargo.toml' -g 'Cargo.lock' -g '*.slint'
 
 ### 步骤 2：关闭 production activation 前缺口
 
-为显式 reassociation 设计双 owner durable 阶段与 root ACL 转移协议，或在首个发布版本中明确不提供该功能；继续补 UIA、签名打包与 Sandbox 证据。所有本机组合层测试使用 injected seams 或临时目录，不调用真实 SCM、证书、包或 Program Files。
+为显式 reassociation 设计双 owner durable 阶段与 root ACL 转移协议，或在首个发布版本中明确不提供该功能；继续补 UIA、签名打包与 Sandbox 的真实 launch/startup/cleanup-uninstall 证据，并把场景结果绑定到同一签名候选 digest。所有本机组合层测试使用 injected seams 或临时目录，不调用真实 SCM、证书、包或 Program Files。
 
 ### 步骤 3：Windows 实机证据顺序
 

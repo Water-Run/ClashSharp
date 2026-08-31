@@ -47,6 +47,15 @@ public sealed record InstallerRuntimeInspection(
         }
 
         DurableTransaction?.Validate();
+        if (DurableTransaction is { } durable
+            && !string.Equals(
+                durable.Journal.ExpectedPackageVersion,
+                ReleaseVersion,
+                StringComparison.Ordinal))
+        {
+            throw new InstallerProtocolException(
+                "installer.runtime.inspection_result_invalid");
+        }
     }
 
     private static bool IsDiagnosticCode(string? value) =>

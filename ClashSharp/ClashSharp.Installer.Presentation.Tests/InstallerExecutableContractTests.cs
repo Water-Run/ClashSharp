@@ -146,7 +146,7 @@ public sealed class InstallerExecutableContractTests
     }
 
     [Fact]
-    public void CustomEntryPointRoutesTheAuthenticatedHelperAndKeepsTheUiFailClosed()
+    public void CustomEntryPointGatesBothTheAuthenticatedHelperAndProductionUi()
     {
         string program = File.ReadAllText(SourcePath("ClashSharp.Installer", "Program.cs"));
         string app = File.ReadAllText(SourcePath("ClashSharp.Installer", "App.xaml.cs"));
@@ -160,9 +160,41 @@ public sealed class InstallerExecutableContractTests
         Assert.DoesNotContain("InstallerMachineHelperInvocation.Parse", program, StringComparison.Ordinal);
         Assert.DoesNotContain("InstallerMachineHelperBootstrap.Parse", program, StringComparison.Ordinal);
         Assert.DoesNotContain("Environment.Exit(0)", program, StringComparison.Ordinal);
+        Assert.Contains("#if CLASHSHARP_INSTALLER_MUTATION_RUNTIME", program, StringComparison.Ordinal);
+        Assert.Contains("RunEnabledMachineHelper(bootstrap)", program, StringComparison.Ordinal);
+        Assert.True(
+            program.IndexOf(
+                "#if CLASHSHARP_INSTALLER_MUTATION_RUNTIME",
+                StringComparison.Ordinal) < program.IndexOf(
+                    "RunEnabledMachineHelper(bootstrap)",
+                    StringComparison.Ordinal));
         Assert.Contains("CLASHSHARP_INSTALLER_MUTATION_RUNTIME", app, StringComparison.Ordinal);
         Assert.Contains("WindowsProductionInstallerRuntimeFactory.Create", app, StringComparison.Ordinal);
         Assert.Contains("new MigrationPreviewInstallerRuntime()", app, StringComparison.Ordinal);
+        string preview = File.ReadAllText(SourcePath(
+            "ClashSharp.Installer",
+            "Runtime",
+            "MigrationPreviewInstallerRuntime.cs"));
+        Assert.Contains("installer.runtime.production_gate_closed", preview, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "installer.runtime.windows_adapters_not_connected",
+            preview,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormalPackagingDoesNotPromoteTheMutationRuntimeWithoutVmEvidence()
+    {
+        string buildScript = File.ReadAllText(SourcePath("Installer", "build.ps1"));
+
+        Assert.DoesNotContain(
+            "ClashSharpEnableInstallerMutationRuntime",
+            buildScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "CLASHSHARP_INSTALLER_MUTATION_RUNTIME",
+            buildScript,
+            StringComparison.Ordinal);
     }
 
     [Fact]

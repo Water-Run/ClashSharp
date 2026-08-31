@@ -5,7 +5,7 @@ using ClashSharp.Installer.Windows.Platform;
 namespace ClashSharp.Installer.Runtime;
 
 /// <summary>
-/// Exposes the WPF shell while production composition and signed Windows evidence remain incomplete.
+/// Exposes the WPF shell while the production composition gate awaits signed Windows evidence.
 /// It never mutates the machine and therefore remains safe if a command is invoked indirectly.
 /// </summary>
 public sealed class MigrationPreviewInstallerRuntime : IInstallerRuntime
@@ -48,7 +48,7 @@ public sealed class MigrationPreviewInstallerRuntime : IInstallerRuntime
         return Task.FromResult(new InstallerExecutionResult(
             InstallerExecutionOutcome.Blocked,
             platform.IsSupported
-                ? "installer.runtime.windows_adapters_not_connected"
+                ? "installer.runtime.production_gate_closed"
                 : platform.DiagnosticCode,
             LastDurablePhase: null,
             RecoveryPending: false));
@@ -64,11 +64,11 @@ public sealed class MigrationPreviewInstallerRuntime : IInstallerRuntime
         return new InstallerRuntimeReadiness(
             CanExecute: false,
             DiagnosticCode: platform.IsSupported
-                ? "installer.runtime.windows_adapters_not_connected"
+                ? "installer.runtime.production_gate_closed"
                 : platform.DiagnosticCode,
-            StatusTitle: platform.IsSupported ? "迁移预览" : "当前系统不受支持",
+            StatusTitle: platform.IsSupported ? "发布验证尚未完成" : "当前系统不受支持",
             StatusDetail: platform.IsSupported
-                ? "新的 WPF 安装界面已可审查；正式安装保持禁用，直至 parent/helper/runtime 组合与 Windows VM 证据全部闭环。"
+                ? "生产 parent/helper/runtime 已完成组合；默认发布门保持关闭，直至同一签名候选的 Windows VM 证据闭环。"
                 : "安装器已在任何发布载荷或系统变更之前阻止执行。需要 Windows 11+ x64 客户端。",
             DisplayVersion: "等待可信发布载荷",
             ProductState: InstallerProductState.Available,
@@ -78,8 +78,8 @@ public sealed class MigrationPreviewInstallerRuntime : IInstallerRuntime
             [
                 new("Windows 11+ x64", platformDetail, platform.IsSupported),
                 new("发布签名与固定清单", "内嵌清单、包内机器文件哈希与候选生成链已实现，尚未完成正式签名发布验证。", false),
-                new("MSIX 用户包事务", "当前用户适配器已实现，仍待接入生产 runtime 并完成 Windows VM 验证。", false),
-                new("系统服务与证书事务", "helper 启动入口、认证 pipe、authority、固定 SCM/payload 编排及目标用户证书 ownership 事务已有实现与测试；parent/coordinator Runtime 仍保持禁用，且尚未完成签名 VM 证据。", false),
+                new("MSIX 用户包事务", "当前用户适配器与 production runtime 已组合；默认发布门关闭，仍待 Windows VM 验证。", false),
+                new("系统服务与证书事务", "helper、认证 pipe、authority、SCM/payload 与目标用户证书事务已组合；默认 parent/helper authority 均禁用，仍待签名 VM 证据。", false),
                 new("最终状态独立验证", "需在 Windows VM 中完成故障注入与恢复证明。", false),
             ]);
     }

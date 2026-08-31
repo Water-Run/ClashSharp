@@ -11,12 +11,12 @@
 3. 主体 MVVM 的依赖方向清晰，Core/Application/Infrastructure 与 ViewModel 不依赖 WinUI，View 和 code-behind 只承担平台交互、生命周期、对话框、导航、焦点与事件边界。现有架构测试已把这些约束变成可执行门禁。
 4. 所有生产项目现在生成 XML 文档，并把公开契约缺失 `CS1591` 提升为错误。非显然的内部/私有权限、生命周期、重放、原生互操作和副作用边界必须写语义注释；不以复述代码的空注释换取“覆盖率”。
 5. WinUI 3 触发器页面原有 13 个纯图标按钮已全部补齐本地化可访问名称与 tooltip，并有 XAML 契约测试防止回归。
-6. 原生互操作已补齐 `System32` DLL 搜索路径限制，生产源码扫描缺失数为零；维护中的 34 个 PowerShell 函数均具有 comment-based help，PowerShell AST 解析错误为零。
+6. 原生互操作已补齐 `System32` DLL 搜索路径限制，生产源码扫描缺失数为零；维护中的 9 个 PowerShell 脚本/模块共 35 个函数，均具有 comment-based help，PowerShell AST 解析错误为零。
 7. Installer 的事务、清单、文件锁、受保护状态、认证 pipe、PID/签名校验、helper-only 证书 ownership、包验证、固定机器 payload/SCM 编排、生产 `IInstallerRuntime`、parent/coordinator 组合及 helper 启动入口均已有实现和测试。该生产执行路径仍受默认关闭的编译门保护；正式打包脚本不会启用它。真实签名候选的 Windows VM 故障矩阵尚未完成，因此当前不能宣称 Installer 可发布。
 
 ## 2. 当前产品与工程拓扑
 
-审查快照包含 18 个 .NET 工程、925 个 C# 源文件、23 个 XAML 文件、7 个受版本控制的 PowerShell 脚本/模块；Rust/Cargo/Slint 实现文件为 0。
+审查快照包含 18 个 .NET 工程、925 个 C# 源文件、23 个 XAML 文件、9 个受版本控制的 PowerShell 脚本/模块；Rust/Cargo/Slint 实现文件为 0。
 
 ### 2.1 用户产品与内部组件
 
@@ -92,7 +92,7 @@ ClashSharp.Installer (WPF composition / entry point)
 
 内部/私有符号采用信息价值门禁：凡涉及权限、所有权、线程、取消、资源寿命、原生调用、重放、状态切点、安全决定或不直观副作用，必须说明调用方需要保持的事实。简单的存储字段和自解释局部步骤不添加“获取/设置某值”式噪声。
 
-PowerShell 规则同步写入 `CodingStyle.md`：每个维护函数都要有 `.SYNOPSIS`、`.DESCRIPTION` 和逐参数 `.PARAMETER`；当前 34/34 已满足，且新增仓库测试防止遗漏。
+PowerShell 规则同步写入 `CodingStyle.md`：每个维护函数都要有 `.SYNOPSIS`、`.DESCRIPTION` 和逐参数 `.PARAMETER`；当前 35/35 已满足，且新增仓库测试防止遗漏。
 
 ### 3.2 C# 14 与 LINQ 选择
 
@@ -156,14 +156,14 @@ PowerShell 规则同步写入 `CodingStyle.md`：每个维护函数都要有 `.S
 - operation-specific durable journal、canonical codec/hash、CAS store、helper-authoritative phase session/loop、回执丢失重放和 helper clear receipt；
 - 受保护 `%ProgramData%` 根、只读 parent reader、rename/reparse/ACL 防护；
 - `runas` 单 UAC 生命周期、named pipe DACL、first-instance、双方 PID、父进程镜像/签名校验、bounded host loop 与 helper authority resource lifetime；
-- WPF `Program` 的 helper 路由会从当前签名可执行文件加载内嵌 manifest，并进入 `WindowsInstallerMachineHelper`；它不创建 WPF Application；
+- WPF `Program` 在 mutation-runtime 编译门启用时，才允许 helper 路由加载内嵌 manifest 并进入 `WindowsInstallerMachineHelper`；默认产物的合法 helper grammar 也会在创建 WPF Application 前直接 fail closed；
 - exact target SID 的包注册检查、TrustedPeople 证书 adapter、helper-only durable certificate ownership mutation/verification，以及供 parent coordinator 使用的只读证书后置条件 adapter；
 - target profile、machine deployment plan、payload archive/staging/promotion/removal、service configuration/mutation、association store、root cleanup，以及固定 `WindowsMachineHelperMachineOperations` 编排；
 - 生产 `ProductionInstallerRuntime` 与 `WindowsInstallerParentEngine`：由可信 backend 独占当前 SID、发布身份和 request 构造，执行前只读检查平台、包、进程及受保护事务，并对单次操作实行 single-flight；
 - `InstallerRuntimeReadiness.AllowedOperations` 由可信 runtime 显式给出，ViewModel 不再根据产品状态推断权限；不受支持平台上的已安装产品只暴露 Uninstall，非法操作集合会整体 fail closed；
 - parent 的执行会按操作创建 bounded broker/coordinator/helper session；证书 mutation/ownership writer 仍只存在于 helper，parent 只持有 `WindowsInstallerCertificatePostcondition` 与受保护事务 reader；
 - helper machine backend 已覆盖普通 install/repair/uninstall 与 durable replay；目标用户 profile 已删除时，只能在精确 SID association 仍存在且固定服务已独立证明 absent 后，用只读根 lease 清理固定 payload/association。显式跨 owner reassociation 尚未形成可验证的双 owner root/SCM 协议，当前继续 fail closed；
-- WPF `App` 仅在 `CLASHSHARP_INSTALLER_MUTATION_RUNTIME` 编译符号存在时组合生产 runtime，否则构造不可执行的迁移预览 runtime；
+- WPF `App` 与 `Program` helper 路由仅在 `CLASHSHARP_INSTALLER_MUTATION_RUNTIME` 编译符号存在时启用 production authority，否则分别构造不可执行的迁移预览 runtime 与稳定失败的 helper 分支；
 - `InstallerShellViewModel` 拥有操作 generation、取消和 runtime 释放；WPF 窗口关闭只请求协作取消，并等待 `IsBusy=false` 后再完成关闭；
 - 主体无服务 create/config/delete 权限，安装器独占服务生命周期 mutation。
 
@@ -177,7 +177,7 @@ PowerShell 规则同步写入 `CodingStyle.md`：每个维护函数都要有 `.S
 2. 对每个 durable cut-point 执行崩溃、断连、回执丢失、helper/parent 终止、重启、篡改与重放矩阵，并证明恢复结果和受保护状态收敛；
 3. 为换绑提供独立、明确确认的 Repair UI/parent policy；只有该确认路径才能构造 `AllowReassociation=true`，并在 VM 中验证外来 owner 证据不会被普通 Repair 覆盖；
 4. 用同一最终 Authenticode 签名候选验证内嵌 manifest、双方映像信任、helper 自举、RFC3161 时间戳、安装/修复/升级/卸载/换绑与恢复矩阵；
-5. 将 Sandbox 当前明确 skipped 的 launch、startup、cleanup-uninstall 场景实现为“未执行即失败”的证据，禁止把 skipped 当通过；
+5. Sandbox 宿主报告契约已只接受精确 schema/scenario/runId、有效时间/环境、全部步骤通过与场景专用 checks；当前只有 fixed-package `install-only` 存在通过契约，并拒绝未知字段、skipped、failed、timedOut、unknown、空值、错配及部分报告。仍需让当前明确 failed/not-executed 的 launch、startup、cleanup-uninstall 场景真实执行，并绑定同一签名候选；
 6. 只有前述证据全部归档后，正式打包才可显式传入 `ClashSharpEnableInstallerMutationRuntime=true`；默认源码构建与开发产物继续保持关闭，并由测试锁定“只能在 formal build + embedded manifest 下启用”。
 
 ### 5.3 发布判定
@@ -186,7 +186,7 @@ PowerShell 规则同步写入 `CodingStyle.md`：每个维护函数都要有 `.S
 |---|---|---|
 | E0 | 文档/设计 | 已有 |
 | E1 | 静态契约/源码审查 | 已有 |
-| E2 | Release 构建与确定性测试 | 当前 Installer 安全集 983 项通过（Core 547 + Presentation 88 + Windows 348）；WPF Release/x64 0 warning、0 error |
+| E2 | Release 构建与确定性测试 | 当前 Installer 安全集 985 项通过（Core 548 + Presentation 89 + Windows 348）；WPF Release/x64 0 warning、0 error |
 | E3 | Windows 真实 API/集成环境 | 部分 adapter 测试已有，完整安装路径未闭环 |
 | E4 | 签名候选 VM、故障注入、重启恢复 | 未完成，发布硬阻断 |
 
@@ -200,6 +200,7 @@ PowerShell 规则同步写入 `CodingStyle.md`：每个维护函数都要有 `.S
 - 将 MihomoService/RecoveryWatchdog 默认设为不可发布，只允许正式安装器组件构建发布；
 - 新增文档、P/Invoke、PowerShell 帮助、可访问性和双产品拓扑架构测试；
 - 完成 Installer 生产 presentation runtime、显式 allowed-operation 授权、窗口关闭取消/资源释放、Windows parent engine、认证 helper composition、固定机器 mutation，以及 profile 缺失时受 service-absent 证明约束的固定根卸载收敛；跨 owner reassociation 仍保持拒绝，并以默认关闭的 formal-build gate 保持 fail-closed。
+- 加固 Sandbox 报告证据门禁：每次场景使用唯一 runId，guest 以临时文件原子发布报告，host 对顶层/环境/步骤 schema 和 `install-only` 固定包证据 fail closed；未实现的必需场景显式失败且没有通过契约，纯报告契约测试已接入 CI，但没有据此提升 E3/E4 等级。
 
 ## 7. 验证账本
 
@@ -208,15 +209,16 @@ PowerShell 规则同步写入 `CodingStyle.md`：每个维护函数都要有 `.S
 | 检查 | 当前证据 |
 |---|---|
 | NuGet vulnerability（含 transitive，18 项目） | 0 个已知易受攻击包 |
-| PowerShell AST / 函数帮助 | 7 文件解析 0 错误；34/34 函数有帮助 |
+| PowerShell AST / 函数帮助 | 9 文件解析 0 错误；35/35 函数有帮助 |
 | 生产 P/Invoke System32 限制 | 0 个缺失 |
 | 公开 XML 文档门禁 | 10/10 生产项目启用；Release build 验证 |
-| Installer Core tests | 547/547 通过；0 失败；0 skipped |
-| Installer Presentation tests | 88/88 通过；0 失败；0 skipped |
+| Installer Core tests | 548/548 通过；0 失败；0 skipped |
+| Installer Presentation tests | 89/89 通过；0 失败；0 skipped |
 | Installer Windows 安全集 | 348/348 通过；0 失败；0 skipped；明确排除会修改开发机 `CurrentUser\TrustedPeople` 的 `WindowsCurrentUserCertificateStoreAdapterTests` |
-| 主体 `ClashSharp.Tests` | 2239/2239 通过；0 失败；0 skipped |
-| 主体 Architecture tests | 172/172 通过；0 失败；0 skipped |
+| 主体 `ClashSharp.Tests` | 2240/2240 通过；0 失败；0 skipped |
+| 主体 Architecture tests | 173/173 通过；0 失败；0 skipped |
 | 主体 MVVM structure gate | 16/16 通过；0 失败；0 skipped |
+| Sandbox report contract | Windows PowerShell 5.1 与 PowerShell 7 双通过；CI 已接入；未启动 Windows Sandbox，不计作 E3/E4 |
 | Release x64 solution build | 18 项目成功；0 warning；0 error |
 | `dotnet format --verify-no-changes` | 通过，退出码 0 |
 | `git diff --check` | 通过；提交前再次复核 |
@@ -232,7 +234,7 @@ PowerShell 规则同步写入 `CodingStyle.md`：每个维护函数都要有 `.S
 - 把 PowerShell AST 语法检查纳入 CI，而不只依赖 C# 源码契约；
 - 为所有新 internal/private 权限与生命周期边界执行审查，拒绝占位式 XML/comment help；
 - 将 UIA、键盘、高对比度、DPI、窗口关闭取消与无障碍屏幕阅读器检查纳入 Windows UI 测试；
-- 完成 Sandbox 的非 skipped 安装、启动、代理关闭和清理卸载矩阵。
+- 完成 Sandbox 的真实 Installer 安装、启动、代理关闭和清理卸载矩阵，并把结果绑定到同一签名候选 digest。
 
 ### P2：受证据驱动的现代化
 

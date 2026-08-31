@@ -34,6 +34,14 @@ jobs:
       - name: Verify formatting
         run: dotnet format ClashSharp/ClashSharp.slnx --verify-no-changes --no-restore
 
+      - name: Verify Sandbox report contract (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./ClashSharp/SandboxTest/Test-SandboxReportContract.ps1
+
+      - name: Verify Sandbox report contract (PowerShell 7)
+        shell: pwsh
+        run: ./ClashSharp/SandboxTest/Test-SandboxReportContract.ps1
+
       - name: Build Release
         run: dotnet build ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restore
 

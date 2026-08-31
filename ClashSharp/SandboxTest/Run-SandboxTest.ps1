@@ -13,8 +13,13 @@ $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $repoRoot = Resolve-Path (Join-Path $scriptRoot "..\..")
 $sandboxScript = Join-Path $scriptRoot "scripts\Run-InSandbox.ps1"
+$sandboxReportContract = Join-Path $scriptRoot "SandboxReportContract.psm1"
 $sandboxRoot = Join-Path $scriptRoot ".sandbox"
-$runId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ")
+$runId = "{0}-{1}" -f `
+    (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ"), `
+    [Guid]::NewGuid().ToString("N")
+
+Import-Module -Name $sandboxReportContract -Force -ErrorAction Stop
 
 <#
 .SYNOPSIS
@@ -176,7 +181,7 @@ function Write-SandboxConfiguration {
     $resolvedSharedDirectory = (Resolve-Path -LiteralPath $SharedDirectory).Path
     $escapedSharedDirectory = [Security.SecurityElement]::Escape($resolvedSharedDirectory)
     $sandboxDirectory = "C:\Users\WDAGUtilityAccount\Desktop\ClashSharpSandbox"
-    $logonCommand = "powershell.exe -ExecutionPolicy Bypass -File $sandboxDirectory\scripts\Run-InSandbox.ps1"
+    $logonCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $sandboxDirectory\scripts\Run-InSandbox.ps1"
     $escapedLogonCommand = [Security.SecurityElement]::Escape($logonCommand)
     $configuration = @"
 <Configuration>
@@ -192,7 +197,9 @@ function Write-SandboxConfiguration {
   </LogonCommand>
 </Configuration>
 "@
-    Set-Content -LiteralPath $Destination -Value $configuration -Encoding utf8NoBOM
+    # UTF8 is BOM-backed in Windows PowerShell 5.1 and BOM-free in PowerShell 7;
+    # both forms are valid XML and keep the host runner compatible with either shell.
+    Set-Content -LiteralPath $Destination -Value $configuration -Encoding UTF8
     return (Resolve-Path -LiteralPath $Destination).Path
 }
 
@@ -238,6 +245,7 @@ foreach ($scenarioName in $scenarios) {
 
     $preparedRuns += [pscustomobject]@{
         Scenario = $scenarioName
+        RunId = $runId
         WsbPath = $emittedWsbPath
         SharedDir = $sharedDir
         PlanPath = $scenarioPlanPath
@@ -269,10 +277,11 @@ foreach ($run in $preparedRuns) {
 
     if (Wait-SandboxReport -ReportPath $run.ReportPath -Timeout $TimeoutSeconds) {
         $report = Get-Content -Raw -Path $run.ReportPath | ConvertFrom-Json
-        Write-Host "Scenario '$($run.Scenario)' completed with status '$($report.status)'."
-        if ($report.status -eq "failed" -or $report.status -eq "timedOut") {
-            throw "Scenario '$($run.Scenario)' failed. Report: $($run.ReportPath)"
-        }
+        SandboxReportContract\Assert-SandboxScenarioReport `
+            -Report $report `
+            -ExpectedScenario $run.Scenario `
+            -ExpectedRunId $run.RunId
+        Write-Host "Scenario '$($run.Scenario)' passed with bound report evidence."
     } else {
         throw "Timed out waiting for scenario '$($run.Scenario)' report: $($run.ReportPath)"
     }

@@ -218,26 +218,10 @@ function Invoke-InstallOnlyScenario {
 
 <#
 .SYNOPSIS
-Creates the explicit evidence object used for an unimplemented sandbox scenario.
-.DESCRIPTION
-Preserves the reason a scenario was not executed so skipped work cannot be mistaken for a pass.
-.PARAMETER Reason
-Human-readable explanation recorded in the result JSON.
-#>
-function New-SkippedChecks {
-    param([string]$Reason)
-
-    return [ordered]@{
-        reason = $Reason
-    }
-}
-
-<#
-.SYNOPSIS
 Writes the terminal sandbox scenario report as JSON.
 .DESCRIPTION
 Combines the immutable plan, guest environment, ordered step evidence, checks, and optional failure
-into the fixed result path consumed by the host harness.
+into a temporary file and atomically publishes it at the fixed path consumed by the host harness.
 .PARAMETER Plan
 Parsed scenario plan that supplies identity and scenario name.
 .PARAMETER Status
@@ -259,6 +243,7 @@ function Write-ScenarioReport {
     $report = [ordered]@{
         schemaVersion = 1
         scenario = [string]$Plan.scenario
+        runId = [string]$Plan.runId
         status = $Status
         startedAt = $startedAt.ToString("o")
         finishedAt = $finishedAt.ToString("o")
@@ -273,7 +258,51 @@ function Write-ScenarioReport {
         failure = $FailureMessage
     }
 
-    $report | ConvertTo-Json -Depth 12 | Set-Content -Encoding UTF8 -Path $reportPath
+    $temporaryReportPath = "$reportPath.tmp"
+    try {
+        $report | ConvertTo-Json -Depth 12 |
+            Set-Content -Encoding UTF8 -LiteralPath $temporaryReportPath
+        Move-Item -LiteralPath $temporaryReportPath -Destination $reportPath -Force
+    } finally {
+        if (Test-Path -LiteralPath $temporaryReportPath) {
+            Remove-Item -LiteralPath $temporaryReportPath -Force
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+Publishes explicit failed evidence for a required scenario that did not execute.
+.DESCRIPTION
+Records a failed step and terminal failed report so an unimplemented required scenario can never be
+mistaken for a pass by the host evidence validator.
+.PARAMETER Plan
+Parsed immutable scenario plan for the current run.
+.PARAMETER Checks
+Mutable report dictionary that receives the not-executed reason.
+.PARAMETER Reason
+Human-readable explanation recorded as both failed step evidence and terminal failure.
+#>
+function Write-NotExecutedScenarioReport {
+    param(
+        [object]$Plan,
+        [System.Collections.IDictionary]$Checks,
+        [string]$Reason
+    )
+
+    $Checks.notExecuted = [ordered]@{
+        reason = $Reason
+    }
+    Add-StepResult `
+        -Name "scenario-not-executed" `
+        -Status "failed" `
+        -StartedAt (Get-Date).ToUniversalTime() `
+        -ErrorMessage $Reason
+    Write-ScenarioReport `
+        -Plan $Plan `
+        -Status "failed" `
+        -Checks $Checks `
+        -FailureMessage $Reason
 }
 
 $plan = $null
@@ -292,27 +321,31 @@ try {
             Invoke-InstallOnlyScenario -Plan $plan -Checks $checks
         }
         "launch-no-proxy" {
-            $checks.skipped = New-SkippedChecks -Reason "launch-no-proxy is planned but not implemented in this increment."
-            Add-StepResult -Name "scenario-skipped" -Status "skipped" -StartedAt (Get-Date).ToUniversalTime() -ErrorMessage $null
-            Write-ScenarioReport -Plan $plan -Status "skipped" -Checks $checks -FailureMessage $null
+            Write-NotExecutedScenarioReport `
+                -Plan $plan `
+                -Checks $checks `
+                -Reason "launch-no-proxy is required but not implemented."
             return
         }
         "startup-with-proxy-config" {
-            $checks.skipped = New-SkippedChecks -Reason "startup-with-proxy-config is planned but not implemented in this increment."
-            Add-StepResult -Name "scenario-skipped" -Status "skipped" -StartedAt (Get-Date).ToUniversalTime() -ErrorMessage $null
-            Write-ScenarioReport -Plan $plan -Status "skipped" -Checks $checks -FailureMessage $null
+            Write-NotExecutedScenarioReport `
+                -Plan $plan `
+                -Checks $checks `
+                -Reason "startup-with-proxy-config is required but not implemented."
             return
         }
         "cleanup-uninstall" {
-            $checks.skipped = New-SkippedChecks -Reason "cleanup-uninstall is planned but not implemented in this increment."
-            Add-StepResult -Name "scenario-skipped" -Status "skipped" -StartedAt (Get-Date).ToUniversalTime() -ErrorMessage $null
-            Write-ScenarioReport -Plan $plan -Status "skipped" -Checks $checks -FailureMessage $null
+            Write-NotExecutedScenarioReport `
+                -Plan $plan `
+                -Checks $checks `
+                -Reason "cleanup-uninstall is required but not implemented."
             return
         }
         "real-proxy-optional" {
-            $checks.skipped = New-SkippedChecks -Reason "real-proxy-optional requires explicit proxy inputs and is not enabled by default."
-            Add-StepResult -Name "scenario-skipped" -Status "skipped" -StartedAt (Get-Date).ToUniversalTime() -ErrorMessage $null
-            Write-ScenarioReport -Plan $plan -Status "skipped" -Checks $checks -FailureMessage $null
+            Write-NotExecutedScenarioReport `
+                -Plan $plan `
+                -Checks $checks `
+                -Reason "real-proxy-optional requires explicit proxy inputs that were not supplied."
             return
         }
         default {
@@ -326,6 +359,7 @@ try {
     if ($null -eq $plan) {
         $plan = [pscustomobject]@{
             scenario = "unknown"
+            runId = "unknown"
         }
     }
 
