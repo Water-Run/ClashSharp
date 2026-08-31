@@ -251,6 +251,7 @@ internal static class ReparseSafeFile
         SetLastError = true,
         CharSet = CharSet.Unicode,
         ExactSpelling = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern SafeFileHandle CreateFile(
         string fileName,
         uint desiredAccess,
@@ -266,6 +267,7 @@ internal static class ReparseSafeFile
         SetLastError = true,
         CharSet = CharSet.Unicode,
         ExactSpelling = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint GetFinalPathNameByHandle(
         SafeFileHandle file,
         [Out] char[] filePath,

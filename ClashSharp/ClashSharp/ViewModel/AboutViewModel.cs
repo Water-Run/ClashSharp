@@ -43,7 +43,9 @@ internal sealed class AboutViewModel : ObservableObject
     /// <summary>Initializes an about view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
     /// <param name="core">Core provider. Must not be null.</param>
+    /// <param name="updateChecker">Read-only release checker. Must not be null.</param>
     /// <param name="launcher">URI launcher. Must not be null.</param>
+    /// <param name="errorSink">Boundary sink for unexpected command failures. Must not be null.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public AboutViewModel(
         IDisplayPageLocalization localization,

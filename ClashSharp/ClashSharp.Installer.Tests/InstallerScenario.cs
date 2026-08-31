@@ -36,13 +36,19 @@ internal sealed class InstallerScenario :
 
     internal Func<CancellationToken, Task>? MachineAction { get; set; }
 
+    internal Func<CancellationToken, Task>? MachineResponseAction { get; set; }
+
     internal Func<CancellationToken, Task>? MachinePrepareAction { get; set; }
+
+    internal Func<CancellationToken, Task>? MachinePrepareAdmissionAction { get; set; }
 
     internal Func<CancellationToken, Task>? PackageCommitAction { get; set; }
 
     internal Func<CancellationToken, Task>? ReleaseReverifyAction { get; set; }
 
     internal Func<CancellationToken, Task>? FinalVerifyAction { get; set; }
+
+    internal Func<CancellationToken, Task>? FinalClearResponseAction { get; set; }
 
     internal Func<InstallerTransactionSnapshot, InstallerTransactionSnapshot>?
         MachineResultFactory
@@ -149,6 +155,12 @@ internal sealed class InstallerScenario :
         InstallerTransactionSnapshot committed = InstallerTransactionSnapshot.Create(
             durableIntent.Journal.TransitionTo(
                 InstallerTransactionPhase.MachineCommitted));
+        await Store.CommitHelperStateAsync(durableIntent, committed, cancellationToken);
+        if (MachineResponseAction is not null)
+        {
+            await MachineResponseAction(cancellationToken);
+        }
+
         return MachineResultFactory?.Invoke(durableIntent) ?? committed;
     }
 
@@ -160,6 +172,12 @@ internal sealed class InstallerScenario :
     {
         MachinePreparationIntents.Add(durableIntent);
         Events.Add($"machine.prepare:{request.Operation}");
+        if (MachinePrepareAdmissionAction is not null)
+        {
+            await MachinePrepareAdmissionAction(cancellationToken);
+        }
+
+        await Store.PersistHelperIntentAsync(durableIntent, cancellationToken);
         if (MachinePrepareAction is not null)
         {
             await MachinePrepareAction(cancellationToken);
@@ -170,6 +188,7 @@ internal sealed class InstallerScenario :
             : InstallerTransactionPhase.MachineReserved;
         InstallerTransactionSnapshot committed = InstallerTransactionSnapshot.Create(
             durableIntent.Journal.TransitionTo(committedPhase));
+        await Store.CommitHelperStateAsync(durableIntent, committed, cancellationToken);
         return MachinePrepareResultFactory?.Invoke(durableIntent) ?? committed;
     }
 
@@ -189,6 +208,7 @@ internal sealed class InstallerScenario :
         InstallerTransactionSnapshot committed = InstallerTransactionSnapshot.Create(
             durableIntent.Journal.TransitionTo(
                 InstallerTransactionPhase.PackageCommitted));
+        await Store.CommitHelperStateAsync(durableIntent, committed, cancellationToken);
         return PackageCommitResultFactory?.Invoke(durableIntent) ?? committed;
     }
 
@@ -208,7 +228,29 @@ internal sealed class InstallerScenario :
 
         InstallerTransactionSnapshot committed = InstallerTransactionSnapshot.Create(
             durableState.Journal.TransitionTo(InstallerTransactionPhase.Verified));
+        await Store.CommitHelperStateAsync(durableState, committed, cancellationToken);
         return FinalResultFactory?.Invoke(durableState) ?? committed;
+    }
+
+    public async Task<InstallerTransactionSnapshot> ClearVerifiedAsync(
+        InstallerRequest request,
+        IInstallerReleaseLease release,
+        InstallerTransactionSnapshot verifiedState,
+        CancellationToken cancellationToken)
+    {
+        request.Validate();
+        verifiedState.Validate();
+        Assert.True(verifiedState.Journal.Matches(request));
+        await Store.ClearVerifiedAsync(
+            verifiedState.Journal.TransactionId,
+            verifiedState.ContentHash,
+            cancellationToken);
+        if (FinalClearResponseAction is not null)
+        {
+            await FinalClearResponseAction(cancellationToken);
+        }
+
+        return verifiedState;
     }
 }
 
@@ -228,11 +270,54 @@ internal sealed class MemoryInstallerTransactionStore : IInstallerTransactionSto
 
     internal InstallerTransactionSnapshot? Current { get; private set; }
 
-    public Task<InstallerTransactionSnapshot?> LoadAsync(CancellationToken cancellationToken)
+    internal Func<CancellationToken, Task<InstallerTransactionSnapshot?>>? LoadAction { get; set; }
+
+    public async Task<InstallerTransactionSnapshot?> LoadAsync(
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         _events.Add("journal.load");
-        return Task.FromResult(Current);
+        return LoadAction is null
+            ? Current
+            : await LoadAction(cancellationToken);
+    }
+
+    internal async Task PersistHelperIntentAsync(
+        InstallerTransactionSnapshot durableIntent,
+        CancellationToken cancellationToken)
+    {
+        durableIntent.Validate();
+        if (Current is null)
+        {
+            Assert.Equal(InstallerTransactionPhase.Prepared, durableIntent.Journal.Phase);
+            _ = await SaveAsync(
+                durableIntent.Journal,
+                expectedCurrentHash: null,
+                cancellationToken);
+            return;
+        }
+
+        Assert.Equal(durableIntent, Current);
+    }
+
+    internal async Task CommitHelperStateAsync(
+        InstallerTransactionSnapshot durableIntent,
+        InstallerTransactionSnapshot committedState,
+        CancellationToken cancellationToken)
+    {
+        durableIntent.Validate();
+        committedState.Validate();
+        Assert.NotNull(Current);
+        if (Current == committedState)
+        {
+            return;
+        }
+
+        Assert.Equal(durableIntent, Current);
+        _ = await SaveAsync(
+            committedState.Journal,
+            durableIntent.ContentHash,
+            cancellationToken);
     }
 
     public Task<InstallerTransactionSnapshot> SaveAsync(

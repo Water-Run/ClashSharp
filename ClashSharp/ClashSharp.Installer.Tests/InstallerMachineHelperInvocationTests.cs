@@ -59,6 +59,18 @@ public sealed class InstallerMachineHelperInvocationTests
         InstallerMachineHelperVerb.Verify,
         InstallerOperation.Uninstall,
         InstallerTransactionPhase.Verified)]
+    [InlineData(
+        InstallerMachineHelperVerb.Clear,
+        InstallerOperation.Install,
+        InstallerTransactionPhase.Verified)]
+    [InlineData(
+        InstallerMachineHelperVerb.Clear,
+        InstallerOperation.Repair,
+        InstallerTransactionPhase.Verified)]
+    [InlineData(
+        InstallerMachineHelperVerb.Clear,
+        InstallerOperation.Uninstall,
+        InstallerTransactionPhase.Verified)]
     public void ExactInvocationRoundTripsAndMatchesOnlyItsDurableState(
         InstallerMachineHelperVerb verb,
         InstallerOperation operation,
@@ -195,6 +207,14 @@ public sealed class InstallerMachineHelperInvocationTests
         InstallerMachineHelperVerb.Verify,
         InstallerOperation.Uninstall,
         InstallerTransactionPhase.MachineCommitted)]
+    [InlineData(
+        InstallerMachineHelperVerb.Clear,
+        InstallerOperation.Install,
+        InstallerTransactionPhase.MachineCommitted)]
+    [InlineData(
+        InstallerMachineHelperVerb.Clear,
+        InstallerOperation.Uninstall,
+        InstallerTransactionPhase.PackageCommitted)]
     public void VerbCannotCrossItsOperationSpecificDurablePhase(
         InstallerMachineHelperVerb verb,
         InstallerOperation operation,

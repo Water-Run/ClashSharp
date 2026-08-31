@@ -119,21 +119,27 @@ public sealed class InstallerOwnershipArchitectureTests
         Assert.DoesNotContain("UninstallStartupRestoreFallback", settingsViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("Command.Uninstall", settingsViewModel, StringComparison.Ordinal);
 
-        string installerPlan = File.ReadAllText(Path.Combine(
+        string installerCoordinator = File.ReadAllText(Path.Combine(
             FindRepositoryRoot(),
             "ClashSharp",
-            "Installer",
-            "src",
-            "service_plan.rs"));
+            "ClashSharp.Installer.Core",
+            "Execution",
+            "InstallerCoordinator.cs"));
+        string elevatedMachineAdapter = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "ClashSharp",
+            "ClashSharp.Installer.Windows",
+            "Machines",
+            "WindowsElevatedMachineAdapter.cs"));
         Assert.Contains(
-            "'create', $serviceName, 'binPath=', $serviceBinaryPath",
-            installerPlan,
+            ".ApplyAsync(request, release, durable, cancellationToken)",
+            installerCoordinator,
             StringComparison.Ordinal);
         Assert.Contains(
-            "'config', $serviceName, 'binPath=', $serviceBinaryPath",
-            installerPlan,
+            "InstallerMachineHelperVerb.Apply",
+            elevatedMachineAdapter,
             StringComparison.Ordinal);
-        Assert.Contains("& $scExe delete $serviceName", installerPlan, StringComparison.Ordinal);
+        Assert.Contains("InstallerMachineHelperVerb.Remove", elevatedMachineAdapter, StringComparison.Ordinal);
     }
 
     /// <summary>The built application assembly contains no hidden service-registration authority.</summary>
@@ -189,6 +195,33 @@ public sealed class InstallerOwnershipArchitectureTests
         Assert.DoesNotContain("MihomoServiceIpcToken", factory, StringComparison.Ordinal);
         Assert.DoesNotContain("MihomoServiceIpcToken", settings, StringComparison.Ordinal);
         Assert.DoesNotContain("MihomoServiceIpcToken", actions, StringComparison.Ordinal);
+    }
+
+    /// <summary>The WPF parent cannot acquire protected Installer journal write authority.</summary>
+    [Fact]
+    public void InstallerParent_UsesOnlyReadOnlyProtectedTransactionState()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string coordinator = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "ClashSharp",
+            "ClashSharp.Installer.Core",
+            "Execution",
+            "InstallerCoordinator.cs"));
+        string parentReader = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "ClashSharp",
+            "ClashSharp.Installer.Windows",
+            "Transactions",
+            "WindowsInstallerProtectedTransactionReader.cs"));
+
+        Assert.Contains("IInstallerTransactionReader transactionReader", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("IInstallerTransactionStore", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain(".SaveAsync(", coordinator, StringComparison.Ordinal);
+        Assert.Contains("WindowsInstallerProtectedTransactionReader", parentReader, StringComparison.Ordinal);
+        Assert.Contains("IInstallerTransactionReader", parentReader, StringComparison.Ordinal);
+        Assert.DoesNotContain("IInstallerTransactionStore", parentReader, StringComparison.Ordinal);
+        Assert.DoesNotContain("public Task<InstallerTransactionSnapshot> SaveAsync", parentReader, StringComparison.Ordinal);
     }
 
     /// <summary>Ensures every shipped language directs lifecycle work to the Installer.</summary>

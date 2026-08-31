@@ -24,10 +24,11 @@ public sealed class InstallerCoordinatorTests
                 "environment.inspect",
                 "release.verify",
                 "journal.load",
-                "journal.save:Prepared",
                 "release.reverify",
                 "machine.prepare:Install",
+                "journal.save:Prepared",
                 "journal.save:MachineReserved",
+                "journal.load",
                 "release.reverify",
                 "certificate.apply:Install",
                 "release.reverify",
@@ -35,15 +36,20 @@ public sealed class InstallerCoordinatorTests
                 "release.reverify",
                 "machine.commit_package:Install",
                 "journal.save:PackageCommitted",
+                "journal.load",
                 "release.reverify",
                 "machine.apply:Install",
                 "journal.save:MachineCommitted",
+                "journal.load",
                 "release.reverify",
                 "final.verify",
                 "journal.save:Verified",
+                "journal.load",
                 "release.reverify",
                 "final.verify",
+                "journal.load",
                 "journal.clear",
+                "journal.load",
                 "release.dispose",
             ],
             scenario.Events);
@@ -314,11 +320,11 @@ public sealed class InstallerCoordinatorTests
     }
 
     [Fact]
-    public async Task UacCancellationDuringMachineReservationCannotMutateUserState()
+    public async Task UacCancellationBeforePreparedLeavesNoInstallRecoveryOrUserMutation()
     {
         InstallerScenario scenario = new()
         {
-            MachinePrepareAction = static _ => throw new InstallerUserCancelledException(
+            MachinePrepareAdmissionAction = static _ => throw new InstallerUserCancelledException(
                 "installer.elevation.user_cancelled"),
         };
         using InstallerCoordinator coordinator = scenario.CreateCoordinator();
@@ -329,19 +335,21 @@ public sealed class InstallerCoordinatorTests
             CancellationToken.None);
 
         Assert.Equal(InstallerExecutionOutcome.Cancelled, result.Outcome);
-        Assert.Equal(InstallerTransactionPhase.Prepared, result.LastDurablePhase);
+        Assert.Null(result.LastDurablePhase);
+        Assert.False(result.RecoveryPending);
         Assert.DoesNotContain("certificate.apply:Install", scenario.Events);
         Assert.DoesNotContain("package.apply:Install", scenario.Events);
         Assert.DoesNotContain("machine.apply:Install", scenario.Events);
-        Assert.Equal(InstallerTransactionPhase.Prepared, scenario.Store.Current?.Journal.Phase);
+        Assert.DoesNotContain("journal.save:Prepared", scenario.Events);
+        Assert.Null(scenario.Store.Current);
     }
 
     [Fact]
-    public async Task UacCancellationDuringRemovalAuthorizationCannotDeleteAnything()
+    public async Task UacCancellationBeforePreparedLeavesNoUninstallRecoveryOrDeletion()
     {
         InstallerScenario scenario = new()
         {
-            MachinePrepareAction = static _ => throw new InstallerUserCancelledException(
+            MachinePrepareAdmissionAction = static _ => throw new InstallerUserCancelledException(
                 "installer.elevation.user_cancelled"),
         };
         using InstallerCoordinator coordinator = scenario.CreateCoordinator();
@@ -353,12 +361,13 @@ public sealed class InstallerCoordinatorTests
 
         Assert.Equal(InstallerExecutionOutcome.Cancelled, result.Outcome);
         Assert.Equal("installer.elevation.user_cancelled", result.DiagnosticCode);
-        Assert.Equal(InstallerTransactionPhase.Prepared, result.LastDurablePhase);
-        Assert.True(result.RecoveryPending);
+        Assert.Null(result.LastDurablePhase);
+        Assert.False(result.RecoveryPending);
         Assert.DoesNotContain("machine.apply:Uninstall", scenario.Events);
         Assert.DoesNotContain("package.apply:Uninstall", scenario.Events);
         Assert.DoesNotContain("certificate.apply:Uninstall", scenario.Events);
-        Assert.Equal(InstallerTransactionPhase.Prepared, scenario.Store.Current?.Journal.Phase);
+        Assert.DoesNotContain("journal.save:Prepared", scenario.Events);
+        Assert.Null(scenario.Store.Current);
     }
 
     [Fact]

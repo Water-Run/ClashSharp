@@ -12,11 +12,19 @@ $ErrorActionPreference = "Stop"
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $repoRoot = Resolve-Path (Join-Path $scriptRoot "..\..")
-$manifestPath = Join-Path $scriptRoot "Cargo.toml"
 $sandboxScript = Join-Path $scriptRoot "scripts\Run-InSandbox.ps1"
 $sandboxRoot = Join-Path $scriptRoot ".sandbox"
 $runId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ")
 
+<#
+.SYNOPSIS
+Expands and validates the requested Windows Sandbox scenario selection.
+.DESCRIPTION
+Maps an empty selection to install-only, expands all to the default matrix, and rejects unknown
+scenario names before any sandbox files are created.
+.PARAMETER Selection
+Comma-separated scenario names or the all keyword.
+#>
 function Resolve-ScenarioSelection {
     param([string]$Selection)
 
@@ -49,6 +57,15 @@ function Resolve-ScenarioSelection {
     return @($selected)
 }
 
+<#
+.SYNOPSIS
+Finds the first candidate tree containing both a ClashSharp package and certificate.
+.DESCRIPTION
+Prefers an explicit input and then checks fixed generated locations, returning only a resolved
+directory that contains a matching MSIX or bundle and a certificate.
+.PARAMETER ExplicitPayloadPath
+Optional caller-selected payload root to inspect before the fixed candidates.
+#>
 function Resolve-PayloadSource {
     param([string]$ExplicitPayloadPath)
 
@@ -58,7 +75,7 @@ function Resolve-PayloadSource {
     }
 
     $candidates += @(
-        (Join-Path $repoRoot.Path "ClashSharp\Installer\target\release\payload"),
+        (Join-Path $repoRoot.Path "artifacts\installer\release\payload"),
         (Join-Path $repoRoot.Path "ClashSharp\Installer\payload"),
         (Join-Path $repoRoot.Path "artifacts")
     )
@@ -85,6 +102,16 @@ function Resolve-PayloadSource {
     throw "No usable Clash# MSIX payload was found. Build the installer or pass -PayloadPath."
 }
 
+<#
+.SYNOPSIS
+Copies a selected payload tree into one isolated sandbox shared directory.
+.DESCRIPTION
+Creates the destination and recursively copies every top-level payload entry for the current run.
+.PARAMETER Source
+Resolved payload directory to copy.
+.PARAMETER Destination
+Isolated run directory that receives the payload snapshot.
+#>
 function Copy-Payload {
     param(
         [string]$Source,
@@ -98,6 +125,16 @@ function Copy-Payload {
         }
 }
 
+<#
+.SYNOPSIS
+Waits for the sandbox guest to publish its scenario report.
+.DESCRIPTION
+Polls the exact report path until it appears or the caller-supplied timeout expires.
+.PARAMETER ReportPath
+Expected result JSON path in the mapped reports directory.
+.PARAMETER Timeout
+Maximum number of seconds to wait.
+#>
 function Wait-SandboxReport {
     param(
         [string]$ReportPath,
@@ -116,21 +153,48 @@ function Wait-SandboxReport {
     return $false
 }
 
-if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-    throw "Rust cargo was not found on PATH. Install Rust before running SandboxTest."
-}
+<#
+.SYNOPSIS
+Writes one escaped Windows Sandbox configuration for an isolated scenario run.
+.DESCRIPTION
+Maps the resolved shared directory and emits the fixed guest logon command without interpolating
+unescaped XML content.
+.PARAMETER SharedDirectory
+Host directory mapped into the sandbox.
+.PARAMETER Destination
+Literal path of the WSB configuration to create.
+#>
+function Write-SandboxConfiguration {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SharedDirectory,
 
-$planArgs = @(
-    "run",
-    "--quiet",
-    "--manifest-path",
-    $manifestPath,
-    "--",
-    "plan",
-    "--repo-root",
-    $repoRoot.Path
-)
-& cargo @planArgs
+        [Parameter(Mandatory = $true)]
+        [string]$Destination
+    )
+
+    $resolvedSharedDirectory = (Resolve-Path -LiteralPath $SharedDirectory).Path
+    $escapedSharedDirectory = [Security.SecurityElement]::Escape($resolvedSharedDirectory)
+    $sandboxDirectory = "C:\Users\WDAGUtilityAccount\Desktop\ClashSharpSandbox"
+    $logonCommand = "powershell.exe -ExecutionPolicy Bypass -File $sandboxDirectory\scripts\Run-InSandbox.ps1"
+    $escapedLogonCommand = [Security.SecurityElement]::Escape($logonCommand)
+    $configuration = @"
+<Configuration>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>$escapedSharedDirectory</HostFolder>
+      <SandboxFolder>$sandboxDirectory</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>$escapedLogonCommand</Command>
+  </LogonCommand>
+</Configuration>
+"@
+    Set-Content -LiteralPath $Destination -Value $configuration -Encoding utf8NoBOM
+    return (Resolve-Path -LiteralPath $Destination).Path
+}
 
 $scenarios = Resolve-ScenarioSelection -Selection $Scenario
 $payloadSource = Resolve-PayloadSource -ExplicitPayloadPath $PayloadPath
@@ -168,21 +232,9 @@ foreach ($scenarioName in $scenarios) {
 
     $scenarioPlan | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 -Path $scenarioPlanPath
 
-    $emitArgs = @(
-        "run",
-        "--quiet",
-        "--manifest-path",
-        $manifestPath,
-        "--",
-        "emit-wsb",
-        "--repo-root",
-        $repoRoot.Path,
-        "--shared-dir",
-        $sharedDir,
-        "--wsb-file",
-        $wsbPath
-    )
-    $emittedWsbPath = (& cargo @emitArgs | Select-Object -Last 1)
+    $emittedWsbPath = Write-SandboxConfiguration `
+        -SharedDirectory $sharedDir `
+        -Destination $wsbPath
 
     $preparedRuns += [pscustomobject]@{
         Scenario = $scenarioName

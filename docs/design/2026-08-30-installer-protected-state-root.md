@@ -18,11 +18,11 @@ device, forward-slash, and dot-segment aliases fail closed.
 ancestor handles and disposal boundary.
 
 This composition is an elevated authority component, not a writable store for the `asInvoker` WPF
-parent. The target user is intentionally read-only. Parent-side readiness/recovery inspection must use
-a read-only view over the same verified root, while all create/replace/clear operations remain inside
-the authenticated helper session. The current Core coordinator's direct `SaveAsync`/clear calls are a
-known production-composition gap; wiring them to this store or granting the user write access would
-violate the boundary rather than close it.
+parent. The target user is intentionally read-only. Core now depends only on
+`IInstallerTransactionReader`; `WindowsInstallerProtectedTransactionReader` verifies an existing root
+without creating it and exposes no writer contract. All create/replace/clear operations are owned by
+`InstallerMachineHelperAuthoritySession`. The remaining production gap is wiring those two sides
+through the authenticated persistent broker, not granting the target user write access.
 
 The code now expresses the first part of that split: `IInstallerTransactionReader` contains only
 `LoadAsync`, `IInstallerTransactionStore` extends it with CAS write/clear, and
@@ -101,5 +101,6 @@ Files, or connect the WPF runtime. A deterministic pipe name is not authenticati
 machine-helper IPC checkpoint now defines a split-token/OTS-aware protected DACL, first-instance creation, and both
 client/server PID query primitives, but they are not yet wired into a broker. The broker still must
 bind those checks to verified executable identity, the helper process lifetime, the helper session,
-and protected-store reload before this becomes the production authority. It must also own every
-journal/ledger write and verified clear; the unelevated parent may only read and exact-compare.
+and protected-store reload before this becomes the production authority. The Core authority session
+now owns every journal write and verified clear and the parent is reader-only; certificate-ledger
+authority and the authenticated Windows process composition remain open.

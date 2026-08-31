@@ -28,11 +28,13 @@ grants the target user only `ReadAndExecute`; it must not be weakened merely to 
 convenient. Consequently, the parent can inspect protected recovery state but cannot create,
 transition, replace, or clear the machine-authoritative journal or certificate ledger.
 
-The current Core coordinator still calls `SaveAsync` before the first elevation, calls it again after
-helper-returned transitions, and calls `ClearVerifiedAsync` at completion. Connecting that writer
-directly to `WindowsInstallerProtectedStateStores.Transactions` would therefore either fail under the
-normal user token or duplicate a transition already committed by the helper. Production composition
-must not be enabled in that shape.
+The Core coordinator now accepts only `IInstallerTransactionReader`. It constructs `Prepared` in
+memory, exact-validates each helper response, reloads the protected state through that read-only view,
+and never calls the protected store's `SaveAsync` or `ClearVerifiedAsync`. The elevated-side
+`InstallerMachineHelperAuthoritySession` owns first-`Prepared`, every CAS phase transition, replay
+verification, and verified clear. The authenticated persistent Windows broker and helper host now
+carry that session in deterministic tests; production composition remains disabled until concrete
+machine operations and the WPF startup branch are wired and validated together.
 
 The broker/helper closure must enforce this ownership split:
 
@@ -55,11 +57,11 @@ helper it therefore fails closed with target-user mismatch. It does not silently
 administrator's store, but it also cannot provide the required helper-side target-user operation.
 
 Microsoft documents that `CERT_SYSTEM_STORE_USERS` can open a user's system store by prefixing the
-store name with the textual SID. The primary helper-side implementation candidate is consequently a
-bounded native CryptoAPI adapter that opens only `<exact-target-SID>\TrustedPeople` with
-`CertOpenStore`, then preserves the existing thumbprint + full DER SHA-256 identity policy. This must
-be proven on Windows 11 x64 for read, add, exact remove, a loaded standard-user profile, and alternate
-administrator OTS credentials before it replaces the current-user adapter.
+store name with the textual SID. `WindowsTargetUserCertificateStoreAdapter` now implements the
+bounded native CryptoAPI route and opens only `<exact-target-SID>\TrustedPeople` with `CertOpenStore`,
+while preserving the thumbprint + full DER SHA-256 identity policy. Injected read/add/exact-remove,
+conflict, cancellation, and ack-loss tests pass. Windows 11 x64 with a loaded standard-user profile
+and alternate-administrator OTS credentials remains the required E3/E4 proof before enablement.
 
 Named-pipe impersonation is not a shortcut in the current topology: Microsoft documents that only the
 server end can impersonate the client. Here the unelevated parent owns the server and the elevated
@@ -79,9 +81,10 @@ Primary certificate/impersonation contracts:
 Package verification has the analogous but already documented WinRT route. `PackageManager` accepts
 `FindPackagesForUser(exactSid, exactFamilyName)` and requires administrative privileges when the SID
 is not the caller. The Windows facade now takes the user SID explicitly: the parent current-user
-adapter still passes `string.Empty`, while the future helper-only `CommitPackage` inspector must pass
-the journal's canonical `TargetSid` and apply the same one-registration/full-identity/health checks.
-It must never substitute the OTS administrator's empty/current-user query.
+adapter still passes `string.Empty`, while the implemented helper-only `CommitPackage` inspector
+passes the journal's canonical `TargetSid` and applies the same one-registration/full-identity/health
+checks. It never substitutes the OTS administrator's empty/current-user query. Real alternate-user
+AppXSVC execution remains an E3/E4 requirement.
 
 - [`PackageManager.FindPackagesForUser`](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager.findpackagesforuser?view=winrt-26100)
 
@@ -157,27 +160,31 @@ The Windows-targeted source adds deterministic checks for:
 - first-instance squatting rejection;
 - real same-process client/server connections exercising both native PID APIs;
 - deterministic client/server match, mismatch, invalid handle/PID, query-error sanitization, and fatal
-  exception propagation through an injected native seam.
+  exception propagation through an injected native seam;
+- persistent multi-command broker reuse, UAC cancel, connect/command timeout, response loss,
+  termination observation, and pinned-resource lifetime;
+- helper-side parent final-path/Authenticode verification, elevation check, authority creation, strict
+  command loop, and fault propagation;
+- target-SID certificate/package inspection and helper operation dispatch while an independent locked
+  release lease remains live.
 
 These tests must run on Windows 11 x64. Linux may cross-compile them when the standard resource gate
 passes, but must not execute them or claim Win32 runtime evidence.
 
 ## Still open
 
-This checkpoint supplies pipe construction and peer-PID primitives; it does not yet connect them to
-`IWindowsMachineHelperBroker` or the WPF startup branch. Before production enablement, the following
-remain mandatory:
+The pipe, trust, broker, host, authority session, target-SID certificate adapter, and package inspector
+are implemented. Before production enablement, the following remain mandatory:
 
-- helper-branch composition that consumes the strict parent-PID bootstrap and verifies the server;
-- helper executable and parent image Authenticode/final-path verification before trust;
-- the persistent parent broker and elevated helper loop using the existing session guard;
-- helper-authoritative journal/ledger create, transition, and clear, with a read-only parent view;
-- an exact-target-SID TrustedPeople adapter, or the explicitly bracketed parent-mutation fallback,
-  with standard-user OTS VM evidence;
-- exact-target-SID `PackageManager` inspection for helper-only package commit;
-- bounded connect/command/termination deadlines and uncertain-state reconciliation;
-- signed Windows VM tests covering pipe squatting, wrong peer, UAC cancel, parent/helper crash, PID
-  lifecycle, split-token consent, standard-user OTS credentials, another logon session, and each
-  durable mutation cut point.
+- compose protected roots, profile resolution, locked payload archive/swap, SCM, association, and root
+  cleanup into concrete `IWindowsMachineHelperMachineOperations` with exact replay semantics;
+- prove Repair reassociation without overwriting the only evidence needed to stop the old owned SCM
+  tuple, and prove Uninstall deletes association last under its durable authorization tombstone;
+- wire the same-EXE helper startup branch and production parent runtime without allowing ordinary UI
+  startup to acquire elevated capabilities;
+- run standard-user OTS certificate/package scenarios and real protected-root/SCM mutations in an
+  isolated Windows 11 x64 VM;
+- run signed Windows VM tests covering pipe squatting, wrong peer, UAC cancel, parent/helper crash, PID
+  lifecycle, split-token consent, another logon session, reboot, and every durable mutation cut point.
 
 Until those items close, `MigrationPreviewInstallerRuntime` must continue returning `CanExecute=false`.

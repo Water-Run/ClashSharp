@@ -18,6 +18,19 @@ $noticePath = Join-Path $binaryDirectory "mihomo-NOTICE.txt"
 $manifestPath = Join-Path $binaryDirectory "mihomo-manifest.json"
 $workDirectory = Join-Path $repoRoot "ClashSharp\.download\mihomo"
 
+<#
+.SYNOPSIS
+Returns a required, bounded ordinary Mihomo distribution file.
+.DESCRIPTION
+Rejects missing paths, directories, reparse points, empty files, and oversized files before the
+file participates in hash or provenance verification.
+.PARAMETER LiteralPath
+Literal path of the distribution file.
+.PARAMETER Description
+Stable input name used in validation failures.
+.PARAMETER MaximumLength
+Maximum accepted file length in bytes.
+#>
 function Get-OrdinaryFile {
     param(
         [Parameter(Mandatory = $true)] [string] $LiteralPath,
@@ -37,6 +50,16 @@ function Get-OrdinaryFile {
     return $item
 }
 
+<#
+.SYNOPSIS
+Requires a canonical lowercase SHA-256 digest.
+.DESCRIPTION
+Rejects values that are not exactly 64 lowercase hexadecimal characters.
+.PARAMETER Value
+Digest text to validate.
+.PARAMETER Description
+Stable input name used in validation failures.
+#>
 function Assert-CanonicalSha256 {
     param(
         [Parameter(Mandatory = $true)] [string] $Value,
@@ -47,6 +70,13 @@ function Assert-CanonicalSha256 {
     }
 }
 
+<#
+.SYNOPSIS
+Loads and validates the tracked Mihomo provenance manifest.
+.DESCRIPTION
+Requires the exact schema, canonical release identity, bounded file, and lowercase binary digest
+before returning the parsed manifest.
+#>
 function Read-PinnedManifest {
     $manifestFile = Get-OrdinaryFile `
         -LiteralPath $manifestPath `
@@ -70,6 +100,13 @@ function Read-PinnedManifest {
     return $manifest
 }
 
+<#
+.SYNOPSIS
+Verifies the bundled Mihomo binary, license, notice, and provenance manifest as one distribution.
+.DESCRIPTION
+Requires exact length and SHA-256 agreement and confirms that the notice names the same digest and
+upstream release before returning the manifest.
+#>
 function Test-PinnedDistribution {
     $manifest = Read-PinnedManifest
     $binary = Get-OrdinaryFile -LiteralPath $binaryPath -Description "Pinned mihomo binary"

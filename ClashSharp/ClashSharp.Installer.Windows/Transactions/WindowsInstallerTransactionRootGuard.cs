@@ -7,7 +7,8 @@ using ClashSharp.Installer.Transactions;
 namespace ClashSharp.Installer.Windows.Transactions;
 
 /// <summary>
-/// Creates and pins the fixed ProgramData installer-state root while verifying its owner and DACL.
+/// Verifies the fixed ProgramData installer-state chain and pins every protected descendant against
+/// rename while an elevated writer owns the guard.
 /// </summary>
 public sealed class WindowsInstallerTransactionRootGuard :
     IInstallerTransactionRootGuard,
@@ -21,13 +22,15 @@ public sealed class WindowsInstallerTransactionRootGuard :
     private readonly string _programDataPath;
     private readonly string _targetSid;
     private readonly IWindowsInstallerDirectoryNative _native;
+    private readonly bool _createMissingProtectedDirectories;
     private List<IWindowsInstallerDirectoryLease>? _leases;
     private bool _disposed;
 
     private WindowsInstallerTransactionRootGuard(
         string programDataPath,
         string targetSid,
-        IWindowsInstallerDirectoryNative native)
+        IWindowsInstallerDirectoryNative native,
+        bool createMissingProtectedDirectories)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(programDataPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetSid);
@@ -37,6 +40,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
         _programDataPath = NormalizeDriveQualifiedPath(programDataPath);
         _targetSid = targetSid;
         _native = native;
+        _createMissingProtectedDirectories = createMissingProtectedDirectories;
         RootPath = NormalizeDriveQualifiedPath(Path.Combine(
             _programDataPath,
             ProductDirectoryName,
@@ -51,6 +55,19 @@ public sealed class WindowsInstallerTransactionRootGuard :
 
     /// <summary>Gets the only machine-protected state root accepted by this guard.</summary>
     public string RootPath { get; }
+
+    internal bool IsProtectedRootPresent
+    {
+        get
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return _leases is not null
+                    && _leases.Count == BuildDirectoryChain().Count();
+            }
+        }
+    }
 
     /// <summary>Creates a guard bound to the Windows ProgramData known folder and one target user.</summary>
     /// <param name="targetSid">Canonical SID of the interactive user allowed to read recovery state.</param>
@@ -69,7 +86,8 @@ public sealed class WindowsInstallerTransactionRootGuard :
         return new WindowsInstallerTransactionRootGuard(
             programDataPath,
             targetSid,
-            new WindowsInstallerDirectoryNative());
+            new WindowsInstallerDirectoryNative(),
+            createMissingProtectedDirectories: true);
     }
 
     /// <inheritdoc />
@@ -139,7 +157,40 @@ public sealed class WindowsInstallerTransactionRootGuard :
         string programDataPath,
         string targetSid,
         IWindowsInstallerDirectoryNative native) =>
-        new(programDataPath, targetSid, native);
+        new(
+            programDataPath,
+            targetSid,
+            native,
+            createMissingProtectedDirectories: true);
+
+    internal static WindowsInstallerTransactionRootGuard CreateReadOnlyDefault(
+        string targetSid)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException(
+                "The protected installer transaction root is available only on Windows.");
+        }
+
+        string programDataPath = Environment.GetFolderPath(
+            Environment.SpecialFolder.CommonApplicationData,
+            Environment.SpecialFolderOption.DoNotVerify);
+        return new WindowsInstallerTransactionRootGuard(
+            programDataPath,
+            targetSid,
+            new WindowsInstallerDirectoryNative(),
+            createMissingProtectedDirectories: false);
+    }
+
+    internal static WindowsInstallerTransactionRootGuard CreateReadOnlyForTesting(
+        string programDataPath,
+        string targetSid,
+        IWindowsInstallerDirectoryNative native) =>
+        new(
+            programDataPath,
+            targetSid,
+            native,
+            createMissingProtectedDirectories: false);
 
     private List<IWindowsInstallerDirectoryLease> AcquireDirectoryChain(
         CancellationToken cancellationToken)
@@ -150,7 +201,8 @@ public sealed class WindowsInstallerTransactionRootGuard :
             foreach (WindowsInstallerDirectoryPath path in BuildDirectoryChain())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (path.CreateWithProtectedAcl)
+                if (path.CreateWithProtectedAcl
+                    && _createMissingProtectedDirectories)
                 {
                     _native.CreateDirectory(
                         path.Path,
@@ -158,7 +210,21 @@ public sealed class WindowsInstallerTransactionRootGuard :
                             _targetSid));
                 }
 
-                IWindowsInstallerDirectoryLease lease = _native.OpenDirectory(path.Path);
+                IWindowsInstallerDirectoryLease lease;
+                try
+                {
+                    lease = _native.OpenDirectory(
+                        path.Path,
+                        preventRename: _createMissingProtectedDirectories
+                            && path.CreateWithProtectedAcl);
+                }
+                catch (Exception exception) when (
+                    !_createMissingProtectedDirectories
+                    && path.CreateWithProtectedAcl
+                    && IsMissingDirectory(exception))
+                {
+                    break;
+                }
                 acquired.Add(lease);
                 ValidateObservation(
                     lease.Observe(),
@@ -177,11 +243,11 @@ public sealed class WindowsInstallerTransactionRootGuard :
     }
 
     private void RevalidateDirectoryChain(
-        IReadOnlyList<IWindowsInstallerDirectoryLease> leases,
+        List<IWindowsInstallerDirectoryLease> leases,
         CancellationToken cancellationToken)
     {
         WindowsInstallerDirectoryPath[] paths = BuildDirectoryChain().ToArray();
-        if (leases.Count != paths.Length)
+        if (leases.Count > paths.Length)
         {
             throw new InstallerProtocolException(
                 "installer.transaction.root_verification_failed");
@@ -194,6 +260,54 @@ public sealed class WindowsInstallerTransactionRootGuard :
                 leases[index].Observe(),
                 paths[index].RequiresExactProtection,
                 _targetSid);
+        }
+
+        if (_createMissingProtectedDirectories || leases.Count == paths.Length)
+        {
+            if (leases.Count != paths.Length)
+            {
+                throw new InstallerProtocolException(
+                    "installer.transaction.root_verification_failed");
+            }
+
+            return;
+        }
+
+        var appended = new List<IWindowsInstallerDirectoryLease>();
+        try
+        {
+            for (int index = leases.Count; index < paths.Length; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IWindowsInstallerDirectoryLease lease;
+                try
+                {
+                    lease = _native.OpenDirectory(
+                        paths[index].Path,
+                        preventRename: _createMissingProtectedDirectories
+                            && paths[index].CreateWithProtectedAcl);
+                }
+                catch (Exception exception) when (IsMissingDirectory(exception))
+                {
+                    break;
+                }
+
+                appended.Add(lease);
+                ValidateObservation(
+                    lease.Observe(),
+                    paths[index].RequiresExactProtection,
+                    _targetSid);
+            }
+
+            if (appended.Count != 0)
+            {
+                leases.AddRange(appended);
+                appended.Clear();
+            }
+        }
+        finally
+        {
+            DisposeLeases(appended);
         }
     }
 
@@ -366,6 +480,10 @@ public sealed class WindowsInstallerTransactionRootGuard :
             or AccessViolationException
             or AppDomainUnloadedException);
 
+    private static bool IsMissingDirectory(Exception exception) =>
+        exception is DirectoryNotFoundException or FileNotFoundException
+        || exception is Win32Exception { NativeErrorCode: 2 or 3 };
+
     private sealed record WindowsInstallerDirectoryPath(
         string Path,
         bool RequiresExactProtection,
@@ -378,6 +496,9 @@ internal static class WindowsInstallerDirectorySecurityPolicy
     internal const string AdministratorsSid = "S-1-5-32-544";
     internal const string TrustedInstallerSid =
         "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+
+    internal const FileSystemRights TargetUserReadOnlyRights =
+        FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize;
 
     private const int GenericAll = 0x1000_0000;
     private const FileSystemRights DangerousAnchorRights =
@@ -401,7 +522,7 @@ internal static class WindowsInstallerDirectorySecurityPolicy
         security.SetOwner(administrators);
         security.AddAccessRule(CreateRule(localSystem, FileSystemRights.FullControl));
         security.AddAccessRule(CreateRule(administrators, FileSystemRights.FullControl));
-        security.AddAccessRule(CreateRule(targetUser, FileSystemRights.ReadAndExecute));
+        security.AddAccessRule(CreateRule(targetUser, TargetUserReadOnlyRights));
         return security;
     }
 
@@ -427,7 +548,7 @@ internal static class WindowsInstallerDirectorySecurityPolicy
             || !HasExactRule(
                 security.AccessEntries,
                 targetSid,
-                FileSystemRights.ReadAndExecute))
+                TargetUserReadOnlyRights))
         {
             throw new InstallerProtocolException(
                 "installer.transaction.root_acl_invalid");
@@ -501,9 +622,19 @@ internal static class WindowsInstallerDirectorySecurityPolicy
 
 internal interface IWindowsInstallerDirectoryNative
 {
+    /// <summary>Creates a directory with the supplied protected descriptor.</summary>
+    /// <param name="path">Canonical absolute directory path.</param>
+    /// <param name="security">Exact descriptor applied during creation.</param>
     void CreateDirectory(string path, DirectorySecurity security);
 
-    IWindowsInstallerDirectoryLease OpenDirectory(string path);
+    /// <summary>Opens a directory for observation and optionally pins its name against rename.</summary>
+    /// <param name="path">Canonical absolute directory path.</param>
+    /// <param name="preventRename">
+    /// <see langword="true"/> to request DELETE access while withholding delete sharing; otherwise,
+    /// <see langword="false"/> for a read-only observer that cannot require DELETE permission.
+    /// </param>
+    /// <returns>A lease owning the native directory handle.</returns>
+    IWindowsInstallerDirectoryLease OpenDirectory(string path, bool preventRename);
 }
 
 internal interface IWindowsInstallerDirectoryLease : IDisposable

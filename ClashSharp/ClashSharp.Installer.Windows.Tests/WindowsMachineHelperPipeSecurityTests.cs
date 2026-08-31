@@ -38,12 +38,12 @@ public sealed class WindowsMachineHelperPipeSecurityTests
         AssertExactRule(
             rules,
             logonSid,
-            PipeAccessRights.ReadWrite,
+            PipeAccessRights.ReadWrite | PipeAccessRights.Synchronize,
             AccessControlType.Allow);
         AssertExactRule(
             rules,
             new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
-            PipeAccessRights.ReadWrite,
+            PipeAccessRights.ReadWrite | PipeAccessRights.Synchronize,
             AccessControlType.Allow);
         AssertExactRule(
             rules,
@@ -105,13 +105,8 @@ public sealed class WindowsMachineHelperPipeSecurityTests
             duplicateFailure is IOException or UnauthorizedAccessException,
             $"Unexpected duplicate-pipe outcome: {duplicateFailure?.GetType().Name ?? "none"}.");
 
-        await using NamedPipeClientStream client = new(
-            serverName: ".",
-            pipeName: bootstrap.Invocation.BuildSessionPipeName(),
-            direction: PipeDirection.InOut,
-            options: PipeOptions.Asynchronous,
-            impersonationLevel: TokenImpersonationLevel.Anonymous,
-            inheritability: HandleInheritability.None);
+        await using IWindowsMachineHelperClient client =
+            new WindowsMachineHelperClientFactory().Create(bootstrap);
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
         Task accepting = server.WaitForConnectionAsync(timeout.Token);
         await client.ConnectAsync(timeout.Token);
@@ -119,7 +114,7 @@ public sealed class WindowsMachineHelperPipeSecurityTests
 
         var identity = new WindowsMachineHelperPipeIdentity();
         identity.VerifyClient(server.SafePipeHandle, Environment.ProcessId);
-        identity.VerifyServer(client.SafePipeHandle, Environment.ProcessId);
+        client.VerifyServer(Environment.ProcessId);
     }
 
     [Fact]

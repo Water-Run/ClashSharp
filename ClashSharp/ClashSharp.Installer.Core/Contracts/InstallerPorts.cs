@@ -34,6 +34,18 @@ public interface IInstallerCertificateMutation
         CancellationToken cancellationToken);
 }
 
+/// <summary>Independently proves the durable certificate mutation postcondition without changing it.</summary>
+public interface IInstallerCertificateMutationVerifier
+{
+    /// <summary>
+    /// Verifies the exact certificate and ownership-ledger state produced by the requested operation.
+    /// </summary>
+    Task VerifyAppliedAsync(
+        InstallerRequest request,
+        IInstallerReleaseLease release,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Executes repeatable per-user package deployment or removal.</summary>
 public interface IInstallerPackageMutation
 {
@@ -83,5 +95,18 @@ public interface IInstallerFinalVerifier
         InstallerRequest request,
         IInstallerReleaseLease release,
         InstallerTransactionSnapshot durableState,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Clears the exact helper-verified journal and returns its immutable receipt.
+    /// </summary>
+    /// <remarks>
+    /// The elevated helper owns this mutation. The unelevated parent must subsequently prove
+    /// absence through its read-only transaction view.
+    /// </remarks>
+    Task<InstallerTransactionSnapshot> ClearVerifiedAsync(
+        InstallerRequest request,
+        IInstallerReleaseLease release,
+        InstallerTransactionSnapshot verifiedState,
         CancellationToken cancellationToken);
 }

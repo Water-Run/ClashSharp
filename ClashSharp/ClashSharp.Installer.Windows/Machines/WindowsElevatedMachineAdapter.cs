@@ -89,6 +89,19 @@ public sealed class WindowsElevatedMachineAdapter :
             durableState,
             cancellationToken);
 
+    /// <inheritdoc />
+    public Task<InstallerTransactionSnapshot> ClearVerifiedAsync(
+        InstallerRequest request,
+        IInstallerReleaseLease release,
+        InstallerTransactionSnapshot verifiedState,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            InstallerMachineHelperVerb.Clear,
+            request,
+            release,
+            verifiedState,
+            cancellationToken);
+
     private async Task<InstallerTransactionSnapshot> ExecuteAsync(
         InstallerMachineHelperVerb verb,
         InstallerRequest request,

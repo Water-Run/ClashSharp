@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using ClashSharp.ApplicationModel.Startup;
@@ -22,15 +20,157 @@ public sealed class RepositoryTopologyTests
             ".gitattributes",
             "global.json",
             "Directory.Build.props",
-            "rust-toolchain.toml",
             ".github/workflows/ci.yml",
             "CodingStyle.md",
             "docs/architecture/stabilization-ledger.md",
-            "eng/dependency-audit-exceptions.json",
-            "eng/tool-versions.json",
         ];
 
         Assert.All(paths, path => Assert.True(File.Exists(Path.Combine(RepositoryRoot, path)), path));
+    }
+
+    /// <summary>Verifies every production assembly emits XML documentation and rejects missing public contracts.</summary>
+    [Fact]
+    public void ProductionProjects_EnforceCompletePublicXmlDocumentation()
+    {
+        string[] projectNames =
+        [
+            "ClashSharp.Core",
+            "ClashSharp.Application",
+            "ClashSharp.Infrastructure",
+            "ClashSharp",
+            "ClashSharp.MihomoService",
+            "ClashSharp.RecoveryWatchdog",
+            "ClashSharp.Installer.Core",
+            "ClashSharp.Installer.Presentation",
+            "ClashSharp.Installer.Windows",
+            "ClashSharp.Installer",
+        ];
+
+        foreach (string projectName in projectNames)
+        {
+            string projectPath = Path.Combine(
+                RepositoryRoot,
+                "ClashSharp",
+                projectName,
+                $"{projectName}.csproj");
+            XDocument project = XDocument.Load(projectPath);
+            Dictionary<string, string> properties = project
+                .Descendants("PropertyGroup")
+                .Elements()
+                .GroupBy(static element => element.Name.LocalName, StringComparer.Ordinal)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => group.Last().Value.Trim(),
+                    StringComparer.Ordinal);
+
+            Assert.Equal("true", properties["GenerateDocumentationFile"]);
+            Assert.Contains("CS1591", properties["WarningsAsErrors"], StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Verifies Windows system-library imports cannot resolve through writable search locations.</summary>
+    [Fact]
+    public void ProductionPInvokeDeclarations_AreRestrictedToSystem32()
+    {
+        string[] productionProjectNames =
+        [
+            "ClashSharp.Core",
+            "ClashSharp.Application",
+            "ClashSharp.Infrastructure",
+            "ClashSharp",
+            "ClashSharp.MihomoService",
+            "ClashSharp.RecoveryWatchdog",
+            "ClashSharp.Installer.Core",
+            "ClashSharp.Installer.Presentation",
+            "ClashSharp.Installer.Windows",
+            "ClashSharp.Installer",
+        ];
+
+        string[] offenders = productionProjectNames
+            .SelectMany(projectName => Directory.EnumerateFiles(
+                Path.Combine(RepositoryRoot, "ClashSharp", projectName),
+                "*.cs",
+                SearchOption.AllDirectories))
+            .Where(path =>
+            {
+                string relativePath = Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/');
+                return !relativePath.Contains("/bin/", StringComparison.Ordinal)
+                    && !relativePath.Contains("/obj/", StringComparison.Ordinal);
+            })
+            .SelectMany(FindUnrestrictedPInvokeDeclarations)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            offenders.Length == 0,
+            $"Unrestricted production P/Invoke declarations found:{Environment.NewLine}{string.Join(Environment.NewLine, offenders)}");
+    }
+
+    /// <summary>Verifies every maintained PowerShell function has adjacent comment-based help.</summary>
+    [Fact]
+    public void MaintainedPowerShellFunctions_HaveCompleteCommentBasedHelp()
+    {
+        string[] sourceRoots =
+        [
+            Path.Combine(RepositoryRoot, "ClashSharp", "Installer"),
+            Path.Combine(RepositoryRoot, "ClashSharp", "SandboxTest"),
+            Path.Combine(RepositoryRoot, "Tools"),
+            Path.Combine(RepositoryRoot, "eng"),
+        ];
+        var functionPattern = new Regex(
+            @"(?m)^function\s+(?<name>[A-Za-z][A-Za-z0-9-]*)\s*\{",
+            RegexOptions.CultureInvariant);
+        var parameterPattern = new Regex(
+            @"(?m)^\s*\.PARAMETER\s+(?<name>[A-Za-z][A-Za-z0-9]*)\s*$",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        var offenders = new List<string>();
+
+        foreach (string path in sourceRoots
+                     .Where(Directory.Exists)
+                     .SelectMany(root => Directory.EnumerateFiles(
+                         root,
+                         "*.ps*1",
+                         SearchOption.AllDirectories))
+                     .Where(path => !path.Contains(
+                         $"{Path.DirectorySeparatorChar}.sandbox{Path.DirectorySeparatorChar}",
+                         StringComparison.OrdinalIgnoreCase)))
+        {
+            string source = File.ReadAllText(path);
+            foreach (Match function in functionPattern.Matches(source))
+            {
+                string body = ReadPowerShellFunctionBody(source, function.Index);
+                string help = ReadPowerShellFunctionHelp(source, function.Index, body);
+                string functionName = function.Groups["name"].Value;
+                if (!help.Contains(".SYNOPSIS", StringComparison.OrdinalIgnoreCase)
+                    || !help.Contains(".DESCRIPTION", StringComparison.OrdinalIgnoreCase))
+                {
+                    offenders.Add(RelativeFunction(path, functionName));
+                    continue;
+                }
+
+                string parameterBlock = ReadPowerShellParameterBlock(body);
+                string[] parameters = Regex.Matches(
+                        parameterBlock,
+                        @"\$(?<name>[A-Za-z][A-Za-z0-9]*)",
+                        RegexOptions.CultureInvariant)
+                    .Select(match => match.Groups["name"].Value)
+                    .Where(name => name is not ("true" or "false" or "null"))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                HashSet<string> documentedParameters = parameterPattern
+                    .Matches(help)
+                    .Select(match => match.Groups["name"].Value)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (parameters.Any(parameter => !documentedParameters.Contains(parameter)))
+                {
+                    offenders.Add(RelativeFunction(path, functionName));
+                }
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            $"PowerShell functions missing complete help:{Environment.NewLine}{string.Join(Environment.NewLine, offenders)}");
     }
 
     /// <summary>Verifies C# sources rely on source control and project-level nullability policy.</summary>
@@ -118,6 +258,68 @@ public sealed class RepositoryTopologyTests
             Assert.Equal("false", properties["IsPublishable"]);
             Assert.Equal("false", properties["IsPackable"]);
         }
+    }
+
+    /// <summary>Verifies the repository exposes only the main app and one Installer as user products.</summary>
+    [Fact]
+    public void ExecutableTopology_HasOneMainApplicationAndOneInstallerProduct()
+    {
+        string projectsRoot = Path.Combine(RepositoryRoot, "ClashSharp");
+        string[] installerInternalComponents =
+        [
+            "ClashSharp.MihomoService",
+            "ClashSharp.RecoveryWatchdog",
+        ];
+        (string Path, XDocument Project)[] executableProjects = Directory
+            .EnumerateFiles(projectsRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(path => !path.Contains(
+                $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase))
+            .Select(path => (Path: path, Project: XDocument.Load(path)))
+            .Where(item => item.Project
+                .Descendants("OutputType")
+                .Any(element => element.Value.Trim() is "Exe" or "WinExe"))
+            .ToArray();
+
+        string[] userProducts = executableProjects
+            .Where(item => !HasProjectProperty(item.Project, "IsTestProject", "true"))
+            .Where(item => !installerInternalComponents.Contains(
+                Path.GetFileNameWithoutExtension(item.Path),
+                StringComparer.Ordinal))
+            .Select(item => Path.GetFileNameWithoutExtension(item.Path))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(["ClashSharp", "ClashSharp.Installer"], userProducts);
+        Assert.All(
+            executableProjects.Where(item => installerInternalComponents.Contains(
+                Path.GetFileNameWithoutExtension(item.Path),
+                StringComparer.Ordinal)),
+            item =>
+            {
+                XElement[] publishability = item.Project
+                    .Descendants("IsPublishable")
+                    .ToArray();
+                Assert.Contains(
+                    publishability,
+                    element => element.Value.Trim() == "false"
+                        && ((string?)element.Attribute("Condition"))?.Contains(
+                            "!='true'",
+                            StringComparison.Ordinal) == true
+                        && ((string?)element.Attribute("Condition"))?.Contains(
+                            "ClashSharpFormalInstallerComponent",
+                            StringComparison.Ordinal) == true);
+                Assert.Contains(
+                    publishability,
+                    element => element.Value.Trim() == "true"
+                        && ((string?)element.Attribute("Condition"))?.Contains(
+                            "=='true'",
+                            StringComparison.Ordinal) == true
+                        && ((string?)element.Attribute("Condition"))?.Contains(
+                            "ClashSharpFormalInstallerComponent",
+                            StringComparison.Ordinal) == true);
+                Assert.True(HasProjectProperty(item.Project, "IsPackable", "false"));
+            });
     }
 
     /// <summary>Verifies migrated types are loaded from production assemblies.</summary>
@@ -254,53 +456,160 @@ public sealed class RepositoryTopologyTests
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies RustSec exceptions are scoped, owned, justified, and time bounded.</summary>
+    /// <summary>Prevents the retired native Installer toolchain and UI from returning.</summary>
     [Fact]
-    public void DependencyAuditExceptions_AreDocumentedAndUnexpired()
+    public void Repository_ContainsOnlyTheCSharpInstallerImplementation()
     {
-        string path = Path.Combine(RepositoryRoot, "eng", "dependency-audit-exceptions.json");
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
-        JsonElement exceptions = document.RootElement.GetProperty("rustsecExceptions");
-        string[] advisoryIds = exceptions.EnumerateArray()
-            .Select(item => item.GetProperty("advisoryId").GetString())
-            .OfType<string>()
+        string[] forbiddenFiles = Directory
+            .EnumerateFiles(RepositoryRoot, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/'))
+            .Where(relativePath =>
+                !relativePath.StartsWith(".git/", StringComparison.Ordinal)
+                && !relativePath.Contains("/bin/", StringComparison.Ordinal)
+                && !relativePath.Contains("/obj/", StringComparison.Ordinal)
+                && !relativePath.Contains("/artifacts/", StringComparison.Ordinal)
+                && !relativePath.Contains("/target/", StringComparison.Ordinal)
+                && !relativePath.Contains("/.sandbox/", StringComparison.Ordinal))
+            .Where(relativePath =>
+                relativePath.EndsWith(".rs", StringComparison.OrdinalIgnoreCase)
+                || relativePath.EndsWith(".slint", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(relativePath).Equals("Cargo.toml", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(relativePath).Equals("Cargo.lock", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileName(relativePath).StartsWith("rust-toolchain", StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.Ordinal)
             .ToArray();
-
-        foreach (JsonElement exception in exceptions.EnumerateArray())
-        {
-            string package = exception.GetProperty("package").GetString()!;
-            string version = exception.GetProperty("version").GetString()!;
-            string lockFile = exception.GetProperty("lockFile").GetString()!;
-            Assert.False(string.IsNullOrWhiteSpace(package));
-            Assert.False(string.IsNullOrWhiteSpace(version));
-            Assert.False(string.IsNullOrWhiteSpace(lockFile));
-            Assert.False(string.IsNullOrWhiteSpace(exception.GetProperty("introducedBy").GetString()));
-            Assert.Equal("x86_64-pc-windows-msvc", exception.GetProperty("releaseTarget").GetString());
-            Assert.Equal("Release", exception.GetProperty("owner").GetString());
-            Assert.Equal("Phase 11", exception.GetProperty("reviewPhase").GetString());
-            Assert.False(string.IsNullOrWhiteSpace(exception.GetProperty("rationale").GetString()));
-            DateOnly expiresOn = DateOnly.Parse(exception.GetProperty("expiresOn").GetString()!, CultureInfo.InvariantCulture);
-            Assert.True(expiresOn >= DateOnly.FromDateTime(DateTime.UtcNow), $"RustSec exception expired on {expiresOn:O}.");
-
-            string lockText = File.ReadAllText(Path.Combine(RepositoryRoot, lockFile));
-            Assert.Contains($"name = \"{package}\"", lockText, StringComparison.Ordinal);
-            Assert.Contains($"version = \"{version}\"", lockText, StringComparison.Ordinal);
-        }
+        Assert.True(
+            forbiddenFiles.Length == 0,
+            $"Retired Installer source/toolchain files found:{Environment.NewLine}{string.Join(Environment.NewLine, forbiddenFiles)}");
 
         string workflow = File.ReadAllText(Path.Combine(RepositoryRoot, ".github", "workflows", "ci.yml"));
-        string[] workflowAdvisoryIds = Regex.Matches(workflow, @"--ignore\s+(?<advisory>RUSTSEC-\d{4}-\d{4})")
-            .Select(match => match.Groups["advisory"].Value)
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        Assert.Equal(advisoryIds, workflowAdvisoryIds);
-
-        string toolVersionsPath = Path.Combine(RepositoryRoot, "eng", "tool-versions.json");
-        using JsonDocument toolVersions = JsonDocument.Parse(File.ReadAllText(toolVersionsPath));
-        string cargoAuditVersion = toolVersions.RootElement.GetProperty("cargoAudit").GetString()!;
-        Assert.Contains($"cargo install cargo-audit --version {cargoAuditVersion} --locked", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("cargo", workflow, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("rust", workflow, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static IEnumerable<string> FindUnrestrictedPInvokeDeclarations(string path)
+    {
+        string[] lines = File.ReadAllLines(path);
+        for (int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+        {
+            if (!Regex.IsMatch(
+                    lines[lineIndex],
+                    @"\[(?:System\.Runtime\.InteropServices\.)?(?:DllImport|LibraryImport)\s*\("))
+            {
+                continue;
+            }
+
+            bool isSystem32Restricted = false;
+            int inspectionEnd = Math.Min(lines.Length - 1, lineIndex + 16);
+            for (int inspectionIndex = lineIndex + 1; inspectionIndex <= inspectionEnd; inspectionIndex++)
+            {
+                if (lines[inspectionIndex].Contains(
+                        "DefaultDllImportSearchPaths(DllImportSearchPath.System32)",
+                        StringComparison.Ordinal))
+                {
+                    isSystem32Restricted = true;
+                }
+
+                if (Regex.IsMatch(lines[inspectionIndex], @"\b(?:extern|partial)\b"))
+                {
+                    break;
+                }
+            }
+
+            if (!isSystem32Restricted)
+            {
+                string relativePath = Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/');
+                yield return $"{relativePath}:{lineIndex + 1}";
+            }
+        }
+    }
+
+    private static bool HasProjectProperty(
+        XDocument project,
+        string propertyName,
+        string expectedValue) =>
+        project
+            .Descendants(propertyName)
+            .Any(element => string.Equals(
+                element.Value.Trim(),
+                expectedValue,
+                StringComparison.OrdinalIgnoreCase));
+
+    private static string ReadPowerShellFunctionBody(
+        string source,
+        int functionStart)
+    {
+        Match nextFunction = Regex.Match(
+            source[(functionStart + 1)..],
+            @"(?m)^function\s+",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        int functionEnd = nextFunction.Success
+            ? functionStart + 1 + nextFunction.Index
+            : source.Length;
+        return source[functionStart..functionEnd];
+    }
+
+    private static string ReadPowerShellFunctionHelp(
+        string source,
+        int functionStart,
+        string functionBody)
+    {
+        string preceding = source[..functionStart].TrimEnd();
+        int precedingEnd = preceding.LastIndexOf("#>", StringComparison.Ordinal);
+        int precedingStart = preceding.LastIndexOf("<#", StringComparison.Ordinal);
+        if (precedingStart >= 0
+            && precedingEnd == preceding.Length - 2
+            && precedingStart < precedingEnd)
+        {
+            return preceding[precedingStart..(precedingEnd + 2)];
+        }
+
+        int openingBrace = functionBody.IndexOf('{');
+        int internalStart = functionBody.IndexOf("<#", StringComparison.Ordinal);
+        int internalEnd = functionBody.IndexOf("#>", StringComparison.Ordinal);
+        return openingBrace >= 0
+            && internalStart > openingBrace
+            && internalEnd > internalStart
+            && string.IsNullOrWhiteSpace(
+                functionBody[(openingBrace + 1)..internalStart])
+                ? functionBody[internalStart..(internalEnd + 2)]
+                : string.Empty;
+    }
+
+    private static string ReadPowerShellParameterBlock(string functionBody)
+    {
+        Match parameterStart = Regex.Match(
+            functionBody,
+            @"(?m)^\s*param\s*\(",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        if (!parameterStart.Success)
+        {
+            return string.Empty;
+        }
+
+        int openingParenthesis = functionBody.IndexOf(
+            '(',
+            parameterStart.Index);
+        int depth = 0;
+        for (int index = openingParenthesis; index < functionBody.Length; index++)
+        {
+            depth += functionBody[index] switch
+            {
+                '(' => 1,
+                ')' => -1,
+                _ => 0,
+            };
+            if (depth == 0)
+            {
+                return functionBody[(openingParenthesis + 1)..index];
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static string RelativeFunction(string path, string functionName) =>
+        $"{Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/')}::{functionName}";
 
     private static void AssertProjectReference(XDocument project, string projectName)
     {

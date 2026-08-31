@@ -13,13 +13,16 @@ internal sealed class WindowsPayloadFixture : IDisposable
 {
     private const string Version = "1.2.3.4";
     private readonly byte[] _certificateBytes;
+    private readonly bool _removeCurrentUserCertificateOnDispose;
     private bool _disposed;
 
     internal WindowsPayloadFixture(
         bool createPayload = true,
         string? primaryPackageNameOverride = null,
-        bool dependencyIsFramework = true)
+        bool dependencyIsFramework = true,
+        bool removeCurrentUserCertificateOnDispose = true)
     {
+        _removeCurrentUserCertificateOnDispose = removeCurrentUserCertificateOnDispose;
         RootDirectory = Path.Combine(
             Path.GetTempPath(),
             "ClashSharp.Installer.Windows.Tests",
@@ -78,6 +81,7 @@ internal sealed class WindowsPayloadFixture : IDisposable
             InstallerReleaseManifest.CurrentSchema,
             Version,
             Sha256(primary),
+            "89ABCDEF0123456789ABCDEF0123456789ABCDEF",
             Convert.ToHexString(publicCertificate.GetCertHash(HashAlgorithmName.SHA1)),
             Sha256(_certificateBytes),
             new InstallerPackageIdentity(
@@ -198,7 +202,7 @@ internal sealed class WindowsPayloadFixture : IDisposable
             return;
         }
 
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() && _removeCurrentUserCertificateOnDispose)
         {
             RemoveTestCertificate();
         }

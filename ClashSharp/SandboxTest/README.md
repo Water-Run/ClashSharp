@@ -1,15 +1,15 @@
 # ClashSharp SandboxTest
 
-This directory is the framework for full Windows Sandbox based smoke tests.
-The current shape follows approach 3: PowerShell owns host orchestration and
-Rust owns test-harness helper logic that is easy to unit test.
+This directory contains the PowerShell driver for full Windows Sandbox based
+smoke tests. The driver owns host orchestration and emits each isolated `.wsb`
+configuration without an additional helper runtime.
 
 ## Current scope
 
 - `Run-SandboxTest.ps1` prepares the shared Sandbox directory.
 - `scripts/Run-InSandbox.ps1` is copied into the shared directory and runs
   inside Windows Sandbox.
-- `clashsharp-sandbox-test` generates the `.wsb` file and prints the dry-run
+- `Run-SandboxTest.ps1` generates the `.wsb` file and prints the dry-run
   execution plan.
 - No real install, launch, proxy, or service checks run yet.
 
@@ -25,12 +25,6 @@ Generate files and open Windows Sandbox:
 
 ```powershell
 .\Run-SandboxTest.ps1 -Launch
-```
-
-Run the Rust helper tests:
-
-```powershell
-cargo test
 ```
 
 ## Next implementation steps

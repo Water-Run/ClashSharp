@@ -5,8 +5,13 @@ namespace ClashSharp.Model;
 /// <summary>How one retained profile version reached durable state.</summary>
 public enum ProfileHistoryApplyOutcome
 {
+    /// <summary>The validated version was archived without becoming active.</summary>
     Stored,
+
+    /// <summary>The version was archived and successfully made active.</summary>
     Applied,
+
+    /// <summary>The retained version was reapplied as an explicit rollback target.</summary>
     RollbackApplied,
 }
 
@@ -17,6 +22,8 @@ public enum ProfileHistoryApplyOutcome
 /// <param name="SourceName">Profile source display name at import time; never null.</param>
 /// <param name="NodeCount">Validated proxy node count.</param>
 /// <param name="RuleCount">Validated rule count.</param>
+/// <param name="ContentSha256">Lowercase SHA-256 digest of the retained source bytes.</param>
+/// <param name="ApplyOutcome">Durable activation outcome recorded for this version.</param>
 /// <remarks>
 /// Invariants: String values are never null and count values are non-negative.
 /// Thread safety: Immutable value type and inherently thread-safe after construction.

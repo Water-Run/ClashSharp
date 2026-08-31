@@ -12,10 +12,20 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        IInstallerRuntime runtime = new MigrationPreviewInstallerRuntime();
+        IInstallerRuntime runtime = CreateRuntime();
         var viewModel = new InstallerShellViewModel(runtime);
         var window = new MainWindow(viewModel);
         MainWindow = window;
         window.Show();
+    }
+
+    private static IInstallerRuntime CreateRuntime()
+    {
+#if CLASHSHARP_INSTALLER_MUTATION_RUNTIME
+        EmbeddedInstallerReleaseManifest release = EmbeddedInstallerReleaseManifest.Load();
+        return WindowsProductionInstallerRuntimeFactory.Create(release);
+#else
+        return new MigrationPreviewInstallerRuntime();
+#endif
     }
 }

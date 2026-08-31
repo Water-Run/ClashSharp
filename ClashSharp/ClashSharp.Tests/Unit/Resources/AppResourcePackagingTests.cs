@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace ClashSharp.Tests.Unit.Resources;
@@ -10,6 +11,36 @@ namespace ClashSharp.Tests.Unit.Resources;
 /// <summary>Tests source placement for resources that must be available when the application XAML loads.</summary>
 public sealed class AppResourcePackagingTests
 {
+    /// <summary>Verifies every icon-only trigger action exposes localized UI Automation and tooltip text.</summary>
+    [Fact]
+    public void TriggersXaml_GlyphOnlyButtonsExposeAccessibleNamesAndTooltips()
+    {
+        string triggersXamlPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "View",
+            "Triggers.xaml");
+        XDocument document = XDocument.Load(triggersXamlPath, LoadOptions.SetLineInfo);
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XElement[] glyphOnlyButtons = document
+            .Descendants(presentation + "Button")
+            .Where(button => button.Elements().Any(element =>
+                element.Name == presentation + "FontIcon"
+                || element.Name == presentation + "SymbolIcon"))
+            .ToArray();
+
+        Assert.Equal(13, glyphOnlyButtons.Length);
+        foreach (XElement button in glyphOnlyButtons)
+        {
+            Assert.False(
+                string.IsNullOrWhiteSpace((string?)button.Attribute("AutomationProperties.Name")),
+                $"Glyph-only button at {((IXmlLineInfo)button).LineNumber} has no accessible name.");
+            Assert.False(
+                string.IsNullOrWhiteSpace((string?)button.Attribute("ToolTipService.ToolTip")),
+                $"Glyph-only button at {((IXmlLineInfo)button).LineNumber} has no tooltip.");
+        }
+    }
+
     /// <summary>Verifies shared app resources are declared directly in App.xaml instead of an unprocessed loose dictionary.</summary>
     [Fact]
     public void AppXaml_ContainsRuntimeCriticalResources()
@@ -2382,14 +2413,18 @@ public sealed class AppResourcePackagingTests
     [Fact]
     public void InstallerMain_GuardsConcurrentActions()
     {
-        string sourcePath = FindSourceFile("ClashSharp", "Installer", "src", "main.rs");
+        string sourcePath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer.Presentation",
+            "Presentation",
+            "AsyncDelegateCommand.cs");
 
         string source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("AtomicBool", source, StringComparison.Ordinal);
-        Assert.Contains("ACTION_RUNNING", source, StringComparison.Ordinal);
-        Assert.Contains("compare_exchange", source, StringComparison.Ordinal);
-        Assert.Contains("ACTION_RUNNING.store(false", source, StringComparison.Ordinal);
+        Assert.Contains("Interlocked.CompareExchange(ref _executing, 1, 0)", source, StringComparison.Ordinal);
+        Assert.Contains("Interlocked.Exchange(ref _executing, 0)", source, StringComparison.Ordinal);
+        Assert.Contains("finally", source, StringComparison.Ordinal);
+        Assert.Contains("NotifyCanExecuteChanged", source, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the data section is backup/restore oriented and does not duplicate export with a backup button.</summary>

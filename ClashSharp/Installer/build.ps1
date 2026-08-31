@@ -2,8 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [switch] $Development,
-    [switch] $CSharpInstallerCandidate
+    [switch] $Development
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,7 +12,7 @@ $repoRoot = Resolve-Path (Join-Path $installerRoot "..\..")
 $appProject = Join-Path $repoRoot "ClashSharp\ClashSharp\ClashSharp.csproj"
 $serviceProject = Join-Path $repoRoot "ClashSharp\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj"
 $watchdogProject = Join-Path $repoRoot "ClashSharp\ClashSharp.RecoveryWatchdog\ClashSharp.RecoveryWatchdog.csproj"
-$csharpInstallerProject = Join-Path $repoRoot "ClashSharp\ClashSharp.Installer\ClashSharp.Installer.csproj"
+$installerProject = Join-Path $repoRoot "ClashSharp\ClashSharp.Installer\ClashSharp.Installer.csproj"
 $appManifest = Join-Path (Split-Path -Parent $appProject) "Package.appxmanifest"
 $mihomoBinary = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo.exe"
 $mihomoManifestPath = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo-manifest.json"
@@ -22,11 +21,9 @@ $mihomoNoticePath = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\mihomo-N
 $geoDataDirectory = Join-Path $repoRoot "ClashSharp\ClashSharp\Binaries\GeoData"
 $geoDataManifest = Join-Path $geoDataDirectory "manifest.json"
 $signingDir = Join-Path $installerRoot "signing"
-$rustTarget = "x86_64-pc-windows-msvc"
-$installerTargetRoot = Join-Path $installerRoot "target"
+$installerTargetRoot = Join-Path $repoRoot "artifacts\installer"
 $packagingStagingRoot = Join-Path $installerTargetRoot "packaging-staging"
-$releaseDir = Join-Path $installerTargetRoot "release-artifacts"
-$legacyCargoReleaseDir = Join-Path $installerTargetRoot "release"
+$releaseDir = Join-Path $installerTargetRoot "release"
 $packagingContractModule = Join-Path $installerRoot "PackagingContract.psm1"
 
 $packagingContractModuleItem = Get-Item -LiteralPath $packagingContractModule -Force
@@ -36,6 +33,25 @@ if ($packagingContractModuleItem.PSIsContainer -or
 }
 Import-Module -Name $packagingContractModule -Force
 
+$authenticodeThumbprint = if ($Development) {
+    '0000000000000000000000000000000000000000'
+} else {
+    $configuredThumbprint = [string]$env:CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT
+    if ($configuredThumbprint -cnotmatch '^[0-9A-F]{40}$') {
+        throw "Official release builds require canonical CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT."
+    }
+    $configuredThumbprint
+}
+
+<#
+.SYNOPSIS
+Removes one generated Installer output directory after containment and reparse-point checks.
+.DESCRIPTION
+Accepts only an ordinary directory strictly below the fixed Installer artifact root and rejects
+recursive deletion when the target, an ancestor, or any descendant is a reparse point.
+.PARAMETER LiteralPath
+Absolute or repository-relative path to the generated directory that may be removed.
+#>
 function Remove-GeneratedDirectory {
     param(
         [Parameter(Mandatory = $true)]
@@ -79,39 +95,19 @@ function Remove-GeneratedDirectory {
     Remove-Item -LiteralPath $candidateFull -Recurse -Force
 }
 
-function Remove-GeneratedFile {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $LiteralPath
-    )
-
-    $targetRootFull = [IO.Path]::GetFullPath($installerTargetRoot).TrimEnd([char[]]@('\', '/'))
-    $candidateFull = [IO.Path]::GetFullPath($LiteralPath)
-    if (-not $candidateFull.StartsWith(
-            $targetRootFull + [IO.Path]::DirectorySeparatorChar,
-            [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to clean generated file outside the Installer target directory: $candidateFull"
-    }
-    $null = Assert-ClashSharpOrdinaryPath -LiteralPath $candidateFull -AllowMissing
-    foreach ($ancestor in @($installerRoot, $installerTargetRoot)) {
-        if (Test-Path -LiteralPath $ancestor) {
-            $ancestorItem = Get-Item -LiteralPath $ancestor -Force
-            if ($ancestorItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-                throw "Refusing to clean generated file through a reparse ancestor: $ancestor"
-            }
-        }
-    }
-    if (-not (Test-Path -LiteralPath $candidateFull)) {
-        return
-    }
-
-    $item = Get-Item -LiteralPath $candidateFull -Force
-    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        throw "Generated output must be an ordinary file: $candidateFull"
-    }
-    Remove-Item -LiteralPath $candidateFull -Force
-}
-
+<#
+.SYNOPSIS
+Returns a required, bounded ordinary file used as a trusted packaging input.
+.DESCRIPTION
+Rejects missing paths, directories, reparse points, empty files, and files beyond the declared
+maximum before returning the FileInfo instance.
+.PARAMETER LiteralPath
+Literal path of the packaging input.
+.PARAMETER Description
+Stable human-readable name used in validation failures.
+.PARAMETER MaximumLength
+Maximum accepted file length in bytes.
+#>
 function Get-OrdinaryFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -138,6 +134,19 @@ function Get-OrdinaryFile {
     return $item
 }
 
+<#
+.SYNOPSIS
+Validates one staged Installer component against the executable payload allowlist.
+.DESCRIPTION
+Builds the canonical directory contract, rejects forbidden extensions and product artifacts,
+requires every declared file, and optionally enforces an exact file set.
+.PARAMETER LiteralPath
+Root directory of the staged component.
+.PARAMETER RequiredFiles
+Canonical relative filenames that must be present.
+.PARAMETER ExactFileSet
+Requires the staged contract to contain no files beyond RequiredFiles.
+#>
 function Confirm-ClashSharpComponentStaging {
     [CmdletBinding()]
     param(
@@ -173,6 +182,14 @@ function Confirm-ClashSharpComponentStaging {
     return $contract
 }
 
+<#
+.SYNOPSIS
+Converts a canonical four-part package version into a System.Version value.
+.DESCRIPTION
+Rejects noncanonical text and components outside the UInt16 range used by MSIX identity.
+.PARAMETER Value
+Four-part decimal package version to validate and convert.
+#>
 function ConvertTo-ClashSharpPackageVersion {
     [CmdletBinding()]
     param(
@@ -192,23 +209,6 @@ function ConvertTo-ClashSharpPackageVersion {
 
 # A failed attempt must not leave an unsigned or stale file under the publishable artifact name.
 Remove-GeneratedDirectory -LiteralPath $releaseDir
-if (Test-Path -LiteralPath $legacyCargoReleaseDir) {
-    $legacyCargoReleaseItem = Get-Item -LiteralPath $legacyCargoReleaseDir -Force
-    if (-not $legacyCargoReleaseItem.PSIsContainer -or
-        ($legacyCargoReleaseItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        throw "Legacy Cargo release output must be an ordinary directory."
-    }
-}
-foreach ($legacyArtifactName in @(
-        "ClashSharp-Installer.exe",
-        "ClashSharp-Installer.exe.sha256",
-        "ClashSharp-Installer-Development-Unsigned.exe",
-        "ClashSharp-Installer-Development-Unsigned.exe.sha256",
-        "ClashSharp-Installer-Development-Unsigned.stale.exe",
-        "DEVELOPMENT-UNSIGNED.txt")) {
-    Remove-GeneratedFile -LiteralPath (Join-Path $legacyCargoReleaseDir $legacyArtifactName)
-}
-Remove-GeneratedDirectory -LiteralPath (Join-Path $legacyCargoReleaseDir "payload")
 
 $null = Assert-ClashSharpOrdinaryPath -LiteralPath $packagingStagingRoot -AllowMissing
 $null = [IO.Directory]::CreateDirectory($packagingStagingRoot)
@@ -221,10 +221,9 @@ $watchdogPublishRoot = Join-Path $componentStagingRoot "watchdog-publish"
 $watchdogStagingRoot = Join-Path $componentStagingRoot "watchdog"
 $appPackageStagingRoot = Join-Path $packagingRunRoot "app-packages"
 $payloadStagingDir = Join-Path $packagingRunRoot "payload"
-$cargoStagingRoot = Join-Path $packagingRunRoot "cargo"
 $promotionStagingRoot = Join-Path $packagingRunRoot "promotion"
-$csharpInstallerPublishRoot = Join-Path $componentStagingRoot "csharp-installer-candidate"
-$csharpInstallerReleaseManifestPath = Join-Path $packagingRunRoot "csharp-installer-release-manifest.json"
+$installerPublishRoot = Join-Path $componentStagingRoot "installer-publish"
+$installerReleaseManifestPath = Join-Path $packagingRunRoot "installer-release-manifest.json"
 
 if (-not (Test-Path -LiteralPath $appManifest -PathType Leaf)) {
     throw "Package.appxmanifest was not found at the fixed app project path."
@@ -448,7 +447,7 @@ if (-not $Development -and $signingCertificate.Thumbprint -cne $expectedMsixThum
     throw "The private MSIX signing key does not match the controlled release certificate."
 }
 
-# Do not expose the PFX password to MSBuild, Cargo, or dependency build scripts.
+# Do not expose the PFX password to MSBuild or dependency build scripts.
 $certificatePasswordText = $null
 Remove-Variable -Name certificatePassword -Scope Script -ErrorAction SilentlyContinue
 
@@ -473,6 +472,7 @@ dotnet publish $serviceProject `
     -p:EnableCompressionInSingleFile=true `
     -p:DebugSymbols=false `
     -p:DebugType=None `
+    -p:PublishDocumentationFiles=false `
     -o $servicePublishRoot
 if ($LASTEXITCODE -ne 0) {
     throw "MihomoService publish failed with exit code $LASTEXITCODE."
@@ -499,6 +499,7 @@ dotnet publish $watchdogProject `
     -p:EnableCompressionInSingleFile=true `
     -p:DebugSymbols=false `
     -p:DebugType=None `
+    -p:PublishDocumentationFiles=false `
     -o $watchdogPublishRoot
 if ($LASTEXITCODE -ne 0) {
     throw "RecoveryWatchdog publish failed with exit code $LASTEXITCODE."
@@ -676,76 +677,50 @@ $provenance | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $provenancePath
 $stagedPayloadCertificate.Dispose()
 $null = Get-ClashSharpDirectoryContract -LiteralPath $payloadStagingDir
 
-if ($CSharpInstallerCandidate) {
-    $csharpInstallerReleaseManifest = New-ClashSharpInstallerReleaseManifest `
-        -PayloadRoot $payloadStagingDir `
-        -PrimaryIdentity $appIdentity `
-        -PrimaryRelativePath ($appPackage.Name.ToLowerInvariant()) `
-        -DependencyContracts @($csharpDependencyContracts) `
-        -CertificateRelativePath ($certificatePayloadFile.Name.ToLowerInvariant()) `
-        -CertificateThumbprint $payloadCertificate.Thumbprint `
-        -OutputPath $csharpInstallerReleaseManifestPath
+$installerReleaseManifest = New-ClashSharpInstallerReleaseManifest `
+    -PayloadRoot $payloadStagingDir `
+    -PrimaryIdentity $appIdentity `
+    -PrimaryRelativePath ($appPackage.Name.ToLowerInvariant()) `
+    -DependencyContracts @($csharpDependencyContracts) `
+    -CertificateRelativePath ($certificatePayloadFile.Name.ToLowerInvariant()) `
+    -CertificateThumbprint $payloadCertificate.Thumbprint `
+    -AuthenticodeCertificateThumbprint $authenticodeThumbprint `
+    -OutputPath $installerReleaseManifestPath
 
-    dotnet publish $csharpInstallerProject `
-        -c Release `
-        --no-restore `
-        -p:Platform=x64 `
-        -r win-x64 `
-        --self-contained true `
-        -p:PublishSingleFile=true `
-        -p:PublishTrimmed=false `
-        -p:PublishReadyToRun=true `
-        -p:IncludeNativeLibrariesForSelfExtract=true `
-        -p:EnableCompressionInSingleFile=true `
-        -p:DebugSymbols=false `
-        -p:CopyDocumentationFilesToOutputDirectory=false `
-        -p:CopyDocumentationFilesToPublishDirectory=false `
-        -p:ClashSharpFormalInstallerBuild=true `
-        "-p:ClashSharpInstallerReleaseManifestPath=$($csharpInstallerReleaseManifest.FullName)" `
-        -o $csharpInstallerPublishRoot
-    if ($LASTEXITCODE -ne 0) {
-        throw "C# WPF Installer candidate publish failed with exit code $LASTEXITCODE."
-    }
-
-    $csharpCandidateEntries = @(Get-ChildItem -LiteralPath $csharpInstallerPublishRoot -Force)
-    if ($csharpCandidateEntries.Count -ne 1 -or
-        $csharpCandidateEntries[0].PSIsContainer -or
-        ($csharpCandidateEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -or
-        $csharpCandidateEntries[0].Name -cne 'ClashSharp.Installer.exe') {
-        throw 'The C# WPF Installer candidate must publish as one green executable.'
-    }
-    Write-Host 'C# WPF Installer migration candidate passed its isolated single-file build contract.'
+dotnet publish $installerProject `
+    -c Release `
+    --no-restore `
+    -p:Platform=x64 `
+    -r win-x64 `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:PublishTrimmed=false `
+    -p:PublishReadyToRun=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true `
+    -p:DebugSymbols=false `
+    -p:DebugType=None `
+    -p:PublishDocumentationFiles=false `
+    -p:ClashSharpFormalInstallerBuild=true `
+    "-p:ClashSharpInstallerReleaseManifestPath=$($installerReleaseManifest.FullName)" `
+    -o $installerPublishRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "WPF Installer publish failed with exit code $LASTEXITCODE."
 }
 
-    New-Item -ItemType Directory -Force -Path $cargoStagingRoot | Out-Null
-    $previousPackagingMode = $env:CLASHSHARP_INSTALLER_PACKAGING_MODE
-    $previousPayloadDirectory = $env:CLASHSHARP_INSTALLER_PAYLOAD_DIR
-    try {
-        $env:CLASHSHARP_INSTALLER_PACKAGING_MODE = if ($Development) { "development" } else { "official" }
-        $env:CLASHSHARP_INSTALLER_PAYLOAD_DIR = $payloadStagingDir
-        cargo build --release --frozen --target $rustTarget --target-dir $cargoStagingRoot
-        if ($LASTEXITCODE -ne 0) {
-            throw "Rust Installer release build failed with exit code $LASTEXITCODE."
-        }
-    } finally {
-        if ($null -eq $previousPackagingMode) {
-            Remove-Item Env:\CLASHSHARP_INSTALLER_PACKAGING_MODE -ErrorAction SilentlyContinue
-        } else {
-            $env:CLASHSHARP_INSTALLER_PACKAGING_MODE = $previousPackagingMode
-        }
-        if ($null -eq $previousPayloadDirectory) {
-            Remove-Item Env:\CLASHSHARP_INSTALLER_PAYLOAD_DIR -ErrorAction SilentlyContinue
-        } else {
-            $env:CLASHSHARP_INSTALLER_PAYLOAD_DIR = $previousPayloadDirectory
-        }
-    }
+$installerEntries = @(Get-ChildItem -LiteralPath $installerPublishRoot -Force)
+if ($installerEntries.Count -ne 1 -or
+    $installerEntries[0].PSIsContainer -or
+    ($installerEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+    $installerEntries[0].Name -cne 'ClashSharp.Installer.exe') {
+    throw 'The WPF Installer must publish as one self-contained executable.'
+}
+Write-Host 'WPF Installer passed its isolated single-file build contract.'
 
-    $stagedInstallerExecutable = Join-Path `
-        $cargoStagingRoot `
-        "$rustTarget\release\ClashSharp-Installer.exe"
+    $stagedInstallerExecutable = $installerEntries[0].FullName
     $null = Get-OrdinaryFile `
         -LiteralPath $stagedInstallerExecutable `
-        -Description "staged Rust Installer executable"
+        -Description "staged WPF Installer executable"
     $null = New-Item -ItemType Directory -Path $promotionStagingRoot
     $developmentExecutable = Join-Path $promotionStagingRoot "ClashSharp-Installer-Development-Unsigned.exe"
     $developmentMarker = Join-Path $promotionStagingRoot "DEVELOPMENT-UNSIGNED.txt"
@@ -761,11 +736,6 @@ if ($CSharpInstallerCandidate) {
             -Value "Development-only unsigned Installer. Do not publish or distribute this artifact."
         Write-Warning "Built an explicitly unsigned development Installer. It is not a release artifact."
     } else {
-        $authenticodeThumbprint = [string]$env:CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT
-        if ($authenticodeThumbprint -cnotmatch '^[0-9A-F]{40}$') {
-            throw "Official release builds require canonical CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT."
-        }
-
         $timestampUrlText = [string]$env:CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL
         try {
             $timestampUri = [Uri]$timestampUrlText

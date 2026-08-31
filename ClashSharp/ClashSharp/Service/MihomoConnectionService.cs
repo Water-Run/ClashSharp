@@ -59,7 +59,7 @@ public sealed class MihomoConnectionService
     /// <param name="cancellationToken">Cancels the HTTP request.</param>
     /// <returns>A task that completes after mihomo acknowledges the request.</returns>
     /// <exception cref="HttpRequestException">The mihomo API request fails.</exception>
-    /// <exception cref="ArgumentException"><paramref name="connectionId"/> is empty.</exception>
+    /// <exception cref="System.ArgumentException"><paramref name="connectionId"/> is empty.</exception>
     public Task CloseConnectionAsync(string connectionId, CancellationToken cancellationToken)
     {
         return _controllerClient.CloseConnectionAsync(connectionId, cancellationToken);

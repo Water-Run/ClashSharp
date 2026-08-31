@@ -15,6 +15,7 @@ internal static class InstallerTestData
     internal const string Version = "1.2.3.4";
     internal const string TransactionId = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
     internal const string CertificateThumbprint = "0123456789ABCDEF0123456789ABCDEF01234567";
+    internal const string AuthenticodeThumbprint = "89ABCDEF0123456789ABCDEF0123456789ABCDEF";
     internal const string CertificateHash = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
     internal const string DependencyHash = "1111111111111111111111111111111111111111111111111111111111111111";
     internal const string PackageName = "67dc1dc3-13fd-46c5-84f4-2932d94b566f";
@@ -80,6 +81,7 @@ internal static class InstallerTestData
             InstallerReleaseManifest.CurrentSchema,
             release.ExpectedPackageVersion,
             release.InstallerPayloadSha256,
+            AuthenticodeThumbprint,
             release.PackageCertificateThumbprint,
             release.CertificateSha256,
             PackageIdentity(release.ExpectedPackageVersion),

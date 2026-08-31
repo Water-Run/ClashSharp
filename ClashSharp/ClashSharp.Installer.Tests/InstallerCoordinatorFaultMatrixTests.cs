@@ -67,14 +67,14 @@ public sealed class InstallerCoordinatorFaultMatrixTests
     }
 
     [Theory]
-    [InlineData(InstallerOperation.Install, "machine_prepare", InstallerTransactionPhase.Prepared)]
-    [InlineData(InstallerOperation.Install, "package_commit", InstallerTransactionPhase.MachineReserved)]
-    [InlineData(InstallerOperation.Install, "machine", InstallerTransactionPhase.PackageCommitted)]
-    [InlineData(InstallerOperation.Install, "final", InstallerTransactionPhase.MachineCommitted)]
-    [InlineData(InstallerOperation.Uninstall, "machine_prepare", InstallerTransactionPhase.Prepared)]
-    [InlineData(InstallerOperation.Uninstall, "machine", InstallerTransactionPhase.MachineRemovalAuthorized)]
-    [InlineData(InstallerOperation.Uninstall, "package_commit", InstallerTransactionPhase.MachineCommitted)]
-    [InlineData(InstallerOperation.Uninstall, "final", InstallerTransactionPhase.PackageCommitted)]
+    [InlineData(InstallerOperation.Install, "machine_prepare", InstallerTransactionPhase.MachineReserved)]
+    [InlineData(InstallerOperation.Install, "package_commit", InstallerTransactionPhase.PackageCommitted)]
+    [InlineData(InstallerOperation.Install, "machine", InstallerTransactionPhase.MachineCommitted)]
+    [InlineData(InstallerOperation.Install, "final", InstallerTransactionPhase.Verified)]
+    [InlineData(InstallerOperation.Uninstall, "machine_prepare", InstallerTransactionPhase.MachineRemovalAuthorized)]
+    [InlineData(InstallerOperation.Uninstall, "machine", InstallerTransactionPhase.MachineCommitted)]
+    [InlineData(InstallerOperation.Uninstall, "package_commit", InstallerTransactionPhase.PackageCommitted)]
+    [InlineData(InstallerOperation.Uninstall, "final", InstallerTransactionPhase.Verified)]
     public async Task ParentNeverAdvancesWithoutTheExactHelperCommittedJournal(
         InstallerOperation operation,
         string staleBoundary,
@@ -111,6 +111,99 @@ public sealed class InstallerCoordinatorFaultMatrixTests
         Assert.True(result.RecoveryPending);
         Assert.Equal(expectedPhase, scenario.Store.Current?.Journal.Phase);
         Assert.DoesNotContain("journal.clear", scenario.Events);
+    }
+
+    [Fact]
+    public void CoordinatorDependsOnlyOnTheReadOnlyProtectedTransactionView()
+    {
+        Type coordinator = typeof(InstallerCoordinator);
+        Type[] constructorDependencies = Assert.Single(coordinator.GetConstructors())
+            .GetParameters()
+            .Select(static parameter => parameter.ParameterType)
+            .ToArray();
+
+        Assert.Contains(typeof(IInstallerTransactionReader), constructorDependencies);
+        Assert.DoesNotContain(typeof(IInstallerTransactionStore), constructorDependencies);
+        Assert.DoesNotContain(
+            coordinator.GetFields(
+                System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.NonPublic),
+            static field => field.FieldType == typeof(IInstallerTransactionStore));
+    }
+
+    [Fact]
+    public async Task HelperCommitSurvivesLostResponseAndIsRecoveredFromProtectedState()
+    {
+        InstallerScenario scenario = new()
+        {
+            MachineResponseAction = static _ => throw new InstallerStateUncertainException(
+                "installer.elevation.response_lost"),
+        };
+        using InstallerCoordinator coordinator = scenario.CreateCoordinator();
+
+        InstallerExecutionResult result = await coordinator.ExecuteAsync(
+            InstallerTestData.Request(),
+            progress: null,
+            CancellationToken.None);
+
+        Assert.Equal(InstallerExecutionOutcome.Uncertain, result.Outcome);
+        Assert.Equal("installer.elevation.response_lost", result.DiagnosticCode);
+        Assert.Equal(InstallerTransactionPhase.MachineCommitted, result.LastDurablePhase);
+        Assert.True(result.RecoveryPending);
+        Assert.Equal(
+            InstallerTransactionPhase.MachineCommitted,
+            scenario.Store.Current?.Journal.Phase);
+        Assert.DoesNotContain("final.verify", scenario.Events);
+    }
+
+    [Fact]
+    public async Task ClearResponseLossUsesSuccessfulNullReloadWithoutResurrectingVerifiedFallback()
+    {
+        InstallerScenario scenario = new()
+        {
+            FinalClearResponseAction = static _ => throw new InstallerStateUncertainException(
+                "installer.elevation.clear_response_lost"),
+        };
+        using InstallerCoordinator coordinator = scenario.CreateCoordinator();
+
+        InstallerExecutionResult result = await coordinator.ExecuteAsync(
+            InstallerTestData.Request(),
+            progress: null,
+            CancellationToken.None);
+
+        Assert.Equal(InstallerExecutionOutcome.Uncertain, result.Outcome);
+        Assert.Equal("installer.elevation.clear_response_lost", result.DiagnosticCode);
+        Assert.Null(result.LastDurablePhase);
+        Assert.False(result.RecoveryPending);
+        Assert.Null(scenario.Store.Current);
+        Assert.Contains("journal.clear", scenario.Events);
+    }
+
+    [Fact]
+    public async Task ProtectedReloadFailureFallsBackOnlyToTheValidatedHelperResponse()
+    {
+        int loadCount = 0;
+        InstallerScenario scenario = new();
+        scenario.Store.LoadAction = _ => ++loadCount == 1
+            ? Task.FromResult<InstallerTransactionSnapshot?>(null)
+            : Task.FromException<InstallerTransactionSnapshot?>(
+                new IOException("Injected protected-store read failure."));
+        using InstallerCoordinator coordinator = scenario.CreateCoordinator();
+
+        InstallerExecutionResult result = await coordinator.ExecuteAsync(
+            InstallerTestData.Request(),
+            progress: null,
+            CancellationToken.None);
+
+        Assert.Equal(InstallerExecutionOutcome.Uncertain, result.Outcome);
+        Assert.Equal("installer.transaction.reload_failed", result.DiagnosticCode);
+        Assert.Equal(InstallerTransactionPhase.MachineReserved, result.LastDurablePhase);
+        Assert.True(result.RecoveryPending);
+        Assert.Equal(3, loadCount);
+        Assert.Equal(
+            InstallerTransactionPhase.MachineReserved,
+            scenario.Store.Current?.Journal.Phase);
+        Assert.DoesNotContain("certificate.apply:Install", scenario.Events);
     }
 
     [Theory]
@@ -166,14 +259,14 @@ public sealed class InstallerCoordinatorFaultMatrixTests
     }
 
     [Theory]
-    [InlineData(InstallerOperation.Install, 1, InstallerTransactionPhase.Prepared)]
+    [InlineData(InstallerOperation.Install, 1, null)]
     [InlineData(InstallerOperation.Install, 2, InstallerTransactionPhase.MachineReserved)]
     [InlineData(InstallerOperation.Install, 3, InstallerTransactionPhase.MachineReserved)]
     [InlineData(InstallerOperation.Install, 4, InstallerTransactionPhase.MachineReserved)]
     [InlineData(InstallerOperation.Install, 5, InstallerTransactionPhase.PackageCommitted)]
     [InlineData(InstallerOperation.Install, 6, InstallerTransactionPhase.MachineCommitted)]
     [InlineData(InstallerOperation.Install, 7, InstallerTransactionPhase.Verified)]
-    [InlineData(InstallerOperation.Uninstall, 1, InstallerTransactionPhase.Prepared)]
+    [InlineData(InstallerOperation.Uninstall, 1, null)]
     [InlineData(InstallerOperation.Uninstall, 2, InstallerTransactionPhase.MachineRemovalAuthorized)]
     [InlineData(InstallerOperation.Uninstall, 3, InstallerTransactionPhase.MachineCommitted)]
     [InlineData(InstallerOperation.Uninstall, 4, InstallerTransactionPhase.MachineCommitted)]
@@ -183,7 +276,7 @@ public sealed class InstallerCoordinatorFaultMatrixTests
     public async Task ReleaseReverificationFailureNeverClaimsALaterPhase(
         InstallerOperation operation,
         int failingCall,
-        InstallerTransactionPhase expectedPhase)
+        InstallerTransactionPhase? expectedPhase)
     {
         int call = 0;
         InstallerScenario scenario = ScenarioFor(operation);
@@ -201,10 +294,14 @@ public sealed class InstallerCoordinatorFaultMatrixTests
             progress: null,
             CancellationToken.None);
 
-        Assert.Equal(InstallerExecutionOutcome.Failed, result.Outcome);
+        Assert.Equal(
+            expectedPhase is null
+                ? InstallerExecutionOutcome.Blocked
+                : InstallerExecutionOutcome.Failed,
+            result.Outcome);
         Assert.Equal("installer.release.changed", result.DiagnosticCode);
         Assert.Equal(expectedPhase, result.LastDurablePhase);
-        Assert.True(result.RecoveryPending);
+        Assert.Equal(expectedPhase is not null, result.RecoveryPending);
         Assert.Equal(expectedPhase, scenario.Store.Current?.Journal.Phase);
         Assert.DoesNotContain("journal.clear", scenario.Events);
     }

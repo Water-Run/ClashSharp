@@ -15,7 +15,7 @@ public sealed class InstallerReleaseManifestGenerationTests
         string outputPath = Path.Combine(fixture.RootDirectory, "installer-release-manifest.json");
         string command = $$"""
             $ErrorActionPreference = 'Stop'
-            Import-Module -LiteralPath {{Quote(modulePath)}} -Force
+            Import-Module -Name {{Quote(modulePath)}} -Force
             $primary = Get-ClashSharpMsixIdentity -LiteralPath {{Quote(fixture.PrimaryPath)}}
             $dependency = Get-ClashSharpMsixIdentity -LiteralPath {{Quote(fixture.DependencyPath)}}
             $dependencyContract = [PSCustomObject]@{
@@ -29,6 +29,7 @@ public sealed class InstallerReleaseManifestGenerationTests
                 -PrimaryRelativePath 'clashsharp_1.2.3.4_x64.msix' `
                 -DependencyContracts @($dependencyContract) `
                 -CertificateRelativePath 'clashsharp_temporarykey.cer' `
+                -AuthenticodeCertificateThumbprint '{{fixture.Manifest.AuthenticodeCertificateThumbprint}}' `
                 -CertificateThumbprint '{{fixture.Manifest.PackageCertificateThumbprint}}' `
                 -OutputPath {{Quote(outputPath)}}
             [Console]::Out.Write('OK')
@@ -36,7 +37,10 @@ public sealed class InstallerReleaseManifestGenerationTests
 
         ProcessResult result = await RunPowerShellAsync(command, TimeSpan.FromSeconds(20));
 
-        Assert.Equal(0, result.ExitCode);
+        Assert.True(
+            result.ExitCode == 0,
+            $"PowerShell generator exited with {result.ExitCode}. "
+            + $"stdout: {result.StandardOutput}; stderr: {result.StandardError}");
         Assert.Equal("OK", result.StandardOutput);
         Assert.True(
             string.IsNullOrWhiteSpace(result.StandardError),
@@ -50,6 +54,9 @@ public sealed class InstallerReleaseManifestGenerationTests
         Assert.Equal(fixture.Manifest.Schema, actual.Schema);
         Assert.Equal(fixture.Manifest.ExpectedPackageVersion, actual.ExpectedPackageVersion);
         Assert.Equal(fixture.Manifest.InstallerPayloadSha256, actual.InstallerPayloadSha256);
+        Assert.Equal(
+            fixture.Manifest.AuthenticodeCertificateThumbprint,
+            actual.AuthenticodeCertificateThumbprint);
         Assert.Equal(
             fixture.Manifest.PackageCertificateThumbprint,
             actual.PackageCertificateThumbprint);

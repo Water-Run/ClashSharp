@@ -14,10 +14,13 @@ public sealed class InstallerReleaseManifestCodecTests
         byte[] bytes = InstallerReleaseManifestCodec.Serialize(expected);
         InstallerReleaseManifest actual = InstallerReleaseManifestCodec.Parse(bytes);
 
-        Assert.StartsWith("{\"schema\":1,\"expectedPackageVersion\":", Encoding.UTF8.GetString(bytes));
+        Assert.StartsWith("{\"schema\":2,\"expectedPackageVersion\":", Encoding.UTF8.GetString(bytes));
         Assert.Equal(expected.Schema, actual.Schema);
         Assert.Equal(expected.ExpectedPackageVersion, actual.ExpectedPackageVersion);
         Assert.Equal(expected.InstallerPayloadSha256, actual.InstallerPayloadSha256);
+        Assert.Equal(
+            expected.AuthenticodeCertificateThumbprint,
+            actual.AuthenticodeCertificateThumbprint);
         Assert.Equal(expected.PackageCertificateThumbprint, actual.PackageCertificateThumbprint);
         Assert.Equal(expected.CertificateSha256, actual.CertificateSha256);
         Assert.Equal(expected.PackageIdentity, actual.PackageIdentity);
@@ -42,8 +45,8 @@ public sealed class InstallerReleaseManifestCodecTests
             "\"unexpected\":true,\"files\":[",
             StringComparison.Ordinal));
         AssertJsonInvalid(CanonicalJson().Replace(
-            "\"schema\":1",
-            "\"schema\":1,\"schema\":1",
+            "\"schema\":2",
+            "\"schema\":2,\"schema\":2",
             StringComparison.Ordinal));
         AssertJsonInvalid(CanonicalJson().Replace(
             "\"schema\"",
@@ -129,6 +132,7 @@ public sealed class InstallerReleaseManifestCodecTests
     [InlineData("\"schema\":\"1\"")]
     [InlineData("\"expectedPackageVersion\":null")]
     [InlineData("\"installerPayloadSha256\":null")]
+    [InlineData("\"authenticodeCertificateThumbprint\":null")]
     [InlineData("\"packageCertificateThumbprint\":null")]
     [InlineData("\"certificateSha256\":null")]
     public void ManifestPropertyValueTypesAreStrict(string replacement)
@@ -136,9 +140,10 @@ public sealed class InstallerReleaseManifestCodecTests
         string propertyName = replacement[1..replacement.IndexOf('"', 1)];
         string original = propertyName switch
         {
-            "schema" => "\"schema\":1",
+            "schema" => "\"schema\":2",
             "expectedPackageVersion" => $"\"expectedPackageVersion\":\"{InstallerTestData.Version}\"",
             "installerPayloadSha256" => $"\"installerPayloadSha256\":\"{InstallerTestData.Hash}\"",
+            "authenticodeCertificateThumbprint" => $"\"authenticodeCertificateThumbprint\":\"{InstallerTestData.AuthenticodeThumbprint}\"",
             "packageCertificateThumbprint" => $"\"packageCertificateThumbprint\":\"{InstallerTestData.CertificateThumbprint}\"",
             "certificateSha256" => $"\"certificateSha256\":\"{InstallerTestData.CertificateHash}\"",
             _ => throw new InvalidOperationException("Unknown manifest property."),

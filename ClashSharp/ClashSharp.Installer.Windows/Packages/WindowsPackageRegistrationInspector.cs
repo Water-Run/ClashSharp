@@ -4,6 +4,14 @@ using ClashSharp.Installer.Payloads;
 
 namespace ClashSharp.Installer.Windows.Packages;
 
+internal interface IWindowsTargetUserPackageCommitInspector
+{
+    void Verify(
+        InstallerRequest request,
+        InstallerReleaseManifest manifest,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Maps one exact user/family query through the shared fail-closed identity policy.</summary>
 internal static class WindowsPackageRegistrationInspector
 {
@@ -80,6 +88,7 @@ internal static class WindowsPackageRegistrationInspector
 /// Independently proves the exact target-user AppXSVC result before the helper commits PackageCommitted.
 /// </summary>
 internal sealed class WindowsTargetUserPackageCommitInspector
+    : IWindowsTargetUserPackageCommitInspector
 {
     private readonly IWindowsPackageManagerFacade _packageManager;
 
@@ -90,7 +99,7 @@ internal sealed class WindowsTargetUserPackageCommitInspector
         _packageManager = packageManager;
     }
 
-    internal void Verify(
+    public void Verify(
         InstallerRequest request,
         InstallerReleaseManifest manifest,
         CancellationToken cancellationToken)

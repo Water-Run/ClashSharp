@@ -3,9 +3,9 @@ namespace ClashSharp.Tests.Unit.Resources;
 /// <summary>Tests the installer build script source-level contract.</summary>
 public sealed class InstallerBuildScriptTests
 {
-    /// <summary>Verifies the native Installer is the only packaging entry and release inputs fail closed.</summary>
+    /// <summary>Verifies the WPF Installer is the only packaging entry and release inputs fail closed.</summary>
     [Fact]
-    public void BuildInstallerScript_UsesOnlySignedPinnedNativeReleasePath()
+    public void BuildInstallerScript_UsesOnlySignedPinnedWpfReleasePath()
     {
         string scriptPath = FindSourceFile("ClashSharp", "Installer", "build.ps1");
         string repositoryRoot = FindRepositoryRoot();
@@ -13,15 +13,12 @@ public sealed class InstallerBuildScriptTests
         string script = File.ReadAllText(scriptPath);
 
         Assert.False(File.Exists(Path.Combine(repositoryRoot, "Tools", "build_installer.py")));
-        Assert.Contains("cargo build --release", script, StringComparison.Ordinal);
-        Assert.Contains(
-            "cargo build --release --frozen --target $rustTarget --target-dir $cargoStagingRoot",
-            script,
-            StringComparison.Ordinal);
-        Assert.Contains("$rustTarget = \"x86_64-pc-windows-msvc\"", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish $installerProject", script, StringComparison.Ordinal);
+        Assert.Contains("ClashSharp.Installer.csproj", script, StringComparison.Ordinal);
         Assert.Contains("dotnet publish $appProject", script, StringComparison.Ordinal);
         Assert.Contains("--no-restore", script, StringComparison.Ordinal);
-        Assert.Contains("CLASHSHARP_INSTALLER_PACKAGING_MODE", script, StringComparison.Ordinal);
+        Assert.Contains("-p:ClashSharpFormalInstallerBuild=true", script, StringComparison.Ordinal);
+        Assert.Contains("New-ClashSharpInstallerReleaseManifest", script, StringComparison.Ordinal);
         Assert.Contains("mihomo-manifest.json", script, StringComparison.Ordinal);
         Assert.Contains("$manifest.files.Count -ne 4", script, StringComparison.Ordinal);
         Assert.Contains("CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT", script, StringComparison.Ordinal);
@@ -42,7 +39,8 @@ public sealed class InstallerBuildScriptTests
             StringComparison.Ordinal);
         Assert.Contains("Remove-Item Env:\\CLASHSHARP_CERTIFICATE_PASSWORD", script, StringComparison.Ordinal);
         Assert.Contains("packaging-staging", script, StringComparison.Ordinal);
-        Assert.Contains("release-artifacts", script, StringComparison.Ordinal);
+        Assert.Contains("artifacts\\installer", script, StringComparison.Ordinal);
+        Assert.Contains("$releaseDir = Join-Path $installerTargetRoot \"release\"", script, StringComparison.Ordinal);
         Assert.Contains("$stagedInstallerExecutable", script, StringComparison.Ordinal);
         Assert.Contains("Remove-GeneratedDirectory -LiteralPath $releaseDir", script, StringComparison.Ordinal);
         Assert.Contains("Installer artifact SHA-256", script, StringComparison.Ordinal);
@@ -51,6 +49,8 @@ public sealed class InstallerBuildScriptTests
         Assert.DoesNotContain("Invoke-WebRequest", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-RestMethod", script, StringComparison.Ordinal);
         Assert.DoesNotContain("CLASHSHARP_ALLOW_MISSING_GEODATA", script, StringComparison.Ordinal);
+        Assert.DoesNotMatch("(?i)\\b(cargo|rustc|rustup)\\b", script);
+        Assert.DoesNotContain("CSharpInstallerCandidate", script, StringComparison.Ordinal);
 
         int clearPassword = script.IndexOf(
             "Remove-Item Env:\\CLASHSHARP_CERTIFICATE_PASSWORD",
@@ -64,9 +64,9 @@ public sealed class InstallerBuildScriptTests
         Assert.True(signStaged >= 0 && publishOfficialName > signStaged);
     }
 
-    /// <summary>Verifies the WPF migration candidate embeds a generated manifest and stays non-promoted.</summary>
+    /// <summary>Verifies the WPF Installer embeds a generated manifest and is the promoted executable.</summary>
     [Fact]
-    public void BuildInstallerScript_HasIsolatedCSharpCandidateContract()
+    public void BuildInstallerScript_HasFormalWpfInstallerContract()
     {
         string scriptPath = FindSourceFile("ClashSharp", "Installer", "build.ps1");
         string modulePath = FindSourceFile(
@@ -82,14 +82,18 @@ public sealed class InstallerBuildScriptTests
         string module = File.ReadAllText(modulePath);
         string installerProject = File.ReadAllText(installerProjectPath);
 
-        Assert.Contains("[switch] $CSharpInstallerCandidate", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("CSharpInstallerCandidate", script, StringComparison.Ordinal);
         Assert.Contains("New-ClashSharpInstallerReleaseManifest", script, StringComparison.Ordinal);
-        Assert.Contains("dotnet publish $csharpInstallerProject", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish $installerProject", script, StringComparison.Ordinal);
         Assert.Contains("-p:ClashSharpFormalInstallerBuild=true", script, StringComparison.Ordinal);
         Assert.Contains("ClashSharpInstallerReleaseManifestPath", script, StringComparison.Ordinal);
-        Assert.Contains("must publish as one green executable", script, StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "Move-Item -LiteralPath $csharpCandidateEntries",
+        Assert.Contains(
+            "-AuthenticodeCertificateThumbprint $authenticodeThumbprint",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("must publish as one self-contained executable", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "$stagedInstallerExecutable = $installerEntries[0].FullName",
             script,
             StringComparison.Ordinal);
 
@@ -98,6 +102,7 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("[Security.Cryptography.SHA256]::HashData", module, StringComparison.Ordinal);
         Assert.Contains("[Security.Cryptography.IncrementalHash]::CreateHash", module, StringComparison.Ordinal);
         Assert.Contains("New-ClashSharpInstallerReleaseManifest", module, StringComparison.Ordinal);
+        Assert.Contains("authenticodeCertificateThumbprint", module, StringComparison.Ordinal);
         Assert.Contains("machineFiles                  = @($machineFiles)", module, StringComparison.Ordinal);
         Assert.Contains("binaries/mihomo.exe", module, StringComparison.Ordinal);
         Assert.Contains(
@@ -112,110 +117,97 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("ValidateClashSharpFormalInstallerManifest", installerProject, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the native Rust installer embeds a Windows executable icon.</summary>
+    /// <summary>Verifies the WPF Installer embeds the Windows executable icon.</summary>
     [Fact]
-    public void NativeInstallerBuild_EmbedsWindowsExecutableIcon()
+    public void WpfInstallerBuild_EmbedsWindowsExecutableIcon()
     {
-        string cargoPath = FindSourceFile("ClashSharp", "Installer", "Cargo.toml");
-        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
+        string installerProjectPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer",
+            "ClashSharp.Installer.csproj");
         string iconPath = FindSourceFile("ClashSharp", "Installer", "LogoInstaller.ico");
 
-        string cargo = File.ReadAllText(cargoPath);
-        string buildScript = File.ReadAllText(buildScriptPath);
+        string installerProject = File.ReadAllText(installerProjectPath);
 
-        Assert.Contains("winresource", cargo, StringComparison.Ordinal);
-        Assert.Contains("WindowsResource::new()", buildScript, StringComparison.Ordinal);
-        Assert.Contains("set_icon(\"LogoInstaller.ico\")", buildScript, StringComparison.Ordinal);
-        Assert.Contains("CLASHSHARP_INSTALLER_PACKAGING_MODE", buildScript, StringComparison.Ordinal);
-        Assert.Contains("release Installer builds must run through build.ps1", buildScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "<ApplicationIcon>..\\Installer\\LogoInstaller.ico</ApplicationIcon>",
+            installerProject,
+            StringComparison.Ordinal);
         Assert.EndsWith("LogoInstaller.ico", iconPath, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the final MSIX GeoData set and manifest content are bound into the Installer.</summary>
+    /// <summary>Verifies the final MSIX GeoData set and manifest content are bound into the WPF Installer.</summary>
     [Fact]
-    public void NativeInstallerBuild_BindsCompleteGeoDataManifestFromFinalMsix()
+    public void WpfInstallerBuild_BindsCompleteGeoDataManifestFromFinalMsix()
     {
-        string cargoPath = FindSourceFile("ClashSharp", "Installer", "Cargo.toml");
-        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
+        string scriptPath = FindSourceFile("ClashSharp", "Installer", "build.ps1");
+        string modulePath = FindSourceFile("ClashSharp", "Installer", "PackagingContract.psm1");
 
-        string cargo = File.ReadAllText(cargoPath);
-        string buildScript = File.ReadAllText(buildScriptPath);
+        string script = File.ReadAllText(scriptPath);
+        string module = File.ReadAllText(modulePath);
 
-        Assert.Contains("serde_json = \"1\"", cargo, StringComparison.Ordinal);
-        Assert.Contains("serde_json::from_slice", buildScript, StringComparison.Ordinal);
-        Assert.Contains("validate_geodata_manifest", buildScript, StringComparison.Ordinal);
-        Assert.Contains("#[serde(deny_unknown_fields)]", buildScript, StringComparison.Ordinal);
-        Assert.Contains("Binaries/GeoData/manifest.json", buildScript, StringComparison.Ordinal);
-        Assert.Contains("Binaries/GeoData/Country.mmdb", buildScript, StringComparison.Ordinal);
-        Assert.Contains("Binaries/GeoData/GeoIP.dat", buildScript, StringComparison.Ordinal);
-        Assert.Contains("Binaries/GeoData/GeoSite.dat", buildScript, StringComparison.Ordinal);
-        Assert.Contains("Binaries/GeoData/ASN.mmdb", buildScript, StringComparison.Ordinal);
-        Assert.Contains("actual_length != asset.length", buildScript, StringComparison.Ordinal);
-        Assert.Contains("actual_sha256 != &asset.sha256", buildScript, StringComparison.Ordinal);
+        Assert.Contains("$manifest.files.Count -ne 4", script, StringComparison.Ordinal);
+        Assert.Contains("Country.mmdb", script, StringComparison.Ordinal);
+        Assert.Contains("GeoIP.dat", script, StringComparison.Ordinal);
+        Assert.Contains("GeoSite.dat", script, StringComparison.Ordinal);
+        Assert.Contains("ASN.mmdb", script, StringComparison.Ordinal);
+        Assert.Contains("GeoData asset length mismatch", script, StringComparison.Ordinal);
+        Assert.Contains("GeoData asset SHA-256 mismatch", script, StringComparison.Ordinal);
+        Assert.Contains("machineFiles                  = @($machineFiles)", module, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the final MSIX is the sole generated package-identity source.</summary>
     [Fact]
-    public void NativeInstallerBuild_GeneratesCompleteIdentityFromFinalMsix()
+    public void WpfInstallerBuild_GeneratesCompleteIdentityFromFinalMsix()
     {
-        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
-        string servicePlanPath = FindSourceFile(
+        string scriptPath = FindSourceFile("ClashSharp", "Installer", "build.ps1");
+        string modulePath = FindSourceFile("ClashSharp", "Installer", "PackagingContract.psm1");
+        string manifestPath = FindSourceFile(
             "ClashSharp",
-            "Installer",
-            "src",
-            "service_plan.rs");
+            "ClashSharp.Installer.Core",
+            "Payloads",
+            "InstallerReleaseManifest.cs");
 
-        string buildScript = File.ReadAllText(buildScriptPath);
-        string servicePlan = File.ReadAllText(servicePlanPath);
+        string script = File.ReadAllText(scriptPath);
+        string module = File.ReadAllText(modulePath);
+        string manifest = File.ReadAllText(manifestPath);
 
-        Assert.Contains("extract_trusted_package_manifest", buildScript, StringComparison.Ordinal);
-        Assert.Contains("parse_final_appx_identity", buildScript, StringComparison.Ordinal);
-        Assert.Contains("ProcessorArchitecture", buildScript, StringComparison.Ordinal);
-        Assert.Contains("Application Executable", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_PACKAGE_IDENTITY_NAME", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_PACKAGE_PUBLISHER", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_PACKAGE_PUBLISHER_ID", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_PACKAGE_FAMILY_NAME", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_PACKAGE_VERSION", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_PACKAGE_ARCHITECTURE", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_APPLICATION_ID", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_APPLICATION_EXECUTABLE", buildScript, StringComparison.Ordinal);
-        Assert.Contains("PackageFamilyNameFromId", buildScript, StringComparison.Ordinal);
-        Assert.Contains("derive_publisher_id", buildScript, StringComparison.Ordinal);
-
-        Assert.Contains("pub use crate::trust_anchor", servicePlan, StringComparison.Ordinal);
-        Assert.DoesNotContain("pub const PACKAGE_IDENTITY_NAME: &str =", servicePlan, StringComparison.Ordinal);
-        Assert.DoesNotContain("pub const PACKAGE_PUBLISHER: &str =", servicePlan, StringComparison.Ordinal);
-        Assert.DoesNotContain("pub const PACKAGE_PUBLISHER_ID: &str =", servicePlan, StringComparison.Ordinal);
-        Assert.DoesNotContain("pub const PACKAGE_FAMILY_NAME: &str =", servicePlan, StringComparison.Ordinal);
+        Assert.Contains("Get-ClashSharpMsixIdentity", script, StringComparison.Ordinal);
+        Assert.Contains("Get-ClashSharpPublisherId", module, StringComparison.Ordinal);
+        Assert.Contains("New-ClashSharpInstallerReleaseManifest", module, StringComparison.Ordinal);
+        Assert.Contains("expectedPackageVersion       = [string]$PrimaryIdentity.Version", module, StringComparison.Ordinal);
+        Assert.Matches("packageIdentity\\s+= \\[ordered\\]@\\{", module);
+        Assert.Contains("public InstallerPackageIdentity PackageIdentity", manifest, StringComparison.Ordinal);
+        Assert.Contains("PackageIdentity.Validate(ExpectedPackageVersion)", manifest, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies ordinary Repair cannot opt into package downgrade semantics.</summary>
     [Fact]
-    public void NativeInstallerRepair_RejectsDowngradeByDefault()
+    public void WpfInstallerRepair_RejectsDowngradeByDefault()
     {
-        string installerPath = FindSourceFile("ClashSharp", "Installer", "src", "main.rs");
-        string identityPath = FindSourceFile(
+        string coordinatorPath = FindSourceFile(
             "ClashSharp",
-            "Installer",
-            "src",
-            "package_identity.rs");
+            "ClashSharp.Installer.Core",
+            "Execution",
+            "InstallerCoordinator.cs");
+        string packageAdapterPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer.Windows",
+            "Packages",
+            "WindowsCurrentUserPackageStoreAdapter.cs");
 
-        string installer = File.ReadAllText(installerPath);
-        string identity = File.ReadAllText(identityPath);
+        string coordinator = File.ReadAllText(coordinatorPath);
+        string packageAdapter = File.ReadAllText(packageAdapterPath);
 
-        Assert.Contains("query_current_user_package_registration", installer, StringComparison.Ordinal);
-        Assert.Contains("installer.package.downgrade_rejected", installer, StringComparison.Ordinal);
-        Assert.Contains("classify_deployment_version", installer, StringComparison.Ordinal);
-        Assert.Contains("PackageVersion", identity, StringComparison.Ordinal);
-        Assert.Contains("DeploymentVersionChange::Downgrade", identity, StringComparison.Ordinal);
-        Assert.Contains(" -Update -RetainFilesOnFailure", installer, StringComparison.Ordinal);
-        Assert.DoesNotContain("ForceUpdateFromAnyVersion", installer, StringComparison.Ordinal);
+        Assert.Contains("environment.InstalledPackageVersion", coordinator, StringComparison.Ordinal);
+        Assert.Contains("installed > requested", coordinator, StringComparison.Ordinal);
+        Assert.Contains("installer.package.downgrade_rejected", coordinator, StringComparison.Ordinal);
+        Assert.Contains("ForceUpdateFromAnyVersion: false", packageAdapter, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies MSIX signing identity is derived from and bound to the manifest Publisher.</summary>
     [Fact]
-    public void NativeInstallerBuild_BindsSigningCertificateToManifestPublisher()
+    public void WpfInstallerBuild_BindsSigningCertificateToManifestPublisher()
     {
         string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.ps1");
         string manifestPath = FindSourceFile("ClashSharp", "ClashSharp", "Package.appxmanifest");
@@ -249,20 +241,28 @@ public sealed class InstallerBuildScriptTests
 
     /// <summary>Verifies formal packaging uses fresh exact content, dependency, signer, and promotion contracts.</summary>
     [Fact]
-    public void NativeInstallerBuild_UsesExactIsolatedPayloadAndSignatureContract()
+    public void WpfInstallerBuild_UsesExactIsolatedPayloadAndSignatureContract()
     {
         string scriptPath = FindSourceFile("ClashSharp", "Installer", "build.ps1");
         string modulePath = FindSourceFile(
             "ClashSharp",
             "Installer",
             "PackagingContract.psm1");
-        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
         string projectPath = FindSourceFile("ClashSharp", "ClashSharp", "ClashSharp.csproj");
+        string serviceProjectPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.MihomoService",
+            "ClashSharp.MihomoService.csproj");
+        string watchdogProjectPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.RecoveryWatchdog",
+            "ClashSharp.RecoveryWatchdog.csproj");
 
         string script = File.ReadAllText(scriptPath);
         string module = File.ReadAllText(modulePath);
-        string buildScript = File.ReadAllText(buildScriptPath);
         string project = File.ReadAllText(projectPath);
+        string serviceProject = File.ReadAllText(serviceProjectPath);
+        string watchdogProject = File.ReadAllText(watchdogProjectPath);
 
         Assert.Contains("[Guid]::NewGuid().ToString('N')", script, StringComparison.Ordinal);
         Assert.Contains("Copy-ClashSharpComponentPayload", script, StringComparison.Ordinal);
@@ -275,7 +275,8 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("-RequireTrusted", script, StringComparison.Ordinal);
         Assert.Contains("-RequireTimestamp", script, StringComparison.Ordinal);
         Assert.Contains("payload-provenance.json", script, StringComparison.Ordinal);
-        Assert.Contains("CLASHSHARP_INSTALLER_PAYLOAD_DIR", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish $installerProject", script, StringComparison.Ordinal);
+        Assert.Contains("$stagedInstallerExecutable = $installerEntries[0].FullName", script, StringComparison.Ordinal);
         Assert.Contains("Copy-ClashSharpVerifiedDirectory", script, StringComparison.Ordinal);
         Assert.Contains("Compare-ClashSharpDirectoryContract", script, StringComparison.Ordinal);
         Assert.Contains("--self-contained true", script, StringComparison.Ordinal);
@@ -284,6 +285,9 @@ public sealed class InstallerBuildScriptTests
         Assert.Contains("-p:PublishTrimmed=false", script, StringComparison.Ordinal);
         Assert.Contains("-p:PublishReadyToRun=true", script, StringComparison.Ordinal);
         Assert.Contains("-p:IncludeNativeLibrariesForSelfExtract=true", script, StringComparison.Ordinal);
+        Assert.Equal(
+            3,
+            script.Split("-p:PublishDocumentationFiles=false", StringSplitOptions.None).Length - 1);
         Assert.DoesNotContain("--self-contained false", script, StringComparison.Ordinal);
         Assert.DoesNotContain("LastWriteTimeUtc", script, StringComparison.Ordinal);
         Assert.DoesNotContain("latestPackageDirectory", script, StringComparison.Ordinal);
@@ -302,68 +306,55 @@ public sealed class InstallerBuildScriptTests
         Assert.DoesNotContain("ClashSharp.RecoveryWatchdog.runtimeconfig.json", project, StringComparison.Ordinal);
         Assert.Contains("Binaries\\GeoData\\ASN.mmdb", project, StringComparison.Ordinal);
 
-        Assert.Contains("validate_final_msix_file_contract", buildScript, StringComparison.Ordinal);
-        Assert.Contains("REQUIRED_PACKAGE_EXECUTABLES", buildScript, StringComparison.Ordinal);
-        Assert.Contains("parse_dependency_package_identity", buildScript, StringComparison.Ordinal);
-        Assert.Contains("payload provenance", buildScript, StringComparison.Ordinal);
-        Assert.Contains("ensure_payload_root_is_ordinary", buildScript, StringComparison.Ordinal);
-        Assert.Contains("unexpected release payload directory", buildScript, StringComparison.Ordinal);
-        Assert.Contains("Microsoft.Web.WebView2.Core.winmd", buildScript, StringComparison.Ordinal);
-        Assert.DoesNotContain("ClashSharp.RecoveryWatchdog.deps.json", buildScript, StringComparison.Ordinal);
-        Assert.DoesNotContain("ClashSharp.MihomoService.deps.json", buildScript, StringComparison.Ordinal);
+        Assert.Contains("<PublishDocumentationFiles>false", serviceProject, StringComparison.Ordinal);
+        Assert.Contains("<Content Update=\"packages.lock.json\"", serviceProject, StringComparison.Ordinal);
+        Assert.Contains("CopyToPublishDirectory=\"Never\"", serviceProject, StringComparison.Ordinal);
+        Assert.Contains("<PublishDocumentationFiles>false", watchdogProject, StringComparison.Ordinal);
+
+        Assert.Contains("New-ClashSharpInstallerReleaseManifest", module, StringComparison.Ordinal);
+        Assert.Contains("machineFiles                  = @($machineFiles)", module, StringComparison.Ordinal);
+        Assert.Contains("files                         = @($files)", module, StringComparison.Ordinal);
+        Assert.Contains("installerPayloadSha256", module, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies verified payload bytes stay locked through consumers and registration gets a full-file check.</summary>
     [Fact]
-    public void NativeInstaller_ClosesPayloadConsumptionRaceAndVerifiesFullRegistration()
+    public void WpfInstaller_ClosesPayloadConsumptionRaceAndVerifiesPackageIntegrity()
     {
-        string buildScriptPath = FindSourceFile("ClashSharp", "Installer", "build.rs");
-        string trustAnchorPath = FindSourceFile(
+        string lockedFilePath = FindSourceFile(
             "ClashSharp",
-            "Installer",
-            "src",
-            "trust_anchor.rs");
-        string installerPath = FindSourceFile("ClashSharp", "Installer", "src", "main.rs");
+            "ClashSharp.Installer.Windows",
+            "Files",
+            "WindowsLockedPayloadFile.cs");
+        string releaseLeasePath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer.Windows",
+            "Files",
+            "WindowsInstallerReleaseLease.cs");
+        string packageVerifierPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer.Core",
+            "Payloads",
+            "InstallerMsixPackageVerifier.cs");
         string packageManifestPath = FindSourceFile(
             "ClashSharp",
             "ClashSharp",
             "Package.appxmanifest");
 
-        string buildScript = File.ReadAllText(buildScriptPath);
-        string trustAnchor = File.ReadAllText(trustAnchorPath);
-        string installer = File.ReadAllText(installerPath);
+        string lockedFile = File.ReadAllText(lockedFilePath);
+        string releaseLease = File.ReadAllText(releaseLeasePath);
+        string packageVerifier = File.ReadAllText(packageVerifierPath);
         string packageManifest = File.ReadAllText(packageManifestPath);
 
-        Assert.Contains("TRUSTED_ARCHIVE_FILES", buildScript, StringComparison.Ordinal);
-        Assert.Contains("TRUSTED_REGISTERED_PACKAGE_FILES", buildScript, StringComparison.Ordinal);
-        Assert.Contains("NON_HASH_STABLE_REGISTERED_MSIX_FILES", buildScript, StringComparison.Ordinal);
-        Assert.Contains("AppxMetadata/CodeIntegrity.cat", buildScript, StringComparison.Ordinal);
-        Assert.Contains("parse_appx_block_map_file_manifest", buildScript, StringComparison.Ordinal);
-        Assert.Contains("validate_registered_manifest_matches_block_map", buildScript, StringComparison.Ordinal);
-        Assert.Contains("validate_package_integrity_contract", buildScript, StringComparison.Ordinal);
-
-        Assert.Contains(".share_mode(FILE_SHARE_READ)", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("FILE_FLAG_OPEN_REPARSE_POINT", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("FILE_FLAG_BACKUP_SEMANTICS", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("GetFileInformationByHandle", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("file_guards", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("_directory_guards", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("verify_locked_path_identity", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("verify_open_file", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("pub fn reverify(&mut self)", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("verify_registered_package_payload", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("VerifiedRegisteredPackage", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("DEPLOYED_FOOTPRINT_FILES", trustAnchor, StringComparison.Ordinal);
-        Assert.Contains("is_allowed_system_package_metadata_file", trustAnchor, StringComparison.Ordinal);
-        Assert.DoesNotContain("verify_registered_machine_payload", trustAnchor, StringComparison.Ordinal);
-
-        Assert.Contains("verify_registered_package_payload", installer, StringComparison.Ordinal);
-        Assert.Contains("registered_package.reverify()?", installer, StringComparison.Ordinal);
-        Assert.Contains("let _trusted_payload = verify_installer_payload", installer, StringComparison.Ordinal);
-        Assert.DoesNotContain("verify_registered_machine_payload", installer, StringComparison.Ordinal);
-        Assert.True(
-            installer.Split("payload.reverify()?", StringSplitOptions.None).Length >= 7,
-            "Certificate, package, and machine consumers must remain bracketed by re-verification.");
+        Assert.Contains("SafeFileHandle handle", lockedFile, StringComparison.Ordinal);
+        Assert.Contains("WindowsFileSystemNative.GetOrdinaryFileIdentity", lockedFile, StringComparison.Ordinal);
+        Assert.Contains("RandomAccess.GetLength", lockedFile, StringComparison.Ordinal);
+        Assert.Contains("IncrementalHash.CreateHash(HashAlgorithmName.SHA256)", lockedFile, StringComparison.Ordinal);
+        Assert.Contains("internal void Reverify", lockedFile, StringComparison.Ordinal);
+        Assert.Contains("WindowsInstallerPayloadLocker.VerifyExactShape", releaseLease, StringComparison.Ordinal);
+        Assert.Contains("file.Reverify(cancellationToken)", releaseLease, StringComparison.Ordinal);
+        Assert.Contains("AppxBlockMap.xml", packageVerifier, StringComparison.Ordinal);
+        Assert.Contains("Uap10Namespace + \"PackageIntegrity\"", packageVerifier, StringComparison.Ordinal);
         Assert.Contains("uap10:PackageIntegrity", packageManifest, StringComparison.Ordinal);
         Assert.Contains("uap10:Content Enforcement=\"on\"", packageManifest, StringComparison.Ordinal);
     }
@@ -388,49 +379,37 @@ public sealed class InstallerBuildScriptTests
     [Fact]
     public void InstallerUninstall_UsesOwnerCheckedMachineHelperBeforeCurrentUserCleanup()
     {
-        string installerPath = FindSourceFile("ClashSharp", "Installer", "src", "main.rs");
-        string servicePlanPath = FindSourceFile("ClashSharp", "Installer", "src", "service_plan.rs");
+        string coordinatorPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer.Core",
+            "Execution",
+            "InstallerCoordinator.cs");
+        string machineAdapterPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp.Installer.Windows",
+            "Machines",
+            "WindowsElevatedMachineAdapter.cs");
 
-        string installer = File.ReadAllText(installerPath);
-        string servicePlan = File.ReadAllText(servicePlanPath);
+        string coordinator = File.ReadAllText(coordinatorPath);
+        string machineAdapter = File.ReadAllText(machineAdapterPath);
 
-        Assert.Contains("uninstall_machine_resources_if_owner(&target_sid)?", installer, StringComparison.Ordinal);
-        Assert.Contains("--machine-uninstall", installer, StringComparison.Ordinal);
-        Assert.Contains("--target-sid", installer, StringComparison.Ordinal);
-        Assert.Contains("uninstall_startup_restore_fallback(", installer, StringComparison.Ordinal);
-        Assert.Contains("package_mutation_locks.installer_mutation_path()", installer, StringComparison.Ordinal);
-        Assert.Contains("ClashSharp.ProxyRestoreFallback", installer, StringComparison.Ordinal);
-        Assert.Contains("Remove-ItemProperty", installer, StringComparison.Ordinal);
-        Assert.Contains("Remove-AppxPackage", installer, StringComparison.Ordinal);
+        Assert.Contains("InstallerTransactionPhase.MachineRemovalAuthorized", coordinator, StringComparison.Ordinal);
+        Assert.Contains("InstallerMachineHelperVerb.Remove", machineAdapter, StringComparison.Ordinal);
+        Assert.Contains("InstallerMachineHelperInvocation.Create(verb, durableState)", machineAdapter, StringComparison.Ordinal);
+        Assert.Contains("result.ValidateAgainst(command)", machineAdapter, StringComparison.Ordinal);
+        Assert.Contains("installer.machine.target_user_mismatch", machineAdapter, StringComparison.Ordinal);
 
-        Assert.Contains("MachineHelperInvocation::Uninstall { target_sid }", installer, StringComparison.Ordinal);
-        Assert.Contains("may_uninstall_machine(target_sid, &association)?", installer, StringComparison.Ordinal);
-        Assert.Contains("return Ok(0);", installer, StringComparison.Ordinal);
-        Assert.Contains("render_uninstall_script(target_sid)", installer, StringComparison.Ordinal);
-        Assert.Contains("owner association does not authorize this uninstall", servicePlan, StringComparison.Ordinal);
-        Assert.Contains("$scExe = Join-Path ([Environment]::SystemDirectory) 'sc.exe'", servicePlan, StringComparison.Ordinal);
-        Assert.Contains("& $scExe delete $serviceName", servicePlan, StringComparison.Ordinal);
-        Assert.Contains("& $scExe query $serviceName", servicePlan, StringComparison.Ordinal);
-        Assert.Contains(
-            "installer.machine.service_delete_pending_reboot",
-            servicePlan,
+        int removeMachine = coordinator.IndexOf(
+            ".ApplyAsync(request, release, durable, cancellationToken)",
+            coordinator.IndexOf("ExecuteUninstallAsync", StringComparison.Ordinal),
             StringComparison.Ordinal);
-        Assert.Contains("ClashSharpMihomo", servicePlan, StringComparison.Ordinal);
-
-        int removeMachine = servicePlan.IndexOf(
-            "OperationStep::RemoveMachineResourcesIfOwner,",
-            StringComparison.Ordinal);
-        int removeFallback = servicePlan.IndexOf(
-            "OperationStep::RemoveCurrentUserStartupFallback,",
+        int removePackage = coordinator.IndexOf(
+            "_packageMutation.ApplyAsync(request, release, cancellationToken)",
             removeMachine + 1,
             StringComparison.Ordinal);
-        int removePackage = servicePlan.IndexOf(
-            "OperationStep::RemoveCurrentUserPackageIfPresent,",
-            removeFallback + 1,
-            StringComparison.Ordinal);
         Assert.True(
-            removeMachine >= 0 && removeFallback > removeMachine && removePackage > removeFallback,
-            "Owner-checked machine cleanup must precede CurrentUser fallback and package removal.");
+            removeMachine >= 0 && removePackage > removeMachine,
+            "Owner-checked helper cleanup must precede CurrentUser package removal.");
     }
 
     private static string FindSourceFile(params string[] segments)

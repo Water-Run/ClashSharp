@@ -216,6 +216,8 @@ internal static partial class LocalizationResources
             ["Command.RemoveRegistration"] = "Registrierung entfernen",
             ["Command.Open"] = "Öffnen",
             ["Command.Edit"] = "Bearbeiten",
+            ["Command.MoveUp"] = "Nach oben",
+            ["Command.MoveDown"] = "Nach unten",
             ["Command.Save"] = "Speichern",
             ["Command.Rename"] = "Umbenennen",
             ["Command.History"] = "Verlauf",

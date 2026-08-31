@@ -407,6 +407,7 @@ internal sealed class ProfilesViewModel : ObservableObject
 
     /// <summary>Resolves active profile display text from current rows.</summary>
     /// <param name="profiles">Current profile rows. Must not be null.</param>
+    /// <param name="fallbackProfileId">Stable identifier returned when no row is active.</param>
     /// <returns>Active profile display text.</returns>
     private static string ResolveActiveProfileDisplayText(
         IEnumerable<ConfigurationProfileDisplay> profiles,

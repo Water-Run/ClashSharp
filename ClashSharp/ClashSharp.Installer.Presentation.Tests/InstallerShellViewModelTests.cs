@@ -6,6 +6,18 @@ namespace ClashSharp.Installer.Presentation.Tests;
 
 public sealed class InstallerShellViewModelTests
 {
+    [Fact]
+    public void DisposeReleasesRuntimeLifetimeExactlyOnce()
+    {
+        var runtime = new ScriptedInstallerRuntime();
+        var viewModel = new InstallerShellViewModel(runtime);
+
+        viewModel.Dispose();
+        viewModel.Dispose();
+
+        Assert.Equal(1, runtime.DisposeCount);
+    }
+
     [Theory]
     [InlineData(InstallerProductState.Available, "安装")]
     [InlineData(InstallerProductState.Installed, "修复")]
@@ -66,6 +78,26 @@ public sealed class InstallerShellViewModelTests
         Assert.Equal(new[] { InstallerOperation.Uninstall }, runtime.Operations);
         Assert.False(viewModel.HasSecondaryAction);
         Assert.False(viewModel.SecondaryActionCommand.CanExecute(parameter: null));
+    }
+
+    [Fact]
+    public async Task UninstallOnlyReadinessCannotExposeRepair()
+    {
+        var runtime = new ScriptedInstallerRuntime
+        {
+            Inspect = _ => Task.FromResult(InstallerPresentationTestData.Readiness(
+                InstallerProductState.Installed,
+                allowedOperations: [InstallerOperation.Uninstall])),
+        };
+        using var viewModel = new InstallerShellViewModel(runtime);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("卸载", viewModel.PrimaryActionText);
+        Assert.False(viewModel.HasSecondaryAction);
+        Assert.False(viewModel.IsSecondaryActionVisible);
+        await viewModel.PrimaryActionCommand.ExecuteAsync();
+        Assert.Equal([InstallerOperation.Uninstall], runtime.Operations);
     }
 
     [Theory]
@@ -136,6 +168,9 @@ public sealed class InstallerShellViewModelTests
     [InlineData("recovery_missing_operation")]
     [InlineData("recovery_unknown_operation")]
     [InlineData("ordinary_has_recovery_operation")]
+    [InlineData("can_execute_without_operation")]
+    [InlineData("blocked_with_operation")]
+    [InlineData("installed_repair_only")]
     public async Task InvalidReadinessFailsClosed(string invalidCase)
     {
         InstallerRuntimeReadiness readiness = invalidCase switch
@@ -161,6 +196,14 @@ public sealed class InstallerShellViewModelTests
             {
                 RecoveryOperation = InstallerOperation.Uninstall,
             },
+            "can_execute_without_operation" => InstallerPresentationTestData.Readiness(
+                allowedOperations: []),
+            "blocked_with_operation" => InstallerPresentationTestData.Readiness(
+                canExecute: false,
+                allowedOperations: [InstallerOperation.Install]),
+            "installed_repair_only" => InstallerPresentationTestData.Readiness(
+                InstallerProductState.Installed,
+                allowedOperations: [InstallerOperation.Repair]),
             _ => throw new InvalidOperationException(),
         };
         var runtime = new ScriptedInstallerRuntime
@@ -365,6 +408,30 @@ public sealed class InstallerShellViewModelTests
         Assert.False(viewModel.IsSecondaryActionVisible);
         Assert.False(viewModel.IsCancelActionVisible);
         Assert.Equal("已取消", viewModel.StatusBadge);
+        Assert.Equal("installer.cancelled", viewModel.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task WindowShutdownCancellationUsesTheSameActiveGeneration()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runtime = new ScriptedInstallerRuntime
+        {
+            Inspect = async cancellationToken =>
+            {
+                entered.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                throw new InvalidOperationException("Unreachable.");
+            },
+        };
+        using var viewModel = new InstallerShellViewModel(runtime);
+
+        Task inspection = viewModel.InitializeAsync();
+        await entered.Task;
+        viewModel.RequestCancellation();
+        await inspection;
+
+        Assert.False(viewModel.IsBusy);
         Assert.Equal("installer.cancelled", viewModel.DiagnosticCode);
     }
 

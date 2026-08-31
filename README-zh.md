@@ -7,7 +7,7 @@
 `Clash#` 是一个现代化的 Windows 原生代理客户端，基于 [mihomo](https://github.com/MetaCubeX/mihomo) 构建。
 `Clash#` 以`AGPL-3.0`协议开源于[GitHub](https://github.com/Water-Run/ClashSharp).
 
-> 开发状态（2026-08-30）：项目处于生产加固阶段，尚未发布正式版本，当前源码与开发产物不应视为生产就绪。C# / WPF 绿色安装器迁移已经开始，但当前 WPF runtime 明确禁止系统变更；现有 Rust Installer 在取得同等 Windows VM 证据前仍是发布 authority。进度、证据边界和发布 Gate 见[项目开发地图](./docs/reviews/2026-08-27-project-development-map.md)、[生产就绪执行计划](./docs/reviews/2026-08-27-production-readiness-execution-plan.md)与[Installer 重写详细审查](./docs/reviews/2026-08-30-installer-wpf-rewrite-audit.md)。
+> 开发状态（2026-08-31）：项目处于生产加固阶段，尚未发布正式版本，当前源码与开发产物不应视为生产就绪。自包含 C# / WPF 绿色安装器现为唯一 Installer 实现；生产 runtime、parent engine 与认证 helper 已在源码中闭环，但默认及正式打包仍关闭 mutation-runtime 编译门，直至同一签名候选通过 Windows VM E4 矩阵。进度、证据边界和发布 Gate 见[当前项目结构、MVVM、编码质量与 Installer 总审查](./docs/reviews/2026-08-31-project-structure-mvvm-code-quality-installer-audit.md)、[项目开发地图](./docs/reviews/2026-08-27-project-development-map.md)、[生产就绪执行计划](./docs/reviews/2026-08-27-production-readiness-execution-plan.md)与[Installer 重写详细审查](./docs/reviews/2026-08-30-installer-wpf-rewrite-audit.md)。
 
 ## 关于Windows原生
 
@@ -29,7 +29,7 @@
 
 > 修复、升级和完整卸载请重新运行 `ClashSharp-Installer.exe`。安装器会在证书/MSIX 被消费期间持续持有只读锁，并在使用前后复核同一文件对象的身份与 SHA-256；部署完成后还会依据签名 block map 逐项复核全部包作者文件，MSIX 同时启用 Windows package-integrity enforcement。不要只从 Windows 应用管理移除 MSIX，否则机器级 Service 资源可能无法同步清理。
 
-正式构建的依赖解析与 payload 装配保持离线：`dotnet publish` 使用预先完成的 locked restore，Cargo 使用 frozen lock/cache；构建不会联网追踪 Mihomo `latest`。仓库内固定的版本、长度和 SHA-256 必须与普通二进制完全一致，并须先通过 `Tools\Prepare-GeoData.ps1` 准备四项固定 GeoData 资产。每次打包都会使用全新随机 staging，只接纳最终 manifest 声明的唯一 x64 Windows App Runtime 依赖，并要求通过 `CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT` 固定其受控 signer thumbprint。正式产物还要求受控的 MSIX 证书、可信且带时间戳的 Installer Authenticode 签名，以及显式的 `CLASHSHARP_WINDOWS_SDK_VERSION`；SignTool 只接受该固定 Windows Kits x64 目录中通过 Microsoft 签名信任校验的版本，签名阶段仅联系显式配置的 HTTPS 时间戳服务。未签名 Cargo 输出只存在于可清理的 staging 目录；精确文件集合、长度与 SHA-256 契约在 promotion 后复核一致，才会发布到 `target\release-artifacts`。`build.ps1 -Development` 只生成明确标记为不可发布的未签名开发产物。
+正式构建的依赖解析与 payload 装配保持离线：所有 .NET 项目都使用预先完成的 locked restore，构建不会联网追踪 Mihomo `latest`。仓库内固定的版本、长度和 SHA-256 必须与普通二进制完全一致，并须先通过 `Tools\Prepare-GeoData.ps1` 准备四项固定 GeoData 资产。每次打包都会使用全新随机 staging，只接纳最终 manifest 声明的唯一 x64 Windows App Runtime 依赖，并要求通过 `CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT` 固定其受控 signer thumbprint。正式产物还要求受控的 MSIX 证书、可信且带时间戳的 Installer Authenticode 签名，以及显式的 `CLASHSHARP_WINDOWS_SDK_VERSION`；SignTool 只接受该固定 Windows Kits x64 目录中通过 Microsoft 签名信任校验的版本，签名阶段仅联系显式配置的 HTTPS 时间戳服务。WPF Installer 只在可清理的 staging 中发布为单个自包含可执行文件；精确文件集合、长度与 SHA-256 契约复核一致后，才会提升到 `artifacts\installer\release`。`build.ps1 -Development` 只生成明确标记为不可发布的未签名开发产物。
 
 ### 快速上手
 
@@ -48,7 +48,7 @@
 | 接管所有         | 全局             | 开启代理, 全局模式      |
 | 透明代理         | TUN模式          | 开启代理, 且使用TUN模式 |
 
-> 其中，透明代理需要在设置中打开。TUN 会接管整台机器的路由与 DNS；Clash# 当前按“一台机器、一个交互用户、一个 Core 所有者”设计，不支持多用户会话隔离。需要更换所有者时，请由目标用户重新运行 ClashSharp 安装器进行修复/关联。
+> 其中，透明代理需要在设置中打开。TUN 会接管整台机器的路由与 DNS；Clash# 当前按“一台机器、一个交互用户、一个 Core 所有者”设计，不支持多用户会话隔离。正式安装器开放执行后，更换所有者必须由目标用户重新运行 Installer，并在 Repair 中明确确认重新关联；普通 Repair 不会隐式换绑。
 
 `Clash#`预设的默认端口是`10000`.
 

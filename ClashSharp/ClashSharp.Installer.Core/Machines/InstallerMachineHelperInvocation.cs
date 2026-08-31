@@ -22,6 +22,9 @@ public enum InstallerMachineHelperVerb
 
     /// <summary>Independently verifies the final installed or removed state.</summary>
     Verify,
+
+    /// <summary>Deletes only the exact verified journal and proves its absence.</summary>
+    Clear,
 }
 
 /// <summary>
@@ -159,6 +162,9 @@ public sealed record InstallerMachineHelperInvocation(
                 InstallerOperation.Uninstall,
                 InstallerTransactionPhase.PackageCommitted or InstallerTransactionPhase.Verified) =>
                 true,
+            (InstallerMachineHelperVerb.Clear,
+                InstallerOperation.Install or InstallerOperation.Repair or InstallerOperation.Uninstall,
+                InstallerTransactionPhase.Verified) => true,
             _ => false,
         };
         if (!allowed)
@@ -213,6 +219,7 @@ public sealed record InstallerMachineHelperInvocation(
             "apply" => InstallerMachineHelperVerb.Apply,
             "remove" => InstallerMachineHelperVerb.Remove,
             "verify" => InstallerMachineHelperVerb.Verify,
+            "clear" => InstallerMachineHelperVerb.Clear,
             _ => (InstallerMachineHelperVerb)(-1),
         };
         return Enum.IsDefined(verb);
@@ -225,6 +232,7 @@ public sealed record InstallerMachineHelperInvocation(
         InstallerMachineHelperVerb.Apply => "apply",
         InstallerMachineHelperVerb.Remove => "remove",
         InstallerMachineHelperVerb.Verify => "verify",
+        InstallerMachineHelperVerb.Clear => "clear",
         _ => throw new InstallerProtocolException("installer.machine_helper.verb_invalid"),
     };
 }

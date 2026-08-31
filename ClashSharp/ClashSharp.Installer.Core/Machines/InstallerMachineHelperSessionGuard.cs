@@ -107,15 +107,21 @@ public sealed class InstallerMachineHelperSessionGuard
             InstallerMachineHelperSessionDisposition disposition;
             if (protectedState is null)
             {
-                if (_latestProtectedState is not null
-                    || command.Verb != InstallerMachineHelperVerb.Prepare
-                    || requestState.Journal.Phase != InstallerTransactionPhase.Prepared)
+                bool initialPrepare = _latestProtectedState is null
+                    && command.Verb == InstallerMachineHelperVerb.Prepare
+                    && requestState.Journal.Phase == InstallerTransactionPhase.Prepared;
+                bool committedClearReplay = _latestProtectedState is null
+                    && command.Verb == InstallerMachineHelperVerb.Clear
+                    && requestState.Journal.Phase == InstallerTransactionPhase.Verified;
+                if (!initialPrepare && !committedClearReplay)
                 {
                     throw new InstallerProtocolException(
                         "installer.machine_helper.session_protected_state_missing");
                 }
 
-                disposition = InstallerMachineHelperSessionDisposition.Execute;
+                disposition = committedClearReplay
+                    ? InstallerMachineHelperSessionDisposition.VerifyCommittedReplay
+                    : InstallerMachineHelperSessionDisposition.Execute;
             }
             else
             {
@@ -128,7 +134,8 @@ public sealed class InstallerMachineHelperSessionGuard
                 }
 
                 bool exactRequest = requestState == protectedState;
-                bool committedReplay = expectedResult == protectedState;
+                bool committedReplay = command.Verb != InstallerMachineHelperVerb.Clear
+                    && expectedResult == protectedState;
                 if (!exactRequest && !committedReplay)
                 {
                     if (requestState.Journal.Generation < protectedState.Journal.Generation)
@@ -181,6 +188,10 @@ public sealed class InstallerMachineHelperSessionGuard
 
             bool protectedStateMatches = result.Outcome switch
             {
+                InstallerMachineHelperOutcome.Succeeded
+                    when pending.Command.Verb == InstallerMachineHelperVerb.Clear =>
+                    protectedState is null
+                    && resultState == pending.Command.ToDurableState(),
                 InstallerMachineHelperOutcome.Succeeded =>
                     protectedState == resultState,
                 InstallerMachineHelperOutcome.Failed
@@ -190,6 +201,12 @@ public sealed class InstallerMachineHelperSessionGuard
                         ? protectedState is null
                             || protectedState == pending.Command.ToDurableState()
                         : protectedState == pending.ProtectedStateBefore,
+                InstallerMachineHelperOutcome.PostconditionFailed
+                    when pending.Disposition
+                        == InstallerMachineHelperSessionDisposition.VerifyCommittedReplay
+                    && pending.Command.Verb == InstallerMachineHelperVerb.Clear =>
+                    protectedState is null
+                    && resultState == pending.Command.ToDurableState(),
                 InstallerMachineHelperOutcome.PostconditionFailed
                     when pending.Disposition
                         == InstallerMachineHelperSessionDisposition.VerifyCommittedReplay =>
@@ -232,12 +249,15 @@ public sealed class InstallerMachineHelperSessionGuard
                     "installer.machine_helper.session_identity_mismatch");
             }
 
-            bool allowed = pending.ProtectedStateBefore is null
+            bool allowed = pending.Command.Verb == InstallerMachineHelperVerb.Clear
                 ? protectedState is null
-                    || protectedState == requestState
-                    || protectedState == expectedResult
-                : protectedState == pending.ProtectedStateBefore
-                    || protectedState == expectedResult;
+                    || protectedState == pending.ProtectedStateBefore
+                : pending.ProtectedStateBefore is null
+                    ? protectedState is null
+                        || protectedState == requestState
+                        || protectedState == expectedResult
+                    : protectedState == pending.ProtectedStateBefore
+                        || protectedState == expectedResult;
             if (!allowed)
             {
                 throw new InstallerProtocolException(

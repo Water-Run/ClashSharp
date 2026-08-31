@@ -325,6 +325,8 @@ public sealed partial class Logs : Page
     /// <param name="selectedIndex">Selected cleanup mode index.</param>
     /// <param name="parameterBox">Numeric parameter editor. Must not be null.</param>
     /// <param name="descriptionText">Cleanup description text. Must not be null.</param>
+    /// <param name="levelBox">Level filter enabled only for filtered cleanup mode.</param>
+    /// <param name="categoryBox">Category filter enabled only for filtered cleanup mode.</param>
     private void UpdateCleanupParameterEditor(
         int selectedIndex,
         NumberBox parameterBox,

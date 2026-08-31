@@ -146,6 +146,7 @@ internal static class RecoveryWatchdogPaths
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern int GetCurrentPackageFamilyName(
         ref int packageFamilyNameLength,
         [Out] char[]? packageFamilyName);

@@ -545,6 +545,7 @@ public sealed partial class Settings : Page
 
     /// <summary>Confirms and applies a settings-group default reset.</summary>
     /// <param name="resetAction">Group reset action. Must not be null.</param>
+    /// <param name="includeServiceDeploymentNote">Whether to append the Installer-owned service notice.</param>
     private async Task ResetSettingsGroupAsync(Action resetAction, bool includeServiceDeploymentNote = false)
     {
         ArgumentNullException.ThrowIfNull(resetAction);

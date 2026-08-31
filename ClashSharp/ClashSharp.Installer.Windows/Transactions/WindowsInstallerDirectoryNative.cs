@@ -14,13 +14,15 @@ internal sealed class WindowsInstallerDirectoryNative : IWindowsInstallerDirecto
         new DirectoryInfo(path).Create(security);
     }
 
-    public IWindowsInstallerDirectoryLease OpenDirectory(string path) =>
-        new WindowsInstallerDirectoryLease(path);
+    /// <inheritdoc />
+    public IWindowsInstallerDirectoryLease OpenDirectory(string path, bool preventRename) =>
+        new WindowsInstallerDirectoryLease(path, preventRename);
 }
 
 internal sealed class WindowsInstallerDirectoryLease : IWindowsInstallerDirectoryLease
 {
     private const uint ReadControl = 0x0002_0000;
+    private const uint Delete = 0x0001_0000;
     private const uint FileReadAttributes = 0x0000_0080;
     private const uint FileShareRead = 0x0000_0001;
     private const uint FileShareWrite = 0x0000_0002;
@@ -36,12 +38,12 @@ internal sealed class WindowsInstallerDirectoryLease : IWindowsInstallerDirector
     private readonly SafeFileHandle _handle;
     private bool _disposed;
 
-    internal WindowsInstallerDirectoryLease(string path)
+    internal WindowsInstallerDirectoryLease(string path, bool preventRename)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _handle = CreateFile(
             path,
-            ReadControl | FileReadAttributes,
+            ReadControl | FileReadAttributes | (preventRename ? Delete : 0),
             FileShareRead | FileShareWrite,
             0,
             OpenExisting,

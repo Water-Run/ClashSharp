@@ -219,5 +219,6 @@ public sealed class WindowsProxyService
     /// <param name="bufferLength">Option data buffer length in bytes.</param>
     /// <returns>True when the option call succeeds; otherwise false.</returns>
     [DllImport("wininet.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern bool InternetSetOption(nint internet, int option, nint buffer, int bufferLength);
 }

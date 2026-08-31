@@ -15,11 +15,31 @@ $failed = $false
 
 New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 
+<#
+.SYNOPSIS
+Reads the Windows build number recorded in the guest operating system registry.
+.DESCRIPTION
+Returns the CurrentBuildNumber value used only as evidence in the scenario report.
+#>
 function Get-WindowsBuildNumber {
     $property = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
     return [string]$property.CurrentBuildNumber
 }
 
+<#
+.SYNOPSIS
+Appends one bounded scenario-step result to the in-memory report.
+.DESCRIPTION
+Records status, UTC timestamps, elapsed milliseconds, and the sanitized step failure message.
+.PARAMETER Name
+Stable scenario step name.
+.PARAMETER Status
+Terminal step status.
+.PARAMETER StartedAt
+UTC start time captured before the step ran.
+.PARAMETER ErrorMessage
+Failure detail, or null for a successful step.
+#>
 function Add-StepResult {
     param(
         [string]$Name,
@@ -39,6 +59,17 @@ function Add-StepResult {
     }) | Out-Null
 }
 
+<#
+.SYNOPSIS
+Runs one scenario action and records its terminal result.
+.DESCRIPTION
+Marks the overall scenario failed and rethrows when the action fails so later mutation steps do
+not continue after an unmet prerequisite.
+.PARAMETER Name
+Stable name written to the step report.
+.PARAMETER Action
+Scenario action to execute synchronously.
+#>
 function Invoke-ScenarioStep {
     param(
         [string]$Name,
@@ -56,6 +87,14 @@ function Invoke-ScenarioStep {
     }
 }
 
+<#
+.SYNOPSIS
+Selects the newest top-level ClashSharp MSIX package from the mapped payload.
+.DESCRIPTION
+Rejects the scenario when no matching MSIX or bundle is available at the expected root.
+.PARAMETER PayloadPath
+Mapped guest payload directory to inspect.
+#>
 function Find-PayloadPackage {
     param([string]$PayloadPath)
 
@@ -71,6 +110,14 @@ function Find-PayloadPackage {
     return $package
 }
 
+<#
+.SYNOPSIS
+Selects the newest certificate file from the mapped payload tree.
+.DESCRIPTION
+Rejects the scenario when the payload has no certificate available for the install-only probe.
+.PARAMETER PayloadPath
+Mapped guest payload directory to inspect recursively.
+#>
 function Find-PayloadCertificate {
     param([string]$PayloadPath)
 
@@ -85,6 +132,15 @@ function Find-PayloadCertificate {
     return $certificate
 }
 
+<#
+.SYNOPSIS
+Returns the deterministic dependency-package list below the mapped payload.
+.DESCRIPTION
+Returns an empty array when no Dependencies directory exists; otherwise returns MSIX files sorted
+by full path so installation order is reproducible.
+.PARAMETER PayloadPath
+Mapped guest payload directory containing the optional Dependencies tree.
+#>
 function Get-DependencyPackages {
     param([string]$PayloadPath)
 
@@ -97,6 +153,17 @@ function Get-DependencyPackages {
         Sort-Object FullName)
 }
 
+<#
+.SYNOPSIS
+Executes the sandbox install-only package probe and records package identity evidence.
+.DESCRIPTION
+Resolves the payload, imports its certificate, installs dependencies and the primary package, and
+requires the expected package registration before reporting success.
+.PARAMETER Plan
+Parsed immutable scenario plan for the current run.
+.PARAMETER Checks
+Mutable report dictionary that receives verified package evidence.
+#>
 function Invoke-InstallOnlyScenario {
     param(
         [object]$Plan,
@@ -149,6 +216,14 @@ function Invoke-InstallOnlyScenario {
     }
 }
 
+<#
+.SYNOPSIS
+Creates the explicit evidence object used for an unimplemented sandbox scenario.
+.DESCRIPTION
+Preserves the reason a scenario was not executed so skipped work cannot be mistaken for a pass.
+.PARAMETER Reason
+Human-readable explanation recorded in the result JSON.
+#>
 function New-SkippedChecks {
     param([string]$Reason)
 
@@ -157,6 +232,21 @@ function New-SkippedChecks {
     }
 }
 
+<#
+.SYNOPSIS
+Writes the terminal sandbox scenario report as JSON.
+.DESCRIPTION
+Combines the immutable plan, guest environment, ordered step evidence, checks, and optional failure
+into the fixed result path consumed by the host harness.
+.PARAMETER Plan
+Parsed scenario plan that supplies identity and scenario name.
+.PARAMETER Status
+Terminal scenario status.
+.PARAMETER Checks
+Evidence dictionary produced by executed checks.
+.PARAMETER FailureMessage
+Terminal failure detail, or null when no failure occurred.
+#>
 function Write-ScenarioReport {
     param(
         [object]$Plan,

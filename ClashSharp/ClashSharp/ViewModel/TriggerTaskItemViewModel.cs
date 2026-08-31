@@ -43,6 +43,21 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
 
     public string LastTriggeredLabel => _getString("Triggers.LastTriggered");
 
+    /// <summary>Gets the localized accessible label for editing this trigger.</summary>
+    public string EditText => _getString("Command.Edit");
+
+    /// <summary>Gets the localized accessible label for moving this trigger earlier.</summary>
+    public string MoveUpText => _getString("Command.MoveUp");
+
+    /// <summary>Gets the localized accessible label for moving this trigger later.</summary>
+    public string MoveDownText => _getString("Command.MoveDown");
+
+    /// <summary>Gets the localized accessible label for deleting this trigger.</summary>
+    public string DeleteText => _getString("Command.Delete");
+
+    /// <summary>Gets the localized accessible label for the trigger-enabled switch.</summary>
+    public string EnabledText => _getString("Triggers.Enabled.Title");
+
     public string LastTriggeredSummary => LastTriggeredAt is DateTimeOffset lastTriggered
         ? lastTriggered.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
         : _getString("Triggers.NeverTriggered");

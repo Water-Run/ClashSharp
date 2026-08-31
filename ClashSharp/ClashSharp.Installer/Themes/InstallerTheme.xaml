@@ -1,5 +1,20 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Color x:Key="InstallerAccentColor">#7355DD</Color>
+  <Color x:Key="InstallerAccentHoverColor">#6849D2</Color>
+  <Color x:Key="InstallerAccentPressedColor">#593BBE</Color>
+  <Color x:Key="InstallerAccentSoftColor">#F0ECFF</Color>
+  <Color x:Key="InstallerPageColor">#F7F6FA</Color>
+  <Color x:Key="InstallerBorderColor">#DED9E8</Color>
+  <Color x:Key="InstallerMutedColor">#62606B</Color>
+
+  <SolidColorBrush x:Key="InstallerAccentBrush" Color="{StaticResource InstallerAccentColor}" />
+  <SolidColorBrush x:Key="InstallerAccentHoverBrush" Color="{StaticResource InstallerAccentHoverColor}" />
+  <SolidColorBrush x:Key="InstallerAccentPressedBrush" Color="{StaticResource InstallerAccentPressedColor}" />
+  <SolidColorBrush x:Key="InstallerAccentSoftBrush" Color="{StaticResource InstallerAccentSoftColor}" />
+  <SolidColorBrush x:Key="InstallerPageBrush" Color="{StaticResource InstallerPageColor}" />
+  <SolidColorBrush x:Key="InstallerBorderBrush" Color="{StaticResource InstallerBorderColor}" />
+  <SolidColorBrush x:Key="InstallerMutedTextBrush" Color="{StaticResource InstallerMutedColor}" />
   <SolidColorBrush x:Key="InstallerCardBrush"
                    Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
   <SolidColorBrush x:Key="InstallerMutedSurfaceBrush"
@@ -15,9 +30,9 @@
               <LinearGradientBrush MappingMode="Absolute"
                                    StartPoint="307,188"
                                    EndPoint="721,842">
-                <GradientStop Offset="0" Color="#0C7428" />
-                <GradientStop Offset="0.48" Color="#0B7026" />
-                <GradientStop Offset="1" Color="#0A6822" />
+                <GradientStop Offset="0" Color="#8066E8" />
+                <GradientStop Offset="0.48" Color="#7355DD" />
+                <GradientStop Offset="1" Color="#6042C4" />
               </LinearGradientBrush>
             </GeometryDrawing.Brush>
           </GeometryDrawing>
@@ -37,33 +52,125 @@
     <Setter Property="FontSize" Value="14" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{StaticResource InstallerBorderBrush}" />
+    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+    <Setter Property="FocusVisualStyle">
+      <Setter.Value>
+        <Style TargetType="Control">
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate>
+                <Border Margin="2"
+                        BorderBrush="{StaticResource InstallerAccentBrush}"
+                        BorderThickness="2"
+                        CornerRadius="4" />
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
+        </Style>
+      </Setter.Value>
+    </Setter>
   </Style>
 
   <Style TargetType="ProgressBar">
     <Setter Property="Height" Value="8" />
     <Setter Property="Minimum" Value="0" />
     <Setter Property="Maximum" Value="100" />
+    <Setter Property="Foreground" Value="{StaticResource InstallerAccentBrush}" />
+  </Style>
+
+  <Style x:Key="InstallerWindowStyle" TargetType="Window">
+    <Setter Property="Background" Value="{StaticResource InstallerPageBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
   </Style>
 
   <Style x:Key="InstallerCardStyle" TargetType="Border">
     <Setter Property="Background"
             Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
-    <Setter Property="BorderBrush"
-            Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
+    <Setter Property="BorderBrush" Value="{StaticResource InstallerBorderBrush}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="8" />
     <Setter Property="Padding" Value="28" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+        <Setter Property="BorderBrush"
+                Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="InstallerStatusPillStyle" TargetType="Border">
+    <Setter Property="Padding" Value="12,6" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Background" Value="{StaticResource InstallerAccentSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource InstallerAccentBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+        <Setter Property="Background"
+                Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+        <Setter Property="BorderBrush"
+                Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="InstallerAccentSurfaceStyle" TargetType="Border">
+    <Setter Property="Background" Value="{StaticResource InstallerAccentSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource InstallerBorderBrush}" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+        <Setter Property="Background"
+                Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+        <Setter Property="BorderBrush"
+                Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="InstallerAccentTextStyle" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{StaticResource InstallerAccentBrush}" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+        <Setter Property="Foreground"
+                Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
   </Style>
 
   <Style x:Key="InstallerPrimaryButtonStyle"
          TargetType="Button"
          BasedOn="{StaticResource {x:Type Button}}">
     <Setter Property="MinWidth" Value="116" />
-    <Setter Property="Background"
-            Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-    <Setter Property="Foreground"
-            Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+    <Setter Property="Background" Value="{StaticResource InstallerAccentBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource InstallerAccentBrush}" />
+    <Setter Property="Foreground" Value="White" />
     <Setter Property="FontWeight" Value="SemiBold" />
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Background" Value="{StaticResource InstallerAccentHoverBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource InstallerAccentHoverBrush}" />
+      </Trigger>
+      <Trigger Property="IsPressed" Value="True">
+        <Setter Property="Background" Value="{StaticResource InstallerAccentPressedBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource InstallerAccentPressedBrush}" />
+      </Trigger>
+      <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+        <Setter Property="Background"
+                Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+        <Setter Property="BorderBrush"
+                Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+        <Setter Property="Foreground"
+                Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
   </Style>
 
   <Style x:Key="SectionHeadingStyle" TargetType="TextBlock">
@@ -74,8 +181,13 @@
   </Style>
 
   <Style x:Key="MutedTextStyle" TargetType="TextBlock">
-    <Setter Property="Foreground"
-            Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+    <Setter Property="Foreground" Value="{StaticResource InstallerMutedTextBrush}" />
     <Setter Property="TextWrapping" Value="Wrap" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+        <Setter Property="Foreground"
+                Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
   </Style>
 </ResourceDictionary>

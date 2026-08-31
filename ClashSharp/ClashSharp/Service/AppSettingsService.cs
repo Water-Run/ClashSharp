@@ -463,18 +463,24 @@ public sealed partial class AppSettingsService :
         set => WriteOrdinary(editor => editor.MasterInfoTileLayout = value);
     }
 
+    /// <summary>Gets or sets the first URL tested through the configured proxy path.</summary>
+    /// <value>An absolute HTTP or HTTPS probe URL.</value>
     public string ConnectionTestProxyUrl1
     {
         get => GetString(KeyConnectionTestProxyUrl1, DefaultConnectionTestProxyUrl1);
         set => WriteOrdinary(editor => editor.ConnectionTestProxyUrl1 = value);
     }
 
+    /// <summary>Gets or sets the second URL tested through the configured proxy path.</summary>
+    /// <value>An absolute HTTP or HTTPS probe URL independent of the first endpoint.</value>
     public string ConnectionTestProxyUrl2
     {
         get => GetString(KeyConnectionTestProxyUrl2, DefaultConnectionTestProxyUrl2);
         set => WriteOrdinary(editor => editor.ConnectionTestProxyUrl2 = value);
     }
 
+    /// <summary>Gets or sets the URL used to verify direct-connect reachability.</summary>
+    /// <value>An absolute HTTP or HTTPS probe URL that bypasses the proxy path.</value>
     public string ConnectionTestDirectUrl
     {
         get => GetString(KeyConnectionTestDirectUrl, DefaultConnectionTestDirectUrl);
@@ -844,13 +850,13 @@ public sealed partial class AppSettingsService :
 }
 
 /// <summary>Describes one persisted settings change for audit subscribers.</summary>
-/// <param name="Key">Setting storage key.</param>
-/// <param name="OldValue">Value before the write or reset.</param>
-/// <param name="NewValue">Value after the write; null when removed.</param>
-/// <param name="WasRemoved">True when the setting was reset to its default value.</param>
 public sealed class AppSettingChangedEventArgs : EventArgs
 {
     /// <summary>Initializes a settings-change event payload.</summary>
+    /// <param name="key">Setting storage key.</param>
+    /// <param name="oldValue">Value before the write or reset.</param>
+    /// <param name="newValue">Value after the write; <see langword="null"/> when removed.</param>
+    /// <param name="wasRemoved">Whether the setting was reset to its default value.</param>
     public AppSettingChangedEventArgs(string key, object? oldValue, object? newValue, bool wasRemoved)
     {
         Key = key;

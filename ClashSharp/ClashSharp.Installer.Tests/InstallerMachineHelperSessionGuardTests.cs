@@ -116,6 +116,44 @@ public sealed class InstallerMachineHelperSessionGuardTests
         Assert.Equal(verified, CompleteSuccessfully(guard, verify, verified));
     }
 
+    [Fact]
+    public void VerifiedClearCompletesOnlyAgainstAbsentProtectedStateAndSupportsAckLossReplay()
+    {
+        InstallerTransactionSnapshot verified = State(AdvanceTo(
+            Journal(InstallerOperation.Install),
+            InstallerTransactionPhase.Verified));
+        InstallerMachineHelperCommand clear = Command(
+            InstallerMachineHelperVerb.Clear,
+            verified);
+        InstallerMachineHelperResult receipt = InstallerMachineHelperResult.Succeeded(
+            clear,
+            verified);
+        var guard = new InstallerMachineHelperSessionGuard(
+            clear.ToInvocation(),
+            verified);
+
+        Assert.Equal(
+            InstallerMachineHelperSessionDisposition.Execute,
+            guard.Begin(clear, verified));
+        Assert.Equal(verified, guard.Complete(receipt, protectedState: null));
+
+        var replay = new InstallerMachineHelperSessionGuard(
+            clear.ToInvocation(),
+            protectedState: null);
+        Assert.Equal(
+            InstallerMachineHelperSessionDisposition.VerifyCommittedReplay,
+            replay.Begin(clear, protectedState: null));
+        Assert.Equal(verified, replay.Complete(receipt, protectedState: null));
+
+        var uncleared = new InstallerMachineHelperSessionGuard(
+            clear.ToInvocation(),
+            verified);
+        _ = uncleared.Begin(clear, verified);
+        AssertDiagnostic(
+            () => uncleared.Complete(receipt, verified),
+            "installer.machine_helper.session_protected_state_mismatch");
+    }
+
     [Theory]
     [InlineData(InstallerOperation.Install, InstallerTransactionPhase.PackageCommitted,
         InstallerMachineHelperVerb.Apply, InstallerMachineHelperSessionDisposition.Execute)]

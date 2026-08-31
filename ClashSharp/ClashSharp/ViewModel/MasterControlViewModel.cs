@@ -127,6 +127,13 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <param name="takeover">Network takeover provider. Must not be null.</param>
     /// <param name="log">Log sink. Must not be null.</param>
     /// <param name="infoTileLayout">Persistent information-tile layout service. Must not be null.</param>
+    /// <param name="heroStatusLayout">Persistent hero-status slot layout service. Must not be null.</param>
+    /// <param name="errorSink">Boundary sink for unexpected command failures. Must not be null.</param>
+    /// <param name="trayStatus">Optional effective tray-state reader; unavailable state is used when omitted.</param>
+    /// <param name="runtime">Optional runtime status provider; unavailable state is used when omitted.</param>
+    /// <param name="actions">Optional application action dispatcher; no-op actions are used when omitted.</param>
+    /// <param name="modeApplied">Optional observer invoked after a mode transition is committed.</param>
+    /// <param name="getNow">Optional clock used for deterministic refresh throttling.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public MasterControlViewModel(
         IMasterControlLocalization localization,
@@ -1330,6 +1337,7 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     /// <summary>Resolves transparent proxy status after mode application.</summary>
     /// <param name="isTransparentProxyRunning">True when the takeover result reports TUN as running.</param>
+    /// <param name="tunRequested">True when the transition requested service-owned TUN.</param>
     /// <returns>User-facing transparent proxy status text.</returns>
     private string ResolveTransparentProxyStatus(
         bool isTransparentProxyRunning,

@@ -13,6 +13,7 @@ public static class InstallerReleaseManifestCodec
         "schema",
         "expectedPackageVersion",
         "installerPayloadSha256",
+        "authenticodeCertificateThumbprint",
         "packageCertificateThumbprint",
         "certificateSha256",
         "packageIdentity",
@@ -105,6 +106,7 @@ public static class InstallerReleaseManifestCodec
                 "schema" => property.Value.ValueKind == JsonValueKind.Number
                     && property.Value.TryGetInt32(out _),
                 "expectedPackageVersion" or "installerPayloadSha256"
+                    or "authenticodeCertificateThumbprint"
                     or "packageCertificateThumbprint" or "certificateSha256" =>
                     property.Value.ValueKind == JsonValueKind.String,
                 "packageIdentity" => property.Value.ValueKind == JsonValueKind.Object,

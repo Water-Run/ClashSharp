@@ -13,7 +13,7 @@ public sealed class InstallerCoordinator : IDisposable
     private readonly IInstallerPackageMutation _packageMutation;
     private readonly IInstallerMachineMutation _machineMutation;
     private readonly IInstallerFinalVerifier _finalVerifier;
-    private readonly IInstallerTransactionStore _transactionStore;
+    private readonly IInstallerTransactionReader _transactionReader;
     private readonly SemaphoreSlim _executionGate = new(1, 1);
     private bool _disposed;
 
@@ -25,7 +25,7 @@ public sealed class InstallerCoordinator : IDisposable
         IInstallerPackageMutation packageMutation,
         IInstallerMachineMutation machineMutation,
         IInstallerFinalVerifier finalVerifier,
-        IInstallerTransactionStore transactionStore)
+        IInstallerTransactionReader transactionReader)
     {
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(releaseVerifier);
@@ -33,14 +33,14 @@ public sealed class InstallerCoordinator : IDisposable
         ArgumentNullException.ThrowIfNull(packageMutation);
         ArgumentNullException.ThrowIfNull(machineMutation);
         ArgumentNullException.ThrowIfNull(finalVerifier);
-        ArgumentNullException.ThrowIfNull(transactionStore);
+        ArgumentNullException.ThrowIfNull(transactionReader);
         _environment = environment;
         _releaseVerifier = releaseVerifier;
         _certificateMutation = certificateMutation;
         _packageMutation = packageMutation;
         _machineMutation = machineMutation;
         _finalVerifier = finalVerifier;
-        _transactionStore = transactionStore;
+        _transactionReader = transactionReader;
     }
 
     /// <summary>Runs or resumes the exact requested transaction.</summary>
@@ -87,7 +87,7 @@ public sealed class InstallerCoordinator : IDisposable
                 ?? throw new InstallerProtocolException("installer.release.lease_missing");
             ValidateRelease(request, releaseLease);
 
-            durable = await _transactionStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+            durable = await _transactionReader.LoadAsync(cancellationToken).ConfigureAwait(false);
             transactionStateReached = true;
             durable?.Validate();
             if (durable is not null && !durable.Journal.Matches(request))
@@ -112,10 +112,8 @@ public sealed class InstallerCoordinator : IDisposable
 
             if (durable is null)
             {
-                InstallerTransactionJournal prepared = InstallerTransactionJournal.Create(request);
-                durable = await _transactionStore
-                    .SaveAsync(prepared, expectedCurrentHash: null, cancellationToken)
-                    .ConfigureAwait(false);
+                durable = InstallerTransactionSnapshot.Create(
+                    InstallerTransactionJournal.Create(request));
                 durable.Validate();
             }
 
@@ -144,11 +142,11 @@ public sealed class InstallerCoordinator : IDisposable
                 InstallerTransactionSnapshot verified = await _finalVerifier
                     .VerifyAsync(request, releaseLease, durable, cancellationToken)
                     .ConfigureAwait(false);
-                durable = await AcceptHelperStateAsync(
-                        durable,
-                        verified,
-                        InstallerTransactionPhase.Verified,
-                        cancellationToken)
+                durable = ValidateHelperState(
+                    durable,
+                    verified,
+                    InstallerTransactionPhase.Verified);
+                durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -158,17 +156,17 @@ public sealed class InstallerCoordinator : IDisposable
             InstallerTransactionSnapshot confirmed = await _finalVerifier
                 .VerifyAsync(request, releaseLease, durable, cancellationToken)
                 .ConfigureAwait(false);
-            durable = await AcceptHelperStateAsync(
-                    durable,
-                    confirmed,
-                    InstallerTransactionPhase.Verified,
-                    cancellationToken)
+            durable = ValidateHelperState(
+                durable,
+                confirmed,
+                InstallerTransactionPhase.Verified);
+            durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                 .ConfigureAwait(false);
-            await _transactionStore.ClearVerifiedAsync(
-                    durable.Journal.TransactionId,
-                    durable.ContentHash,
-                    cancellationToken)
+            InstallerTransactionSnapshot clearReceipt = await _finalVerifier
+                .ClearVerifiedAsync(request, releaseLease, durable, cancellationToken)
                 .ConfigureAwait(false);
+            ValidateClearReceipt(durable, clearReceipt);
+            await ConfirmHelperClearAsync(durable, cancellationToken).ConfigureAwait(false);
             ReportSafely(progress, InstallerTransactionPhase.Verified, 100, "installer.progress.completed");
             return Result(
                 InstallerExecutionOutcome.Succeeded,
@@ -196,6 +194,18 @@ public sealed class InstallerCoordinator : IDisposable
             }
             return Result(
                 InstallerExecutionOutcome.Cancelled,
+                exception.DiagnosticCode,
+                durable?.Journal.Phase,
+                recoveryPending: durable is not null);
+        }
+        catch (HelperStateReloadException exception)
+        {
+            if (transactionStateReached)
+            {
+                durable = await RefreshDurableAsync(exception.FallbackState).ConfigureAwait(false);
+            }
+            return Result(
+                InstallerExecutionOutcome.Uncertain,
                 exception.DiagnosticCode,
                 durable?.Journal.Phase,
                 recoveryPending: durable is not null);
@@ -269,11 +279,11 @@ public sealed class InstallerCoordinator : IDisposable
             InstallerTransactionSnapshot reserved = await _machineMutation
                 .PrepareAsync(request, release, durable, cancellationToken)
                 .ConfigureAwait(false);
-            durable = await AcceptHelperStateAsync(
-                    durable,
-                    reserved,
-                    InstallerTransactionPhase.MachineReserved,
-                    cancellationToken)
+            durable = ValidateHelperState(
+                durable,
+                reserved,
+                InstallerTransactionPhase.MachineReserved);
+            durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -291,11 +301,11 @@ public sealed class InstallerCoordinator : IDisposable
             InstallerTransactionSnapshot packageCommitted = await _machineMutation
                 .CommitPackageAsync(request, release, durable, cancellationToken)
                 .ConfigureAwait(false);
-            durable = await AcceptHelperStateAsync(
-                    durable,
-                    packageCommitted,
-                    InstallerTransactionPhase.PackageCommitted,
-                    cancellationToken)
+            durable = ValidateHelperState(
+                durable,
+                packageCommitted,
+                InstallerTransactionPhase.PackageCommitted);
+            durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -307,11 +317,11 @@ public sealed class InstallerCoordinator : IDisposable
             InstallerTransactionSnapshot machineCommitted = await _machineMutation
                 .ApplyAsync(request, release, durable, cancellationToken)
                 .ConfigureAwait(false);
-            durable = await AcceptHelperStateAsync(
-                    durable,
-                    machineCommitted,
-                    InstallerTransactionPhase.MachineCommitted,
-                    cancellationToken)
+            durable = ValidateHelperState(
+                durable,
+                machineCommitted,
+                InstallerTransactionPhase.MachineCommitted);
+            durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -337,11 +347,11 @@ public sealed class InstallerCoordinator : IDisposable
             InstallerTransactionSnapshot authorized = await _machineMutation
                 .PrepareAsync(request, release, durable, cancellationToken)
                 .ConfigureAwait(false);
-            durable = await AcceptHelperStateAsync(
-                    durable,
-                    authorized,
-                    InstallerTransactionPhase.MachineRemovalAuthorized,
-                    cancellationToken)
+            durable = ValidateHelperState(
+                durable,
+                authorized,
+                InstallerTransactionPhase.MachineRemovalAuthorized);
+            durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -353,11 +363,11 @@ public sealed class InstallerCoordinator : IDisposable
             InstallerTransactionSnapshot machineCommitted = await _machineMutation
                 .ApplyAsync(request, release, durable, cancellationToken)
                 .ConfigureAwait(false);
-            durable = await AcceptHelperStateAsync(
-                    durable,
-                    machineCommitted,
-                    InstallerTransactionPhase.MachineCommitted,
-                    cancellationToken)
+            durable = ValidateHelperState(
+                durable,
+                machineCommitted,
+                InstallerTransactionPhase.MachineCommitted);
+            durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -371,11 +381,11 @@ public sealed class InstallerCoordinator : IDisposable
             InstallerTransactionSnapshot packageCommitted = await _machineMutation
                 .CommitPackageAsync(request, release, durable, cancellationToken)
                 .ConfigureAwait(false);
-            durable = await AcceptHelperStateAsync(
-                    durable,
-                    packageCommitted,
-                    InstallerTransactionPhase.PackageCommitted,
-                    cancellationToken)
+            durable = ValidateHelperState(
+                durable,
+                packageCommitted,
+                InstallerTransactionPhase.PackageCommitted);
+            durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -400,11 +410,10 @@ public sealed class InstallerCoordinator : IDisposable
         CancellationToken cancellationToken) =>
         await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
 
-    private async Task<InstallerTransactionSnapshot> AcceptHelperStateAsync(
+    private static InstallerTransactionSnapshot ValidateHelperState(
         InstallerTransactionSnapshot current,
         InstallerTransactionSnapshot? helperState,
-        InstallerTransactionPhase expectedPhase,
-        CancellationToken cancellationToken)
+        InstallerTransactionPhase expectedPhase)
     {
         current.Validate();
         if (helperState is null)
@@ -422,14 +431,96 @@ public sealed class InstallerCoordinator : IDisposable
                 "installer.machine_helper.result_mismatch");
         }
 
-        if (helperState == current)
+        return helperState;
+    }
+
+    private async Task<InstallerTransactionSnapshot> ConfirmHelperStateAsync(
+        InstallerTransactionSnapshot helperState,
+        CancellationToken cancellationToken)
+    {
+        helperState.Validate();
+        InstallerTransactionSnapshot? protectedState;
+        try
         {
-            return current;
+            protectedState = await _transactionReader
+                .LoadAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            throw new HelperStateReloadException(
+                "installer.transaction.reload_failed",
+                helperState);
         }
 
-        return await _transactionStore
-            .SaveAsync(helperState.Journal, current.ContentHash, cancellationToken)
-            .ConfigureAwait(false);
+        if (protectedState is null)
+        {
+            throw new InstallerStateUncertainException(
+                "installer.transaction.helper_state_missing");
+        }
+
+        protectedState.Validate();
+        if (protectedState != helperState)
+        {
+            throw new InstallerProtocolException(
+                "installer.machine_helper.protected_state_mismatch");
+        }
+
+        return protectedState;
+    }
+
+    private static void ValidateClearReceipt(
+        InstallerTransactionSnapshot verifiedState,
+        InstallerTransactionSnapshot? clearReceipt)
+    {
+        verifiedState.Validate();
+        if (clearReceipt is null)
+        {
+            throw new InstallerProtocolException(
+                "installer.machine_helper.clear_receipt_missing");
+        }
+
+        clearReceipt.Validate();
+        if (clearReceipt != verifiedState)
+        {
+            throw new InstallerProtocolException(
+                "installer.machine_helper.clear_receipt_mismatch");
+        }
+    }
+
+    private async Task ConfirmHelperClearAsync(
+        InstallerTransactionSnapshot verifiedState,
+        CancellationToken cancellationToken)
+    {
+        verifiedState.Validate();
+        InstallerTransactionSnapshot? protectedState;
+        try
+        {
+            protectedState = await _transactionReader
+                .LoadAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            throw new HelperStateReloadException(
+                "installer.transaction.clear_reload_failed",
+                verifiedState);
+        }
+
+        if (protectedState is not null)
+        {
+            protectedState.Validate();
+            throw new InstallerProtocolException(
+                "installer.machine_helper.clear_not_observed");
+        }
     }
 
     private async Task<InstallerTransactionSnapshot?> RefreshDurableAsync(
@@ -437,12 +528,30 @@ public sealed class InstallerCoordinator : IDisposable
     {
         try
         {
-            return await _transactionStore.LoadAsync(CancellationToken.None).ConfigureAwait(false) ?? fallback;
+            return await _transactionReader.LoadAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {
             return fallback;
         }
+    }
+
+    private sealed class HelperStateReloadException : Exception
+    {
+        internal HelperStateReloadException(
+            string diagnosticCode,
+            InstallerTransactionSnapshot fallbackState)
+            : base(diagnosticCode)
+        {
+            InstallerProtocolValidation.ValidateDiagnosticCode(diagnosticCode);
+            fallbackState.Validate();
+            DiagnosticCode = diagnosticCode;
+            FallbackState = fallbackState;
+        }
+
+        internal string DiagnosticCode { get; }
+
+        internal InstallerTransactionSnapshot FallbackState { get; }
     }
 
     private static InstallerExecutionResult? ValidateEnvironment(

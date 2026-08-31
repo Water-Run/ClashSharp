@@ -14,8 +14,10 @@ namespace ClashSharp.Service;
 /// </remarks>
 public sealed class StartupRestoreFallbackService
 {
+    /// <summary>Command-line switch that selects the one-shot proxy restoration path.</summary>
     public const string HelperArgument = "--restore-proxy-on-startup";
 
+    /// <summary>Gets the process-wide current-user registration service.</summary>
     public static StartupRestoreFallbackService Instance { get; } = new();
 
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";

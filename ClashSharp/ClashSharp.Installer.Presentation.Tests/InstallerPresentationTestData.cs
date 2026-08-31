@@ -9,6 +9,7 @@ internal static class InstallerPresentationTestData
         InstallerProductState productState = InstallerProductState.Available,
         InstallerOperation? recoveryOperation = null,
         bool canExecute = true,
+        IReadOnlyList<InstallerOperation>? allowedOperations = null,
         IReadOnlyList<InstallerCapabilityStatus>? capabilities = null,
         string diagnosticCode = "installer.runtime.ready") =>
         new(
@@ -19,6 +20,10 @@ internal static class InstallerPresentationTestData
             "1.2.3.4",
             productState,
             recoveryOperation,
+            allowedOperations ?? DefaultAllowedOperations(
+                productState,
+                recoveryOperation,
+                canExecute),
             capabilities ??
             [
                 new InstallerCapabilityStatus(
@@ -27,6 +32,27 @@ internal static class InstallerPresentationTestData
                     canExecute),
             ]);
 
+    private static IReadOnlyList<InstallerOperation> DefaultAllowedOperations(
+        InstallerProductState productState,
+        InstallerOperation? recoveryOperation,
+        bool canExecute)
+    {
+        if (!canExecute)
+        {
+            return [];
+        }
+
+        return productState switch
+        {
+            InstallerProductState.Available => [InstallerOperation.Install],
+            InstallerProductState.Installed =>
+                [InstallerOperation.Repair, InstallerOperation.Uninstall],
+            InstallerProductState.RecoveryRequired when recoveryOperation is { } operation =>
+                [operation],
+            _ => [],
+        };
+    }
+
     internal static InstallerExecutionResult Result(
         InstallerExecutionOutcome outcome = InstallerExecutionOutcome.Succeeded,
         bool recoveryPending = false,
@@ -34,7 +60,7 @@ internal static class InstallerPresentationTestData
         new(outcome, "installer.test.result", phase, recoveryPending);
 }
 
-internal sealed class ScriptedInstallerRuntime : IInstallerRuntime
+internal sealed class ScriptedInstallerRuntime : IInstallerRuntime, IDisposable
 {
     internal Func<CancellationToken, Task<InstallerRuntimeReadiness>> Inspect { get; set; } =
         static _ => Task.FromResult(InstallerPresentationTestData.Readiness());
@@ -51,6 +77,8 @@ internal sealed class ScriptedInstallerRuntime : IInstallerRuntime
 
     internal List<InstallerOperation> Operations { get; } = [];
 
+    internal int DisposeCount { get; private set; }
+
     public Task<InstallerRuntimeReadiness> InspectReadinessAsync(
         CancellationToken cancellationToken)
     {
@@ -66,6 +94,8 @@ internal sealed class ScriptedInstallerRuntime : IInstallerRuntime
         Operations.Add(operation);
         return Execute(operation, progress, cancellationToken);
     }
+
+    public void Dispose() => DisposeCount++;
 }
 
 internal sealed class QueuedSynchronizationContext : SynchronizationContext

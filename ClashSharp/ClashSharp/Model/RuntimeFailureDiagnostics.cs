@@ -7,14 +7,31 @@ namespace ClashSharp.Model;
 /// <summary>Stable release-facing runtime failure areas.</summary>
 public enum RuntimeFailureArea
 {
+    /// <summary>Windows service availability, identity, or IPC failures.</summary>
     Service,
+
+    /// <summary>TUN ownership, interface, or lifecycle failures.</summary>
     Tun,
+
+    /// <summary>Runtime configuration validation or application failures.</summary>
     Configuration,
+
+    /// <summary>Proxy-provider acquisition or update failures.</summary>
     Provider,
+
+    /// <summary>Required GeoData asset validation or availability failures.</summary>
     GeoData,
+
+    /// <summary>Mihomo controller ownership or connectivity failures.</summary>
     Controller,
+
+    /// <summary>Mixed listener binding or ownership failures.</summary>
     MixedPort,
+
+    /// <summary>Network route ownership or reconciliation failures.</summary>
     Route,
+
+    /// <summary>DNS ownership or reconciliation failures.</summary>
     Dns,
 }
 

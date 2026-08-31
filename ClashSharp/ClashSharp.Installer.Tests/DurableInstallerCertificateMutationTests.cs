@@ -326,6 +326,87 @@ public sealed class DurableInstallerCertificateMutationTests
         Assert.Equal(0, removalOwnership.Current?.Ledger.ManagedReferenceCount);
     }
 
+    [Fact]
+    public async Task InstalledVerificationRequiresActiveMatchingLedgerAndExactCertificate()
+    {
+        List<string> events = [];
+        MemoryOwnershipStore ownership = new(events, InstallerTestData.CertificateLedger());
+        RecordingCertificateStore certificates = new(
+            events,
+            InstallerCertificatePresence.ExactMatch);
+        DurableInstallerCertificateMutation mutation = new(ownership, certificates);
+
+        await VerifyAsync(
+            mutation,
+            InstallerTestData.Request(),
+            InstallerTestData.Release(),
+            CancellationToken.None);
+
+        Assert.Equal(
+            ["ownership.load", "certificate.inspect:ExactMatch"],
+            events);
+    }
+
+    [Fact]
+    public async Task InstalledVerificationRejectsMissingOwnershipLedger()
+    {
+        List<string> events = [];
+        MemoryOwnershipStore ownership = new(events);
+        RecordingCertificateStore certificates = new(
+            events,
+            InstallerCertificatePresence.ExactMatch);
+        DurableInstallerCertificateMutation mutation = new(ownership, certificates);
+
+        InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => VerifyAsync(
+                mutation,
+                InstallerTestData.Request(),
+                InstallerTestData.Release(),
+                CancellationToken.None));
+
+        Assert.Equal("installer.certificate.ownership_missing", exception.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task UninstallVerificationRejectsUnclearedMatchingLedger()
+    {
+        List<string> events = [];
+        MemoryOwnershipStore ownership = new(events, InstallerTestData.CertificateLedger());
+        RecordingCertificateStore certificates = new(
+            events,
+            InstallerCertificatePresence.Missing);
+        DurableInstallerCertificateMutation mutation = new(ownership, certificates);
+
+        InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => VerifyAsync(
+                mutation,
+                InstallerTestData.Request(InstallerOperation.Uninstall),
+                InstallerTestData.Release(certificatePayloadAvailable: false),
+                CancellationToken.None));
+
+        Assert.Equal("installer.certificate.removal_incomplete", exception.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData(InstallerCertificatePresence.Missing)]
+    [InlineData(InstallerCertificatePresence.ExactMatch)]
+    public async Task UninstallVerificationAllowsClearedLedgerWithAbsentOrPreExistingCertificate(
+        InstallerCertificatePresence presence)
+    {
+        List<string> events = [];
+        MemoryOwnershipStore ownership = new(events);
+        RecordingCertificateStore certificates = new(events, presence);
+        DurableInstallerCertificateMutation mutation = new(ownership, certificates);
+
+        await VerifyAsync(
+            mutation,
+            InstallerTestData.Request(InstallerOperation.Uninstall),
+            InstallerTestData.Release(certificatePayloadAvailable: false),
+            CancellationToken.None);
+
+        Assert.Equal(2, events.Count);
+    }
+
     private static async Task ApplyAsync(
         DurableInstallerCertificateMutation mutation,
         InstallerRequest request,
@@ -334,6 +415,16 @@ public sealed class DurableInstallerCertificateMutationTests
     {
         await using TestInstallerReleaseLease lease = InstallerTestData.Lease(release);
         await mutation.ApplyAsync(request, lease, cancellationToken);
+    }
+
+    private static async Task VerifyAsync(
+        DurableInstallerCertificateMutation mutation,
+        InstallerRequest request,
+        VerifiedInstallerRelease release,
+        CancellationToken cancellationToken)
+    {
+        await using TestInstallerReleaseLease lease = InstallerTestData.Lease(release);
+        await mutation.VerifyAppliedAsync(request, lease, cancellationToken);
     }
 
     private sealed class MemoryOwnershipStore : IInstallerCertificateOwnershipStore

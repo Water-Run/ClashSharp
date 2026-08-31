@@ -213,10 +213,26 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
     /// <summary>Performs the initial readiness inspection.</summary>
     public Task InitializeAsync() => RefreshAsync();
 
+    /// <summary>
+    /// Requests cooperative cancellation for window shutdown. A privileged operation may continue
+    /// until its authenticated helper reaches a terminal result.
+    /// </summary>
+    public void RequestCancellation()
+    {
+        CancellationTokenSource? cancellation;
+        lock (_operationSync)
+        {
+            cancellation = _activeCancellation;
+        }
+
+        cancellation?.Cancel();
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
         CancellationTokenSource? cancellation;
+        IDisposable? runtimeLifetime;
         lock (_operationSync)
         {
             if (_disposed)
@@ -227,9 +243,11 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
             _disposed = true;
             _generation++;
             cancellation = _activeCancellation;
+            runtimeLifetime = _runtime as IDisposable;
         }
 
         cancellation?.Cancel();
+        runtimeLifetime?.Dispose();
     }
 
     private async Task RefreshAsync()
@@ -411,16 +429,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         }
     }
 
-    private void CancelActiveOperation()
-    {
-        CancellationTokenSource? cancellation;
-        lock (_operationSync)
-        {
-            cancellation = _activeCancellation;
-        }
-
-        cancellation?.Cancel();
-    }
+    private void CancelActiveOperation() => RequestCancellation();
 
     private void SetCancelledIfCurrent(OperationGeneration operation)
     {
@@ -533,29 +542,26 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
     private void ApplyProductState(InstallerRuntimeReadiness readiness)
     {
-        switch (readiness.ProductState)
+        InstallerOperation fallbackOperation = readiness.ProductState switch
         {
-            case InstallerProductState.Available:
-                _primaryOperation = InstallerOperation.Install;
-                _secondaryOperation = null;
-                PrimaryActionText = "安装";
-                SecondaryActionText = string.Empty;
-                break;
-            case InstallerProductState.Installed:
-                _primaryOperation = InstallerOperation.Repair;
-                _secondaryOperation = InstallerOperation.Uninstall;
-                PrimaryActionText = "修复";
-                SecondaryActionText = "卸载";
-                break;
-            case InstallerProductState.RecoveryRequired:
-                _primaryOperation = readiness.RecoveryOperation!.Value;
-                _secondaryOperation = null;
-                PrimaryActionText = $"继续{GetOperationLabel(_primaryOperation)}";
-                SecondaryActionText = string.Empty;
-                break;
-            default:
-                throw new InstallerProtocolException("installer.runtime.readiness_invalid");
-        }
+            InstallerProductState.Available => InstallerOperation.Install,
+            InstallerProductState.Installed => InstallerOperation.Repair,
+            InstallerProductState.RecoveryRequired => readiness.RecoveryOperation!.Value,
+            _ => throw new InstallerProtocolException(
+                "installer.runtime.readiness_invalid"),
+        };
+        _primaryOperation = readiness.AllowedOperations.Count > 0
+            ? readiness.AllowedOperations[0]
+            : fallbackOperation;
+        _secondaryOperation = readiness.AllowedOperations.Count > 1
+            ? readiness.AllowedOperations[1]
+            : null;
+        PrimaryActionText = readiness.ProductState == InstallerProductState.RecoveryRequired
+            ? $"继续{GetOperationLabel(_primaryOperation)}"
+            : GetOperationLabel(_primaryOperation);
+        SecondaryActionText = _secondaryOperation is { } secondary
+            ? GetOperationLabel(secondary)
+            : string.Empty;
 
         HasSecondaryAction = readiness.CanExecute
             && _secondaryOperation is not null;
@@ -573,6 +579,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
     {
         if (readiness is null
             || !HasValidProductState(readiness)
+            || !HasValidAllowedOperations(readiness)
             || !IsValidDiagnosticCode(readiness.DiagnosticCode)
             || !IsValidDisplayText(readiness.StatusTitle, 160)
             || !IsValidDisplayText(readiness.StatusDetail, 1_024)
@@ -599,6 +606,38 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         InstallerProductStatePolicy.IsValid(
             readiness.ProductState,
             readiness.RecoveryOperation);
+
+    private static bool HasValidAllowedOperations(InstallerRuntimeReadiness readiness)
+    {
+        if (readiness.AllowedOperations is null
+            || readiness.AllowedOperations.Count > 2
+            || readiness.AllowedOperations.Any(static operation => !Enum.IsDefined(operation))
+            || readiness.AllowedOperations.Distinct().Count()
+                != readiness.AllowedOperations.Count
+            || readiness.CanExecute != (readiness.AllowedOperations.Count > 0))
+        {
+            return false;
+        }
+
+        return readiness.ProductState switch
+        {
+            InstallerProductState.Available =>
+                readiness.AllowedOperations.Count == 0
+                || readiness.AllowedOperations.SequenceEqual(
+                    [InstallerOperation.Install]),
+            InstallerProductState.Installed =>
+                readiness.AllowedOperations.Count == 0
+                || readiness.AllowedOperations.SequenceEqual(
+                    [InstallerOperation.Uninstall])
+                || readiness.AllowedOperations.SequenceEqual(
+                    [InstallerOperation.Repair, InstallerOperation.Uninstall]),
+            InstallerProductState.RecoveryRequired =>
+                readiness.AllowedOperations.Count == 0
+                || readiness.AllowedOperations.SequenceEqual(
+                    [readiness.RecoveryOperation!.Value]),
+            _ => false,
+        };
+    }
 
     private static void ValidateExecutionResult(InstallerExecutionResult result)
     {

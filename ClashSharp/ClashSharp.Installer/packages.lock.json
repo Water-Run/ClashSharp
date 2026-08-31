@@ -4,14 +4,20 @@
     "net10.0-windows10.0.22000": {
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[10.0.11, )",
-        "resolved": "10.0.11",
-        "contentHash": "UUJ1mIT3dPg6sNrEVNQZBOCG4rG4PJtVkyq/MSD/6d383rz1xA2WdCA5MlQmbMBKyt9TDCs4YmT/MmrcOJPrGQ=="
+        "requested": "[10.0.5, )",
+        "resolved": "10.0.5",
+        "contentHash": "A+5ZuQ0f449tM+MQrhf6R9ZX7lYpjk/ODEwLYKrnF6111rtARx8fVsm4YznUnQiKnnXfaXNBqgxmil6RW3L3SA=="
       },
       "clashsharp.installer.core": {
         "type": "Project"
       },
       "clashsharp.installer.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "ClashSharp.Installer.Core": "[1.0.0, )"
+        }
+      },
+      "clashsharp.installer.windows": {
         "type": "Project",
         "dependencies": {
           "ClashSharp.Installer.Core": "[1.0.0, )"

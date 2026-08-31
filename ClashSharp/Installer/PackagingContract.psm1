@@ -4,6 +4,17 @@ function Assert-ClashSharpOrdinaryPath {
     <#
     .SYNOPSIS
         Rejects reparse points and non-directory ancestors for one fully qualified path.
+    .DESCRIPTION
+        Walks the path from its volume root, rejects reparse points and invalid ancestors, and
+        optionally enforces the expected leaf kind without following an unsafe filesystem object.
+    .PARAMETER LiteralPath
+        Fully qualified path to validate.
+    .PARAMETER AllowMissing
+        Allows a canonical descendant path whose final segments do not yet exist.
+    .PARAMETER RequireDirectory
+        Requires an existing leaf to be an ordinary directory.
+    .PARAMETER RequireFile
+        Requires an existing leaf to be an ordinary file.
     #>
     [CmdletBinding()]
     param(
@@ -81,6 +92,11 @@ function Get-ClashSharpDirectoryContract {
     <#
     .SYNOPSIS
         Returns a sorted exact file/length/SHA-256 contract for an ordinary directory tree.
+    .DESCRIPTION
+        Rejects reparse entries, empty trees, traversal, and case-colliding relative paths before
+        returning the canonical ordinally sorted content contract.
+    .PARAMETER LiteralPath
+        Ordinary directory tree to inventory.
     #>
     [CmdletBinding()]
     param(
@@ -123,6 +139,13 @@ function Compare-ClashSharpDirectoryContract {
     <#
     .SYNOPSIS
         Throws unless two exact directory contracts have identical paths, lengths, and hashes.
+    .DESCRIPTION
+        Compares already canonical contracts in order and fails at the first file-count or entry
+        mismatch so a copied payload cannot be accepted on partial agreement.
+    .PARAMETER Expected
+        Trusted source directory contract.
+    .PARAMETER Actual
+        Independently measured destination directory contract.
     #>
     [CmdletBinding()]
     param(
@@ -155,6 +178,13 @@ function Copy-ClashSharpVerifiedDirectory {
     <#
     .SYNOPSIS
         Copies an ordinary directory into a new destination and verifies its exact contract.
+    .DESCRIPTION
+        Inventories the source, creates a previously absent destination, copies every declared
+        file without overwrite, and compares a fresh destination contract before returning it.
+    .PARAMETER Source
+        Ordinary source directory whose contract is authoritative for this copy.
+    .PARAMETER Destination
+        New destination directory to create and verify.
     #>
     [CmdletBinding()]
     param(
@@ -194,6 +224,13 @@ function Copy-ClashSharpComponentPayload {
     <#
     .SYNOPSIS
         Selects only packageable runtime files from one fresh, flat dotnet publish directory.
+    .DESCRIPTION
+        Rejects nested or reparse entries and forbidden product artifacts, filters documentation
+        and lock files, copies the allowed runtime extensions, and returns the destination contract.
+    .PARAMETER Source
+        Fresh flat dotnet publish directory to filter.
+    .PARAMETER Destination
+        New component-staging directory that receives allowed runtime files.
     #>
     [CmdletBinding()]
     param(
@@ -261,6 +298,11 @@ function Get-ClashSharpMsixManifestDocument {
     <#
     .SYNOPSIS
         Reads the one canonical, bounded AppxManifest.xml from an ordinary MSIX file.
+    .DESCRIPTION
+        Opens the package as a bounded ZIP, requires exactly one canonical manifest entry, and
+        parses XML with DTD processing and external resolution disabled.
+    .PARAMETER LiteralPath
+        Ordinary MSIX file whose manifest is read.
     #>
     [CmdletBinding()]
     param(
@@ -313,6 +355,11 @@ function Get-ClashSharpMsixIdentity {
     <#
     .SYNOPSIS
         Returns the strict package identity from an MSIX manifest.
+    .DESCRIPTION
+        Validates canonical identity, version, architecture, application, and framework fields and
+        derives the exact full name and family name used by the Installer release contract.
+    .PARAMETER LiteralPath
+        Ordinary MSIX file whose identity is inspected.
     #>
     [CmdletBinding()]
     param(
@@ -401,6 +448,11 @@ function Get-ClashSharpPublisherId {
     <#
     .SYNOPSIS
         Derives the canonical 13-character Windows package PublisherId.
+    .DESCRIPTION
+        Hashes the exact canonical publisher subject as UTF-16LE and encodes the Windows-defined
+        leading digest bits with the package identity alphabet.
+    .PARAMETER Publisher
+        Canonical certificate publisher subject from the MSIX identity.
     #>
     [CmdletBinding()]
     param(
@@ -442,6 +494,11 @@ function Get-ClashSharpMsixMachineFileContract {
     <#
     .SYNOPSIS
         Hashes the exact machine-scope payload inside a bounded ordinary primary MSIX.
+    .DESCRIPTION
+        Requires the fixed service, Mihomo, and GeoData entry allowlist with canonical paths and
+        byte budgets, then returns each entry's expanded length and SHA-256 digest.
+    .PARAMETER LiteralPath
+        Ordinary primary MSIX file containing the machine-scope payload.
     #>
     [CmdletBinding()]
     param(
@@ -576,6 +633,26 @@ function New-ClashSharpInstallerReleaseManifest {
     <#
     .SYNOPSIS
         Generates the compact strict C# Installer release manifest from final staged payload bytes.
+    .DESCRIPTION
+        Verifies the exact payload role set, primary and dependency identities, certificate and
+        Authenticode anchors, and embedded machine files before atomically emitting bounded UTF-8
+        JSON and checking its read-back hash.
+    .PARAMETER PayloadRoot
+        Ordinary final payload directory whose bytes are bound into the manifest.
+    .PARAMETER PrimaryIdentity
+        Validated primary MSIX identity object.
+    .PARAMETER PrimaryRelativePath
+        Canonical payload-relative path of the primary MSIX.
+    .PARAMETER DependencyContracts
+        Validated dependency identity and minimum-version contracts.
+    .PARAMETER CertificateRelativePath
+        Canonical payload-relative path of the package signing certificate.
+    .PARAMETER CertificateThumbprint
+        Uppercase SHA-1 thumbprint expected for the MSIX signer.
+    .PARAMETER AuthenticodeCertificateThumbprint
+        Uppercase SHA-1 thumbprint expected for the final Installer executable signer.
+    .PARAMETER OutputPath
+        Previously absent path at which to write the embedded release manifest.
     #>
     [CmdletBinding()]
     param(
@@ -602,6 +679,10 @@ function New-ClashSharpInstallerReleaseManifest {
         [Parameter(Mandatory)]
         [ValidatePattern('^[0-9A-F]{40}$')]
         [string] $CertificateThumbprint,
+
+        [Parameter(Mandatory)]
+        [ValidatePattern('^[0-9A-F]{40}$')]
+        [string] $AuthenticodeCertificateThumbprint,
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -744,9 +825,10 @@ function New-ClashSharpInstallerReleaseManifest {
     }
 
     $manifest = [ordered]@{
-        schema                       = 1
+        schema                       = 2
         expectedPackageVersion       = [string]$PrimaryIdentity.Version
         installerPayloadSha256       = [string]$payloadByPath[$canonicalPrimaryPath].Sha256
+        authenticodeCertificateThumbprint = $AuthenticodeCertificateThumbprint
         packageCertificateThumbprint = $CertificateThumbprint
         certificateSha256            = [string]$payloadByPath[$canonicalCertificatePath].Sha256
         packageIdentity               = [ordered]@{
@@ -788,6 +870,11 @@ function Get-ClashSharpMainPackageDependency {
     <#
     .SYNOPSIS
         Returns the exact PackageDependency declarations from a main MSIX identity document.
+    .DESCRIPTION
+        Reads every direct PackageDependency and rejects missing identity fields or noncanonical
+        minimum versions before returning the ordered dependency contracts.
+    .PARAMETER ManifestDocument
+        Securely parsed primary AppxManifest XML document.
     #>
     [CmdletBinding()]
     param(
@@ -822,6 +909,19 @@ function Get-ClashSharpPackageSignature {
     <#
     .SYNOPSIS
         Verifies a package signer and returns its canonical subject and thumbprint.
+    .DESCRIPTION
+        Requires the expected subject, optional exact thumbprint, and optional Windows trust and
+        timestamp evidence before returning a bounded signer summary.
+    .PARAMETER LiteralPath
+        Ordinary signed package file to inspect.
+    .PARAMETER ExpectedSubject
+        Exact certificate subject required for the signer.
+    .PARAMETER ExpectedThumbprint
+        Optional canonical uppercase SHA-1 thumbprint required for the signer.
+    .PARAMETER RequireTrusted
+        Requires Windows Authenticode status to be Valid.
+    .PARAMETER RequireTimestamp
+        Requires a timestamp signer certificate to be present.
     #>
     [CmdletBinding()]
     param(

@@ -1,11 +1,15 @@
+using ClashSharp.Installer.Contracts;
+using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Presentation;
+using ClashSharp.Installer.Runtime;
+using ClashSharp.Installer.Windows.Machines;
 
 namespace ClashSharp.Installer;
 
 internal static class Program
 {
     private const int InvalidMachineHelperArgumentsExitCode = 2;
-    private const int MachineHelperNotConnectedExitCode = 3;
+    private const int MachineHelperFailedExitCode = 3;
 
     [STAThread]
     internal static int Main(string[] arguments)
@@ -13,7 +17,7 @@ internal static class Program
         ArgumentNullException.ThrowIfNull(arguments);
         return InstallerStartupRouter.Run(
             arguments,
-            runMachineHelper: static _ => MachineHelperNotConnectedExitCode,
+            runMachineHelper: RunMachineHelper,
             runUserInterface: static () =>
             {
                 var application = new App();
@@ -22,4 +26,34 @@ internal static class Program
             },
             invalidArgumentsExitCode: InvalidMachineHelperArgumentsExitCode);
     }
+
+    private static int RunMachineHelper(InstallerMachineHelperBootstrap bootstrap)
+    {
+        try
+        {
+            EmbeddedInstallerReleaseManifest release = EmbeddedInstallerReleaseManifest.Load();
+            string executablePath = Environment.ProcessPath
+                ?? throw new InstallerProtocolException(
+                    "installer.machine_helper.executable_path_missing");
+            WindowsInstallerMachineHelper
+                .RunAsync(
+                    bootstrap,
+                    executablePath,
+                    release.Bytes,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            return 0;
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            return MachineHelperFailedExitCode;
+        }
+    }
+
+    private static bool IsRecoverable(Exception exception) =>
+        exception is not (OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException);
 }

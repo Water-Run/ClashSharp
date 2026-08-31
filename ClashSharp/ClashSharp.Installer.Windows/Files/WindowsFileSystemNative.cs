@@ -7,9 +7,11 @@ namespace ClashSharp.Installer.Windows.Files;
 internal static class WindowsFileSystemNative
 {
     private const uint GenericRead = 0x8000_0000;
+    private const uint Delete = 0x0001_0000;
     private const uint FileListDirectory = 0x0000_0001;
     private const uint FileReadAttributes = 0x0000_0080;
     private const uint FileShareRead = 0x0000_0001;
+    private const uint FileShareWrite = 0x0000_0002;
     private const uint OpenExisting = 3;
     private const uint FileAttributeDirectory = 0x0000_0010;
     private const uint FileAttributeNormal = 0x0000_0080;
@@ -53,10 +55,37 @@ internal static class WindowsFileSystemNative
 
     internal static SafeFileHandle OpenOrdinaryDirectory(string path)
     {
-        SafeFileHandle handle = CreateFile(
+        return OpenOrdinaryDirectory(
             path,
             FileListDirectory | FileReadAttributes,
-            FileShareRead,
+            FileShareRead);
+    }
+
+    internal static SafeFileHandle OpenOrdinaryDirectoryForMutationGuard(string path)
+    {
+        return OpenOrdinaryDirectory(
+            path,
+            FileListDirectory | FileReadAttributes,
+            FileShareRead | FileShareWrite);
+    }
+
+    internal static SafeFileHandle OpenOrdinaryDirectoryForDeletion(string path)
+    {
+        return OpenOrdinaryDirectory(
+            path,
+            FileListDirectory | FileReadAttributes | Delete,
+            FileShareRead | FileShareWrite);
+    }
+
+    private static SafeFileHandle OpenOrdinaryDirectory(
+        string path,
+        uint desiredAccess,
+        uint shareMode)
+    {
+        SafeFileHandle handle = CreateFile(
+            path,
+            desiredAccess,
+            shareMode,
             0,
             OpenExisting,
             FileFlagBackupSemantics | FileFlagOpenReparsePoint,

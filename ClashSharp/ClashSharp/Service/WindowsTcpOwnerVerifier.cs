@@ -229,6 +229,7 @@ internal sealed class WindowsTcpOwnerVerifier : IWindowsTcpOwnerVerifier
     }
 
     [DllImport("iphlpapi.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint GetExtendedTcpTable(
         nint tcpTable,
         ref uint outputBufferLength,

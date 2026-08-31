@@ -166,7 +166,7 @@ else
   pass "Workspace free space ${workspace_free_mib} MiB is sufficient."
 fi
 
-worker_command_pattern='^(dotnet|MSBuild|VBCSCompiler|testhost|vstest|vstest.console|cargo|rustc|cc1|magick|convert|inkscape|rsvg-convert)$'
+worker_command_pattern='^(dotnet|MSBuild|VBCSCompiler|testhost|vstest|vstest.console|cc1|magick|convert|inkscape|rsvg-convert)$'
 excluded_worker_pids=" $$ "
 ancestor_pid="$PPID"
 while [[ "$ancestor_pid" =~ ^[0-9]+$ ]] && (( ancestor_pid > 1 )); do

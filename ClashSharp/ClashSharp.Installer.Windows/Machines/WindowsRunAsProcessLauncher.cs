@@ -7,14 +7,23 @@ namespace ClashSharp.Installer.Windows.Machines;
 
 internal interface IWindowsRunAsProcessLauncher
 {
-    Task<Process> StartAsync(
+    Task<IWindowsElevatedHelperProcess> StartAsync(
         string executablePath,
         InstallerMachineHelperBootstrap bootstrap,
         CancellationToken cancellationToken);
 }
 
+internal interface IWindowsElevatedHelperProcess : IDisposable
+{
+    int ProcessId { get; }
+
+    bool HasExited { get; }
+
+    Task WaitForExitAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>
-/// Starts a broker-preverified NativeAOT helper through ShellExecute runas on an STA thread.
+/// Starts the broker-preverified single-file Installer's helper branch through runas on an STA thread.
 /// This launcher validates bootstrap shape, not file identity or Authenticode trust.
 /// </summary>
 internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
@@ -33,7 +42,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
         _start = start;
     }
 
-    public Task<Process> StartAsync(
+    public Task<IWindowsElevatedHelperProcess> StartAsync(
         string executablePath,
         InstallerMachineHelperBootstrap bootstrap,
         CancellationToken cancellationToken)
@@ -53,7 +62,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
         if (!IsCanonicalDriveQualifiedPath(fullPath)
             || !string.Equals(
                 Path.GetFileName(fullPath),
-                "ClashSharp.Installer.MachineHelper.exe",
+                "ClashSharp.Installer.exe",
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InstallerProtocolException(
@@ -61,7 +70,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
         }
 
         ProcessStartInfo startInfo = CreateStartInfo(fullPath, bootstrap);
-        var completion = new TaskCompletionSource<Process>(
+        var completion = new TaskCompletionSource<IWindowsElevatedHelperProcess>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() => StartOnSta(startInfo, completion, cancellationToken))
         {
@@ -102,7 +111,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
 
     private void StartOnSta(
         ProcessStartInfo startInfo,
-        TaskCompletionSource<Process> completion,
+        TaskCompletionSource<IWindowsElevatedHelperProcess> completion,
         CancellationToken cancellationToken)
     {
         try
@@ -111,7 +120,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
             Process process = _start(startInfo)
                 ?? throw new InstallerProtocolException(
                     "installer.elevation.process_missing");
-            completion.TrySetResult(process);
+            completion.TrySetResult(new WindowsElevatedHelperProcess(process));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -143,4 +152,26 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
             or StackOverflowException
             or AccessViolationException
             or AppDomainUnloadedException);
+}
+
+internal sealed class WindowsElevatedHelperProcess : IWindowsElevatedHelperProcess
+{
+    private readonly Process _process;
+
+    internal WindowsElevatedHelperProcess(Process process)
+    {
+        ArgumentNullException.ThrowIfNull(process);
+        _process = process;
+    }
+
+    public int ProcessId => _process.Id;
+
+    public bool HasExited => _process.HasExited;
+
+    internal Process ProcessForTesting => _process;
+
+    public Task WaitForExitAsync(CancellationToken cancellationToken) =>
+        _process.WaitForExitAsync(cancellationToken);
+
+    public void Dispose() => _process.Dispose();
 }

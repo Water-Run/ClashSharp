@@ -340,14 +340,31 @@ public sealed class InstallerReleaseManifestTests
             "installer.release.manifest_file_hash_invalid");
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("89abcdef0123456789abcdef0123456789abcdef")]
+    [InlineData("89ABCDEF0123456789ABCDEF0123456789ABCDEG")]
+    public void AuthenticodeSignerThumbprintMustBeCanonicalUpperHex(string thumbprint)
+    {
+        InstallerReleaseManifest canonical = InstallerTestData.Manifest();
+
+        AssertDiagnostic(
+            () => CreateManifest(
+                canonical.Files,
+                authenticodeThumbprint: thumbprint).Validate(),
+            "installer.release.authenticode_thumbprint_invalid");
+    }
+
     private static InstallerReleaseManifest CreateManifest(
         IReadOnlyList<InstallerPayloadFileEntry> files,
         int schema = InstallerReleaseManifest.CurrentSchema,
-        IReadOnlyList<InstallerMachinePayloadFileEntry>? machineFiles = null) =>
+        IReadOnlyList<InstallerMachinePayloadFileEntry>? machineFiles = null,
+        string authenticodeThumbprint = InstallerTestData.AuthenticodeThumbprint) =>
         new(
             schema,
             InstallerTestData.Version,
             InstallerTestData.Hash,
+            authenticodeThumbprint,
             InstallerTestData.CertificateThumbprint,
             InstallerTestData.CertificateHash,
             InstallerTestData.PackageIdentity(),

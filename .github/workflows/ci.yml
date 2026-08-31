@@ -44,11 +44,13 @@ jobs:
           dotnet publish ClashSharp/ClashSharp.MihomoService/ClashSharp.MihomoService.csproj `
             -c Release -p:Platform=x64 -r win-x64 --self-contained true --no-restore `
             -p:ClashSharpFormalInstallerComponent=true `
+            -p:DebugSymbols=false -p:DebugType=None -p:PublishDocumentationFiles=false `
             -o (Join-Path $componentRoot 'service')
           if ($LASTEXITCODE -ne 0) { throw 'Self-contained service publish failed.' }
           dotnet publish ClashSharp/ClashSharp.RecoveryWatchdog/ClashSharp.RecoveryWatchdog.csproj `
             -c Release -p:Platform=x64 -r win-x64 --self-contained true --no-restore `
             -p:ClashSharpFormalInstallerComponent=true `
+            -p:DebugSymbols=false -p:DebugType=None -p:PublishDocumentationFiles=false `
             -o (Join-Path $componentRoot 'watchdog')
           if ($LASTEXITCODE -ne 0) { throw 'Self-contained watchdog publish failed.' }
 
@@ -134,43 +136,3 @@ jobs:
             ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults/**/coverage.cobertura.xml
             ClashSharp/ClashSharp.Installer.Windows.Tests/TestResults/**/*.trx
           if-no-files-found: error
-
-  rust:
-    name: Rust ${{ matrix.name }}
-    runs-on: windows-2025
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Installer
-            manifest: ClashSharp/Installer/Cargo.toml
-            lockfile: ClashSharp/Installer/Cargo.lock
-          - name: SandboxTest
-            manifest: ClashSharp/SandboxTest/Cargo.toml
-            lockfile: ClashSharp/SandboxTest/Cargo.lock
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-
-      - name: Activate pinned Rust toolchain
-        run: rustup show
-
-      - name: Verify formatting
-        run: cargo fmt --manifest-path ${{ matrix.manifest }} -- --check
-
-      - name: Run Clippy
-        run: cargo clippy --manifest-path ${{ matrix.manifest }} --locked --all-targets -- -D warnings
-
-      - name: Run tests
-        run: cargo test --manifest-path ${{ matrix.manifest }} --locked --all-targets
-
-      - name: Install pinned cargo-audit
-        run: cargo install cargo-audit --version 0.22.2 --locked
-
-      - name: Audit Installer dependencies
-        if: matrix.name == 'Installer'
-        run: cargo audit --file ${{ matrix.lockfile }}
-
-      - name: Audit dependencies
-        if: matrix.name != 'Installer'
-        run: cargo audit --file ${{ matrix.lockfile }}

@@ -76,6 +76,9 @@ internal sealed class LogsViewModel : ObservableObject
     /// <param name="streamRuntimeLogs">
     /// Optional live mihomo log source. The page owns its cancellation and reconnect lifecycle.
     /// </param>
+    /// <param name="readServiceHostLogs">
+    /// Optional bounded snapshot reader for LocalSystem service-host diagnostics.
+    /// </param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public LogsViewModel(
         Func<string, string> getString,

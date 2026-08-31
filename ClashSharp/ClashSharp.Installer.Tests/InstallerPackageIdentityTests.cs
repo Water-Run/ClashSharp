@@ -156,6 +156,7 @@ public sealed class InstallerPackageIdentityTests
             source.Schema,
             source.ExpectedPackageVersion,
             source.InstallerPayloadSha256,
+            source.AuthenticodeCertificateThumbprint,
             source.PackageCertificateThumbprint,
             source.CertificateSha256,
             source.PackageIdentity,

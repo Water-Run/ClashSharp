@@ -982,26 +982,32 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     /// <summary>32-bit SetWindowLong entry point.</summary>
     [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern int SetWindowLong32(nint hWnd, int nIndex, int dwNewLong);
 
     /// <summary>64-bit SetWindowLongPtr entry point.</summary>
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern nint SetWindowLongPtr64(nint hWnd, int nIndex, nint dwNewLong);
 
     /// <summary>Passes a message to the specified previous window procedure.</summary>
     [DllImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern nint CallWindowProc(nint lpPrevWndFunc, nint hWnd, uint msg, nint wParam, nint lParam);
 
     /// <summary>Provides safe default processing when a previous window procedure is unavailable.</summary>
     [DllImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern nint DefWindowProc(nint hWnd, uint msg, nint wParam, nint lParam);
 
     /// <summary>Registers the Explorer taskbar-recreation message for this process.</summary>
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint RegisterWindowMessage(string lpString);
 
     /// <summary>Retrieves the DPI for the specified window.</summary>
     [DllImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint GetDpiForWindow(nint hwnd);
 
     #endregion

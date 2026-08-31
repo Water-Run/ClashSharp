@@ -196,24 +196,28 @@ internal sealed class WindowsMihomoServiceIdentityNativeApi : IMihomoServiceIden
     }
 
     [DllImport("kernel32.dll", EntryPoint = "GetNamedPipeServerProcessId", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetNamedPipeServerProcessIdNative(
         SafePipeHandle pipe,
         out uint serverProcessId);
 
     [DllImport("advapi32.dll", EntryPoint = "OpenSCManagerW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern nint OpenSCManagerNative(
         string? machineName,
         string? databaseName,
         uint desiredAccess);
 
     [DllImport("advapi32.dll", EntryPoint = "OpenServiceW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern nint OpenServiceNative(
         nint serviceControlManager,
         string serviceName,
         uint desiredAccess);
 
     [DllImport("advapi32.dll", EntryPoint = "QueryServiceStatusEx", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool QueryServiceStatusExNative(
         nint service,
@@ -223,6 +227,7 @@ internal sealed class WindowsMihomoServiceIdentityNativeApi : IMihomoServiceIden
         out uint bytesNeeded);
 
     [DllImport("advapi32.dll", EntryPoint = "CloseServiceHandle")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseServiceHandleNative(nint serviceHandle);
 }

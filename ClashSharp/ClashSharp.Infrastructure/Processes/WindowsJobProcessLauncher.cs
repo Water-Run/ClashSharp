@@ -275,9 +275,11 @@ internal sealed class WindowsKillOnCloseJob : IWindowsProcessJob
     {
 #pragma warning disable SYSLIB1054 // This interop is isolated and SafeFileHandle owns every returned handle.
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         public static extern SafeFileHandle CreateJobObject(IntPtr jobAttributes, string? name);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetInformationJobObject(
             SafeFileHandle job,
@@ -286,14 +288,17 @@ internal sealed class WindowsKillOnCloseJob : IWindowsProcessJob
             uint jobObjectInformationLength);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool AssignProcessToJobObject(SafeFileHandle job, SafeFileHandle process);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool TerminateJobObject(SafeFileHandle job, uint exitCode);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool QueryInformationJobObject(
             SafeFileHandle job,
@@ -791,6 +796,7 @@ internal sealed class WindowsJobProcessLauncher
 #pragma warning disable CA1838 // CreateProcessW requires a mutable command-line buffer.
 #pragma warning disable SYSLIB1054 // This interop requires mutable CreateProcessW command lines and native startup structs.
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CreateProcess(
             string? applicationName,
@@ -805,6 +811,7 @@ internal sealed class WindowsJobProcessLauncher
             out ProcessInformation processInformation);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CreatePipe(
             out SafeFileHandle readPipe,
@@ -813,10 +820,12 @@ internal sealed class WindowsJobProcessLauncher
             uint size);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetHandleInformation(SafeFileHandle handle, uint mask, uint flags);
 
         [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         public static extern SafeFileHandle CreateFile(
             string fileName,
             uint desiredAccess,
@@ -827,16 +836,20 @@ internal sealed class WindowsJobProcessLauncher
             IntPtr templateFile);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         public static extern uint ResumeThread(SafeFileHandle thread);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool TerminateProcess(SafeFileHandle process, uint exitCode);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         public static extern uint WaitForSingleObject(SafeFileHandle handle, uint milliseconds);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool InitializeProcThreadAttributeList(
             IntPtr attributeList,
@@ -845,6 +858,7 @@ internal sealed class WindowsJobProcessLauncher
             ref nuint size);
 
         [DllImport("kernel32.dll", SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool UpdateProcThreadAttribute(
             IntPtr attributeList,
@@ -856,6 +870,7 @@ internal sealed class WindowsJobProcessLauncher
             IntPtr returnSize);
 
         [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         public static extern void DeleteProcThreadAttributeList(IntPtr attributeList);
 #pragma warning restore SYSLIB1054
 #pragma warning restore CA1838

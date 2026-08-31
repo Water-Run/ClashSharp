@@ -83,5 +83,6 @@ internal sealed class RecoveryWatchdogRunner(
     }
 
     [DllImport("wininet.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern bool InternetSetOption(nint internet, int option, nint buffer, int bufferLength);
 }

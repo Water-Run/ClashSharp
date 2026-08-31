@@ -155,6 +155,36 @@ public sealed class WindowsElevatedMachineAdapterTests
         Assert.Equal(SuccessfulState(Assert.Single(broker.Commands)), committed);
     }
 
+    [Theory]
+    [InlineData(InstallerOperation.Install)]
+    [InlineData(InstallerOperation.Repair)]
+    [InlineData(InstallerOperation.Uninstall)]
+    public async Task FinalClearUsesExactVerifiedJournalAsTheHelperReceipt(
+        InstallerOperation operation)
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using var fixture = new WindowsPayloadFixture();
+        InstallerRequest request = fixture.Request(operation);
+        await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
+        var broker = RecordingBroker.Succeeding();
+        var adapter = new WindowsElevatedMachineAdapter(broker, () => request.TargetSid);
+        InstallerTransactionSnapshot verified = Snapshot(
+            request,
+            InstallerTransactionPhase.Verified);
+
+        InstallerTransactionSnapshot receipt = await adapter.ClearVerifiedAsync(
+            request,
+            lease,
+            verified,
+            CancellationToken.None);
+
+        InstallerMachineHelperInvocation invocation = Assert.Single(broker.Invocations);
+        Assert.Equal(InstallerMachineHelperVerb.Clear, invocation.Verb);
+        invocation.ValidateAgainst(verified);
+        Assert.Equal(verified, Assert.Single(broker.Commands).ToDurableState());
+        Assert.Equal(verified, receipt);
+    }
+
     [Fact]
     public async Task CancellationBeforeBrokerStartDoesNotLaunchElevation()
     {
@@ -440,10 +470,13 @@ public sealed class WindowsElevatedMachineAdapterTests
             InstallerMachineHelperVerb.Apply or InstallerMachineHelperVerb.Remove =>
                 InstallerTransactionPhase.MachineCommitted,
             InstallerMachineHelperVerb.Verify => InstallerTransactionPhase.Verified,
+            InstallerMachineHelperVerb.Clear => InstallerTransactionPhase.Verified,
             _ => throw new InvalidOperationException(),
         };
-        return InstallerTransactionSnapshot.Create(
-            requestState.Journal.TransitionTo(committedPhase));
+        return requestState.Journal.Phase == committedPhase
+            ? requestState
+            : InstallerTransactionSnapshot.Create(
+                requestState.Journal.TransitionTo(committedPhase));
     }
 
     private sealed class RecordingBroker : IWindowsMachineHelperBroker

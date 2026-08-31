@@ -130,6 +130,7 @@ public static class InstallerMachineHelperCommandCodec
         InstallerMachineHelperVerb.Apply => "apply",
         InstallerMachineHelperVerb.Remove => "remove",
         InstallerMachineHelperVerb.Verify => "verify",
+        InstallerMachineHelperVerb.Clear => "clear",
         _ => throw new InstallerProtocolException(
             "installer.machine_helper.verb_invalid"),
     };
@@ -141,6 +142,7 @@ public static class InstallerMachineHelperCommandCodec
         "apply" => InstallerMachineHelperVerb.Apply,
         "remove" => InstallerMachineHelperVerb.Remove,
         "verify" => InstallerMachineHelperVerb.Verify,
+        "clear" => InstallerMachineHelperVerb.Clear,
         _ => throw new JsonException("The helper command verb is invalid."),
     };
 }

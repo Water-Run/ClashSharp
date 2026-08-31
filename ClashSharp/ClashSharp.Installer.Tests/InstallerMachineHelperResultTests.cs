@@ -19,6 +19,8 @@ public sealed class InstallerMachineHelperResultTests
     [InlineData(InstallerMachineHelperVerb.Remove, false)]
     [InlineData(InstallerMachineHelperVerb.Verify, true)]
     [InlineData(InstallerMachineHelperVerb.Verify, false)]
+    [InlineData(InstallerMachineHelperVerb.Clear, true)]
+    [InlineData(InstallerMachineHelperVerb.Clear, false)]
     public void CanonicalTerminalResultsRoundTripAndBindRequestToResultJournal(
         InstallerMachineHelperVerb verb,
         bool succeeded)
@@ -349,6 +351,13 @@ public sealed class InstallerMachineHelperResultTests
                 InstallerTransactionPhase.PackageCommitted,
                 InstallerTransactionPhase.MachineCommitted,
             ],
+            InstallerMachineHelperVerb.Clear =>
+            [
+                InstallerTransactionPhase.MachineReserved,
+                InstallerTransactionPhase.PackageCommitted,
+                InstallerTransactionPhase.MachineCommitted,
+                InstallerTransactionPhase.Verified,
+            ],
             _ => throw new InvalidOperationException(),
         };
         foreach (InstallerTransactionPhase phase in transitions)
@@ -377,10 +386,13 @@ public sealed class InstallerMachineHelperResultTests
             InstallerMachineHelperVerb.Apply or InstallerMachineHelperVerb.Remove =>
                 InstallerTransactionPhase.MachineCommitted,
             InstallerMachineHelperVerb.Verify => InstallerTransactionPhase.Verified,
+            InstallerMachineHelperVerb.Clear => InstallerTransactionPhase.Verified,
             _ => throw new InvalidOperationException(),
         };
-        return InstallerTransactionSnapshot.Create(
-            requestState.Journal.TransitionTo(next));
+        return requestState.Journal.Phase == next
+            ? requestState
+            : InstallerTransactionSnapshot.Create(
+                requestState.Journal.TransitionTo(next));
     }
 
     private static string CanonicalJson()

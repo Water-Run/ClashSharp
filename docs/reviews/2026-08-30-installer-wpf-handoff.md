@@ -1,54 +1,37 @@
 # ClashSharp Installer / WPF 接盘开工单
 
-更新时间：2026-08-30（Asia/Shanghai）
-工作区：`/home/waterrun/Project/ClashSharp`
-分支 / HEAD：`main` / `edfd025a5b22`
-结论：**实现尚未闭环，也不是可发布 Installer；接盘第一件事是恢复当前源码的可编译、可测试证据。**
+> 2026-08-31 状态更新：迁移期 Rust/Slint 双轨已删除，C# / WPF Installer 为唯一实现；下文提到的 Rust 文件和差分向量只保留为历史背景。后续实现不得重新引入 Cargo、Rust 或 Slint。当前生产入口仍保持 fail closed，不能把“唯一源码实现”误报为“已通过发布验收”。
+
+更新时间：2026-08-31（Asia/Shanghai）
+当前工作区：`D:\Coding\ClashSharp`
+结论：**C# / WPF 已成为唯一 Installer 源码；production runtime、parent/helper 与 machine operations 已接入源码并通过安全定向测试，但默认编译门仍关闭，真实提权 mutation 和签名 VM 矩阵尚未闭环。**
 
 ## 1. 接盘时先守住的边界
 
 - 工作树包含大量未提交修改和新增文件；不得 `reset --hard`、`checkout --`、清理未跟踪目录或覆盖用户修改。先用 `git status --short` 建立自己的变更清单。
-- 当前环境是 Linux。它可以验证 Core、Presentation、静态资源和 Windows 目标交叉编译；不能声称验证过 WPF runtime、UIA、UAC、AppXSVC、SCM、ACL、证书写入、Authenticode、重启恢复或真实安装/卸载。
+- 当前活动环境是 Windows 工作区，可以执行 Windows 定向测试；本轮没有启动 WPF Installer、UAC、AppXSVC、SCM、证书或机器目录真实 mutation，不能把 fake/temp-only 测试外推为管理员 VM 证据。
 - 目标平台固定为 Windows 11+ 原生 x64。WPF EXE 固定 `win-x64`、self-contained、single-file、`asInvoker`。
 - 产品界面固定为参考 Visual Studio Installer 信息层级的**单产品卡片**，不增加伪导航、多页安装向导或多产品网格。
 - 稳定产品状态只有 `Available`、`Installed`、`RecoveryRequired`；busy 是执行覆盖态，不是第四个持久状态。
-- 安装器在迁移完成前必须 fail closed。当前 `MigrationPreviewInstallerRuntime.CanExecute=false` 是预期安全状态，不能为演示而放开。
-- Rust / Slint Installer 仍是发布 authority；C# / WPF 只有在同一签名候选通过完整 Windows E4 矩阵后才能切换。
+- 默认与正式打包仍必须 fail closed。`MigrationPreviewInstallerRuntime.CanExecute=false` 是预期安全状态；源码中的 production runtime 只能由 formal build + embedded manifest + 显式 mutation flag 三重门启用，不能为演示而放开。
+- Rust / Slint 已退役且不得恢复。C# / WPF 是唯一实现；同一签名候选通过完整 Windows E4 矩阵前，`build.ps1` 不得传入 mutation-runtime 开关。
 
-## 2. 资源纪律：任何构建之前必须执行
+## 2. 资源与并发纪律
 
-本机本轮发生过全局 OOM。所有 restore、build、test、format 和渲染必须由资源门持锁包裹，从检查开始一直锁到命令退出；不得降低阈值、改用更轻 profile 绕过，也不得和 Cargo、dotnet、编译器或渲染器并发。
-
-固定 SDK：`/tmp/clashsharp-dotnet-10.0.201/dotnet`
-
-```bash
-./eng/check-linux-resource-budget.sh standard -- <单个 restore/build/test/format 命令>
-```
-
-高分辨率渲染、ICO 多尺寸生成、完整 solution / publish 使用 `heavy`。所有 MSBuild 命令保持 `-m:1 -nr:false -p:UseSharedCompilation=false`，测试集串行启动。
-
-交接前最后一次只读门禁结果：
-
-- `MemAvailable`: 6464 MiB；
-- `SwapFree`: 12 MiB；
-- 综合余量：6476 MiB，低于 standard 的 12288 MiB；
-- load 6.93 / 16 CPU、memory PSI full avg10 0.00；
-- 没有并发 build/test/compiler/renderer；最近 15 分钟没有可读 OOM；
-- 结论：`RESOURCE GATE: BLOCKED`，因此本轮没有启动 dotnet、Cargo 或渲染器。
-
-门禁不通过时停止，不把静态检查当作编译或测试证据。
+- 不终止、不暂停、不重启其他代理或不属于本任务的进程；发现并发构建时先等待其自然结束。
+- Windows 上所有 MSBuild 命令保持 `-m:1 -nr:false -p:UseSharedCompilation=false`，测试集串行启动，避免 compiler server 和 testhost 争用。
+- 不通过测试启动 Installer/App/mihomo，不请求 UAC，不触碰真实服务、证书、包、代理、TUN 或机器目录；Win32 mutation 测试只能使用随机临时目录或 injected fake。
+- 如果回到 Linux 环境，继续用 `eng/check-linux-resource-budget.sh` 包裹 restore/build/test/format；历史 OOM 门禁仍然有效。
 
 ## 3. 当前证据账本
 
 | 范围 | 最近真实证据 | 当前源码状态 | 可以声称什么 |
 |---|---|---|---|
-| Installer Core | Release `499/499`，0 skipped；line 94.90%（3108/3275），branch 85.67%（1495/1745） | 静态展开 512 项；strict bootstrap / pipe-name 等增量后未重新编译 | 仅旧 499 checkpoint 绿色；不能声称当前 512 绿色或沿用旧覆盖率 |
-| Installer Presentation | Release `39/39`，0 skipped | 静态展开 70 项；三态全矩阵增量后未重新编译 | 仅旧 39 checkpoint 绿色 |
-| Installer Windows | 前 76 项所在版本在 Linux 完成 Windows 11 x64 Release 交叉编译，0 warning / 0 error | 静态展开 103 项；最新 27 项和生产增量未重新编译 | 只能声称旧交叉编译 checkpoint；Windows 测试从未在 Linux 执行 |
-| WPF shell | 较早版本完成 Windows 11 x64 Release 交叉编译，0 warning / 0 error | strict bootstrap、Presentation 和 Windows 依赖增量后未重编 | 没有 WPF runtime / UIA 运行证据 |
-| 静态检查 | 最近 `git diff --check` 和相关 XAML / manifest / SVG `xmllint` 通过 | 本交接文档之后仍应再跑一次小型静态检查 | 只能证明文本/XML 基本完整 |
-
-当前静态计数 512 / 70 / 103 是源码审查期望值，实际 test discovery 和 TRX 才是最终权威。必需测试的 skipped / not-executed 必须按失败处理。
+| Installer Core | Release `547/547`，0 skipped | helper-authoritative coordinator/session、strict manifest、certificate ledger、inspection contract 与 fault matrix 已跑绿 | 当前 Core checkpoint 绿色；旧覆盖率数字不能自动沿用 |
+| Installer Presentation | Release `88/88`，0 skipped | 单卡片三态、精确 allowed-operation、production runtime、并发/取消/异常边界已跑绿 | 当前纯 Presentation checkpoint 绿色 |
+| Installer Windows | 安全集 `348/348`，Release build 0 warning / 0 error | authenticated broker/host、target-SID cert、machine operations、environment/process 与 parent engine 已实现 | 明确排除了会改真实 CurrentUser 证书的 3 项测试；不能声称管理员 mutation 通过 |
+| WPF shell | Windows 11 x64 Release 编译通过，0 warning / 0 error | C# 紫色单卡片、helper pre-WPF 分流、关闭取消与 gated production composition 已落地；默认 runtime 仍 fail closed | 没有 UIA、UAC 或生产安装运行证据 |
+| 仓库纯度 | Rust/Cargo/Slint 源文件扫描为空，`git diff --check` 无 whitespace error | 旧审计文字和打包资产目录可保留，但不得包含 Rust 构建入口 | 当前实现语言是 C#；GitHub 历史统计刷新取决于提交后的重新索引 |
 
 ## 4. 已落地的主要内容
 
@@ -57,7 +40,7 @@
 - WPF 目标固定 Windows 11+ x64、自包含单文件、`asInvoker`、PerMonitorV2。
 - 主窗口收敛为一个产品卡片：Available 只显示安装；Installed 显示修复和卸载；RecoveryRequired 只显示与 durable journal 精确一致的继续动作；busy 只显示取消。
 - `InstallerProductStatePolicy` 使 durable transaction 优先于 package 观测，并拒绝非法 state / operation 组合。
-- Presentation 源码测试已展开全部 15 个合法 operation / phase 组合、5 个非法组合，以及所有 `CanExecute=false` 状态；尚待资源门后的实际执行。
+- Presentation 测试已覆盖全部合法 operation / phase 组合、非法组合、所有 `CanExecute=false` 状态、受限平台仅卸载、runtime lifetime 与窗口关闭取消；当前 Release checkpoint 为 88/88。
 - `Logo.svg` 已依据原 PNG 的轮廓、阴影和白色标记重建，并以 WPF geometry 契约锁定。
 
 ### Core / durable protocol
@@ -67,125 +50,58 @@
 - 新增只读 `IInstallerTransactionReader`，writer `IInstallerTransactionStore` 继承它；Windows protected stores 暴露 reader 与 writer 两种 capability view。
 - protected root 固定 `%ProgramData%\ClashSharp\Installer\v2`，目标用户只有读取恢复状态的权限，不能为了 parent 接线而放宽 ACL。
 
-### Windows helper / package primitive
+### Windows helper / machine primitive
 
-- 已写严格八参数 parent-PID bootstrap、固定 helper 路径与 STA `runas` launcher、UAC 1223 分类。
+- 已写严格八参数 parent-PID bootstrap、固定 helper 路径与 STA `runas` launcher、UAC 1223 分类，以及锁定 exact EXE 的 final-path / Authenticode signer lease。
 - named-pipe DACL 拒绝 Network，允许 exact logon SID ReadWrite；为 over-the-shoulder elevation 额外允许 Builtin Administrators ReadWrite。此 ACL 只是连通门，连接后仍必须双向精确绑定 parent / helper PID 和签名镜像。
-- 已写 first-pipe-instance / 单实例和双向 pipe PID 查询 primitive。
+- persistent broker、client/server、helper host、双向 PID/image 验证、bounded deadline、退出与 uncertain reconciliation 已有 deterministic 测试；WPF production runtime 已组合这些能力，但默认编译门仍关闭。
 - PackageManager facade 已支持显式 target SID；`WindowsTargetUserPackageCommitInspector` 按 exact SID + package family + version + health fail closed。
-- CurrentUser package adapter 仍显式传空 SID，保持原有 parent-current-user 行为；未来 helper 的 `CommitPackage` 必须传 journal 中的 exact `TargetSid`。
+- native target-SID `TrustedPeople` adapter 已按 SID、thumbprint 和完整 DER hash 实现并完成 injected 测试；alternate-admin OTS 真实 VM 证据仍缺失。
+- machine plan、target profile resolver、protected roots、锁定 MSIX 的固定七项 archive、staging/current/previous swap、SCM read/mutate、association 原子写入和空根清理原语已组合进 concrete machine operations。profile 缺失卸载只在 exact SID association 存在且服务已独立证明 absent 时清理固定 payload/association，始终只读打开根 lease。
 
 ## 5. 当前最高优先级缺口
 
-### P0：修正 protected-state authority 分工
+### 已关闭的实现缺口
 
-这是接盘后第一个实现任务，先于 broker、SCM 和更多 UI。
+- coordinator 已只持有 parent read-only transaction view；Prepared、phase transition、certificate ledger 与 Verified clear 均由 helper authority session 独占，成功空读取不再错误复活内存 fallback。
+- persistent authenticated broker、same-EXE helper host、PID/final-path/Authenticode lease、target-SID package inspector和 target-SID certificate adapter 已落地并通过 deterministic 定向测试。
+- 机器侧 fixed-plan 原语已覆盖 protected roots、locked archive、payload swap、SCM、association、profile resolver、remove 与 postcondition verifier。
+- concrete `WindowsMachineHelperMachineOperations`、helper pre-WPF 启动入口、只读 environment/process inspection、parent engine 和 `ProductionInstallerRuntime` 已完成组合；production runtime 仍由默认关闭的 formal-build gate 隔离。
 
-`InstallerCoordinator` 现在仍：
+### P0：显式 reassociation 与 production activation 证据
 
-1. 在首次 UAC 前直接 `SaveAsync(Prepared)`；
-2. 在 helper 返回每个后继后再次 `SaveAsync`；
-3. 在完成时直接 `ClearVerifiedAsync`。
+普通 install/repair/uninstall 与 durable replay 已完成组合。剩余源码级权限缺口是显式跨 owner reassociation：当前 protected root ACL 和 SCM tuple 都绑定现 owner，不能通过把 association 直接换成目标 SID 来“修复”。在协议完成前所有外来 owner 场景继续 fail closed，普通 parent 请求固定 `AllowReassociation=false`。
 
-这与安全模型冲突：WPF parent 是 `asInvoker`，而 protected root 对目标用户只读；直接接 Windows writer 会失败，helper 已提交后再由 parent 保存又会重复写或 CAS 冲突。
+- 先以旧 owner SID/token/profile 和旧 ACL lease 验证并停止旧 SCM tuple，不得覆盖 association；
+- 再以 durable、可重放的明确阶段迁移 root ACL 与 association，并为新 owner 构造 exact service tuple；
+- UI/parent 必须有独立明确确认，只有该路径可设置 `AllowReassociation=true`；
+- 每个失败切点必须保留足够的旧/新 owner 证据，能收敛而不是遗失授权。
 
-要求的最终分工：
+### P0：production runtime 与真实证据
 
-- parent 只持有 `IInstallerTransactionReader`，构造 Prepared 只在内存中进行；
-- 首个经过 PID / image / protocol 认证的 helper `Prepare` 在任何副作用前持久化 Prepared；
-- journal 和 certificate ledger 的每次 transition 均由同一 helper session 唯一提交；
-- helper 返回结果后，parent 只重新读取 protected store 并与 result exact-compare；
-- Verified clear 是 helper-authoritative terminal operation，随后 parent 只读证明 journal 已不存在；
-- UAC 在 helper 持久化 Prepared 前取消时，不得出现 durable recovery，也不得有任何副作用。
+- production composition 已存在但默认不开启；在 E3/E4 完成前继续由 `MigrationPreviewInstallerRuntime` fail closed，不得修改默认值或打包参数。
+- 真实 Windows 11 管理员临时 VM 仍需验证 UAC/OTS、target-SID cert/AppXSVC、ACL、SCM、锁文件、1072 delete-pending、reboot 和 durable cut-point。
+- 正式签名、自包含单文件候选还需同一 digest 的 E3/E4 矩阵；没有这些证据不得宣称可发布。
 
-同时修复 `InstallerCoordinator.RefreshDurableAsync`：当前 `LoadAsync() ?? fallback` 会在权威读取成功且确实无 journal 时错误回退到内存 Prepared。只有读取本身失败时才允许使用 fallback；成功读取 `null` 必须保持 `null`。
+## 6. 当前推进顺序
 
-优先涉及：
+### 步骤 0：只读确认与安全测试边界
 
-- `ClashSharp/ClashSharp.Installer.Core/Execution/InstallerCoordinator.cs`
-- `ClashSharp/ClashSharp.Installer.Core/Transactions/IInstallerTransactionStore.cs`
-- `ClashSharp/ClashSharp.Installer.Tests/InstallerCoordinatorTests.cs`
-- `ClashSharp/ClashSharp.Installer.Tests/InstallerCoordinatorFaultMatrixTests.cs`
-- `ClashSharp/ClashSharp.Installer.Tests/InstallerScenario.cs`
-- `ClashSharp/ClashSharp.Installer.Windows/Transactions/WindowsInstallerProtectedStateStores.cs`
-
-场景 fake 也必须模拟 helper-authoritative store，不能继续让 coordinator mirror 代替真实权限模型。至少新增：UAC-before-Prepared、helper committed / response lost、clear response lost、successful-null reload 和 read failure fallback 测试。
-
-### P0：OTS 目标用户证书与 package
-
-- 现有 `WindowsCurrentUserCertificateStoreAdapter` 会验证进程 token SID 等于 `TargetSid`，所以 alternate-admin helper 会 fail closed；它不会误写管理员 CurrentUser，但也无法完成目标用户证书操作。
-- 首选候选是 native `CertOpenStore` + `CERT_SYSTEM_STORE_USERS`，且 store name 只能是 `<exact target SID>\TrustedPeople`；继续保留 thumbprint 与 DER SHA-256 双校验。
-- 必须在 Windows 11 x64 标准用户 + 输入另一管理员凭据的 OTS VM 上取证。当前 pipe 方向是 parent server / helper client，`ImpersonateNamedPipeClient` 不能让 helper 反向 impersonate parent。
-- 若目标 SID store 无法形成可靠证据，只允许 helper-authoritative ledger cut-point 包围 parent-side certificate mutation 的显式回退；绝不写入管理员 CurrentUser，也不放宽 protected root。
-- exact-target-SID package inspector 已写但未编译，仍需接进 helper-only `CommitPackage` 并在 OTS VM 验证权限矩阵。
-
-### P0：还没有的生产闭环
-
-- 签名、hash-locked、独立 NativeAOT machine helper；
-- 一个 UAC 生命周期内的 persistent authenticated broker；
-- parent / helper 最终路径与 Authenticode 身份绑定、deadline、退出和 uncertain reconciliation；
-- machine directory / ACL / SCM / association apply-remove 适配器；
-- helper-authoritative certificate ledger；
-- WPF production runtime composition；当前仍是 `MigrationPreviewInstallerRuntime`；
-- 签名候选的 Windows E3 / E4、cut-point、重启和 OTS 证据。
-
-## 6. 接盘后的精确启动顺序
-
-### 步骤 0：只读确认
-
-```bash
+```powershell
 git status --short
 git diff --check
-./eng/check-linux-resource-budget.sh standard
+rg --files -g '*.rs' -g 'Cargo.toml' -g 'Cargo.lock' -g '*.slint'
 ```
 
-门禁未 READY 就停在这里。不要启动 restore、compiler server、测试或渲染。
+保留工作树中所有既有修改。先确认没有其他构建正在占用输出目录；只启动本任务的单进程 build/test，不终止其他进程。禁止运行会修改真实 CurrentUser certificate store、SCM、AppXSVC 或受保护机器目录的测试。
 
-### 步骤 1：把当前静态增量恢复为真实 checkpoint
+### 步骤 1：保持当前 checkpoint
 
-下面命令逐条、串行执行；每一条都重新过门并独占 host-wide lock：
+每个小步先跑受影响的 deterministic/fake 或随机临时目录测试，再以 `-m:1 -nr:false -p:UseSharedCompilation=false` 构建 Windows 生产项目和测试项目。完整 Windows adapter 集中会触碰真实用户证书的用例必须留给隔离 VM，不能在开发主机直接整批执行。
 
-```bash
-./eng/check-linux-resource-budget.sh standard -- \
-  /tmp/clashsharp-dotnet-10.0.201/dotnet test \
-  ClashSharp/ClashSharp.Installer.Tests/ClashSharp.Installer.Tests.csproj \
-  -c Release -p:Platform=x64 --no-restore \
-  -m:1 -nr:false -p:UseSharedCompilation=false
+### 步骤 2：关闭 production activation 前缺口
 
-./eng/check-linux-resource-budget.sh standard -- \
-  /tmp/clashsharp-dotnet-10.0.201/dotnet test \
-  ClashSharp/ClashSharp.Installer.Presentation.Tests/ClashSharp.Installer.Presentation.Tests.csproj \
-  -c Release -p:Platform=x64 --no-restore \
-  -m:1 -nr:false -p:UseSharedCompilation=false
-
-./eng/check-linux-resource-budget.sh standard -- \
-  /tmp/clashsharp-dotnet-10.0.201/dotnet build \
-  ClashSharp/ClashSharp.Installer.Windows.Tests/ClashSharp.Installer.Windows.Tests.csproj \
-  -c Release -p:Platform=x64 --no-restore \
-  -m:1 -nr:false -p:UseSharedCompilation=false
-
-./eng/check-linux-resource-budget.sh standard -- \
-  /tmp/clashsharp-dotnet-10.0.201/dotnet build \
-  ClashSharp/ClashSharp.Installer/ClashSharp.Installer.csproj \
-  -c Release -p:Platform=x64 --no-restore \
-  -m:1 -nr:false -p:UseSharedCompilation=false
-```
-
-如果 assets 不完整而确实需要 restore，只能先以同样的 standard wrapper 对 `ClashSharp/ClashSharp.slnx --locked-mode -p:Platform=x64` 做一次串行 restore，再回到上面顺序。不得无门禁 restore。
-
-Linux 上不运行 Windows adapter tests；只交叉编译。完整 `dotnet format` 在 Linux 可能因 WindowsDesktop analyzer 缺少 `System.Composition` 崩溃，Linux 可先做受门禁的 whitespace 验证，完整 analyzer / format 以 Windows CI 为准。
-
-首轮最可能暴露编译问题的位置：
-
-- `IInstallerTransactionReader` 新 API 的引用和 XML public API 规则；
-- `WindowsPackageRegistrationInspector.cs`；
-- `WindowsTargetUserPackageCommitInspectorTests.cs`；
-- Presentation theory 中 nullable enum / collection expression；
-- `IWindowsPackageManagerFacade.FindPackagesForUser` 新显式 SID 签名的漏改实现或 fake。
-
-### 步骤 2：实现 authority split，再补测试
-
-先让步骤 1 绿色，再改 coordinator / helper ownership；每个小步只跑受影响的一个测试项目。不要在未编译堆积上继续增加 broker、SCM 或 UI。
+为显式 reassociation 设计双 owner durable 阶段与 root ACL 转移协议，或在首个发布版本中明确不提供该功能；继续补 UIA、签名打包与 Sandbox 证据。所有本机组合层测试使用 injected seams 或临时目录，不调用真实 SCM、证书、包或 Program Files。
 
 ### 步骤 3：Windows 实机证据顺序
 
@@ -219,13 +135,13 @@ Linux 上不运行 Windows adapter tests；只交叉编译。完整 `dotnet form
 
 ## 9. 不能误报的事项
 
-- 当前 512 / 70 / 103 未经编译和执行；
+- 旧 512 / 70 / 103 checkpoint 已恢复；Core/Presentation 已超过旧计数并实际跑绿，Windows 新边界已编译和定向验证，完整 Windows/VM 矩阵仍未执行；
 - Windows tests 从未在 Linux 执行；
 - WPF shell 没有 Linux runtime 证据，也没有 Windows UIA 证据；
-- C# Installer 不是当前发布 authority；
-- protected root / IPC / package inspector 是 primitive，不等于 authenticated broker；
-- 当前 coordinator 权限模型仍错误，production composition 不得接线；
-- CurrentUser certificate adapter 不支持 alternate-admin OTS 目标用户；
+- C# / WPF 是唯一 Installer 源码实现，但当前 fail-closed runtime 不是可发布 production authority；
+- authenticated broker/host、machine operations、helper 路由与 WPF production runtime 已组合并通过 deterministic 测试，但默认 gate 关闭且没有 signed VM 证据；
+- coordinator authority split 已完成；剩余源码权限缺口是显式双 owner reassociation，剩余发布缺口是 E3/E4 与 gate promotion；
+- target-SID native certificate adapter 已实现，alternate-admin OTS 仍未在隔离 VM 取证；
 - `MigrationPreviewInstallerRuntime` 不执行安装；
 - ICO 未完成；
 - 没有签名候选、Windows E3/E4、reboot 或 cut-point 闭环。
@@ -238,4 +154,4 @@ Linux 上不运行 Windows adapter tests；只交叉编译。完整 `dotnet form
 4. [Protected-state root 边界](../design/2026-08-30-installer-protected-state-root.md)
 5. [项目开发地图](2026-08-27-project-development-map.md)
 
-接盘成功的第一个可审计里程碑不是“界面能打开”，而是：资源门 READY 后，当前 512 / 70 / 103 源码恢复为真实绿色 checkpoint；随后 coordinator 完成 helper-only write / transition / clear 与 parent read-only reload，并由 fault matrix 证明 UAC cancel、ack-loss、成功空读取和 clear reconciliation。
+截至 2026-08-31，authority split、authenticated broker/helper host、target-SID certificate/package、machine operations、profile-independent removal、helper 启动入口、parent engine 与 gated WPF production runtime 均已完成源码与安全定向测试。下一里程碑是决定并实现显式双 owner reassociation 边界，随后在同一签名候选上完成 Windows E3/E4，才能考虑启用 production gate。

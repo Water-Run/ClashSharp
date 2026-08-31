@@ -218,6 +218,8 @@ internal static partial class LocalizationResources
             ["Command.RemoveRegistration"] = "移除注册",
             ["Command.Open"] = "打开",
             ["Command.Edit"] = "编辑",
+            ["Command.MoveUp"] = "上移",
+            ["Command.MoveDown"] = "下移",
             ["Command.Save"] = "保存",
             ["Command.Rename"] = "重命名",
             ["Command.History"] = "历史",

@@ -29,6 +29,7 @@ public sealed class InstallerExecutableContractTests
         Assert.Equal(
             "ClashSharp.Installer.ReleaseManifest.json",
             Property(project, "ClashSharpInstallerReleaseManifestLogicalName"));
+        Assert.Equal("false", Property(project, "ClashSharpEnableInstallerMutationRuntime"));
         Assert.Contains(project.Descendants("ProjectReference"), reference =>
             string.Equals(
                 (string?)reference.Attribute("Include"),
@@ -51,6 +52,15 @@ public sealed class InstallerExecutableContractTests
             "'$(ClashSharpFormalInstallerBuild)' == 'true'",
             (string?)formalTarget.Attribute("Condition"));
         Assert.Equal(2, formalTarget.Elements("Error").Count());
+        XElement runtimeTarget = Assert.Single(
+            project.Descendants("Target"),
+            static target =>
+                (string?)target.Attribute("Name") ==
+                    "ValidateClashSharpInstallerMutationRuntime");
+        Assert.Equal(
+            "'$(ClashSharpEnableInstallerMutationRuntime)' == 'true'",
+            (string?)runtimeTarget.Attribute("Condition"));
+        Assert.Equal(2, runtimeTarget.Elements("Error").Count());
     }
 
     [Fact]
@@ -91,12 +101,13 @@ public sealed class InstallerExecutableContractTests
                 static element =>
                     (string?)element.Attribute("Style") ==
                         "{StaticResource InstallerCardStyle}"));
-        Assert.Empty(shell.Descendants().Where(element =>
-            element.Name == presentation + "TabControl"
-            || element.Name == presentation + "TabItem"
-            || element.Name == presentation + "Frame"
-            || element.Name == presentation + "Page"
-            || element.Name == presentation + "NavigationWindow"));
+        Assert.DoesNotContain(
+            shell.Descendants(),
+            element => element.Name == presentation + "TabControl"
+                || element.Name == presentation + "TabItem"
+                || element.Name == presentation + "Frame"
+                || element.Name == presentation + "Page"
+                || element.Name == presentation + "NavigationWindow");
         XElement productHeading = Assert.Single(
             shell.Descendants(presentation + "TextBlock"),
             static element =>
@@ -135,16 +146,80 @@ public sealed class InstallerExecutableContractTests
     }
 
     [Fact]
-    public void CustomEntryPointDelegatesToTheBehaviorTestedStartupRouter()
+    public void CustomEntryPointRoutesTheAuthenticatedHelperAndKeepsTheUiFailClosed()
     {
         string program = File.ReadAllText(SourcePath("ClashSharp.Installer", "Program.cs"));
+        string app = File.ReadAllText(SourcePath("ClashSharp.Installer", "App.xaml.cs"));
 
         Assert.Contains("InstallerStartupRouter.Run(", program, StringComparison.Ordinal);
-        Assert.Contains("MachineHelperNotConnectedExitCode", program, StringComparison.Ordinal);
+        Assert.Contains("WindowsInstallerMachineHelper", program, StringComparison.Ordinal);
+        Assert.Contains("EmbeddedInstallerReleaseManifest.Load()", program, StringComparison.Ordinal);
+        Assert.Contains("MachineHelperFailedExitCode", program, StringComparison.Ordinal);
         Assert.Contains("InvalidMachineHelperArgumentsExitCode", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("MachineHelperNotConnectedExitCode", program, StringComparison.Ordinal);
         Assert.DoesNotContain("InstallerMachineHelperInvocation.Parse", program, StringComparison.Ordinal);
         Assert.DoesNotContain("InstallerMachineHelperBootstrap.Parse", program, StringComparison.Ordinal);
         Assert.DoesNotContain("Environment.Exit(0)", program, StringComparison.Ordinal);
+        Assert.Contains("CLASHSHARP_INSTALLER_MUTATION_RUNTIME", app, StringComparison.Ordinal);
+        Assert.Contains("WindowsProductionInstallerRuntimeFactory.Create", app, StringComparison.Ordinal);
+        Assert.Contains("new MigrationPreviewInstallerRuntime()", app, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowCloseWaitsForTheActiveRuntimeGeneration()
+    {
+        string shell = File.ReadAllText(SourcePath("ClashSharp.Installer", "MainWindow.xaml"));
+        string codeBehind = File.ReadAllText(SourcePath(
+            "ClashSharp.Installer",
+            "MainWindow.xaml.cs"));
+
+        Assert.Contains("Closing=\"OnClosing\"", shell, StringComparison.Ordinal);
+        Assert.Contains("Closed=\"OnClosed\"", shell, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.IsBusy", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("e.Cancel = true", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.RequestCancellation()", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("Dispatcher.BeginInvoke", codeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShellUsesCSharpPurpleAsItsAccessibleInstallerAccent()
+    {
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XDocument theme = XDocument.Load(SourcePath(
+            "ClashSharp.Installer",
+            "Themes",
+            "InstallerTheme.xaml"));
+        XDocument shell = XDocument.Load(SourcePath("ClashSharp.Installer", "MainWindow.xaml"));
+
+        XElement accent = Assert.Single(
+            theme.Descendants(presentation + "Color"),
+            color => (string?)color.Attribute(x + "Key") == "InstallerAccentColor");
+        Assert.Equal("#7355DD", accent.Value.Trim());
+        Assert.Contains(
+            theme.Descendants(presentation + "DataTrigger"),
+            trigger => (string?)trigger.Attribute("Value") == "True"
+                && ((string?)trigger.Attribute("Binding"))?.Contains(
+                    "SystemParameters.HighContrast",
+                    StringComparison.Ordinal) == true);
+
+        XElement window = Assert.IsType<XElement>(shell.Root);
+        Assert.Equal("920", (string?)window.Attribute("Width"));
+        Assert.Equal("620", (string?)window.Attribute("Height"));
+        Assert.Equal("{StaticResource InstallerWindowStyle}", (string?)window.Attribute("Style"));
+        XElement rootGrid = Assert.Single(window.Elements(presentation + "Grid"));
+        Assert.Contains(
+            rootGrid.Elements(presentation + "Border"),
+            border => (string?)border.Attribute("Background") ==
+                "{StaticResource InstallerAccentBrush}");
+
+        string themeText = File.ReadAllText(SourcePath(
+            "ClashSharp.Installer",
+            "Themes",
+            "InstallerTheme.xaml"));
+        Assert.DoesNotContain("#0C7428", themeText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("#0B7026", themeText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("#0A6822", themeText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

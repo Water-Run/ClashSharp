@@ -3,7 +3,7 @@ using ClashSharp.Installer.Contracts;
 namespace ClashSharp.Installer.Runtime;
 
 /// <summary>
-/// Owns security-sensitive request construction and bridges the WPF shell to Windows execution.
+/// Bridges the WPF shell to a trusted backend that owns security-sensitive request construction.
 /// The presentation layer never supplies a SID, release hash, or package identity.
 /// </summary>
 public interface IInstallerRuntime
@@ -49,6 +49,9 @@ public enum InstallerProductState
 /// <param name="DisplayVersion">Trusted release version, or a migration placeholder.</param>
 /// <param name="ProductState">One of the three fixed product-card states.</param>
 /// <param name="RecoveryOperation">Exact operation only when a durable recovery is required.</param>
+/// <param name="AllowedOperations">
+/// Exact ordered operations authorized by the trusted runtime; empty when execution is blocked.
+/// </param>
 /// <param name="Capabilities">Independently evaluated prerequisites.</param>
 public sealed record InstallerRuntimeReadiness(
     bool CanExecute,
@@ -58,4 +61,5 @@ public sealed record InstallerRuntimeReadiness(
     string DisplayVersion,
     InstallerProductState ProductState,
     InstallerOperation? RecoveryOperation,
+    IReadOnlyList<InstallerOperation> AllowedOperations,
     IReadOnlyList<InstallerCapabilityStatus> Capabilities);

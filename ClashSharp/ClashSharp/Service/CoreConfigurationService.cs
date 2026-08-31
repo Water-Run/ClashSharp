@@ -398,6 +398,7 @@ public sealed partial class CoreConfigurationService
     /// <summary>Builds runtime configuration from the selected imported or built-in profile.</summary>
     /// <param name="mixedPort">Mixed HTTP and SOCKS proxy port in range [1, 65535].</param>
     /// <param name="mode">Master takeover mode whose equivalent mihomo mode should be emitted.</param>
+    /// <param name="transparentProxyEnabled">Whether the generated runtime should include TUN ownership settings.</param>
     /// <returns>Runtime configuration text with deterministic line endings.</returns>
     private string BuildRuntimeConfiguration(int mixedPort, ClashSharpMode mode, bool transparentProxyEnabled)
     {

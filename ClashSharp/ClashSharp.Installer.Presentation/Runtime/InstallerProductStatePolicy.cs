@@ -29,13 +29,13 @@ public static class InstallerProductStatePolicy
     internal static bool IsValid(
         InstallerProductState productState,
         InstallerOperation? recoveryOperation) => productState switch
-    {
-        InstallerProductState.Available or InstallerProductState.Installed =>
-            recoveryOperation is null,
-        InstallerProductState.RecoveryRequired =>
-            recoveryOperation is { } operation && Enum.IsDefined(operation),
-        _ => false,
-    };
+        {
+            InstallerProductState.Available or InstallerProductState.Installed =>
+                recoveryOperation is null,
+            InstallerProductState.RecoveryRequired =>
+                recoveryOperation is { } operation && Enum.IsDefined(operation),
+            _ => false,
+        };
 
     /// <summary>Selects Available, Installed, or exact durable RecoveryRequired state.</summary>
     /// <param name="installedPackageVersion">Canonical installed MSIX version, when present.</param>

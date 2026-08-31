@@ -24,6 +24,9 @@ internal static class StartupConflictDialogPresenter
     /// <summary>Shows the startup conflict dialog for the supplied issue snapshot.</summary>
     /// <param name="xamlRoot">XAML root used to host the dialog. Must not be null.</param>
     /// <param name="issues">Detected conflict issues. Must not be null.</param>
+    /// <param name="getString">Localization resolver used for every dialog label.</param>
+    /// <param name="errorSink">Boundary sink for unexpected repair-command failures.</param>
+    /// <param name="cancellationToken">Cancels pending repair work and closes the dialog lifetime.</param>
     /// <returns>A task that completes after the dialog closes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="xamlRoot"/> or <paramref name="issues"/> is null.</exception>
     public static async Task ShowAsync(
@@ -64,6 +67,9 @@ internal static class StartupConflictDialogPresenter
     /// <summary>Builds dialog content for either an empty result or a list of repairable issues.</summary>
     /// <param name="issues">Detected conflict issues. Must not be null.</param>
     /// <param name="xamlRoot">XAML root used to size the scroll region. Must not be null.</param>
+    /// <param name="getString">Localization resolver used for content labels.</param>
+    /// <param name="errorSink">Boundary sink supplied to each repair command.</param>
+    /// <param name="cancellationToken">Cancels repair commands owned by this content lifetime.</param>
     /// <returns>Dialog content element.</returns>
     private static UIElement BuildContent(
         IReadOnlyList<StartupConflictIssue> issues,
@@ -112,6 +118,9 @@ internal static class StartupConflictDialogPresenter
 
     /// <summary>Builds one repairable conflict issue row.</summary>
     /// <param name="issue">Conflict issue snapshot. Must not be null.</param>
+    /// <param name="getString">Localization resolver used for the action label.</param>
+    /// <param name="errorSink">Boundary sink for unexpected repair failures.</param>
+    /// <param name="cancellationToken">Cancels the row's repair command.</param>
     /// <returns>Issue row element.</returns>
     private static Grid BuildIssueRow(
         StartupConflictIssue issue,

@@ -144,11 +144,11 @@ internal sealed partial class ClashDataPackageService
 
     private readonly Action<DataPackageTransactionCheckpoint>? _checkpoint;
 
+#if UNIT_TESTS
     /// <summary>
     /// Resets persisted settings through the same durable generation boundary used by package imports.
     /// A crash before the reset generation is recorded rolls back; a crash afterwards completes it.
     /// </summary>
-#if UNIT_TESTS
     public async Task ResetSettingsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -243,8 +243,8 @@ internal sealed partial class ClashDataPackageService
         }
     }
 
-    /// <summary>Completes or rolls back a retained package/reset transaction after an abnormal exit.</summary>
 #if UNIT_TESTS
+    /// <summary>Completes or rolls back a retained package/reset transaction after an abnormal exit.</summary>
     public Task ReconcilePendingTransactionAsync(CancellationToken cancellationToken)
     {
         return ReconcilePendingTransactionCoreAsync(admissionLease: null, cancellationToken);

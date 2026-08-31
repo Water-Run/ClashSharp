@@ -1,10 +1,11 @@
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Platform;
+using ClashSharp.Installer.Windows.Platform;
 
 namespace ClashSharp.Installer.Runtime;
 
 /// <summary>
-/// Exposes the new shell while the Windows mutation adapters are still under parity review.
+/// Exposes the WPF shell while production composition and signed Windows evidence remain incomplete.
 /// It never mutates the machine and therefore remains safe if a command is invoked indirectly.
 /// </summary>
 public sealed class MigrationPreviewInstallerRuntime : IInstallerRuntime
@@ -67,17 +68,18 @@ public sealed class MigrationPreviewInstallerRuntime : IInstallerRuntime
                 : platform.DiagnosticCode,
             StatusTitle: platform.IsSupported ? "迁移预览" : "当前系统不受支持",
             StatusDetail: platform.IsSupported
-                ? "新的 WPF 安装界面已可审查；正式安装仍由现有安装器负责，直至 Windows 执行器通过等价性验证。"
+                ? "新的 WPF 安装界面已可审查；正式安装保持禁用，直至 parent/helper/runtime 组合与 Windows VM 证据全部闭环。"
                 : "安装器已在任何发布载荷或系统变更之前阻止执行。需要 Windows 11+ x64 客户端。",
             DisplayVersion: "等待可信发布载荷",
             ProductState: InstallerProductState.Available,
             RecoveryOperation: null,
+            AllowedOperations: [],
             Capabilities:
             [
                 new("Windows 11+ x64", platformDetail, platform.IsSupported),
                 new("发布签名与固定清单", "内嵌清单、包内机器文件哈希与候选生成链已实现，尚未完成正式签名发布验证。", false),
-                new("MSIX 用户包事务", "当前用户适配器已实现，仍待接入完整生产事务并在 Windows 验证。", false),
-                new("系统服务与证书事务", "证书适配器、MachineReserved 顺序及单会话 journal 绑定协议已实现；签名 NativeAOT helper、SCM、ACL 与认证管道尚未接入。", false),
+                new("MSIX 用户包事务", "当前用户适配器已实现，仍待接入生产 runtime 并完成 Windows VM 验证。", false),
+                new("系统服务与证书事务", "helper 启动入口、认证 pipe、authority、固定 SCM/payload 编排及目标用户证书 ownership 事务已有实现与测试；parent/coordinator Runtime 仍保持禁用，且尚未完成签名 VM 证据。", false),
                 new("最终状态独立验证", "需在 Windows VM 中完成故障注入与恢复证明。", false),
             ]);
     }

@@ -87,6 +87,15 @@ internal sealed class TriggerConditionEditorViewModel : ObservableObject
 
     public string Description => _getString($"Triggers.Condition.{GetLocalizationSuffix()}.Description");
 
+    /// <summary>Gets the localized accessible label for moving this condition earlier.</summary>
+    public string MoveUpText => _getString("Command.MoveUp");
+
+    /// <summary>Gets the localized accessible label for moving this condition later.</summary>
+    public string MoveDownText => _getString("Command.MoveDown");
+
+    /// <summary>Gets the localized accessible label for removing this condition.</summary>
+    public string RemoveText => _getString("Command.Delete");
+
     public bool IsThresholdVisible => Kind is TriggerConditionKind.Traffic
         or TriggerConditionKind.Rate
         or TriggerConditionKind.ActiveConnections;

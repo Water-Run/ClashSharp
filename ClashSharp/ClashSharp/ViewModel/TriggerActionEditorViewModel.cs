@@ -53,6 +53,15 @@ internal sealed class TriggerActionEditorViewModel : ObservableObject
 
     public string Description => _getString($"Triggers.Action.{Kind}.Description");
 
+    /// <summary>Gets the localized accessible label for moving this action earlier.</summary>
+    public string MoveUpText => _getString("Command.MoveUp");
+
+    /// <summary>Gets the localized accessible label for moving this action later.</summary>
+    public string MoveDownText => _getString("Command.MoveDown");
+
+    /// <summary>Gets the localized accessible label for removing this action.</summary>
+    public string RemoveText => _getString("Command.Delete");
+
     public bool IsBooleanVisible => Kind is TriggerActionKind.SetLaunchAtStartup
         or TriggerActionKind.SetTransparentProxy
         or TriggerActionKind.SetConnectionSampling;

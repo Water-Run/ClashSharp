@@ -2097,6 +2097,7 @@ public sealed partial class ProfileCatalogService
     /// <param name="document">Catalog document to mutate. Must not be null.</param>
     /// <param name="linkId">Stable link identifier. Must not be null.</param>
     /// <param name="status">New link status. Must not be null.</param>
+    /// <param name="markSuccessfulUpdate">Whether to record the current time as a completed update.</param>
     private static void UpdateLinkStatus(
         ProfileCatalogDocument document,
         string linkId,
@@ -2243,6 +2244,7 @@ public sealed partial class ProfileCatalogService
 
     /// <summary>Ensures the catalog document contains the built-in direct profile.</summary>
     /// <param name="document">Catalog document to inspect. Must not be null.</param>
+    /// <param name="getString">Localization resolver for built-in profile display metadata.</param>
     /// <returns>The original document with the built-in profile inserted when necessary.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
     private ProfileCatalogDocument EnsureBuiltInProfile(

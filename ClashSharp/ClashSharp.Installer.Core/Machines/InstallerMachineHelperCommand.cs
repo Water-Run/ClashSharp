@@ -111,6 +111,7 @@ public sealed record InstallerMachineHelperCommand(
             InstallerMachineHelperVerb.Apply or InstallerMachineHelperVerb.Remove =>
                 InstallerTransactionPhase.MachineCommitted,
             InstallerMachineHelperVerb.Verify => InstallerTransactionPhase.Verified,
+            InstallerMachineHelperVerb.Clear => InstallerTransactionPhase.Verified,
             _ => throw new InstallerProtocolException(
                 "installer.machine_helper.verb_invalid"),
         };

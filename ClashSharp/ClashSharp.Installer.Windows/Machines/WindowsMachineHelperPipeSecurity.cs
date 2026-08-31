@@ -1,8 +1,11 @@
+using System.ComponentModel;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
+using Microsoft.Win32.SafeHandles;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -58,19 +61,31 @@ internal static class WindowsMachineHelperPipeSecurity
                 "The elevated-helper pipe is available only on Windows.");
         }
 
-        using WindowsIdentity identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
-        SecurityIdentifier[] logonSids = identity.Groups?
-            .OfType<SecurityIdentifier>()
-            .Where(static sid => sid.IsWellKnown(WellKnownSidType.LogonIdsSid))
-            .ToArray()
-            ?? [];
-        if (logonSids.Length != 1)
+        try
+        {
+            using WindowsIdentity identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+            SecurityIdentifier logonSid = WindowsTokenLogonSidNative.Get(
+                identity.AccessToken);
+            if (!logonSid.IsWellKnown(WellKnownSidType.LogonIdsSid))
+            {
+                throw new InstallerProtocolException(
+                    "installer.machine_helper.logon_identity_invalid");
+            }
+
+            return logonSid;
+        }
+        catch (InstallerProtocolException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is Win32Exception
+            or ArgumentException
+            or UnauthorizedAccessException)
         {
             throw new InstallerProtocolException(
-                "installer.machine_helper.logon_identity_invalid");
+                "installer.machine_helper.logon_identity_invalid",
+                exception);
         }
-
-        return logonSids[0];
     }
 
     /// <summary>Creates the first and only server instance before the helper is launched.</summary>
@@ -92,5 +107,93 @@ internal static class WindowsMachineHelperPipeSecurity
             security,
             HandleInheritability.None,
             additionalAccessRights: 0);
+    }
+}
+
+internal static class WindowsTokenLogonSidNative
+{
+    private const int TokenLogonSid = 28;
+    private const int ErrorInsufficientBuffer = 122;
+    private const int MaximumTokenInformationBytes = 64 * 1024;
+
+    internal static SecurityIdentifier Get(SafeAccessTokenHandle token)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        if (token.IsClosed || token.IsInvalid)
+        {
+            throw new InstallerProtocolException(
+                "installer.machine_helper.logon_identity_invalid");
+        }
+
+        _ = GetTokenInformation(
+            token,
+            TokenLogonSid,
+            0,
+            tokenInformationLength: 0,
+            out int requiredLength);
+        int firstError = Marshal.GetLastPInvokeError();
+        if (firstError != ErrorInsufficientBuffer
+            || requiredLength <= 0
+            || requiredLength > MaximumTokenInformationBytes)
+        {
+            throw new Win32Exception(firstError);
+        }
+
+        nint buffer = Marshal.AllocHGlobal(requiredLength);
+        try
+        {
+            if (!GetTokenInformation(
+                    token,
+                    TokenLogonSid,
+                    buffer,
+                    requiredLength,
+                    out int returnedLength))
+            {
+                throw new Win32Exception(Marshal.GetLastPInvokeError());
+            }
+
+            if (returnedLength != requiredLength)
+            {
+                throw new InstallerProtocolException(
+                    "installer.machine_helper.logon_identity_invalid");
+            }
+
+            TokenGroups groups = Marshal.PtrToStructure<TokenGroups>(buffer);
+            if (groups.GroupCount != 1 || groups.FirstGroup.Sid == 0)
+            {
+                throw new InstallerProtocolException(
+                    "installer.machine_helper.logon_identity_invalid");
+            }
+
+            return new SecurityIdentifier(groups.FirstGroup.Sid);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetTokenInformation(
+        SafeAccessTokenHandle token,
+        int tokenInformationClass,
+        nint tokenInformation,
+        int tokenInformationLength,
+        out int returnLength);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TokenGroups
+    {
+        internal uint GroupCount;
+        internal SidAndAttributes FirstGroup;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SidAndAttributes
+    {
+        internal nint Sid;
+        internal uint Attributes;
     }
 }

@@ -386,6 +386,12 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
 
     /// <summary>Applies a takeover mode through TUN when enabled, otherwise through Windows system proxy.</summary>
     /// <param name="mode">Takeover mode that should route traffic through mihomo.</param>
+    /// <param name="transparentProxyEnabled">Whether authenticated service-owned TUN is requested.</param>
+    /// <param name="mixedPort">Verified local mixed-listener port used by the selected owner.</param>
+    /// <param name="preparedConfiguration">Validated runtime configuration prepared for this transition.</param>
+    /// <param name="generation">Monotonic configuration generation bound to the service request.</param>
+    /// <param name="configurationHash">SHA-256 identity of the prepared configuration.</param>
+    /// <param name="cancellationToken">Cancels work before an irreversible ownership cut point.</param>
     /// <returns>The resulting takeover state.</returns>
     /// <exception cref="FileNotFoundException">Required core files are missing.</exception>
     /// <exception cref="InvalidOperationException">Core startup or Windows proxy registry access fails.</exception>
@@ -468,7 +474,11 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
 
     /// <summary>Applies a takeover mode by starting the core and enabling Windows proxy.</summary>
     /// <param name="mode">Takeover mode that should enable Windows proxy.</param>
+    /// <param name="mixedPort">Verified local mixed-listener port published to WinINet.</param>
     /// <param name="message">Human-readable outcome message. Must not be null.</param>
+    /// <param name="tunRequested">Whether this App-owned fallback follows an unsuccessful TUN request.</param>
+    /// <param name="preparedConfiguration">Validated runtime configuration for the App-owned core.</param>
+    /// <param name="cancellationToken">Cancels startup before the verified proxy commit.</param>
     /// <returns>The resulting takeover state.</returns>
     private async Task<NetworkTakeoverResult> ApplySystemProxyTakeoverModeAsync(
         ClashSharpMode mode,

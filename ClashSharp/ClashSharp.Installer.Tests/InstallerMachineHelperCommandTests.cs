@@ -14,6 +14,7 @@ public sealed class InstallerMachineHelperCommandTests
     [InlineData(InstallerMachineHelperVerb.Apply)]
     [InlineData(InstallerMachineHelperVerb.Remove)]
     [InlineData(InstallerMachineHelperVerb.Verify)]
+    [InlineData(InstallerMachineHelperVerb.Clear)]
     public void EveryVerbRoundTripsAsAnExactJournalBoundCommand(
         InstallerMachineHelperVerb verb)
     {
@@ -186,6 +187,13 @@ public sealed class InstallerMachineHelperCommandTests
                 InstallerTransactionPhase.MachineReserved,
                 InstallerTransactionPhase.PackageCommitted,
                 InstallerTransactionPhase.MachineCommitted,
+            ],
+            InstallerMachineHelperVerb.Clear =>
+            [
+                InstallerTransactionPhase.MachineReserved,
+                InstallerTransactionPhase.PackageCommitted,
+                InstallerTransactionPhase.MachineCommitted,
+                InstallerTransactionPhase.Verified,
             ],
             _ => throw new InvalidOperationException(),
         };

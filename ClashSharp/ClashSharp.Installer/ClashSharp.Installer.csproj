@@ -8,6 +8,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>14</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -25,6 +27,11 @@
     <RootNamespace>ClashSharp.Installer</RootNamespace>
     <StartupObject>ClashSharp.Installer.Program</StartupObject>
     <ClashSharpInstallerReleaseManifestLogicalName>ClashSharp.Installer.ReleaseManifest.json</ClashSharpInstallerReleaseManifestLogicalName>
+    <ClashSharpEnableInstallerMutationRuntime Condition="'$(ClashSharpEnableInstallerMutationRuntime)' == ''">false</ClashSharpEnableInstallerMutationRuntime>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ClashSharpEnableInstallerMutationRuntime)' == 'true'">
+    <DefineConstants>$(DefineConstants);CLASHSHARP_INSTALLER_MUTATION_RUNTIME</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -52,5 +59,15 @@
     <Error
       Condition="'$(ClashSharpInstallerReleaseManifestPath)' != '' and !Exists('$(ClashSharpInstallerReleaseManifestPath)')"
       Text="The formal Installer embedded release manifest does not exist." />
+  </Target>
+
+  <Target Name="ValidateClashSharpInstallerMutationRuntime" BeforeTargets="PrepareForBuild"
+          Condition="'$(ClashSharpEnableInstallerMutationRuntime)' == 'true'">
+    <Error
+      Condition="'$(ClashSharpFormalInstallerBuild)' != 'true'"
+      Text="The production Installer mutation runtime requires ClashSharpFormalInstallerBuild=true." />
+    <Error
+      Condition="'$(ClashSharpInstallerReleaseManifestPath)' == '' or !Exists('$(ClashSharpInstallerReleaseManifestPath)')"
+      Text="The production Installer mutation runtime requires an embedded release manifest." />
   </Target>
 </Project>

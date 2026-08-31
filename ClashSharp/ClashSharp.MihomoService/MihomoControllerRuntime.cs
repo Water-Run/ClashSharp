@@ -452,6 +452,7 @@ internal sealed class MihomoNamedPipeControllerTransport : IMihomoControllerTran
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetNamedPipeServerProcessId(
         SafePipeHandle pipe,

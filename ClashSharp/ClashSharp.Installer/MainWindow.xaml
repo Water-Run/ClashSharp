@@ -5,39 +5,43 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="ClashSharp 安装器"
-        Width="1120"
-        Height="720"
-        MinWidth="880"
-        MinHeight="560"
+        Width="920"
+        Height="620"
+        MinWidth="760"
+        MinHeight="520"
         WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
-        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        Style="{StaticResource InstallerWindowStyle}"
         TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="Auto"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         AutomationProperties.Name="ClashSharp 安装器"
         Loaded="OnLoaded"
-        Closing="OnClosing">
+        Closing="OnClosing"
+        Closed="OnClosed">
   <Grid>
     <Grid.RowDefinitions>
-      <RowDefinition Height="64" />
+      <RowDefinition Height="8" />
+      <RowDefinition Height="72" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
 
     <Border Grid.Row="0"
+            Background="{StaticResource InstallerAccentBrush}" />
+
+    <Border Grid.Row="1"
             Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-            BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+            BorderBrush="{StaticResource InstallerBorderBrush}"
             BorderThickness="0,0,0,1">
-      <Grid Margin="24,0">
+      <Grid Margin="26,0">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <Image Width="34"
-               Height="34"
+        <Image Width="38"
+               Height="38"
                VerticalAlignment="Center"
                Source="{StaticResource ClashSharpBrandMark}"
                Stretch="Uniform"
@@ -45,11 +49,11 @@
         <StackPanel Grid.Column="1"
                     Margin="12,0,0,0"
                     VerticalAlignment="Center">
-          <TextBlock Text="ClashSharp Installer"
-                     FontSize="18"
+          <TextBlock Text="ClashSharp 安装器"
+                     FontSize="19"
                      FontWeight="SemiBold" />
           <TextBlock Margin="0,2,0,0"
-                     Text="独立、自包含的 Windows 安装器"
+                     Text="轻量、自包含的 Windows 安装体验"
                      FontSize="12"
                      Style="{StaticResource MutedTextStyle}" />
         </StackPanel>
@@ -62,12 +66,12 @@
       </Grid>
     </Border>
 
-    <ScrollViewer Grid.Row="1"
+    <ScrollViewer Grid.Row="2"
                   VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled"
                   Focusable="False">
-      <Grid Margin="32,26,32,30"
-            MaxWidth="980"
+      <Grid Margin="28,24,28,28"
+            MaxWidth="840"
             HorizontalAlignment="Stretch">
         <Border Style="{StaticResource InstallerCardStyle}"
                 Padding="0"
@@ -80,7 +84,7 @@
               <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Grid Margin="26,24">
+            <Grid Margin="24,22">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="72" />
                 <ColumnDefinition Width="*" />
@@ -92,8 +96,8 @@
                       HorizontalAlignment="Left"
                       VerticalAlignment="Top"
                       CornerRadius="7"
-                      Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-                      BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                      Background="{StaticResource InstallerAccentSoftBrush}"
+                      BorderBrush="{StaticResource InstallerAccentBrush}"
                       BorderThickness="1">
                 <Image Width="42"
                        Height="42"
@@ -116,21 +120,18 @@
 
               <Border Grid.Column="2"
                       Margin="20,0,0,0"
-                      Padding="12,6"
                       VerticalAlignment="Top"
-                      CornerRadius="14"
-                      Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
-                      BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
-                      BorderThickness="1">
+                      Style="{StaticResource InstallerStatusPillStyle}">
                 <TextBlock Text="{Binding StatusBadge, Mode=OneWay}"
+                           Style="{StaticResource InstallerAccentTextStyle}"
                            FontWeight="SemiBold"
                            AutomationProperties.Name="{Binding StatusBadge, StringFormat=当前状态：{0}}" />
               </Border>
             </Grid>
 
             <Border Grid.Row="1"
-                    Padding="26,20"
-                    BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                    Padding="24,18"
+                    BorderBrush="{StaticResource InstallerBorderBrush}"
                     BorderThickness="0,1,0,1">
               <Grid>
                 <Grid.ColumnDefinitions>
@@ -160,9 +161,10 @@
                 </StackPanel>
 
                 <Border Grid.Column="1"
-                        Padding="18,4"
-                        Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
-                        CornerRadius="4">
+                        Padding="18,6"
+                        Style="{StaticResource InstallerAccentSurfaceStyle}"
+                        BorderThickness="1"
+                        CornerRadius="6">
                   <StackPanel>
                     <TextBlock Margin="0,8"
                                Text="执行前提"
@@ -193,7 +195,7 @@
               </Grid>
             </Border>
 
-            <StackPanel Grid.Row="2" Margin="26,18,26,16">
+            <StackPanel Grid.Row="2" Margin="24,18,24,16">
               <UniformGrid Columns="3">
                 <StackPanel Margin="0,0,24,0">
                   <TextBlock Text="应用位置" FontWeight="SemiBold" />
@@ -238,9 +240,8 @@
             </StackPanel>
 
             <Border Grid.Row="3"
-                    Padding="26,15"
-                    Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
-                    BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                    Padding="24,15"
+                    Style="{StaticResource InstallerAccentSurfaceStyle}"
                     BorderThickness="0,1,0,0">
               <Grid>
                 <Grid.ColumnDefinitions>

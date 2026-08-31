@@ -18,7 +18,7 @@ public sealed class InstallerReleaseManifest
     };
 
     /// <summary>The only currently supported manifest schema.</summary>
-    public const int CurrentSchema = 1;
+    public const int CurrentSchema = 2;
 
     /// <summary>Creates an immutable manifest and snapshots its file entries.</summary>
     [JsonConstructor]
@@ -26,6 +26,7 @@ public sealed class InstallerReleaseManifest
         int schema,
         string expectedPackageVersion,
         string installerPayloadSha256,
+        string authenticodeCertificateThumbprint,
         string packageCertificateThumbprint,
         string certificateSha256,
         InstallerPackageIdentity packageIdentity,
@@ -36,6 +37,7 @@ public sealed class InstallerReleaseManifest
         Schema = schema;
         ExpectedPackageVersion = expectedPackageVersion;
         InstallerPayloadSha256 = installerPayloadSha256;
+        AuthenticodeCertificateThumbprint = authenticodeCertificateThumbprint;
         PackageCertificateThumbprint = packageCertificateThumbprint;
         CertificateSha256 = certificateSha256;
         PackageIdentity = packageIdentity;
@@ -52,6 +54,9 @@ public sealed class InstallerReleaseManifest
 
     /// <summary>Gets the exact primary MSIX SHA-256 bound into transactions.</summary>
     public string InstallerPayloadSha256 { get; }
+
+    /// <summary>Gets the uppercase SHA-1 identity of the signed Installer executable publisher.</summary>
+    public string AuthenticodeCertificateThumbprint { get; }
 
     /// <summary>Gets the uppercase SHA-1 identity of the package certificate.</summary>
     public string PackageCertificateThumbprint { get; }
@@ -85,6 +90,9 @@ public sealed class InstallerReleaseManifest
         InstallerProtocolValidation.ValidateLowerHex256(
             InstallerPayloadSha256,
             "installer.release.payload_hash_invalid");
+        InstallerProtocolValidation.ValidateUpperHex160(
+            AuthenticodeCertificateThumbprint,
+            "installer.release.authenticode_thumbprint_invalid");
         InstallerProtocolValidation.ValidateUpperHex160(
             PackageCertificateThumbprint,
             "installer.release.certificate_thumbprint_invalid");

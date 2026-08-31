@@ -8,6 +8,11 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <LangVersion>14</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+    <IsPublishable Condition="'$(ClashSharpFormalInstallerComponent)'!='true'">false</IsPublishable>
+    <IsPublishable Condition="'$(ClashSharpFormalInstallerComponent)'=='true'">true</IsPublishable>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(ClashSharpFormalInstallerComponent)'=='true'">
@@ -19,6 +24,7 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugSymbols>false</DebugSymbols>
     <DebugType>None</DebugType>
+    <PublishDocumentationFiles>false</PublishDocumentationFiles>
   </PropertyGroup>
 
   <ItemGroup>

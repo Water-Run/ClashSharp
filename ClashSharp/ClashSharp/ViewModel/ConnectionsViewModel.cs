@@ -46,6 +46,8 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <param name="localization">Localization provider. Must not be null.</param>
     /// <param name="connectionClient">Active connection client. Must not be null.</param>
     /// <param name="log">Log sink. Must not be null.</param>
+    /// <param name="errorSink">Boundary sink for unexpected command failures. Must not be null.</param>
+    /// <param name="displayTextFilter">Optional sanitizer applied to controller-sourced display text.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public ConnectionsViewModel(
         IConnectionsLocalization localization,

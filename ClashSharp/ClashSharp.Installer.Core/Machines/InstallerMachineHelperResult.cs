@@ -16,13 +16,13 @@ public enum InstallerMachineHelperOutcome
     PostconditionFailed,
 }
 
-/// <summary>Bounded helper response binding a request journal to helper-committed journal bytes.</summary>
+/// <summary>Bounded helper response binding a request journal to a committed-state receipt.</summary>
 /// <param name="Schema">Response schema.</param>
 /// <param name="Verb">Executed fixed helper verb.</param>
 /// <param name="TransactionId">Exact durable transaction identifier.</param>
 /// <param name="JournalContentHash">Exact request journal SHA-256.</param>
-/// <param name="ResultJournalContentHash">SHA-256 of the helper's resulting journal bytes.</param>
-/// <param name="ResultJournalBase64">Canonical helper-result journal bytes encoded as Base64.</param>
+/// <param name="ResultJournalContentHash">SHA-256 of the helper's resulting or cleared journal receipt.</param>
+/// <param name="ResultJournalBase64">Canonical helper-result or clear-receipt journal bytes encoded as Base64.</param>
 /// <param name="Outcome">Reported terminal outcome.</param>
 /// <param name="PostconditionVerified">Whether the helper independently verified the verb postcondition.</param>
 /// <param name="DiagnosticCode">Stable non-localized result code.</param>

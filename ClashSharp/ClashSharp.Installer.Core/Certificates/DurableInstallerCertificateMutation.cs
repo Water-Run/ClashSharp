@@ -6,7 +6,9 @@ namespace ClashSharp.Installer.Certificates;
 /// Applies certificate changes through a write-ahead ownership ledger so retries are idempotent
 /// and certificates that predate ClashSharp are never removed.
 /// </summary>
-public sealed class DurableInstallerCertificateMutation : IInstallerCertificateMutation
+public sealed class DurableInstallerCertificateMutation :
+    IInstallerCertificateMutation,
+    IInstallerCertificateMutationVerifier
 {
     private readonly IInstallerCertificateOwnershipStore _ownershipStore;
     private readonly IInstallerCertificateStoreAdapter _certificateStore;
@@ -39,6 +41,59 @@ public sealed class DurableInstallerCertificateMutation : IInstallerCertificateM
         }
 
         await EnsureInstalledAsync(request, release, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task VerifyAppliedAsync(
+        InstallerRequest request,
+        IInstallerReleaseLease release,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(release);
+        request.Validate();
+        release.Release.Validate();
+        InstallerCertificateOwnershipSnapshot? ownership = await _ownershipStore
+            .LoadAsync(cancellationToken)
+            .ConfigureAwait(false);
+        InstallerCertificatePresence presence = await InspectExactAsync(
+                request,
+                release,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (request.Operation is InstallerOperation.Install or InstallerOperation.Repair)
+        {
+            if (ownership is null)
+            {
+                throw new InstallerProtocolException(
+                    "installer.certificate.ownership_missing");
+            }
+
+            ValidateActiveOwnership(ownership.Ledger, request, release);
+            if (presence != InstallerCertificatePresence.ExactMatch)
+            {
+                throw new InstallerProtocolException(
+                    "installer.certificate.installation_verification_failed");
+            }
+
+            return;
+        }
+
+        if (ownership is not null)
+        {
+            ValidateMatchingOwnership(ownership.Ledger, request, release);
+            throw new InstallerProtocolException(
+                "installer.certificate.removal_incomplete");
+        }
+
+        if (presence is not (
+                InstallerCertificatePresence.Missing
+                or InstallerCertificatePresence.ExactMatch))
+        {
+            throw new InstallerProtocolException(
+                "installer.certificate.removal_verification_failed");
+        }
     }
 
     private async Task EnsureInstalledAsync(

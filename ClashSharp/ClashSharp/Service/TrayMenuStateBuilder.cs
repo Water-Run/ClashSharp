@@ -56,6 +56,7 @@ public enum TrayIconVisualState
 /// <param name="TunEffective">True only when the service-owned TUN runtime is conclusively ready.</param>
 /// <param name="SettingsLabel">Settings command label.</param>
 /// <param name="SafeExitLabel">Safe exit command label.</param>
+/// <param name="VisibleFeatureIds">Case-insensitive identifiers for menu sections that may be shown.</param>
 public readonly record struct TrayMenuState(
     string StatusMenuLabel,
     IReadOnlyList<TrayStatusMenuItem> StatusItems,
@@ -71,16 +72,22 @@ public readonly record struct TrayMenuState(
     string SafeExitLabel,
     IReadOnlySet<string> VisibleFeatureIds)
 {
+    /// <summary>Gets whether the runtime-status section is visible.</summary>
     public bool ShowStatus => VisibleFeatureIds.Contains("status");
 
+    /// <summary>Gets whether the takeover-mode section is visible.</summary>
     public bool ShowMode => VisibleFeatureIds.Contains("mode");
 
+    /// <summary>Gets whether the page-navigation section is visible.</summary>
     public bool ShowPages => VisibleFeatureIds.Contains("pages");
 
+    /// <summary>Gets whether the transparent-proxy command is visible.</summary>
     public bool ShowTransparentProxy => VisibleFeatureIds.Contains("transparent-proxy");
 
+    /// <summary>Gets whether the settings command is visible.</summary>
     public bool ShowSettings => VisibleFeatureIds.Contains("settings");
 
+    /// <summary>Gets whether the safe-exit command is visible.</summary>
     public bool ShowSafeExit => VisibleFeatureIds.Contains("safe-exit");
 }
 
