@@ -8,6 +8,92 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the active connections view model.</summary>
 public sealed class ConnectionsViewModelTests
 {
+    [Theory]
+    [InlineData("browser")]
+    [InlineData("EXAMPLE")]
+    [InlineData("payload-a")]
+    [InlineData("route a")]
+    public async Task SearchText_FiltersDisplayedFieldsWithoutRequestingAnotherSnapshot(string query)
+    {
+        FakeConnectionClient client = new()
+        {
+            Connections =
+            [
+                new("1", "Browser", "example.test", "rule", "payload-a", "Route A", 1, 2, DateTimeOffset.UnixEpoch),
+                new("2", "curl", "other.test", "direct", "", "DIRECT", 3, 4, DateTimeOffset.UnixEpoch),
+            ],
+        };
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+
+        viewModel.SearchText = query;
+
+        Assert.Equal("1", Assert.Single(viewModel.Connections).Connection.Id);
+        Assert.Equal("1 of 2", viewModel.FilterCountText);
+        Assert.Equal(1, client.RefreshCount);
+        viewModel.SearchText = string.Empty;
+        Assert.Equal(2, viewModel.Connections.Count);
+        Assert.Equal(1, client.RefreshCount);
+    }
+
+    [Fact]
+    public async Task SearchText_UsesSanitizedTextAndDoesNotChangeCloseAllScope()
+    {
+        FakeConnectionClient client = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink(),
+            text => text.Replace("host", "visible-destination", StringComparison.Ordinal));
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        viewModel.SearchText = "host";
+        Assert.Empty(viewModel.Connections);
+        Assert.True(viewModel.CanCloseConnections);
+        Assert.Equal("No matches", viewModel.EmptyStateText);
+
+        await viewModel.CloseAllConnectionsAsync(CancellationToken.None);
+        Assert.True(client.CloseAllCalled);
+        Assert.False(viewModel.IsClosing);
+        viewModel.SearchText = "VISIBLE-DESTINATION";
+        Assert.Equal(2, viewModel.Connections.Count);
+    }
+
+    [Fact]
+    public async Task EmptyState_DistinguishesInitialEmptyAndUnavailableSnapshots()
+    {
+        FakeConnectionClient client = new() { Connections = [] };
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
+        Assert.Equal("Not refreshed", viewModel.EmptyStateText);
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.Equal("No active connections", viewModel.EmptyStateText);
+        Assert.True(viewModel.HasEmptyState);
+        Assert.False(viewModel.CanCloseConnections);
+
+        client.ExceptionToThrow = new HttpRequestException("Controller unavailable.");
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.Equal("Unavailable", viewModel.EmptyStateText);
+        Assert.False(viewModel.IsRefreshing);
+        Assert.True(viewModel.HasEmptyState);
+    }
+
+    [Fact]
+    public async Task CloseAllConnectionsAsync_DisablesCloseActionsUntilTheOperationCompletes()
+    {
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeConnectionClient client = new() { CloseAllResult = release.Task };
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Task close = viewModel.CloseAllConnectionsAsync(CancellationToken.None);
+        Assert.True(viewModel.IsClosing);
+        Assert.False(viewModel.CanCloseConnections);
+
+        release.SetResult();
+        await close;
+        Assert.False(viewModel.IsClosing);
+        Assert.True(viewModel.CanCloseConnections);
+    }
+
     [Fact]
     public async Task RefreshConnectionsAsync_OutOfOrderSuccessKeepsTheNewestSnapshot()
     {
@@ -17,11 +103,14 @@ public sealed class ConnectionsViewModelTests
         ConnectionsViewModel viewModel = new(
             new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
         Task first = viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.True(viewModel.IsRefreshing);
         await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.True(viewModel.IsRefreshing);
 
         stale.SetResult([]);
         await first;
 
+        Assert.False(viewModel.IsRefreshing);
         Assert.Equal(client.Connections.Count, viewModel.Connections.Count);
         Assert.Equal("2 active", viewModel.ConnectionStatusText);
     }
@@ -285,6 +374,9 @@ public sealed class ConnectionsViewModelTests
                 "Connections.Status.Unavailable" => "Unavailable",
                 "Connections.Status.Closed" => "Closed",
                 "Connections.Status.ClosedAll" => "Closed all",
+                "Connections.Empty" => "No active connections",
+                "Connections.NoMatches" => "No matches",
+                "Connections.FilterCount.Format" => "{0} of {1}",
                 _ => key,
             };
         }
@@ -295,7 +387,7 @@ public sealed class ConnectionsViewModelTests
     {
         /// <summary>Gets fake active connections.</summary>
         /// <value>Configured active connections.</value>
-        public IReadOnlyList<ActiveConnection> Connections { get; } =
+        public IReadOnlyList<ActiveConnection> Connections { get; init; } =
         [
             new("1", "proc", "host", "rule", "payload", "proxy", 10, 20, DateTimeOffset.UnixEpoch),
             new("2", "proc", "host", "rule", "payload", "proxy", 30, 40, DateTimeOffset.UnixEpoch),
@@ -320,6 +412,8 @@ public sealed class ConnectionsViewModelTests
         /// <summary>Gets whether close-all was called.</summary>
         /// <value>True when close-all was called.</value>
         public bool CloseAllCalled { get; private set; }
+
+        public Task CloseAllResult { get; init; } = Task.CompletedTask;
 
         /// <summary>Gets fake active connections.</summary>
         /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
@@ -360,7 +454,7 @@ public sealed class ConnectionsViewModelTests
         public Task CloseAllConnectionsAsync(CancellationToken cancellationToken)
         {
             CloseAllCalled = true;
-            return Task.CompletedTask;
+            return CloseAllResult;
         }
     }
 

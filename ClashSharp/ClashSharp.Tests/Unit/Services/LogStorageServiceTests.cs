@@ -9,6 +9,24 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class LogStorageServiceTests
 {
     [Fact]
+    public void AppendLog_RedactsAndBoundsEveryFieldBeforePersistence()
+    {
+        using TempDatabase tempDatabase = new();
+        LogStorageService service = new(tempDatabase.Path, () => "profile-a");
+        service.AppendLog(
+            "Info",
+            "https://user:private-source@example.test",
+            "request failed: password=private-password",
+            "Authorization: Bearer private-token\n" + new string('x', 100_000));
+
+        LogRecord record = Assert.Single(service.GetRecentLogs(1));
+        Assert.DoesNotContain("private-source", record.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-password", record.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-token", record.Detail, StringComparison.Ordinal);
+        Assert.InRange(record.Detail.Length, 1, ClashSharp.Diagnostics.RuntimeLogText.MaximumCharacters);
+    }
+
+    [Fact]
     public void Constructor_DoesNotCreateDatabaseDirectory()
     {
         string root = Path.Combine(

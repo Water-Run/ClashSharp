@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using ClashSharp.Diagnostics;
 using ClashSharp.Model;
 using Microsoft.Data.Sqlite;
 
@@ -480,6 +481,12 @@ public sealed partial class LogStorageService
             throw new ArgumentException("Log message must not be whitespace.", nameof(message));
         }
 
+        // All producers, including runtime/HTTP errors, cross the same boundary before SQL persistence.
+        string safeLevel = PersistedLogText.Normalize(level);
+        string safeSource = PersistedLogText.Normalize(source);
+        string safeMessage = PersistedLogText.Normalize(message);
+        string safeDetail = PersistedLogText.Normalize(detail ?? string.Empty);
+
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -490,10 +497,10 @@ public sealed partial class LogStorageService
                 null,
                 "INSERT INTO Logs (CreatedAtUnixTime, Level, Source, Message, Detail) VALUES ($createdAt, $level, $source, $message, $detail);",
                 ("$createdAt", DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
-                ("$level", level),
-                ("$source", source),
-                ("$message", message),
-                ("$detail", detail ?? string.Empty));
+                ("$level", safeLevel),
+                ("$source", safeSource),
+                ("$message", safeMessage),
+                ("$detail", safeDetail));
         }
     }
 

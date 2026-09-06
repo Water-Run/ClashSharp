@@ -39,9 +39,14 @@ public static class RuntimeLogText
 
             buffer[destinationIndex++] = char.IsLowSurrogate(character)
                 ? '\uFFFD'
-                : char.IsControl(character) ? ' ' : character;
+                : char.IsControl(character) || IsDirectionControl(character) ? ' ' : character;
         }
 
         return new string(buffer[..destinationIndex]).Trim();
     }
+
+    private static bool IsDirectionControl(char character) =>
+        character is '\u061C' or '\u200E' or '\u200F'
+            or (>= '\u202A' and <= '\u202E')
+            or (>= '\u2066' and <= '\u2069');
 }

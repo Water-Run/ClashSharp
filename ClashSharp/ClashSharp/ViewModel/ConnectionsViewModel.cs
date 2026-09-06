@@ -38,6 +38,12 @@ internal sealed class ConnectionsViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="Connections"/>.</summary>
     private IReadOnlyList<ActiveConnectionDisplayRow> _connections = [];
+    private IReadOnlyList<ActiveConnectionDisplayRow> _allConnections = [];
+    private string _searchText = string.Empty;
+    private int _refreshCount;
+    private int _closeCount;
+    private bool _hasObservation;
+    private bool _isAvailable;
 
     /// <summary>Backing field for <see cref="ConnectionStatusText"/>.</summary>
     private string _connectionStatusText = string.Empty;
@@ -99,6 +105,55 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <summary>Gets the close-one command label.</summary>
     /// <value>Localized command label.</value>
     public string CloseConnectionText => _localization.GetString("Command.Close");
+
+    /// <summary>Gets the localized description of searchable connection fields.</summary>
+    public string SearchPlaceholderText => _localization.GetString("Connections.Search");
+
+    /// <summary>Gets the accessible description of uploaded traffic.</summary>
+    public string UploadText => _localization.GetString("Connections.Upload");
+
+    /// <summary>Gets the accessible description of downloaded traffic.</summary>
+    public string DownloadText => _localization.GetString("Connections.Download");
+
+    /// <summary>Gets or sets the local filter applied to visible, sanitized connection fields.</summary>
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            string search = value ?? string.Empty;
+            if (SetProperty(ref _searchText, search.Length > 256 ? search[..256] : search))
+            {
+                ApplyFilter();
+            }
+        }
+    }
+
+    /// <summary>Gets whether at least one explicit refresh is still running.</summary>
+    public bool IsRefreshing => _refreshCount > 0;
+
+    /// <summary>Gets whether a connection close operation is still running.</summary>
+    public bool IsClosing => _closeCount > 0;
+
+    /// <summary>Gets close-action availability against the full snapshot, independently of the visible filter.</summary>
+    public bool CanCloseConnections => _isAvailable && _allConnections.Count > 0 && !IsClosing;
+
+    /// <summary>Gets whether the page should explain why no rows are displayed.</summary>
+    public bool HasEmptyState => !IsRefreshing && Connections.Count == 0;
+
+    /// <summary>Gets a distinct explanation for initial, unavailable, empty, or filtered-empty state.</summary>
+    public string EmptyStateText => !_hasObservation
+        ? _localization.GetString("Connections.Status.NotRefreshed")
+        : !_isAvailable
+            ? _localization.GetString("Connections.Status.Unavailable")
+            : _localization.GetString(_allConnections.Count == 0 ? "Connections.Empty" : "Connections.NoMatches");
+
+    /// <summary>Gets the displayed row count relative to the full snapshot.</summary>
+    public string FilterCountText => string.Format(
+        CultureInfo.CurrentCulture,
+        _localization.GetString("Connections.FilterCount.Format"),
+        Connections.Count,
+        _allConnections.Count);
 
     /// <summary>Gets active connection rows.</summary>
     /// <value>Active connection rows; never null.</value>
@@ -192,6 +247,8 @@ internal sealed class ConnectionsViewModel : ObservableObject
     {
         cancellationToken.ThrowIfCancellationRequested();
         long revision = ++_snapshotRevision;
+        _refreshCount++;
+        NotifyViewState();
         try
         {
             IReadOnlyList<ActiveConnection> connections = await _connectionClient.GetActiveConnectionsAsync(cancellationToken);
@@ -216,14 +273,22 @@ internal sealed class ConnectionsViewModel : ObservableObject
 
             return null;
         }
+        finally
+        {
+            _refreshCount--;
+            NotifyViewState();
+        }
     }
 
     private void ApplyConnections(IReadOnlyList<ActiveConnection> connections)
     {
         ++_snapshotRevision;
-        Connections = connections
+        _hasObservation = true;
+        _isAvailable = true;
+        _allConnections = connections
             .Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter))
             .ToArray();
+        ApplyFilter();
         ConnectionStatusText = string.Format(
             CultureInfo.CurrentCulture,
             _localization.GetString("Connections.Status.Active.Format"),
@@ -233,9 +298,35 @@ internal sealed class ConnectionsViewModel : ObservableObject
     private void ApplyUnavailableStatus(string detail)
     {
         ++_snapshotRevision;
-        Connections = [];
+        _hasObservation = true;
+        _isAvailable = false;
+        _allConnections = [];
+        ApplyFilter();
         ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
         _log.Append("Warning", "Connections", ConnectionStatusText, detail);
+    }
+
+    private void ApplyFilter()
+    {
+        string query = SearchText.Trim();
+        Connections = query.Length == 0
+            ? _allConnections
+            : _allConnections.Where(row =>
+                row.ProcessNameDisplay.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || row.HostDisplay.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || row.RuleDisplay.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || row.ProxyNameDisplay.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
+        NotifyViewState();
+    }
+
+    private void NotifyViewState()
+    {
+        OnPropertyChanged(nameof(IsRefreshing));
+        OnPropertyChanged(nameof(IsClosing));
+        OnPropertyChanged(nameof(CanCloseConnections));
+        OnPropertyChanged(nameof(HasEmptyState));
+        OnPropertyChanged(nameof(EmptyStateText));
+        OnPropertyChanged(nameof(FilterCountText));
     }
 
     /// <summary>Closes one active connection and refreshes the visible list.</summary>
@@ -244,6 +335,9 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <returns>A task that completes after close and refresh finish.</returns>
     public async Task CloseConnectionAsync(ActiveConnection connection, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        _closeCount++;
+        NotifyViewState();
         try
         {
             await _connectionClient.CloseConnectionAsync(connection.Id, cancellationToken);
@@ -264,6 +358,11 @@ internal sealed class ConnectionsViewModel : ObservableObject
             ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
             _log.Append("Warning", "Connections", ConnectionStatusText, exception.Message);
         }
+        finally
+        {
+            _closeCount--;
+            NotifyViewState();
+        }
     }
 
     /// <summary>Closes all active connections and refreshes the visible list.</summary>
@@ -271,6 +370,9 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <returns>A task that completes after close and refresh finish.</returns>
     public async Task CloseAllConnectionsAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        _closeCount++;
+        NotifyViewState();
         try
         {
             await _connectionClient.CloseAllConnectionsAsync(cancellationToken);
@@ -290,6 +392,11 @@ internal sealed class ConnectionsViewModel : ObservableObject
         {
             ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
             _log.Append("Warning", "Connections", ConnectionStatusText, exception.Message);
+        }
+        finally
+        {
+            _closeCount--;
+            NotifyViewState();
         }
     }
 

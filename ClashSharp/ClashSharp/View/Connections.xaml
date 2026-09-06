@@ -3,14 +3,20 @@
     x:Class="ClashSharp.View.Connections"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:ClashSharp.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Loaded="Page_Loaded"
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Page.Resources>
+
     <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -28,44 +34,67 @@
                     <FontIcon Glyph="&#xE72C;" />
                 </AppBarButton.Icon>
             </AppBarButton>
-            <AppBarButton x:Name="CloseAllConnectionsButton" Label="{Binding CloseAllConnectionsText}" Click="CloseAllConnectionsButton_Click">
+            <AppBarButton x:Name="CloseAllConnectionsButton" Label="{Binding CloseAllConnectionsText}" IsEnabled="{Binding CanCloseConnections}" Click="CloseAllConnectionsButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE711;" />
                 </AppBarButton.Icon>
             </AppBarButton>
         </CommandBar>
 
-        <TextBlock Grid.Row="2" x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <ProgressRing Grid.Row="1" Width="20" Height="20" HorizontalAlignment="Left" IsActive="{Binding IsClosing}" IsHitTestVisible="False" />
+
+        <TextBox Grid.Row="2" MaxLength="256" Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 PlaceholderText="{Binding SearchPlaceholderText}" AutomationProperties.Name="{Binding SearchPlaceholderText}" />
+
+        <Grid Grid.Row="3" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+            <TextBlock Grid.Column="1" Text="{Binding FilterCountText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Grid>
 
         <ListView
             x:Name="ConnectionsList"
-            Grid.Row="3"
+            Grid.Row="4"
             HorizontalContentAlignment="Stretch"
+            SelectionMode="None"
             ItemsSource="{Binding Connections}">
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Grid Padding="4,10" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="{Binding ProcessNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Grid.Column="1" Text="{Binding HostDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Grid.Column="2" Text="{Binding RuleDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Column="3" Text="{Binding ProxyNameDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Grid.Column="4" Text="{Binding UploadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="5" Text="{Binding DownloadDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{Binding HostDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                                <Run Text="{Binding ProcessNameDisplay}" /><Run Text=" · " /><Run Text="{Binding ProxyNameDisplay}" />
+                            </TextBlock>
+                            <TextBlock Text="{Binding RuleDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE898;" FontSize="12" AutomationProperties.AccessibilityView="Raw" />
+                                <TextBlock Text="{Binding UploadDisplay}" AutomationProperties.HelpText="{Binding DataContext.UploadText, ElementName=ConnectionsList}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE896;" FontSize="12" AutomationProperties.AccessibilityView="Raw" />
+                                <TextBlock Text="{Binding DownloadDisplay}" AutomationProperties.HelpText="{Binding DataContext.DownloadText, ElementName=ConnectionsList}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </StackPanel>
                         <Button
-                            Grid.Column="6"
+                            Grid.Column="2"
                             Padding="8,4"
                             HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            IsEnabled="{Binding DataContext.CanCloseConnections, ElementName=ConnectionsList}"
                             AutomationProperties.Name="{Binding DataContext.CloseConnectionText, ElementName=ConnectionsList}"
+                            ToolTipService.ToolTip="{Binding DataContext.CloseConnectionText, ElementName=ConnectionsList}"
                             Click="CloseConnectionButton_Click">
                             <FontIcon Glyph="&#xE711;" FontSize="14" />
                         </Button>
@@ -73,5 +102,11 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+        <ProgressRing Grid.Row="4" IsActive="{Binding IsRefreshing}" Width="32" Height="32" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0" IsHitTestVisible="False" />
+        <StackPanel Grid.Row="4" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12"
+                    Visibility="{Binding HasEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <FontIcon Glyph="&#xE839;" FontSize="32" Opacity="0.5" AutomationProperties.AccessibilityView="Raw" />
+            <TextBlock Text="{Binding EmptyStateText}" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="420" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
     </Grid>
 </Page>
