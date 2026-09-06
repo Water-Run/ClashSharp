@@ -16,6 +16,7 @@
     <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
+    <ProjectReference Include="..\ClashSharp.Installer.Core\ClashSharp.Installer.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj" />
     <ProjectReference Include="..\ClashSharp.RecoveryWatchdog\ClashSharp.RecoveryWatchdog.csproj" Aliases="RecoveryWatchdog" />
     <ProjectReference Include="..\ClashSharp.StartupProbe\ClashSharp.StartupProbe.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />

@@ -12,7 +12,7 @@ namespace ClashSharp.Installer.Transactions;
 public sealed class FileInstallerTransactionStore : IInstallerTransactionStore, IDisposable
 {
     /// <summary>Gets the fixed journal filename below the protected root.</summary>
-    public const string JournalFileName = "transaction-v2.json";
+    public const string JournalFileName = InstallerStateLayout.JournalFileName;
 
     private readonly SemaphoreSlim _ioGate = new(1, 1);
     private readonly string _rootPath;

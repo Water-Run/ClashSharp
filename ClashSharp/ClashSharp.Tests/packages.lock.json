@@ -629,6 +629,9 @@
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.3, )"
         }
       },
+      "clashsharp.installer.core": {
+        "type": "Project"
+      },
       "clashsharp.mihomoservice": {
         "type": "Project",
         "dependencies": {

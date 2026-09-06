@@ -14,10 +14,6 @@ public sealed class WindowsInstallerTransactionRootGuard :
     IInstallerTransactionRootGuard,
     IDisposable
 {
-    private const string ProductDirectoryName = "ClashSharp";
-    private const string InstallerDirectoryName = "Installer";
-    private const string StateVersionDirectoryName = "v2";
-
     private readonly object _gate = new();
     private readonly string _programDataPath;
     private readonly string _targetSid;
@@ -43,9 +39,9 @@ public sealed class WindowsInstallerTransactionRootGuard :
         _createMissingProtectedDirectories = createMissingProtectedDirectories;
         RootPath = NormalizeDriveQualifiedPath(Path.Combine(
             _programDataPath,
-            ProductDirectoryName,
-            InstallerDirectoryName,
-            StateVersionDirectoryName));
+            InstallerStateLayout.ProductDirectoryName,
+            InstallerStateLayout.InstallerDirectoryName,
+            InstallerStateLayout.VersionDirectoryName));
         if (!IsStrictDescendant(_programDataPath, RootPath))
         {
             throw new InstallerProtocolException(

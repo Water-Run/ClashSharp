@@ -1,38 +1,35 @@
 using System;
 using System.IO;
 using System.Security;
+using ClashSharp.Installer.Contracts;
 
 namespace ClashSharp.Service;
 
-/// <summary>Classifies the Installer-owned public transaction marker observed at App startup.</summary>
+/// <summary>Classifies current and legacy Installer-owned transaction state observed at App startup.</summary>
 internal enum InstallerTransactionState
 {
-    /// <summary>No public transaction marker or Installer directory exists.</summary>
+    /// <summary>Neither a current journal nor a legacy transaction marker exists.</summary>
     Clear,
 
-    /// <summary>An ordinary readable public transaction marker exists.</summary>
+    /// <summary>An ordinary readable journal or legacy transaction marker exists.</summary>
     Pending,
 
     /// <summary>The fixed marker path cannot be inspected safely or unambiguously.</summary>
     Invalid,
 }
 
-/// <summary>Reads the Installer-owned public transaction state without changing machine state.</summary>
+/// <summary>Reads Installer-owned transaction presence without changing machine state.</summary>
 internal interface IInstallerTransactionStateReader
 {
-    /// <summary>Observes the fixed public marker once.</summary>
+    /// <summary>Observes the fixed current and legacy transaction paths once.</summary>
     InstallerTransactionState Read();
 }
 
 /// <summary>
-/// Observes the fixed ProgramData Installer transaction marker without parsing or repairing it.
+/// Observes fixed ProgramData Installer transaction paths without parsing or repairing their content.
 /// </summary>
 internal sealed class InstallerTransactionStateReader : IInstallerTransactionStateReader
 {
-    internal const string ProductDirectoryName = "ClashSharp";
-    internal const string InstallerDirectoryName = "Installer";
-    internal const string PublicMarkerFileName = "transaction.json";
-
     private readonly string? _commonApplicationDataRoot;
 
     /// <summary>Creates the production reader whose root comes from the Windows well-known folder.</summary>
@@ -55,7 +52,7 @@ internal sealed class InstallerTransactionStateReader : IInstallerTransactionSta
                 ?? Environment.GetFolderPath(
                     Environment.SpecialFolder.CommonApplicationData,
                     Environment.SpecialFolderOption.DoNotVerify);
-            if (string.IsNullOrWhiteSpace(root))
+            if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root))
             {
                 return InstallerTransactionState.Invalid;
             }
@@ -67,7 +64,7 @@ internal sealed class InstallerTransactionStateReader : IInstallerTransactionSta
                 return InstallerTransactionState.Invalid;
             }
 
-            string productRoot = Path.Combine(fullRoot, ProductDirectoryName);
+            string productRoot = Path.Combine(fullRoot, InstallerStateLayout.ProductDirectoryName);
             ObservedPathKind productKind = ObservePath(productRoot);
             if (productKind == ObservedPathKind.Missing)
             {
@@ -79,7 +76,7 @@ internal sealed class InstallerTransactionStateReader : IInstallerTransactionSta
                 return InstallerTransactionState.Invalid;
             }
 
-            string installerRoot = Path.Combine(productRoot, InstallerDirectoryName);
+            string installerRoot = Path.Combine(productRoot, InstallerStateLayout.InstallerDirectoryName);
             ObservedPathKind installerKind = ObservePath(installerRoot);
             if (installerKind == ObservedPathKind.Missing)
             {
@@ -91,27 +88,27 @@ internal sealed class InstallerTransactionStateReader : IInstallerTransactionSta
                 return InstallerTransactionState.Invalid;
             }
 
-            string markerPath = Path.Combine(installerRoot, PublicMarkerFileName);
-            ObservedPathKind markerKind = ObservePath(markerPath);
-            if (markerKind == ObservedPathKind.Missing)
+            InstallerTransactionState legacyState = ObserveMarker(Path.Combine(
+                installerRoot,
+                InstallerStateLayout.LegacyMarkerFileName));
+            if (legacyState != InstallerTransactionState.Clear)
+            {
+                return legacyState;
+            }
+
+            string versionRoot = Path.Combine(installerRoot, InstallerStateLayout.VersionDirectoryName);
+            ObservedPathKind versionKind = ObservePath(versionRoot);
+            if (versionKind == ObservedPathKind.Missing)
             {
                 return InstallerTransactionState.Clear;
             }
 
-            if (markerKind != ObservedPathKind.OrdinaryFile)
+            if (versionKind != ObservedPathKind.OrdinaryDirectory)
             {
                 return InstallerTransactionState.Invalid;
             }
 
-            using FileStream marker = new(
-                markerPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 1,
-                FileOptions.SequentialScan);
-            _ = marker.Length;
-            return InstallerTransactionState.Pending;
+            return ObserveMarker(Path.Combine(versionRoot, InstallerStateLayout.JournalFileName));
         }
         catch (Exception exception) when (exception is
             IOException or
@@ -123,6 +120,32 @@ internal sealed class InstallerTransactionStateReader : IInstallerTransactionSta
         {
             return InstallerTransactionState.Invalid;
         }
+    }
+
+    private static InstallerTransactionState ObserveMarker(string markerPath)
+    {
+        ObservedPathKind markerKind = ObservePath(markerPath);
+        if (markerKind == ObservedPathKind.Missing)
+        {
+            return InstallerTransactionState.Clear;
+        }
+
+        if (markerKind != ObservedPathKind.OrdinaryFile)
+        {
+            return InstallerTransactionState.Invalid;
+        }
+
+        // Presence is sufficient, including malformed or Verified-but-not-cleared journals.
+        // Do not obstruct the authority's atomic replacement while observing that presence.
+        using FileStream marker = new(
+            markerPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 1,
+            FileOptions.SequentialScan);
+        _ = marker.Length;
+        return InstallerTransactionState.Pending;
     }
 
     private static ObservedPathKind ObservePath(string path)

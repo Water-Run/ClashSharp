@@ -248,7 +248,7 @@ public sealed class InstallerOwnershipArchitectureTests
         Assert.Contains(repairText, description, StringComparison.Ordinal);
     }
 
-    /// <summary>The App observes the public transaction marker only after acquiring its lifetime barrier.</summary>
+    /// <summary>The App observes transaction presence after its lifetime barrier without Installer authority.</summary>
     [Fact]
     public void InstallerTransactionGate_IsReadOnlyAndPrecedesRuntimeMutation()
     {
@@ -268,9 +268,10 @@ public sealed class InstallerOwnershipArchitectureTests
             StringComparison.Ordinal);
 
         Assert.Contains("CommonApplicationData", reader, StringComparison.Ordinal);
-        Assert.Contains("ProductDirectoryName = \"ClashSharp\"", reader, StringComparison.Ordinal);
-        Assert.Contains("InstallerDirectoryName = \"Installer\"", reader, StringComparison.Ordinal);
-        Assert.Contains("PublicMarkerFileName = \"transaction.json\"", reader, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            typeof(ClashSharpUi::ClashSharp.Service.InstallerTransactionStateReader)
+                .Assembly.GetReferencedAssemblies(),
+            static assembly => assembly.Name?.StartsWith("ClashSharp.Installer", StringComparison.Ordinal) == true);
         Assert.Contains("FileAccess.Read", reader, StringComparison.Ordinal);
         Assert.DoesNotContain("File.Write", reader, StringComparison.Ordinal);
         Assert.DoesNotContain("File.Delete", reader, StringComparison.Ordinal);
