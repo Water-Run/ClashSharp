@@ -63,6 +63,8 @@ public sealed class WindowsInstallerReleaseVerifierTests
     [InlineData("ClashSharp.exe")]
     [InlineData("ClashSharp.Installer.dll")]
     [InlineData("installer.exe")]
+    [InlineData("ClashSharp.Installer.exe")]
+    [InlineData("ClashSharp-Installer-Development-Unsigned.exe")]
     public void ExecutableNameMustMatchThePublishedInstaller(string executableName)
     {
         WindowsPayloadFixture.AssertWindows11X64();
@@ -87,5 +89,22 @@ public sealed class WindowsInstallerReleaseVerifierTests
                 fixture.ExecutablePath));
 
         Assert.Equal("installer.release.manifest_missing", exception.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData("ClashSharp-Installer.exe")]
+    [InlineData(@"\\server\release\ClashSharp-Installer.exe")]
+    [InlineData(@"\\?\C:\release\ClashSharp-Installer.exe")]
+    public void RelativeNetworkAndDevicePathsAreRejectedBeforePayloadAccess(string executablePath)
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using var fixture = new WindowsPayloadFixture(
+            createPayload: false,
+            removeCurrentUserCertificateOnDispose: false);
+
+        InstallerProtocolException exception = Assert.Throws<InstallerProtocolException>(() =>
+            new WindowsInstallerReleaseVerifier(fixture.ManifestBytes, executablePath));
+
+        Assert.Equal("installer.release.executable_path_invalid", exception.DiagnosticCode);
     }
 }

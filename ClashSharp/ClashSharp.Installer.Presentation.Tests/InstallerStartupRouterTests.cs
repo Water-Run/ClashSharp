@@ -11,6 +11,56 @@ public sealed class InstallerStartupRouterTests
         "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
     [Fact]
+    public void PayloadAuditCreatesOnlyTheReadOnlyComposition()
+    {
+        int auditCalls = 0;
+        int exitCode = InstallerStartupRouter.Run(
+            ["--verify-payload"],
+            _ => throw new InvalidOperationException("Elevation must not be composed."),
+            () => throw new InvalidOperationException("The UI must not be composed."),
+            invalidArgumentsExitCode: 2,
+            runPayloadAudit: () =>
+            {
+                auditCalls++;
+                return 23;
+            });
+
+        Assert.Equal(23, exitCode);
+        Assert.Equal(1, auditCalls);
+    }
+
+    [Theory]
+    [InlineData("--VERIFY-PAYLOAD")]
+    [InlineData("--verify-payload=true")]
+    [InlineData("--verify-payload", "--machine-helper")]
+    [InlineData("--machine-helper", "--verify-payload")]
+    [InlineData("--verify-payload", "--verify-payload")]
+    [InlineData("--verify-payload", "unexpected")]
+    public void InvalidPayloadAuditGrammarCreatesNoComposition(params string[] arguments)
+    {
+        int exitCode = InstallerStartupRouter.Run(
+            arguments,
+            _ => throw new InvalidOperationException("Elevation must not be composed."),
+            () => throw new InvalidOperationException("The UI must not be composed."),
+            invalidArgumentsExitCode: 2,
+            runPayloadAudit: () => throw new InvalidOperationException("Audit must not run."));
+
+        Assert.Equal(2, exitCode);
+    }
+
+    [Fact]
+    public void UnsupportedPayloadAuditNeverFallsBackToTheUserInterface()
+    {
+        int exitCode = InstallerStartupRouter.Run(
+            ["--verify-payload"],
+            _ => throw new InvalidOperationException("Elevation must not be composed."),
+            () => throw new InvalidOperationException("The UI must not be composed."),
+            invalidArgumentsExitCode: 2);
+
+        Assert.Equal(2, exitCode);
+    }
+
+    [Fact]
     public void OrdinaryLaunchCreatesOnlyTheUserInterfaceComposition()
     {
         int helperCalls = 0;

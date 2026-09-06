@@ -62,7 +62,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
         if (!IsCanonicalDriveQualifiedPath(fullPath)
             || !string.Equals(
                 Path.GetFileName(fullPath),
-                "ClashSharp.Installer.exe",
+                InstallerArtifactNames.PublishedExecutable,
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InstallerProtocolException(

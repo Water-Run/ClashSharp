@@ -29,14 +29,21 @@ public sealed class WindowsInstallerReleaseVerifier : IInstallerReleaseVerifier
             throw new InstallerProtocolException("installer.release.manifest_missing");
         }
 
-        string fullExecutablePath = executablePath is { } processPath
-            ? Path.GetFullPath(processPath)
-            : throw new InstallerProtocolException("installer.release.executable_path_invalid");
+        if (executablePath is null || !Path.IsPathFullyQualified(executablePath))
+        {
+            throw new InstallerProtocolException("installer.release.executable_path_invalid");
+        }
+
+        string fullExecutablePath = Path.GetFullPath(executablePath);
         string? executableDirectory = Path.GetDirectoryName(fullExecutablePath);
-        if (string.IsNullOrWhiteSpace(executableDirectory)
+        if (fullExecutablePath.Length < 3
+            || !char.IsAsciiLetter(fullExecutablePath[0])
+            || fullExecutablePath[1] != ':'
+            || fullExecutablePath[2] != Path.DirectorySeparatorChar
+            || string.IsNullOrWhiteSpace(executableDirectory)
             || !string.Equals(
                 Path.GetFileName(fullExecutablePath),
-                "ClashSharp.Installer.exe",
+                InstallerArtifactNames.PublishedExecutable,
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InstallerProtocolException("installer.release.executable_path_invalid");

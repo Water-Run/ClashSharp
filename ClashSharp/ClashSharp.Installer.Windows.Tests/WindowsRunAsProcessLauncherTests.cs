@@ -25,7 +25,7 @@ public sealed class WindowsRunAsProcessLauncherTests
         InstallerMachineHelperBootstrap bootstrap = Bootstrap();
         string executablePath = Path.Combine(
             Path.GetTempPath(),
-            "ClashSharp.Installer.exe");
+            "ClashSharp-Installer.exe");
 
         IWindowsElevatedHelperProcess actual = await launcher.StartAsync(
             executablePath,
@@ -109,11 +109,13 @@ public sealed class WindowsRunAsProcessLauncherTests
 
     [Theory]
     [InlineData(@"C:\release\installer.exe")]
+    [InlineData(@"C:\release\ClashSharp.Installer.exe")]
+    [InlineData(@"C:\release\ClashSharp-Installer-Development-Unsigned.exe")]
     [InlineData(@"ClashSharp.Installer.MachineHelper.exe")]
     [InlineData(@"C:\release\ClashSharp.Installer.MachineHelper.exe")]
     [InlineData(@"\\server\release\ClashSharp.Installer.MachineHelper.exe")]
-    [InlineData(@"\\server\release\ClashSharp.Installer.exe")]
-    [InlineData(@"\\?\C:\release\ClashSharp.Installer.exe")]
+    [InlineData(@"\\server\release\ClashSharp-Installer.exe")]
+    [InlineData(@"\\?\C:\release\ClashSharp-Installer.exe")]
     public async Task NoncanonicalExecutablePathFailsBeforeShellExecute(string executablePath)
     {
         WindowsPayloadFixture.AssertWindows11X64();
@@ -136,7 +138,7 @@ public sealed class WindowsRunAsProcessLauncherTests
 
     private static string ExecutablePath() => Path.Combine(
         Path.GetTempPath(),
-        "ClashSharp.Installer.exe");
+        "ClashSharp-Installer.exe");
 
     private static InstallerMachineHelperBootstrap Bootstrap()
     {

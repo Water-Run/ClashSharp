@@ -28,7 +28,7 @@ internal sealed class WindowsPayloadFixture : IDisposable
             "ClashSharp.Installer.Windows.Tests",
             Guid.NewGuid().ToString("N"));
         PayloadRoot = Path.Combine(RootDirectory, "payload");
-        ExecutablePath = Path.Combine(RootDirectory, "ClashSharp.Installer.exe");
+        ExecutablePath = Path.Combine(RootDirectory, "ClashSharp-Installer.exe");
 
         using ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var certificateRequest = new CertificateRequest(

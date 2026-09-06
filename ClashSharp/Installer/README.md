@@ -34,6 +34,13 @@ RID、CLR/host 文件和原生 x64 PE 头，再验证依赖的身份、签名、
 EXE 的“自包含单文件”指安装器运行环境，安装载荷仍在该目录。开发文件名明确含
 Development-Unsigned，另附标识文件；它不是正式发行版。
 
+打包结束会启动最终 EXE 的 --verify-payload 只读入口，实际加载自包含运行时与
+嵌入清单，验证相邻 payload 的精确文件集合、长度、摘要、MSIX 身份与内部
+machine 文件，然后释放全部文件句柄。成功时退出码为 0，重定向 stdout 可取得
+一条 JSON 收据；失败为 3，保留参数组合错误为 2。该入口不创建 UI，不提权、
+安装、信任证书或修改服务；它不代表 EXE 签名、目标平台和安装事务已经验收。
+正式提权入口只接受 ClashSharp-Installer.exe，开发标识文件名不能获得安装权限。
+
 CI 的 Offline Installer package 在干净 Windows runner 上执行以上完整打包，
 产物保留五天供检查。此检查验证构建和载荷，不代表 GUI 安装或故障恢复已经验收。
 

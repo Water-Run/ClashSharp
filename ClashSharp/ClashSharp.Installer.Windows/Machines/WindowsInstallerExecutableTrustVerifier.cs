@@ -146,7 +146,7 @@ internal sealed class WindowsInstallerExecutableTrustVerifier
             || fullPath[2] != Path.DirectorySeparatorChar
             || !string.Equals(
                 Path.GetFileName(fullPath),
-                "ClashSharp.Installer.exe",
+                InstallerArtifactNames.PublishedExecutable,
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InstallerProtocolException(

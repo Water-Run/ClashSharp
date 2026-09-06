@@ -84,8 +84,10 @@ public sealed class WindowsInstallerExecutableTrustVerifierTests
     }
 
     [Theory]
-    [InlineData("ClashSharp.Installer.exe")]
+    [InlineData("ClashSharp-Installer.exe")]
     [InlineData("C:\\Temp\\Another.exe")]
+    [InlineData("C:\\Temp\\ClashSharp.Installer.exe")]
+    [InlineData("C:\\Temp\\ClashSharp-Installer-Development-Unsigned.exe")]
     public async Task NoncanonicalExecutablePathIsRejected(string executablePath)
     {
         var authenticode = new RecordingAuthenticodeVerifier(ExpectedSigner);
@@ -156,7 +158,7 @@ public sealed class WindowsInstallerExecutableTrustVerifierTests
                 Path.GetTempPath(),
                 "ClashSharp-Installer-Trust-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_root);
-            ExecutablePath = Path.Combine(_root, "ClashSharp.Installer.exe");
+            ExecutablePath = Path.Combine(_root, "ClashSharp-Installer.exe");
             File.WriteAllBytes(ExecutablePath, [1, 2, 3, 4]);
         }
 

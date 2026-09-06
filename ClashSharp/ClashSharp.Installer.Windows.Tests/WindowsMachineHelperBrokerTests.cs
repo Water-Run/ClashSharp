@@ -42,7 +42,7 @@ public sealed class WindowsMachineHelperBrokerTests
         Assert.Equal(1, launcher.CallCount);
         Assert.Equal(4243, serverFactory.Server.VerifiedProcessId);
         Assert.Equal(4242, launcher.Bootstrap?.ParentProcessId);
-        Assert.Equal("ClashSharp.Installer.exe", Path.GetFileName(trust.LastPath));
+        Assert.Equal("ClashSharp-Installer.exe", Path.GetFileName(trust.LastPath));
         requests.Position = 0;
         Assert.Equal(
             prepare,
@@ -189,7 +189,7 @@ public sealed class WindowsMachineHelperBrokerTests
         IWindowsMachineHelperServerFactory serverFactory,
         IWindowsRunAsProcessLauncher launcher) =>
         new(
-            Path.Combine(Path.GetTempPath(), "ClashSharp.Installer.exe"),
+            Path.Combine(Path.GetTempPath(), "ClashSharp-Installer.exe"),
             trustVerifier,
             serverFactory,
             launcher,

@@ -33,7 +33,7 @@ public sealed class WindowsMachineHelperParentProcessVerifierTests
     {
         string expected = Path.Combine(
             Path.GetTempPath(),
-            "ClashSharp.Installer.exe");
+            "ClashSharp-Installer.exe");
         var native = new FakeParentNative
         {
             ImagePath = Path.Combine(Path.GetTempPath(), "different.exe"),
@@ -53,7 +53,7 @@ public sealed class WindowsMachineHelperParentProcessVerifierTests
     {
         string expected = Path.Combine(
             Path.GetTempPath(),
-            "ClashSharp.Installer.exe");
+            "ClashSharp-Installer.exe");
         var native = new FakeParentNative
         {
             ImagePath = expected,
@@ -73,7 +73,7 @@ public sealed class WindowsMachineHelperParentProcessVerifierTests
     {
         string expected = Path.Combine(
             Path.GetTempPath(),
-            "ClashSharp.Installer.exe");
+            "ClashSharp-Installer.exe");
         var native = new FakeParentNative
         {
             Failure = new Win32Exception(5, "sensitive path"),
@@ -94,7 +94,7 @@ public sealed class WindowsMachineHelperParentProcessVerifierTests
     {
         string expected = Path.Combine(
             Path.GetTempPath(),
-            "ClashSharp.Installer.exe");
+            "ClashSharp-Installer.exe");
         var native = new FakeParentNative
         {
             ImagePath = expected,

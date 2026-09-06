@@ -13,7 +13,7 @@ public sealed class WindowsInstallerMachineHelperTests
         InstallerProtocolException exception = await Assert.ThrowsAsync<
             InstallerProtocolException>(() => WindowsInstallerMachineHelper.RunAsync(
                 Bootstrap(),
-                @"C:\Release\ClashSharp.Installer.exe",
+                @"C:\Release\ClashSharp-Installer.exe",
                 "{}"u8.ToArray(),
                 CancellationToken.None));
 
@@ -29,7 +29,7 @@ public sealed class WindowsInstallerMachineHelperTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             WindowsInstallerMachineHelper.RunAsync(
                 Bootstrap(),
-                @"C:\Release\ClashSharp.Installer.exe",
+                @"C:\Release\ClashSharp-Installer.exe",
                 "{}"u8.ToArray(),
                 cancellation.Token));
     }

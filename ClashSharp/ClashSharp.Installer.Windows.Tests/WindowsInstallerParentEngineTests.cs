@@ -287,7 +287,7 @@ public sealed class WindowsInstallerParentEngineTests
         InstallerProtocolException exception = Assert.Throws<InstallerProtocolException>(() =>
             WindowsInstallerParentEngine.CreateDefault(
                 "{}"u8.ToArray(),
-                @"C:\Release\ClashSharp.Installer.exe"));
+                @"C:\Release\ClashSharp-Installer.exe"));
 
         Assert.Equal("installer.release.manifest_json_invalid", exception.DiagnosticCode);
     }

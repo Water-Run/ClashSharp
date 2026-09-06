@@ -1,7 +1,11 @@
+using System.IO;
+using System.Text.Json;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
+using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Presentation;
 using ClashSharp.Installer.Runtime;
+using ClashSharp.Installer.Windows.Files;
 using ClashSharp.Installer.Windows.Machines;
 
 namespace ClashSharp.Installer;
@@ -24,7 +28,42 @@ internal static class Program
                 application.InitializeComponent();
                 return application.Run();
             },
-            invalidArgumentsExitCode: InvalidMachineHelperArgumentsExitCode);
+            invalidArgumentsExitCode: InvalidMachineHelperArgumentsExitCode,
+            runPayloadAudit: RunPayloadAudit);
+    }
+
+    private static int RunPayloadAudit()
+    {
+        try
+        {
+            EmbeddedInstallerReleaseManifest release = EmbeddedInstallerReleaseManifest.Load();
+            string executableDirectory = Path.GetDirectoryName(Environment.ProcessPath)
+                ?? throw new InstallerProtocolException("installer.release.executable_path_invalid");
+            var auditor = new WindowsInstallerPayloadAuditor(
+                release.Bytes,
+                Path.Combine(executableDirectory, "payload"));
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            InstallerPayloadAuditResult result = auditor.AuditAsync(cancellation.Token)
+                .GetAwaiter().GetResult();
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                schemaVersion = 1,
+                status = "passed",
+                publishedExecutable = InstallerArtifactNames.PublishedExecutable,
+                packageVersion = result.PackageVersion,
+                payloadSha256 = result.PayloadSha256,
+                fileCount = result.FileCount,
+                totalBytes = result.TotalBytes,
+                machineFileCount = result.MachineFileCount,
+            }));
+            return 0;
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            // Keep process diagnostics bounded and free of paths, identities, and exception text.
+            Console.WriteLine("{\"schemaVersion\":1,\"status\":\"failed\",\"code\":\"installer.release.payload_audit_failed\"}");
+            return MachineHelperFailedExitCode;
+        }
     }
 
     private static int RunMachineHelper(InstallerMachineHelperBootstrap bootstrap)

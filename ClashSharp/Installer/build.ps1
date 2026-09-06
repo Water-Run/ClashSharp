@@ -24,6 +24,7 @@ $signingDir = Join-Path $installerRoot "signing"
 $installerTargetRoot = Join-Path $repoRoot "artifacts\installer"
 $packagingStagingRoot = Join-Path $installerTargetRoot "packaging-staging"
 $releaseDir = Join-Path $installerTargetRoot "release"
+$publishedExecutableName = 'ClashSharp-Installer.exe'
 $packagingContractModule = Join-Path $installerRoot "PackagingContract.psm1"
 
 $packagingContractModuleItem = Get-Item -LiteralPath $packagingContractModule -Force
@@ -873,7 +874,7 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
         }
 
         # The official filename appears only after the staged executable is signed and verified.
-        $installerExecutable = Join-Path $promotionStagingRoot "ClashSharp-Installer.exe"
+        $installerExecutable = Join-Path $promotionStagingRoot $publishedExecutableName
         Move-Item -LiteralPath $stagedInstallerExecutable -Destination $installerExecutable
     }
 
@@ -894,6 +895,69 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
             -Source $promotionStagingRoot `
             -Destination $releaseDir)
     Compare-ClashSharpDirectoryContract -Expected $promotionContract -Actual $releaseContract
+
+    # Exercise the final single-file process and its embedded manifest using the read-only route.
+    # No WPF, elevation, package deployment, certificate trust, or service composition is created.
+    $auditStart = [Diagnostics.ProcessStartInfo]::new()
+    $auditStart.FileName = Join-Path $releaseDir (Split-Path -Leaf $installerExecutable)
+    $auditStart.ArgumentList.Add('--verify-payload')
+    $auditStart.UseShellExecute = $false
+    $auditStart.CreateNoWindow = $true
+    $auditStart.RedirectStandardOutput = $true
+    $auditStart.RedirectStandardError = $true
+    $auditProcess = [Diagnostics.Process]::new()
+    $auditProcess.StartInfo = $auditStart
+    $auditStarted = $false
+    $auditOutputTask = $null
+    $auditErrorTask = $null
+    try {
+        if (-not $auditProcess.Start()) {
+            throw 'The packaged Installer payload audit could not start.'
+        }
+        $auditStarted = $true
+        $auditOutputTask = $auditProcess.StandardOutput.ReadToEndAsync()
+        $auditErrorTask = $auditProcess.StandardError.ReadToEndAsync()
+        if (-not $auditProcess.WaitForExit(90000)) {
+            $auditProcess.Kill($true)
+            $auditProcess.WaitForExit()
+            throw 'The packaged Installer payload audit exceeded its time budget.'
+        }
+        $auditOutput = $auditOutputTask.GetAwaiter().GetResult()
+        $auditError = $auditErrorTask.GetAwaiter().GetResult()
+        if ($auditProcess.ExitCode -ne 0 -or
+            $auditOutput.Length -gt 4096 -or
+            -not [string]::IsNullOrWhiteSpace($auditError)) {
+            throw 'The packaged Installer payload audit failed.'
+        }
+        $audit = ConvertFrom-Json -InputObject $auditOutput
+        $expectedAudit = Get-Content -LiteralPath $installerReleaseManifest.FullName -Raw | ConvertFrom-Json
+        $expectedAuditBytes = [long]($expectedAudit.files | Measure-Object -Property length -Sum).Sum
+        if ($audit.schemaVersion -ne 1 -or $audit.status -cne 'passed' -or
+            $audit.publishedExecutable -cne $publishedExecutableName -or
+            $audit.packageVersion -cne $expectedAudit.expectedPackageVersion -or
+            $audit.payloadSha256 -cne $expectedAudit.installerPayloadSha256 -or
+            $audit.fileCount -ne @($expectedAudit.files).Count -or
+            $audit.totalBytes -ne $expectedAuditBytes -or
+            $audit.machineFileCount -ne @($expectedAudit.machineFiles).Count) {
+            throw 'The packaged Installer payload audit disagrees with the release contract.'
+        }
+        Write-Host "Packaged Installer read-only payload audit: $($audit.fileCount) files, $($audit.machineFileCount) machine entries, version $($audit.packageVersion)."
+    } finally {
+        try {
+            if ($auditStarted -and -not $auditProcess.HasExited) {
+                $auditProcess.Kill($true)
+                $auditProcess.WaitForExit()
+            }
+            if ($null -ne $auditOutputTask) {
+                $null = $auditOutputTask.GetAwaiter().GetResult()
+            }
+            if ($null -ne $auditErrorTask) {
+                $null = $auditErrorTask.GetAwaiter().GetResult()
+            }
+        } finally {
+            $auditProcess.Dispose()
+        }
+    }
     $packagingSucceeded = $true
 } finally {
     try {
