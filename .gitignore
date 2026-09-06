@@ -63,6 +63,9 @@ ClashSharp/Installer/signing/*
 !Installer/signing/.gitkeep
 !ClashSharp/Installer/signing/.gitkeep
 
+# Generated from Installer/release-inputs.json; retain source pins instead of binary cache bytes.
+ClashSharp/ClashSharp/Binaries/GeoData/
+
 Docs/DevelopmentStatusAndRoadmap.md
 Docs/superpowers/
 docs/superpowers/

@@ -29,11 +29,11 @@ public sealed partial class Logs : Page
     /// <summary>Bindable view model for this page.</summary>
     private readonly LogsViewModel _viewModel;
 
-    private readonly PageLoadSession _loadSession = new();
+    private readonly PageLoadSession _loadSession;
 
-    private readonly PageLoadSession _runtimeLogStreamSession = new();
+    private readonly PageLoadSession _runtimeLogStreamSession;
 
-    private readonly PageLoadSession _cleanupPreviewSession = new();
+    private readonly PageOperationSession _pageOperations;
 
     private readonly Func<string, string> _getString;
 
@@ -41,7 +41,9 @@ public sealed partial class Logs : Page
 
     private readonly Action _navigateBack;
 
-    private CancellationTokenSource _pageLifetime = new();
+    private bool _isLoaded;
+    private bool _cleanupPending;
+    private int _visit;
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Logs(LogsPageComposition.Dependencies dependencies)
@@ -50,6 +52,9 @@ public sealed partial class Logs : Page
         _viewModel = dependencies.ViewModel;
         _getString = dependencies.GetString;
         _errorSink = dependencies.ErrorSink;
+        _loadSession = new PageLoadSession(_errorSink, "logs-load");
+        _runtimeLogStreamSession = new PageLoadSession(_errorSink, "logs-stream");
+        _pageOperations = new PageOperationSession(_errorSink, "logs-cleanup");
         _navigateBack = dependencies.NavigateBack;
         _viewModel.SetSourceFilter(dependencies.InitialSourceFilter);
         InitializeComponent();
@@ -58,34 +63,40 @@ public sealed partial class Logs : Page
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
-        ResetPageLifetime();
+        if (_isLoaded)
+        {
+            return;
+        }
+        _isLoaded = true;
+        int visit = ++_visit;
         await RunObservedPageEventAsync(
             "logs-page-load",
-            async pageToken =>
+            async () =>
             {
-                Task runtimeLogStream = RunLatestPageOperationAsync(
-                    _runtimeLogStreamSession,
-                    _viewModel.WatchRuntimeLogsAsync,
-                    pageToken);
-                await RunLatestPageOperationAsync(
-                    _loadSession,
-                    _viewModel.LoadAsync,
-                    pageToken);
-                await runtimeLogStream;
+                await DrainPageOperationsAsync();
+                if (!_isLoaded || visit != _visit)
+                {
+                    return;
+                }
+                await Task.WhenAll(
+                    _runtimeLogStreamSession.RunAsync(_viewModel.WatchRuntimeLogsAsync),
+                    _loadSession.RunAsync(_viewModel.LoadAsync));
             });
     }
 
-    private void Page_Unloaded(object sender, RoutedEventArgs e)
+    private async void Page_Unloaded(object sender, RoutedEventArgs e)
     {
-        _pageLifetime.Cancel();
+        _isLoaded = false;
+        ++_visit;
         _loadSession.Cancel();
         _runtimeLogStreamSession.Cancel();
-        _cleanupPreviewSession.Cancel();
+        _pageOperations.Cancel();
+        await RunObservedPageEventAsync("logs-page-unload", DrainPageOperationsAsync);
     }
 
     private async void LogSearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (sender is TextBox textBox)
+        if (_isLoaded && sender is TextBox textBox)
         {
             if (StringComparer.Ordinal.Equals(_viewModel.SearchText, textBox.Text))
             {
@@ -95,16 +106,18 @@ public sealed partial class Logs : Page
             _viewModel.ApplySearchText(textBox.Text);
             await RunObservedPageEventAsync(
                 "logs-search",
-                pageToken => RunLatestPageOperationAsync(
-                    _loadSession,
+                () => _loadSession.RunAsync(
                     _viewModel.LoadAsync,
-                    pageToken,
                     SearchDebounceDelay));
         }
     }
 
     private async void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (!_isLoaded)
+        {
+            return;
+        }
         if (sender is ComboBox { SelectedItem: string selectedLevel } comboBox && ReferenceEquals(comboBox, LevelFilterBox))
         {
             if (StringComparer.Ordinal.Equals(_viewModel.SelectedLevelFilter, selectedLevel))
@@ -115,10 +128,7 @@ public sealed partial class Logs : Page
             _viewModel.SelectedLevelFilter = selectedLevel;
             await RunObservedPageEventAsync(
                 "logs-level-filter",
-                pageToken => RunLatestPageOperationAsync(
-                    _loadSession,
-                    _viewModel.LoadAsync,
-                    pageToken));
+                () => _loadSession.RunAsync(_viewModel.LoadAsync));
             return;
         }
 
@@ -132,21 +142,19 @@ public sealed partial class Logs : Page
             _viewModel.SelectedCategoryFilter = selectedCategory;
             await RunObservedPageEventAsync(
                 "logs-category-filter",
-                pageToken => RunLatestPageOperationAsync(
-                    _loadSession,
-                    _viewModel.LoadAsync,
-                    pageToken));
+                () => _loadSession.RunAsync(_viewModel.LoadAsync));
         }
     }
 
     private async void RefreshLogsButton_Click(object sender, RoutedEventArgs e)
     {
+        if (!_isLoaded)
+        {
+            return;
+        }
         await RunObservedPageEventAsync(
             "logs-refresh",
-            pageToken => RunLatestPageOperationAsync(
-                _loadSession,
-                _viewModel.LoadAsync,
-                pageToken));
+            () => _loadSession.RunAsync(_viewModel.LoadAsync));
     }
 
     /// <summary>Requests semantic back navigation from the owning shell.</summary>
@@ -160,13 +168,34 @@ public sealed partial class Logs : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void CleanupButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunObservedPageEventAsync(
-            "logs-cleanup-presentation",
-            ShowCleanupDialogAsync);
+        if (!_isLoaded || _cleanupPending)
+        {
+            return;
+        }
+        _cleanupPending = true;
+        Button? button = sender as Button;
+        if (button is not null)
+        {
+            button.IsEnabled = false;
+        }
+        try
+        {
+            await _pageOperations.RunAsync(ShowCleanupDialogAsync);
+        }
+        finally
+        {
+            _cleanupPending = false;
+            if (button is not null)
+            {
+                button.IsEnabled = true;
+            }
+        }
     }
 
     private async Task ShowCleanupDialogAsync(CancellationToken pageToken)
     {
+        PageLoadSession previewSession = new(_errorSink, "logs-cleanup-preview");
+        bool dialogOpen = true;
         ComboBox cleanupModeBox = new()
         {
             SelectedIndex = 0,
@@ -227,6 +256,10 @@ public sealed partial class Logs : Page
 
         async Task UpdatePreviewAsync(Action? updateEditor = null)
         {
+            if (!dialogOpen || pageToken.IsCancellationRequested)
+            {
+                return;
+            }
             try
             {
                 updateEditor?.Invoke();
@@ -236,8 +269,7 @@ public sealed partial class Logs : Page
                 string? categoryFilter = categoryBox.SelectedItem as string;
                 previewText.Text = _viewModel.CleanupPreviewPlaceholderText;
 
-                await RunLatestPageOperationAsync(
-                    _cleanupPreviewSession,
+                await previewSession.RunAsync(
                     async previewToken =>
                     {
                         string? text = await _viewModel.GetCleanupPreviewTextAsync(
@@ -252,8 +284,8 @@ public sealed partial class Logs : Page
                             previewText.Text = text;
                         }
                     },
-                    pageToken,
-                    CleanupPreviewDebounceDelay);
+                    CleanupPreviewDebounceDelay,
+                    pageToken);
             }
             catch (Exception exception) when (
                 ExceptionGraphClassifier.IsCallerCancellation(exception, pageToken))
@@ -263,11 +295,13 @@ public sealed partial class Logs : Page
             catch (Exception exception) when (
                 !ExceptionGraphClassifier.IsProcessFatal(exception))
             {
-                await ReportUnexpectedAsync("logs-cleanup-preview-presentation", exception);
+                await previewSession.RunAsync(
+                    _ => Task.FromException(exception),
+                    cancellationToken: CancellationToken.None);
             }
         }
 
-        cleanupModeBox.SelectionChanged += async (_, _) =>
+        async void OnModeChanged(object sender, SelectionChangedEventArgs e)
         {
             await UpdatePreviewAsync(
                 () => UpdateCleanupParameterEditor(
@@ -276,10 +310,15 @@ public sealed partial class Logs : Page
                     descriptionText,
                     levelBox,
                     categoryBox));
-        };
-        parameterBox.ValueChanged += async (_, _) => await UpdatePreviewAsync();
-        levelBox.SelectionChanged += async (_, _) => await UpdatePreviewAsync();
-        categoryBox.SelectionChanged += async (_, _) => await UpdatePreviewAsync();
+        }
+        async void OnParameterChanged(NumberBox sender, NumberBoxValueChangedEventArgs e) =>
+            await UpdatePreviewAsync();
+        async void OnFilterChanged(object sender, SelectionChangedEventArgs e) =>
+            await UpdatePreviewAsync();
+        cleanupModeBox.SelectionChanged += OnModeChanged;
+        parameterBox.ValueChanged += OnParameterChanged;
+        levelBox.SelectionChanged += OnFilterChanged;
+        categoryBox.SelectionChanged += OnFilterChanged;
 
         ThemedContentDialog dialog = new()
         {
@@ -292,13 +331,20 @@ public sealed partial class Logs : Page
         };
 
         ContentDialogResult result;
+        Task initialPreview = UpdatePreviewAsync();
         try
         {
             result = await dialog.ShowManagedAsync(pageToken);
         }
         finally
         {
-            _cleanupPreviewSession.Cancel();
+            dialogOpen = false;
+            cleanupModeBox.SelectionChanged -= OnModeChanged;
+            parameterBox.ValueChanged -= OnParameterChanged;
+            levelBox.SelectionChanged -= OnFilterChanged;
+            categoryBox.SelectionChanged -= OnFilterChanged;
+            previewSession.Cancel();
+            await Task.WhenAll(initialPreview, previewSession.DrainAsync());
         }
 
         if (result != ContentDialogResult.Primary)
@@ -310,15 +356,23 @@ public sealed partial class Logs : Page
         double cleanupParameter = parameterBox.Value;
         string? selectedLevelFilter = levelBox.SelectedItem as string;
         string? selectedCategoryFilter = categoryBox.SelectedItem as string;
-        await RunLatestPageOperationAsync(
-            _loadSession,
-            cleanupToken => _viewModel.ApplyCleanupModeAsync(
+        IsEnabled = false;
+        try
+        {
+            _loadSession.Cancel();
+            await _loadSession.DrainAsync();
+            pageToken.ThrowIfCancellationRequested();
+            await _viewModel.ApplyCleanupModeAsync(
                 selectedCleanupMode,
                 cleanupParameter,
                 selectedLevelFilter,
                 selectedCategoryFilter,
-                cleanupToken),
-            pageToken);
+                pageToken);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
     }
 
     /// <summary>Updates the parameter editor to match the selected cleanup mode.</summary>
@@ -381,55 +435,26 @@ public sealed partial class Logs : Page
         }
     }
 
-    private void ResetPageLifetime()
-    {
-        CancellationTokenSource previousLifetime = _pageLifetime;
-        _pageLifetime = new CancellationTokenSource();
-        previousLifetime.Cancel();
-        previousLifetime.Dispose();
-    }
+    private Task DrainPageOperationsAsync() => Task.WhenAll(
+        _loadSession.DrainAsync(),
+        _runtimeLogStreamSession.DrainAsync(),
+        _pageOperations.DrainAsync());
 
     private async Task RunObservedPageEventAsync(
         string operationName,
-        Func<CancellationToken, Task> operation)
+        Func<Task> operation)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationName);
         ArgumentNullException.ThrowIfNull(operation);
-        CancellationToken pageToken = _pageLifetime.Token;
         try
         {
-            await operation(pageToken);
-        }
-        catch (Exception exception) when (
-            ExceptionGraphClassifier.IsCallerCancellation(exception, pageToken))
-        {
-            // Page teardown owns cancellation and leaves the last stable bound state intact.
+            await operation();
         }
         catch (Exception exception) when (
             !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             await ReportUnexpectedAsync(operationName, exception);
         }
-    }
-
-    private static Task RunLatestPageOperationAsync(
-        PageLoadSession session,
-        Func<CancellationToken, Task> operation,
-        CancellationToken pageToken,
-        TimeSpan debounceDelay = default)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        ArgumentNullException.ThrowIfNull(operation);
-        return session.RunAsync(
-            async operationToken =>
-            {
-                using CancellationTokenSource linkedCancellation =
-                    CancellationTokenSource.CreateLinkedTokenSource(
-                        pageToken,
-                        operationToken);
-                await operation(linkedCancellation.Token);
-            },
-            debounceDelay);
     }
 
     private async Task ReportUnexpectedAsync(

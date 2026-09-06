@@ -23,14 +23,17 @@ public sealed class LogsInteractionArchitectureTests
             "LogsPageComposition.cs"));
 
         Assert.Contains("CleanupPreviewDebounceDelay", pageSource, StringComparison.Ordinal);
-        Assert.Contains("_cleanupPreviewSession", pageSource, StringComparison.Ordinal);
-        Assert.Contains("_cleanupPreviewSession.Cancel();", pageSource, StringComparison.Ordinal);
+        Assert.Contains("PageLoadSession previewSession", pageSource, StringComparison.Ordinal);
+        Assert.Contains("previewSession.Cancel();", pageSource, StringComparison.Ordinal);
+        Assert.Contains("previewSession.DrainAsync()", pageSource, StringComparison.Ordinal);
         Assert.Contains("_runtimeLogStreamSession", pageSource, StringComparison.Ordinal);
         Assert.Contains("_viewModel.WatchRuntimeLogsAsync", pageSource, StringComparison.Ordinal);
         Assert.Contains("context.MihomoService.ReadHostLogsAsync", compositionSource, StringComparison.Ordinal);
         Assert.Contains("_runtimeLogStreamSession.Cancel();", pageSource, StringComparison.Ordinal);
         Assert.Contains("RunObservedPageEventAsync(", pageSource, StringComparison.Ordinal);
-        Assert.Contains("RunLatestPageOperationAsync(", pageSource, StringComparison.Ordinal);
+        Assert.Contains("PageOperationSession", pageSource, StringComparison.Ordinal);
+        Assert.Contains("_pageOperations.RunAsync(ShowCleanupDialogAsync)", pageSource, StringComparison.Ordinal);
+        Assert.Contains("_loadSession.DrainAsync()", pageSource, StringComparison.Ordinal);
         Assert.Contains("dialog.ShowManagedAsync(pageToken)", pageSource, StringComparison.Ordinal);
         Assert.Contains(
             "_viewModel.GetCleanupPreviewTextAsync(",
