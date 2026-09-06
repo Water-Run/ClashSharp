@@ -21,6 +21,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
+      - name: Verify PowerShell syntax (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./eng/Test-PowerShellSyntax.ps1
+
+      - name: Verify PowerShell syntax (PowerShell 7)
+        shell: pwsh
+        run: ./eng/Test-PowerShellSyntax.ps1
+
       - name: Set up pinned .NET SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
@@ -30,6 +38,8 @@ jobs:
         run: dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
 
       - name: Verify formatting
+        env:
+          Platform: x64
         run: dotnet format ClashSharp/ClashSharp.slnx --verify-no-changes --no-restore
 
       - name: Verify Sandbox report contract (Windows PowerShell 5.1)

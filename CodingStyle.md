@@ -38,6 +38,8 @@ Tracked functions provide adjacent comment-based help with a concrete `.SYNOPSIS
 
 Human-authored repository text uses UTF-8, LF, final newlines, and trimmed trailing whitespace; generated lock files retain their tool-produced representation. `dotnet format --verify-no-changes` is the C# formatting contract. Prefer readable modern C# syntax and extract named steps when a LINQ or fluent chain becomes difficult to audit.
 
+Set `Platform=x64` in the formatting process environment when checking the solution so the WinUI design-time build loads successfully. Scope this setting to formatting; Installer Core and Presentation tests use the solution's AnyCPU output directories. A workspace-load warning requires investigation even when `dotnet format` exits successfully.
+
 ## Modern C# and LINQ
 
 Use C# 14 features when they make an invariant more explicit: collection expressions for fixed snapshots, records for immutable value contracts, property/list patterns and switch expressions for closed state machines, `using`/`await using` declarations for deterministic ownership, and `ArgumentNullException.ThrowIfNull` or equivalent boundary guards. Do not introduce a feature only to shorten code when it obscures authority, lifetime, or diagnostics.

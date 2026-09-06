@@ -7,7 +7,7 @@
 `Clash#` 是一个现代化的 Windows 原生代理客户端，基于 [mihomo](https://github.com/MetaCubeX/mihomo) 构建。
 `Clash#` 以`AGPL-3.0`协议开源于[GitHub](https://github.com/Water-Run/ClashSharp).
 
-> 开发状态（2026-08-31）：项目处于生产加固阶段，尚未发布正式版本，当前源码与开发产物不应视为生产就绪。自包含 C# / WPF 绿色安装器现为唯一 Installer 实现；生产 runtime、parent engine 与认证 helper 已在源码中闭环，但默认及正式打包仍关闭 mutation-runtime 编译门，直至同一签名候选通过 Windows VM E4 矩阵。进度、证据边界和发布 Gate 见[当前项目结构、MVVM、编码质量与 Installer 总审查](./docs/reviews/2026-08-31-project-structure-mvvm-code-quality-installer-audit.md)、[项目开发地图](./docs/reviews/2026-08-27-project-development-map.md)、[生产就绪执行计划](./docs/reviews/2026-08-27-production-readiness-execution-plan.md)与[Installer 重写详细审查](./docs/reviews/2026-08-30-installer-wpf-rewrite-audit.md)。
+> 开发状态（2026-09-06）：项目处于生产加固阶段，当前源码与开发产物尚不满足生产发布条件。自包含 C# / WPF 绿色安装器为唯一 Installer 实现；生产 runtime、parent engine 与认证 helper 已在源码中闭环，但默认及正式打包仍关闭 mutation-runtime 编译门，直至同一签名候选通过 Windows VM E4 矩阵。本轮已完成订阅操作锁回收、双版本 PowerShell 语法门禁和 WinUI 格式检查环境修复；当前进度、执行顺序及验证记录见[开发状态与推进计划](./docs/reviews/2026-09-06-development-status-and-next-steps.md)，结构与 Installer 权限边界见[2026-08-31 总审查](./docs/reviews/2026-08-31-project-structure-mvvm-code-quality-installer-audit.md)。
 
 ## 关于Windows原生
 

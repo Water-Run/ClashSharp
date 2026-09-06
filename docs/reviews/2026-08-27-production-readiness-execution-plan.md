@@ -1,5 +1,7 @@
 # ClashSharp 生产就绪执行计划
 
+> 历史计划：当前执行队列与验收条件见 [2026-09-06 开发状态与推进计划](2026-09-06-development-status-and-next-steps.md)。本文保留迁移期任务和原始证据，不将旧的未勾选条目直接视为当前实现缺口。
+
 > 2026-08-31 更新：Rust/Slint Installer 与 Rust Sandbox helper 已退役并从受控树移除；自包含 C# / WPF Installer 是唯一实现。本文中仍出现的 Rust 路径、Cargo 门禁和跨语言向量仅记录迁移前证据，不再是当前执行入口。
 >
 > 当前 Installer / WPF 接盘入口：[ClashSharp Installer / WPF 接盘开工单](2026-08-30-installer-wpf-handoff.md)。2026-08-31 已恢复并超过旧 checkpoint，随后完成 Core helper-authoritative protected-state P0；Windows 生产 broker/进程组合仍继续推进。

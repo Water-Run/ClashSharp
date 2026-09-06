@@ -107,8 +107,8 @@ public sealed partial class ProfileCatalogService
     /// <summary>Cached catalog document loaded from disk during this service lifetime.</summary>
     private ProfileCatalogDocument? _cachedDocument;
 
-    /// <summary>Per-link single-flight gates spanning download through durable catalog commit.</summary>
-    private readonly Dictionary<string, SemaphoreSlim> _subscriptionUpdateGates = new(StringComparer.Ordinal);
+    /// <summary>Per-link leases span download through durable commit and release idle keys after their last waiter.</summary>
+    private readonly ProfileOperationGate _subscriptionUpdateGates = new();
 
     /// <summary>Serializes live profile activation, active updates, rollback, and deletion.</summary>
     private readonly SemaphoreSlim _profileMutationGate = new(1, 1);
@@ -450,21 +450,14 @@ public sealed partial class ProfileCatalogService
             Guid.NewGuid(),
             async (_, token) =>
             {
-                SemaphoreSlim updateGate = GetSubscriptionUpdateGate(linkId);
-                await updateGate.WaitAsync(token).ConfigureAwait(false);
-                try
-                {
-                    return TryUpdateSubscriptionLinkCore(
-                        linkId,
-                        name,
-                        uri,
-                        isEnabled,
-                        updateIntervalHours);
-                }
-                finally
-                {
-                    updateGate.Release();
-                }
+                using IDisposable updateLease = await _subscriptionUpdateGates
+                    .EnterAsync(linkId, token).ConfigureAwait(false);
+                return TryUpdateSubscriptionLinkCore(
+                    linkId,
+                    name,
+                    uri,
+                    isEnabled,
+                    updateIntervalHours);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -498,16 +491,9 @@ public sealed partial class ProfileCatalogService
             Guid.NewGuid(),
             async (_, token) =>
             {
-                SemaphoreSlim updateGate = GetSubscriptionUpdateGate(linkId);
-                await updateGate.WaitAsync(token).ConfigureAwait(false);
-                try
-                {
-                    return TryDeleteSubscriptionLinkCore(linkId);
-                }
-                finally
-                {
-                    updateGate.Release();
-                }
+                using IDisposable updateLease = await _subscriptionUpdateGates
+                    .EnterAsync(linkId, token).ConfigureAwait(false);
+                return TryDeleteSubscriptionLinkCore(linkId);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -820,33 +806,26 @@ public sealed partial class ProfileCatalogService
         ProfileSubscriptionLink link,
         CancellationToken cancellationToken)
     {
-        SemaphoreSlim updateGate = GetSubscriptionUpdateGate(link.Id);
-        await updateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        using IDisposable updateLease = await _subscriptionUpdateGates
+            .EnterAsync(link.Id, cancellationToken).ConfigureAwait(false);
+        ProfileSubscriptionLink currentLink = ResolveCurrentSubscriptionLink(
+            link,
+            requireEnabled: false);
         try
         {
-            ProfileSubscriptionLink currentLink = ResolveCurrentSubscriptionLink(
-                link,
-                requireEnabled: false);
-            try
-            {
-                EnsureLinkHasHttpUri(currentLink);
-                using HttpRequestMessage request = new(HttpMethod.Head, currentLink.Uri);
-                using HttpResponseMessage response = await SendWithGetFallbackAsync(request, cancellationToken).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
+            EnsureLinkHasHttpUri(currentLink);
+            using HttpRequestMessage request = new(HttpMethod.Head, currentLink.Uri);
+            using HttpResponseMessage response = await SendWithGetFallbackAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
 
-                string status = FormatString("ProfileCatalog.Subscription.CheckSucceeded.Format", (int)response.StatusCode);
-                TryUpdateSubscriptionLinkStatus(currentLink.Id, status);
-                return status;
-            }
-            catch (Exception exception) when (exception is ArgumentException or HttpRequestException or OperationCanceledException or InvalidOperationException)
-            {
-                TryUpdateSubscriptionLinkStatus(currentLink.Id, GetString("ProfileCatalog.Subscription.CheckFailed"));
-                throw;
-            }
+            string status = FormatString("ProfileCatalog.Subscription.CheckSucceeded.Format", (int)response.StatusCode);
+            TryUpdateSubscriptionLinkStatus(currentLink.Id, status);
+            return status;
         }
-        finally
+        catch (Exception exception) when (exception is ArgumentException or HttpRequestException or OperationCanceledException or InvalidOperationException)
         {
-            updateGate.Release();
+            TryUpdateSubscriptionLinkStatus(currentLink.Id, GetString("ProfileCatalog.Subscription.CheckFailed"));
+            throw;
         }
     }
 
@@ -893,31 +872,24 @@ public sealed partial class ProfileCatalogService
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        SemaphoreSlim updateGate = GetSubscriptionUpdateGate(link.Id);
-        await updateGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        using IDisposable updateLease = await _subscriptionUpdateGates
+            .EnterAsync(link.Id, cancellationToken).ConfigureAwait(false);
+        ProfileSubscriptionLink currentLink;
         try
         {
-            ProfileSubscriptionLink currentLink;
-            try
-            {
-                currentLink = ResolveCurrentSubscriptionLink(link, requireEnabled: true);
-            }
-            catch (InvalidOperationException) when (requireDue)
-            {
-                return null;
-            }
-
-            if (requireDue && !IsSubscriptionLinkDue(currentLink, now))
-            {
-                return null;
-            }
-
-            return await ImportSubscriptionLinkCoreAsync(currentLink, cancellationToken).ConfigureAwait(false);
+            currentLink = ResolveCurrentSubscriptionLink(link, requireEnabled: true);
         }
-        finally
+        catch (InvalidOperationException) when (requireDue)
         {
-            updateGate.Release();
+            return null;
         }
+
+        if (requireDue && !IsSubscriptionLinkDue(currentLink, now))
+        {
+            return null;
+        }
+
+        return await ImportSubscriptionLinkCoreAsync(currentLink, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ProfileImportResult> ImportSubscriptionLinkCoreAsync(
@@ -1722,22 +1694,6 @@ public sealed partial class ProfileCatalogService
         catch (Exception compensationFailure) when (!ExceptionGraphClassifier.IsProcessFatal(compensationFailure))
         {
             throw new AggregateException(failureMessage, catalogFailure, compensationFailure);
-        }
-    }
-
-    /// <summary>Gets the stable single-flight gate for one subscription link.</summary>
-    private SemaphoreSlim GetSubscriptionUpdateGate(string linkId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(linkId);
-        lock (_syncLock)
-        {
-            if (!_subscriptionUpdateGates.TryGetValue(linkId, out SemaphoreSlim? gate))
-            {
-                gate = new SemaphoreSlim(1, 1);
-                _subscriptionUpdateGates.Add(linkId, gate);
-            }
-
-            return gate;
         }
     }
 

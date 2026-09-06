@@ -6,41 +6,46 @@ using System.Threading.Tasks;
 
 namespace ClashSharp.Service;
 
-/// <summary>Serializes complete import transactions for one normalized profile without blocking other profiles.</summary>
+/// <summary>Serializes operations for one profile or subscription key without blocking other keys.</summary>
 /// <remarks>
 /// Invariants: An entry remains registered while a holder or waiter references it.
 /// Thread safety: Safe for concurrent callers.
 /// Side effects: Waits asynchronously and releases keyed semaphore entries after their last user exits.
 /// </remarks>
-internal sealed class ProfileImportGate
+internal sealed class ProfileOperationGate
 {
     private readonly ConcurrentDictionary<string, Entry> _entries =
         new(StringComparer.Ordinal);
 
-    /// <summary>Asynchronously acquires the transaction lease for <paramref name="profileId"/>.</summary>
+    /// <summary>Gets a diagnostic snapshot of keys still retained by holders or waiters.</summary>
+    internal int ActiveKeyCount => _entries.Count;
+
+    /// <summary>Asynchronously acquires the operation lease for <paramref name="key"/>.</summary>
+    /// <remarks>Each gate instance owns a separate key space; callers supply canonical identifiers.</remarks>
     public async ValueTask<IDisposable> EnterAsync(
-        string profileId,
+        string key,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
-        Entry entry = AcquireEntryReference(profileId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        cancellationToken.ThrowIfCancellationRequested();
+        Entry entry = AcquireEntryReference(key);
         try
         {
             await entry.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            return new Lease(this, profileId, entry);
+            return new Lease(this, key, entry);
         }
         catch
         {
-            ReleaseEntryReference(profileId, entry);
+            ReleaseEntryReference(key, entry);
             throw;
         }
     }
 
-    private Entry AcquireEntryReference(string profileId)
+    private Entry AcquireEntryReference(string key)
     {
         while (true)
         {
-            if (_entries.TryGetValue(profileId, out Entry? existing))
+            if (_entries.TryGetValue(key, out Entry? existing))
             {
                 if (existing.TryAddReference())
                 {
@@ -51,7 +56,7 @@ internal sealed class ProfileImportGate
             }
 
             Entry created = new();
-            if (_entries.TryAdd(profileId, created))
+            if (_entries.TryAdd(key, created))
             {
                 return created;
             }
@@ -60,13 +65,13 @@ internal sealed class ProfileImportGate
         }
     }
 
-    private void Release(string profileId, Entry entry)
+    private void Release(string key, Entry entry)
     {
         entry.Semaphore.Release();
-        ReleaseEntryReference(profileId, entry);
+        ReleaseEntryReference(key, entry);
     }
 
-    private void ReleaseEntryReference(string profileId, Entry entry)
+    private void ReleaseEntryReference(string key, Entry entry)
     {
         if (!entry.ReleaseReference())
         {
@@ -74,7 +79,7 @@ internal sealed class ProfileImportGate
         }
 
         bool removed = ((ICollection<KeyValuePair<string, Entry>>)_entries).Remove(
-            new KeyValuePair<string, Entry>(profileId, entry));
+            new KeyValuePair<string, Entry>(key, entry));
         if (removed)
         {
             entry.Dispose();
@@ -83,6 +88,8 @@ internal sealed class ProfileImportGate
 
     private sealed class Entry : IDisposable
     {
+        // Zero is terminal: a new caller must wait for removal and acquire a fresh entry,
+        // otherwise the last releaser could dispose a semaphore already reused by that caller.
         private int _references = 1;
 
         public SemaphoreSlim Semaphore { get; } = new(1, 1);
@@ -119,15 +126,15 @@ internal sealed class ProfileImportGate
     }
 
     private sealed class Lease(
-        ProfileImportGate owner,
-        string profileId,
+        ProfileOperationGate owner,
+        string key,
         Entry entry) : IDisposable
     {
-        private ProfileImportGate? _owner = owner;
+        private ProfileOperationGate? _owner = owner;
 
         public void Dispose()
         {
-            Interlocked.Exchange(ref _owner, null)?.Release(profileId, entry);
+            Interlocked.Exchange(ref _owner, null)?.Release(key, entry);
         }
     }
 }

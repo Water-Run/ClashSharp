@@ -52,7 +52,7 @@ public sealed partial class CoreConfigurationService
     private readonly object _syncLock = new();
 
     /// <summary>Serializes complete import transactions by normalized profile path.</summary>
-    private readonly ProfileImportGate _profileImportGate = new();
+    private readonly ProfileOperationGate _profileImportGate = new();
 
     /// <summary>Absolute directory path for mihomo runtime configuration.</summary>
     private readonly string _configurationDirectoryPath;

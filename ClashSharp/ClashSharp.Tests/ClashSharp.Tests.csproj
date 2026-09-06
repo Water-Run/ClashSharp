@@ -142,7 +142,7 @@
     <Compile Include="..\ClashSharp\Service\ProfileCatalogIds.cs" Link="Service\ProfileCatalogIds.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogMutationCoordinator.cs" Link="Service\ProfileCatalogMutationCoordinator.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.cs" Link="Service\ProfileCatalogService.cs" />
-    <Compile Include="..\ClashSharp\Service\ProfileImportGate.cs" Link="Service\ProfileImportGate.cs" />
+    <Compile Include="..\ClashSharp\Service\ProfileOperationGate.cs" Link="Service\ProfileOperationGate.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogServiceFactory.cs" Link="Service\ProfileCatalogServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileSubscriptionScheduler.cs" Link="Service\ProfileSubscriptionScheduler.cs" />
     <Compile Include="..\ClashSharp\Service\ProxyNodeCatalogService.cs" Link="Service\ProxyNodeCatalogService.cs" />
