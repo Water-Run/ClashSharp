@@ -64,6 +64,18 @@ Windows 实现使用固定的 `ProgramData\ClashSharp\InstallerAuthority\v1\owne
 
 远端生产只读检查在隔离 ProgramData 上通过 31 项原生断言，确认八个阶段及三种无效长度均阻断、原字节保留、宽松 ACL 被拒绝、缺失产品目录不被创建。收据为 `artifacts/verification/owner-transfer-admission-validation-m4k.json`。该结果不证明专用迁移执行器、完整 helper IPC 或桌面安装已经完成。
 
+## M4l 持久阶段编排
+
+Core 的 `InstallerOwnerTransferCoordinator` 只接收同一专用 authority 已检查的私有 snapshot，先重新读取并逐字段核对实际记录，再调用阶段执行端口。Prepared 必须已经保存；记录缺失、进度变化或身份变化均在系统修改前拒绝，不能由恢复入口重新生成凭据或候选。
+
+六个修改边界按顺序调用 `ApplyAndVerifyAsync`，成功完成一个边界后才保存下一阶段和 generation。执行端口必须独立验证整个步骤的后置条件，并允许准确的已完成状态重放。取消和异常不会触发回滚、删除证据或执行下一步；已经执行但未确认的步骤由下次恢复重新观察。编排器拒绝并发进入，等待已拥有的异步任务结束后才释放本地执行状态。
+
+最后单独调用只读 `VerifyCompletedAsync`，复核服务、权限、association、证书账本及准确的普通 Prepared 启动屏障，然后保存 Verified 并按摘要删除私有记录。恢复已是 Verified 的记录同样再次验证；最终保存/删除确认不明确时仍保留可恢复状态。返回值仅包含原普通 v2 snapshot，后续安装仍须在相同 authority/生命周期保护下接管，不能提前清除普通日志。
+
+新增 31 项用例，使用生产 Core 私有 store、真实临时文件中的普通 v2 store 和模拟系统修改端口，覆盖八个初始阶段、六个步骤前/后中断、取消期间排空、陈旧身份、最终验证失败、普通屏障丢失和不明确的提交确认。完整 Core 774 项通过、0 跳过，行覆盖率 93.44%、分支 86.23%；全解决方案 Release x64 构建 0 警告、0 错误，format 检查 1288 个源文件、0 处变更、无工作区警告。覆盖率与 TRX 位于 `artifacts/verification/coverage-1.0.0-m4l`。
+
+这项实现是持久编排；阶段端口的 Windows 原生实现和专用认证入口仍待接入。模拟的服务/ACL/证书操作不计作实际换绑验收，也不改变普通 helper 的拒绝边界或生产 mutation 门。
+
 ## 持久迁移的接入要求
 
 换绑必须是独立用例。后续接入不能再次让普通写入方法凭布尔值覆盖旧证据：
