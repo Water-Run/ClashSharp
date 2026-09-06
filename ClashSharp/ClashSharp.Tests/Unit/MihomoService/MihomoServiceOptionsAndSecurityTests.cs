@@ -200,7 +200,7 @@ public sealed class MihomoServiceOptionsAndSecurityTests
             protectDirectory: true,
             commonApplicationDataRoot: temporaryDirectory.Path);
 
-        await Assert.ThrowsAsync<IOException>(() => store.StageAsync(
+        await Assert.ThrowsAsync<MihomoServiceConfigurationTrustException>(() => store.StageAsync(
             1,
             MihomoServiceTestSupport.ComputeHash(content),
             CancellationToken.None));

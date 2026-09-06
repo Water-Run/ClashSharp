@@ -3,6 +3,7 @@ using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Windows.Machines;
 using ClashSharp.Installer.Windows.Transactions;
+using ClashSharp.Windows.FileSecurity;
 
 namespace ClashSharp.Installer.Windows.Tests;
 
@@ -161,10 +162,10 @@ public sealed class WindowsMachineRootGuardTests
         Assert.Equal(0, native.OpenCount);
     }
 
-    private static WindowsInstallerDirectoryObservation Anchor(
-        params WindowsInstallerDirectoryAce[] additional)
+    private static WindowsDirectoryObservation Anchor(
+        params WindowsDirectoryAce[] additional)
     {
-        var entries = new List<WindowsInstallerDirectoryAce>
+        var entries = new List<WindowsDirectoryAce>
         {
             Ace(
                 WindowsInstallerDirectorySecurityPolicy.LocalSystemSid,
@@ -177,23 +178,23 @@ public sealed class WindowsMachineRootGuardTests
             Ace(UsersSid, FileSystemRights.ReadAndExecute, AceFlags.None),
         };
         entries.AddRange(additional);
-        return new WindowsInstallerDirectoryObservation(
+        return new WindowsDirectoryObservation(
             IsDirectory: true,
             IsReparsePoint: false,
-            new WindowsInstallerDirectorySecuritySnapshot(
+            new WindowsDirectorySecuritySnapshot(
                 WindowsInstallerDirectorySecurityPolicy.LocalSystemSid,
                 HasDacl: true,
                 DaclProtected: false,
                 entries));
     }
 
-    private static WindowsInstallerDirectoryObservation Protected(string targetSid)
+    private static WindowsDirectoryObservation Protected(string targetSid)
     {
         const AceFlags inheritance = AceFlags.ContainerInherit | AceFlags.ObjectInherit;
-        return new WindowsInstallerDirectoryObservation(
+        return new WindowsDirectoryObservation(
             IsDirectory: true,
             IsReparsePoint: false,
-            new WindowsInstallerDirectorySecuritySnapshot(
+            new WindowsDirectorySecuritySnapshot(
                 WindowsInstallerDirectorySecurityPolicy.AdministratorsSid,
                 HasDacl: true,
                 DaclProtected: true,
@@ -213,13 +214,13 @@ public sealed class WindowsMachineRootGuardTests
                 ]));
     }
 
-    private static WindowsInstallerDirectoryAce Ace(
+    private static WindowsDirectoryAce Ace(
         string sid,
         FileSystemRights rights,
         AceFlags flags) =>
         new(
             sid,
-            WindowsInstallerDirectoryAceKind.Allow,
+            WindowsDirectoryAceKind.Allow,
             (int)rights,
             flags,
             IsObjectSpecific: false);
@@ -282,7 +283,7 @@ public sealed class WindowsMachineRootGuardTests
             return new FakeLease(this, observation);
         }
 
-        internal void Set(string path, WindowsInstallerDirectoryObservation observation)
+        internal void Set(string path, WindowsDirectoryObservation observation)
         {
             if (_observations.TryGetValue(path, out MutableObservation? existing))
             {
@@ -308,7 +309,7 @@ public sealed class WindowsMachineRootGuardTests
                 _observation = observation;
             }
 
-            public WindowsInstallerDirectoryObservation Observe()
+            public WindowsDirectoryObservation Observe()
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 _owner.ObservationCount++;
@@ -328,9 +329,9 @@ public sealed class WindowsMachineRootGuardTests
         }
 
         private sealed class MutableObservation(
-            WindowsInstallerDirectoryObservation value)
+            WindowsDirectoryObservation value)
         {
-            internal WindowsInstallerDirectoryObservation Value { get; set; } = value;
+            internal WindowsDirectoryObservation Value { get; set; } = value;
         }
     }
 }

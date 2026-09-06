@@ -1,5 +1,6 @@
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Windows.Transactions;
+using ClashSharp.Windows.FileSecurity;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -225,7 +226,7 @@ internal sealed class WindowsMachineRootGuard : IWindowsMachineRootGuard
 
     private void ValidateObservation(
         DirectorySpec spec,
-        WindowsInstallerDirectoryObservation observation)
+        WindowsDirectoryObservation observation)
     {
         if (!observation.IsDirectory)
         {

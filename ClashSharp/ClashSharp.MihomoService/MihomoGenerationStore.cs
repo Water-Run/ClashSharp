@@ -37,6 +37,7 @@ internal sealed class MihomoGenerationStore
     private readonly MihomoServiceOptions _options;
     private readonly bool _protectDirectory;
     private readonly string? _commonApplicationDataRoot;
+    private readonly MihomoServiceSharedDirectoryGuard? _sharedDirectories;
 
     internal MihomoGenerationStore(
         MihomoServiceOptions options,
@@ -48,6 +49,9 @@ internal sealed class MihomoGenerationStore
         _commonApplicationDataRoot = protectDirectory
             ? Path.GetFullPath(commonApplicationDataRoot ?? GetCommonApplicationDataRoot())
             : null;
+        _sharedDirectories = _commonApplicationDataRoot is null
+            ? null
+            : new MihomoServiceSharedDirectoryGuard(_commonApplicationDataRoot, options.AllowedSid.Value);
     }
 
     internal async Task<MihomoStagedGeneration> StageAsync(
@@ -166,7 +170,7 @@ internal sealed class MihomoGenerationStore
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private void PrepareServiceDirectory()
+    private IDisposable? PrepareServiceDirectory()
     {
         if (!_protectDirectory)
         {
@@ -175,7 +179,7 @@ internal sealed class MihomoGenerationStore
             unprotectedDirectory.Create();
             unprotectedDirectory.Refresh();
             ValidateExistingDirectory(unprotectedDirectory, "generation endpoint");
-            return;
+            return null;
         }
 
         string commonApplicationDataRoot = _commonApplicationDataRoot!;
@@ -199,15 +203,23 @@ internal sealed class MihomoGenerationStore
                 "The generation endpoint is outside the protected service data root.");
         }
 
-        CreateAndProtectOwnedDirectory(productDirectoryPath, "product data root");
-        CreateAndProtectOwnedDirectory(fixedServiceRootPath, "service data root");
-        CreateAndProtectOwnedDirectory(expectedEndpointPath, "generation endpoint");
+        IDisposable sharedRoots = _sharedDirectories!.Acquire();
+        try
+        {
+            CreateAndProtectOwnedDirectory(expectedEndpointPath, "generation endpoint");
+            return sharedRoots;
+        }
+        catch
+        {
+            sharedRoots.Dispose();
+            throw;
+        }
     }
 
     /// <summary>Creates and validates the LocalSystem-owned mihomo working directory.</summary>
     internal string PrepareRuntimeDirectory()
     {
-        PrepareServiceDirectory();
+        using IDisposable? sharedRoots = PrepareServiceDirectory();
         string runtimeDirectoryPath = _options.RuntimeDirectory;
         DirectoryInfo runtimeDirectory = new(runtimeDirectoryPath);
         ValidateExistingDirectory(runtimeDirectory, "runtime directory");

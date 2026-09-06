@@ -18,4 +18,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="ClashSharp.Installer.Windows.Tests" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\Windows\WindowsDirectorySecuritySnapshot.cs" Link="Shared\WindowsDirectorySecuritySnapshot.cs" />
+    <Compile Include="..\Shared\Windows\WindowsDirectoryReadLease.cs" Link="Shared\WindowsDirectoryReadLease.cs" />
+    <Compile Include="..\Shared\Windows\WindowsDirectoryAccessPolicy.cs" Link="Shared\WindowsDirectoryAccessPolicy.cs" />
+  </ItemGroup>
 </Project>

@@ -4,6 +4,7 @@ using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Transactions;
 using ClashSharp.Installer.Windows.Transactions;
+using ClashSharp.Windows.FileSecurity;
 
 namespace ClashSharp.Installer.Windows.Tests;
 
@@ -61,7 +62,7 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
     public async Task ExistingPrivateRootWithUnexpectedSecurityIsRejectedWithoutAclWashing(string condition)
     {
         var native = new FakeDirectories();
-        WindowsInstallerDirectorySecuritySnapshot original = AlterSecurity(
+        WindowsDirectorySecuritySnapshot original = AlterSecurity(
             Snapshot(WindowsInstallerPrivateStateSecurity.CreateDirectorySecurity()), condition);
         native.Observations[AuthorityRoot] = new(true, false, original);
         using var guard = WindowsInstallerTransactionRootGuard.CreatePrivateOwnerTransferForTesting(@"C:\ProgramData", native);
@@ -109,7 +110,7 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
     [InlineData(true)]
     public void PrivateDescriptorsContainOnlyTwoExplicitAuthorityEntries(bool directory)
     {
-        WindowsInstallerDirectorySecuritySnapshot security = Snapshot(directory
+        WindowsDirectorySecuritySnapshot security = Snapshot(directory
             ? WindowsInstallerPrivateStateSecurity.CreateDirectorySecurity()
             : WindowsInstallerPrivateStateSecurity.CreateFileSecurity());
 
@@ -277,7 +278,7 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
         await guard.EnsureProtectedAsync(PrivateRoot, CancellationToken.None);
         Assert.False(guard.IsProtectedRootPresent);
         Assert.Equal(2, native.LiveLeases);
-        foreach ((string path, WindowsInstallerDirectoryObservation observation) in CompletePrivateChain().Observations)
+        foreach ((string path, WindowsDirectoryObservation observation) in CompletePrivateChain().Observations)
         {
             native.Observations[path] = observation;
         }
@@ -297,17 +298,17 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
         return native;
     }
 
-    private static WindowsInstallerDirectorySecuritySnapshot AlterSecurity(WindowsInstallerDirectorySecuritySnapshot security, string condition)
+    private static WindowsDirectorySecuritySnapshot AlterSecurity(WindowsDirectorySecuritySnapshot security, string condition)
     {
-        WindowsInstallerDirectoryAce first = security.AccessEntries[0];
-        WindowsInstallerDirectoryAce second = security.AccessEntries[1];
+        WindowsDirectoryAce first = security.AccessEntries[0];
+        WindowsDirectoryAce second = security.AccessEntries[1];
         return condition switch
         {
             "user-readable" => Snapshot(WindowsInstallerDirectorySecurityPolicy.CreateProtectedDirectorySecurity(UserSid)),
             "wrong-owner" => security with { OwnerSid = UserSid },
             "unprotected" => security with { DaclProtected = false },
             "no-dacl" => security with { HasDacl = false },
-            "deny" => security with { AccessEntries = [first with { Kind = WindowsInstallerDirectoryAceKind.Deny }, second] },
+            "deny" => security with { AccessEntries = [first with { Kind = WindowsDirectoryAceKind.Deny }, second] },
             "inherited" => security with { AccessEntries = [first with { Flags = first.Flags | AceFlags.Inherited }, second] },
             "object-specific" => security with { AccessEntries = [first with { IsObjectSpecific = true }, second] },
             "extra-entry" => security with { AccessEntries = [first, second, first with { Sid = UserSid }] },
@@ -317,20 +318,20 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
         };
     }
 
-    private static WindowsInstallerDirectorySecuritySnapshot Snapshot(ObjectSecurity security)
+    private static WindowsDirectorySecuritySnapshot Snapshot(ObjectSecurity security)
     {
         var raw = new RawSecurityDescriptor(security.GetSecurityDescriptorBinaryForm(), 0);
         return new(raw.Owner?.Value, raw.DiscretionaryAcl is not null,
             (raw.ControlFlags & ControlFlags.DiscretionaryAclProtected) != 0,
-            raw.DiscretionaryAcl!.Cast<CommonAce>().Select(ace => new WindowsInstallerDirectoryAce(
+            raw.DiscretionaryAcl!.Cast<CommonAce>().Select(ace => new WindowsDirectoryAce(
                 ace.SecurityIdentifier.Value,
-                ace.AceQualifier == AceQualifier.AccessAllowed ? WindowsInstallerDirectoryAceKind.Allow : WindowsInstallerDirectoryAceKind.Deny,
+                ace.AceQualifier == AceQualifier.AccessAllowed ? WindowsDirectoryAceKind.Allow : WindowsDirectoryAceKind.Deny,
                 ace.AccessMask, ace.AceFlags, false)).ToArray());
     }
 
     private sealed class FakeDirectories : IWindowsInstallerDirectoryNative
     {
-        internal Dictionary<string, WindowsInstallerDirectoryObservation> Observations { get; } =
+        internal Dictionary<string, WindowsDirectoryObservation> Observations { get; } =
             new(StringComparer.OrdinalIgnoreCase)
             {
                 [@"C:\"] = new(true, false, Snapshot(WindowsInstallerPrivateStateSecurity.CreateDirectorySecurity())),
@@ -366,7 +367,7 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
         private sealed class Lease(FakeDirectories owner, string path) : IWindowsInstallerDirectoryLease
         {
             private bool _disposed;
-            public WindowsInstallerDirectoryObservation Observe() => owner.Observations[path];
+            public WindowsDirectoryObservation Observe() => owner.Observations[path];
             public void Dispose()
             {
                 if (!_disposed)

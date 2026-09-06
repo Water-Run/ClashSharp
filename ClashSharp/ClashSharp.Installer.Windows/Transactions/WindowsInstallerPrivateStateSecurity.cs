@@ -1,6 +1,7 @@
 using System.Security.AccessControl;
 using System.Security.Principal;
 using ClashSharp.Installer.Contracts;
+using ClashSharp.Windows.FileSecurity;
 
 namespace ClashSharp.Installer.Windows.Transactions;
 
@@ -21,7 +22,7 @@ internal static class WindowsInstallerPrivateStateSecurity
         return security;
     }
 
-    internal static void Validate(WindowsInstallerDirectorySecuritySnapshot security, bool directory)
+    internal static void Validate(WindowsDirectorySecuritySnapshot security, bool directory)
     {
         AceFlags flags = directory ? AceFlags.ContainerInherit | AceFlags.ObjectInherit : AceFlags.None;
         if (!security.HasDacl || !security.DaclProtected
@@ -56,11 +57,11 @@ internal static class WindowsInstallerPrivateStateSecurity
         }
     }
 
-    private static bool HasExactEntry(IReadOnlyList<WindowsInstallerDirectoryAce> entries, string sid, AceFlags flags)
+    private static bool HasExactEntry(IReadOnlyList<WindowsDirectoryAce> entries, string sid, AceFlags flags)
     {
-        WindowsInstallerDirectoryAce[] matching = entries.Where(entry => string.Equals(entry.Sid, sid, StringComparison.Ordinal)).ToArray();
+        WindowsDirectoryAce[] matching = entries.Where(entry => string.Equals(entry.Sid, sid, StringComparison.Ordinal)).ToArray();
         return matching.Length == 1
-            && matching[0].Kind == WindowsInstallerDirectoryAceKind.Allow
+            && matching[0].Kind == WindowsDirectoryAceKind.Allow
             && matching[0].AccessMask == (int)FileSystemRights.FullControl
             && matching[0].Flags == flags
             && !matching[0].IsObjectSpecific;

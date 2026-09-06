@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Windows.Files;
+using ClashSharp.Windows.FileSecurity;
 using Microsoft.Win32.SafeHandles;
 
 namespace ClashSharp.Installer.Windows.Transactions;
@@ -207,7 +208,7 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
         }
 
         WindowsInstallerPrivateStateSecurity.Validate(
-            WindowsInstallerDirectoryLease.ReadSecuritySnapshot(file), directory: false);
+            WindowsDirectoryReadLease.ReadSecuritySnapshot(file), directory: false);
     }
 
     private static void ValidateJournalPath(string path)

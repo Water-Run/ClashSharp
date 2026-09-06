@@ -4,6 +4,7 @@ using System.Security.Principal;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Transactions;
+using ClashSharp.Windows.FileSecurity;
 
 namespace ClashSharp.Installer.Windows.Transactions;
 
@@ -400,7 +401,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
     }
 
     private static void ValidateObservation(
-        WindowsInstallerDirectoryObservation observation,
+        WindowsDirectoryObservation observation,
         bool requiresExactProtection,
         string? targetSid)
     {
@@ -530,132 +531,32 @@ public sealed class WindowsInstallerTransactionRootGuard :
 
 internal static class WindowsInstallerDirectorySecurityPolicy
 {
-    internal const string LocalSystemSid = "S-1-5-18";
-    internal const string AdministratorsSid = "S-1-5-32-544";
-    internal const string TrustedInstallerSid =
-        "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
-
-    internal const FileSystemRights TargetUserReadOnlyRights =
-        FileSystemRights.ReadAndExecute | FileSystemRights.Synchronize;
-
-    private const int GenericAll = 0x1000_0000;
-    private const FileSystemRights DangerousAnchorRights =
-        FileSystemRights.Delete
-        | FileSystemRights.DeleteSubdirectoriesAndFiles
-        | FileSystemRights.ChangePermissions
-        | FileSystemRights.TakeOwnership;
-    private const InheritanceFlags ExpectedInheritance =
-        InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
-    private const AceFlags ExpectedAceFlags =
-        AceFlags.ContainerInherit | AceFlags.ObjectInherit;
+    internal const string LocalSystemSid = WindowsDirectoryAccessPolicy.LocalSystemSid;
+    internal const string AdministratorsSid = WindowsDirectoryAccessPolicy.AdministratorsSid;
+    internal const string TrustedInstallerSid = WindowsDirectoryAccessPolicy.TrustedInstallerSid;
+    internal const FileSystemRights TargetUserReadOnlyRights = WindowsDirectoryAccessPolicy.OwnerReadOnlyRights;
 
     internal static DirectorySecurity CreateProtectedDirectorySecurity(string targetSid)
     {
         InstallerProtocolValidation.ValidateTargetSid(targetSid);
-        var localSystem = new SecurityIdentifier(LocalSystemSid);
-        var administrators = new SecurityIdentifier(AdministratorsSid);
-        var targetUser = new SecurityIdentifier(targetSid);
-        DirectorySecurity security = new();
-        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-        security.SetOwner(administrators);
-        security.AddAccessRule(CreateRule(localSystem, FileSystemRights.FullControl));
-        security.AddAccessRule(CreateRule(administrators, FileSystemRights.FullControl));
-        security.AddAccessRule(CreateRule(targetUser, TargetUserReadOnlyRights));
-        return security;
+        return WindowsDirectoryAccessPolicy.CreateOwnerReadableDirectorySecurity(targetSid);
     }
 
-    internal static void ValidateProtectedRoot(
-        WindowsInstallerDirectorySecuritySnapshot security,
-        string targetSid)
+    internal static void ValidateProtectedRoot(WindowsDirectorySecuritySnapshot security, string targetSid)
     {
-        if (!security.HasDacl
-            || !security.DaclProtected
-            || !string.Equals(
-                security.OwnerSid,
-                AdministratorsSid,
-                StringComparison.Ordinal)
-            || security.AccessEntries.Count != 3
-            || !HasExactRule(
-                security.AccessEntries,
-                LocalSystemSid,
-                FileSystemRights.FullControl)
-            || !HasExactRule(
-                security.AccessEntries,
-                AdministratorsSid,
-                FileSystemRights.FullControl)
-            || !HasExactRule(
-                security.AccessEntries,
-                targetSid,
-                TargetUserReadOnlyRights))
+        if (!WindowsDirectoryAccessPolicy.HasExactOwnerReadOnlyAccess(security, targetSid))
         {
-            throw new InstallerProtocolException(
-                "installer.transaction.root_acl_invalid");
+            throw new InstallerProtocolException("installer.transaction.root_acl_invalid");
         }
     }
 
-    internal static void ValidateRenameAnchor(
-        WindowsInstallerDirectorySecuritySnapshot security)
+    internal static void ValidateRenameAnchor(WindowsDirectorySecuritySnapshot security)
     {
-        if (!security.HasDacl
-            || !IsTrustedAuthority(security.OwnerSid))
+        if (!WindowsDirectoryAccessPolicy.IsTrustedRenameAnchor(security))
         {
-            throw new InstallerProtocolException(
-                "installer.transaction.root_ancestor_acl_invalid");
-        }
-
-        foreach (WindowsInstallerDirectoryAce entry in security.AccessEntries)
-        {
-            if (entry.Kind == WindowsInstallerDirectoryAceKind.Unsupported)
-            {
-                throw new InstallerProtocolException(
-                    "installer.transaction.root_ancestor_acl_invalid");
-            }
-
-            bool appliesToAnchor = (entry.Flags & AceFlags.InheritOnly) == 0;
-            if (entry.Kind == WindowsInstallerDirectoryAceKind.Allow
-                && appliesToAnchor
-                && !IsTrustedAuthority(entry.Sid)
-                && HasDangerousAnchorRights(entry.AccessMask))
-            {
-                throw new InstallerProtocolException(
-                    "installer.transaction.root_ancestor_acl_invalid");
-            }
+            throw new InstallerProtocolException("installer.transaction.root_ancestor_acl_invalid");
         }
     }
-
-    private static FileSystemAccessRule CreateRule(
-        SecurityIdentifier sid,
-        FileSystemRights rights) =>
-        new(
-            sid,
-            rights,
-            ExpectedInheritance,
-            PropagationFlags.None,
-            AccessControlType.Allow);
-
-    private static bool HasExactRule(
-        IReadOnlyList<WindowsInstallerDirectoryAce> entries,
-        string sid,
-        FileSystemRights rights)
-    {
-        WindowsInstallerDirectoryAce[] matches = entries
-            .Where(entry => string.Equals(entry.Sid, sid, StringComparison.Ordinal))
-            .ToArray();
-        return matches.Length == 1
-            && matches[0].Kind == WindowsInstallerDirectoryAceKind.Allow
-            && matches[0].AccessMask == (int)rights
-            && matches[0].Flags == ExpectedAceFlags
-            && !matches[0].IsObjectSpecific;
-    }
-
-    private static bool IsTrustedAuthority(string? sid) =>
-        sid is LocalSystemSid or AdministratorsSid or TrustedInstallerSid;
-
-    private static bool HasDangerousAnchorRights(int accessMask) =>
-        // Windows 11 ProgramData intentionally grants Users create-folder/append-data rights.
-        // Those can pre-position a name (which exact child validation rejects), but cannot replace
-        // an existing protected child. Delete-child, delete, WRITE_DAC, and WRITE_OWNER can.
-        (accessMask & ((int)DangerousAnchorRights | GenericAll)) != 0;
 }
 
 internal interface IWindowsInstallerDirectoryNative
@@ -676,30 +577,5 @@ internal interface IWindowsInstallerDirectoryNative
 
 internal interface IWindowsInstallerDirectoryLease : IDisposable
 {
-    WindowsInstallerDirectoryObservation Observe();
-}
-
-internal sealed record WindowsInstallerDirectoryObservation(
-    bool IsDirectory,
-    bool IsReparsePoint,
-    WindowsInstallerDirectorySecuritySnapshot Security);
-
-internal sealed record WindowsInstallerDirectorySecuritySnapshot(
-    string? OwnerSid,
-    bool HasDacl,
-    bool DaclProtected,
-    IReadOnlyList<WindowsInstallerDirectoryAce> AccessEntries);
-
-internal sealed record WindowsInstallerDirectoryAce(
-    string Sid,
-    WindowsInstallerDirectoryAceKind Kind,
-    int AccessMask,
-    AceFlags Flags,
-    bool IsObjectSpecific);
-
-internal enum WindowsInstallerDirectoryAceKind
-{
-    Allow,
-    Deny,
-    Unsupported,
+    WindowsDirectoryObservation Observe();
 }
