@@ -15,14 +15,14 @@ internal sealed class WindowsInstallerDirectoryNative : IWindowsInstallerDirecto
     }
 
     /// <inheritdoc />
-    public IWindowsInstallerDirectoryLease OpenDirectory(string path, bool preventRename) =>
-        new WindowsInstallerDirectoryLease(path, preventRename);
+    public IWindowsInstallerDirectoryLease OpenDirectory(string path) =>
+        new WindowsInstallerDirectoryLease(path);
 }
 
 internal sealed class WindowsInstallerDirectoryLease : IWindowsInstallerDirectoryLease
 {
     private const uint ReadControl = 0x0002_0000;
-    private const uint Delete = 0x0001_0000;
+    private const uint FileListDirectory = 0x0000_0001;
     private const uint FileReadAttributes = 0x0000_0080;
     private const uint FileShareRead = 0x0000_0001;
     private const uint FileShareWrite = 0x0000_0002;
@@ -38,12 +38,15 @@ internal sealed class WindowsInstallerDirectoryLease : IWindowsInstallerDirector
     private readonly SafeFileHandle _handle;
     private bool _disposed;
 
-    internal WindowsInstallerDirectoryLease(string path, bool preventRename)
+    internal WindowsInstallerDirectoryLease(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        // Metadata-only access does not participate in directory delete sharing checks.
+        // List access pins the name without requesting DELETE, so nested mutation guards
+        // can coexist while every lease continues to withhold delete sharing.
         _handle = CreateFile(
             path,
-            ReadControl | FileReadAttributes | (preventRename ? Delete : 0),
+            ReadControl | FileListDirectory | FileReadAttributes,
             FileShareRead | FileShareWrite,
             0,
             OpenExisting,

@@ -351,7 +351,7 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
             }
         }
 
-        public IWindowsInstallerDirectoryLease OpenDirectory(string path, bool preventRename)
+        public IWindowsInstallerDirectoryLease OpenDirectory(string path)
         {
             Calls.Add("open:" + path);
             if (!Observations.ContainsKey(path))

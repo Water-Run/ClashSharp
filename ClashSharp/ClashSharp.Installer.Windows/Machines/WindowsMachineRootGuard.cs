@@ -133,9 +133,7 @@ internal sealed class WindowsMachineRootGuard : IWindowsMachineRootGuard
                             .CreateProtectedDirectorySecurity(_plan.Request.TargetSid));
                 }
 
-                IWindowsInstallerDirectoryLease lease = _native.OpenDirectory(
-                    spec.Path,
-                    preventRename: spec.CreateWithProtectedAcl);
+                IWindowsInstallerDirectoryLease lease = _native.OpenDirectory(spec.Path);
                 acquired.Add((spec, lease));
                 ValidateObservation(spec, lease.Observe());
             }

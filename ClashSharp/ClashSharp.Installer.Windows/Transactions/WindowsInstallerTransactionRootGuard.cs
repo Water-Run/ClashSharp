@@ -250,10 +250,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
                 IWindowsInstallerDirectoryLease lease;
                 try
                 {
-                    lease = _native.OpenDirectory(
-                        path.Path,
-                        preventRename: _createMissingProtectedDirectories
-                            && path.CreateWithProtectedAcl);
+                    lease = _native.OpenDirectory(path.Path);
                 }
                 catch (Exception exception) when (
                     !_createMissingProtectedDirectories
@@ -319,10 +316,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
                 IWindowsInstallerDirectoryLease lease;
                 try
                 {
-                    lease = _native.OpenDirectory(
-                        paths[index].Path,
-                        preventRename: _createMissingProtectedDirectories
-                            && paths[index].CreateWithProtectedAcl);
+                    lease = _native.OpenDirectory(paths[index].Path);
                 }
                 catch (Exception exception) when (IsMissingDirectory(exception))
                 {
@@ -671,14 +665,13 @@ internal interface IWindowsInstallerDirectoryNative
     /// <param name="security">Exact descriptor applied during creation.</param>
     void CreateDirectory(string path, DirectorySecurity security);
 
-    /// <summary>Opens a directory for observation and optionally pins its name against rename.</summary>
+    /// <summary>
+    /// Opens a directory for security observation and listing, withholding delete sharing
+    /// to pin its name against deletion or rename without requesting delete authority.
+    /// </summary>
     /// <param name="path">Canonical absolute directory path.</param>
-    /// <param name="preventRename">
-    /// <see langword="true"/> to request DELETE access while withholding delete sharing; otherwise,
-    /// <see langword="false"/> for a read-only observer that cannot require DELETE permission.
-    /// </param>
     /// <returns>A lease owning the native directory handle.</returns>
-    IWindowsInstallerDirectoryLease OpenDirectory(string path, bool preventRename);
+    IWindowsInstallerDirectoryLease OpenDirectory(string path);
 }
 
 internal interface IWindowsInstallerDirectoryLease : IDisposable

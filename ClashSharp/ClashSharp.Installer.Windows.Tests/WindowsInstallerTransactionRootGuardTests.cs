@@ -38,7 +38,6 @@ public sealed class WindowsInstallerTransactionRootGuardTests
             ],
             native.CreatedPaths);
         Assert.Equal(5, native.ActiveLeaseCount);
-        Assert.Equal([false, false, true, true, true], native.PreventRenameRequests);
 
         await guard.EnsureProtectedAsync(guard.RootPath, CancellationToken.None);
         Assert.Equal(15, native.ObservationCount);
@@ -65,7 +64,6 @@ public sealed class WindowsInstallerTransactionRootGuardTests
 
         Assert.Empty(native.CreatedPaths);
         Assert.Equal(2, native.ActiveLeaseCount);
-        Assert.Equal([false, false], native.PreventRenameRequests);
         Assert.False(guard.IsProtectedRootPresent);
 
         string productRoot = Path.Combine(ProgramDataPath, "ClashSharp");
@@ -78,7 +76,6 @@ public sealed class WindowsInstallerTransactionRootGuardTests
 
         Assert.Empty(native.CreatedPaths);
         Assert.Equal(5, native.ActiveLeaseCount);
-        Assert.Equal([false, false, false, false, false], native.PreventRenameRequests);
         Assert.True(guard.IsProtectedRootPresent);
     }
 
@@ -336,9 +333,7 @@ public sealed class WindowsInstallerTransactionRootGuardTests
         try
         {
             var native = new WindowsInstallerDirectoryNative();
-            IWindowsInstallerDirectoryLease lease = native.OpenDirectory(
-                original,
-                preventRename: true);
+            IWindowsInstallerDirectoryLease lease = native.OpenDirectory(original);
             try
             {
                 WindowsInstallerDirectoryObservation observation = lease.Observe();
@@ -514,8 +509,6 @@ public sealed class WindowsInstallerTransactionRootGuardTests
 
         internal int OpenCount { get; private set; }
 
-        internal List<bool> PreventRenameRequests { get; } = [];
-
         public void CreateDirectory(string path, DirectorySecurity security)
         {
             ArgumentNullException.ThrowIfNull(security);
@@ -523,7 +516,7 @@ public sealed class WindowsInstallerTransactionRootGuardTests
             _observations.TryAdd(path, new MutableObservation(Protected(_targetSid)));
         }
 
-        public IWindowsInstallerDirectoryLease OpenDirectory(string path, bool preventRename)
+        public IWindowsInstallerDirectoryLease OpenDirectory(string path)
         {
             OpenCount++;
             if (!_observations.TryGetValue(path, out MutableObservation? observation))
@@ -531,7 +524,6 @@ public sealed class WindowsInstallerTransactionRootGuardTests
                 throw new DirectoryNotFoundException();
             }
 
-            PreventRenameRequests.Add(preventRename);
             ActiveLeaseCount++;
             return new FakeLease(this, observation);
         }

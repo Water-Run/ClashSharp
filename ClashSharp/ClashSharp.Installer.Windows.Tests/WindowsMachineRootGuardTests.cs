@@ -36,11 +36,7 @@ public sealed class WindowsMachineRootGuardTests
             native.CreatedPaths);
         Assert.True(native.ActiveLeaseCount > 0);
         Assert.Equal(native.ActiveLeaseCount * 2, native.ObservationCount);
-        Assert.All(
-            native.OpenRequests,
-            request => Assert.Equal(
-                native.CreatedPaths.Contains(request.Path, StringComparer.OrdinalIgnoreCase),
-                request.PreventRename));
+        Assert.All(native.CreatedPaths, path => Assert.Contains(path, native.OpenRequests));
 
         int opened = native.OpenCount;
         int created = native.CreatedPaths.Count;
@@ -87,17 +83,15 @@ public sealed class WindowsMachineRootGuardTests
         Assert.Contains(
             native.OpenRequests,
             request => string.Equals(
-                    request.Path,
+                    request,
                     plan.MachineRoot,
-                    StringComparison.OrdinalIgnoreCase)
-                && request.PreventRename);
+                    StringComparison.OrdinalIgnoreCase));
         Assert.Contains(
             native.OpenRequests,
             request => string.Equals(
-                    request.Path,
+                    request,
                     plan.ServiceDataRoot,
-                    StringComparison.OrdinalIgnoreCase)
-                && request.PreventRename);
+                    StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -265,7 +259,7 @@ public sealed class WindowsMachineRootGuardTests
 
         internal int OpenCount { get; private set; }
 
-        internal List<(string Path, bool PreventRename)> OpenRequests { get; } = [];
+        internal List<string> OpenRequests { get; } = [];
 
         public void CreateDirectory(string path, DirectorySecurity security)
         {
@@ -274,12 +268,10 @@ public sealed class WindowsMachineRootGuardTests
             _observations.TryAdd(path, new MutableObservation(Protected(_targetSid)));
         }
 
-        public IWindowsInstallerDirectoryLease OpenDirectory(
-            string path,
-            bool preventRename)
+        public IWindowsInstallerDirectoryLease OpenDirectory(string path)
         {
             OpenCount++;
-            OpenRequests.Add((path, preventRename));
+            OpenRequests.Add(path);
             if (!_observations.TryGetValue(path, out MutableObservation? observation))
             {
                 observation = new MutableObservation(Anchor());

@@ -76,6 +76,22 @@ Core 的 `InstallerOwnerTransferCoordinator` 只接收同一专用 authority 已
 
 这项实现是持久编排；阶段端口的 Windows 原生实现和专用认证入口仍待接入。模拟的服务/ACL/证书操作不计作实际换绑验收，也不改变普通 helper 的拒绝边界或生产 mutation 门。
 
+## M4m 旧服务步骤与目录句柄修复
+
+Windows 的旧服务步骤只接受 StartupBlocked。它重新核对同一候选、准确的普通 Prepared snapshot、旧 SID 对应的实际 profile、机器目录权限与旧 association，再调用已有 SCM tuple 验证及停止/删除实现。后置检查要求服务不存在、旧 association 仍准确存在；服务已经不存在时可重放。目录和 association 租约持有到异步步骤结束，取消不会提前释放。窄端口只提供该步骤需要的六项操作，普通 machine backend 复用这些实现。
+
+首次远端验证在写入初始 association 时发现一个影响普通安装的真实错误：外层目录保护请求 DELETE 且不共享删除，内层文件写入保护又拒绝共享该 DELETE 访问，因此 CreateFile 返回 ERROR_SHARING_VIOLATION（32）。另一项原生对照确认，仅请求 READ_CONTROL 和 FILE_READ_ATTRIBUTES 的只读句柄没有阻止目录改名。
+
+共用目录 lease 现在统一请求 READ_CONTROL、FILE_LIST_DIRECTORY 和 FILE_READ_ATTRIBUTES，共享读/写但不共享删除。读取目录内容的访问参与共享冲突检查，能够固定名称，同时不再携带会阻塞嵌套保护的 DELETE 权限。移除原来两个模式的布尔参数，读写两种 root guard 都使用同一保护语义；实际删除操作仍使用独立的删除句柄。[CreateFileW 的访问与共享规则](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)说明了共享限制及删除与改名的关系；具体旧、新句柄行为另有真实 Windows 对照收据。
+
+新增 21 项服务步骤边界用例，以及 3 项实际临时目录回归：多个观察/修改保护共存并持续阻止改名、已有删除权限阻止新观察 lease，以及持有保护期间完整创建/替换/读取/删除 association。临时目录测试不修改系统 ACL、服务或证书。完整 Windows 安全子集 474 项通过、0 跳过；18 项目 Release x64 构建 0 警告、0 错误，format 加载 1291 个文件、0 处变更、无工作区警告。
+
+远端使用生产 Windows backend、真实 SCM 和隔离文件根目录通过 12 项服务断言，覆盖准确旧服务删除、已删除重放、不同凭据的服务拒绝及原样保留、association/普通日志保留。测试只创建停止状态的自有服务，结束后确认固定服务不存在。候选为测试 manifest/lease，双 App 屏障及候选签名未在该探针验证，所以这不是完整迁移或签名安装验收。
+
+目录句柄变化后，使用同一程序集在新隔离目录重跑私有存储与普通准入的四个独立进程，共 105 项断言通过，包括阶段恢复、ACL、硬链接、符号链接、大小限制和全阶段阻断。收据为 artifacts/verification 下的 service-removal-validation-m4m.json、private-state-regression-m4m.json 和 handle-sharing-validation-m4m-initial.json；实际 Windows 程序集 SHA-256 为 deb128c8dd39fafeb04b748935d71b61e10434e1867a11cdd4d1db3b310be395。
+
+该服务步骤尚未接入完整阶段执行器及专用认证入口。机器 ACL 迁移、association 切换、证书账本保留、双账户清理和确认界面继续实现，生产 mutation 门保持原有关闭状态。
+
 ## 持久迁移的接入要求
 
 换绑必须是独立用例。后续接入不能再次让普通写入方法凭布尔值覆盖旧证据：

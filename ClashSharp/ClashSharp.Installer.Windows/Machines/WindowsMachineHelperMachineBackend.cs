@@ -5,18 +5,9 @@ using ClashSharp.Installer.Windows.Files;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
-internal interface IWindowsMachineHelperMachineBackend
+internal interface IWindowsMachineHelperMachineBackend : IWindowsOwnerTransferServiceBackend
 {
-    string ResolveTargetProfile(string targetSid, CancellationToken cancellationToken);
-
     string CreateAuthenticationToken();
-
-    WindowsMachineDeploymentPlan CreatePlan(
-        InstallerRequest request,
-        InstallerReleaseManifest manifest,
-        InstallerMachineAssociation association,
-        string targetProfileRoot,
-        bool removalPlan);
 
     /// <summary>
     /// Builds a fixed-root removal plan whose profile-derived fields must never authorize service
@@ -26,14 +17,6 @@ internal interface IWindowsMachineHelperMachineBackend
         InstallerRequest request,
         InstallerReleaseManifest manifest,
         InstallerMachineAssociation association);
-
-    IWindowsMachineRootGuard CreateRootGuard(
-        WindowsMachineDeploymentPlan plan,
-        bool createMissing);
-
-    IWindowsMachineAssociationStore CreateAssociationStore(
-        WindowsMachineDeploymentPlan plan,
-        IWindowsMachineRootGuard rootGuard);
 
     bool ServiceExists(CancellationToken cancellationToken);
 
@@ -49,17 +32,11 @@ internal interface IWindowsMachineHelperMachineBackend
         WindowsMachineDeploymentPlan plan,
         CancellationToken cancellationToken);
 
-    Task StopDeleteServiceAsync(
-        WindowsMachineDeploymentPlan plan,
-        CancellationToken cancellationToken);
-
     void VerifyServicePrepared(CancellationToken cancellationToken);
 
     void VerifyServiceInstalled(
         WindowsMachineDeploymentPlan plan,
         CancellationToken cancellationToken);
-
-    void VerifyServiceAbsent(CancellationToken cancellationToken);
 
     Task StagePayloadAsync(
         WindowsMachineDeploymentPlan plan,
