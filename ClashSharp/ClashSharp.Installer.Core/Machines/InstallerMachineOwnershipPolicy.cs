@@ -128,11 +128,13 @@ public static class InstallerMachineOwnershipPolicy
                 InstallerMachineProvisionDisposition.Provision,
                 association.AuthenticationToken);
         }
-        else if (!request.AllowReassociation
-            && (observation.Status != InstallerMachineAssociationStatus.Missing
-                || serviceExists
-                || machineResidueExists))
+        else if (observation.Status != InstallerMachineAssociationStatus.Missing
+            || serviceExists
+            || machineResidueExists)
         {
+            // A repair flag records intent, not proof that the old service was removed and
+            // both owners' protected state was transferred. Only a dedicated durable transfer
+            // may replace that evidence; ordinary provisioning must observe the new owner first.
             decision = new(
                 InstallerMachineProvisionDisposition.RequiresExplicitRepair,
                 null);

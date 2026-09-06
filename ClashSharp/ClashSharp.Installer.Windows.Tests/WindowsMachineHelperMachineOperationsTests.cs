@@ -105,8 +105,16 @@ public sealed class WindowsMachineHelperMachineOperationsTests
         Assert.DoesNotContain("association:write", backend.Calls);
     }
 
-    [Fact]
-    public async Task ExplicitRepairReplacesInvalidAssociationOnlyAfterFence()
+    [Theory]
+    [InlineData(InstallerMachineAssociationStatus.Invalid, false)]
+    [InlineData(InstallerMachineAssociationStatus.Invalid, true)]
+    [InlineData(InstallerMachineAssociationStatus.Missing, false)]
+    [InlineData(InstallerMachineAssociationStatus.Missing, true)]
+    [InlineData(InstallerMachineAssociationStatus.Valid, false)]
+    [InlineData(InstallerMachineAssociationStatus.Valid, true)]
+    public async Task RepairIntentPreservesUnprovenEvidenceBeforeServiceOrAssociationMutation(
+        InstallerMachineAssociationStatus status,
+        bool serviceExists)
     {
         using var fixture = Fixture();
         InstallerRequest request = fixture.Request(
@@ -115,24 +123,33 @@ public sealed class WindowsMachineHelperMachineOperationsTests
         {
             AllowReassociation = true,
         };
+        InstallerMachineAssociation foreign = InstallerMachineAssociation.Create(OtherSid, ForeignToken);
+        InstallerMachineAssociationObservation observation = new(
+            status,
+            status == InstallerMachineAssociationStatus.Valid ? foreign : null);
         var backend = new FakeBackend(
-            InstallerMachineAssociationObservation.Invalid(),
+            observation,
             rootsAbsent: false)
         {
             PayloadPresent = true,
+            ServiceInstalled = serviceExists,
+            ServiceAssociation = serviceExists ? foreign : null,
         };
         var operations = new WindowsMachineHelperMachineOperations(backend);
 
-        await operations.PrepareAsync(
-            request,
-            new FakeReleaseLease(request, fixture.Manifest),
-            InstallerMachineHelperSessionDisposition.Execute,
-            CancellationToken.None);
+        InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => operations.PrepareAsync(
+                request,
+                new FakeReleaseLease(request, fixture.Manifest),
+                InstallerMachineHelperSessionDisposition.Execute,
+                CancellationToken.None));
 
-        Assert.Equal(
-            InstallerMachineAssociation.Create(TargetSid, FreshToken),
-            backend.Association.Association);
-        AssertOrdered(backend.Calls, "service:stop-fence", "association:write");
+        Assert.Equal("installer.machine.reassociation_required", exception.DiagnosticCode);
+        Assert.Equal(observation, backend.Association);
+        Assert.Equal(serviceExists, backend.ServiceInstalled);
+        Assert.True(backend.PayloadPresent);
+        Assert.DoesNotContain("service:stop-fence", backend.Calls);
+        Assert.DoesNotContain("association:write", backend.Calls);
     }
 
     [Fact]
@@ -164,8 +181,9 @@ public sealed class WindowsMachineHelperMachineOperationsTests
                 InstallerMachineHelperSessionDisposition.Execute,
                 CancellationToken.None));
 
-        Assert.Equal("installer.machine.existing_service_not_owned", exception.DiagnosticCode);
+        Assert.Equal("installer.machine.reassociation_required", exception.DiagnosticCode);
         Assert.Equal(foreign, backend.Association.Association);
+        Assert.DoesNotContain("service:stop-fence", backend.Calls);
         Assert.DoesNotContain("association:write", backend.Calls);
     }
 
@@ -1303,8 +1321,7 @@ public sealed class WindowsMachineHelperMachineOperationsTests
                     return Task.CompletedTask;
                 }
 
-                if (!_plan.Request.AllowReassociation
-                    && _owner.Association.Status != InstallerMachineAssociationStatus.Missing)
+                if (_owner.Association.Status != InstallerMachineAssociationStatus.Missing)
                 {
                     throw new InstallerProtocolException(
                         "installer.machine.association_conflict");

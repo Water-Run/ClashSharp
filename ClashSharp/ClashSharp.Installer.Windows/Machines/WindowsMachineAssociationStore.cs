@@ -125,8 +125,9 @@ internal sealed class WindowsMachineAssociationStore : IWindowsMachineAssociatio
             return;
         }
 
-        if (!_plan.Request.AllowReassociation
-            && before.Status != InstallerMachineAssociationStatus.Missing)
+        // This ordinary provisioning port can create or re-observe its exact association.
+        // A request flag alone must never erase a different owner, token, or malformed evidence.
+        if (before.Status != InstallerMachineAssociationStatus.Missing)
         {
             throw new InstallerProtocolException(
                 "installer.machine.association_conflict");

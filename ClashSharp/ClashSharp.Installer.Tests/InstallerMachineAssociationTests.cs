@@ -159,7 +159,7 @@ public sealed class InstallerMachineAssociationTests
     }
 
     [Fact]
-    public void CleanInstallAndExplicitRepairUseFreshCredential()
+    public void CleanInstallUsesFreshCredential()
     {
         InstallerMachineProvisionDecision clean =
             InstallerMachineOwnershipPolicy.DecideProvision(
@@ -168,20 +168,60 @@ public sealed class InstallerMachineAssociationTests
                 serviceExists: false,
                 machineResidueExists: false,
                 freshAuthenticationToken: InstallerTestData.OtherHash);
-        InstallerMachineProvisionDecision repair =
-            InstallerMachineOwnershipPolicy.DecideProvision(
-                InstallerTestData.Request(
-                    InstallerOperation.Repair,
-                    allowReassociation: true),
-                InstallerMachineAssociationObservation.Invalid(),
-                serviceExists: true,
-                machineResidueExists: true,
-                freshAuthenticationToken: InstallerTestData.OtherHash);
-
         Assert.Equal(InstallerTestData.OtherHash, clean.AuthenticationToken);
-        Assert.Equal(InstallerTestData.OtherHash, repair.AuthenticationToken);
         Assert.Equal(InstallerMachineProvisionDisposition.Provision, clean.Disposition);
-        Assert.Equal(InstallerMachineProvisionDisposition.Provision, repair.Disposition);
+    }
+
+    [Theory]
+    [InlineData(InstallerMachineAssociationStatus.Invalid, false, false, false)]
+    [InlineData(InstallerMachineAssociationStatus.Invalid, false, false, true)]
+    [InlineData(InstallerMachineAssociationStatus.Missing, true, false, false)]
+    [InlineData(InstallerMachineAssociationStatus.Missing, true, false, true)]
+    [InlineData(InstallerMachineAssociationStatus.Missing, false, true, false)]
+    [InlineData(InstallerMachineAssociationStatus.Missing, false, true, true)]
+    [InlineData(InstallerMachineAssociationStatus.Valid, false, false, false)]
+    [InlineData(InstallerMachineAssociationStatus.Valid, false, false, true)]
+    [InlineData(InstallerMachineAssociationStatus.Valid, true, true, false)]
+    [InlineData(InstallerMachineAssociationStatus.Valid, true, true, true)]
+    public void RepairIntentCannotReplaceUnprovenOwnership(
+        InstallerMachineAssociationStatus status,
+        bool serviceExists,
+        bool residueExists,
+        bool allowReassociation)
+    {
+        InstallerMachineAssociationObservation observation = new(
+            status,
+            status == InstallerMachineAssociationStatus.Valid
+                ? Association() with { OwnerSid = "S-1-5-21-100-200-300-1002" }
+                : null);
+
+        InstallerMachineProvisionDecision decision = InstallerMachineOwnershipPolicy.DecideProvision(
+            InstallerTestData.Request(InstallerOperation.Repair, allowReassociation),
+            observation,
+            serviceExists,
+            residueExists,
+            InstallerTestData.OtherHash);
+
+        Assert.Equal(InstallerMachineProvisionDisposition.RequiresExplicitRepair, decision.Disposition);
+        Assert.Null(decision.AuthenticationToken);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RepairRetainsTheAlreadyEstablishedOwnersCredential(bool allowReassociation)
+    {
+        InstallerMachineAssociation existing = Association();
+
+        InstallerMachineProvisionDecision decision = InstallerMachineOwnershipPolicy.DecideProvision(
+            InstallerTestData.Request(InstallerOperation.Repair, allowReassociation),
+            InstallerMachineAssociationObservation.Valid(existing),
+            serviceExists: true,
+            machineResidueExists: true,
+            InstallerTestData.OtherHash);
+
+        Assert.Equal(InstallerMachineProvisionDisposition.Provision, decision.Disposition);
+        Assert.Equal(existing.AuthenticationToken, decision.AuthenticationToken);
     }
 
     [Fact]

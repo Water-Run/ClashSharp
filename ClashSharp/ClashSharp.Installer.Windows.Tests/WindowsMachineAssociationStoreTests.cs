@@ -86,8 +86,12 @@ public sealed class WindowsMachineAssociationStoreTests
         }
     }
 
-    [Fact]
-    public async Task ExplicitReassociationRepairMayReplaceForeignAssociation()
+    [Theory]
+    [InlineData("foreign")]
+    [InlineData("different-token")]
+    [InlineData("invalid-json")]
+    [InlineData("unsafe-object")]
+    public async Task RepairIntentCannotOverwriteDifferentOrUnprovenAssociation(string condition)
     {
         using var fixture = Fixture();
         InstallerRequest repair = fixture.Request(targetSid: TargetSid) with
@@ -97,17 +101,25 @@ public sealed class WindowsMachineAssociationStoreTests
         };
         WindowsMachineDeploymentPlan plan = Plan(fixture, request: repair);
         var root = new FakeRootGuard(plan);
-        var native = new FakeAssociationNative
+        WindowsMachineAssociationFileObservation before = condition switch
         {
-            Observation = Encoded(
-                InstallerMachineAssociation.Create(OtherSid, OtherToken)),
+            "foreign" => Encoded(InstallerMachineAssociation.Create(OtherSid, OtherToken)),
+            "different-token" => Encoded(InstallerMachineAssociation.Create(TargetSid, OtherToken)),
+            "invalid-json" => new(WindowsMachineAssociationFileStatus.OrdinaryFile, [0x01]),
+            "unsafe-object" => new(WindowsMachineAssociationFileStatus.Unsafe, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(condition)),
         };
+        var native = new FakeAssociationNative { Observation = before };
         using var store = new WindowsMachineAssociationStore(plan, root, native);
 
-        await store.WriteAndVerifyAsync(plan.Association, CancellationToken.None);
+        InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => store.WriteAndVerifyAsync(plan.Association, CancellationToken.None));
 
-        Assert.Equal(plan.Association, Parse(native.Observation));
-        Assert.Equal(1, native.WriteCalls);
+        Assert.Equal("installer.machine.association_conflict", exception.DiagnosticCode);
+        Assert.Equal(before.Status, native.Observation.Status);
+        Assert.Equal(before.Bytes, native.Observation.Bytes);
+        Assert.Equal(0, native.WriteCalls);
+        Assert.Equal(0, native.DeleteCalls);
     }
 
     [Fact]
