@@ -149,6 +149,8 @@ internal static class WindowsFileSystemNative
             information.VolumeSerialNumber,
             (ulong)information.FileIndexHigh << 32 | information.FileIndexLow);
 
+    internal static uint GetLinkCount(SafeFileHandle handle) => GetInformation(handle).NumberOfLinks;
+
     private static ByHandleFileInformation GetInformation(SafeFileHandle handle)
     {
         if (!GetFileInformationByHandle(handle, out ByHandleFileInformation information))

@@ -83,7 +83,9 @@ internal sealed class WindowsInstallerDirectoryLease : IWindowsInstallerDirector
         _disposed = true;
     }
 
-    private static WindowsInstallerDirectorySecuritySnapshot ReadSecuritySnapshot(
+    // Security is read from the already-pinned object handle; private journal files reuse this
+    // descriptor projection without reopening their path for an ACL query.
+    internal static WindowsInstallerDirectorySecuritySnapshot ReadSecuritySnapshot(
         SafeFileHandle handle)
     {
         uint error = GetSecurityInfo(

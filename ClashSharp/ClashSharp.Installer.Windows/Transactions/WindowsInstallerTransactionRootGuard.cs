@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using ClashSharp.Installer.Contracts;
+using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Windows.Transactions;
@@ -16,7 +17,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
 {
     private readonly object _gate = new();
     private readonly string _programDataPath;
-    private readonly string _targetSid;
+    private readonly string? _targetSid;
     private readonly IWindowsInstallerDirectoryNative _native;
     private readonly bool _createMissingProtectedDirectories;
     private List<IWindowsInstallerDirectoryLease>? _leases;
@@ -24,14 +25,25 @@ public sealed class WindowsInstallerTransactionRootGuard :
 
     private WindowsInstallerTransactionRootGuard(
         string programDataPath,
-        string targetSid,
+        string? targetSid,
         IWindowsInstallerDirectoryNative native,
-        bool createMissingProtectedDirectories)
+        bool createMissingProtectedDirectories,
+        bool privateOwnerTransfer = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(programDataPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(targetSid);
         ArgumentNullException.ThrowIfNull(native);
-        InstallerProtocolValidation.ValidateTargetSid(targetSid);
+        if (privateOwnerTransfer)
+        {
+            if (targetSid is not null || !createMissingProtectedDirectories)
+            {
+                throw new ArgumentException("Private transfer roots cannot carry a user-readable owner.", nameof(targetSid));
+            }
+        }
+        else
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(targetSid);
+            InstallerProtocolValidation.ValidateTargetSid(targetSid);
+        }
 
         _programDataPath = NormalizeDriveQualifiedPath(programDataPath);
         _targetSid = targetSid;
@@ -40,8 +52,8 @@ public sealed class WindowsInstallerTransactionRootGuard :
         RootPath = NormalizeDriveQualifiedPath(Path.Combine(
             _programDataPath,
             InstallerStateLayout.ProductDirectoryName,
-            InstallerStateLayout.InstallerDirectoryName,
-            InstallerStateLayout.VersionDirectoryName));
+            privateOwnerTransfer ? InstallerOwnerTransferStateLayout.AuthorityDirectoryName : InstallerStateLayout.InstallerDirectoryName,
+            privateOwnerTransfer ? InstallerOwnerTransferStateLayout.VersionDirectoryName : InstallerStateLayout.VersionDirectoryName));
         if (!IsStrictDescendant(_programDataPath, RootPath))
         {
             throw new InstallerProtocolException(
@@ -188,6 +200,21 @@ public sealed class WindowsInstallerTransactionRootGuard :
             native,
             createMissingProtectedDirectories: false);
 
+    // Only the elevated owner-transfer persistence factory uses this fixed private layout.
+    // The common product root must already exist; its current user's ACL is never rewritten.
+    internal static WindowsInstallerTransactionRootGuard CreatePrivateOwnerTransferDefault() =>
+        new(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolderOption.DoNotVerify),
+            targetSid: null,
+            new WindowsInstallerDirectoryNative(),
+            createMissingProtectedDirectories: true,
+            privateOwnerTransfer: true);
+
+    internal static WindowsInstallerTransactionRootGuard CreatePrivateOwnerTransferForTesting(
+        string programDataPath,
+        IWindowsInstallerDirectoryNative native) =>
+        new(programDataPath, null, native, createMissingProtectedDirectories: true, privateOwnerTransfer: true);
+
     private List<IWindowsInstallerDirectoryLease> AcquireDirectoryChain(
         CancellationToken cancellationToken)
     {
@@ -202,8 +229,9 @@ public sealed class WindowsInstallerTransactionRootGuard :
                 {
                     _native.CreateDirectory(
                         path.Path,
-                        WindowsInstallerDirectorySecurityPolicy.CreateProtectedDirectorySecurity(
-                            _targetSid));
+                        _targetSid is null
+                            ? WindowsInstallerPrivateStateSecurity.CreateDirectorySecurity()
+                            : WindowsInstallerDirectorySecurityPolicy.CreateProtectedDirectorySecurity(_targetSid));
                 }
 
                 IWindowsInstallerDirectoryLease lease;
@@ -330,7 +358,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
             current = Path.Combine(current, segment);
             yield return new WindowsInstallerDirectoryPath(
                 current,
-                CreateWithProtectedAcl: true,
+                CreateWithProtectedAcl: _targetSid is not null || protectedSegmentIndex > 0,
                 RequiresExactProtection: protectedSegmentIndex > 0);
             protectedSegmentIndex++;
         }
@@ -366,7 +394,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
     private static void ValidateObservation(
         WindowsInstallerDirectoryObservation observation,
         bool requiresExactProtection,
-        string targetSid)
+        string? targetSid)
     {
         if (!observation.IsDirectory)
         {
@@ -386,9 +414,14 @@ public sealed class WindowsInstallerTransactionRootGuard :
 
         if (requiresExactProtection)
         {
-            WindowsInstallerDirectorySecurityPolicy.ValidateProtectedRoot(
-                observation.Security,
-                targetSid);
+            if (targetSid is null)
+            {
+                WindowsInstallerPrivateStateSecurity.Validate(observation.Security, directory: true);
+            }
+            else
+            {
+                WindowsInstallerDirectorySecurityPolicy.ValidateProtectedRoot(observation.Security, targetSid);
+            }
         }
         else
         {

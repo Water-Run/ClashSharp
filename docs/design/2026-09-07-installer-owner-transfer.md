@@ -40,6 +40,20 @@ Core 的 `Ownership` 模块现在定义独立 schema 1、两份 participant、�
 
 161 项协议用例覆盖完整阶段组合、陈旧摘要、身份替换、两份证书账本、最大 Unicode profile、严格编码和诊断脱敏。完整 Installer Core 721 项通过、0 跳过；同次覆盖率为行 93.29%、分支 85.98%，超过既有 90%/80% 门槛。收据为 `artifacts/verification/coverage-1.0.0-m4i/1.0.0-m4i-core.trx`，覆盖率报告位于该目录的 `0da142d4-d948-4289-bc28-75765d6fe861/coverage.cobertura.xml`。全解决方案 Release x64 构建 0 警告、0 错误。
 
+## M4j 已实现的私有持久存储
+
+Core 的 `InstallerOwnerTransferStore` 将摘要比较、相邻阶段和精确重放规则应用于一个窄的字节存储端口。写入或删除即使返回 I/O 错误、取消或确认丢失，也会在调用方仍持有机器权限及目录租约时重新读取实际状态；只有目标状态已被观察到才报告成功。取消且状态未变时返回取消，状态损坏或不可确认时返回稳定的 uncertain 诊断，不进行第二次修改。读写缓冲在使用后清零，同一 store 拒绝并发调用；这不能替代进程间机器独占锁。
+
+Windows 实现使用固定的 `ProgramData\ClashSharp\InstallerAuthority\v1\owner-transfer-v1.json`，与用户可读的 `Installer\v2` 分开。已有 `ClashSharp` 根目录必须存在且通过祖先检查；私有后代只接受 Administrators owner、受保护 DACL 和 SYSTEM/Administrators 两条准确 FullControl ACE。创建使用显式安全描述符，已有目录不被重新赋予“正确”ACL；验证失败即拒绝。每次操作重新检查已固定的目录句柄，租约在 authority 退出前保持。
+
+文件句柄必须是普通文件、只有一个硬链接，并具有准确的两条私有 ACE。读取限制为 1–16384 字节；只有在已验证根目录下确认固定叶子不存在才返回空状态。写入通过[在创建时指定 ACL 的 FileInfo.Create](https://learn.microsoft.com/en-us/dotnet/api/system.io.filesystemaclextensions.create?view=net-10.0)建立独占随机临时文件，验证句柄后写入并 flush，再使用同目录 [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw) 替换固定叶子。清理只涉及当前调用创建的临时路径；后续调用不信任或自动删除旧临时文件。
+
+新增 22 项 Core 故障用例、21 项 Windows fake 边界用例。完整 Installer Core 743 项、Windows 开发机安全子集 436 项通过，均 0 跳过；行覆盖率 93.39%、分支 86.17%。完整 Release x64 构建 18 个项目，0 警告、0 错误，format 检查 1284 个源文件、0 处变更、无工作区警告。
+
+远端管理员进程使用生产 Core/Windows 存储、生产机器互斥锁和隔离 ProgramData 路径完成 74 项原生断言：独立进程重启恢复 Prepared、七次相邻推进、Verified 清除、准确 ACL、目录重命名被句柄阻止、宽松文件/目录 ACL、硬链接、符号链接和超大文件拒绝，以及异常对象字节/权限保留。没有修改服务、系统代理、包或证书。收据为 `artifacts/verification/private-persistence-validation-m4j.json`，包含实际被测程序集摘要；这是存储级验证，不包含实际服务迁移、掉电测试或桌面验收。
+
+当前 backend 只供显式迁移 authority 使用，首次读取可以创建缺失的两个私有后代；普通 helper 检查是否有未完成迁移时仍需独立的只读探测，不能调用该创建路径。它尚未接入 production composition，也没有赋予普通操作换绑权限。
+
 ## 持久迁移的接入要求
 
 换绑必须是独立用例。后续接入不能再次让普通写入方法凭布尔值覆盖旧证据：
@@ -52,7 +66,7 @@ Core 的 `Ownership` 模块现在定义独立 schema 1、两份 participant、�
 - 现有 certificate ownership store 只保存一个目标 SID 的账本。旧账本不能改写 TargetSid 或在有引用时删除；需要保留原证书归属证据，并定义旧账户包的保留/移除及后续独立卸载路径。目录 ACL 转移本身不能解决这项多账户状态问题。
 - 确认界面应明确说明旧账户的服务接管将停止，以及旧包、配置和证书如何处理。只有这条独立确认路径可以申请迁移权限；普通 Repair、静默参数和恢复一个不匹配的候选不能隐式发起换绑。
 
-这些要求尚未全部实现。下一步是 SYSTEM/Administrators 专有目录与文件权限验证、原子持久存储和中断后重放，再连接 native 阶段执行器及确认界面。当前生产 mutation 门继续关闭，跨账户请求仍拒绝；协议层测试不是换绑功能完成的证明。
+这些要求尚未全部实现。下一步先让普通 helper 只读检查未完成的私有迁移，再连接 native 阶段执行器、证书账本保存和确认界面。当前生产 mutation 门继续关闭，跨账户请求仍拒绝；协议及存储测试不是换绑功能完成的证明。
 
 ## 验证
 
