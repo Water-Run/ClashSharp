@@ -37,9 +37,26 @@
             </GeometryDrawing.Brush>
           </GeometryDrawing>
           <GeometryDrawing Brush="#29033E15"
-                           Geometry="M 443,290 H 508 L 988,770 L 915,1214 H 850 L 370,734 Z M 598,290 H 664 L 1144,770 L 1071,1213 H 1006 L 526,733 Z M 340,402 H 713 L 1193,882 V 949 H 820 L 340,469 Z M 316,556 H 689 L 1169,1036 V 1103 H 796 L 316,623 Z M 275,649 H 351 L 831,1129 V 1213 H 755 L 275,733 Z" />
+                           Geometry="M 443,290 H 508 L 988,770 L 915,1214 H 850 L 370,734 Z" />
+          <GeometryDrawing Brush="#29033E15"
+                           Geometry="M 598,290 H 664 L 1144,770 L 1071,1213 H 1006 L 526,733 Z" />
+          <GeometryDrawing Brush="#29033E15"
+                           Geometry="M 340,402 H 713 L 1193,882 V 949 H 820 L 340,469 Z" />
+          <GeometryDrawing Brush="#29033E15"
+                           Geometry="M 316,556 H 689 L 1169,1036 V 1103 H 796 L 316,623 Z" />
+          <GeometryDrawing Brush="#29033E15"
+                           Geometry="M 275,649 H 351 L 831,1129 V 1213 H 755 L 275,733 Z" />
+          <!-- Separate layers preserve SVG overlap: no even-odd holes in the hash. -->
           <GeometryDrawing Brush="#FFFFFF"
-                           Geometry="M 443,290 H 508 L 435,733 H 370 Z M 598,290 H 664 L 591,733 H 526 Z M 340,402 H 713 V 469 H 340 Z M 316,556 H 689 V 623 H 316 Z M 351,662 L 339,674 C 332,668 324,665 315,665 C 301,665 292,676 292,691 C 292,706 301,717 315,717 C 324,717 332,713 339,707 L 351,719 C 341,728 329,733 315,733 C 291,733 275,715 275,691 C 275,667 291,649 315,649 C 329,649 341,654 351,662 Z" />
+                           Geometry="M 443,290 H 508 L 435,733 H 370 Z" />
+          <GeometryDrawing Brush="#FFFFFF"
+                           Geometry="M 598,290 H 664 L 591,733 H 526 Z" />
+          <GeometryDrawing Brush="#FFFFFF"
+                           Geometry="M 340,402 H 713 V 469 H 340 Z" />
+          <GeometryDrawing Brush="#FFFFFF"
+                           Geometry="M 316,556 H 689 V 623 H 316 Z" />
+          <GeometryDrawing Brush="#FFFFFF"
+                           Geometry="M 351,662 L 339,674 C 332,668 324,665 315,665 C 301,665 292,676 292,691 C 292,706 301,717 315,717 C 324,717 332,713 339,707 L 351,719 C 341,728 329,733 315,733 C 291,733 275,715 275,691 C 275,667 291,649 315,649 C 329,649 341,654 351,662 Z" />
         </DrawingGroup.Children>
       </DrawingGroup>
     </DrawingImage.Drawing>

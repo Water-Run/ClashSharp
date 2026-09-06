@@ -139,6 +139,6 @@ ImageMagick 的整体 RMSE 不作为唯一质量分数：原 PNG 含外部背景
 - [x] 用 1024-unit 手工路径替换几何漂移的旧 SVG；
 - [x] WPF shell 使用同一几何 DrawingImage，不再显示临时通用 `C` 图标；
 - [ ] 重型资源门禁通过后重新生成四尺寸预览和轮廓指标；
-- [ ] 从 canonical SVG 生成并人工提示 16/20/24/32/40/48/64/256 ICO frames；
+- [x] 从与 canonical SVG 逐层对齐的 WPF 资源生成并提示 16/20/24/32/40/48/64/128/256 ICO frames；安装器采用既有紫色配色，生成与证据见 [2026-09-07 记录](2026-09-07-installer-icon-generation.md)；
 - [ ] Windows Explorer、任务栏、安装器标题栏在 100/150/200/300% DPI 做人工 smoke；
 - [ ] 若未来调整几何，SVG、WPF DrawingImage 和 ICO 生成输入必须在同一变更中更新并由契约测试锁定。

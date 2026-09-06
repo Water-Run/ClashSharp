@@ -290,21 +290,23 @@ public sealed class InstallerExecutableContractTests
         XElement hexagonDrawing = Assert.Single(
             drawing.Descendants(presentation + "GeometryDrawing"),
             item => item.Element(presentation + "GeometryDrawing.Brush") is not null);
-        XElement shadowDrawing = Assert.Single(
-            drawing.Descendants(presentation + "GeometryDrawing"),
-            static item => (string?)item.Attribute("Brush") == "#29033E15");
-        XElement markDrawing = Assert.Single(
-            drawing.Descendants(presentation + "GeometryDrawing"),
-            static item => (string?)item.Attribute("Brush") == "#FFFFFF");
+        XElement[] shadowDrawings = drawing.Descendants(presentation + "GeometryDrawing")
+            .Where(static item => (string?)item.Attribute("Brush") == "#29033E15")
+            .ToArray();
+        XElement[] markDrawings = drawing.Descendants(presentation + "GeometryDrawing")
+            .Where(static item => (string?)item.Attribute("Brush") == "#FFFFFF")
+            .ToArray();
         Assert.Equal(
             NormalizeGeometry((string)canonicalHexagon.Attribute("d")!),
             NormalizeGeometry((string)hexagonDrawing.Attribute("Geometry")!));
         Assert.Equal(
-            NormalizeGeometry(CombinePaths(canonicalShadow, svgNamespace)),
-            NormalizeGeometry((string)shadowDrawing.Attribute("Geometry")!));
+            canonicalShadow.Elements(svgNamespace + "path")
+                .Select(static path => NormalizeGeometry((string)path.Attribute("d")!)),
+            shadowDrawings.Select(static item => NormalizeGeometry((string)item.Attribute("Geometry")!)));
         Assert.Equal(
-            NormalizeGeometry(CombinePaths(canonicalMark, svgNamespace)),
-            NormalizeGeometry((string)markDrawing.Attribute("Geometry")!));
+            canonicalMark.Elements(svgNamespace + "path")
+                .Select(static path => NormalizeGeometry((string)path.Attribute("d")!)),
+            markDrawings.Select(static item => NormalizeGeometry((string)item.Attribute("Geometry")!)));
     }
 
     private static string Property(XDocument project, string name) =>
@@ -312,12 +314,6 @@ public sealed class InstallerExecutableContractTests
 
     private static string NormalizeGeometry(string geometry) =>
         Regex.Replace(geometry.Replace(',', ' '), "\\s+", " ").Trim();
-
-    private static string CombinePaths(XElement group, XNamespace svgNamespace) =>
-        string.Join(
-            " ",
-            group.Elements(svgNamespace + "path")
-                .Select(static path => (string)path.Attribute("d")!));
 
     private static string SourcePath(params string[] parts)
     {

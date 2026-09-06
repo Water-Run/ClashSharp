@@ -29,6 +29,10 @@ jobs:
         shell: pwsh
         run: ./eng/Test-PowerShellSyntax.ps1
 
+      - name: Verify installer vector icon bytes
+        shell: powershell
+        run: ./eng/Generate-InstallerIcon.ps1 -Verify
+
       - name: Verify offline .NET package contract
         shell: pwsh
         run: ./ClashSharp/Installer/Test-PackagingRuntimeContract.ps1
