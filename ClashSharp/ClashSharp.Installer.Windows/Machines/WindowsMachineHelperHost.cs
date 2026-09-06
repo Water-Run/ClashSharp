@@ -29,12 +29,16 @@ internal sealed class WindowsMachineHelperAuthorityFactory
     : IWindowsMachineHelperAuthorityFactory
 {
     private readonly IWindowsMachineHelperAuthorityResourcesFactory _resourcesFactory;
+    private readonly IWindowsInstallerAuthorityLock _authorityLock;
 
     internal WindowsMachineHelperAuthorityFactory(
-        IWindowsMachineHelperAuthorityResourcesFactory resourcesFactory)
+        IWindowsMachineHelperAuthorityResourcesFactory resourcesFactory,
+        IWindowsInstallerAuthorityLock authorityLock)
     {
         ArgumentNullException.ThrowIfNull(resourcesFactory);
+        ArgumentNullException.ThrowIfNull(authorityLock);
         _resourcesFactory = resourcesFactory;
+        _authorityLock = authorityLock;
     }
 
     public async Task<IWindowsMachineHelperAuthorityLease> CreateAsync(
@@ -42,14 +46,19 @@ internal sealed class WindowsMachineHelperAuthorityFactory
         string targetSid,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(bootstrap);
+        bootstrap.Validate();
         InstallerProtocolValidation.ValidateTargetSid(targetSid);
         cancellationToken.ThrowIfCancellationRequested();
-        IWindowsMachineHelperAuthorityResources resources =
-            _resourcesFactory.Create(targetSid)
-            ?? throw new InstallerProtocolException(
-                "installer.machine_helper.authority_resources_missing");
+        IAsyncDisposable exclusiveAuthority = await _authorityLock.AcquireAsync(cancellationToken)
+            .ConfigureAwait(false);
+        IWindowsMachineHelperAuthorityResources? resources = null;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            resources = _resourcesFactory.Create(targetSid)
+                ?? throw new InstallerProtocolException(
+                    "installer.machine_helper.authority_resources_missing");
             InstallerMachineHelperAuthoritySession session = await
                 InstallerMachineHelperAuthoritySession.CreateAsync(
                     bootstrap,
@@ -58,11 +67,21 @@ internal sealed class WindowsMachineHelperAuthorityFactory
                     resources.Operations,
                     cancellationToken)
                 .ConfigureAwait(false);
-            return new WindowsMachineHelperAuthorityLease(session, resources);
+            return new WindowsMachineHelperAuthorityLease(session, resources, exclusiveAuthority);
         }
         catch
         {
-            await resources.DisposeAsync().ConfigureAwait(false);
+            try
+            {
+                if (resources is not null)
+                {
+                    await resources.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await exclusiveAuthority.DisposeAsync().ConfigureAwait(false);
+            }
             throw;
         }
     }
@@ -71,29 +90,41 @@ internal sealed class WindowsMachineHelperAuthorityFactory
 internal sealed class WindowsMachineHelperAuthorityLease
     : IWindowsMachineHelperAuthorityLease
 {
-    private IWindowsMachineHelperAuthorityResources? _resources;
+    private OwnedAuthority? _owned;
 
     internal WindowsMachineHelperAuthorityLease(
         InstallerMachineHelperAuthoritySession session,
-        IWindowsMachineHelperAuthorityResources resources)
+        IWindowsMachineHelperAuthorityResources resources,
+        IAsyncDisposable exclusiveAuthority)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(resources);
+        ArgumentNullException.ThrowIfNull(exclusiveAuthority);
         Session = session;
-        _resources = resources;
+        _owned = new OwnedAuthority(resources, exclusiveAuthority);
     }
 
     public InstallerMachineHelperAuthoritySession Session { get; }
 
     public async ValueTask DisposeAsync()
     {
-        IWindowsMachineHelperAuthorityResources? resources =
-            Interlocked.Exchange(ref _resources, null);
-        if (resources is not null)
+        OwnedAuthority? owned = Interlocked.Exchange(ref _owned, null);
+        if (owned is not null)
         {
-            await resources.DisposeAsync().ConfigureAwait(false);
+            try
+            {
+                await owned.Resources.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                await owned.ExclusiveAuthority.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
+
+    private sealed record OwnedAuthority(
+        IWindowsMachineHelperAuthorityResources Resources,
+        IAsyncDisposable ExclusiveAuthority);
 }
 
 internal sealed record WindowsMachineHelperHostLimits(
@@ -187,7 +218,8 @@ internal sealed class WindowsMachineHelperHost
             new WindowsMachineHelperParentProcessVerifier(),
             new WindowsMachineHelperClientFactory(),
             new WindowsMachineHelperAuthorityFactory(
-                new WindowsMachineHelperAuthorityResourcesFactory(operationsFactory)),
+                new WindowsMachineHelperAuthorityResourcesFactory(operationsFactory),
+                new WindowsInstallerAuthorityLock()),
             WindowsMachineHelperHostLimits.Default);
     }
 

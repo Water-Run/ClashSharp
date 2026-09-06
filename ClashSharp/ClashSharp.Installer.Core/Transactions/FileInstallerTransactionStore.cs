@@ -4,6 +4,11 @@ using ClashSharp.Installer.Contracts;
 namespace ClashSharp.Installer.Transactions;
 
 /// <summary>Persists the fixed installer journal through guarded same-directory atomic replacement.</summary>
+/// <remarks>
+/// Elevated production writers must hold the machine-wide helper authority lease across the entire
+/// transaction session. This store's I/O gate only serializes calls on this instance; it does not
+/// provide interprocess exclusion for the read/compare/replace sequence.
+/// </remarks>
 public sealed class FileInstallerTransactionStore : IInstallerTransactionStore, IDisposable
 {
     /// <summary>Gets the fixed journal filename below the protected root.</summary>
