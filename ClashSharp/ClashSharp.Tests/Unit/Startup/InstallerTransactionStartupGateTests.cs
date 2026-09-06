@@ -67,12 +67,33 @@ public sealed class InstallerTransactionStartupGateTests
         Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
     }
 
-    /// <summary>Closing a fatal diagnostic shell after this gate cannot execute network shutdown.</summary>
+    /// <summary>Unavailable lifetime ownership follows a specific terminal Installer diagnostic.</summary>
     [Fact]
-    public async Task ExecuteAsync_PendingThenHostShutdown_DoesNotInvokeNetworkCoordinator()
+    public async Task ExecuteAsync_OwnershipUnavailable_ClosesAdmissionAndReturnsSpecificFatal()
     {
         MutationAdmissionBarrier barrier = new();
-        InstallerTransactionStartupGate gate = new(InstallerTransactionState.Pending, barrier);
+        InstallerTransactionStartupGate gate = new(InstallerTransactionState.OwnershipUnavailable, barrier);
+
+        StartupStepResult result = await gate.ExecuteAsync(
+            new AppLaunchRequest(string.Empty), CancellationToken.None);
+
+        Assert.Equal(StartupStepOutcome.Fatal, result.Outcome);
+        Assert.Equal(InstallerTransactionStartupGate.OwnershipUnavailableDiagnosticCode, result.DiagnosticCode);
+        Assert.NotNull(result.DiagnosticCode);
+        Assert.True(RuntimeDiagnosticCode.IsStable(result.DiagnosticCode));
+        Assert.True(InstallerTransactionStartupGate.IsBlockingDiagnosticCode(result.DiagnosticCode));
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+    }
+
+    /// <summary>Closing any Installer-blocked diagnostic shell cannot execute network shutdown.</summary>
+    [Theory]
+    [InlineData((int)InstallerTransactionState.Pending)]
+    [InlineData((int)InstallerTransactionState.Invalid)]
+    [InlineData((int)InstallerTransactionState.OwnershipUnavailable)]
+    public async Task ExecuteAsync_BlockedThenHostShutdown_DoesNotInvokeNetworkCoordinator(int state)
+    {
+        MutationAdmissionBarrier barrier = new();
+        InstallerTransactionStartupGate gate = new((InstallerTransactionState)state, barrier);
         _ = await gate.ExecuteAsync(new AppLaunchRequest(string.Empty), CancellationToken.None);
         RecordingShutdownNetworkCoordinator network = new();
         RuntimeLifecycleCoordinator lifecycle = new(

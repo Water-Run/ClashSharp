@@ -12,6 +12,11 @@ Parent 在创建执行会话之前取得锁，等待会话及 broker 收尾之�
 因此 parent 异常退出不会释放仍在工作的 helper 的启动保护；取消也不会自动撤销已取得的
 句柄。所有持锁进程退出后，Windows 关闭句柄，下一次 App 启动再检查持久日志。
 
+App 获取 Installer 协调锁失败时立即结束本次启动，不等待十秒，也不创建诊断窗口或
+watchdog。明确的 OwnershipUnavailable 状态仍经过终态 startup gate 关闭 mutation
+admission，再走已有的无窗口退出路径。这避免诊断窗口保持包内进程运行，继续占用安装器
+正在替换或移除的 MSIX。安装进度由 Installer 窗口展示；后续重新启动仍重新读取持久日志。
+
 应用正在运行时，安装器在创建事务存储、Prepared 或机器修改之前被拒绝。多个 helper
 仍由机器范围互斥对象串行化；持久日志负责进程退出后的恢复判定。三者各有明确职责。
 

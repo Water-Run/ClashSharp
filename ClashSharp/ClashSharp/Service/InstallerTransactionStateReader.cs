@@ -5,7 +5,7 @@ using ClashSharp.Installer.Contracts;
 
 namespace ClashSharp.Service;
 
-/// <summary>Classifies current and legacy Installer-owned transaction state observed at App startup.</summary>
+/// <summary>Classifies Installer ownership and transaction state observed at App startup.</summary>
 internal enum InstallerTransactionState
 {
     /// <summary>Neither a current journal nor a legacy transaction marker exists.</summary>
@@ -16,6 +16,9 @@ internal enum InstallerTransactionState
 
     /// <summary>The fixed marker path cannot be inspected safely or unambiguously.</summary>
     Invalid,
+
+    /// <summary>Installer lifetime ownership was unavailable, so journal inspection was not admitted.</summary>
+    OwnershipUnavailable,
 }
 
 /// <summary>Reads Installer-owned transaction presence without changing machine state.</summary>

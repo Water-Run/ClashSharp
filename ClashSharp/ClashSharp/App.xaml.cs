@@ -154,6 +154,15 @@ public partial class App : Microsoft.UI.Xaml.Application
         _recoveryWatchdog = await RecoveryWatchdogCoordinator
             .AcquireAsync(cancellationToken)
             .ConfigureAwait(true);
+        if (_recoveryWatchdog is null)
+        {
+            // A diagnostic window would keep the package running during deployment. Let the
+            // terminal startup gate close admission and exit without creating a window or watchdog.
+            _installerTransactionState = InstallerTransactionState.OwnershipUnavailable;
+            _startupShellSuppressed = true;
+            return;
+        }
+
         _installerTransactionState = _installerTransactionStateReader.Read();
         if (_startupShellSuppressed)
         {

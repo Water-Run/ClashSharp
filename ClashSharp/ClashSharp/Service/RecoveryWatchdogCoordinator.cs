@@ -33,16 +33,17 @@ internal sealed class RecoveryWatchdogCoordinator : IDisposable
         _leaseStore = leaseStore;
     }
 
-    internal static async Task<RecoveryWatchdogCoordinator> AcquireAsync(
+    /// <summary>Returns no coordinator immediately when Installer ownership is unavailable.</summary>
+    internal static async Task<RecoveryWatchdogCoordinator?> AcquireAsync(
         CancellationToken cancellationToken)
     {
         FileStream? installerMutationLock = await RecoveryWatchdogFileLock.TryAcquireAsync(
             RecoveryWatchdogPaths.ResolveInstallerMutationLockPath(),
-            TimeSpan.FromSeconds(10),
+            TimeSpan.Zero,
             cancellationToken).ConfigureAwait(false);
         if (installerMutationLock is null)
         {
-            throw new IOException("Timed out waiting for Installer mutation ownership.");
+            return null;
         }
 
         string localData = RecoveryWatchdogPaths.ResolveLocalDataDirectory();
