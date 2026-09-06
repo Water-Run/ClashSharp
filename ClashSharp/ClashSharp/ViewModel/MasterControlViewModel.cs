@@ -5,7 +5,6 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -90,7 +89,7 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private const string ApplicationDisplayName = "Clash#";
 
-    private static readonly string ApplicationVersionText = ResolveApplicationVersionText();
+    private static readonly string ApplicationVersionText = ApplicationVersion.Current;
 
     /// <summary>Whether the bundled core was available during the latest status refresh.</summary>
     private bool _isCoreAvailable = true;
@@ -1481,12 +1480,6 @@ internal sealed class MasterControlViewModel : ObservableObject
     private static string CleanTileTitle(string title)
     {
         return title.Replace("{0}", string.Empty, StringComparison.Ordinal).Trim().TrimEnd(':', '：');
-    }
-
-    private static string ResolveApplicationVersionText()
-    {
-        Version? version = Assembly.GetExecutingAssembly().GetName().Version;
-        return version is null ? "1.0.0.0" : version.ToString();
     }
 
     private sealed class NoMasterControlApplicationActionDispatcher : IMasterControlActions

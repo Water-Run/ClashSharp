@@ -23,9 +23,11 @@ public sealed partial class Links : Page
 
     private readonly PageLoadSession _loadSession = new();
 
-    private readonly SemaphoreSlim _operationGate = new(1, 1);
+    private readonly PageOperationSession _operations;
 
-    private CancellationTokenSource _pageLifetime = new();
+    private bool _isLoaded;
+
+    private int _visit;
 
     private readonly Func<string, string> _getString;
 
@@ -35,15 +37,19 @@ public sealed partial class Links : Page
         ArgumentNullException.ThrowIfNull(dependencies);
         _viewModel = dependencies.ViewModel;
         _getString = dependencies.GetString;
+        _operations = new PageOperationSession(dependencies.ErrorSink, "links-page-action");
         InitializeComponent();
         DataContext = _viewModel;
     }
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
-        if (_pageLifetime.IsCancellationRequested)
+        int visit = ++_visit;
+        _isLoaded = true;
+        await _operations.DrainAsync();
+        if (!_isLoaded || visit != _visit)
         {
-            _pageLifetime = new CancellationTokenSource();
+            return;
         }
 
         await _loadSession.RunAsync(_viewModel.LoadAsync);
@@ -51,8 +57,10 @@ public sealed partial class Links : Page
 
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
+        _isLoaded = false;
+        ++_visit;
         _loadSession.Cancel();
-        _pageLifetime.Cancel();
+        _operations.Cancel();
     }
 
     /// <summary>Shows the add-link dialog and delegates accepted input to the view model.</summary>
@@ -209,29 +217,26 @@ public sealed partial class Links : Page
     }
 
     /// <summary>Queues durable page mutations without cancelling an older accepted operation.</summary>
-    private async Task RunPageOperationAsync(Func<CancellationToken, Task> operation)
+    private Task RunPageOperationAsync(Func<CancellationToken, Task> operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        CancellationToken cancellationToken = _pageLifetime.Token;
-        bool entered = false;
-        try
+        if (!_isLoaded)
         {
-            await _operationGate.WaitAsync(cancellationToken);
-            entered = true;
+            return Task.CompletedTask;
+        }
+
+        return _operations.RunAsync(async cancellationToken =>
+        {
             SetOperationBusy(isBusy: true);
-            await operation(cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            if (entered)
+            try
+            {
+                await operation(cancellationToken);
+            }
+            finally
             {
                 SetOperationBusy(isBusy: false);
-                _operationGate.Release();
             }
-        }
+        });
     }
 
     private void SetOperationBusy(bool isBusy)

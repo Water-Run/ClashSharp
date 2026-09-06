@@ -16,7 +16,11 @@ public sealed class ProfileAndLinkLifecycleArchitectureTests
 
         Assert.DoesNotContain("CancellationToken.None", source, StringComparison.Ordinal);
         Assert.Contains("_loadSession.Cancel()", source, StringComparison.Ordinal);
-        Assert.Contains("_operationGate.WaitAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("PageOperationSession _operations", source, StringComparison.Ordinal);
+        Assert.Contains("_operations.RunAsync(async cancellationToken =>", source, StringComparison.Ordinal);
+        Assert.Contains("_operations.Cancel()", source, StringComparison.Ordinal);
+        Assert.Contains("await _operations.DrainAsync()", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SemaphoreSlim", source, StringComparison.Ordinal);
         Assert.Contains("SetOperationBusy(isBusy: true)", source, StringComparison.Ordinal);
         Assert.Contains("cancellationToken.ThrowIfCancellationRequested()", source, StringComparison.Ordinal);
         Assert.Contains(
@@ -57,7 +61,11 @@ public sealed class ProfileAndLinkLifecycleArchitectureTests
 
         Assert.DoesNotContain("CancellationToken.None", source, StringComparison.Ordinal);
         Assert.Contains("_loadSession.Cancel()", source, StringComparison.Ordinal);
-        Assert.Contains("_operationGate.WaitAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("PageOperationSession _operations", source, StringComparison.Ordinal);
+        Assert.Contains("_operations.RunAsync(async cancellationToken =>", source, StringComparison.Ordinal);
+        Assert.Contains("_operations.Cancel()", source, StringComparison.Ordinal);
+        Assert.Contains("await _operations.DrainAsync()", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SemaphoreSlim", source, StringComparison.Ordinal);
         Assert.Contains("SetOperationBusy(isBusy: true)", source, StringComparison.Ordinal);
         Assert.Contains("dialog.ShowManagedAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("cancellationToken.ThrowIfCancellationRequested()", source, StringComparison.Ordinal);

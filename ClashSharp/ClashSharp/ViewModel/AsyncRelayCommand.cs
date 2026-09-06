@@ -12,7 +12,7 @@ namespace ClashSharp.ViewModel;
 /// Explicit execution propagates failures to its caller. ICommand execution records unexpected
 /// failures and reports them through the injected application error sink.
 /// </remarks>
-internal sealed class AsyncRelayCommand : ObservableObject, ICommand
+internal sealed class AsyncRelayCommand : ObservableObject, ICommand, IAsyncCommandState
 {
     private readonly Func<object?, CancellationToken, Task> _executeAsync;
     private readonly Func<bool>? _canExecute;

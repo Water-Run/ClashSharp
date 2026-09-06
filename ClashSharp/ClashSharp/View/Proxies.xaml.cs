@@ -20,13 +20,18 @@ public sealed partial class Proxies : Page
 
     private readonly PageLoadSession _loadSession = new();
 
-    private readonly PageLoadSession _selectionSession = new();
+    private readonly PageOperationSession _selectionSession;
+
+    private bool _isLoaded;
+
+    private int _visit;
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Proxies(ProxiesPageComposition.Dependencies dependencies)
     {
         ArgumentNullException.ThrowIfNull(dependencies);
         _viewModel = dependencies.ViewModel;
+        _selectionSession = new PageOperationSession(dependencies.ErrorSink, "proxies-page-selection");
         InitializeComponent();
         DataContext = _viewModel;
     }
@@ -34,12 +39,22 @@ public sealed partial class Proxies : Page
     /// <summary>Loads catalog and mihomo runtime state while the page is active.</summary>
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
+        int visit = ++_visit;
+        _isLoaded = true;
+        await _selectionSession.DrainAsync();
+        if (!_isLoaded || visit != _visit)
+        {
+            return;
+        }
+
         await _loadSession.RunAsync(_viewModel.LoadAsync);
     }
 
     /// <summary>Cancels page-owned requests before the visual tree is released.</summary>
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
+        _isLoaded = false;
+        ++_visit;
         _loadSession.Cancel();
         _selectionSession.Cancel();
     }
@@ -47,7 +62,8 @@ public sealed partial class Proxies : Page
     /// <summary>Handles runtime strategy group selection changes.</summary>
     private async void ProxyGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is not ComboBox { DataContext: MihomoProxyGroupDisplay group, SelectedItem: string proxyName }
+        if (!_isLoaded
+            || sender is not ComboBox { DataContext: MihomoProxyGroupDisplay group, SelectedItem: string proxyName }
             || string.Equals(group.CurrentSelection, proxyName, StringComparison.Ordinal))
         {
             return;

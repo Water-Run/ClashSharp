@@ -42,6 +42,10 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="ConnectionStatusText"/>.</summary>
     private string _connectionStatusText = string.Empty;
 
+    // REST requests, live snapshots and availability transitions share one publication order.
+    // A late REST response must not replace a newer request or an already observed stream snapshot.
+    private long _snapshotRevision;
+
     /// <summary>Initializes a connections view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
     /// <param name="connectionClient">Active connection client. Must not be null.</param>
@@ -126,10 +130,10 @@ internal sealed class ConnectionsViewModel : ObservableObject
 
     /// <summary>Refreshes active connections from the local core API.</summary>
     /// <param name="cancellationToken">Cancels the refresh when requested.</param>
-    /// <returns>Active connection rows; empty when refresh fails.</returns>
+    /// <returns>Active connection rows; empty when refresh fails or is superseded.</returns>
     /// <remarks>
     /// Cancellation semantics: Passed through to the connection client.
-    /// Thread / reentrancy: The page serializes visible operations through its load-session lifetime.
+    /// Thread / reentrancy: UI-thread calls may overlap; only the latest observation is published.
     /// </remarks>
     public async Task<IReadOnlyList<ActiveConnection>> RefreshConnectionsAsync(CancellationToken cancellationToken)
     {
@@ -186,10 +190,17 @@ internal sealed class ConnectionsViewModel : ObservableObject
     private async Task<IReadOnlyList<ActiveConnection>?> TryRefreshConnectionsAsync(
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        long revision = ++_snapshotRevision;
         try
         {
             IReadOnlyList<ActiveConnection> connections = await _connectionClient.GetActiveConnectionsAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            if (revision != _snapshotRevision)
+            {
+                return null;
+            }
+
             ApplyConnections(connections);
             return connections;
         }
@@ -198,13 +209,18 @@ internal sealed class ConnectionsViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            ApplyUnavailableStatus(exception.Message);
+            if (revision == _snapshotRevision)
+            {
+                ApplyUnavailableStatus(exception.Message);
+            }
+
             return null;
         }
     }
 
     private void ApplyConnections(IReadOnlyList<ActiveConnection> connections)
     {
+        ++_snapshotRevision;
         Connections = connections
             .Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter))
             .ToArray();
@@ -216,6 +232,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
 
     private void ApplyUnavailableStatus(string detail)
     {
+        ++_snapshotRevision;
         Connections = [];
         ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
         _log.Append("Warning", "Connections", ConnectionStatusText, detail);

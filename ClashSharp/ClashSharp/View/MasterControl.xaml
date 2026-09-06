@@ -204,6 +204,7 @@
                             <components:MasterInfoTile
                                 Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                                 Title="{Binding Title}"
+                                Description="{Binding Description}"
                                 Value="{Binding Value}"
                                 Detail="{Binding Detail}"
                                 Glyph="{Binding Glyph}"

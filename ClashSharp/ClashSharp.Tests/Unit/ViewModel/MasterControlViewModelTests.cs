@@ -386,7 +386,7 @@ public sealed class MasterControlViewModelTests
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "active-profile" && tile.Value == "profile-a");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "port" && tile.Value == "12000");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-name" && tile.Value == "Clash#");
-        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-version" && tile.Value == "Version 1.0.0.0");
+        Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-version" && tile.Value == "Version 1.0.0");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "app-runtime" && tile.Value == ".NET 10 + WinUI 3");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "notification-level" && tile.Value == "More");
         Assert.Contains(viewModel.InfoTiles, tile => tile.Id == "triggers-enabled" && tile.Value == "On");

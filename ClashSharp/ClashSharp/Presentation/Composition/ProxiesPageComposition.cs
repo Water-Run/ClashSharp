@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.ViewModel;
 
@@ -20,17 +21,20 @@ internal static class ProxiesPageComposition
             context.ErrorSink,
             new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));
 
-        return new Dependencies(viewModel);
+        return new Dependencies(viewModel, context.ErrorSink);
     }
 
     /// <summary>Injected dependencies used by the proxies view.</summary>
     internal sealed class Dependencies
     {
-        public Dependencies(ProxiesViewModel viewModel)
+        public Dependencies(ProxiesViewModel viewModel, IApplicationErrorSink errorSink)
         {
             ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         }
 
         public ProxiesViewModel ViewModel { get; }
+
+        public IApplicationErrorSink ErrorSink { get; }
     }
 }

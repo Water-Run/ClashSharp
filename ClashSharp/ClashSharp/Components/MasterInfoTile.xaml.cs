@@ -1,4 +1,6 @@
+using System;
 using System.Windows.Input;
+using ClashSharp.ApplicationModel.Presentation;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,9 +17,20 @@ public sealed partial class MasterInfoTile : UserControl
     private Point? _pressedPoint;
     private bool _suppressNextTap;
 
+    private ICommand? _observedCommand;
+
+    private bool _isLoaded;
+
     /// <summary>Identifies the <see cref="Title"/> dependency property.</summary>
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title),
+        typeof(string),
+        typeof(MasterInfoTile),
+        new PropertyMetadata(string.Empty));
+
+    /// <summary>Identifies the <see cref="Description"/> dependency property.</summary>
+    public static readonly DependencyProperty DescriptionProperty = DependencyProperty.Register(
+        nameof(Description),
         typeof(string),
         typeof(MasterInfoTile),
         new PropertyMetadata(string.Empty));
@@ -62,17 +75,20 @@ public sealed partial class MasterInfoTile : UserControl
         nameof(TileCommand),
         typeof(ICommand),
         typeof(MasterInfoTile),
-        new PropertyMetadata(null));
+        new PropertyMetadata(null, OnTileCommandChanged));
 
     /// <summary>Initializes an information tile and its pointer-aware visual states.</summary>
     public MasterInfoTile()
     {
         InitializeComponent();
-        Loaded += (_, _) =>
-        {
-            ProtectedCursor = TileCommand is null ? null : InputSystemCursor.Create(InputSystemCursorShape.Hand);
-            UpdateVisualState(useTransitions: false);
-        };
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        // Native Button supplies keyboard, focus and UIA Invoke behavior. Observe handled
+        // pointer events as well, because Button may capture them before the parent GridView.
+        TileButton.AddHandler(PointerPressedEvent, new PointerEventHandler(TileRoot_PointerPressed), true);
+        TileButton.AddHandler(PointerMovedEvent, new PointerEventHandler(TileRoot_PointerMoved), true);
+        TileButton.AddHandler(PointerReleasedEvent, new PointerEventHandler(TileRoot_PointerReleased), true);
+        TileButton.AddHandler(PointerCanceledEvent, new PointerEventHandler(TileRoot_PointerCanceled), true);
     }
 
     /// <summary>Gets or sets the tile's primary label.</summary>
@@ -80,6 +96,13 @@ public sealed partial class MasterInfoTile : UserControl
     {
         get => (string)GetValue(TitleProperty);
         set => SetValue(TitleProperty, value);
+    }
+
+    /// <summary>Gets or sets the localized explanation exposed by the action tooltip.</summary>
+    public string Description
+    {
+        get => (string)GetValue(DescriptionProperty);
+        set => SetValue(DescriptionProperty, value);
     }
 
     /// <summary>Gets or sets the tile's emphasized current value.</summary>
@@ -124,7 +147,7 @@ public sealed partial class MasterInfoTile : UserControl
         set => SetValue(TileCommandProperty, value);
     }
 
-    private void TileRoot_Tapped(object sender, TappedRoutedEventArgs e)
+    private void TileButton_Click(object sender, RoutedEventArgs e)
     {
         if (_suppressNextTap)
         {
@@ -184,6 +207,74 @@ public sealed partial class MasterInfoTile : UserControl
     {
         _pressedPoint = null;
         _ = VisualStateManager.GoToState(this, "PointerOver", true);
+        // A drag may suppress native Click entirely. Clear its residue after this input
+        // message so the next keyboard/UIA activation is never mistaken for the drag.
+        DispatcherQueue.TryEnqueue(() => _suppressNextTap = false);
+    }
+
+    private void TileRoot_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        _pressedPoint = null;
+        _suppressNextTap = false;
+        _ = VisualStateManager.GoToState(this, "Normal", true);
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = true;
+        ObserveCommand();
+        UpdateVisualState(useTransitions: false);
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = false;
+        ObserveCommand();
+        _pressedPoint = null;
+        _suppressNextTap = false;
+    }
+
+    private static void OnTileCommandChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+    {
+        ((MasterInfoTile)dependencyObject).ObserveCommand();
+    }
+
+    private void ObserveCommand()
+    {
+        if (_observedCommand is not null)
+        {
+            _observedCommand.CanExecuteChanged -= OnCanExecuteChanged;
+        }
+
+        _observedCommand = _isLoaded ? TileCommand : null;
+        if (_observedCommand is not null)
+        {
+            _observedCommand.CanExecuteChanged += OnCanExecuteChanged;
+        }
+
+        UpdateCommandState();
+    }
+
+    private void OnCanExecuteChanged(object? sender, EventArgs e)
+    {
+        UpdateCommandState();
+    }
+
+    private void UpdateCommandState()
+    {
+        if (TileButton is null)
+        {
+            return;
+        }
+
+        bool actionable = TileCommand is not null;
+        bool available = _isLoaded && TileCommand?.CanExecute(null) == true;
+        bool running = _isLoaded && TileCommand is IAsyncCommandState { IsRunning: true };
+        TileButton.Visibility = actionable ? Visibility.Visible : Visibility.Collapsed;
+        TileButton.IsEnabled = available;
+        ExecutionProgress.IsActive = running;
+        ExecutionProgress.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        ProtectedCursor = available ? InputSystemCursor.Create(InputSystemCursorShape.Hand) : null;
     }
 
     private static void OnIsToggleOnChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)

@@ -8,6 +8,71 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the active connections view model.</summary>
 public sealed class ConnectionsViewModelTests
 {
+    [Fact]
+    public async Task RefreshConnectionsAsync_OutOfOrderSuccessKeepsTheNewestSnapshot()
+    {
+        TaskCompletionSource<IReadOnlyList<ActiveConnection>> stale = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeConnectionClient client = new();
+        client.RefreshResults.Enqueue(stale.Task);
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
+        Task first = viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+
+        stale.SetResult([]);
+        await first;
+
+        Assert.Equal(client.Connections.Count, viewModel.Connections.Count);
+        Assert.Equal("2 active", viewModel.ConnectionStatusText);
+    }
+
+    [Fact]
+    public async Task RefreshConnectionsAsync_OutOfOrderFailureDoesNotClearOrLogOverNewSuccess()
+    {
+        TaskCompletionSource<IReadOnlyList<ActiveConnection>> stale = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeConnectionClient client = new();
+        FakeConnectionLog log = new();
+        client.RefreshResults.Enqueue(stale.Task);
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink());
+        Task first = viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+
+        stale.SetException(new HttpRequestException("Old request failed."));
+        await first;
+
+        Assert.Equal(client.Connections.Count, viewModel.Connections.Count);
+        Assert.Equal("2 active", viewModel.ConnectionStatusText);
+        Assert.Empty(log.Entries);
+    }
+
+    [Fact]
+    public async Task RefreshConnectionsAsync_LateResponseCannotReplaceALiveStreamObservation()
+    {
+        TaskCompletionSource<IReadOnlyList<ActiveConnection>> stale = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeConnectionClient client = new()
+        {
+            StreamConnections = [new("live", "stream", "host", "rule", "", "proxy", 1, 2, DateTimeOffset.UnixEpoch)],
+        };
+        client.RefreshResults.Enqueue(stale.Task);
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
+        using CancellationTokenSource lifetime = new();
+        Task first = viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Task stream = viewModel.WatchConnectionsAsync(lifetime.Token);
+        try
+        {
+            stale.SetResult(client.Connections);
+            await first;
+            Assert.Equal("live", Assert.Single(viewModel.Connections).Connection.Id);
+        }
+        finally
+        {
+            lifetime.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stream);
+        }
+    }
+
     /// <summary>Verifies construction loads labels and initial status text.</summary>
     [Fact]
     public void Constructor_LoadsLabelsAndInitialStatus()
@@ -246,6 +311,8 @@ public sealed class ConnectionsViewModelTests
         /// <value>Refresh call count.</value>
         public int RefreshCount { get; private set; }
 
+        public Queue<Task<IReadOnlyList<ActiveConnection>>> RefreshResults { get; } = new();
+
         /// <summary>Gets the last closed connection id.</summary>
         /// <value>Closed connection id, or null when none was closed.</value>
         public string? ClosedConnectionId { get; private set; }
@@ -260,6 +327,11 @@ public sealed class ConnectionsViewModelTests
         public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
         {
             RefreshCount++;
+            if (RefreshResults.TryDequeue(out Task<IReadOnlyList<ActiveConnection>>? result))
+            {
+                return result;
+            }
+
             return ExceptionToThrow is null
                 ? Task.FromResult(Connections)
                 : Task.FromException<IReadOnlyList<ActiveConnection>>(ExceptionToThrow);

@@ -34,6 +34,10 @@
             Padding="0"
             Background="Transparent"
             BorderThickness="0"
+            UseSystemFocusVisuals="True"
+            AutomationProperties.Name="{Binding Title, ElementName=Root}"
+            AutomationProperties.HelpText="{Binding Description, ElementName=Root}"
+            ToolTipService.ToolTip="{Binding Description, ElementName=Root}"
             Command="{Binding Command, ElementName=Root}">
             <Grid Style="{StaticResource ClashCardGridStyle}" Padding="12" ColumnSpacing="10" MinHeight="78">
             <Grid.ColumnDefinitions>

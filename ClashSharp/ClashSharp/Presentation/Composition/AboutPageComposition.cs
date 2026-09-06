@@ -16,8 +16,7 @@ internal static class AboutPageComposition
     public static Dependencies Create(PageCompositionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        string applicationVersion = typeof(AboutPageComposition).Assembly.GetName().Version?.ToString()
-            ?? "1.0.0.0";
+        string applicationVersion = ApplicationVersion.Current;
         AboutViewModel viewModel = new(
             new DisplayPageLocalizationAdapter(context.Localization),
             new AboutCoreAdapter(context.MihomoCore),

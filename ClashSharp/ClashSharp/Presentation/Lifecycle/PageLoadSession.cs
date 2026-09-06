@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Presentation;
 
 namespace ClashSharp.Presentation.Lifecycle;
 
@@ -10,6 +12,17 @@ internal sealed class PageLoadSession
     private readonly object _syncRoot = new();
 
     private CancellationTokenSource? _activeLoad;
+
+    private readonly IApplicationErrorSink? _errorSink;
+    private readonly string _operationName;
+
+    /// <summary>Creates a read session with optional observation of unexpected platform-boundary errors.</summary>
+    public PageLoadSession(IApplicationErrorSink? errorSink = null, string operationName = "page-load")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationName);
+        _errorSink = errorSink;
+        _operationName = operationName;
+    }
 
     /// <summary>Runs a page load and cancels any older load still owned by this session.</summary>
     /// <param name="loadAsync">Cancellable page-load operation. Must not be null.</param>
@@ -49,6 +62,20 @@ internal sealed class PageLoadSession
         catch (OperationCanceledException) when (
             currentLoad.IsCancellationRequested)
         {
+        }
+        catch (Exception exception) when (_errorSink is not null
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            try
+            {
+                await _errorSink.ReportAsync(
+                    new ApplicationError(_operationName, exception),
+                    CancellationToken.None);
+            }
+            catch (Exception sinkException) when (!ExceptionGraphClassifier.IsProcessFatal(sinkException))
+            {
+                // Error presentation cannot strand a page lifetime or fault its async-void event.
+            }
         }
         finally
         {

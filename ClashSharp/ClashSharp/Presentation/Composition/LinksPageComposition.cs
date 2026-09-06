@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.ViewModel;
 
@@ -18,20 +19,23 @@ internal static class LinksPageComposition
             context.ErrorSink,
             new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));
 
-        return new Dependencies(viewModel, context.Localization.GetString);
+        return new Dependencies(viewModel, context.Localization.GetString, context.ErrorSink);
     }
 
     /// <summary>Injected dependencies used by the subscription-links view.</summary>
     internal sealed class Dependencies
     {
-        public Dependencies(LinksViewModel viewModel, Func<string, string> getString)
+        public Dependencies(LinksViewModel viewModel, Func<string, string> getString, IApplicationErrorSink errorSink)
         {
             ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             GetString = getString ?? throw new ArgumentNullException(nameof(getString));
+            ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         }
 
         public LinksViewModel ViewModel { get; }
 
         public Func<string, string> GetString { get; }
+
+        public IApplicationErrorSink ErrorSink { get; }
     }
 }

@@ -2078,7 +2078,12 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("SelectedOff", modeButtonXaml, StringComparison.Ordinal);
         Assert.Contains("DoubleAnimation", modeButtonXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<ToggleButton", modeButtonXaml, StringComparison.Ordinal);
-        Assert.Contains("Tapped=\"TileRoot_Tapped\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("<Button", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"TileButton_Click\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("UseSystemFocusVisuals=\"True\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{Binding Title, ElementName=Root}\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("ToolTipService.ToolTip=\"{Binding Description, ElementName=Root}\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Tapped=\"TileRoot_Tapped\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SelectedOverlay\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ToggleThumbTransform\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("SwitchOn", infoTileXaml, StringComparison.Ordinal);

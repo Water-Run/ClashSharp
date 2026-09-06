@@ -14,13 +14,7 @@
         x:Name="TileRoot"
         Style="{StaticResource ClashCardGridStyle}"
         MinHeight="116"
-        RowSpacing="10"
-        Tapped="TileRoot_Tapped"
-        PointerEntered="TileRoot_PointerEntered"
-        PointerExited="TileRoot_PointerExited"
-        PointerPressed="TileRoot_PointerPressed"
-        PointerMoved="TileRoot_PointerMoved"
-        PointerReleased="TileRoot_PointerReleased">
+        RowSpacing="10">
         <Grid.RenderTransform>
             <ScaleTransform x:Name="TileScaleTransform" CenterX="110" CenterY="58" />
         </Grid.RenderTransform>
@@ -140,5 +134,38 @@
                 MaxLines="2"
                 TextTrimming="CharacterEllipsis" />
         </StackPanel>
+
+        <Button
+            x:Name="TileButton"
+            Grid.RowSpan="2"
+            Margin="-16"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            Background="Transparent"
+            BorderThickness="0"
+            UseSystemFocusVisuals="True"
+            AutomationProperties.Name="{Binding Title, ElementName=Root}"
+            AutomationProperties.HelpText="{Binding Value, ElementName=Root}"
+            ToolTipService.ToolTip="{Binding Description, ElementName=Root}"
+            Click="TileButton_Click"
+            PointerEntered="TileRoot_PointerEntered"
+            PointerExited="TileRoot_PointerExited">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="4" />
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+        <ProgressRing
+            x:Name="ExecutionProgress"
+            Grid.Row="1"
+            Width="18"
+            Height="18"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            IsHitTestVisible="False"
+            IsActive="False"
+            Visibility="Collapsed"
+            AutomationProperties.AccessibilityView="Raw" />
     </Grid>
 </UserControl>

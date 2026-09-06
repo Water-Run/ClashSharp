@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.ViewModel;
 
@@ -26,7 +27,8 @@ internal static class ProfilesPageComposition
                 "Warning",
                 "Profiles",
                 context.Localization.GetString("Profiles.Log.FilePickerNoMainWindow"),
-                null));
+                null),
+            context.ErrorSink);
     }
 
     /// <summary>Injected dependencies used by the profiles view.</summary>
@@ -35,12 +37,14 @@ internal static class ProfilesPageComposition
         public Dependencies(
             ProfilesViewModel viewModel,
             Func<string, string> getString,
-            Action reportFilePickerUnavailable)
+            Action reportFilePickerUnavailable,
+            IApplicationErrorSink errorSink)
         {
             ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             GetString = getString ?? throw new ArgumentNullException(nameof(getString));
             ReportFilePickerUnavailable = reportFilePickerUnavailable
                 ?? throw new ArgumentNullException(nameof(reportFilePickerUnavailable));
+            ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         }
 
         public ProfilesViewModel ViewModel { get; }
@@ -48,5 +52,7 @@ internal static class ProfilesPageComposition
         public Func<string, string> GetString { get; }
 
         public Action ReportFilePickerUnavailable { get; }
+
+        public IApplicationErrorSink ErrorSink { get; }
     }
 }

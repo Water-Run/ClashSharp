@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.ViewModel;
 
@@ -18,17 +19,20 @@ internal static class ConnectionsPageComposition
             context.ErrorSink,
             context.MainlandChinaTextDisplay.Apply);
 
-        return new Dependencies(viewModel);
+        return new Dependencies(viewModel, context.ErrorSink);
     }
 
     /// <summary>Injected dependencies used by the connections view.</summary>
     internal sealed class Dependencies
     {
-        public Dependencies(ConnectionsViewModel viewModel)
+        public Dependencies(ConnectionsViewModel viewModel, IApplicationErrorSink errorSink)
         {
             ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         }
 
         public ConnectionsViewModel ViewModel { get; }
+
+        public IApplicationErrorSink ErrorSink { get; }
     }
 }
