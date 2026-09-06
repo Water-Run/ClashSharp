@@ -43,3 +43,7 @@ ClearVerifiedAsync 成功后，新启动才恢复开放。测试仅替换机器�
 仍须接入，才能覆盖“检查进程后、Prepared 持久化前，另一个主程序开始启动”的并发窗口；
 机器范围 helper 互斥只保护多个 helper，不能代替这项 App/Installer 协作。跨账户换绑和
 正式签名候选的实际安装、故障恢复及桌面验收仍单独推进。
+
+后续 M4e 已接入 parent 和 helper 独立持有的 App 生命周期锁，详见
+[Installer 与 App 生命周期协作](2026-09-07-installer-app-lifetime.md)；该文同时记录 MSIX
+文件可见性和跨账户场景尚需完成的实际验收。

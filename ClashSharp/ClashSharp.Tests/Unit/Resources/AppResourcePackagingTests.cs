@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
+using ClashSharp.Installer.Contracts;
 
 namespace ClashSharp.Tests.Unit.Resources;
 
@@ -3182,6 +3183,29 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("TaskId=\"ClashSharpStartup\"", manifestXml, StringComparison.Ordinal);
         Assert.Contains("EntryPoint=\"Windows.FullTrustApplication\"", manifestXml, StringComparison.Ordinal);
         Assert.DoesNotContain("updater", manifestXml, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Keeps the lifetime lock visible to the Installer without disabling all AppData virtualization.</summary>
+    [Fact]
+    public void PackageManifest_ExcludesOnlyTheSharedProductDirectoryFromFileVirtualization()
+    {
+        XDocument manifest = XDocument.Load(FindSourceFile("ClashSharp", "ClashSharp", "Package.appxmanifest"));
+        XNamespace package = "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
+        XNamespace virtualization = "http://schemas.microsoft.com/appx/manifest/virtualization/windows10";
+        XNamespace restricted = "http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities";
+        XElement properties = Assert.Single(manifest.Root!.Elements(package + "Properties"));
+        XElement declaration = Assert.Single(properties.Elements(virtualization + "FileSystemWriteVirtualization"));
+        XElement exclusions = Assert.Single(declaration.Elements(virtualization + "ExcludedDirectories"));
+        XElement exclusion = Assert.Single(exclusions.Elements(virtualization + "ExcludedDirectory"));
+
+        Assert.Equal("$(KnownFolder:LocalAppData)\\" + InstallerStateLayout.ProductDirectoryName, exclusion.Value);
+        Assert.Single(
+            manifest.Descendants(restricted + "Capability"),
+            element => (string?)element.Attribute("Name") == "unvirtualizedResources");
+        Assert.DoesNotContain(
+            properties.Elements(),
+            element => element.Name.LocalName == "FileSystemWriteVirtualization" && element.Name != declaration.Name);
+        Assert.Empty(properties.Elements(virtualization + "RegistryWriteVirtualization"));
     }
 
     /// <summary>Counts non-overlapping occurrences of a string fragment.</summary>

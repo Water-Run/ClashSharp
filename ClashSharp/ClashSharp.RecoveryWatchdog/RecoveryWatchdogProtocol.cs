@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.Installer.Contracts;
 using ClashSharp.Service;
 
 namespace ClashSharp.Recovery;
@@ -99,7 +100,7 @@ internal static class RecoveryWatchdogPaths
 {
     internal const string LeaseFileName = "RecoveryWatchdogLease.json";
     internal const string LockFileName = "RecoveryWatchdog.lock";
-    internal const string InstallerMutationLockFileName = "InstallerMutation.lock";
+    internal const string InstallerMutationLockFileName = InstallerStateLayout.ApplicationMutationLockFileName;
     internal const string ProxyJournalFileName = "WindowsProxyMutationJournal.json";
 
     private const int AppModelErrorNoPackage = 15700;
@@ -141,7 +142,7 @@ internal static class RecoveryWatchdogPaths
     {
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ClashSharp",
+            InstallerStateLayout.ProductDirectoryName,
             InstallerMutationLockFileName);
     }
 

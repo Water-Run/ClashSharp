@@ -20,7 +20,8 @@ public sealed class WindowsInstallerParentEngineTests
         using WindowsInstallerParentEngine engine = WindowsInstallerParentEngine.CreateForTesting(
             fixture.Manifest,
             TargetSid,
-            factory);
+            factory,
+            new RecordingApplicationLock());
         var progress = new Progress<InstallerProgress>();
 
         InstallerExecutionResult result = await engine.ExecuteAsync(
@@ -58,7 +59,8 @@ public sealed class WindowsInstallerParentEngineTests
         using WindowsInstallerParentEngine engine = WindowsInstallerParentEngine.CreateForTesting(
             fixture.Manifest,
             TargetSid,
-            factory);
+            factory,
+            new RecordingApplicationLock());
 
         Task<InstallerExecutionResult> first = engine.ExecuteAsync(
             InstallerOperation.Install,
@@ -87,7 +89,8 @@ public sealed class WindowsInstallerParentEngineTests
         using WindowsInstallerParentEngine engine = WindowsInstallerParentEngine.CreateForTesting(
             fixture.Manifest,
             TargetSid,
-            factory);
+            factory,
+            new RecordingApplicationLock());
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
@@ -113,7 +116,8 @@ public sealed class WindowsInstallerParentEngineTests
         using WindowsInstallerParentEngine engine = WindowsInstallerParentEngine.CreateForTesting(
             fixture.Manifest,
             TargetSid,
-            factory);
+            factory,
+            new RecordingApplicationLock());
 
         InstallerProtocolException operation = await Assert.ThrowsAsync<InstallerProtocolException>(
             () => engine.ExecuteAsync(
@@ -148,7 +152,8 @@ public sealed class WindowsInstallerParentEngineTests
         var engine = WindowsInstallerParentEngine.CreateForTesting(
             fixture.Manifest,
             TargetSid,
-            factory);
+            factory,
+            new RecordingApplicationLock());
 
         Task<InstallerExecutionResult> accepted = engine.ExecuteAsync(
             InstallerOperation.Install,
@@ -185,6 +190,7 @@ public sealed class WindowsInstallerParentEngineTests
             fixture.Manifest,
             TargetSid,
             factory,
+            new RecordingApplicationLock(),
             inspector);
 
         InstallerRuntimeInspection actual = await engine.InspectAsync(
@@ -221,6 +227,7 @@ public sealed class WindowsInstallerParentEngineTests
             fixture.Manifest,
             TargetSid,
             new RecordingSessionFactory(() => session),
+            new RecordingApplicationLock(),
             inspector);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
@@ -254,6 +261,7 @@ public sealed class WindowsInstallerParentEngineTests
                 fixture.Manifest,
                 TargetSid,
                 factory,
+                new RecordingApplicationLock(),
                 missing);
 
         InstallerProtocolException missingResult = await Assert.ThrowsAsync<
@@ -272,6 +280,7 @@ public sealed class WindowsInstallerParentEngineTests
                 fixture.Manifest,
                 TargetSid,
                 factory,
+                new RecordingApplicationLock(),
                 different);
         InstallerProtocolException invalid = await Assert.ThrowsAsync<
             InstallerProtocolException>(() => differentEngine.InspectAsync(
@@ -290,6 +299,78 @@ public sealed class WindowsInstallerParentEngineTests
                 @"C:\Release\ClashSharp-Installer.exe"));
 
         Assert.Equal("installer.release.manifest_json_invalid", exception.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task AppLifetimeLeaseSurvivesExecutionAndSessionCleanup()
+    {
+        using var fixture = Fixture();
+        var applicationLock = new RecordingApplicationLock();
+        var session = new RecordingSession((_, _, _) =>
+        {
+            Assert.True(applicationLock.Held);
+            return Task.FromResult(Success());
+        })
+        {
+            OnDispose = () => Assert.True(applicationLock.Held),
+        };
+        var factory = new RecordingSessionFactory(() =>
+        {
+            Assert.True(applicationLock.Held);
+            return session;
+        });
+        using WindowsInstallerParentEngine engine = WindowsInstallerParentEngine.CreateForTesting(
+            fixture.Manifest, TargetSid, factory, applicationLock);
+
+        await engine.ExecuteAsync(InstallerOperation.Repair, null, CancellationToken.None);
+
+        Assert.False(applicationLock.Held);
+        Assert.Equal(1, applicationLock.DisposeCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedSessionCreationOrDisposalReleasesAppLifetimeLease(bool failDisposal)
+    {
+        using var fixture = Fixture();
+        var applicationLock = new RecordingApplicationLock();
+        var expected = new IOException("injected");
+        var session = new RecordingSession(static (_, _, _) => Task.FromResult(Success()))
+        {
+            OnDispose = () => throw expected,
+        };
+        var factory = new RecordingSessionFactory(() => failDisposal ? session : throw expected);
+        using WindowsInstallerParentEngine engine = WindowsInstallerParentEngine.CreateForTesting(
+            fixture.Manifest, TargetSid, factory, applicationLock);
+
+        IOException actual = await Assert.ThrowsAsync<IOException>(() =>
+            engine.ExecuteAsync(InstallerOperation.Install, null, CancellationToken.None));
+
+        Assert.Same(expected, actual);
+        Assert.False(applicationLock.Held);
+        Assert.Equal(1, applicationLock.DisposeCount);
+    }
+
+    [Fact]
+    public async Task BusyAppLifetimeLockRejectsExecutionBeforeSessionCreation()
+    {
+        using var fixture = Fixture();
+        var applicationLock = new RecordingApplicationLock
+        {
+            AcquireFailure = new InstallerProtocolException("installer.application_running"),
+        };
+        var factory = new RecordingSessionFactory(() =>
+            new RecordingSession(static (_, _, _) => Task.FromResult(Success())));
+        using WindowsInstallerParentEngine engine = WindowsInstallerParentEngine.CreateForTesting(
+            fixture.Manifest, TargetSid, factory, applicationLock);
+
+        InstallerProtocolException actual = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            engine.ExecuteAsync(InstallerOperation.Install, null, CancellationToken.None));
+
+        Assert.Equal("installer.application_running", actual.DiagnosticCode);
+        Assert.Equal(0, factory.CreateCount);
+        Assert.Equal(0, applicationLock.DisposeCount);
     }
 
     private const string TargetSid = "S-1-5-21-100-200-300-1001";
@@ -348,6 +429,8 @@ public sealed class WindowsInstallerParentEngineTests
 
         internal int DisposeCount { get; private set; }
 
+        internal Action? OnDispose { get; init; }
+
         public Task<InstallerExecutionResult> ExecuteAsync(
             InstallerRequest request,
             IProgress<InstallerProgress>? progress,
@@ -361,8 +444,38 @@ public sealed class WindowsInstallerParentEngineTests
 
         public ValueTask DisposeAsync()
         {
+            OnDispose?.Invoke();
             DisposeCount++;
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingApplicationLock : IWindowsInstallerApplicationLock, IDisposable
+    {
+        internal bool Held { get; private set; }
+
+        internal int DisposeCount { get; private set; }
+
+        internal Exception? AcquireFailure { get; init; }
+
+        public IDisposable Acquire(string targetSid, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(TargetSid, targetSid);
+            Assert.False(Held);
+            if (AcquireFailure is not null)
+            {
+                throw AcquireFailure;
+            }
+            Held = true;
+            return this;
+        }
+
+        public void Dispose()
+        {
+            Assert.True(Held);
+            Held = false;
+            DisposeCount++;
         }
     }
 

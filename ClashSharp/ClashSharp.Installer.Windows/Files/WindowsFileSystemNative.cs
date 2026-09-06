@@ -13,20 +13,26 @@ internal static class WindowsFileSystemNative
     private const uint FileShareRead = 0x0000_0001;
     private const uint FileShareWrite = 0x0000_0002;
     private const uint OpenExisting = 3;
+    private const uint OpenAlways = 4;
     private const uint FileAttributeDirectory = 0x0000_0010;
     private const uint FileAttributeNormal = 0x0000_0080;
     private const uint FileAttributeReparsePoint = 0x0000_0400;
     private const uint FileFlagBackupSemantics = 0x0200_0000;
     private const uint FileFlagOpenReparsePoint = 0x0020_0000;
 
-    internal static SafeFileHandle OpenOrdinaryFile(string path)
+    internal static SafeFileHandle OpenOrdinaryFile(string path) => OpenOrdinaryFile(path, OpenExisting);
+
+    // Only the current-user Installer parent may create the coordination file in its own profile.
+    internal static SafeFileHandle OpenOrCreateOrdinaryFile(string path) => OpenOrdinaryFile(path, OpenAlways);
+
+    private static SafeFileHandle OpenOrdinaryFile(string path, uint creationDisposition)
     {
         SafeFileHandle handle = CreateFile(
             path,
             GenericRead,
             FileShareRead,
             0,
-            OpenExisting,
+            creationDisposition,
             FileAttributeNormal | FileFlagOpenReparsePoint,
             0);
         if (handle.IsInvalid)

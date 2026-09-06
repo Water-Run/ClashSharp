@@ -28,6 +28,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\ClashSharp.Installer.Core\Contracts\InstallerStateLayout.cs" Link="Recovery\InstallerStateLayout.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsProxyMutationJournal.cs" Link="Service\WindowsProxyMutationJournal.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsProxyOwnershipRestorer.cs" Link="Service\WindowsProxyOwnershipRestorer.cs" />
   </ItemGroup>

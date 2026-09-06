@@ -4,6 +4,7 @@ using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Transactions;
+using ClashSharp.Installer.Windows.Execution;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -30,15 +31,19 @@ internal sealed class WindowsMachineHelperAuthorityFactory
 {
     private readonly IWindowsMachineHelperAuthorityResourcesFactory _resourcesFactory;
     private readonly IWindowsInstallerAuthorityLock _authorityLock;
+    private readonly IWindowsInstallerApplicationLock _applicationLock;
 
     internal WindowsMachineHelperAuthorityFactory(
         IWindowsMachineHelperAuthorityResourcesFactory resourcesFactory,
-        IWindowsInstallerAuthorityLock authorityLock)
+        IWindowsInstallerAuthorityLock authorityLock,
+        IWindowsInstallerApplicationLock applicationLock)
     {
         ArgumentNullException.ThrowIfNull(resourcesFactory);
         ArgumentNullException.ThrowIfNull(authorityLock);
+        ArgumentNullException.ThrowIfNull(applicationLock);
         _resourcesFactory = resourcesFactory;
         _authorityLock = authorityLock;
+        _applicationLock = applicationLock;
     }
 
     public async Task<IWindowsMachineHelperAuthorityLease> CreateAsync(
@@ -53,9 +58,12 @@ internal sealed class WindowsMachineHelperAuthorityFactory
         IAsyncDisposable exclusiveAuthority = await _authorityLock.AcquireAsync(cancellationToken)
             .ConfigureAwait(false);
         IWindowsMachineHelperAuthorityResources? resources = null;
+        IDisposable? applicationLease = null;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            applicationLease = _applicationLock.Acquire(targetSid, cancellationToken)
+                ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
             resources = _resourcesFactory.Create(targetSid)
                 ?? throw new InstallerProtocolException(
                     "installer.machine_helper.authority_resources_missing");
@@ -67,7 +75,7 @@ internal sealed class WindowsMachineHelperAuthorityFactory
                     resources.Operations,
                     cancellationToken)
                 .ConfigureAwait(false);
-            return new WindowsMachineHelperAuthorityLease(session, resources, exclusiveAuthority);
+            return new WindowsMachineHelperAuthorityLease(session, resources, applicationLease, exclusiveAuthority);
         }
         catch
         {
@@ -80,7 +88,14 @@ internal sealed class WindowsMachineHelperAuthorityFactory
             }
             finally
             {
-                await exclusiveAuthority.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    applicationLease?.Dispose();
+                }
+                finally
+                {
+                    await exclusiveAuthority.DisposeAsync().ConfigureAwait(false);
+                }
             }
             throw;
         }
@@ -95,13 +110,15 @@ internal sealed class WindowsMachineHelperAuthorityLease
     internal WindowsMachineHelperAuthorityLease(
         InstallerMachineHelperAuthoritySession session,
         IWindowsMachineHelperAuthorityResources resources,
+        IDisposable applicationLease,
         IAsyncDisposable exclusiveAuthority)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(resources);
+        ArgumentNullException.ThrowIfNull(applicationLease);
         ArgumentNullException.ThrowIfNull(exclusiveAuthority);
         Session = session;
-        _owned = new OwnedAuthority(resources, exclusiveAuthority);
+        _owned = new OwnedAuthority(resources, applicationLease, exclusiveAuthority);
     }
 
     public InstallerMachineHelperAuthoritySession Session { get; }
@@ -117,13 +134,21 @@ internal sealed class WindowsMachineHelperAuthorityLease
             }
             finally
             {
-                await owned.ExclusiveAuthority.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    owned.ApplicationLease.Dispose();
+                }
+                finally
+                {
+                    await owned.ExclusiveAuthority.DisposeAsync().ConfigureAwait(false);
+                }
             }
         }
     }
 
     private sealed record OwnedAuthority(
         IWindowsMachineHelperAuthorityResources Resources,
+        IDisposable ApplicationLease,
         IAsyncDisposable ExclusiveAuthority);
 }
 
@@ -219,7 +244,8 @@ internal sealed class WindowsMachineHelperHost
             new WindowsMachineHelperClientFactory(),
             new WindowsMachineHelperAuthorityFactory(
                 new WindowsMachineHelperAuthorityResourcesFactory(operationsFactory),
-                new WindowsInstallerAuthorityLock()),
+                new WindowsInstallerAuthorityLock(),
+                WindowsInstallerApplicationLock.CreateHelper()),
             WindowsMachineHelperHostLimits.Default);
     }
 

@@ -21,4 +21,7 @@ public static class InstallerStateLayout
 
     /// <summary>Gets the legacy transaction marker filename directly below the Installer directory.</summary>
     public const string LegacyMarkerFileName = "transaction.json";
+
+    /// <summary>Gets the per-user App lifetime lock below LocalApplicationData and the product directory.</summary>
+    public const string ApplicationMutationLockFileName = "InstallerMutation.lock";
 }

@@ -1,6 +1,7 @@
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Transactions;
+using ClashSharp.Installer.Windows.Execution;
 using ClashSharp.Installer.Windows.Machines;
 
 namespace ClashSharp.Installer.Windows.Tests;
@@ -31,7 +32,7 @@ public sealed class WindowsMachineHelperHostTests
             store,
             operations);
         var authorityFactory = new WindowsMachineHelperAuthorityFactory(
-            resourcesFactory, new RecordingAuthorityLock(events));
+            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events));
         var trust = new RecordingTrustVerifier(events);
         var parent = new RecordingParentVerifier(events);
         var clientFactory = new RecordingClientFactory(events, commands, results);
@@ -62,9 +63,11 @@ public sealed class WindowsMachineHelperHostTests
                 "client-verify-server",
                 "parent-alive",
                 "authority-lock",
+                "application-lock",
                 "authority-resources-create",
                 "operation",
                 "authority-resources-dispose",
+                "application-unlock",
                 "authority-unlock",
                 "client-dispose",
                 "parent-dispose",
@@ -221,7 +224,7 @@ public sealed class WindowsMachineHelperHostTests
             new MemoryTransactionStore(conflicting),
             new RecordingOperations(events));
         var authorityFactory = new WindowsMachineHelperAuthorityFactory(
-            resourcesFactory, new RecordingAuthorityLock(events));
+            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events));
 
         InstallerProtocolException exception = await Assert.ThrowsAsync<
             InstallerProtocolException>(() => authorityFactory.CreateAsync(
@@ -235,7 +238,8 @@ public sealed class WindowsMachineHelperHostTests
             "installer.machine_helper.session_transaction_mismatch",
             exception.DiagnosticCode);
         Assert.Equal(
-            ["authority-lock", "authority-resources-create", "authority-resources-dispose", "authority-unlock"],
+            ["authority-lock", "application-lock", "authority-resources-create", "authority-resources-dispose",
+                "application-unlock", "authority-unlock"],
             events);
         Assert.Equal(requested.Journal.TargetSid, resourcesFactory.TargetSid);
     }
@@ -249,7 +253,8 @@ public sealed class WindowsMachineHelperHostTests
             events, new MemoryTransactionStore(state), new RecordingOperations(events));
         var factory = new WindowsMachineHelperAuthorityFactory(
             resources,
-            new RecordingAuthorityLock(events, new InstallerProtocolException("installer.concurrent_action_rejected")));
+            new RecordingAuthorityLock(events, new InstallerProtocolException("installer.concurrent_action_rejected")),
+            new RecordingApplicationLock(events));
 
         InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
             factory.CreateAsync(
@@ -259,6 +264,29 @@ public sealed class WindowsMachineHelperHostTests
 
         Assert.Equal("installer.concurrent_action_rejected", exception.DiagnosticCode);
         Assert.Equal(["authority-lock"], events);
+        Assert.Null(resources.TargetSid);
+    }
+
+    [Fact]
+    public async Task RunningAppRejectsAuthorityBeforeStoreCreationAndReleasesGlobalLease()
+    {
+        var events = new List<string>();
+        InstallerTransactionSnapshot state = VerifiedSnapshot();
+        var resources = new RecordingAuthorityResourcesFactory(
+            events, new MemoryTransactionStore(state), new RecordingOperations(events));
+        var factory = new WindowsMachineHelperAuthorityFactory(
+            resources,
+            new RecordingAuthorityLock(events),
+            new RecordingApplicationLock(events, new InstallerProtocolException("installer.application_running")));
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            factory.CreateAsync(
+                InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
+                state.Journal.TargetSid,
+                CancellationToken.None));
+
+        Assert.Equal("installer.application_running", failure.DiagnosticCode);
+        Assert.Equal(["authority-lock", "application-lock", "authority-unlock"], events);
         Assert.Null(resources.TargetSid);
     }
 
@@ -273,7 +301,8 @@ public sealed class WindowsMachineHelperHostTests
         {
             CreateFailure = expected,
         };
-        var factory = new WindowsMachineHelperAuthorityFactory(resources, new RecordingAuthorityLock(events));
+        var factory = new WindowsMachineHelperAuthorityFactory(
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events));
 
         IOException actual = await Assert.ThrowsAsync<IOException>(() => factory.CreateAsync(
             InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
@@ -281,7 +310,9 @@ public sealed class WindowsMachineHelperHostTests
             CancellationToken.None));
 
         Assert.Same(expected, actual);
-        Assert.Equal(["authority-lock", "authority-resources-create", "authority-unlock"], events);
+        Assert.Equal(
+            ["authority-lock", "application-lock", "authority-resources-create", "application-unlock", "authority-unlock"],
+            events);
     }
 
     [Fact]
@@ -295,7 +326,8 @@ public sealed class WindowsMachineHelperHostTests
         {
             DisposeFailure = expected,
         };
-        var factory = new WindowsMachineHelperAuthorityFactory(resources, new RecordingAuthorityLock(events));
+        var factory = new WindowsMachineHelperAuthorityFactory(
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events));
         IWindowsMachineHelperAuthorityLease lease = await factory.CreateAsync(
             InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
             state.Journal.TargetSid,
@@ -306,7 +338,8 @@ public sealed class WindowsMachineHelperHostTests
 
         Assert.Same(expected, actual);
         Assert.Equal(
-            ["authority-lock", "authority-resources-create", "authority-resources-dispose", "authority-unlock"],
+            ["authority-lock", "application-lock", "authority-resources-create", "authority-resources-dispose",
+                "application-unlock", "authority-unlock"],
             events);
     }
 
@@ -677,6 +710,24 @@ public sealed class WindowsMachineHelperHostTests
             }
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class RecordingApplicationLock(List<string> events, Exception? failure = null)
+        : IWindowsInstallerApplicationLock, IDisposable
+    {
+        public IDisposable Acquire(string targetSid, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal("S-1-5-21-100-200-300-1001", targetSid);
+            events.Add("application-lock");
+            if (failure is not null)
+            {
+                throw failure;
+            }
+            return this;
+        }
+
+        public void Dispose() => events.Add("application-unlock");
     }
 
     private sealed class RecordingAuthorityLock(List<string> events, Exception? failure = null)

@@ -45,6 +45,7 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend
     private readonly string _targetSid;
     private readonly IWindowsInstallerExecutionSessionFactory _sessionFactory;
     private readonly IWindowsInstallerParentInspector _inspector;
+    private readonly IWindowsInstallerApplicationLock _applicationLock;
     private bool _active;
     private bool _disposed;
 
@@ -52,17 +53,20 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend
         InstallerReleaseManifest manifest,
         string targetSid,
         IWindowsInstallerExecutionSessionFactory sessionFactory,
-        IWindowsInstallerParentInspector inspector)
+        IWindowsInstallerParentInspector inspector,
+        IWindowsInstallerApplicationLock applicationLock)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(sessionFactory);
         ArgumentNullException.ThrowIfNull(inspector);
+        ArgumentNullException.ThrowIfNull(applicationLock);
         manifest.Validate();
         InstallerProtocolValidation.ValidateTargetSid(targetSid);
         _manifest = manifest;
         _targetSid = targetSid;
         _sessionFactory = sessionFactory;
         _inspector = inspector;
+        _applicationLock = applicationLock;
     }
 
     /// <summary>
@@ -99,7 +103,8 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend
             manifest,
             targetSid,
             sessionFactory,
-            inspector);
+            inspector,
+            WindowsInstallerApplicationLock.CreateCurrentUser());
     }
 
     /// <summary>Gets the release version derived from the embedded manifest.</summary>
@@ -174,6 +179,8 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend
                 _manifest.ExpectedPackageVersion,
                 _manifest.InstallerPayloadSha256);
             request.Validate();
+            using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
+                ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
             await using IWindowsInstallerExecutionSession session =
                 await _sessionFactory
                     .CreateAsync(cancellationToken)
@@ -248,12 +255,14 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend
         InstallerReleaseManifest manifest,
         string targetSid,
         IWindowsInstallerExecutionSessionFactory sessionFactory,
+        IWindowsInstallerApplicationLock applicationLock,
         IWindowsInstallerParentInspector? inspector = null) =>
         new(
             manifest,
             targetSid,
             sessionFactory,
-            inspector ?? UnavailableWindowsInstallerParentInspector.Instance);
+            inspector ?? UnavailableWindowsInstallerParentInspector.Instance,
+            applicationLock);
 }
 
 internal sealed class WindowsInstallerParentInspector : IWindowsInstallerParentInspector
