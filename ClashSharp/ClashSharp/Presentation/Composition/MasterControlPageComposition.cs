@@ -7,6 +7,7 @@ using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.Presentation.Dialogs;
+using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
@@ -17,10 +18,12 @@ internal sealed record MasterControlPageDependencies(
     MasterControlViewModel ViewModel,
     Func<string, string> GetString,
     IApplicationErrorSink ErrorSink,
+    MasterControlTileActionSession TileActions,
     IStartupGuidePresenter StartupGuide,
     Func<Microsoft.UI.Xaml.XamlRoot, CancellationToken, Task> ShowStartupConflicts,
     Func<IReadOnlyList<ProxyNode>> GetProxyNodes,
     Func<IReadOnlyList<ProxyNode>, CancellationToken, Task<IReadOnlyList<ProxyNode>>> TestProxyLatencyAsync,
+    DataPackageDialogPresenter DataPackages,
     Action OpenSettings);
 
 /// <summary>Builds the explicit dependency graph for the master-control page.</summary>
@@ -47,6 +50,7 @@ internal static class MasterControlPageComposition
         MihomoServiceManager mihomoServiceManager = context.MihomoService;
         RuntimeTrafficRateService runtimeTrafficRate = context.RuntimeTraffic;
         IApplicationErrorSink errorSink = context.ErrorSink;
+        MasterControlTileActionSession tileActions = new(errorSink);
         IMasterControlRuntimeSnapshotSource runtimeSnapshotSource = new MasterControlRuntimeSnapshotSource(
             () => settings.ActiveProfileId,
             coreConfiguration.GetState,
@@ -77,6 +81,7 @@ internal static class MasterControlPageComposition
             new MasterInfoTileLayoutService(settings),
             new MasterHeroStatusLayoutService(settings),
             errorSink,
+            tileActions.ExecuteAsync,
             new MasterControlTrayStatusAdapter(context.TrayStatus),
             new MasterControlRuntimeAdapter(runtimeSnapshotSource),
             new MasterControlActionsAdapter(applicationActions),
@@ -86,6 +91,7 @@ internal static class MasterControlPageComposition
             viewModel,
             localization.GetString,
             errorSink,
+            tileActions,
             context.StartupGuide.Create(errorSink),
             async (xamlRoot, cancellationToken) =>
             {
@@ -101,6 +107,7 @@ internal static class MasterControlPageComposition
             },
             proxyNodes.GetNodes,
             proxyLatency.TestNodesAsync,
+            new DataPackageDialogPresenter(SettingsPageComposition.CreateOperations(context), localization.GetString),
             openSettings);
     }
 

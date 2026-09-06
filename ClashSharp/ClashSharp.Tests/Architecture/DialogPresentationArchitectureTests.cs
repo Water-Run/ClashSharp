@@ -97,7 +97,9 @@ public sealed class DialogPresentationArchitectureTests
         Assert.Contains(".CheckConflictsAsync(settings.MixedPort, cancellationToken)", masterComposition, StringComparison.Ordinal);
         Assert.DoesNotContain(".CheckConflicts(settings.MixedPort)", masterComposition, StringComparison.Ordinal);
         Assert.Contains("_showStartupConflicts(GetDialogXamlRoot(), cancellationToken)", masterPage, StringComparison.Ordinal);
-        Assert.Contains("_pageLifetime?.Token", masterPage, StringComparison.Ordinal);
+        Assert.Contains("_tileActions.Activate(PresentTileActionAsync)", masterPage, StringComparison.Ordinal);
+        Assert.Contains("_tileActions.Deactivate()", masterPage, StringComparison.Ordinal);
+        Assert.Contains("_tileActions.DrainAsync()", masterPage, StringComparison.Ordinal);
 
         Assert.Contains(
             "checkStartupConflictsAsync: context.StartupConflicts.CheckConflictsAsync",
@@ -173,8 +175,13 @@ public sealed class DialogPresentationArchitectureTests
         Assert.DoesNotContain("StartupGuideDialog", masterControl, StringComparison.Ordinal);
         Assert.DoesNotContain("StartupGuideDialog", settings, StringComparison.Ordinal);
         Assert.Contains("_windowLifetime.Token", mainWindow, StringComparison.Ordinal);
-        Assert.Contains("_pageLifetime?.Token", masterControl, StringComparison.Ordinal);
-        Assert.Contains("_pageLifetime?.Token", settings, StringComparison.Ordinal);
+        Assert.Contains("_startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken)", masterControl, StringComparison.Ordinal);
+        Assert.Contains("_tileActions.Deactivate()", masterControl, StringComparison.Ordinal);
+        Assert.Contains("_tileActions.DrainAsync()", masterControl, StringComparison.Ordinal);
+        Assert.Contains("_startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken)", settings, StringComparison.Ordinal);
+        Assert.Contains("RunPageOperationAsync", settings, StringComparison.Ordinal);
+        Assert.Contains("_pageOperations.Cancel()", settings, StringComparison.Ordinal);
+        Assert.Contains("_pageOperations.DrainAsync()", settings, StringComparison.Ordinal);
     }
 
     private static bool IsBuildOutput(string path)

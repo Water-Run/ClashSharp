@@ -214,6 +214,7 @@ public sealed class MasterControlViewModelTests
             new FakeMasterInfoTileLayoutService(),
             new FakeMasterHeroStatusLayoutService(),
             new FakeApplicationErrorSink(),
+            (_, _) => Task.CompletedTask,
             new FakeMasterTrayStatus(),
             modeApplied: mode =>
             {
@@ -246,6 +247,7 @@ public sealed class MasterControlViewModelTests
             new FakeMasterInfoTileLayoutService(),
             new FakeMasterHeroStatusLayoutService(),
             new FakeApplicationErrorSink(),
+            (_, _) => Task.CompletedTask,
             new FakeMasterTrayStatus(),
             modeApplied: _ =>
             {
@@ -729,18 +731,69 @@ public sealed class MasterControlViewModelTests
     [Fact]
     public async Task FunctionalTileCommands_RequestPageActions()
     {
-        MasterControlViewModel viewModel = CreateViewModel();
-        await viewModel.LoadAsync(CancellationToken.None);
         List<MasterControlTileAction> actions = [];
-        viewModel.TileActionRequested += (_, action) => actions.Add(action);
-
-        viewModel.InfoTiles.Single(tile => tile.Id == "startup-prompt").TileCommand?.Execute(null);
-        viewModel.InfoTiles.Single(tile => tile.Id == "startup-conflicts").TileCommand?.Execute(null);
-        viewModel.InfoTiles.Single(tile => tile.Id == "latency").TileCommand?.Execute(null);
+        MasterControlViewModel viewModel = CreateViewModel(presentTileActionAsync: (action, _) =>
+        {
+            actions.Add(action);
+            return Task.CompletedTask;
+        });
+        await viewModel.LoadAsync(CancellationToken.None);
+        foreach (string id in new[] { "startup-prompt", "startup-conflicts", "latency", "export-config", "import-config", "connection-test" })
+        {
+            AsyncRelayCommand command = Assert.IsType<AsyncRelayCommand>(viewModel.InfoTiles.Single(tile => tile.Id == id).TileCommand);
+            await command.ExecuteAsync(null);
+        }
 
         Assert.Equal(
-            [MasterControlTileAction.ShowStartupPrompt, MasterControlTileAction.CheckStartupConflicts, MasterControlTileAction.RunLatencyTest],
+            [MasterControlTileAction.ShowStartupPrompt, MasterControlTileAction.CheckStartupConflicts,
+                MasterControlTileAction.RunLatencyTest, MasterControlTileAction.ExportConfiguration,
+                MasterControlTileAction.ImportConfiguration, MasterControlTileAction.OpenConnectionTest],
             actions);
+    }
+
+    [Fact]
+    public async Task FunctionalTileCommand_TracksPresentationUntilItCompletesAndRejectsDuplicateClicks()
+    {
+        TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int calls = 0;
+        MasterControlViewModel viewModel = CreateViewModel(presentTileActionAsync: (_, token) =>
+        {
+            calls++;
+            return completion.Task.WaitAsync(token);
+        });
+        await viewModel.LoadAsync(CancellationToken.None);
+        AsyncRelayCommand command = Assert.IsType<AsyncRelayCommand>(viewModel.InfoTiles.Single(tile => tile.Id == "latency").TileCommand);
+        command.Execute(null);
+        Task execution = Assert.IsAssignableFrom<Task>(command.ExecutionTask);
+        Assert.True(command.IsRunning);
+        Assert.False(command.CanExecute(null));
+        command.Execute(null);
+        Assert.Same(execution, command.ExecutionTask);
+        Assert.Equal(1, calls);
+
+        completion.SetResult();
+        await execution.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(command.IsRunning);
+        Assert.True(command.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task InvalidateAfterAction_RefreshesImportedModeAndRuntimeWithinTheNormalThrottleWindow()
+    {
+        FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.Disabled };
+        FakeMasterRuntime runtime = new();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime, getNow: () => now);
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal(1, runtime.SnapshotCount);
+        settings.CurrentMode = ClashSharpMode.Standby;
+
+        viewModel.InvalidateAfterAction(settingsImported: true);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(ClashSharpMode.Standby, viewModel.SelectedMode);
+        Assert.Equal(2, runtime.SnapshotCount);
+        Assert.True(viewModel.IsStandbyModeSelected);
     }
 
     /// <summary>Creates a master control view model with fake dependencies.</summary>
@@ -763,7 +816,8 @@ public sealed class MasterControlViewModelTests
         Func<DateTimeOffset>? getNow = null,
         IMasterControlActions? actions = null,
         IApplicationErrorSink? errorSink = null,
-        Func<ClashSharpMode, Task>? modeApplied = null)
+        Func<ClashSharpMode, Task>? modeApplied = null,
+        Func<MasterControlTileAction, CancellationToken, Task>? presentTileActionAsync = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -775,6 +829,7 @@ public sealed class MasterControlViewModelTests
             infoTileLayout ?? new FakeMasterInfoTileLayoutService(),
             heroStatusLayout ?? new FakeMasterHeroStatusLayoutService(),
             errorSink ?? new FakeApplicationErrorSink(),
+            presentTileActionAsync ?? ((_, _) => Task.CompletedTask),
             trayStatus ?? new FakeMasterTrayStatus(),
             runtime ?? new FakeMasterRuntime(),
             actions: actions,

@@ -5,21 +5,18 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Components;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
+using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using Windows.Storage;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace ClashSharp.View;
 
@@ -31,8 +28,6 @@ namespace ClashSharp.View;
 /// </remarks>
 public sealed partial class Settings : Page
 {
-    private sealed record DataPackageScopeOption(DataPackageExportScope Scope, string Title, string Description, string Glyph);
-
     /// <summary>Owns settings state transitions and persistence.</summary>
     private readonly SettingsViewModel _viewModel;
     private readonly Func<string, string> _getString;
@@ -41,12 +36,14 @@ public sealed partial class Settings : Page
     private readonly Func<Windows.UI.Color, string> _formatAccentColor;
     private readonly IApplicationErrorSink _errorSink;
     private readonly IStartupGuidePresenter _startupGuide;
-    private readonly ISettingsPageOperations _operations;
+    private readonly DataPackageDialogPresenter _dataPackages;
+    private readonly PageOperationSession _pageOperations;
 
     /// <summary>True while initial settings are being bound to controls.</summary>
     private bool _isLoadingSettings = true;
 
-    private CancellationTokenSource? _pageLifetime = new();
+    private bool _isLoaded;
+    private int _visit;
     private bool _isViewModelSubscribed;
 
     internal Settings(SettingsPageDependencies dependencies)
@@ -66,8 +63,9 @@ public sealed partial class Settings : Page
             ?? throw new ArgumentException("An application error sink is required.", nameof(dependencies));
         _startupGuide = dependencies.StartupGuide
             ?? throw new ArgumentException("A startup-guide presenter is required.", nameof(dependencies));
-        _operations = dependencies.Operations
-            ?? throw new ArgumentException("Settings page operations are required.", nameof(dependencies));
+        _dataPackages = dependencies.DataPackages
+            ?? throw new ArgumentException("A data-package presenter is required.", nameof(dependencies));
+        _pageOperations = new PageOperationSession(_errorSink, "settings-page-operation");
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
@@ -97,30 +95,41 @@ public sealed partial class Settings : Page
     }
 
     /// <summary>Restores page-scoped subscriptions and cancellation after navigation back to this instance.</summary>
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_pageLifetime is null)
+        if (_isLoaded)
         {
-            _pageLifetime = new CancellationTokenSource();
+            return;
         }
 
-        SubscribeToViewModel();
-        CheckStartupConflictsButton.IsEnabled = true;
-        _isLoadingSettings = true;
-        try
+        _isLoaded = true;
+        int visit = ++_visit;
+        await _pageOperations.DrainAsync();
+        if (!_isLoaded || visit != _visit)
         {
-            LoadSettings();
-        }
-        finally
-        {
-            _isLoadingSettings = false;
+            return;
         }
 
-        _viewModel.RefreshMihomoServiceStatusCommand.Execute(null);
+        await RunPageOperationAsync(async token =>
+        {
+            SubscribeToViewModel();
+            CheckStartupConflictsButton.IsEnabled = true;
+            _isLoadingSettings = true;
+            try
+            {
+                LoadSettings();
+            }
+            finally
+            {
+                _isLoadingSettings = false;
+            }
+
+            await _viewModel.RefreshMihomoServiceStatusCommand.ExecuteObservedAsync(null, token);
+        });
     }
 
     /// <summary>Stops page work and view-model notifications while the page is outside the visual tree.</summary>
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    private async void OnUnloaded(object sender, RoutedEventArgs e)
     {
         if (_isViewModelSubscribed)
         {
@@ -128,9 +137,10 @@ public sealed partial class Settings : Page
             _isViewModelSubscribed = false;
         }
 
-        CancellationTokenSource? pageLifetime = Interlocked.Exchange(ref _pageLifetime, null);
-        pageLifetime?.Cancel();
-        pageLifetime?.Dispose();
+        _isLoaded = false;
+        _visit++;
+        _pageOperations.Cancel();
+        await _pageOperations.DrainAsync();
     }
 
     private void SubscribeToViewModel()
@@ -156,28 +166,12 @@ public sealed partial class Settings : Page
     /// <summary>Runs a connection test against the configured test URL.</summary>
     private async void ConnectionTestButton_Click(object sender, RoutedEventArgs e)
     {
-        CancellationToken cancellationToken = _pageLifetime?.Token ?? new CancellationToken(canceled: true);
-        ConnectionTestButton.IsEnabled = false;
-        try
+        await RunPageOperationAsync(async cancellationToken =>
         {
             ConnectionTestReport report = await _viewModel.RunConnectionTestAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             await ShowConnectionTestResultAsync(report, cancellationToken);
-        }
-        catch (OperationCanceledException exception)
-            when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
-        {
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            await ShowSettingsOperationFailureAsync(
-                "Settings.ConnectionTest",
-                _viewModel.ConnectionTestUrlTitleText,
-                exception);
-        }
-        finally
-        {
-            ConnectionTestButton.IsEnabled = true;
-        }
+        });
     }
 
     /// <summary>Shows the connection test result.</summary>
@@ -314,15 +308,26 @@ public sealed partial class Settings : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void OpenNetworkRepairButton_Click(object sender, RoutedEventArgs e)
     {
-        ThemedContentDialog dialog = new()
+        await RunPageOperationAsync(async cancellationToken =>
         {
-            Title = _viewModel.WindowsNativeTitleText,
-            Content = BuildNetworkRepairPanel(),
-            CloseButtonText = _getString("Command.Close"),
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        await dialog.ShowManagedAsync();
+            PageOperationSession diagnostics = new(_errorSink, "settings-diagnostic-dialog");
+            ThemedContentDialog dialog = new()
+            {
+                Title = _viewModel.WindowsNativeTitleText,
+                Content = BuildNetworkRepairPanel(diagnostics, cancellationToken),
+                CloseButtonText = _getString("Command.Close"),
+                XamlRoot = GetDialogXamlRoot(),
+            };
+            try
+            {
+                await dialog.ShowManagedAsync(cancellationToken);
+            }
+            finally
+            {
+                diagnostics.Cancel();
+                await diagnostics.DrainAsync();
+            }
+        });
     }
 
     /// <summary>Shows restart guidance when accent color mode changes after initial binding.</summary>
@@ -335,7 +340,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        await ShowRestartRequiredDialogAsync();
+        await RunPageOperationAsync(ShowRestartRequiredDialogAsync);
     }
 
     private async void LanguageBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -345,7 +350,7 @@ public sealed partial class Settings : Page
             return;
         }
 
-        await ShowRestartRequiredDialogAsync();
+        await RunPageOperationAsync(ShowRestartRequiredDialogAsync);
     }
 
     /// <summary>Opens the application accent color picker and persists the selected color.</summary>
@@ -353,76 +358,82 @@ public sealed partial class Settings : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void AppAccentColorSwatchButton_Click(object sender, RoutedEventArgs e)
     {
-        ColorPicker picker = new()
+        await RunPageOperationAsync(async cancellationToken =>
         {
-            Color = _parseAccentColor(_viewModel.AppAccentColorValue),
-            IsAlphaEnabled = false,
-            Width = 320,
-            MaxWidth = 320,
-        };
+            ColorPicker picker = new()
+            {
+                Color = _parseAccentColor(_viewModel.AppAccentColorValue),
+                IsAlphaEnabled = false,
+                Width = 320,
+                MaxWidth = 320,
+            };
 
-        Grid pickerPanel = new()
-        {
-            Width = 340,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        pickerPanel.Children.Add(picker);
+            Grid pickerPanel = new()
+            {
+                Width = 340,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            pickerPanel.Children.Add(picker);
 
-        ThemedContentDialog dialog = new()
-        {
-            Title = _viewModel.AppAccentColorTitleText,
-            Content = pickerPanel,
-            MaxWidth = 420,
-            PrimaryButtonText = _viewModel.AppAccentColorPickText,
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = GetDialogXamlRoot(),
-        };
+            ThemedContentDialog dialog = new()
+            {
+                Title = _viewModel.AppAccentColorTitleText,
+                Content = pickerPanel,
+                MaxWidth = 420,
+                PrimaryButtonText = _viewModel.AppAccentColorPickText,
+                CloseButtonText = _getString("Command.Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = GetDialogXamlRoot(),
+            };
 
-        if (await dialog.ShowManagedAsync() is not ContentDialogResult.Primary)
-        {
-            return;
-        }
+            if (await dialog.ShowManagedAsync(cancellationToken) is not ContentDialogResult.Primary)
+            {
+                return;
+            }
 
-        _viewModel.SetAppAccentColorModeIndex((int)AppAccentColorMode.Custom);
-        _viewModel.SetAppAccentColorValue(_formatAccentColor(picker.Color));
-        if (_viewModel.IsAppAccentColorRestartPending)
-        {
-            await ShowRestartRequiredDialogAsync();
-        }
+            _viewModel.SetAppAccentColorModeIndex((int)AppAccentColorMode.Custom);
+            _viewModel.SetAppAccentColorValue(_formatAccentColor(picker.Color));
+            if (_viewModel.IsAppAccentColorRestartPending)
+            {
+                await ShowRestartRequiredDialogAsync(cancellationToken);
+            }
+        });
     }
 
     /// <summary>Opens the connection-test URL editor dialog.</summary>
     private async void EditConnectionTestUrlsButton_Click(object sender, RoutedEventArgs e)
     {
-        TextBox proxyUrl1Box = new() { Text = _viewModel.ConnectionTestProxyUrl1, Width = 360 };
-        TextBox proxyUrl2Box = new() { Text = _viewModel.ConnectionTestProxyUrl2, Width = 360 };
-        TextBox directUrlBox = new() { Text = _viewModel.ConnectionTestDirectUrl, Width = 360 };
-        StackPanel panel = BuildConnectionTestUrlsPanel(proxyUrl1Box, proxyUrl2Box, directUrlBox);
-
-        ThemedContentDialog dialog = new()
+        await RunPageOperationAsync(async cancellationToken =>
         {
-            Title = _viewModel.ConnectionTestUrlTitleText,
-            Content = panel,
-            PrimaryButtonText = _getString("Command.Save"),
-            SecondaryButtonText = _viewModel.ResetText,
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = GetDialogXamlRoot(),
-        };
+            TextBox proxyUrl1Box = new() { Text = _viewModel.ConnectionTestProxyUrl1, Width = 360 };
+            TextBox proxyUrl2Box = new() { Text = _viewModel.ConnectionTestProxyUrl2, Width = 360 };
+            TextBox directUrlBox = new() { Text = _viewModel.ConnectionTestDirectUrl, Width = 360 };
+            StackPanel panel = BuildConnectionTestUrlsPanel(proxyUrl1Box, proxyUrl2Box, directUrlBox);
 
-        ContentDialogResult result = await dialog.ShowManagedAsync();
-        if (result is ContentDialogResult.Secondary)
-        {
-            _viewModel.ResetConnectionTestUrlsToDefaults();
-            return;
-        }
+            ThemedContentDialog dialog = new()
+            {
+                Title = _viewModel.ConnectionTestUrlTitleText,
+                Content = panel,
+                PrimaryButtonText = _getString("Command.Save"),
+                SecondaryButtonText = _viewModel.ResetText,
+                CloseButtonText = _getString("Command.Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = GetDialogXamlRoot(),
+            };
 
-        if (result is ContentDialogResult.Primary)
-        {
-            _viewModel.SetConnectionTestUrls(proxyUrl1Box.Text, proxyUrl2Box.Text, directUrlBox.Text);
-        }
+            ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
+            if (result is ContentDialogResult.Secondary)
+            {
+                _viewModel.ResetConnectionTestUrlsToDefaults();
+                return;
+            }
+
+            if (result is ContentDialogResult.Primary)
+            {
+                _viewModel.SetConnectionTestUrls(proxyUrl1Box.Text, proxyUrl2Box.Text, directUrlBox.Text);
+            }
+        });
     }
 
     /// <summary>Builds the connection-test URL editor content.</summary>
@@ -464,7 +475,7 @@ public sealed partial class Settings : Page
     }
 
     /// <summary>Shows a short prompt explaining that the edited setting applies after restart.</summary>
-    private async Task ShowRestartRequiredDialogAsync()
+    private async Task ShowRestartRequiredDialogAsync(CancellationToken cancellationToken)
     {
         ThemedContentDialog dialog = new()
         {
@@ -474,7 +485,7 @@ public sealed partial class Settings : Page
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        await dialog.ShowManagedAsync();
+        await dialog.ShowManagedAsync(cancellationToken);
     }
 
     private void TriggersEnabledToggle_Toggled(object sender, RoutedEventArgs e)
@@ -546,7 +557,12 @@ public sealed partial class Settings : Page
     /// <summary>Confirms and applies a settings-group default reset.</summary>
     /// <param name="resetAction">Group reset action. Must not be null.</param>
     /// <param name="includeServiceDeploymentNote">Whether to append the Installer-owned service notice.</param>
-    private async Task ResetSettingsGroupAsync(Action resetAction, bool includeServiceDeploymentNote = false)
+    private Task ResetSettingsGroupAsync(Action resetAction, bool includeServiceDeploymentNote = false)
+    {
+        return RunPageOperationAsync(token => ResetSettingsGroupCoreAsync(resetAction, includeServiceDeploymentNote, token));
+    }
+
+    private async Task ResetSettingsGroupCoreAsync(Action resetAction, bool includeServiceDeploymentNote, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resetAction);
         string message = _viewModel.ResetGroupConfirmMessageText;
@@ -565,8 +581,9 @@ public sealed partial class Settings : Page
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        if (await dialog.ShowManagedAsync() is ContentDialogResult.Primary)
+        if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             resetAction();
         }
     }
@@ -574,38 +591,41 @@ public sealed partial class Settings : Page
     /// <summary>Opens the searchable tray feature selector.</summary>
     private async void EditTrayVisibleFeaturesButton_Click(object sender, RoutedEventArgs e)
     {
-        HashSet<string> selectedIds = new(
-            _viewModel.TrayVisibleFeatureIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            StringComparer.OrdinalIgnoreCase);
-        SearchableOptionList optionList = new()
+        await RunPageOperationAsync(async cancellationToken =>
         {
-            SearchPlaceholder = _viewModel.TrayVisibleFeatureSearchPlaceholderText,
-            AllowMultiple = true,
-            MaxListHeight = 360,
-        };
-        optionList.SetOptions(SettingsViewModel.TrayFeatureDefinitions.Select(feature => new SearchableOptionItem(
-            feature.Id,
-            _getString(feature.TitleKey),
-            _viewModel.TraySectionTitleText,
-            _getString(feature.DescriptionKey),
-            feature.Glyph,
-            feature.Id,
-            selectedIds.Contains(feature.Id))));
+            HashSet<string> selectedIds = new(
+                _viewModel.TrayVisibleFeatureIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                StringComparer.OrdinalIgnoreCase);
+            SearchableOptionList optionList = new()
+            {
+                SearchPlaceholder = _viewModel.TrayVisibleFeatureSearchPlaceholderText,
+                AllowMultiple = true,
+                MaxListHeight = 360,
+            };
+            optionList.SetOptions(SettingsViewModel.TrayFeatureDefinitions.Select(feature => new SearchableOptionItem(
+                feature.Id,
+                _getString(feature.TitleKey),
+                _viewModel.TraySectionTitleText,
+                _getString(feature.DescriptionKey),
+                feature.Glyph,
+                feature.Id,
+                selectedIds.Contains(feature.Id))));
 
-        ThemedContentDialog dialog = new()
-        {
-            Title = _viewModel.TrayVisibleFeaturesTitleText,
-            Content = optionList,
-            PrimaryButtonText = _getString("Command.Save"),
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = GetDialogXamlRoot(),
-        };
+            ThemedContentDialog dialog = new()
+            {
+                Title = _viewModel.TrayVisibleFeaturesTitleText,
+                Content = optionList,
+                PrimaryButtonText = _getString("Command.Save"),
+                CloseButtonText = _getString("Command.Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = GetDialogXamlRoot(),
+            };
 
-        if (await dialog.ShowManagedAsync() is ContentDialogResult.Primary)
-        {
-            _viewModel.SetTrayVisibleFeatureIds(optionList.SelectedOptions.Select(static option => option.Id));
-        }
+            if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
+            {
+                _viewModel.SetTrayVisibleFeatureIds(optionList.SelectedOptions.Select(static option => option.Id));
+            }
+        });
     }
 
     /// <summary>Runs startup conflict detection immediately and shows the shared result dialog.</summary>
@@ -613,63 +633,22 @@ public sealed partial class Settings : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void CheckStartupConflictsButton_Click(object sender, RoutedEventArgs e)
     {
-        CancellationToken cancellationToken = _pageLifetime?.Token
-            ?? new CancellationToken(canceled: true);
-        CheckStartupConflictsButton.IsEnabled = false;
-        try
+        await RunPageOperationAsync(async cancellationToken =>
         {
-            IReadOnlyList<StartupConflictIssue> issues =
-                await _viewModel.CheckStartupConflictsAsync(cancellationToken);
+            IReadOnlyList<StartupConflictIssue> issues = await _viewModel.CheckStartupConflictsAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             await StartupConflictDialogPresenter.ShowAsync(
-                GetDialogXamlRoot(),
-                issues,
-                _getString,
-                _errorSink,
-                cancellationToken);
-        }
-        catch (OperationCanceledException exception) when (
-            ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
-        {
-        }
-        catch (Exception exception) when (
-            !ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            await ReportStartupConflictFailureAsync(exception, cancellationToken);
-        }
-        finally
-        {
-            if (_pageLifetime is CancellationTokenSource lifetime
-                && lifetime.Token == cancellationToken
-                && !cancellationToken.IsCancellationRequested)
-            {
-                CheckStartupConflictsButton.IsEnabled = true;
-            }
-        }
-    }
-
-    private async Task ReportStartupConflictFailureAsync(
-        Exception exception,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _errorSink.ReportAsync(
-                new ApplicationError("settings-startup-conflict-detection", exception),
-                cancellationToken);
-        }
-        catch (Exception sinkException) when (
-            !ExceptionGraphClassifier.IsProcessFatal(sinkException))
-        {
-        }
+                GetDialogXamlRoot(), issues, _getString, _errorSink, cancellationToken);
+        });
     }
 
     /// <summary>Shows the startup prompt immediately.</summary>
     private async void ShowStartupPromptButton_Click(object sender, RoutedEventArgs e)
     {
-        CancellationToken cancellationToken = _pageLifetime?.Token
-            ?? new CancellationToken(canceled: true);
-        await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken);
+        await RunPageOperationAsync(async cancellationToken =>
+        {
+            await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken);
+        });
     }
 
     /// <summary>Registers the startup restore fallback helper.</summary>
@@ -690,283 +669,46 @@ public sealed partial class Settings : Page
         _viewModel.RemoveStartupRestoreFallbackRegistration();
     }
 
-    /// <summary>Exports a Clash# XML data package with the selected scope.</summary>
+    /// <summary>Exports settings through the shared, page-owned backup workflow.</summary>
     private async void ExportDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
-        CancellationToken cancellationToken = _pageLifetime?.Token ?? new CancellationToken(canceled: true);
-        try
-        {
-            DataPackageExportScope? scope = await SelectDataPackageExportScopeAsync();
-            if (scope is DataPackageExportScope selectedScope)
-            {
-                await PickAndExportDataPackageAsync(selectedScope, cancellationToken);
-            }
-        }
-        catch (OperationCanceledException exception)
-            when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
-        {
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            await ShowSettingsOperationFailureAsync(
-                "Settings.ExportData",
-                _viewModel.DataExportTitleText,
-                exception);
-        }
+        await RunPageOperationAsync(token => _dataPackages.ExportAsync(GetDialogXamlRoot(), token));
     }
 
-    /// <summary>Imports a Clash# XML data package after two confirmations.</summary>
+    /// <summary>Imports settings through the shared transaction and reloads only after successful completion.</summary>
     private async void ImportDataPackageButton_Click(object sender, RoutedEventArgs e)
     {
-        CancellationToken cancellationToken = _pageLifetime?.Token ?? new CancellationToken(canceled: true);
-        try
+        await RunPageOperationAsync(async token =>
         {
-            FileOpenPicker picker = new()
+            if (await _dataPackages.ImportAsync(GetDialogXamlRoot(), token))
             {
-                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            };
-            InitializePickerWithWindow(picker);
-            picker.FileTypeFilter.Add(".xml");
-
-            StorageFile? file = await picker.PickSingleFileAsync();
-            if (file is null)
-            {
-                return;
+                token.ThrowIfCancellationRequested();
+                _viewModel.ReloadAfterDataImport();
             }
-
-            ClashDataPackageScope? scope = _operations.ReadPackageScope(file.Path);
-            if (!IsImportableDataPackageScope(scope) || !await ConfirmDataImportAsync(scope))
-            {
-                return;
-            }
-
-            IsEnabled = false;
-            try
-            {
-                await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
-                ApplyImportedSettings();
-            }
-            finally
-            {
-                IsEnabled = true;
-            }
-        }
-        catch (OperationCanceledException exception)
-            when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
-        {
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            await ShowSettingsOperationFailureAsync(
-                "Settings.ImportData",
-                _viewModel.ImportText,
-                exception);
-        }
-    }
-
-    /// <summary>Prompts for the package export scope immediately before saving.</summary>
-    private async Task<DataPackageExportScope?> SelectDataPackageExportScopeAsync()
-    {
-        StackPanel optionPanel = new()
-        {
-            Spacing = 8,
-        };
-        List<DialogOptionRow> rows = [];
-
-        foreach (DataPackageScopeOption option in BuildDataPackageScopeOptions())
-        {
-            DialogOptionRow row = new()
-            {
-                Title = option.Title,
-                Metadata = _viewModel.DataExportTitleText,
-                Description = option.Description,
-                Glyph = option.Glyph,
-                IsChecked = option.Scope == DataPackageExportScope.Settings,
-                Tag = option.Scope,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-            };
-            row.SelectionInvoked += (_, _) => SelectDataPackageScopeRow(row, rows);
-            rows.Add(row);
-            optionPanel.Children.Add(row);
-        }
-
-        StackPanel panel = new()
-        {
-            Spacing = 12,
-            MinWidth = 420,
-            MaxWidth = 620,
-        };
-        panel.Children.Add(new TextBlock
-        {
-            Text = _viewModel.DataExportDescriptionText,
-            TextWrapping = TextWrapping.WrapWholeWords,
-            Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
         });
-        panel.Children.Add(optionPanel);
+    }
 
-        ThemedContentDialog dialog = new()
-        {
-            Title = _getString("Settings.DataExport.Title"),
-            Content = panel,
-            PrimaryButtonText = _viewModel.ExportText,
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        if (await dialog.ShowManagedAsync() is not ContentDialogResult.Primary)
-        {
-            return null;
-        }
-
-        foreach (DialogOptionRow row in rows)
-        {
-            if (row.IsChecked && row.Tag is DataPackageExportScope scope)
+    private Task RunPageOperationAsync(Func<CancellationToken, Task> operation)
+    {
+        return !_isLoaded
+            ? Task.CompletedTask
+            : _pageOperations.RunAsync(async token =>
             {
-                return scope;
-            }
-        }
-
-        return DataPackageExportScope.Settings;
-    }
-
-    private IReadOnlyList<DataPackageScopeOption> BuildDataPackageScopeOptions()
-    {
-        return
-        [
-            new(
-                DataPackageExportScope.Settings,
-                _viewModel.DataPackageScopeSettingsText,
-                _getString("Settings.DataPackage.Scope.Settings.Description"),
-                "\uE713"),
-            new(
-                DataPackageExportScope.SettingsAndProxyConfiguration,
-                _viewModel.DataPackageScopeSettingsAndProxyConfigurationText,
-                _getString("Settings.DataPackage.Scope.SettingsAndProxyConfiguration.Description"),
-                "\uE968"),
-            new(
-                DataPackageExportScope.SystemLogSqlite,
-                _getString("Settings.DataPackage.Scope.SystemLogSqlite"),
-                _getString("Settings.DataPackage.Scope.SystemLogSqlite.Description"),
-                "\uE777"),
-        ];
-    }
-
-    private static void SelectDataPackageScopeRow(DialogOptionRow selectedRow, IReadOnlyList<DialogOptionRow> rows)
-    {
-        foreach (DialogOptionRow row in rows)
-        {
-            row.IsChecked = ReferenceEquals(row, selectedRow);
-        }
-    }
-
-    /// <summary>Shows a save picker and exports the selected data package scope.</summary>
-    private async Task PickAndExportDataPackageAsync(
-        DataPackageExportScope scope,
-        CancellationToken cancellationToken)
-    {
-        FileSavePicker picker = new()
-        {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            SuggestedFileName = $"ClashSharp-{DateTime.Now:yyyyMMdd-HHmmss}",
-        };
-        InitializePickerWithWindow(picker);
-        if (scope == DataPackageExportScope.SystemLogSqlite)
-        {
-            picker.FileTypeChoices.Add("SQLite", [".sqlite3"]);
-        }
-        else
-        {
-            picker.FileTypeChoices.Add("Clash# XML", [".xml"]);
-        }
-
-        StorageFile? file = await picker.PickSaveFileAsync();
-        if (file is null)
-        {
-            return;
-        }
-
-        await _operations.ExportDataAsync(file.Path, scope, cancellationToken);
-    }
-
-    private static bool IsImportableDataPackageScope(ClashDataPackageScope? scope)
-    {
-        return scope is ClashDataPackageScope.Settings or ClashDataPackageScope.SettingsAndProxyConfiguration;
-    }
-
-    /// <summary>Confirms import overwrite behavior in two steps.</summary>
-    private async Task<bool> ConfirmDataImportAsync(ClashDataPackageScope? scope)
-    {
-        ThemedContentDialog firstDialog = new()
-        {
-            Title = _getString("Settings.DataImport.Warning.Title"),
-            Content = FormatDataImportWarning(scope),
-            PrimaryButtonText = _viewModel.ImportText,
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        if (await firstDialog.ShowManagedAsync() is not ContentDialogResult.Primary)
-        {
-            return false;
-        }
-
-        ThemedContentDialog secondDialog = new()
-        {
-            Title = _getString("Settings.DataImport.SecondConfirm.Title"),
-            Content = _getString("Settings.DataImport.SecondConfirm.Message"),
-            PrimaryButtonText = _viewModel.ImportText,
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        return await secondDialog.ShowManagedAsync() is ContentDialogResult.Primary;
-    }
-
-    private string FormatDataImportWarning(ClashDataPackageScope? scope)
-    {
-        string message = _getString("Settings.DataImport.Warning.Message");
-        if (scope is null)
-        {
-            return message;
-        }
-
-        return $"{message}{Environment.NewLine}{string.Format(CultureInfo.CurrentCulture, _getString("Settings.DataImport.Warning.Scope.Format"), GetDataPackageScopeText(scope.Value))}";
-    }
-
-    private string GetDataPackageScopeText(ClashDataPackageScope scope)
-    {
-        return scope switch
-        {
-            ClashDataPackageScope.Settings => _viewModel.DataPackageScopeSettingsText,
-            ClashDataPackageScope.SettingsAndProxyConfiguration => _viewModel.DataPackageScopeSettingsAndProxyConfigurationText,
-            _ => scope.ToString(),
-        };
-    }
-
-    /// <summary>Re-applies settings that affect running application services after package import.</summary>
-    private void ApplyImportedSettings()
-    {
-        _viewModel.ReloadAfterDataImport();
-    }
-
-    /// <summary>Associates a WinUI picker with the application window so it can be shown from unpackaged desktop context.</summary>
-    private static void InitializePickerWithWindow(object picker)
-    {
-        if (App.MainWindow is null)
-        {
-            return;
-        }
-
-        nint windowHandle = WindowNative.GetWindowHandle(App.MainWindow);
-        InitializeWithWindow.Initialize(picker, windowHandle);
+                IsEnabled = false;
+                try
+                {
+                    await operation(token);
+                }
+                finally
+                {
+                    IsEnabled = true;
+                }
+            });
     }
 
     /// <summary>Builds the network repair dialog content.</summary>
     /// <returns>Dialog content panel.</returns>
-    private ScrollViewer BuildNetworkRepairPanel()
+    private ScrollViewer BuildNetworkRepairPanel(PageOperationSession diagnostics, CancellationToken cancellationToken)
     {
         StackPanel panel = new()
         {
@@ -975,9 +717,9 @@ public sealed partial class Settings : Page
             MaxWidth = 640,
         };
 
-        AddDiagnosticRow(panel, _viewModel.WslDiagnosticTitleText, nameof(SettingsViewModel.WslDiagnosticStatusText), "Wsl");
-        AddDiagnosticRow(panel, _viewModel.TerminalDiagnosticTitleText, nameof(SettingsViewModel.TerminalDiagnosticStatusText), "Terminal");
-        AddDiagnosticRow(panel, _viewModel.StoreDiagnosticTitleText, nameof(SettingsViewModel.StoreDiagnosticStatusText), "MicrosoftStore");
+        AddDiagnosticRow(panel, _viewModel.WslDiagnosticTitleText, nameof(SettingsViewModel.WslDiagnosticStatusText), "Wsl", diagnostics, cancellationToken);
+        AddDiagnosticRow(panel, _viewModel.TerminalDiagnosticTitleText, nameof(SettingsViewModel.TerminalDiagnosticStatusText), "Terminal", diagnostics, cancellationToken);
+        AddDiagnosticRow(panel, _viewModel.StoreDiagnosticTitleText, nameof(SettingsViewModel.StoreDiagnosticStatusText), "MicrosoftStore", diagnostics, cancellationToken);
 
         return new ScrollViewer
         {
@@ -994,7 +736,15 @@ public sealed partial class Settings : Page
     /// <param name="title">Target title. Must not be null.</param>
     /// <param name="statusPropertyName">Bindable status property name. Must not be null.</param>
     /// <param name="targetTag">Diagnostic target tag. Must not be null.</param>
-    private void AddDiagnosticRow(StackPanel panel, string title, string statusPropertyName, string targetTag)
+    /// <param name="diagnostics">Owns the diagnostic operations accepted by this dialog.</param>
+    /// <param name="cancellationToken">Cancels work when the page leaves the visual tree.</param>
+    private void AddDiagnosticRow(
+        StackPanel panel,
+        string title,
+        string statusPropertyName,
+        string targetTag,
+        PageOperationSession diagnostics,
+        CancellationToken cancellationToken)
     {
         Grid row = new()
         {
@@ -1032,21 +782,31 @@ public sealed partial class Settings : Page
             HorizontalAlignment = HorizontalAlignment.Right,
         };
         Grid.SetRow(buttonPanel, 1);
-        AddDiagnosticButton(buttonPanel, "\uE9D9", _viewModel.DiagnoseText, $"{targetTag}:Diagnose");
-        AddDiagnosticButton(buttonPanel, "\uE73E", _viewModel.ApplyText, $"{targetTag}:Apply");
-        AddDiagnosticButton(buttonPanel, "\uE72C", _viewModel.ResetText, $"{targetTag}:Reset");
+        AddDiagnosticButton(buttonPanel, "\uE9D9", _viewModel.DiagnoseText, $"{targetTag}:Diagnose", diagnostics, cancellationToken);
+        AddDiagnosticButton(buttonPanel, "\uE73E", _viewModel.ApplyText, $"{targetTag}:Apply", diagnostics, cancellationToken);
+        AddDiagnosticButton(buttonPanel, "\uE72C", _viewModel.ResetText, $"{targetTag}:Reset", diagnostics, cancellationToken);
         row.Children.Add(buttonPanel);
 
         panel.Children.Add(row);
     }
 
     /// <summary>Adds one command button to a diagnostic row.</summary>
-    private void AddDiagnosticButton(StackPanel panel, string glyph, string text, string commandParameter)
+    private void AddDiagnosticButton(
+        StackPanel panel,
+        string glyph,
+        string text,
+        string commandParameter,
+        PageOperationSession diagnostics,
+        CancellationToken cancellationToken)
     {
         Button button = new()
         {
-            Command = _viewModel.WindowsDiagnosticCommand,
-            CommandParameter = commandParameter,
+            Command = new AsyncRelayCommand(
+                _ => diagnostics.RunAsync(
+                    token => _viewModel.WindowsDiagnosticCommand.ExecuteAsync(commandParameter, token),
+                    cancellationToken),
+                _errorSink,
+                operationName: "settings-diagnostic-command"),
             VerticalAlignment = VerticalAlignment.Center,
         };
 
@@ -1065,78 +825,53 @@ public sealed partial class Settings : Page
     /// <summary>Shows a two-step confirmation and restores all settings to defaults.</summary>
     private async void ResetAllSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!await ConfirmAsync(
-                _getString("Settings.ResetAllSettings.Title"),
-                _getString("Settings.ResetAllSettings.Confirm"),
-                _viewModel.ResetText)
-            || !await ConfirmAsync(
-                _getString("Settings.ResetAllSettings.SecondConfirm.Title"),
-                _getString("Settings.ResetAllSettings.SecondConfirm"),
-                _viewModel.ResetText))
+        await RunPageOperationAsync(async cancellationToken =>
         {
-            return;
-        }
+            if (!await ConfirmAsync(
+                    _getString("Settings.ResetAllSettings.Title"),
+                    _getString("Settings.ResetAllSettings.Confirm"),
+                    _viewModel.ResetText, cancellationToken)
+                || !await ConfirmAsync(
+                    _getString("Settings.ResetAllSettings.SecondConfirm.Title"),
+                    _getString("Settings.ResetAllSettings.SecondConfirm"),
+                    _viewModel.ResetText, cancellationToken))
+            {
+                return;
+            }
 
-        try
-        {
-            IsEnabled = false;
-            try
-            {
-                await _viewModel.ResetAllSettingsAsync(CancellationToken.None);
-            }
-            finally
-            {
-                IsEnabled = true;
-            }
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            await _operations.ReportUnexpectedErrorAsync(
-                "settings-reset-all",
-                exception,
-                CancellationToken.None);
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            await _viewModel.ResetAllSettingsAsync(cancellationToken);
+        });
     }
 
     /// <summary>Shows a three-step confirmation and clears all local application data.</summary>
     private async void ClearAllDataButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!await ConfirmAsync(
-                _getString("Settings.ClearAllData.Title"),
-                _getString("Settings.ClearAllData.Confirm"),
-                _viewModel.CleanupText)
-            || !await ConfirmAsync(
-                _getString("Settings.ClearAllData.SecondConfirm.Title"),
-                _getString("Settings.ClearAllData.SecondConfirm"),
-                _viewModel.CleanupText)
-            || !await ConfirmAsync(
-                _getString("Settings.ClearAllData.FinalConfirm.Title"),
-                _getString("Settings.ClearAllData.FinalConfirm"),
-                _viewModel.CleanupText))
+        await RunPageOperationAsync(async cancellationToken =>
         {
-            return;
-        }
+            if (!await ConfirmAsync(
+                    _getString("Settings.ClearAllData.Title"),
+                    _getString("Settings.ClearAllData.Confirm"),
+                    _viewModel.CleanupText, cancellationToken)
+                || !await ConfirmAsync(
+                    _getString("Settings.ClearAllData.SecondConfirm.Title"),
+                    _getString("Settings.ClearAllData.SecondConfirm"),
+                    _viewModel.CleanupText, cancellationToken)
+                || !await ConfirmAsync(
+                    _getString("Settings.ClearAllData.FinalConfirm.Title"),
+                    _getString("Settings.ClearAllData.FinalConfirm"),
+                    _viewModel.CleanupText, cancellationToken))
+            {
+                return;
+            }
 
-        CancellationToken cancellationToken = _pageLifetime?.Token ?? new CancellationToken(canceled: true);
-        try
-        {
+            cancellationToken.ThrowIfCancellationRequested();
             await _viewModel.ClearAllDataAsync(cancellationToken);
-        }
-        catch (OperationCanceledException exception)
-            when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
-        {
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            await ShowSettingsOperationFailureAsync(
-                "Settings.ClearAllData",
-                _viewModel.ClearAllDataTitleText,
-                exception);
-        }
+        });
     }
 
     /// <summary>Shows a destructive-action confirmation dialog.</summary>
-    private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText)
+    private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText, CancellationToken cancellationToken)
     {
         ThemedContentDialog dialog = new()
         {
@@ -1148,28 +883,7 @@ public sealed partial class Settings : Page
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        return await dialog.ShowManagedAsync() is ContentDialogResult.Primary;
-    }
-
-    /// <summary>Logs and displays a settings operation failure without escaping the async event handler.</summary>
-    private async Task ShowSettingsOperationFailureAsync(
-        string operationName,
-        string title,
-        Exception exception)
-    {
-        await _operations.ReportUnexpectedErrorAsync(
-            operationName,
-            exception,
-            CancellationToken.None);
-        ThemedContentDialog dialog = new()
-        {
-            Title = title,
-            Content = _viewModel.UnexpectedErrorText,
-            CloseButtonText = _getString("Command.Close"),
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        await dialog.ShowManagedAsync();
+        return await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary;
     }
 
 }

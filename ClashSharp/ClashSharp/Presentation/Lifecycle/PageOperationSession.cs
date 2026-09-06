@@ -30,20 +30,24 @@ internal sealed class PageOperationSession
     }
 
     /// <summary>Queues an action after all earlier actions, without replacing their lifetime.</summary>
-    public Task RunAsync(Func<CancellationToken, Task> operation)
+    public Task RunAsync(
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(operation);
         lock (_syncRoot)
         {
-            EnqueueUnderLock(operation);
+            EnqueueUnderLock(operation, cancellationToken);
             return _tail;
         }
     }
 
     // Admission owns _syncRoot; every task returned by ExecuteAsync remains owned by _tail.
-    private void EnqueueUnderLock(Func<CancellationToken, Task> operation)
+    private void EnqueueUnderLock(
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken = default)
     {
-        CancellationTokenSource cancellation = new();
+        CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _operations.Add(cancellation);
         _tail = ExecuteAsync(_tail, operation, cancellation);
     }

@@ -49,6 +49,8 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Shared application action dispatcher used by functional tiles.</summary>
     private readonly IMasterControlActions _actions;
 
+    private readonly IReadOnlyDictionary<MasterControlTileAction, AsyncRelayCommand> _tileActionCommands;
+
     private readonly AsyncRelayCommand _toggleTransparentProxyCommand;
 
     private readonly AsyncRelayCommand _toggleStartupLaunchCommand;
@@ -128,6 +130,7 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <param name="infoTileLayout">Persistent information-tile layout service. Must not be null.</param>
     /// <param name="heroStatusLayout">Persistent hero-status slot layout service. Must not be null.</param>
     /// <param name="errorSink">Boundary sink for unexpected command failures. Must not be null.</param>
+    /// <param name="presentTileActionAsync">Awaitable page interaction port. Must not be null.</param>
     /// <param name="trayStatus">Optional effective tray-state reader; unavailable state is used when omitted.</param>
     /// <param name="runtime">Optional runtime status provider; unavailable state is used when omitted.</param>
     /// <param name="actions">Optional application action dispatcher; no-op actions are used when omitted.</param>
@@ -144,6 +147,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterInfoTileLayoutService infoTileLayout,
         IMasterHeroStatusLayoutService heroStatusLayout,
         IApplicationErrorSink errorSink,
+        Func<MasterControlTileAction, CancellationToken, Task> presentTileActionAsync,
         IMasterControlTrayStatus? trayStatus = null,
         IMasterControlRuntime? runtime = null,
         IMasterControlActions? actions = null,
@@ -159,6 +163,13 @@ internal sealed class MasterControlViewModel : ObservableObject
         _infoTileLayout = infoTileLayout ?? throw new ArgumentNullException(nameof(infoTileLayout));
         _heroStatusLayout = heroStatusLayout ?? throw new ArgumentNullException(nameof(heroStatusLayout));
         ArgumentNullException.ThrowIfNull(errorSink);
+        ArgumentNullException.ThrowIfNull(presentTileActionAsync);
+        _tileActionCommands = Enum.GetValues<MasterControlTileAction>().ToDictionary(
+            static action => action,
+            action => new AsyncRelayCommand(
+                token => presentTileActionAsync(action, token),
+                errorSink,
+                operationName: $"master-tile-{action}"));
         _trayStatus = trayStatus ?? UnavailableMasterControlTrayStatus.Instance;
         _runtime = runtime ?? UnavailableMasterControlRuntime.Instance;
         _actions = actions ?? NoMasterControlApplicationActionDispatcher.Instance;
@@ -310,9 +321,6 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     public string RestoreDefaultHeroStatusLayoutText => _localization.GetString("Master.Hero.RestoreDefault");
 
-    /// <summary>Raised when a functional information tile requests page-level UI work.</summary>
-    public event EventHandler<MasterControlTileAction>? TileActionRequested;
-
     /// <summary>Gets the selected takeover mode.</summary>
     /// <value>Current selected mode, including faulted state when application fails.</value>
     public ClashSharpMode SelectedMode
@@ -445,6 +453,17 @@ internal sealed class MasterControlViewModel : ObservableObject
         OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
         _lastHeavyRefreshAt = now;
+    }
+
+    /// <summary>Invalidates cached summaries after a completed action, optionally reloading imported presentation settings.</summary>
+    /// <remarks>The page calls this after its previous load has drained, before starting the next observed load.</remarks>
+    public void InvalidateAfterAction(bool settingsImported = false)
+    {
+        _lastHeavyRefreshAt = null;
+        if (settingsImported)
+        {
+            _isInitialized = false;
+        }
     }
 
     /// <summary>Loads persisted page state once without recreating collections on repeated Loaded events.</summary>
@@ -1125,11 +1144,6 @@ internal sealed class MasterControlViewModel : ObservableObject
         RefreshTileValues();
     }
 
-    private void RequestTileAction(MasterControlTileAction action)
-    {
-        TileActionRequested?.Invoke(this, action);
-    }
-
     private static string CompactUrl(string value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) || string.IsNullOrWhiteSpace(uri.Host))
@@ -1382,20 +1396,20 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTile("mihomo-version", "MihomoVersion", "\uE950", infoType),
                 owner.CreateTile("system-proxy", "SystemProxy", "\uE968", infoType),
                 owner.CreateTile("transparent-proxy", "TransparentProxy", "\uE8A7", controllableType, true, owner._settings.TransparentProxyEnabled, trackedCommand: owner._toggleTransparentProxyCommand),
-                owner.CreateTile("latency", "Latency", "\uEC4A", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.RunLatencyTest)),
+                owner.CreateTile("latency", "Latency", "\uEC4A", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.RunLatencyTest]),
                 owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, trackedCommand: owner._toggleStartupLaunchCommand),
                 owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, trackedCommand: owner._toggleConnectionSamplingCommand),
                 owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, command: owner.ToggleUrlBlocking),
                 owner.CreateTile("active-profile", "ActiveProfile", "\uE8A5", infoType),
                 owner.CreateTile("port", "Port", "\uE839", infoType),
-                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", navigationType),
+                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", navigationType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.OpenConnectionTest]),
                 owner.CreateTile("connection-test-proxy-url-1", "ConnectionTestProxyUrl1", "\uE774", infoType),
                 owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", infoType),
                 owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", infoType),
-                owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ShowStartupPrompt)),
-                owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.CheckStartupConflicts)),
-                owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ExportConfiguration)),
-                owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, command: () => owner.RequestTileAction(MasterControlTileAction.ImportConfiguration)),
+                owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.ShowStartupPrompt]),
+                owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.CheckStartupConflicts]),
+                owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.ExportConfiguration]),
+                owner.CreateTile("import-config", "ImportConfig", "\uE8B5", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.ImportConfiguration]),
                 owner.CreateTile("app-name", "AppName", "\uE946", infoType),
                 owner.CreateTileFromKeys("app-version", "About.Version.Title", "\uE946", "Master.Tile.Description.AppVersion", infoType),
                 owner.CreateTileFromKeys("app-runtime", "About.Runtime.Title", "\uE7F8", "Master.Tile.Description.AppRuntime", infoType),

@@ -7,6 +7,30 @@ namespace ClashSharp.Tests.Unit.Presentation;
 public sealed class PageOperationSessionTests
 {
     [Fact]
+    public async Task RunAsync_CallerCancellationRevokesQueuedWorkWithoutCancellingOtherActions()
+    {
+        TestApplicationErrorSink errors = new();
+        PageOperationSession session = new(errors, "test-action");
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task first = session.RunAsync(async token =>
+        {
+            entered.SetResult();
+            await release.Task.WaitAsync(token);
+        });
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        using CancellationTokenSource caller = new();
+        bool queuedInvoked = false;
+        Task second = session.RunAsync(_ => { queuedInvoked = true; return Task.CompletedTask; }, caller.Token);
+        caller.Cancel();
+        Assert.False(first.IsCompleted);
+        release.SetResult();
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(queuedInvoked);
+        Assert.Empty(errors.Errors);
+    }
+
+    [Fact]
     public async Task RunAsync_QueuesAcceptedActionsInOrderWithoutCancellingTheFirst()
     {
         PageOperationSession session = new(new TestApplicationErrorSink(), "test-action");

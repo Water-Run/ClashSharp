@@ -8,4 +8,5 @@ internal enum MasterControlTileAction
     RunLatencyTest,
     ExportConfiguration,
     ImportConfiguration,
+    OpenConnectionTest,
 }

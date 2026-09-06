@@ -2278,6 +2278,8 @@ public sealed class AppResourcePackagingTests
         string settingsCode = File.ReadAllText(settingsCodePath);
         string settingsComposition = File.ReadAllText(settingsCompositionPath);
 
+        string packagePresenter = File.ReadAllText(FindSourceFile(
+            "ClashSharp", "ClashSharp", "Presentation", "Dialogs", "DataPackageDialogPresenter.cs"));
         Assert.Contains("x:Name=\"DataPackageRow\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DataPackageScopeBox\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ItemsSource=\"{Binding DataPackageScopeOptions}\"", settingsXaml, StringComparison.Ordinal);
@@ -2287,17 +2289,20 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"ImportDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"BackupDataPackageButton\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ExportDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("SelectDataPackageExportScopeAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("Settings.DataExport.Title", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("DataExportDescriptionText", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("SelectDataPackageExportScopeAsync", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("Settings.DataExport.Title", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("Settings.DataExport.Description", packagePresenter, StringComparison.Ordinal);
         Assert.Contains("ImportDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("Settings.DataImport.Warning.Title", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("Settings.DataImport.SecondConfirm.Title", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("ReadPackageScope", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("FormatDataImportWarning", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("_operations.ImportDataPackageAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("_operations.ExportDataAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("Settings.DataImport.Warning.Title", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("Settings.DataImport.SecondConfirm.Title", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("ReadPackageScope", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("FormatDataImportWarning", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("_operations.ImportDataPackageAsync", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("_operations.ExportDataAsync", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("_dataPackages.ImportAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_dataPackages.ExportAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("dialog.ShowManagedAsync(cancellationToken)", packagePresenter, StringComparison.Ordinal);
         Assert.DoesNotContain(".Instance", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ISettingsPageOperations", settingsComposition, StringComparison.Ordinal);
     }
@@ -2310,10 +2315,16 @@ public sealed class AppResourcePackagingTests
 
         string settingsCode = File.ReadAllText(settingsCodePath);
 
-        Assert.Contains("ShowSettingsOperationFailureAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("_operations.ReportUnexpectedErrorAsync(", settingsCode, StringComparison.Ordinal);
+        string operationSession = File.ReadAllText(FindSourceFile(
+            "ClashSharp", "ClashSharp", "Presentation", "Lifecycle", "PageOperationSession.cs"));
+        Assert.Contains("PageOperationSession(_errorSink", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_pageOperations.RunAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("_errorSink.ReportAsync(", operationSession, StringComparison.Ordinal);
         Assert.DoesNotContain("exception.Message", settingsCode, StringComparison.Ordinal);
-        Assert.True(CountOccurrences(settingsCode, "await ShowSettingsOperationFailureAsync(") >= 3);
+        Assert.Contains("_pageOperations.Cancel()", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("await _pageOperations.DrainAsync()", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResetAllSettingsAsync(CancellationToken.None)", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("dialog.ShowManagedAsync()", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies helper-process races and Mihomo Job ownership cleanup use their distinct safety contracts.</summary>
@@ -2456,9 +2467,11 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("DataPackageExportScope.SystemLogs", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ExportLogsXmlAsync", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ExportLogsAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("DataPackageExportScope.SystemLogSqlite", settingsCode, StringComparison.Ordinal);
+        string packagePresenter = File.ReadAllText(FindSourceFile(
+            "ClashSharp", "ClashSharp", "Presentation", "Dialogs", "DataPackageDialogPresenter.cs"));
+        Assert.Contains("DataPackageExportScope.SystemLogSqlite", packagePresenter, StringComparison.Ordinal);
         Assert.Contains("DataPackageExportScope.SystemLogSqlite => ExportLogDatabaseAsync", settingsComposition, StringComparison.Ordinal);
-        Assert.Contains("IsImportableDataPackageScope", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("IsImportableDataPackageScope", packagePresenter, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies trigger navigation sits above statistics and resolves to the triggers page.</summary>
@@ -2848,8 +2861,11 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("x:Name=\"SelectedGlyph\"", componentXaml, StringComparison.Ordinal);
         Assert.Contains("<ListView", searchableComponentXaml, StringComparison.Ordinal);
         Assert.Contains("Property=\"HorizontalContentAlignment\" Value=\"Stretch\"", searchableComponentXaml, StringComparison.Ordinal);
-        Assert.Contains("DialogOptionRow", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("SelectionInvoked += (_, _) => SelectDataPackageScopeRow", settingsCode, StringComparison.Ordinal);
+        string packagePresenter = File.ReadAllText(FindSourceFile(
+            "ClashSharp", "ClashSharp", "Presentation", "Dialogs", "DataPackageDialogPresenter.cs"));
+        Assert.Contains("_dataPackages.ExportAsync", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("DialogOptionRow", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("SelectionInvoked += (_, _) => SelectDataPackageScopeRow", packagePresenter, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", searchableComponentXaml, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", masterControlCode, StringComparison.Ordinal);
     }

@@ -11,6 +11,7 @@ using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Layout;
+using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -48,6 +49,8 @@ public sealed partial class MasterControl : Page
     private readonly MasterControlViewModel _viewModel;
     private readonly Func<string, string> _getString;
     private readonly IApplicationErrorSink _errorSink;
+    private readonly MasterControlTileActionSession _tileActions;
+    private readonly DataPackageDialogPresenter _dataPackages;
     private readonly IStartupGuidePresenter _startupGuide;
     private readonly Func<XamlRoot, CancellationToken, Task> _showStartupConflicts;
     private readonly Func<IReadOnlyList<ProxyNode>> _getProxyNodes;
@@ -73,6 +76,10 @@ public sealed partial class MasterControl : Page
             ?? throw new ArgumentException("A localization function is required.", nameof(dependencies));
         _errorSink = dependencies.ErrorSink
             ?? throw new ArgumentException("An application error sink is required.", nameof(dependencies));
+        _tileActions = dependencies.TileActions
+            ?? throw new ArgumentException("A tile action session is required.", nameof(dependencies));
+        _dataPackages = dependencies.DataPackages
+            ?? throw new ArgumentException("A data-package presenter is required.", nameof(dependencies));
         _startupGuide = dependencies.StartupGuide
             ?? throw new ArgumentException("A startup-guide presenter is required.", nameof(dependencies));
         _showStartupConflicts = dependencies.ShowStartupConflicts
@@ -85,7 +92,6 @@ public sealed partial class MasterControl : Page
             ?? throw new ArgumentException("A settings navigation function is required.", nameof(dependencies));
         InitializeComponent();
         DataContext = _viewModel;
-        _viewModel.TileActionRequested += OnTileActionRequested;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -102,6 +108,13 @@ public sealed partial class MasterControl : Page
 
         CancellationTokenSource lifetime = new();
         _pageLifetime = lifetime;
+        await _tileActions.DrainAsync();
+        if (!ReferenceEquals(_pageLifetime, lifetime))
+        {
+            return;
+        }
+
+        _tileActions.Activate(PresentTileActionAsync);
         await LoadForCurrentPageAsync();
     }
 
@@ -133,7 +146,7 @@ public sealed partial class MasterControl : Page
     /// <summary>Opens the latency-test dialog and runs a timed progress workflow.</summary>
     private async void OpenLatencyDialogButton_Click(object sender, RoutedEventArgs e)
     {
-        await ShowLatencyDialogAsync();
+        await _tileActions.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
     }
 
     private void SetHeroStatusDisplayButton_Click(object sender, RoutedEventArgs e)
@@ -243,25 +256,34 @@ public sealed partial class MasterControl : Page
     }
 
     /// <summary>Handles functional information-tile actions requested by the view model.</summary>
-    private async void OnTileActionRequested(object? sender, MasterControlTileAction action)
+    private async Task PresentTileActionAsync(MasterControlTileAction action, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         switch (action)
         {
             case MasterControlTileAction.ShowStartupPrompt:
-                await ShowStartupPromptDialogAsync();
+                await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken);
                 break;
             case MasterControlTileAction.CheckStartupConflicts:
-                await ShowStartupConflictDialogAsync();
+                await _showStartupConflicts(GetDialogXamlRoot(), cancellationToken);
                 break;
             case MasterControlTileAction.RunLatencyTest:
-                await ShowLatencyDialogAsync();
+                await ShowLatencyDialogAsync(cancellationToken);
                 break;
             case MasterControlTileAction.ExportConfiguration:
-                _openSettings();
+                await _dataPackages.ExportAsync(GetDialogXamlRoot(), cancellationToken);
                 break;
             case MasterControlTileAction.ImportConfiguration:
+                if (await _dataPackages.ImportAsync(GetDialogXamlRoot(), cancellationToken))
+                {
+                    await RefreshAfterActionAsync(cancellationToken, settingsImported: true);
+                }
+                break;
+            case MasterControlTileAction.OpenConnectionTest:
                 _openSettings();
                 break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported tile action.");
         }
     }
 
@@ -275,9 +297,16 @@ public sealed partial class MasterControl : Page
         }
 
         _pageLifetime = null;
+        _tileActions.Deactivate();
         lifetime.Cancel();
-        await _loadTask;
-        lifetime.Dispose();
+        try
+        {
+            await Task.WhenAll(_loadTask, _tileActions.DrainAsync());
+        }
+        finally
+        {
+            lifetime.Dispose();
+        }
     }
 
     /// <summary>Returns the window-level XAML root so dialogs center in the visible window.</summary>
@@ -290,9 +319,9 @@ public sealed partial class MasterControl : Page
     }
 
     /// <summary>Opens the latency-test dialog and runs a timed progress workflow.</summary>
-    private async Task ShowLatencyDialogAsync()
+    private async Task ShowLatencyDialogAsync(CancellationToken cancellationToken)
     {
-        using CancellationTokenSource cancellation = new();
+        using CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         ProgressBar timeoutBar = new()
         {
             Minimum = 0,
@@ -304,7 +333,8 @@ public sealed partial class MasterControl : Page
             Text = _getString("Master.LatencyDialog.Running"),
             TextWrapping = TextWrapping.Wrap,
         };
-        StackPanel content = BuildLatencyDialogContent(progressText, timeoutBar);
+        ProgressRing progressRing = new() { IsActive = true, Width = 20, Height = 20 };
+        StackPanel content = BuildLatencyDialogContent(progressText, timeoutBar, progressRing);
 
         ThemedContentDialog dialog = new()
         {
@@ -314,74 +344,33 @@ public sealed partial class MasterControl : Page
             XamlRoot = GetDialogXamlRoot(),
         };
 
-        dialog.Closing += (_, _) => cancellation.Cancel();
+        Task latencyTask = Task.CompletedTask;
         dialog.Opened += OnDialogOpened;
-
-        await dialog.ShowManagedAsync();
-
-        async void OnDialogOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
+        try
         {
+            await dialog.ShowManagedAsync(cancellationToken);
+        }
+        finally
+        {
+            dialog.Opened -= OnDialogOpened;
             try
             {
-                await RunLatencyTestWithProgressAsync(progressText, timeoutBar, cancellation.Token);
-                if (!cancellation.IsCancellationRequested)
-                {
-                    sender.Hide();
-                }
+                await cancellation.CancelAsync();
             }
-            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            finally
             {
-                progressText.Text = _viewModel.LatencyTestFailedText;
+                await latencyTask;
             }
         }
-    }
 
-    /// <summary>Shows the startup prompt dialog from a functional tile.</summary>
-    private async Task ShowStartupPromptDialogAsync()
-    {
-        CancellationToken cancellationToken = _pageLifetime?.Token
-            ?? new CancellationToken(canceled: true);
-        await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken);
-    }
-
-    /// <summary>Runs startup conflict detection and shows the shared result dialog.</summary>
-    private async Task ShowStartupConflictDialogAsync()
-    {
-        CancellationToken cancellationToken = _pageLifetime?.Token
-            ?? new CancellationToken(canceled: true);
-        try
+        void OnDialogOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
         {
-            await _showStartupConflicts(GetDialogXamlRoot(), cancellationToken);
-        }
-        catch (OperationCanceledException exception) when (
-            ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
-        {
-        }
-        catch (Exception exception) when (
-            !ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            await ReportStartupConflictFailureAsync(exception, cancellationToken);
-        }
-    }
-
-    private async Task ReportStartupConflictFailureAsync(
-        Exception exception,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _errorSink.ReportAsync(
-                new ApplicationError("master-startup-conflict-detection", exception),
-                cancellationToken);
-        }
-        catch (Exception sinkException) when (
-            !ExceptionGraphClassifier.IsProcessFatal(sinkException))
-        {
+            latencyTask = RunLatencyTestWithProgressAsync(dialog, progressText, timeoutBar, progressRing, cancellation.Token);
         }
     }
 
     /// <summary>Builds latency-test dialog content using the RunOnce-style progress row and timeout bar.</summary>
-    private static StackPanel BuildLatencyDialogContent(TextBlock progressText, ProgressBar timeoutBar)
+    private static StackPanel BuildLatencyDialogContent(TextBlock progressText, ProgressBar timeoutBar, ProgressRing progressRing)
     {
         StackPanel content = new()
         {
@@ -395,7 +384,7 @@ public sealed partial class MasterControl : Page
             Spacing = 10,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        progressRow.Children.Add(new ProgressRing { IsActive = true, Width = 20, Height = 20 });
+        progressRow.Children.Add(progressRing);
         progressRow.Children.Add(progressText);
         content.Children.Add(progressRow);
         content.Children.Add(timeoutBar);
@@ -403,7 +392,12 @@ public sealed partial class MasterControl : Page
     }
 
     /// <summary>Runs proxy latency tests while updating a timed progress bar.</summary>
-    private async Task RunLatencyTestWithProgressAsync(TextBlock progressText, ProgressBar timeoutBar, CancellationToken cancellationToken)
+    private async Task RunLatencyTestWithProgressAsync(
+        ThemedContentDialog dialog,
+        TextBlock progressText,
+        ProgressBar timeoutBar,
+        ProgressRing progressRing,
+        CancellationToken cancellationToken)
     {
         IReadOnlyList<ProxyNode> nodes = _getProxyNodes();
         TimeSpan estimatedDuration = TimeSpan.FromSeconds(Math.Clamp(nodes.Count * 3, 4, 60));
@@ -422,31 +416,46 @@ public sealed partial class MasterControl : Page
         try
         {
             IReadOnlyList<ProxyNode> testedNodes = await _testProxyLatencyAsync(nodes, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             progressText.Text = string.Format(
                 CultureInfo.CurrentCulture,
                 _getString("Master.LatencyDialog.Completed.Format"),
                 testedNodes.Count);
             timeoutBar.Value = 100;
-            await LoadForCurrentPageAsync();
+            await RefreshAfterActionAsync(cancellationToken);
+        }
+        catch (Exception exception) when (ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             progressText.Text = _viewModel.LatencyTestFailedText;
+            await _errorSink.ReportAsync(new ApplicationError("master-latency-test", exception), CancellationToken.None);
         }
         finally
         {
             timer.Stop();
+            progressRing.IsActive = false;
+            dialog.CloseButtonText = _getString("Command.Close");
         }
+    }
+
+    private async Task RefreshAfterActionAsync(CancellationToken cancellationToken, bool settingsImported = false)
+    {
+        await _loadTask;
+        cancellationToken.ThrowIfCancellationRequested();
+        _viewModel.InvalidateAfterAction(settingsImported);
+        await LoadForCurrentPageAsync();
     }
 
     /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
     private async void EditInfoTilesButton_Click(object sender, RoutedEventArgs e)
     {
-        await ShowInfoTilesEditorAsync();
+        await _tileActions.RunAsync(ShowInfoTilesEditorAsync);
     }
 
     /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>
-    private async Task ShowInfoTilesEditorAsync()
+    private async Task ShowInfoTilesEditorAsync(CancellationToken cancellationToken)
     {
         XamlRoot dialogRoot = GetDialogXamlRoot();
         double editorWidth = CalculateInfoTilesEditorWidth(dialogRoot);
@@ -489,11 +498,12 @@ public sealed partial class MasterControl : Page
             XamlRoot = dialogRoot,
         };
 
-        if (await dialog.ShowManagedAsync() is not ContentDialogResult.Primary)
+        if (await dialog.ShowManagedAsync(cancellationToken) is not ContentDialogResult.Primary)
         {
             return;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         HashSet<string> selectedIds = optionList.SelectedOptions
             .Select(static option => option.Id)
             .ToHashSet(StringComparer.Ordinal);

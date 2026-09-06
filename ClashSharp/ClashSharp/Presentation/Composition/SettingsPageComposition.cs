@@ -26,7 +26,7 @@ internal sealed record SettingsPageDependencies(
     Func<Color, string> FormatAccentColor,
     IApplicationErrorSink ErrorSink,
     IStartupGuidePresenter StartupGuide,
-    ISettingsPageOperations Operations);
+    DataPackageDialogPresenter DataPackages);
 
 /// <summary>Owns settings operations that require file, service, or application-state access.</summary>
 internal interface ISettingsPageOperations
@@ -111,15 +111,7 @@ internal static class SettingsPageComposition
             beginDestructiveRuntimeMutationAsync:
                 runtimeMutations.BeginDestructiveMutationAsync);
 
-        SettingsPageOperations operations = new(
-            settings,
-            localization,
-            logStorage,
-            context.DataPackages,
-            runtimeMutations,
-            applicationLifecycle,
-            context.Profiles,
-            errorSink);
+        SettingsPageOperations operations = CreateOperations(context);
 
         return new SettingsPageDependencies(
             viewModel,
@@ -129,7 +121,22 @@ internal static class SettingsPageComposition
             AppThemeService.FormatAccentColor,
             errorSink,
             context.StartupGuide.Create(errorSink),
-            operations);
+            new DataPackageDialogPresenter(operations, localization.GetString));
+    }
+
+    /// <summary>Creates the shared transactional package port without constructing a settings view model.</summary>
+    internal static SettingsPageOperations CreateOperations(PageCompositionContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return new SettingsPageOperations(
+            context.Settings,
+            context.Localization,
+            context.LogStorage,
+            context.DataPackages,
+            context.SettingsRuntimeMutations,
+            context.ApplicationLifecycle,
+            context.Profiles,
+            context.ErrorSink);
     }
 }
 
