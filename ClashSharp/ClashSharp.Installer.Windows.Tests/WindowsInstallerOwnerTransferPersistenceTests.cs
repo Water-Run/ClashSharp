@@ -161,6 +161,142 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
         Assert.Equal(["guard"], calls);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task OrdinaryAdmissionDoesNotCreateMissingPrivateChainOrOpenALeaf(int presentProtectedSegments)
+    {
+        var native = new FakeDirectories();
+        if (presentProtectedSegments == 0)
+        {
+            native.Observations.Remove(ProductRoot);
+        }
+        if (presentProtectedSegments == 2)
+        {
+            native.Observations[AuthorityRoot] = new(true, false, Snapshot(WindowsInstallerPrivateStateSecurity.CreateDirectorySecurity()));
+        }
+        var files = new RecordingPresence(native);
+        var admission = WindowsInstallerOwnerTransferAdmission.CreateForTesting(
+            () => WindowsInstallerTransactionRootGuard.CreateReadOnlyOwnerTransferForTesting(@"C:\ProgramData", native), files);
+        Assert.Empty(native.Calls);
+
+        await admission.EnsureOrdinaryActionAllowedAsync(CancellationToken.None);
+
+        Assert.Equal(0, files.Calls);
+        Assert.Empty(native.CreatedPaths);
+        Assert.Equal(0, native.LiveLeases);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OrdinaryAdmissionChecksPresenceWithinTheValidatedLeaseWithoutReadingCredentials(bool present)
+    {
+        FakeDirectories native = CompletePrivateChain();
+        var files = new RecordingPresence(native) { Present = present };
+        var admission = WindowsInstallerOwnerTransferAdmission.CreateForTesting(
+            () => WindowsInstallerTransactionRootGuard.CreateReadOnlyOwnerTransferForTesting(@"C:\ProgramData", native), files);
+
+        if (present)
+        {
+            InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+                admission.EnsureOrdinaryActionAllowedAsync(CancellationToken.None));
+            Assert.Equal("installer.owner_transfer.pending", exception.DiagnosticCode);
+        }
+        else
+        {
+            await admission.EnsureOrdinaryActionAllowedAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(1, files.Calls);
+        Assert.Empty(native.CreatedPaths);
+        Assert.Equal(0, native.LiveLeases);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UntrustedPrivateChainOrFileCannotBeReportedAsAbsent(bool fileFailure)
+    {
+        FakeDirectories native = CompletePrivateChain();
+        var expected = new InstallerProtocolException("installer.owner_transfer.file_open_failed");
+        var files = new RecordingPresence(native) { Failure = fileFailure ? expected : null };
+        if (!fileFailure)
+        {
+            native.Observations[PrivateRoot] = new(true, false, Snapshot(WindowsInstallerDirectorySecurityPolicy.CreateProtectedDirectorySecurity(UserSid)));
+        }
+        var admission = WindowsInstallerOwnerTransferAdmission.CreateForTesting(
+            () => WindowsInstallerTransactionRootGuard.CreateReadOnlyOwnerTransferForTesting(@"C:\ProgramData", native), files);
+
+        InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            admission.EnsureOrdinaryActionAllowedAsync(CancellationToken.None));
+
+        Assert.Equal(fileFailure ? expected.DiagnosticCode : "installer.owner_transfer.private_acl_invalid", exception.DiagnosticCode);
+        Assert.Equal(fileFailure ? 1 : 0, files.Calls);
+        Assert.Empty(native.CreatedPaths);
+        Assert.Equal(0, native.LiveLeases);
+    }
+
+    [Fact]
+    public async Task MissingProgramDataAncestorIsNotTreatedAsMissingProductState()
+    {
+        var native = new FakeDirectories();
+        native.Observations.Remove(@"C:\ProgramData");
+        var files = new RecordingPresence(native);
+        var admission = WindowsInstallerOwnerTransferAdmission.CreateForTesting(
+            () => WindowsInstallerTransactionRootGuard.CreateReadOnlyOwnerTransferForTesting(@"C:\ProgramData", native), files);
+
+        await Assert.ThrowsAsync<InstallerProtocolException>(() => admission.EnsureOrdinaryActionAllowedAsync(CancellationToken.None));
+
+        Assert.Equal(0, files.Calls);
+        Assert.Empty(native.CreatedPaths);
+        Assert.Equal(0, native.LiveLeases);
+    }
+
+    [Fact]
+    public async Task PreCancelledAdmissionDoesNotCreateGuardOrOpenObjects()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var native = new FakeDirectories();
+        var admission = WindowsInstallerOwnerTransferAdmission.CreateForTesting(
+            () => throw new InvalidOperationException("Guard creation must remain deferred."), new RecordingPresence(native));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => admission.EnsureOrdinaryActionAllowedAsync(cancellation.Token));
+
+        Assert.Empty(native.Calls);
+    }
+
+    [Fact]
+    public async Task ReadOnlyPrivateGuardObservesNewlyAppearingStateWithoutCreatingDirectories()
+    {
+        var native = new FakeDirectories();
+        native.Observations.Remove(ProductRoot);
+        using var guard = WindowsInstallerTransactionRootGuard.CreateReadOnlyOwnerTransferForTesting(@"C:\ProgramData", native);
+        await guard.EnsureProtectedAsync(PrivateRoot, CancellationToken.None);
+        Assert.False(guard.IsProtectedRootPresent);
+        Assert.Equal(2, native.LiveLeases);
+        foreach ((string path, WindowsInstallerDirectoryObservation observation) in CompletePrivateChain().Observations)
+        {
+            native.Observations[path] = observation;
+        }
+
+        await guard.EnsureProtectedAsync(PrivateRoot, CancellationToken.None);
+
+        Assert.True(guard.IsProtectedRootPresent);
+        Assert.Equal(5, native.LiveLeases);
+        Assert.Empty(native.CreatedPaths);
+    }
+
+    private static FakeDirectories CompletePrivateChain()
+    {
+        var native = new FakeDirectories();
+        native.Observations[AuthorityRoot] = new(true, false, Snapshot(WindowsInstallerPrivateStateSecurity.CreateDirectorySecurity()));
+        native.Observations[PrivateRoot] = new(true, false, Snapshot(WindowsInstallerPrivateStateSecurity.CreateDirectorySecurity()));
+        return native;
+    }
+
     private static WindowsInstallerDirectorySecuritySnapshot AlterSecurity(WindowsInstallerDirectorySecuritySnapshot security, string condition)
     {
         WindowsInstallerDirectoryAce first = security.AccessEntries[0];
@@ -239,6 +375,26 @@ public sealed class WindowsInstallerOwnerTransferPersistenceTests
                     owner.LiveLeases--;
                 }
             }
+        }
+    }
+
+    private sealed class RecordingPresence(FakeDirectories directories) : IWindowsInstallerPrivateJournalPresenceNative
+    {
+        internal bool Present { get; init; }
+        internal Exception? Failure { get; init; }
+        internal int Calls { get; private set; }
+
+        public bool IsPresent(string path, CancellationToken cancellationToken)
+        {
+            Assert.Equal(Path.Combine(PrivateRoot, InstallerOwnerTransferStateLayout.JournalFileName), path);
+            Assert.Equal(5, directories.LiveLeases);
+            cancellationToken.ThrowIfCancellationRequested();
+            Calls++;
+            if (Failure is not null)
+            {
+                throw Failure;
+            }
+            return Present;
         }
     }
 

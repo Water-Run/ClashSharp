@@ -18,11 +18,18 @@ internal interface IWindowsInstallerPrivateJournalFileNative
     Task DeleteAsync(string path, CancellationToken cancellationToken);
 }
 
+internal interface IWindowsInstallerPrivateJournalPresenceNative
+{
+    bool IsPresent(string path, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Accesses only the fixed private journal leaf under a caller-pinned directory chain. Every file
 /// handle is checked for ordinary kind, a single hard link and an exact private security descriptor.
 /// </summary>
-internal sealed class WindowsInstallerPrivateJournalFileNative : IWindowsInstallerPrivateJournalFileNative
+internal sealed class WindowsInstallerPrivateJournalFileNative :
+    IWindowsInstallerPrivateJournalFileNative,
+    IWindowsInstallerPrivateJournalPresenceNative
 {
     private const uint MoveFileReplaceExisting = 1;
     private const uint MoveFileWriteThrough = 8;
@@ -31,6 +38,15 @@ internal sealed class WindowsInstallerPrivateJournalFileNative : IWindowsInstall
 
     private WindowsInstallerPrivateJournalFileNative()
     {
+    }
+
+    public bool IsPresent(string path, CancellationToken cancellationToken)
+    {
+        ValidateJournalPath(path);
+        cancellationToken.ThrowIfCancellationRequested();
+        using SafeFileHandle? file = OpenPrivateIfPresent(path);
+        cancellationToken.ThrowIfCancellationRequested();
+        return file is not null;
     }
 
     public async Task<byte[]?> ReadAsync(string path, CancellationToken cancellationToken)

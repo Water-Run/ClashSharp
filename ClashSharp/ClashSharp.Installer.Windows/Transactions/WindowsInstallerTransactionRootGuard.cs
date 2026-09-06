@@ -34,7 +34,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
         ArgumentNullException.ThrowIfNull(native);
         if (privateOwnerTransfer)
         {
-            if (targetSid is not null || !createMissingProtectedDirectories)
+            if (targetSid is not null)
             {
                 throw new ArgumentException("Private transfer roots cannot carry a user-readable owner.", nameof(targetSid));
             }
@@ -215,6 +215,19 @@ public sealed class WindowsInstallerTransactionRootGuard :
         IWindowsInstallerDirectoryNative native) =>
         new(programDataPath, null, native, createMissingProtectedDirectories: true, privateOwnerTransfer: true);
 
+    internal static WindowsInstallerTransactionRootGuard CreateReadOnlyOwnerTransferDefault() =>
+        new(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData, Environment.SpecialFolderOption.DoNotVerify),
+            targetSid: null,
+            new WindowsInstallerDirectoryNative(),
+            createMissingProtectedDirectories: false,
+            privateOwnerTransfer: true);
+
+    internal static WindowsInstallerTransactionRootGuard CreateReadOnlyOwnerTransferForTesting(
+        string programDataPath,
+        IWindowsInstallerDirectoryNative native) =>
+        new(programDataPath, null, native, createMissingProtectedDirectories: false, privateOwnerTransfer: true);
+
     private List<IWindowsInstallerDirectoryLease> AcquireDirectoryChain(
         CancellationToken cancellationToken)
     {
@@ -244,7 +257,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
                 }
                 catch (Exception exception) when (
                     !_createMissingProtectedDirectories
-                    && path.CreateWithProtectedAcl
+                    && path.AllowMissingWhenReadOnly
                     && IsMissingDirectory(exception))
                 {
                     break;
@@ -359,7 +372,8 @@ public sealed class WindowsInstallerTransactionRootGuard :
             yield return new WindowsInstallerDirectoryPath(
                 current,
                 CreateWithProtectedAcl: _targetSid is not null || protectedSegmentIndex > 0,
-                RequiresExactProtection: protectedSegmentIndex > 0);
+                RequiresExactProtection: protectedSegmentIndex > 0,
+                AllowMissingWhenReadOnly: true);
             protectedSegmentIndex++;
         }
     }
@@ -516,7 +530,8 @@ public sealed class WindowsInstallerTransactionRootGuard :
     private sealed record WindowsInstallerDirectoryPath(
         string Path,
         bool RequiresExactProtection,
-        bool CreateWithProtectedAcl = false);
+        bool CreateWithProtectedAcl = false,
+        bool AllowMissingWhenReadOnly = false);
 }
 
 internal static class WindowsInstallerDirectorySecurityPolicy

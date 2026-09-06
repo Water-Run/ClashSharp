@@ -52,7 +52,17 @@ Windows 实现使用固定的 `ProgramData\ClashSharp\InstallerAuthority\v1\owne
 
 远端管理员进程使用生产 Core/Windows 存储、生产机器互斥锁和隔离 ProgramData 路径完成 74 项原生断言：独立进程重启恢复 Prepared、七次相邻推进、Verified 清除、准确 ACL、目录重命名被句柄阻止、宽松文件/目录 ACL、硬链接、符号链接和超大文件拒绝，以及异常对象字节/权限保留。没有修改服务、系统代理、包或证书。收据为 `artifacts/verification/private-persistence-validation-m4j.json`，包含实际被测程序集摘要；这是存储级验证，不包含实际服务迁移、掉电测试或桌面验收。
 
-当前 backend 只供显式迁移 authority 使用，首次读取可以创建缺失的两个私有后代；普通 helper 检查是否有未完成迁移时仍需独立的只读探测，不能调用该创建路径。它尚未接入 production composition，也没有赋予普通操作换绑权限。
+当前 backend 只供显式迁移 authority 使用，首次读取可以创建缺失的两个私有后代；普通 helper 通过下面的 M4k 只读端口检查未完成迁移，不能调用该创建路径。写入 backend 尚未接入 production composition，也没有赋予普通操作换绑权限。
+
+## M4k 普通 helper 的只读准入
+
+认证 helper 现在按“机器独占锁 → 私有迁移检查 → App 生命周期锁 → 普通事务资源”建立 authority。只读检查使用独立的 presence 端口，不持有写入方法、不读取或解析记录内容；缺失产品目录或私有后代只表示该固定链尚未建立，不会触发创建。缺失 ProgramData 祖先、无法打开的对象或不准确的权限仍然拒绝。
+
+完整链存在时，通过原生文件句柄验证对象种类、单硬链接及私有 ACL，然后只判断固定叶子是否存在。所有阶段，包括 Verified，以及空文件、损坏 JSON 和超大文件，都返回 `installer.owner_transfer.pending`；普通 helper 无权自行清除。仅确认叶子不存在时允许后续普通流程继续。
+
+检查拥有自己的目录句柄并在返回或异常时释放；机器独占锁继续覆盖后续 authority 生命周期。取消会等待已拥有的检查任务结束后再释放机器锁，且不会进入 App 锁或事务资源创建。新增 14 项 Windows 用例覆盖缺失链、对象拒绝、句柄释放、authority 顺序和取消；完整 Windows 安全子集 450 项通过，0 跳过。Release x64 全解决方案构建 0 警告、0 错误，format 1285 个源文件、0 处变更、无工作区警告。
+
+远端生产只读检查在隔离 ProgramData 上通过 31 项原生断言，确认八个阶段及三种无效长度均阻断、原字节保留、宽松 ACL 被拒绝、缺失产品目录不被创建。收据为 `artifacts/verification/owner-transfer-admission-validation-m4k.json`。该结果不证明专用迁移执行器、完整 helper IPC 或桌面安装已经完成。
 
 ## 持久迁移的接入要求
 
@@ -66,7 +76,7 @@ Windows 实现使用固定的 `ProgramData\ClashSharp\InstallerAuthority\v1\owne
 - 现有 certificate ownership store 只保存一个目标 SID 的账本。旧账本不能改写 TargetSid 或在有引用时删除；需要保留原证书归属证据，并定义旧账户包的保留/移除及后续独立卸载路径。目录 ACL 转移本身不能解决这项多账户状态问题。
 - 确认界面应明确说明旧账户的服务接管将停止，以及旧包、配置和证书如何处理。只有这条独立确认路径可以申请迁移权限；普通 Repair、静默参数和恢复一个不匹配的候选不能隐式发起换绑。
 
-这些要求尚未全部实现。下一步先让普通 helper 只读检查未完成的私有迁移，再连接 native 阶段执行器、证书账本保存和确认界面。当前生产 mutation 门继续关闭，跨账户请求仍拒绝；协议及存储测试不是换绑功能完成的证明。
+这些要求尚未全部实现。下一步连接专用阶段执行器、证书账本保存和确认界面。当前生产 mutation 门继续关闭，跨账户请求仍拒绝；协议、存储及普通入口检查的测试不是换绑功能完成的证明。
 
 ## 验证
 

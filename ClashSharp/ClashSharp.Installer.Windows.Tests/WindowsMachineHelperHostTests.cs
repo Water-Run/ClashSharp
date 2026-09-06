@@ -3,6 +3,7 @@ using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Transactions;
 using ClashSharp.Installer.Windows.Execution;
 using ClashSharp.Installer.Windows.Machines;
+using ClashSharp.Installer.Windows.Transactions;
 
 namespace ClashSharp.Installer.Windows.Tests;
 
@@ -32,7 +33,7 @@ public sealed class WindowsMachineHelperHostTests
             store,
             operations);
         var authorityFactory = new WindowsMachineHelperAuthorityFactory(
-            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events));
+            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
         var trust = new RecordingTrustVerifier(events);
         var parent = new RecordingParentVerifier(events);
         var clientFactory = new RecordingClientFactory(events, commands, results);
@@ -63,6 +64,7 @@ public sealed class WindowsMachineHelperHostTests
                 "client-verify-server",
                 "parent-alive",
                 "authority-lock",
+                "owner-transfer-check",
                 "application-lock",
                 "authority-resources-create",
                 "operation",
@@ -224,7 +226,7 @@ public sealed class WindowsMachineHelperHostTests
             new MemoryTransactionStore(conflicting),
             new RecordingOperations(events));
         var authorityFactory = new WindowsMachineHelperAuthorityFactory(
-            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events));
+            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
 
         InstallerProtocolException exception = await Assert.ThrowsAsync<
             InstallerProtocolException>(() => authorityFactory.CreateAsync(
@@ -238,7 +240,7 @@ public sealed class WindowsMachineHelperHostTests
             "installer.machine_helper.session_transaction_mismatch",
             exception.DiagnosticCode);
         Assert.Equal(
-            ["authority-lock", "application-lock", "authority-resources-create", "authority-resources-dispose",
+            ["authority-lock", "owner-transfer-check", "application-lock", "authority-resources-create", "authority-resources-dispose",
                 "application-unlock", "authority-unlock"],
             events);
         Assert.Equal(requested.Journal.TargetSid, resourcesFactory.TargetSid);
@@ -254,7 +256,7 @@ public sealed class WindowsMachineHelperHostTests
         var factory = new WindowsMachineHelperAuthorityFactory(
             resources,
             new RecordingAuthorityLock(events, new InstallerProtocolException("installer.concurrent_action_rejected")),
-            new RecordingApplicationLock(events));
+            new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
 
         InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
             factory.CreateAsync(
@@ -264,6 +266,70 @@ public sealed class WindowsMachineHelperHostTests
 
         Assert.Equal("installer.concurrent_action_rejected", exception.DiagnosticCode);
         Assert.Equal(["authority-lock"], events);
+        Assert.Null(resources.TargetSid);
+    }
+
+    [Theory]
+    [InlineData("installer.owner_transfer.pending")]
+    [InlineData("installer.owner_transfer.private_acl_invalid")]
+    [InlineData("installer.owner_transfer.file_open_failed")]
+    public async Task PrivateTransferRefusalPreventsOrdinaryAuthorityAndReleasesMachineLease(string diagnosticCode)
+    {
+        var events = new List<string>();
+        InstallerTransactionSnapshot state = VerifiedSnapshot();
+        var resources = new RecordingAuthorityResourcesFactory(
+            events, new MemoryTransactionStore(state), new RecordingOperations(events));
+        var factory = new WindowsMachineHelperAuthorityFactory(
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events),
+            new RecordingOwnerTransferAdmission(events, new InstallerProtocolException(diagnosticCode)));
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() => factory.CreateAsync(
+            InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
+            state.Journal.TargetSid, CancellationToken.None));
+
+        Assert.Equal(diagnosticCode, failure.DiagnosticCode);
+        Assert.Equal(["authority-lock", "owner-transfer-check", "authority-unlock"], events);
+        Assert.Null(resources.TargetSid);
+    }
+
+    [Fact]
+    public async Task CancellationDrainsOwnedTransferInspectionBeforeReleasingMachineLease()
+    {
+        var events = new List<string>();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+        InstallerTransactionSnapshot state = VerifiedSnapshot();
+        var resources = new RecordingAuthorityResourcesFactory(
+            events, new MemoryTransactionStore(state), new RecordingOperations(events));
+        var admission = new RecordingOwnerTransferAdmission(events)
+        {
+            Inspect = _ =>
+            {
+                entered.TrySetResult();
+                return release.Task;
+            },
+        };
+        var factory = new WindowsMachineHelperAuthorityFactory(
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), admission);
+        Task<IWindowsMachineHelperAuthorityLease> pending = factory.CreateAsync(
+            InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
+            state.Journal.TargetSid, cancellation.Token);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            cancellation.Cancel();
+            Assert.False(pending.IsCompleted);
+            Assert.Equal(["authority-lock", "owner-transfer-check"], events);
+        }
+        finally
+        {
+            cancellation.Cancel();
+            release.TrySetResult();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        }
+
+        Assert.Equal(["authority-lock", "owner-transfer-check", "authority-unlock"], events);
         Assert.Null(resources.TargetSid);
     }
 
@@ -277,7 +343,7 @@ public sealed class WindowsMachineHelperHostTests
         var factory = new WindowsMachineHelperAuthorityFactory(
             resources,
             new RecordingAuthorityLock(events),
-            new RecordingApplicationLock(events, new InstallerProtocolException("installer.application_running")));
+            new RecordingApplicationLock(events, new InstallerProtocolException("installer.application_running")), new RecordingOwnerTransferAdmission(events));
 
         InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
             factory.CreateAsync(
@@ -286,7 +352,7 @@ public sealed class WindowsMachineHelperHostTests
                 CancellationToken.None));
 
         Assert.Equal("installer.application_running", failure.DiagnosticCode);
-        Assert.Equal(["authority-lock", "application-lock", "authority-unlock"], events);
+        Assert.Equal(["authority-lock", "owner-transfer-check", "application-lock", "authority-unlock"], events);
         Assert.Null(resources.TargetSid);
     }
 
@@ -302,7 +368,7 @@ public sealed class WindowsMachineHelperHostTests
             CreateFailure = expected,
         };
         var factory = new WindowsMachineHelperAuthorityFactory(
-            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events));
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
 
         IOException actual = await Assert.ThrowsAsync<IOException>(() => factory.CreateAsync(
             InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
@@ -311,7 +377,7 @@ public sealed class WindowsMachineHelperHostTests
 
         Assert.Same(expected, actual);
         Assert.Equal(
-            ["authority-lock", "application-lock", "authority-resources-create", "application-unlock", "authority-unlock"],
+            ["authority-lock", "owner-transfer-check", "application-lock", "authority-resources-create", "application-unlock", "authority-unlock"],
             events);
     }
 
@@ -327,7 +393,7 @@ public sealed class WindowsMachineHelperHostTests
             DisposeFailure = expected,
         };
         var factory = new WindowsMachineHelperAuthorityFactory(
-            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events));
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
         IWindowsMachineHelperAuthorityLease lease = await factory.CreateAsync(
             InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
             state.Journal.TargetSid,
@@ -338,7 +404,7 @@ public sealed class WindowsMachineHelperHostTests
 
         Assert.Same(expected, actual);
         Assert.Equal(
-            ["authority-lock", "application-lock", "authority-resources-create", "authority-resources-dispose",
+            ["authority-lock", "owner-transfer-check", "application-lock", "authority-resources-create", "authority-resources-dispose",
                 "application-unlock", "authority-unlock"],
             events);
     }
@@ -709,6 +775,24 @@ public sealed class WindowsMachineHelperHostTests
                 throw _disposeFailure;
             }
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingOwnerTransferAdmission(List<string> events, Exception? failure = null)
+        : IWindowsInstallerOwnerTransferAdmission
+    {
+        internal Func<CancellationToken, Task>? Inspect { get; init; }
+
+        public Task EnsureOrdinaryActionAllowedAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            events.Add("owner-transfer-check");
+            if (failure is not null)
+            {
+                throw failure;
+            }
+
+            return Inspect?.Invoke(cancellationToken) ?? Task.CompletedTask;
         }
     }
 

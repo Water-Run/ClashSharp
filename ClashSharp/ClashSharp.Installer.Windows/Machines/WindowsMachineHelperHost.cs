@@ -5,6 +5,7 @@ using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Transactions;
 using ClashSharp.Installer.Windows.Execution;
+using ClashSharp.Installer.Windows.Transactions;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -32,18 +33,22 @@ internal sealed class WindowsMachineHelperAuthorityFactory
     private readonly IWindowsMachineHelperAuthorityResourcesFactory _resourcesFactory;
     private readonly IWindowsInstallerAuthorityLock _authorityLock;
     private readonly IWindowsInstallerApplicationLock _applicationLock;
+    private readonly IWindowsInstallerOwnerTransferAdmission _ownerTransferAdmission;
 
     internal WindowsMachineHelperAuthorityFactory(
         IWindowsMachineHelperAuthorityResourcesFactory resourcesFactory,
         IWindowsInstallerAuthorityLock authorityLock,
-        IWindowsInstallerApplicationLock applicationLock)
+        IWindowsInstallerApplicationLock applicationLock,
+        IWindowsInstallerOwnerTransferAdmission ownerTransferAdmission)
     {
         ArgumentNullException.ThrowIfNull(resourcesFactory);
         ArgumentNullException.ThrowIfNull(authorityLock);
         ArgumentNullException.ThrowIfNull(applicationLock);
+        ArgumentNullException.ThrowIfNull(ownerTransferAdmission);
         _resourcesFactory = resourcesFactory;
         _authorityLock = authorityLock;
         _applicationLock = applicationLock;
+        _ownerTransferAdmission = ownerTransferAdmission;
     }
 
     public async Task<IWindowsMachineHelperAuthorityLease> CreateAsync(
@@ -61,6 +66,8 @@ internal sealed class WindowsMachineHelperAuthorityFactory
         IDisposable? applicationLease = null;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _ownerTransferAdmission.EnsureOrdinaryActionAllowedAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             applicationLease = _applicationLock.Acquire(targetSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
@@ -245,7 +252,8 @@ internal sealed class WindowsMachineHelperHost
             new WindowsMachineHelperAuthorityFactory(
                 new WindowsMachineHelperAuthorityResourcesFactory(operationsFactory),
                 new WindowsInstallerAuthorityLock(),
-                WindowsInstallerApplicationLock.CreateHelper()),
+                WindowsInstallerApplicationLock.CreateHelper(),
+                WindowsInstallerOwnerTransferAdmission.CreateDefault()),
             WindowsMachineHelperHostLimits.Default);
     }
 
