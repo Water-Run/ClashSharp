@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -49,7 +49,7 @@
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
       <Extensions>
-        <uap5:Extension Category="windows.startupTask" Executable="$targetnametoken$.exe" EntryPoint="Windows.FullTrustApplication">
+        <uap5:Extension Category="windows.startupTask" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication">
           <uap5:StartupTask TaskId="ClashSharpStartup" Enabled="false" DisplayName="Clash#" />
         </uap5:Extension>
       </Extensions>

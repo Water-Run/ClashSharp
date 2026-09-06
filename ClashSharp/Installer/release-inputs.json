@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "1.0.0",
+  "dotnetSdkVersion": "10.0.201",
+  "windowsAppRuntime": {
+    "packageVersion": "1.8.260317003",
+    "architecture": "x64",
+    "length": 42672814,
+    "sha256": "5be1c722ef3d04c120edb9f41544de53de9c1d998cfd09aae18cb50fdc2cd625",
+    "signerThumbprint": "240A2A20935F07AF88F38149C36A312315057F70"
+  },
+  "geoData": {
+    "repository": "MetaCubeX/meta-rules-dat",
+    "commit": "8b2495481407ab931fbc201a245f1982b60b5a70",
+    "sourceCommit": "4178770badecb1b349fbcd62c737e0d7a2079729",
+    "publishedAt": "2026-09-06T00:06:50Z",
+    "files": [
+      {
+        "name": "Country.mmdb",
+        "sourceName": "country.mmdb",
+        "length": 7832239,
+        "sha256": "031bd6e8dfd62d70b81d2d65ce54a92ed7f21f060add17c66e16a2a0e55d3a41"
+      },
+      {
+        "name": "GeoIP.dat",
+        "sourceName": "geoip.dat",
+        "length": 17120329,
+        "sha256": "4149e607530f91da697bad4696f8c59f0a475af38e69405e4124438c9886c721"
+      },
+      {
+        "name": "GeoSite.dat",
+        "sourceName": "geosite.dat",
+        "length": 4243484,
+        "sha256": "54af8c41407b9a56a59e65c03bcc27d812cb2620e18e62e4795e2972fff5b539"
+      },
+      {
+        "name": "ASN.mmdb",
+        "sourceName": "GeoLite2-ASN.mmdb",
+        "length": 12106294,
+        "sha256": "37279508b91bb26fe6043897490fe2ba02d95a7521a8263e70e566239355b479"
+      }
+    ]
+  }
+}

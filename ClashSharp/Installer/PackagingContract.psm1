@@ -490,6 +490,111 @@ function Get-ClashSharpPublisherId {
     }
 }
 
+function Get-ClashSharpMsixDotNetRuntimeContract {
+    <#
+    .SYNOPSIS
+        Verifies that the final main MSIX carries its own .NET 10 x64 runtime.
+    .DESCRIPTION
+        Reads bounded runtime metadata directly from the ZIP and requires the CLR, host, and
+        base library alongside the application. Rejects shared-framework requirements, wrong
+        runtime identifiers, duplicate entries, missing files, and non-x64 native hosts.
+        Package signature verification remains a separate packaging step.
+    .PARAMETER LiteralPath
+        Ordinary primary MSIX whose offline .NET runtime is verified.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string] $LiteralPath
+    )
+
+    $msixPath = Assert-ClashSharpOrdinaryPath -LiteralPath $LiteralPath -RequireFile
+    if ((Get-Item -LiteralPath $msixPath).Length -gt 1073741824) {
+        throw 'Primary MSIX exceeds the runtime inspection byte budget.'
+    }
+    $requiredNames = @(
+        'ClashSharp.exe', 'ClashSharp.dll', 'ClashSharp.runtimeconfig.json',
+        'ClashSharp.deps.json', 'coreclr.dll', 'hostfxr.dll', 'hostpolicy.dll',
+        'System.Private.CoreLib.dll'
+    )
+    $archive = [IO.Compression.ZipFile]::OpenRead($msixPath)
+    try {
+        if ($archive.Entries.Count -gt 4096) {
+            throw 'Primary MSIX exceeds the runtime inspection entry budget.'
+        }
+        $entries = [Collections.Generic.Dictionary[string, object]]::new(
+            [StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $archive.Entries) {
+            if (-not $entries.TryAdd($entry.FullName, $entry)) {
+                throw 'Primary MSIX contains duplicate or case-colliding entries.'
+            }
+        }
+        foreach ($name in $requiredNames) {
+            if (-not $entries.ContainsKey($name) -or
+                $entries[$name].FullName -cne $name -or
+                $entries[$name].Length -lt 1 -or
+                $entries[$name].Length -gt 134217728) {
+                throw "Primary MSIX is missing a canonical bounded .NET runtime file: $name"
+            }
+        }
+
+        $metadata = @{}
+        foreach ($name in @('ClashSharp.runtimeconfig.json', 'ClashSharp.deps.json')) {
+            if ($entries[$name].Length -gt 4194304) {
+                throw "Primary MSIX runtime metadata exceeds its byte budget: $name"
+            }
+            $reader = [IO.StreamReader]::new($entries[$name].Open(), [Text.UTF8Encoding]::new($false, $true))
+            try {
+                $metadata[$name] = $reader.ReadToEnd() | ConvertFrom-Json -AsHashtable -Depth 32
+            } finally {
+                $reader.Dispose()
+            }
+        }
+        $options = $metadata['ClashSharp.runtimeconfig.json'].runtimeOptions
+        if ($options -isnot [Collections.IDictionary] -or
+            $options.Contains('framework') -or $options.Contains('frameworks') -or
+            $options.tfm -cne 'net10.0' -or
+            @($options.includedFrameworks).Count -ne 1 -or
+            $options.includedFrameworks[0].name -cne 'Microsoft.NETCore.App' -or
+            [string]$options.includedFrameworks[0].version -cnotmatch '^10\.0\.(0|[1-9][0-9]*)$' -or
+            $metadata['ClashSharp.deps.json'].runtimeTarget.name -cne '.NETCoreApp,Version=v10.0/win-x64') {
+            throw 'Primary MSIX must carry a self-contained .NET 10 win-x64 runtime.'
+        }
+
+        foreach ($name in @('ClashSharp.exe', 'coreclr.dll', 'hostfxr.dll', 'hostpolicy.dll')) {
+            $stream = $entries[$name].Open()
+            $reader = [IO.BinaryReader]::new($stream)
+            try {
+                $header = $reader.ReadBytes(64)
+                if ($header.Length -ne 64 -or [BitConverter]::ToUInt16($header, 0) -ne 0x5A4D) {
+                    throw "Primary MSIX runtime file has no DOS header: $name"
+                }
+                $peOffset = [BitConverter]::ToInt32($header, 60)
+                if ($peOffset -lt 64 -or $peOffset -gt 1048576 -or $peOffset -gt ($entries[$name].Length - 6)) {
+                    throw "Primary MSIX runtime file has an invalid PE offset: $name"
+                }
+                $padding = $reader.ReadBytes($peOffset - 64)
+                if ($padding.Length -ne ($peOffset - 64) -or
+                    $reader.ReadUInt32() -ne 0x00004550 -or $reader.ReadUInt16() -ne 0x8664) {
+                    throw "Primary MSIX runtime file must be a native x64 image: $name"
+                }
+            } finally {
+                $reader.Dispose()
+            }
+        }
+        return [PSCustomObject]@{
+            framework = 'Microsoft.NETCore.App'
+            version = [string]$options.includedFrameworks[0].version
+            runtimeIdentifier = 'win-x64'
+            selfContained = $true
+            requiredFiles = $requiredNames
+        }
+    } finally {
+        $archive.Dispose()
+    }
+}
+
 function Get-ClashSharpMsixMachineFileContract {
     <#
     .SYNOPSIS
@@ -973,6 +1078,7 @@ Export-ModuleMember -Function @(
     'Get-ClashSharpMsixManifestDocument',
     'Get-ClashSharpMsixIdentity',
     'Get-ClashSharpPublisherId',
+    'Get-ClashSharpMsixDotNetRuntimeContract',
     'Get-ClashSharpMsixMachineFileContract',
     'Get-ClashSharpMainPackageDependency',
     'Get-ClashSharpPackageSignature',

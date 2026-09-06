@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
@@ -112,8 +112,14 @@
     <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
-    <ProjectReference Include="..\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
-    <ProjectReference Include="..\ClashSharp.RecoveryWatchdog\ClashSharp.RecoveryWatchdog.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <!-- Formal packaging consumes only separately verified component staging. These references
+         establish development build order and must not leak apphosts into the MSIX publish. -->
+    <ProjectReference Include="..\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj"
+                      Condition="'$(GenerateAppxPackageOnBuild)'!='true'"
+                      ReferenceOutputAssembly="false" Private="false" PrivateAssets="all" />
+    <ProjectReference Include="..\ClashSharp.RecoveryWatchdog\ClashSharp.RecoveryWatchdog.csproj"
+                      Condition="'$(GenerateAppxPackageOnBuild)'!='true'"
+                      ReferenceOutputAssembly="false" Private="false" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1721" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
@@ -123,6 +129,8 @@
   </ItemGroup>
 
   <Target Name="ValidateInstallerPackageContent" BeforeTargets="PrepareForBuild" Condition="'$(GenerateAppxPackageOnBuild)'=='true'">
+    <Error Condition="'$(SelfContained)'!='true'" Text="Formal MSIX packaging must include the .NET runtime for offline installation." />
+    <Error Condition="'$(WindowsAppSDKSelfContained)'!='false'" Text="Formal MSIX packaging uses the separately pinned Windows App Runtime framework package." />
     <Error Condition="'$(ClashSharpInstallerServiceRoot)'=='' or '$(ClashSharpInstallerWatchdogRoot)'==''" Text="Formal MSIX packaging must provide fresh Installer component staging roots." />
     <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.exe')" Text="Installer service staging is missing ClashSharp.MihomoService.exe." />
     <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.exe')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.exe." />

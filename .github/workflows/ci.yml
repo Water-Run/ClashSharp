@@ -29,6 +29,10 @@ jobs:
         shell: pwsh
         run: ./eng/Test-PowerShellSyntax.ps1
 
+      - name: Verify offline .NET package contract
+        shell: pwsh
+        run: ./ClashSharp/Installer/Test-PackagingRuntimeContract.ps1
+
       - name: Set up pinned .NET SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
@@ -152,3 +156,39 @@ jobs:
             ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults/**/coverage.cobertura.xml
             ClashSharp/ClashSharp.Installer.Windows.Tests/TestResults/**/*.trx
           if-no-files-found: error
+
+  installer-package:
+    name: Offline Installer package
+    runs-on: windows-2025
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Set up pinned .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+
+      - name: Restore locked dependencies
+        run: dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
+
+      - name: Acquire and stage pinned offline data
+        shell: pwsh
+        run: |
+          ./Tools/Get-ReleaseInputs.ps1
+          $inputRoot = Join-Path $PWD 'artifacts/release-inputs/1.0.0'
+          $assets = @('Country.mmdb', 'GeoIP.dat', 'GeoSite.dat', 'ASN.mmdb') |
+            ForEach-Object { Join-Path $inputRoot $_ }
+          ./Tools/Prepare-GeoData.ps1 -AssetPath $assets
+
+      - name: Build complete development Installer payload
+        shell: pwsh
+        run: ./ClashSharp/Installer/build.ps1 -Development
+
+      - name: Upload development package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ClashSharp-1.0.0-development-package
+          path: artifacts/installer/release/
+          if-no-files-found: error
+          retention-days: 5

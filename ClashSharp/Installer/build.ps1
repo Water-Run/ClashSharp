@@ -219,7 +219,8 @@ $servicePublishRoot = Join-Path $componentStagingRoot "service-publish"
 $serviceStagingRoot = Join-Path $componentStagingRoot "service"
 $watchdogPublishRoot = Join-Path $componentStagingRoot "watchdog-publish"
 $watchdogStagingRoot = Join-Path $componentStagingRoot "watchdog"
-$appPackageStagingRoot = Join-Path $packagingRunRoot "app-packages"
+# MSIX targets concatenate AppxPackageDir with the generated package directory name.
+$appPackageStagingRoot = (Join-Path $packagingRunRoot "app-packages") + [IO.Path]::DirectorySeparatorChar
 $payloadStagingDir = Join-Path $packagingRunRoot "payload"
 $promotionStagingRoot = Join-Path $packagingRunRoot "promotion"
 $installerPublishRoot = Join-Path $componentStagingRoot "installer-publish"
@@ -263,6 +264,26 @@ $certificatePasswordText = $env:CLASHSHARP_CERTIFICATE_PASSWORD
 Remove-Item Env:\CLASHSHARP_CERTIFICATE_PASSWORD -ErrorAction SilentlyContinue
 
 Set-Location $repoRoot
+
+$releaseInputFile = Get-OrdinaryFile `
+    -LiteralPath (Join-Path $installerRoot 'release-inputs.json') `
+    -Description 'Pinned 1.0.0 release inputs' `
+    -MaximumLength 65536
+$releaseInputs = Get-Content -LiteralPath $releaseInputFile.FullName -Raw | ConvertFrom-Json
+if ($releaseInputs.schemaVersion -ne 1 -or $releaseInputs.productVersion -cne '1.0.0' -or
+    $releaseInputs.dotnetSdkVersion -cne '10.0.201' -or
+    $releaseInputs.windowsAppRuntime.architecture -cne 'x64' -or
+    $releaseInputs.windowsAppRuntime.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+    $releaseInputs.windowsAppRuntime.signerThumbprint -cnotmatch '^[0-9A-F]{40}$' -or
+    $releaseInputs.geoData.repository -cne 'MetaCubeX/meta-rules-dat' -or
+    $releaseInputs.geoData.commit -cnotmatch '^[0-9a-f]{40}$' -or
+    $releaseInputs.geoData.files.Count -ne 4) {
+    throw 'Pinned release inputs have an unsupported shape.'
+}
+$sdkVersion = & dotnet --version
+if ($LASTEXITCODE -ne 0 -or $sdkVersion.Trim() -cne $releaseInputs.dotnetSdkVersion) {
+    throw 'Installer packaging requires the exact pinned .NET SDK.'
+}
 
 $geoDataManifestFile = Get-OrdinaryFile `
     -LiteralPath $geoDataManifest `
@@ -310,6 +331,12 @@ if ($null -ne $geoDataManifestFile) {
         if (-not ([string]$asset.sha256 -cmatch '^[0-9a-f]{64}$') -or
             -not $assetHash.Equals([string]$asset.sha256, [System.StringComparison]::Ordinal)) {
             throw "GeoData asset SHA-256 mismatch: $($asset.name)"
+        }
+        $pinnedAsset = @($releaseInputs.geoData.files | Where-Object { $_.name -ceq $asset.name })
+        if ($pinnedAsset.Count -ne 1 -or
+            [long]$pinnedAsset[0].length -ne $assetFile.Length -or
+            [string]$pinnedAsset[0].sha256 -cne $assetHash) {
+            throw "GeoData asset does not match the pinned 1.0.0 release input: $($asset.name)"
         }
     }
 
@@ -517,8 +544,14 @@ dotnet publish $appProject `
     -c Release `
     --no-restore `
     -p:Platform=x64 `
+    -r win-x64 `
+    --self-contained true `
     -p:GenerateAppxPackageOnBuild=true `
+    -p:WindowsAppSDKSelfContained=false `
     -p:AppxBundle=Never `
+    -p:AppxSymbolPackageEnabled=false `
+    -p:DebugSymbols=false `
+    -p:DebugType=None `
     -p:AppxPackageSigningEnabled=true `
     -p:AppxPackageDir=$appPackageStagingRoot `
     -p:ClashSharpInstallerServiceRoot=$serviceStagingRoot `
@@ -544,6 +577,7 @@ if ($appPackages.Count -ne 1) {
     throw "The isolated build did not produce exactly one primary Clash# MSIX package."
 }
 $appPackage = $appPackages[0]
+$dotNetRuntimeContract = Get-ClashSharpMsixDotNetRuntimeContract -LiteralPath $appPackage.FullName
 $appIdentity = Get-ClashSharpMsixIdentity -LiteralPath $appPackage.FullName
 if (-not $appIdentity.Publisher.Equals($manifestPublisher, [StringComparison]::Ordinal) -or
     $appIdentity.Architecture -cne 'x64') {
@@ -560,6 +594,13 @@ if ($declaredDependencies.Count -ne 1 -or
     throw "The final main MSIX dependency declaration is outside the exact product contract."
 }
 
+# The SDK emits framework test-layout packages for all registered architectures.
+# The product payload is x64; retain only that exact directory before matching declarations.
+$dependencyPackages = @($dependencyPackages | Where-Object {
+        [IO.Path]::GetRelativePath(
+            $appPackageStagingRoot,
+            $_.FullName).Replace('\', '/') -cmatch '(^|/)Dependencies/x64/[^/]+\.msix$'
+    })
 if ($dependencyPackages.Count -ne $declaredDependencies.Count) {
     throw "The staged dependency package count does not match the final AppxManifest."
 }
@@ -584,9 +625,11 @@ $null = New-Item -ItemType Directory -Path $payloadDependencyDir
 
 $dependencyProvenance = [Collections.Generic.List[object]]::new()
 $csharpDependencyContracts = [Collections.Generic.List[object]]::new()
-$expectedDependencyThumbprint = [string]$env:CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT
-if ($expectedDependencyThumbprint -cnotmatch '^[0-9A-F]{40}$') {
-    throw "Packaging requires canonical CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT."
+$expectedDependencyThumbprint = [string]$releaseInputs.windowsAppRuntime.signerThumbprint
+$configuredDependencyThumbprint = [string]$env:CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT
+if (-not [string]::IsNullOrWhiteSpace($configuredDependencyThumbprint) -and
+    $configuredDependencyThumbprint -cne $expectedDependencyThumbprint) {
+    throw 'CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT disagrees with the pinned release input.'
 }
 foreach ($declaration in $declaredDependencies) {
     $matchingPackages = @($dependencyPackages | Where-Object {
@@ -620,10 +663,15 @@ foreach ($declaration in $declaredDependencies) {
         -RequireTrusted `
         -RequireTimestamp
     $dependencyPayloadFile = Get-Item -LiteralPath $dependencyPayloadPath -Force
+    $dependencyPayloadHash = (Get-FileHash -LiteralPath $dependencyPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($dependencyPayloadFile.Length -ne [long]$releaseInputs.windowsAppRuntime.length -or
+        $dependencyPayloadHash -cne [string]$releaseInputs.windowsAppRuntime.sha256) {
+        throw 'Windows App Runtime dependency does not match the exact pinned release bytes.'
+    }
     $dependencyProvenance.Add([PSCustomObject]@{
             path               = "Dependencies/x64/$($dependencySource.Name)"
             length             = [long]$dependencyPayloadFile.Length
-            sha256             = (Get-FileHash -LiteralPath $dependencyPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            sha256             = $dependencyPayloadHash
             name               = $dependencyIdentity.Name
             publisher          = $dependencyIdentity.Publisher
             version            = $dependencyIdentity.Version
@@ -652,6 +700,12 @@ $primaryPayloadFile = Get-Item -LiteralPath $primaryPayloadPath -Force
 $certificatePayloadFile = Get-Item -LiteralPath $certificatePayloadPath -Force
 $provenance = [ordered]@{
     schemaVersion = 1
+    dotNetRuntime = $dotNetRuntimeContract
+    releaseInputs = [ordered]@{
+        sha256 = (Get-FileHash -LiteralPath $releaseInputFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        dotnetSdkVersion = $sdkVersion.Trim()
+        geoData = $releaseInputs.geoData
+    }
     primary       = [ordered]@{
         path             = $appPackage.Name
         length           = [long]$primaryPayloadFile.Length
