@@ -66,11 +66,11 @@ public sealed class MigrationPreviewInstallerRuntime : IInstallerRuntime
             DiagnosticCode: platform.IsSupported
                 ? "installer.runtime.production_gate_closed"
                 : platform.DiagnosticCode,
-            StatusTitle: platform.IsSupported ? "发布验证尚未完成" : "当前系统不受支持",
+            StatusTitle: platform.IsSupported ? "此构建暂不提供安装" : "当前系统不受支持",
             StatusDetail: platform.IsSupported
-                ? "生产 parent/helper/runtime 已完成组合；默认发布门保持关闭，直至同一签名候选的 Windows VM 证据闭环。"
-                : "安装器已在任何发布载荷或系统变更之前阻止执行。需要 Windows 11+ x64 客户端。",
-            DisplayVersion: "等待可信发布载荷",
+                ? "这是开发验证版本。完成发布验证后，正式安装包将提供安装与维护操作。"
+                : "请在 Windows 11 或更高版本的 x64 电脑上运行。",
+            DisplayVersion: typeof(MigrationPreviewInstallerRuntime).Assembly.GetName().Version?.ToString(3) ?? "—",
             ProductState: InstallerProductState.Available,
             RecoveryOperation: null,
             AllowedOperations: [],

@@ -12,17 +12,17 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["installer.progress.preflight"] = "正在检查系统与已安装版本…",
-            ["installer.progress.prepared"] = "恢复信息已经安全写入。",
-            ["installer.progress.machine_prepare"] = "正在预留兼容的系统服务所有权…",
+            ["installer.progress.prepared"] = "正在准备操作…",
+            ["installer.progress.machine_prepare"] = "正在准备系统组件…",
             ["installer.progress.certificate"] = "正在核验并配置用户证书…",
-            ["installer.progress.package"] = "正在提交用户应用包…",
+            ["installer.progress.package"] = "正在安装应用…",
             ["installer.progress.machine"] = "正在配置系统服务…",
-            ["installer.progress.machine_remove_authorize"] = "正在核验并持久化系统组件移除授权…",
+            ["installer.progress.machine_remove_authorize"] = "正在准备移除系统组件…",
             ["installer.progress.machine_remove"] = "正在移除系统级组件…",
             ["installer.progress.package_remove"] = "正在移除用户应用包…",
             ["installer.progress.certificate_remove"] = "正在安全释放安装器拥有的证书…",
-            ["installer.progress.verifying"] = "正在独立验证最终状态…",
-            ["installer.progress.completed"] = "最终状态已验证。",
+            ["installer.progress.verifying"] = "正在检查完成状态…",
+            ["installer.progress.completed"] = "操作完成。",
         };
 
     private readonly IInstallerRuntime _runtime;
@@ -35,7 +35,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
     private bool _isProgressIndeterminate;
     private int _progressValue;
     private string _statusTitle = "正在准备";
-    private string _statusDetail = "正在读取可信安装器运行时的就绪状态。";
+    private string _statusDetail = "正在检查系统与已安装版本。";
     private string _statusBadge = "检查中";
     private string _displayVersion = "—";
     private string _diagnosticCode = "installer.runtime.not_inspected";
@@ -260,7 +260,9 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
         IsBusy = true;
         IsProgressIndeterminate = true;
-        ProgressStatus = "正在验证安装器运行时…";
+        StatusTitle = "正在检查安装状态";
+        StatusDetail = "正在检查系统与已安装版本。";
+        ProgressStatus = "正在检查安装状态…";
         StatusBadge = "检查中";
 
         try
@@ -280,10 +282,18 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
             DisplayVersion = readiness.DisplayVersion;
             Capabilities = readiness.Capabilities.ToArray();
             ApplyProductState(readiness);
-            StatusBadge = readiness.CanExecute ? "已验证" : "审查中";
+            StatusBadge = readiness.CanExecute
+                ? readiness.ProductState switch
+                {
+                    InstallerProductState.Available => "未安装",
+                    InstallerProductState.Installed => "已安装",
+                    InstallerProductState.RecoveryRequired => "待恢复",
+                    _ => throw new InstallerProtocolException("installer.runtime.readiness_invalid"),
+                }
+                : "暂不可用";
             ProgressStatus = readiness.CanExecute
-                ? "所有执行前提均已验证。"
-                : "尚未获得变更系统的授权。";
+                ? "准备就绪。"
+                : "请查看上方提示。";
             ProgressValue = 0;
         }
         catch (OperationCanceledException) when (operation.Cancellation.IsCancellationRequested)
@@ -314,8 +324,8 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         if (!CanExecuteMutations || requestedOperation is null)
         {
             StatusBadge = "已阻止";
-            StatusTitle = "执行器尚未就绪";
-            StatusDetail = "就绪端口未证明全部前提，安装器未对系统进行任何更改。";
+            StatusTitle = "暂时无法继续";
+            StatusDetail = "当前检查尚未通过，请重新检查安装状态。系统未被更改。";
             DiagnosticCode = requestedOperation is null
                 ? "installer.runtime.operation_not_available"
                 : "installer.runtime.not_ready";
@@ -333,6 +343,8 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         IsProgressIndeterminate = false;
         ProgressValue = 0;
         ProgressStatus = $"正在开始{GetOperationLabel(requestedOperation.Value)}…";
+        StatusTitle = $"正在{GetOperationLabel(requestedOperation.Value)}";
+        StatusDetail = "正在处理应用及所需组件。";
         StatusBadge = "执行中";
         int acceptProgress = 1;
 
@@ -348,7 +360,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
                 ProgressValue = value.Percent;
                 ProgressStatus = ProgressMessages.TryGetValue(value.MessageKey, out string? message)
                     ? message
-                    : "正在执行已验证的安装步骤…";
+                    : "正在执行当前操作…";
             });
 
             InstallerExecutionResult result = await _runtime.ExecuteAsync(
@@ -441,7 +453,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         InvalidateReadiness();
         StatusBadge = "已取消";
         StatusTitle = "操作已取消";
-        StatusDetail = "取消请求已被处理；如有持久事务，可信运行时将在下次启动时要求恢复。";
+        StatusDetail = "取消请求已处理。重新检查后可继续未完成的操作。";
         DiagnosticCode = "installer.cancelled";
         ProgressStatus = "操作已取消。";
     }
@@ -455,8 +467,8 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
         InvalidateReadiness();
         StatusBadge = "已阻止";
-        StatusTitle = "无法验证执行环境";
-        StatusDetail = "安装器无法证明当前环境安全可用，因此未启用任何系统更改。";
+        StatusTitle = "无法检查安装状态";
+        StatusDetail = "请重新检查；若问题持续，可展开详情查看诊断代码。";
         DiagnosticCode = diagnosticCode;
         ProgressStatus = "就绪检查失败。";
     }
@@ -471,7 +483,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         InvalidateReadiness();
         StatusBadge = "失败";
         StatusTitle = "操作未完成";
-        StatusDetail = "安装事务未能验证目标状态。请保留诊断代码，并在恢复同一发布后重试。";
+        StatusDetail = "请使用本次操作所用的安装器重新检查，或保留诊断代码以便排查。";
         DiagnosticCode = diagnosticCode;
         ProgressStatus = "需要恢复或诊断。";
     }
@@ -485,13 +497,13 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         (StatusBadge, StatusTitle, StatusDetail, ProgressStatus) = result.Outcome switch
         {
             InstallerExecutionOutcome.Succeeded =>
-                ("已完成", "安装状态已验证", "请求的最终状态已由独立验证器确认。", "操作完成。"),
+                ("已完成", "操作已完成", "可以关闭安装器，或重新检查以管理此应用。", "操作完成。"),
             InstallerExecutionOutcome.Blocked =>
-                ("已阻止", "安全检查阻止了操作", "安装器未能证明全部执行前提，系统未被更改。", "操作未开始。"),
+                ("已阻止", "暂时无法继续", "当前检查未通过，系统未被更改。请展开详情查看原因。", "操作未开始。"),
             InstallerExecutionOutcome.Cancelled =>
                 ("已取消", "操作已取消", GetRecoveryDetail(result), "操作已取消。"),
             InstallerExecutionOutcome.Uncertain =>
-                ("需要恢复", "特权操作状态尚未确认", GetRecoveryDetail(result), "必须重新检查并恢复。"),
+                ("需要恢复", "操作状态尚未确认", GetRecoveryDetail(result), "必须重新检查并恢复。"),
             InstallerExecutionOutcome.Failed =>
                 ("失败", "操作未完成", GetRecoveryDetail(result), "需要恢复或诊断。"),
             _ =>
@@ -505,15 +517,15 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
     }
 
     private static string GetRecoveryDetail(InstallerExecutionResult result) => result.RecoveryPending
-        ? "已保留精确发布事务；请使用同一安装器发布恢复，勿改用不同载荷。"
-        : "没有待恢复的持久事务，系统未达到请求的已验证状态。";
+        ? "进度已保留。请使用本次操作所用的安装器重新检查并继续。"
+        : "操作尚未完成，请重新检查安装状态。";
 
     private void SetUnhandledCommandFailure()
     {
         InvalidateReadiness();
         StatusBadge = "失败";
         StatusTitle = "界面命令未完成";
-        StatusDetail = "命令在进入可信执行器前意外终止，未显示原始异常内容。";
+        StatusDetail = "请重新检查后重试，或展开详情查看诊断代码。";
         DiagnosticCode = "installer.presentation.command_failed";
     }
 

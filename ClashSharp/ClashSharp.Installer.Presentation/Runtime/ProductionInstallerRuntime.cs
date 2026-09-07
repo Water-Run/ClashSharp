@@ -110,7 +110,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IDisposable
         {
             return (
                 "请先关闭 ClashSharp",
-                "检测到当前用户的 ClashSharp 应用仍在运行。关闭应用后刷新状态，安装器不会强制终止它。");
+                "关闭正在运行的应用后，选择“重新检查”继续。");
         }
 
         if (!canExecute)
@@ -124,20 +124,20 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IDisposable
         {
             return (
                 "仅安全卸载可用",
-                "当前平台不再满足安装要求，但已安装实例或卸载恢复事务仍可通过受保护路径移除。");
+                "此电脑不满足安装要求，仍可移除已安装的 ClashSharp。");
         }
 
         return product.ProductState switch
         {
             InstallerProductState.Available => (
                 "可以安装",
-                "当前用户尚未安装 ClashSharp；执行时将重新锁定并核验签名发布载荷。"),
+                "为当前账户安装 ClashSharp，并配置所需的系统组件。"),
             InstallerProductState.Installed => (
                 "已安装",
-                "已确认当前用户的 ClashSharp 包；可修复或安全卸载。"),
+                "可修复当前安装，或从此电脑移除 ClashSharp。"),
             InstallerProductState.RecoveryRequired => (
                 "需要继续未完成的操作",
-                "检测到受保护的持久事务，只允许继续同一发布与同一操作。"),
+                "上次操作尚未完成。请使用此安装器继续，完成后再执行其他操作。"),
             _ => throw new InstallerProtocolException(
                 "installer.runtime.product_state_invalid"),
         };

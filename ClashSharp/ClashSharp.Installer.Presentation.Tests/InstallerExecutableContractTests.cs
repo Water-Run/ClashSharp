@@ -108,12 +108,14 @@ public sealed class InstallerExecutableContractTests
                 || element.Name == presentation + "Frame"
                 || element.Name == presentation + "Page"
                 || element.Name == presentation + "NavigationWindow");
-        XElement productHeading = Assert.Single(
+        XElement pageHeading = Assert.Single(
             shell.Descendants(presentation + "TextBlock"),
             static element =>
                 (string?)element.Attribute("AutomationProperties.HeadingLevel") ==
                     "Level1");
-        Assert.Contains(productHeading, productCard.Descendants());
+        Assert.DoesNotContain(pageHeading, productCard.Descendants());
+        Assert.Single(productCard.Descendants(presentation + "TextBlock"),
+            static element => (string?)element.Attribute("AutomationProperties.HeadingLevel") == "Level2");
         Assert.DoesNotContain(
             shell.Descendants(),
             static element =>
@@ -236,14 +238,7 @@ public sealed class InstallerExecutableContractTests
                     StringComparison.Ordinal) == true);
 
         XElement window = Assert.IsType<XElement>(shell.Root);
-        Assert.Equal("920", (string?)window.Attribute("Width"));
-        Assert.Equal("620", (string?)window.Attribute("Height"));
         Assert.Equal("{StaticResource InstallerWindowStyle}", (string?)window.Attribute("Style"));
-        XElement rootGrid = Assert.Single(window.Elements(presentation + "Grid"));
-        Assert.Contains(
-            rootGrid.Elements(presentation + "Border"),
-            border => (string?)border.Attribute("Background") ==
-                "{StaticResource InstallerAccentBrush}");
 
         string themeText = File.ReadAllText(SourcePath(
             "ClashSharp.Installer",

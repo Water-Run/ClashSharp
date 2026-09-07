@@ -36,7 +36,7 @@ public sealed class InstallerShellViewModelTests
 
         Assert.True(viewModel.CanExecuteMutations);
         Assert.Equal(actionText, viewModel.PrimaryActionText);
-        Assert.Equal("已验证", viewModel.StatusBadge);
+        Assert.Equal(productState == InstallerProductState.Installed ? "已安装" : "未安装", viewModel.StatusBadge);
         Assert.True(viewModel.PrimaryActionCommand.CanExecute(parameter: null));
         Assert.True(viewModel.IsPrimaryActionVisible);
         Assert.Equal(
@@ -157,7 +157,7 @@ public sealed class InstallerShellViewModelTests
         Assert.False(viewModel.IsCancelActionVisible);
         Assert.False(viewModel.HasSecondaryAction);
         Assert.Equal("installer.environment.windows_11_required", viewModel.DiagnosticCode);
-        Assert.Equal("审查中", viewModel.StatusBadge);
+        Assert.Equal("暂不可用", viewModel.StatusBadge);
     }
 
     [Theory]
@@ -252,7 +252,7 @@ public sealed class InstallerShellViewModelTests
 
         Assert.Equal(new[] { InstallerOperation.Install }, runtime.Operations);
         Assert.Equal("已完成", viewModel.StatusBadge);
-        Assert.Equal("安装状态已验证", viewModel.StatusTitle);
+        Assert.Equal("操作已完成", viewModel.StatusTitle);
         Assert.Equal(100, viewModel.ProgressValue);
         Assert.False(viewModel.CanExecuteMutations);
         Assert.False(viewModel.PrimaryActionCommand.CanExecute(parameter: null));
@@ -260,9 +260,9 @@ public sealed class InstallerShellViewModelTests
 
     [Theory]
     [InlineData(InstallerExecutionOutcome.Blocked, false, "已阻止", "操作未开始。", "系统未被更改")]
-    [InlineData(InstallerExecutionOutcome.Cancelled, true, "已取消", "操作已取消。", "同一安装器发布")]
-    [InlineData(InstallerExecutionOutcome.Uncertain, true, "需要恢复", "必须重新检查并恢复。", "同一安装器发布")]
-    [InlineData(InstallerExecutionOutcome.Failed, true, "失败", "需要恢复或诊断。", "同一安装器发布")]
+    [InlineData(InstallerExecutionOutcome.Cancelled, true, "已取消", "操作已取消。", "本次操作所用的安装器")]
+    [InlineData(InstallerExecutionOutcome.Uncertain, true, "需要恢复", "必须重新检查并恢复。", "本次操作所用的安装器")]
+    [InlineData(InstallerExecutionOutcome.Failed, true, "失败", "需要恢复或诊断。", "本次操作所用的安装器")]
     public async Task NonSuccessOutcomesRemainFailClosed(
         InstallerExecutionOutcome outcome,
         bool recoveryPending,

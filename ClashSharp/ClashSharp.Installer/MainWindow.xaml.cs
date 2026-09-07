@@ -78,6 +78,8 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e) => DisposeViewModel();
 
+    private void OnCloseClicked(object sender, RoutedEventArgs e) => Close();
+
     private void DisposeViewModel()
     {
         if (_viewModelDisposed)

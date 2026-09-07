@@ -25,7 +25,7 @@ public interface IInstallerRuntime
 public sealed record InstallerCapabilityStatus(string Name, string Detail, bool IsReady)
 {
     /// <summary>Gets an accessible state string for the capability.</summary>
-    public string StateText => IsReady ? "已就绪" : "未接通";
+    public string StateText => IsReady ? "已就绪" : "未就绪";
 }
 
 /// <summary>The only product-card states accepted from trusted installed-state inspection.</summary>
