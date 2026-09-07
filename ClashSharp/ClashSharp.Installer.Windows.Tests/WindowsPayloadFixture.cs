@@ -20,7 +20,8 @@ internal sealed class WindowsPayloadFixture : IDisposable
         bool createPayload = true,
         string? primaryPackageNameOverride = null,
         bool dependencyIsFramework = true,
-        bool removeCurrentUserCertificateOnDispose = true)
+        bool removeCurrentUserCertificateOnDispose = true,
+        bool machineTrustCertificate = false)
     {
         _removeCurrentUserCertificateOnDispose = removeCurrentUserCertificateOnDispose;
         RootDirectory = Path.Combine(
@@ -32,9 +33,16 @@ internal sealed class WindowsPayloadFixture : IDisposable
 
         using ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var certificateRequest = new CertificateRequest(
-            $"CN=ClashSharp Installer Windows Test {Guid.NewGuid():N}",
+            machineTrustCertificate ? "CN=linzh" : $"CN=ClashSharp Installer Windows Test {Guid.NewGuid():N}",
             key,
             HashAlgorithmName.SHA256);
+        if (machineTrustCertificate)
+        {
+            certificateRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+            certificateRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
+            certificateRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+                new OidCollection { new("1.3.6.1.5.5.7.3.3") }, true));
+        }
         using X509Certificate2 issued = certificateRequest.CreateSelfSigned(
             DateTimeOffset.UtcNow.AddMinutes(-5),
             DateTimeOffset.UtcNow.AddDays(1));

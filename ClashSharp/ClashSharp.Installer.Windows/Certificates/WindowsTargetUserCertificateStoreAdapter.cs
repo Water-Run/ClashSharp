@@ -10,292 +10,25 @@ using Microsoft.Win32.SafeHandles;
 
 namespace ClashSharp.Installer.Windows.Certificates;
 
-/// <summary>
-/// Applies certificate operations to the exact target user's TrustedPeople store from the
-/// authenticated elevated helper. This type is intentionally internal so parent-side composition
-/// cannot accidentally substitute an over-the-shoulder administrator's CurrentUser store.
-/// </summary>
-internal sealed class WindowsTargetUserCertificateStoreAdapter
-    : IInstallerCertificateStoreAdapter
+/// <summary>Mutates only the authenticated target user's physical TrustedPeople registry store.</summary>
+internal sealed class WindowsTargetUserCertificateStoreAdapter : WindowsCertificateStoreAdapter
 {
-    private readonly IWindowsTargetUserCertificateStoreNative _native;
-
     internal WindowsTargetUserCertificateStoreAdapter()
         : this(WindowsTargetUserCertificateStoreNative.Instance)
     {
     }
 
-    internal WindowsTargetUserCertificateStoreAdapter(
-        IWindowsTargetUserCertificateStoreNative native)
+    internal WindowsTargetUserCertificateStoreAdapter(IWindowsCertificateStoreNative native)
+        : base(native)
     {
-        ArgumentNullException.ThrowIfNull(native);
-        _native = native;
     }
-
-    public Task<InstallerCertificatePresence> InspectAsync(
-        InstallerRequest request,
-        IInstallerReleaseLease release,
-        CancellationToken cancellationToken)
-    {
-        ValidateBoundary(request, release, cancellationToken);
-        try
-        {
-            using IWindowsTargetUserCertificateStore? store = _native.Open(
-                request.TargetSid,
-                writable: false,
-                createIfMissing: false);
-            if (store is null)
-            {
-                return Task.FromResult(InstallerCertificatePresence.Missing);
-            }
-
-            return Task.FromResult(InspectStore(store, release.Release, cancellationToken));
-        }
-        catch (InstallerProtocolException)
-        {
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (IsRecoverable(exception))
-        {
-            throw new InstallerProtocolException(
-                "installer.certificate.inspection_failed",
-                exception);
-        }
-    }
-
-    public Task ImportAsync(
-        InstallerRequest request,
-        IInstallerReleaseLease release,
-        CancellationToken cancellationToken)
-    {
-        WindowsInstallerReleaseLease windowsLease = ValidateBoundary(
-            request,
-            release,
-            cancellationToken);
-        WindowsLockedPayloadFile certificateFile = windowsLease.RequireFile(
-            InstallerPayloadFileRole.Certificate);
-        byte[] bytes = certificateFile.ReadAllBytes(cancellationToken);
-        try
-        {
-            using X509Certificate2 certificate = X509CertificateLoader.LoadCertificate(bytes);
-            ValidateExactCertificate(certificate, release.Release);
-            if (certificate.HasPrivateKey)
-            {
-                throw new InstallerProtocolException(
-                    "installer.certificate.private_key_rejected");
-            }
-
-            using IWindowsTargetUserCertificateStore store = _native.Open(
-                request.TargetSid,
-                writable: true,
-                createIfMissing: true)
-                ?? throw new InstallerProtocolException(
-                    "installer.certificate.store_creation_failed");
-            InstallerCertificatePresence presence = InspectStore(
-                store,
-                release.Release,
-                cancellationToken);
-            ThrowIfConflict(presence);
-            if (presence == InstallerCertificatePresence.ExactMatch)
-            {
-                return Task.CompletedTask;
-            }
-
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                store.AddEncodedCertificate(bytes);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception exception) when (IsRecoverable(exception))
-            {
-                // CERT_STORE_ADD_NEW can lose a benign race to another exact importer. Re-read
-                // through the same fixed store before classifying the result as a failure.
-                InstallerCertificatePresence racedPresence = InspectStore(
-                    store,
-                    release.Release,
-                    cancellationToken);
-                ThrowIfConflict(racedPresence);
-                if (racedPresence != InstallerCertificatePresence.ExactMatch)
-                {
-                    throw new InstallerProtocolException(
-                        "installer.certificate.import_failed",
-                        exception);
-                }
-
-                return Task.CompletedTask;
-            }
-
-            if (InspectStore(store, release.Release, cancellationToken)
-                != InstallerCertificatePresence.ExactMatch)
-            {
-                throw new InstallerProtocolException(
-                    "installer.certificate.import_verification_failed");
-            }
-
-            return Task.CompletedTask;
-        }
-        catch (InstallerProtocolException)
-        {
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (IsRecoverable(exception))
-        {
-            throw new InstallerProtocolException(
-                "installer.certificate.import_failed",
-                exception);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(bytes);
-        }
-    }
-
-    public Task RemoveExactAsync(
-        InstallerRequest request,
-        IInstallerReleaseLease release,
-        CancellationToken cancellationToken)
-    {
-        ValidateBoundary(request, release, cancellationToken);
-        try
-        {
-            using IWindowsTargetUserCertificateStore? store = _native.Open(
-                request.TargetSid,
-                writable: true,
-                createIfMissing: false);
-            if (store is null)
-            {
-                return Task.CompletedTask;
-            }
-
-            InstallerCertificatePresence presence = InspectStore(
-                store,
-                release.Release,
-                cancellationToken);
-            ThrowIfConflict(presence);
-            if (presence == InstallerCertificatePresence.Missing)
-            {
-                return Task.CompletedTask;
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            store.DeleteExactCertificates(
-                release.Release.PackageCertificateThumbprint,
-                release.Release.CertificateSha256,
-                cancellationToken);
-            InstallerCertificatePresence remaining = InspectStore(
-                store,
-                release.Release,
-                cancellationToken);
-            ThrowIfConflict(remaining);
-            if (remaining != InstallerCertificatePresence.Missing)
-            {
-                throw new InstallerProtocolException(
-                    "installer.certificate.removal_verification_failed");
-            }
-
-            return Task.CompletedTask;
-        }
-        catch (InstallerProtocolException)
-        {
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (IsRecoverable(exception))
-        {
-            throw new InstallerProtocolException(
-                "installer.certificate.removal_failed",
-                exception);
-        }
-    }
-
-    private static WindowsInstallerReleaseLease ValidateBoundary(
-        InstallerRequest request,
-        IInstallerReleaseLease release,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(release);
-        request.Validate();
-        release.Release.Validate();
-        release.Manifest.Validate();
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)
-            || !Environment.Is64BitOperatingSystem
-            || !Environment.Is64BitProcess)
-        {
-            throw new InstallerProtocolException(
-                "installer.certificate.platform_unsupported");
-        }
-
-        if (release is not WindowsInstallerReleaseLease windowsLease
-            || !release.Manifest.Matches(release.Release))
-        {
-            throw new InstallerProtocolException(
-                "installer.release.windows_lease_required");
-        }
-
-        windowsLease.RequireRequest(request);
-        return windowsLease;
-    }
-
-    private static InstallerCertificatePresence InspectStore(
-        IWindowsTargetUserCertificateStore store,
-        VerifiedInstallerRelease release,
-        CancellationToken cancellationToken) =>
-        WindowsCertificateIdentity.InspectStore(store, release.PackageCertificateThumbprint,
-            release.CertificateSha256, cancellationToken);
-
-    private static void ValidateExactCertificate(
-        X509Certificate2 certificate,
-        VerifiedInstallerRelease release)
-    {
-        WindowsCertificateIdentity identity = WindowsCertificateIdentity.FromEncoded(
-            certificate.RawData);
-        if (!identity.Matches(
-                release.PackageCertificateThumbprint,
-                release.CertificateSha256))
-        {
-            throw new InstallerProtocolException(
-                "installer.certificate.payload_identity_invalid");
-        }
-    }
-
-    private static void ThrowIfConflict(InstallerCertificatePresence presence)
-    {
-        if (presence == InstallerCertificatePresence.IdentityConflict)
-        {
-            throw new InstallerProtocolException(
-                "installer.certificate.identity_conflict");
-        }
-    }
-
-    private static bool IsRecoverable(Exception exception) =>
-        exception is not (OutOfMemoryException
-            or StackOverflowException
-            or AccessViolationException
-            or AppDomainUnloadedException);
 }
 
 internal readonly record struct WindowsCertificateIdentity(
     string Thumbprint,
     string DerSha256)
 {
-    internal static InstallerCertificatePresence InspectStore(IWindowsTargetUserCertificateStore store,
+    internal static InstallerCertificatePresence InspectStore(IWindowsCertificateStore store,
         string thumbprint, string derSha256, CancellationToken cancellationToken)
     {
         bool exact = false;
@@ -334,15 +67,15 @@ internal readonly record struct WindowsCertificateIdentity(
         && string.Equals(DerSha256, derSha256, StringComparison.Ordinal);
 }
 
-internal interface IWindowsTargetUserCertificateStoreNative
+internal interface IWindowsCertificateStoreNative
 {
-    IWindowsTargetUserCertificateStore? Open(
+    IWindowsCertificateStore? Open(
         string targetSid,
         bool writable,
         bool createIfMissing);
 }
 
-internal interface IWindowsTargetUserCertificateStore : IDisposable
+internal interface IWindowsCertificateStore : IDisposable
 {
     IReadOnlyList<WindowsCertificateIdentity> EnumerateCertificateIdentities(
         CancellationToken cancellationToken);
@@ -356,9 +89,11 @@ internal interface IWindowsTargetUserCertificateStore : IDisposable
 }
 
 internal sealed class WindowsTargetUserCertificateStoreNative
-    : IWindowsTargetUserCertificateStoreNative
+    : IWindowsCertificateStoreNative
 {
-    private const nint CertificateStoreProviderSystemWide = 10;
+    // A logical system store also exposes machine/group-policy siblings. Exact user ownership
+    // authorizes only the physical registry store, never deletion through an inherited context.
+    private const nint CertificateStoreProviderSystemRegistryWide = 13;
     private const uint CertificateSystemStoreUsers = 0x0006_0000;
     private const uint CertificateStoreOpenExisting = 0x0000_4000;
     private const uint CertificateStoreReadOnly = 0x0000_8000;
@@ -372,7 +107,7 @@ internal sealed class WindowsTargetUserCertificateStoreNative
     {
     }
 
-    public IWindowsTargetUserCertificateStore? Open(
+    public IWindowsCertificateStore? Open(
         string targetSid,
         bool writable,
         bool createIfMissing)
@@ -381,7 +116,7 @@ internal sealed class WindowsTargetUserCertificateStoreNative
         uint flags = BuildOpenFlags(writable, createIfMissing);
 
         SafeWindowsCertificateStoreHandle handle = CertOpenStore(
-            CertificateStoreProviderSystemWide,
+            CertificateStoreProviderSystemRegistryWide,
             encodingType: 0,
             cryptographicProvider: 0,
             flags,
@@ -398,7 +133,7 @@ internal sealed class WindowsTargetUserCertificateStoreNative
             throw new Win32Exception(error);
         }
 
-        return new WindowsTargetUserCertificateStore(handle, writable);
+        return new WindowsCertificateStore(handle, writable);
     }
 
     internal static string BuildSystemStoreName(string targetSid)
@@ -442,8 +177,8 @@ internal sealed class WindowsTargetUserCertificateStoreNative
         string parameter);
 }
 
-internal sealed class WindowsTargetUserCertificateStore
-    : IWindowsTargetUserCertificateStore
+internal sealed class WindowsCertificateStore
+    : IWindowsCertificateStore
 {
     private const uint X509AsnEncoding = 0x0000_0001;
     private const uint CertificateStoreAddNew = 1;
@@ -456,7 +191,7 @@ internal sealed class WindowsTargetUserCertificateStore
     private readonly bool _writable;
     private SafeWindowsCertificateStoreHandle? _handle;
 
-    internal WindowsTargetUserCertificateStore(
+    internal WindowsCertificateStore(
         SafeWindowsCertificateStoreHandle handle,
         bool writable)
     {

@@ -342,7 +342,9 @@ internal sealed class WindowsMachineHelperElevationVerifier
                 "The machine helper is available only on Windows.");
         }
 
-        using WindowsIdentity identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        // WindowsPrincipal duplicates a primary token into an identification token before calling
+        // CheckTokenMembership. QUERY alone makes that read-only membership check fail with access denied.
+        using WindowsIdentity identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query | TokenAccessLevels.Duplicate);
         var principal = new WindowsPrincipal(identity);
         if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
         {

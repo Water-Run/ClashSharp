@@ -82,6 +82,37 @@ public sealed class WindowsInstallerCertificatePostconditionTests
             createPayload: false,
             removeCurrentUserCertificateOnDispose: false);
 
+    [Theory]
+    [InlineData(InstallerOperation.Install, InstallerCertificatePresence.Missing, false)]
+    [InlineData(InstallerOperation.Repair, InstallerCertificatePresence.Missing, false)]
+    [InlineData(InstallerOperation.Install, InstallerCertificatePresence.ExactMatch, true)]
+    [InlineData(InstallerOperation.Uninstall, InstallerCertificatePresence.Missing, true)]
+    [InlineData(InstallerOperation.Uninstall, InstallerCertificatePresence.ExactMatch, true)]
+    [InlineData(InstallerOperation.Uninstall, InstallerCertificatePresence.IdentityConflict, false)]
+    [InlineData(InstallerOperation.Uninstall, (InstallerCertificatePresence)99, false)]
+    public async Task UserTrustAloneCannotSatisfyTheMachineMsixPostcondition(
+        InstallerOperation operation, InstallerCertificatePresence presence, bool accepted)
+    {
+        using var fixture = Fixture();
+        InstallerRequest request = fixture.Request(operation, TargetSid);
+        var user = new RecordingStore(InstallerCertificatePresence.ExactMatch);
+        var machine = new RecordingStore(presence);
+        var verifier = new WindowsInstallerCertificatePostcondition(user, machine);
+        Exception? failure = await Record.ExceptionAsync(() => verifier.ApplyAsync(request,
+            new FakeReleaseLease(request, fixture.Manifest), CancellationToken.None));
+        if (accepted)
+        {
+            Assert.Null(failure);
+        }
+        else
+        {
+            Assert.Equal("installer.machine_certificate.postcondition_failed", Assert.IsType<InstallerProtocolException>(failure).DiagnosticCode);
+        }
+        Assert.Equal(1, machine.InspectCalls);
+        Assert.Equal(0, machine.ImportCalls);
+        Assert.Equal(0, machine.RemoveCalls);
+    }
+
     private sealed class RecordingStore : IInstallerCertificateStoreAdapter
     {
         private readonly InstallerCertificatePresence _presence;

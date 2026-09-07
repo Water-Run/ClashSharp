@@ -30,8 +30,8 @@ internal interface IWindowsInstallerPrivateJournalPresenceNative
 
 /// <summary>
 /// Accesses one factory-bound private leaf under a caller-pinned directory chain. The ordinary
-/// instance still accepts only the transfer journal; a separate account-bound instance accepts only
-/// that SID's certificate archive. Every handle requires a single ordinary file and exact private ACL.
+/// instance still accepts only the transfer journal; separate factories bind an account archive,
+/// retirement journal, or machine-trust document. Every handle requires one ordinary private file.
 /// </summary>
 internal sealed class WindowsInstallerPrivateJournalFileNative :
     IWindowsInstallerPrivateJournalFileNative,
@@ -61,6 +61,10 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
     internal static WindowsInstallerPrivateJournalFileNative CreateForRetiredUninstall() =>
         new(InstallerRetiredUninstallStore.JournalFileName, InstallerTransactionCodec.MaximumDocumentBytes,
             "installer.retired_uninstall");
+
+    internal static WindowsInstallerPrivateJournalFileNative CreateForMachineCertificate() =>
+        new(InstallerMachineCertificateOwnership.FileName, InstallerMachineCertificateOwnership.MaximumDocumentBytes,
+            "installer.machine_certificate");
 
     public bool IsPresent(string path, CancellationToken cancellationToken)
     {

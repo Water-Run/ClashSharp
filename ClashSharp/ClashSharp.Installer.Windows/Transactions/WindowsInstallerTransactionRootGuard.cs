@@ -201,7 +201,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
             native,
             createMissingProtectedDirectories: false);
 
-    // Only the elevated owner-transfer persistence factory uses this fixed private layout.
+    // Elevated transfer, retirement, and machine-trust persistence share this fixed private layout.
     // The common product root must already exist; its current user's ACL is never rewritten.
     internal static WindowsInstallerTransactionRootGuard CreatePrivateOwnerTransferDefault() =>
         new(

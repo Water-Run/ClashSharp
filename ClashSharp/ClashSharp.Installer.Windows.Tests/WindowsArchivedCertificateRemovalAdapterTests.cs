@@ -181,7 +181,7 @@ public sealed class WindowsArchivedCertificateRemovalAdapterTests
         return released ? ledger.PrepareRemoval() : ledger;
     }
 
-    private sealed class Native(IEnumerable<WindowsCertificateIdentity> identities) : IWindowsTargetUserCertificateStoreNative
+    private sealed class Native(IEnumerable<WindowsCertificateIdentity> identities) : IWindowsCertificateStoreNative
     {
         internal List<WindowsCertificateIdentity> Identities { get; } = [.. identities];
         internal List<(string Sid, bool Writable, bool Create)> Opens { get; } = [];
@@ -195,7 +195,7 @@ public sealed class WindowsArchivedCertificateRemovalAdapterTests
         internal Action? AfterOpen { get; set; }
         internal Action? AfterDelete { get; set; }
 
-        public IWindowsTargetUserCertificateStore? Open(string targetSid, bool writable, bool createIfMissing)
+        public IWindowsCertificateStore? Open(string targetSid, bool writable, bool createIfMissing)
         {
             Opens.Add((targetSid, writable, createIfMissing));
             ThrowFor("open");
@@ -211,7 +211,7 @@ public sealed class WindowsArchivedCertificateRemovalAdapterTests
             }
         }
 
-        private sealed class Store(Native native, bool writable) : IWindowsTargetUserCertificateStore
+        private sealed class Store(Native native, bool writable) : IWindowsCertificateStore
         {
             public IReadOnlyList<WindowsCertificateIdentity> EnumerateCertificateIdentities(CancellationToken cancellationToken)
             {

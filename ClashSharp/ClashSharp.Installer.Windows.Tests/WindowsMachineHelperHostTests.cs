@@ -1,3 +1,4 @@
+using System.Security.Principal;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Transactions;
@@ -9,6 +10,22 @@ namespace ClashSharp.Installer.Windows.Tests;
 
 public sealed class WindowsMachineHelperHostTests
 {
+    [Fact]
+    public void NativeElevationCheckReportsMembershipWithoutChangingTheCurrentToken()
+    {
+        using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+        bool elevated = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+        Exception? failure = Record.Exception(WindowsMachineHelperElevationVerifier.Instance.VerifyElevated);
+        if (elevated)
+        {
+            Assert.Null(failure);
+        }
+        else
+        {
+            Assert.Equal("installer.machine_helper.elevation_required", Assert.IsType<InstallerProtocolException>(failure).DiagnosticCode);
+        }
+    }
+
     [Fact]
     public async Task AuthenticatesBothProcessesBeforeCreatingAuthorityAndClearsJournal()
     {

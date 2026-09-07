@@ -11,7 +11,7 @@ namespace ClashSharp.Installer.Windows.Certificates;
 internal sealed class WindowsArchivedCertificateRemovalAdapter : IInstallerArchivedCertificateRemovalAdapter
 {
     private readonly string _targetSid;
-    private readonly IWindowsTargetUserCertificateStoreNative _native;
+    private readonly IWindowsCertificateStoreNative _native;
 
     internal WindowsArchivedCertificateRemovalAdapter(string authenticatedTargetSid)
         : this(authenticatedTargetSid, WindowsTargetUserCertificateStoreNative.Instance)
@@ -19,7 +19,7 @@ internal sealed class WindowsArchivedCertificateRemovalAdapter : IInstallerArchi
     }
 
     internal WindowsArchivedCertificateRemovalAdapter(string authenticatedTargetSid,
-        IWindowsTargetUserCertificateStoreNative native)
+        IWindowsCertificateStoreNative native)
     {
         InstallerProtocolValidation.ValidateTargetSid(authenticatedTargetSid);
         ArgumentNullException.ThrowIfNull(native);
@@ -33,7 +33,7 @@ internal sealed class WindowsArchivedCertificateRemovalAdapter : IInstallerArchi
         Validate(ledger, cancellationToken);
         try
         {
-            using IWindowsTargetUserCertificateStore? store = _native.Open(_targetSid, writable: false, createIfMissing: false);
+            using IWindowsCertificateStore? store = _native.Open(_targetSid, writable: false, createIfMissing: false);
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(store is null ? InstallerCertificatePresence.Missing
                 : WindowsCertificateIdentity.InspectStore(store, ledger.CertificateThumbprint, ledger.CertificateSha256, cancellationToken));
@@ -53,7 +53,7 @@ internal sealed class WindowsArchivedCertificateRemovalAdapter : IInstallerArchi
         }
         try
         {
-            using IWindowsTargetUserCertificateStore? store = _native.Open(_targetSid, writable: true, createIfMissing: false);
+            using IWindowsCertificateStore? store = _native.Open(_targetSid, writable: true, createIfMissing: false);
             cancellationToken.ThrowIfCancellationRequested();
             if (store is null)
             {
@@ -95,7 +95,7 @@ internal sealed class WindowsArchivedCertificateRemovalAdapter : IInstallerArchi
         }
     }
 
-    private static InstallerCertificatePresence Inspect(IWindowsTargetUserCertificateStore store,
+    private static InstallerCertificatePresence Inspect(IWindowsCertificateStore store,
         InstallerCertificateOwnershipLedger ledger, CancellationToken cancellationToken)
     {
         InstallerCertificatePresence presence = WindowsCertificateIdentity.InspectStore(

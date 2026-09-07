@@ -203,6 +203,8 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
         new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
     private const uint UiNone = 2;
     private const uint ChoiceFile = 1;
+    private const uint StateActionVerify = 1;
+    private const uint StateActionClose = 2;
     private const uint CacheOnlyUrlRetrieval = 0x0000_1000;
 
     internal static WindowsAuthenticodeVerifier Instance { get; } = new();
@@ -227,6 +229,7 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
 
         nint path = 0;
         nint fileInfoPointer = 0;
+        bool verificationStarted = false;
         Guid policy = GenericVerifyV2;
         WinTrustData trustData = default;
         try
@@ -246,8 +249,12 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
                 UiChoice = UiNone,
                 UnionChoice = ChoiceFile,
                 FileInfo = fileInfoPointer,
+                // The verified signer belongs to this provider state. IGNORE releases it before
+                // WTHelperProvDataFromStateData can read the authenticated certificate chain.
+                StateAction = StateActionVerify,
                 ProviderFlags = CacheOnlyUrlRetrieval,
             };
+            verificationStarted = true;
             int status = WinVerifyTrust(new nint(-1), ref policy, ref trustData);
             if (status != 0)
             {
@@ -260,9 +267,10 @@ internal sealed class WindowsAuthenticodeVerifier : IWindowsAuthenticodeVerifier
         }
         finally
         {
-            if (trustData.StateData != 0)
+            if (verificationStarted)
             {
-                trustData.StateAction = 2;
+                // Every VERIFY requires CLOSE, including rejected signatures and cancellation.
+                trustData.StateAction = StateActionClose;
                 _ = WinVerifyTrust(new nint(-1), ref policy, ref trustData);
             }
 

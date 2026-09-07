@@ -10,18 +10,21 @@ namespace ClashSharp.Installer.Windows.Certificates;
 public sealed class WindowsInstallerCertificatePostcondition : IInstallerCertificateMutation
 {
     private readonly IInstallerCertificateStoreAdapter _certificateStore;
+    private readonly IInstallerCertificateStoreAdapter? _machineCertificateStore;
 
-    /// <summary>Creates a verifier for the invoking target user's CurrentUser store.</summary>
+    /// <summary>Creates read-only verifiers for target-user trust and machine MSIX trust.</summary>
     public WindowsInstallerCertificatePostcondition()
-        : this(new WindowsCurrentUserCertificateStoreAdapter())
+        : this(new WindowsCurrentUserCertificateStoreAdapter(), new WindowsMachineCertificateStoreAdapter())
     {
     }
 
     internal WindowsInstallerCertificatePostcondition(
-        IInstallerCertificateStoreAdapter certificateStore)
+        IInstallerCertificateStoreAdapter certificateStore,
+        IInstallerCertificateStoreAdapter? machineCertificateStore = null)
     {
         ArgumentNullException.ThrowIfNull(certificateStore);
         _certificateStore = certificateStore;
+        _machineCertificateStore = machineCertificateStore;
     }
 
     /// <inheritdoc />
@@ -50,6 +53,18 @@ public sealed class WindowsInstallerCertificatePostcondition : IInstallerCertifi
         {
             throw new InstallerProtocolException(
                 "installer.certificate.postcondition_failed");
+        }
+        if (_machineCertificateStore is not null)
+        {
+            InstallerCertificatePresence machinePresence = await _machineCertificateStore
+                .InspectAsync(request, release, cancellationToken).ConfigureAwait(false);
+            bool machineValid = request.Operation == InstallerOperation.Uninstall
+                ? machinePresence is InstallerCertificatePresence.Missing or InstallerCertificatePresence.ExactMatch
+                : machinePresence == InstallerCertificatePresence.ExactMatch;
+            if (!machineValid)
+            {
+                throw new InstallerProtocolException("installer.machine_certificate.postcondition_failed");
+            }
         }
     }
 }

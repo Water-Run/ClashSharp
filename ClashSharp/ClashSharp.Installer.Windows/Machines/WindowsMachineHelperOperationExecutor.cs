@@ -41,13 +41,14 @@ internal interface IWindowsMachineHelperMachineOperations
 /// disconnected until parent/runtime composition and signed Windows VM evidence are complete.
 /// </summary>
 internal sealed class WindowsMachineHelperOperationExecutor
-    : IInstallerMachineHelperOperationExecutor
+    : IInstallerMachineHelperOperationExecutor, IDisposable
 {
     private readonly IInstallerReleaseVerifier _releaseVerifier;
     private readonly IInstallerCertificateMutation _certificateMutation;
     private readonly IInstallerCertificateMutationVerifier _certificateVerifier;
     private readonly IWindowsTargetUserPackageCommitInspector _packageInspector;
     private readonly IWindowsMachineHelperMachineOperations _machineOperations;
+    private bool _disposed;
 
     internal WindowsMachineHelperOperationExecutor(
         IInstallerReleaseVerifier releaseVerifier,
@@ -90,6 +91,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
         InstallerMachineHelperSessionDisposition disposition,
         CancellationToken cancellationToken)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(command);
         if (!Enum.IsDefined(disposition))
         {
@@ -216,9 +218,13 @@ internal sealed class WindowsMachineHelperOperationExecutor
     {
         ArgumentNullException.ThrowIfNull(certificateOwnershipStore);
         var certificateStore = new WindowsTargetUserCertificateStoreAdapter();
-        var certificateMutation = new DurableInstallerCertificateMutation(
+        var userMutation = new DurableInstallerCertificateMutation(
             certificateOwnershipStore,
             certificateStore);
+        WindowsMachineCertificatePersistence persistence = WindowsMachineCertificatePersistence.CreateDefault();
+        var machineMutation = new DurableInstallerMachineCertificateMutation(persistence,
+            new WindowsMachineCertificateStoreAdapter(), new WindowsMachineCertificateReferences());
+        var certificateMutation = new WindowsInstallerCertificateMutations(userMutation, machineMutation, persistence);
         return new WindowsMachineHelperOperationExecutor(
             new WindowsInstallerReleaseVerifier(embeddedManifestBytes),
             certificateMutation,
@@ -226,6 +232,15 @@ internal sealed class WindowsMachineHelperOperationExecutor
             new WindowsTargetUserPackageCommitInspector(
                 new WindowsPackageManagerFacade()),
             machineOperations);
+    }
+
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _disposed = true;
+            (_certificateMutation as IDisposable)?.Dispose();
+        }
     }
 
     private static InstallerRequest RequestFrom(InstallerTransactionJournal journal)

@@ -374,7 +374,7 @@ public sealed class WindowsTargetUserCertificateStoreAdapterTests
                 : new string('a', 64));
 
     private sealed class RecordingCertificateStoreNative
-        : IWindowsTargetUserCertificateStoreNative
+        : IWindowsCertificateStoreNative
     {
         internal RecordingCertificateStoreNative(
             params WindowsCertificateIdentity[] certificates)
@@ -408,7 +408,7 @@ public sealed class WindowsTargetUserCertificateStoreAdapterTests
 
         internal bool IgnoreDeletes { get; init; }
 
-        public IWindowsTargetUserCertificateStore? Open(
+        public IWindowsCertificateStore? Open(
             string targetSid,
             bool writable,
             bool createIfMissing)
@@ -424,7 +424,7 @@ public sealed class WindowsTargetUserCertificateStoreAdapterTests
         }
     }
 
-    private sealed class RecordingCertificateStore : IWindowsTargetUserCertificateStore
+    private sealed class RecordingCertificateStore : IWindowsCertificateStore
     {
         private readonly RecordingCertificateStoreNative _owner;
         private readonly bool _writable;
