@@ -1,6 +1,7 @@
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Payloads;
+using ClashSharp.Installer.Retirement;
 using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Windows.Machines;
@@ -203,6 +204,21 @@ internal sealed class WindowsMachineHelperBroker :
     {
         Interlocked.Exchange(ref _disposalRequested, 1);
         return new(_disposal.Value);
+    }
+
+    /// <summary>Adopts only an authenticated dedicated uninstall session, including recovered phases.</summary>
+    internal void AdoptRetiredUninstall(InstallerTransactionSnapshot ready, IWindowsMachineHelperServer server,
+        IWindowsElevatedHelperProcess process, IWindowsInstallerExecutableTrustLease trustLease)
+    {
+        ArgumentNullException.ThrowIfNull(server);
+        ArgumentNullException.ThrowIfNull(process);
+        ArgumentNullException.ThrowIfNull(trustLease);
+        InstallerRetiredUninstallProtocol.Validate(ready);
+        if (_disposed || Volatile.Read(ref _disposalRequested) != 0 || _faulted || _completed || _session is not null)
+        {
+            throw new InstallerProtocolException("installer.retired_uninstall.handoff_invalid");
+        }
+        _session = new(ready.Journal.TransactionId, server, process, trustLease);
     }
 
     private async Task DisposeCoreAsync()

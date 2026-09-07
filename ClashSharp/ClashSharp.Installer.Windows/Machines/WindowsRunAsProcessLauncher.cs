@@ -3,6 +3,8 @@ using System.Diagnostics;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Ownership;
+using ClashSharp.Installer.Retirement;
+using ClashSharp.Installer.Windows.Retirement;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -27,7 +29,8 @@ internal interface IWindowsElevatedHelperProcess : IDisposable
 /// Starts the broker-preverified single-file Installer's helper branch through runas on an STA thread.
 /// This launcher validates bootstrap shape, not file identity or Authenticode trust.
 /// </summary>
-internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher, IWindowsOwnerTransferProcessLauncher
+internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher, IWindowsOwnerTransferProcessLauncher,
+    IWindowsRetiredUninstallProcessLauncher
 {
     private const int ErrorCancelled = 1223;
     private readonly Func<ProcessStartInfo, Process?> _start;
@@ -57,6 +60,14 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
 
     public Task<IWindowsElevatedHelperProcess> StartAsync(
         string executablePath, InstallerOwnerTransferBootstrap bootstrap, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(bootstrap);
+        bootstrap.Validate();
+        return StartAsync(executablePath, bootstrap.ToArguments(), cancellationToken);
+    }
+
+    public Task<IWindowsElevatedHelperProcess> StartAsync(
+        string executablePath, InstallerRetiredUninstallBootstrap bootstrap, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(bootstrap);
         bootstrap.Validate();

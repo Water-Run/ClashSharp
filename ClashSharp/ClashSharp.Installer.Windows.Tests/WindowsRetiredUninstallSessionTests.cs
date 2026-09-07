@@ -2,75 +2,78 @@ using System.Text;
 using System.Threading.Channels;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
-using ClashSharp.Installer.Ownership;
+using ClashSharp.Installer.Retirement;
 using ClashSharp.Installer.Transactions;
 using ClashSharp.Installer.Windows.Machines;
+using ClashSharp.Installer.Windows.Retirement;
 
 namespace ClashSharp.Installer.Windows.Tests;
 
-public sealed partial class WindowsOwnerTransferAuthorityTests
+public sealed partial class WindowsRetiredUninstallAuthorityTests
 {
     [Fact]
-    public async Task DedicatedPipeTransfersThroughRealAuthorityAndCompletesOrdinaryCommandsWithoutRelaunch()
+    public async Task PreparationRefusalCrossesAuthenticatedPipeWithoutLosingItsDiagnostic()
+    {
+        using var fixture = new Fixture { Failure = "shared" };
+        await using var pair = new SessionPair(fixture);
+        var error = await Assert.ThrowsAsync<InstallerProtocolException>(() => pair.StartAsync());
+        Assert.Equal("installer.retired_uninstall.injected_failure", error.DiagnosticCode);
+        Assert.Null(pair.HostFailure);
+        Assert.Null(fixture.Journal.Bytes);
+        Assert.Empty(fixture.Active);
+        Assert.True(pair.Exit.Task.IsCompleted);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task DedicatedPipeCompletesNewAndEveryRecoveredPhaseWithOneAuthenticatedHelper(int recoveredPhase)
     {
         using var fixture = new Fixture();
+        if (recoveredPhase >= 0) { fixture.Seed(recoveredPhase); }
+        InstallerTransactionSnapshot? original = fixture.Journal.Bytes is { } bytes
+            ? InstallerTransactionSnapshot.Create(InstallerTransactionCodec.Parse(bytes)) : null;
         await using var pair = new SessionPair(fixture);
-        WindowsOwnerTransferParentHandoff handoff = await pair.StartAsync((_, _) =>
-        {
-            Assert.Empty(fixture.Active);
-            Assert.Null(fixture.Persistence.Bytes);
-            Assert.Empty(fixture.Inner.Mutations);
-            return Task.FromResult(true);
-        });
+        WindowsRetiredUninstallParentHandoff handoff = await pair.StartAsync();
         await using WindowsMachineHelperBroker broker = handoff.Broker;
+        var receipts = new WindowsRetiredUninstallReceipts(handoff.Ready, broker);
+        if (original is not null) { Assert.Equal(original, handoff.Ready); }
         fixture.RequireHeld();
-        InstallerTransactionSnapshot state = handoff.Continuation;
-        foreach (InstallerMachineHelperVerb verb in new[] { InstallerMachineHelperVerb.Prepare,
-            InstallerMachineHelperVerb.CommitPackage, InstallerMachineHelperVerb.Apply, InstallerMachineHelperVerb.Verify,
-            InstallerMachineHelperVerb.Clear })
+        InstallerTransactionSnapshot state = handoff.Ready;
+        while (state.Journal.Phase != InstallerTransactionPhase.Verified)
         {
-            var command = InstallerMachineHelperCommand.Create(InstallerMachineHelperInvocation.Create(verb, state), state);
-            InstallerMachineHelperResult result = await broker.ExecuteAsync(command);
+            InstallerMachineHelperVerb verb = InstallerRetiredUninstallProtocol.FirstInvocation(state).Verb;
+            if (verb == InstallerMachineHelperVerb.CommitPackage) { fixture.PackagePresent = false; }
+            InstallerMachineHelperCommand command = Command(state, verb);
+            InstallerMachineHelperResult result = await receipts.ExecuteAsync(command);
             Assert.Equal(InstallerMachineHelperOutcome.Succeeded, result.Outcome);
             state = result.ValidateAgainst(command);
+            Assert.Equal(state, await receipts.LoadAsync(default));
         }
+        if (recoveredPhase == 4)
+        {
+            await receipts.ExecuteAsync(Command(state, InstallerMachineHelperVerb.Verify));
+        }
+        await receipts.ApplyAsync(fixture.Request, new ReleaseLease(fixture), default);
+        await receipts.ExecuteAsync(Command(state, InstallerMachineHelperVerb.Clear));
+        Assert.Null(await receipts.LoadAsync(default));
         await pair.Exit.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
         Assert.Null(pair.HostFailure);
         Assert.Equal(1, pair.Launches);
         Assert.Empty(fixture.Active);
-        Assert.Null(fixture.Persistence.Bytes);
-        Assert.False(fixture.Inner.Native.Entries.ContainsKey(WindowsOwnerTransferAccessFixture.ContinuationPath));
-        Assert.Equal(0, fixture.Inner.Native.LiveLeases);
+        Assert.Null(fixture.Journal.Bytes);
+        Assert.Null(fixture.Archive.Bytes);
+        Assert.False(fixture.PackagePresent);
+        Assert.False(fixture.CertificatePresent);
+        Assert.Equal(recoveredPhase >= 3 ? 0 : 1, fixture.CertificateRemovals);
         string wire = Encoding.UTF8.GetString(pair.Helper.Written.ToArray());
         Assert.DoesNotContain("authenticationToken", wire, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("certificateThumbprint", wire, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("profileRoot", wire, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(fixture.Inner.Journal.PreviousOwner.Association.AuthenticationToken, wire, StringComparison.Ordinal);
-        Assert.DoesNotContain(fixture.Inner.Journal.NextOwner.Association.AuthenticationToken, wire, StringComparison.Ordinal);
-        Assert.Equal(5, fixture.Events.Count(value => value.StartsWith("normal:", StringComparison.Ordinal)));
-    }
-
-    [Fact]
-    public async Task DecliningTheOfferLeavesNoPrivateOrOrdinaryJournalAndNoMutation()
-    {
-        using var fixture = new Fixture();
-        await using var pair = new SessionPair(fixture);
-
-        var error = await Assert.ThrowsAsync<InstallerUserCancelledException>(() => pair.StartAsync((offer, _) =>
-        {
-            Assert.False(offer.IsRecovery);
-            Assert.Empty(fixture.Active);
-            return Task.FromResult(false);
-        }));
-
-        Assert.Equal("installer.owner_transfer.declined", error.DiagnosticCode);
-        Assert.Null(pair.HostFailure);
-        Assert.Empty(fixture.Inner.Mutations);
-        Assert.Null(fixture.Persistence.Bytes);
-        Assert.Empty(fixture.Active);
-        Assert.DoesNotContain("transfer-open", fixture.Events);
-        Assert.True(pair.Exit.Task.IsCompleted);
-        Assert.Equal(2, pair.Events.Count(value => value.EndsWith("trust-dispose", StringComparison.Ordinal)));
     }
 
     [Theory]
@@ -83,115 +86,45 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
     [InlineData("server-verify")]
     [InlineData("parent-trust")]
     [InlineData("launch")]
-    public async Task EitherEndpointAuthenticationFailureCannotInspectOrAcquireTransferAuthority(string failure)
+    public async Task FailedEndpointAuthenticationCannotCreateRemovalState(string failure)
     {
         using var fixture = new Fixture();
         await using var pair = new SessionPair(fixture) { Failure = failure };
-        bool displayed = false;
-
-        await Assert.ThrowsAnyAsync<Exception>(() => pair.StartAsync((_, _) =>
-        {
-            displayed = true;
-            return Task.FromResult(true);
-        }));
-
-        Assert.False(displayed);
+        await Assert.ThrowsAnyAsync<Exception>(() => pair.StartAsync());
         Assert.Empty(fixture.Events);
-        Assert.Empty(fixture.Inner.Mutations);
-        Assert.Null(fixture.Persistence.Bytes);
         Assert.Empty(fixture.Active);
+        Assert.Null(fixture.Journal.Bytes);
+        Assert.Equal(0, fixture.CertificateRemovals);
     }
 
     [Fact]
-    public async Task ConfirmationGapStateChangeIsRejectedByTheRealAuthorityBeforeAnyPhase()
+    public async Task ClosedPipeDrainsAuthorityAndNextHelperResumesTheSamePrivateTransaction()
     {
         using var fixture = new Fixture();
-        await using var pair = new SessionPair(fixture);
-
-        await Assert.ThrowsAnyAsync<Exception>(() => pair.StartAsync((_, _) =>
+        InstallerTransactionSnapshot interrupted;
+        await using (var firstPair = new SessionPair(fixture))
         {
-            var changed = fixture.Inner.Journal with
+            WindowsRetiredUninstallParentHandoff first = await firstPair.StartAsync();
+            await using (WindowsMachineHelperBroker broker = first.Broker)
             {
-                Continuation = fixture.Inner.Journal.Continuation with { TransactionId = new string('f', 64) },
-            };
-            fixture.Persistence.Bytes = InstallerOwnerTransferCodec.Serialize(changed);
-            return Task.FromResult(true);
-        }));
-
-        Assert.Equal("installer.owner_transfer.confirmation_state_changed",
-            Assert.IsType<InstallerProtocolException>(pair.HostFailure).DiagnosticCode);
-        Assert.Empty(fixture.Inner.Mutations);
-        Assert.DoesNotContain(fixture.Events, value => value.StartsWith("phase:", StringComparison.Ordinal));
-        Assert.Empty(fixture.Active);
-    }
-
-    [Fact]
-    public async Task ParentCancellationClosesThePipeButDrainsHelperMutationBeforeReleasingPins()
-    {
-        using var fixture = new Fixture();
-        await using var pair = new SessionPair(fixture);
-        using var cancellation = new CancellationTokenSource();
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        fixture.BeforePhase = (phase, _) =>
-        {
-            if (phase != InstallerOwnerTransferPhase.MachineAccessTransferred)
-            {
-                return Task.CompletedTask;
+                var command = Command(first.Ready, InstallerMachineHelperVerb.Prepare);
+                interrupted = (await broker.ExecuteAsync(command)).ValidateAgainst(command);
             }
-            entered.TrySetResult();
-            return drain.Task;
-        };
-        Task pending = pair.StartAsync((_, _) => Task.FromResult(true), cancellationToken: cancellation.Token);
-        try
-        {
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            cancellation.Cancel();
-            Assert.False(pending.IsCompleted);
-            Assert.False(pair.Exit.Task.IsCompleted);
-            fixture.RequireHeld();
-            Assert.DoesNotContain("parent-trust-dispose", pair.Events);
+            Assert.True(firstPair.Exit.Task.IsCompleted);
+            Assert.Empty(fixture.Active);
         }
-        finally
-        {
-            drain.TrySetResult();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
-        }
-        Assert.True(pair.Exit.Task.IsCompleted);
-        Assert.Empty(fixture.Active);
-        Assert.Equal(InstallerTransactionSnapshot.Create(fixture.Inner.Journal.Continuation),
-            await fixture.Inner.Ordinary.LoadAsync(default));
-        Assert.Null(fixture.Persistence.Bytes);
-        Assert.Contains("parent-trust-dispose", pair.Events);
+        await using var secondPair = new SessionPair(fixture);
+        WindowsRetiredUninstallParentHandoff second = await secondPair.StartAsync();
+        await using WindowsMachineHelperBroker resumed = second.Broker;
+        Assert.Equal(interrupted, second.Ready);
+        var remove = Command(second.Ready, InstallerMachineHelperVerb.Remove);
+        var state = (await resumed.ExecuteAsync(remove)).ValidateAgainst(remove);
+        Assert.Equal(InstallerTransactionPhase.MachineCommitted, state.Journal.Phase);
+        Assert.Equal(0, fixture.CertificateRemovals);
     }
 
-    [Fact]
-    public async Task RecoveryOfferRetainsDurableInstallWhenCurrentPackageSuggestsRepair()
-    {
-        using var fixture = new Fixture();
-        fixture.Persistence.Bytes = InstallerOwnerTransferCodec.Serialize(fixture.Inner.Journal);
-        fixture.Confirmed = new(fixture.Inner.Journal, InstallerOwnerTransferSnapshot.Create(fixture.Inner.Journal));
-        await using var pair = new SessionPair(fixture);
-        InstallerOperation? offered = null;
-
-        WindowsOwnerTransferParentHandoff handoff = await pair.StartAsync((offer, _) =>
-        {
-            Assert.True(offer.IsRecovery);
-            offered = offer.Request.Operation;
-            return Task.FromResult(true);
-        }, operation: InstallerOperation.Repair);
-        await handoff.Broker.DisposeAsync();
-        await pair.Exit.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
-        Assert.Equal(InstallerOperation.Install, offered);
-        Assert.Equal(InstallerOperation.Install, handoff.Continuation.Journal.Operation);
-        Assert.DoesNotContain("preparation", fixture.Events);
-        Assert.Empty(fixture.Active);
-    }
-
-    /// <summary>Actual codecs, host, source, transfer phases and ordinary broker; only Windows side effects and trust probes are fake.</summary>
-    private sealed class SessionPair : IWindowsOwnerTransferServerFactory, IWindowsOwnerTransferClientFactory,
-        IWindowsOwnerTransferProcessLauncher, IWindowsMachineHelperServerFactory, IWindowsRunAsProcessLauncher, IAsyncDisposable
+    private sealed class SessionPair : IWindowsRetiredUninstallServerFactory, IWindowsRetiredUninstallClientFactory,
+        IWindowsRetiredUninstallProcessLauncher, IWindowsMachineHelperServerFactory, IWindowsRunAsProcessLauncher, IAsyncDisposable
     {
         internal Fixture Fixture { get; }
         internal PipeStream Parent { get; }
@@ -203,8 +136,8 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
         internal int Launches { get; private set; }
         private readonly TaskCompletionSource _connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private Task? _host;
-        private InstallerOwnerTransferBootstrap? _bootstrap;
-        private readonly WindowsOwnerTransferBroker _broker;
+        private InstallerRetiredUninstallBootstrap? _bootstrap;
+        private readonly WindowsRetiredUninstallBroker _broker;
 
         internal SessionPair(Fixture fixture)
         {
@@ -215,16 +148,14 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
             Helper = new(toHelper.Reader, toParent.Writer);
             var limits = new WindowsMachineHelperBrokerLimits(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5),
                 TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(5));
-            _broker = new(@"C:\fixture\ClashSharp-Installer.exe", fixture.Inner.State.Machine.Release.Manifest,
-                WindowsOwnerTransferAccessFixture.NextSid, new PairTrust(this, "parent"), this, this,
+            _broker = new(@"C:\fixture\ClashSharp-Installer.exe", fixture.Payload.Manifest,
+                WindowsOwnerTransferAccessFixture.PreviousSid, new PairTrust(this, "parent"), this, this,
                 () => new WindowsMachineHelperBroker(@"C:\fixture\ClashSharp-Installer.exe", new PairTrust(this, "unused"),
                     this, this, limits, () => 4242), () => 4242, limits);
         }
 
-        internal Task<WindowsOwnerTransferParentHandoff> StartAsync(
-            Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,
-            InstallerOperation operation = InstallerOperation.Install, CancellationToken cancellationToken = default) =>
-            _broker.StartAsync(operation, confirm, cancellationToken);
+        internal Task<WindowsRetiredUninstallParentHandoff> StartAsync(CancellationToken cancellationToken = default) =>
+            _broker.StartAsync(cancellationToken);
 
         internal void Hit(string value)
         {
@@ -235,30 +166,28 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
             }
         }
 
-        IWindowsMachineHelperServer IWindowsOwnerTransferServerFactory.Create(InstallerOwnerTransferBootstrap bootstrap)
+        IWindowsMachineHelperServer IWindowsRetiredUninstallServerFactory.Create(InstallerRetiredUninstallBootstrap bootstrap)
         {
             _bootstrap = bootstrap;
             return new PairServer(this);
         }
-        IWindowsMachineHelperClient IWindowsOwnerTransferClientFactory.Create(InstallerOwnerTransferBootstrap bootstrap)
+        IWindowsMachineHelperClient IWindowsRetiredUninstallClientFactory.Create(InstallerRetiredUninstallBootstrap bootstrap)
         {
             Assert.Equal(_bootstrap, bootstrap);
             return new PairClient(this);
         }
-        public Task<IWindowsElevatedHelperProcess> StartAsync(string executablePath, InstallerOwnerTransferBootstrap bootstrap, CancellationToken cancellationToken)
+        public Task<IWindowsElevatedHelperProcess> StartAsync(string executablePath, InstallerRetiredUninstallBootstrap bootstrap, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Hit("launch");
             Launches++;
-            var source = new WindowsOwnerTransferOfferSource(new GlobalLock(Fixture), new ReleaseVerifier(Fixture), Fixture.Inner.Backend,
-                () => new PairInspection(Fixture), new AllowRetiredUninstallAdmission());
-            var host = new WindowsOwnerTransferHost(executablePath, new PairElevation(this), new PairTrust(this, "helper"),
-                new PairParent(this), this, source, Fixture.Factory,
+            var host = new WindowsRetiredUninstallHost(executablePath, Fixture.Payload.Manifest,
+                new PairElevation(this), new PairTrust(this, "helper"), new PairParent(this), this, Fixture.Factory,
                 new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
             _host = RunAsync(host, bootstrap);
             return Task.FromResult<IWindowsElevatedHelperProcess>(new PairProcess(this));
         }
-        private async Task RunAsync(WindowsOwnerTransferHost host, InstallerOwnerTransferBootstrap bootstrap)
+        private async Task RunAsync(WindowsRetiredUninstallHost host, InstallerRetiredUninstallBootstrap bootstrap)
         {
             try { await host.RunAsync(bootstrap, default); }
             catch (Exception exception) { HostFailure = exception; }
@@ -344,22 +273,9 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
         private sealed class PairParentLease(SessionPair pair) : IWindowsMachineHelperParentProcessLease
         {
             public int ProcessId => 4242;
-            public string UserSid => WindowsOwnerTransferAccessFixture.NextSid;
+            public string UserSid => WindowsOwnerTransferAccessFixture.PreviousSid;
             public void VerifyAlive() => pair.Hit("parent-alive");
             public void Dispose() => pair.Hit("parent-dispose");
-        }
-        private sealed class PairInspection(Fixture fixture) : IWindowsOwnerTransferInspection
-        {
-            public Task<InstallerOwnerTransferSnapshot?> LoadPrivateAsync(CancellationToken cancellationToken)
-            {
-                Assert.Equal(["global", "release"], fixture.Active);
-                return Task.FromResult(fixture.Persistence.Bytes is { } bytes
-                    ? InstallerOwnerTransferSnapshot.Create(InstallerOwnerTransferCodec.Parse(bytes)) : null);
-            }
-            public Task<InstallerOwnerTransferJournal> CaptureNewAsync(InstallerRequest request,
-                ClashSharp.Installer.Payloads.InstallerReleaseManifest manifest, CancellationToken cancellationToken) =>
-                Task.FromResult(fixture.Inner.Journal);
-            public void Dispose() { }
         }
     }
 

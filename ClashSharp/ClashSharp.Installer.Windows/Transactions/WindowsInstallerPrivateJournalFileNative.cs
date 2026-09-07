@@ -5,6 +5,8 @@ using System.Security.Cryptography;
 using ClashSharp.Installer.Certificates;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Ownership;
+using ClashSharp.Installer.Retirement;
+using ClashSharp.Installer.Transactions;
 using ClashSharp.Installer.Windows.Certificates;
 using ClashSharp.Installer.Windows.Files;
 using ClashSharp.Windows.FileSecurity;
@@ -55,6 +57,10 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
     internal static WindowsInstallerPrivateJournalFileNative CreateForCertificateArchive(string authenticatedTargetSid) =>
         new(WindowsInstallerCertificateArchiveLayout.GetFileName(authenticatedTargetSid),
             InstallerCertificateOwnershipCodec.MaximumDocumentBytes, "installer.certificate_archive");
+
+    internal static WindowsInstallerPrivateJournalFileNative CreateForRetiredUninstall() =>
+        new(InstallerRetiredUninstallStore.JournalFileName, InstallerTransactionCodec.MaximumDocumentBytes,
+            "installer.retired_uninstall");
 
     public bool IsPresent(string path, CancellationToken cancellationToken)
     {

@@ -33,7 +33,7 @@ public sealed class WindowsMachineHelperHostTests
             store,
             operations);
         var authorityFactory = new WindowsMachineHelperAuthorityFactory(
-            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
+            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events), new AllowRetiredUninstallAdmission());
         var trust = new RecordingTrustVerifier(events);
         var parent = new RecordingParentVerifier(events);
         var clientFactory = new RecordingClientFactory(events, commands, results);
@@ -226,7 +226,7 @@ public sealed class WindowsMachineHelperHostTests
             new MemoryTransactionStore(conflicting),
             new RecordingOperations(events));
         var authorityFactory = new WindowsMachineHelperAuthorityFactory(
-            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
+            resourcesFactory, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events), new AllowRetiredUninstallAdmission());
 
         InstallerProtocolException exception = await Assert.ThrowsAsync<
             InstallerProtocolException>(() => authorityFactory.CreateAsync(
@@ -256,7 +256,7 @@ public sealed class WindowsMachineHelperHostTests
         var factory = new WindowsMachineHelperAuthorityFactory(
             resources,
             new RecordingAuthorityLock(events, new InstallerProtocolException("installer.concurrent_action_rejected")),
-            new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
+            new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events), new AllowRetiredUninstallAdmission());
 
         InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
             factory.CreateAsync(
@@ -281,7 +281,7 @@ public sealed class WindowsMachineHelperHostTests
             events, new MemoryTransactionStore(state), new RecordingOperations(events));
         var factory = new WindowsMachineHelperAuthorityFactory(
             resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events),
-            new RecordingOwnerTransferAdmission(events, new InstallerProtocolException(diagnosticCode)));
+            new RecordingOwnerTransferAdmission(events, new InstallerProtocolException(diagnosticCode)), new AllowRetiredUninstallAdmission());
 
         InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() => factory.CreateAsync(
             InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
@@ -289,6 +289,29 @@ public sealed class WindowsMachineHelperHostTests
 
         Assert.Equal(diagnosticCode, failure.DiagnosticCode);
         Assert.Equal(["authority-lock", "owner-transfer-check", "authority-unlock"], events);
+        Assert.Null(resources.TargetSid);
+    }
+
+    [Fact]
+    public async Task PendingRetiredUninstallBlocksOrdinaryAuthorityBeforeOpeningApplicationOrResources()
+    {
+        var events = new List<string>();
+        InstallerTransactionSnapshot state = VerifiedSnapshot();
+        var resources = new RecordingAuthorityResourcesFactory(events, new MemoryTransactionStore(state), new RecordingOperations(events));
+        var retired = new AllowRetiredUninstallAdmission
+        {
+            Inspect = _ =>
+            {
+                events.Add("retired-check");
+                throw new InstallerProtocolException("installer.retired_uninstall.pending");
+            },
+        };
+        var factory = new WindowsMachineHelperAuthorityFactory(resources, new RecordingAuthorityLock(events),
+            new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events), retired);
+        var failure = await Assert.ThrowsAsync<InstallerProtocolException>(() => factory.CreateAsync(
+            InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state), state.Journal.TargetSid, default));
+        Assert.Equal("installer.retired_uninstall.pending", failure.DiagnosticCode);
+        Assert.Equal(["authority-lock", "owner-transfer-check", "retired-check", "authority-unlock"], events);
         Assert.Null(resources.TargetSid);
     }
 
@@ -311,7 +334,7 @@ public sealed class WindowsMachineHelperHostTests
             },
         };
         var factory = new WindowsMachineHelperAuthorityFactory(
-            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), admission);
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), admission, new AllowRetiredUninstallAdmission());
         Task<IWindowsMachineHelperAuthorityLease> pending = factory.CreateAsync(
             InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
             state.Journal.TargetSid, cancellation.Token);
@@ -343,7 +366,7 @@ public sealed class WindowsMachineHelperHostTests
         var factory = new WindowsMachineHelperAuthorityFactory(
             resources,
             new RecordingAuthorityLock(events),
-            new RecordingApplicationLock(events, new InstallerProtocolException("installer.application_running")), new RecordingOwnerTransferAdmission(events));
+            new RecordingApplicationLock(events, new InstallerProtocolException("installer.application_running")), new RecordingOwnerTransferAdmission(events), new AllowRetiredUninstallAdmission());
 
         InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
             factory.CreateAsync(
@@ -368,7 +391,7 @@ public sealed class WindowsMachineHelperHostTests
             CreateFailure = expected,
         };
         var factory = new WindowsMachineHelperAuthorityFactory(
-            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events), new AllowRetiredUninstallAdmission());
 
         IOException actual = await Assert.ThrowsAsync<IOException>(() => factory.CreateAsync(
             InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
@@ -393,7 +416,7 @@ public sealed class WindowsMachineHelperHostTests
             DisposeFailure = expected,
         };
         var factory = new WindowsMachineHelperAuthorityFactory(
-            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events));
+            resources, new RecordingAuthorityLock(events), new RecordingApplicationLock(events), new RecordingOwnerTransferAdmission(events), new AllowRetiredUninstallAdmission());
         IWindowsMachineHelperAuthorityLease lease = await factory.CreateAsync(
             InstallerMachineHelperInvocation.Create(InstallerMachineHelperVerb.Clear, state),
             state.Journal.TargetSid,

@@ -10,6 +10,7 @@ using ClashSharp.Installer.Windows.Certificates;
 using ClashSharp.Installer.Windows.Files;
 using ClashSharp.Installer.Windows.Machines;
 using ClashSharp.Installer.Windows.Packages;
+using ClashSharp.Installer.Windows.Retirement;
 using ClashSharp.Installer.Windows.Transactions;
 
 namespace ClashSharp.Installer.Windows.Execution;
@@ -35,6 +36,12 @@ internal interface IWindowsInstallerOwnerTransferSessionFactory
         IProgress<InstallerProgress>? progress, CancellationToken cancellationToken);
 }
 
+internal interface IWindowsInstallerRetiredUninstallSessionFactory
+{
+    Task<InstallerExecutionResult> UninstallRetiredAccountAsync(
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken);
+}
+
 internal interface IWindowsInstallerParentInspector
 {
     Task<InstallerRuntimeInspection> InspectAsync(
@@ -46,7 +53,8 @@ internal interface IWindowsInstallerParentInspector
 /// Owns trusted request construction for the unelevated Installer parent and creates one bounded
 /// coordinator/helper session per operation.
 /// </summary>
-public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IInstallerOwnerTransferRuntimeBackend
+public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IInstallerOwnerTransferRuntimeBackend,
+    IInstallerRetiredUninstallRuntimeBackend
 {
     private readonly object _lifetimeSync = new();
     private readonly InstallerReleaseManifest _manifest;
@@ -120,6 +128,35 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
 
     /// <inheritdoc />
     public bool SupportsOwnerTransfer => _sessionFactory is IWindowsInstallerOwnerTransferSessionFactory;
+
+    /// <inheritdoc />
+    public bool SupportsRetiredUninstall => _sessionFactory is IWindowsInstallerRetiredUninstallSessionFactory;
+
+    /// <inheritdoc />
+    public async Task<InstallerExecutionResult> UninstallRetiredAccountAsync(
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
+    {
+        if (_sessionFactory is not IWindowsInstallerRetiredUninstallSessionFactory retired)
+        {
+            throw new InstallerProtocolException("installer.retired_uninstall.unavailable");
+        }
+        if (!TryEnter())
+        {
+            return new(InstallerExecutionOutcome.Blocked, "installer.concurrent_action_rejected", null, false);
+        }
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
+                ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
+            return await retired.UninstallRetiredAccountAsync(progress, cancellationToken).ConfigureAwait(false);
+        }
+        catch (InstallerUserCancelledException exception)
+        {
+            return new(InstallerExecutionOutcome.Cancelled, exception.DiagnosticCode, null, false);
+        }
+        finally { Exit(); }
+    }
 
     /// <inheritdoc />
     public async Task<InstallerExecutionResult> TransferAndExecuteAsync(
@@ -408,7 +445,7 @@ internal sealed class UnavailableWindowsInstallerParentInspector
 }
 
 internal sealed class WindowsInstallerExecutionSessionFactory
-    : IWindowsInstallerExecutionSessionFactory, IWindowsInstallerOwnerTransferSessionFactory
+    : IWindowsInstallerExecutionSessionFactory, IWindowsInstallerOwnerTransferSessionFactory, IWindowsInstallerRetiredUninstallSessionFactory
 {
     private readonly byte[] _embeddedManifestBytes;
     private readonly InstallerReleaseManifest _manifest;
@@ -442,6 +479,29 @@ internal sealed class WindowsInstallerExecutionSessionFactory
 
     public Task<IWindowsInstallerExecutionSession> CreateAsync(CancellationToken cancellationToken) =>
         CreateAsync(null, cancellationToken);
+
+    public async Task<InstallerExecutionResult> UninstallRetiredAccountAsync(
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
+    {
+        var request = new InstallerRequest(InstallerOperation.Uninstall, _targetSid, false,
+            _manifest.ExpectedPackageVersion, _manifest.InstallerPayloadSha256);
+        var environment = new WindowsInstallerEnvironment(_manifest);
+        InstallerEnvironmentSnapshot inspection = await environment.InspectAsync(request, cancellationToken).ConfigureAwait(false);
+        if (inspection.IsApplicationRunning)
+        {
+            return new(InstallerExecutionOutcome.Blocked, "installer.application_running", null, false);
+        }
+        WindowsRetiredUninstallParentHandoff handoff = await WindowsRetiredUninstallBroker.CreateDefault(
+            _installerExecutablePath, _manifest, _targetSid).StartAsync(cancellationToken).ConfigureAwait(false);
+        await using WindowsMachineHelperBroker broker = handoff.Broker;
+        var receipts = new WindowsRetiredUninstallReceipts(handoff.Ready, broker);
+        var machine = new WindowsElevatedMachineAdapter(receipts, _currentSid);
+        var coordinator = new InstallerCoordinator(environment,
+            new WindowsInstallerReleaseVerifier(_embeddedManifestBytes, _installerExecutablePath), receipts,
+            new VerifiedInstallerPackageMutation(new WindowsCurrentUserPackageStoreAdapter()),
+            machine, machine, receipts);
+        return await coordinator.ExecuteAsync(request, progress, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task<InstallerExecutionResult> TransferAndExecuteAsync(
         Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,

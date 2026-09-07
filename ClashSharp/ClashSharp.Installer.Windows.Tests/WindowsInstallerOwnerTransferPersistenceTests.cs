@@ -8,7 +8,7 @@ using ClashSharp.Windows.FileSecurity;
 
 namespace ClashSharp.Installer.Windows.Tests;
 
-public sealed class WindowsInstallerOwnerTransferPersistenceTests
+public sealed partial class WindowsInstallerOwnerTransferPersistenceTests
 {
     private const string ProductRoot = @"C:\ProgramData\ClashSharp";
     private const string AuthorityRoot = ProductRoot + @"\InstallerAuthority";

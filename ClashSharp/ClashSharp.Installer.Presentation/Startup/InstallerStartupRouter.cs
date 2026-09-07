@@ -1,6 +1,7 @@
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Ownership;
+using ClashSharp.Installer.Retirement;
 
 namespace ClashSharp.Installer.Presentation;
 
@@ -16,6 +17,7 @@ public static class InstallerStartupRouter
     /// <param name="invalidArgumentsExitCode">Stable exit code for invalid reserved grammar.</param>
     /// <param name="runPayloadAudit">Optional read-only audit composition without WPF or elevation.</param>
     /// <param name="runOwnerTransfer">Optional dedicated ownership helper composition.</param>
+    /// <param name="runRetiredUninstall">Optional dedicated account-copy uninstall helper composition.</param>
     /// <returns>The selected branch exit code, or the invalid-arguments exit code.</returns>
     public static int Run(
         IReadOnlyList<string> arguments,
@@ -23,7 +25,8 @@ public static class InstallerStartupRouter
         Func<int> runUserInterface,
         int invalidArgumentsExitCode,
         Func<int>? runPayloadAudit = null,
-        Func<InstallerOwnerTransferBootstrap, int>? runOwnerTransfer = null)
+        Func<InstallerOwnerTransferBootstrap, int>? runOwnerTransfer = null,
+        Func<InstallerRetiredUninstallBootstrap, int>? runRetiredUninstall = null)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(runMachineHelper);
@@ -44,6 +47,11 @@ public static class InstallerStartupRouter
         InstallerOwnerTransferBootstrap? transfer;
         try
         {
+            InstallerRetiredUninstallBootstrap? retired = InstallerRetiredUninstallBootstrap.Parse(arguments);
+            if (retired is not null)
+            {
+                return runRetiredUninstall is null ? invalidArgumentsExitCode : runRetiredUninstall(retired);
+            }
             transfer = InstallerOwnerTransferBootstrap.Parse(arguments);
             if (transfer is not null)
             {

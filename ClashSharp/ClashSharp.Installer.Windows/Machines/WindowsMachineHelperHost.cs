@@ -34,21 +34,25 @@ internal sealed class WindowsMachineHelperAuthorityFactory
     private readonly IWindowsInstallerAuthorityLock _authorityLock;
     private readonly IWindowsInstallerApplicationLock _applicationLock;
     private readonly IWindowsInstallerOwnerTransferAdmission _ownerTransferAdmission;
+    private readonly IWindowsInstallerRetiredUninstallAdmission _retiredUninstallAdmission;
 
     internal WindowsMachineHelperAuthorityFactory(
         IWindowsMachineHelperAuthorityResourcesFactory resourcesFactory,
         IWindowsInstallerAuthorityLock authorityLock,
         IWindowsInstallerApplicationLock applicationLock,
-        IWindowsInstallerOwnerTransferAdmission ownerTransferAdmission)
+        IWindowsInstallerOwnerTransferAdmission ownerTransferAdmission,
+        IWindowsInstallerRetiredUninstallAdmission retiredUninstallAdmission)
     {
         ArgumentNullException.ThrowIfNull(resourcesFactory);
         ArgumentNullException.ThrowIfNull(authorityLock);
         ArgumentNullException.ThrowIfNull(applicationLock);
         ArgumentNullException.ThrowIfNull(ownerTransferAdmission);
+        ArgumentNullException.ThrowIfNull(retiredUninstallAdmission);
         _resourcesFactory = resourcesFactory;
         _authorityLock = authorityLock;
         _applicationLock = applicationLock;
         _ownerTransferAdmission = ownerTransferAdmission;
+        _retiredUninstallAdmission = retiredUninstallAdmission;
     }
 
     public async Task<IWindowsMachineHelperAuthorityLease> CreateAsync(
@@ -68,6 +72,7 @@ internal sealed class WindowsMachineHelperAuthorityFactory
         {
             cancellationToken.ThrowIfCancellationRequested();
             await _ownerTransferAdmission.EnsureOrdinaryActionAllowedAsync(cancellationToken).ConfigureAwait(false);
+            await _retiredUninstallAdmission.EnsureNoRetiredUninstallAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             applicationLease = _applicationLock.Acquire(targetSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
@@ -253,7 +258,8 @@ internal sealed class WindowsMachineHelperHost
                 new WindowsMachineHelperAuthorityResourcesFactory(operationsFactory),
                 new WindowsInstallerAuthorityLock(),
                 WindowsInstallerApplicationLock.CreateHelper(),
-                WindowsInstallerOwnerTransferAdmission.CreateDefault()),
+                WindowsInstallerOwnerTransferAdmission.CreateDefault(),
+                WindowsInstallerRetiredUninstallAdmission.CreateDefault()),
             WindowsMachineHelperHostLimits.Default);
     }
 

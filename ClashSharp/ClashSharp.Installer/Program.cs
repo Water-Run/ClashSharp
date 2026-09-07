@@ -5,6 +5,7 @@ using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Presentation;
+using ClashSharp.Installer.Retirement;
 using ClashSharp.Installer.Runtime;
 using ClashSharp.Installer.Windows.Files;
 using ClashSharp.Installer.Windows.Machines;
@@ -31,7 +32,8 @@ internal static class Program
             },
             invalidArgumentsExitCode: InvalidMachineHelperArgumentsExitCode,
             runPayloadAudit: RunPayloadAudit,
-            runOwnerTransfer: RunOwnerTransfer);
+            runOwnerTransfer: RunOwnerTransfer,
+            runRetiredUninstall: RunRetiredUninstall);
     }
 
     private static int RunPayloadAudit()
@@ -86,6 +88,33 @@ internal static class Program
         _ = bootstrap;
         return MachineHelperFailedExitCode;
 #endif
+    }
+
+    private static int RunRetiredUninstall(InstallerRetiredUninstallBootstrap bootstrap)
+    {
+#if CLASHSHARP_INSTALLER_MUTATION_RUNTIME
+        return RunEnabledRetiredUninstall(bootstrap);
+#else
+        _ = bootstrap;
+        return MachineHelperFailedExitCode;
+#endif
+    }
+
+    private static int RunEnabledRetiredUninstall(InstallerRetiredUninstallBootstrap bootstrap)
+    {
+        try
+        {
+            EmbeddedInstallerReleaseManifest release = EmbeddedInstallerReleaseManifest.Load();
+            string executablePath = Environment.ProcessPath
+                ?? throw new InstallerProtocolException("installer.machine_helper.executable_path_missing");
+            WindowsInstallerMachineHelper.RunRetiredUninstallAsync(bootstrap, executablePath, release.Bytes, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            return 0;
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            return MachineHelperFailedExitCode;
+        }
     }
 
     private static int RunEnabledOwnerTransfer(InstallerOwnerTransferBootstrap bootstrap)

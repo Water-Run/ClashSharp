@@ -6,7 +6,7 @@ namespace ClashSharp.Installer.Runtime;
 /// Maps a trusted platform backend into the fixed single-product presentation state without ever
 /// constructing a target SID, release hash, package identity, or privileged command.
 /// </summary>
-public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IDisposable
+public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IInstallerRetiredUninstallRuntime, IDisposable
 {
     private readonly IInstallerRuntimeBackend _backend;
     private bool _disposed;
@@ -90,6 +90,23 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
 
     /// <inheritdoc />
     public bool SupportsOwnerTransfer => _backend is IInstallerOwnerTransferRuntimeBackend { SupportsOwnerTransfer: true };
+
+    /// <inheritdoc />
+    public bool SupportsRetiredUninstall => _backend is IInstallerRetiredUninstallRuntimeBackend { SupportsRetiredUninstall: true };
+
+    /// <inheritdoc />
+    public Task<InstallerExecutionResult> UninstallRetiredAccountAsync(
+        IProgress<InstallerProgress> progress, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(progress);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_backend is not IInstallerRetiredUninstallRuntimeBackend { SupportsRetiredUninstall: true } retired)
+        {
+            throw new InstallerProtocolException("installer.retired_uninstall.unavailable");
+        }
+        return retired.UninstallRetiredAccountAsync(progress, cancellationToken);
+    }
 
     /// <inheritdoc />
     public Task<InstallerExecutionResult> TransferAndExecuteAsync(

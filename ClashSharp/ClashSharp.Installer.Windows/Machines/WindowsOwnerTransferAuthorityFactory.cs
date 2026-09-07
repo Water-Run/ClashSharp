@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Ownership;
@@ -6,6 +5,7 @@ using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Transactions;
 using ClashSharp.Installer.Windows.Execution;
 using ClashSharp.Installer.Windows.Files;
+using ClashSharp.Installer.Windows.Transactions;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -65,11 +65,13 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
     private readonly IWindowsOwnerTransferServiceBackend _backend;
     private readonly IWindowsOwnerTransferAuthorityResourcesFactory _transferFactory;
     private readonly IWindowsMachineHelperAuthorityResourcesFactory _ordinaryFactory;
+    private readonly IWindowsInstallerRetiredUninstallAdmission _retiredUninstallAdmission;
 
     internal WindowsOwnerTransferAuthorityFactory(IWindowsInstallerAuthorityLock authorityLock,
         IWindowsInstallerApplicationLock applicationLock, IInstallerReleaseVerifier releaseVerifier,
         IWindowsOwnerTransferServiceBackend backend, IWindowsOwnerTransferAuthorityResourcesFactory transferFactory,
-        IWindowsMachineHelperAuthorityResourcesFactory ordinaryFactory)
+        IWindowsMachineHelperAuthorityResourcesFactory ordinaryFactory,
+        IWindowsInstallerRetiredUninstallAdmission retiredUninstallAdmission)
     {
         ArgumentNullException.ThrowIfNull(authorityLock);
         ArgumentNullException.ThrowIfNull(applicationLock);
@@ -77,12 +79,14 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(transferFactory);
         ArgumentNullException.ThrowIfNull(ordinaryFactory);
+        ArgumentNullException.ThrowIfNull(retiredUninstallAdmission);
         _authorityLock = authorityLock;
         _applicationLock = applicationLock;
         _releaseVerifier = releaseVerifier;
         _backend = backend;
         _transferFactory = transferFactory;
         _ordinaryFactory = ordinaryFactory;
+        _retiredUninstallAdmission = retiredUninstallAdmission;
     }
 
     internal static WindowsOwnerTransferAuthorityFactory CreateDefault(
@@ -94,7 +98,8 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
             new WindowsInstallerReleaseVerifier(manifestBytes, installerExecutablePath), backend,
             new WindowsOwnerTransferAuthorityResourcesFactory(backend),
             new WindowsMachineHelperAuthorityResourcesFactory(store =>
-                WindowsMachineHelperOperationExecutor.CreateDefault(manifestBytes, store)));
+                WindowsMachineHelperOperationExecutor.CreateDefault(manifestBytes, store)),
+            WindowsInstallerRetiredUninstallAdmission.CreateDefault());
     }
 
     public async Task<WindowsOwnerTransferHandoff> CreateAsync(
@@ -105,11 +110,12 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
         cancellationToken.ThrowIfCancellationRequested();
         InstallerOwnerTransferJournal journal = confirmed.Journal;
         InstallerRequest request = WindowsOwnerTransferDeployment.CreateContinuationRequest(journal);
-        var scope = new AuthorityScope();
+        var scope = new WindowsInstallerAuthorityScope();
         try
         {
             _ = scope.RetainAsync(await _authorityLock.AcquireAsync(cancellationToken).ConfigureAwait(false)
                 ?? throw new InstallerProtocolException("installer.owner_transfer.authority_missing"));
+            await _retiredUninstallAdmission.EnsureNoRetiredUninstallAsync(cancellationToken).ConfigureAwait(false);
             IInstallerReleaseLease release = scope.RetainAsync(await _releaseVerifier.VerifyAsync(request, cancellationToken).ConfigureAwait(false)
                 ?? throw new InstallerProtocolException("installer.release.lease_missing"));
             await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
@@ -173,65 +179,11 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
         }
     }
 
-    private sealed class AuthorityLease(InstallerMachineHelperAuthoritySession session, AuthorityScope scope)
+    private sealed class AuthorityLease(InstallerMachineHelperAuthoritySession session, WindowsInstallerAuthorityScope scope)
         : IWindowsMachineHelperAuthorityLease
     {
         public InstallerMachineHelperAuthoritySession Session { get; } = session;
         public ValueTask DisposeAsync() => scope.DisposeAsync();
     }
 
-    /// <summary>
-    /// The factory alone registers resources, then hands ownership to one session. Concurrent
-    /// disposal callers await the same drain; every release runs even if an earlier release fails.
-    /// </summary>
-    private sealed class AuthorityScope : IAsyncDisposable
-    {
-        private readonly List<Func<ValueTask>> _cleanup = [];
-        private readonly Lazy<Task> _disposal;
-
-        internal AuthorityScope() => _disposal = new(DisposeCoreAsync, LazyThreadSafetyMode.ExecutionAndPublication);
-
-        internal T Retain<T>(T resource) where T : IDisposable
-        {
-            _cleanup.Add(() =>
-            {
-                resource.Dispose();
-                return ValueTask.CompletedTask;
-            });
-            return resource;
-        }
-
-        internal T RetainAsync<T>(T resource) where T : IAsyncDisposable
-        {
-            _cleanup.Add(resource.DisposeAsync);
-            return resource;
-        }
-
-        public ValueTask DisposeAsync() => new(_disposal.Value);
-
-        private async Task DisposeCoreAsync()
-        {
-            List<Exception> failures = [];
-            for (int index = _cleanup.Count - 1; index >= 0; index--)
-            {
-                try
-                {
-                    await _cleanup[index]().ConfigureAwait(false);
-                }
-                catch (Exception exception)
-                {
-                    failures.Add(exception);
-                }
-            }
-            _cleanup.Clear();
-            if (failures.Count == 1)
-            {
-                ExceptionDispatchInfo.Capture(failures[0]).Throw();
-            }
-            if (failures.Count > 1)
-            {
-                throw new AggregateException(failures);
-            }
-        }
-    }
 }

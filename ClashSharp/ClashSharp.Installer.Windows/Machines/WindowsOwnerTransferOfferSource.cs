@@ -2,6 +2,7 @@ using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Windows.Execution;
+using ClashSharp.Installer.Windows.Transactions;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -22,19 +23,23 @@ internal sealed class WindowsOwnerTransferOfferSource : IWindowsOwnerTransferOff
     private readonly IInstallerReleaseVerifier _release;
     private readonly IWindowsOwnerTransferStateBackend _backend;
     private readonly Func<IWindowsOwnerTransferInspection> _inspection;
+    private readonly IWindowsInstallerRetiredUninstallAdmission _retiredUninstallAdmission;
 
     internal WindowsOwnerTransferOfferSource(IWindowsInstallerAuthorityLock authorityLock,
         IInstallerReleaseVerifier release, IWindowsOwnerTransferStateBackend backend,
-        Func<IWindowsOwnerTransferInspection> inspection)
+        Func<IWindowsOwnerTransferInspection> inspection,
+        IWindowsInstallerRetiredUninstallAdmission retiredUninstallAdmission)
     {
         ArgumentNullException.ThrowIfNull(authorityLock);
         ArgumentNullException.ThrowIfNull(release);
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(inspection);
+        ArgumentNullException.ThrowIfNull(retiredUninstallAdmission);
         _authorityLock = authorityLock;
         _release = release;
         _backend = backend;
         _inspection = inspection;
+        _retiredUninstallAdmission = retiredUninstallAdmission;
     }
 
     public async Task<WindowsOwnerTransferConfirmedState> CaptureAsync(InstallerOwnerTransferRequest request,
@@ -44,6 +49,7 @@ internal sealed class WindowsOwnerTransferOfferSource : IWindowsOwnerTransferOff
         InstallerRequest ordinary = request.ForAuthenticatedAccount(authenticatedTargetSid);
         cancellationToken.ThrowIfCancellationRequested();
         await using IAsyncDisposable authority = await _authorityLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await _retiredUninstallAdmission.EnsureNoRetiredUninstallAsync(cancellationToken).ConfigureAwait(false);
         await using IInstallerReleaseLease release = await _release.VerifyAsync(ordinary, cancellationToken).ConfigureAwait(false);
         await release.ReverifyAsync(ordinary, cancellationToken).ConfigureAwait(false);
         using IWindowsOwnerTransferInspection inspection = _inspection()

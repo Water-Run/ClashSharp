@@ -6,7 +6,7 @@ using ClashSharp.Installer.Runtime;
 namespace ClashSharp.Installer.Presentation;
 
 /// <summary>Coordinates accessible UI state without acquiring package or machine authority.</summary>
-public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposable
+public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, IDisposable
 {
     private static readonly IReadOnlyDictionary<string, string> ProgressMessages =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -74,6 +74,12 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
             () => _ownerTransferDecision?.TrySetResult(true), () => IsOwnerTransferConfirmationVisible);
         DeclineOwnerTransferCommand = new DelegateCommand(
             () => _ownerTransferDecision?.TrySetResult(false), () => IsOwnerTransferConfirmationVisible);
+        RetiredUninstallCommand = new AsyncDelegateCommand(
+            () => ExecuteOperationAsync(null, retiredUninstall: true), () => IsRetiredUninstallActionVisible, SetUnhandledCommandFailure);
+        ConfirmRetiredUninstallCommand = new DelegateCommand(
+            () => _retiredUninstallDecision?.TrySetResult(true), () => IsRetiredUninstallConfirmationVisible);
+        DeclineRetiredUninstallCommand = new DelegateCommand(
+            () => _retiredUninstallDecision?.TrySetResult(false), () => IsRetiredUninstallConfirmationVisible);
     }
 
     /// <inheritdoc />
@@ -146,7 +152,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
     public bool IsSecondaryActionVisible => IsPrimaryActionVisible && HasSecondaryAction;
 
     /// <summary>Gets whether the single active generation exposes cancellation as its only action.</summary>
-    public bool IsCancelActionVisible => IsBusy && !IsOwnerTransferConfirmationVisible;
+    public bool IsCancelActionVisible => IsBusy && !IsOwnerTransferConfirmationVisible && !IsRetiredUninstallConfirmationVisible;
 
     /// <summary>Gets whether the trusted runtime proved every mutation prerequisite.</summary>
     public bool CanExecuteMutations
@@ -362,10 +368,12 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
     private Task ExecuteSecondaryOperationAsync() => ExecuteOperationAsync(_secondaryOperation);
 
-    private async Task ExecuteOperationAsync(InstallerOperation? requestedOperation, bool ownerTransfer = false)
+    private async Task ExecuteOperationAsync(InstallerOperation? requestedOperation, bool ownerTransfer = false, bool retiredUninstall = false)
     {
         IInstallerOwnerTransferRuntime? transfer = ownerTransfer ? _runtime as IInstallerOwnerTransferRuntime : null;
-        if (ownerTransfer ? transfer?.SupportsOwnerTransfer != true : !CanExecuteMutations || requestedOperation is null)
+        IInstallerRetiredUninstallRuntime? retired = retiredUninstall ? _runtime as IInstallerRetiredUninstallRuntime : null;
+        if (ownerTransfer ? transfer?.SupportsOwnerTransfer != true
+            : retiredUninstall ? retired?.SupportsRetiredUninstall != true : !CanExecuteMutations || requestedOperation is null)
         {
             StatusBadge = "已阻止";
             StatusTitle = "暂时无法继续";
@@ -384,15 +392,17 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
         IsBusy = true;
         InvalidateReadiness();
-        IsProgressIndeterminate = ownerTransfer;
+        IsProgressIndeterminate = ownerTransfer || retiredUninstall;
         ProgressValue = 0;
-        ProgressStatus = ownerTransfer ? "正在检查使用账户…" : $"正在开始{GetOperationLabel(requestedOperation!.Value)}…";
-        StatusTitle = ownerTransfer ? "正在准备切换账户" : $"正在{GetOperationLabel(requestedOperation!.Value)}";
-        StatusDetail = ownerTransfer ? "完成身份检查后，将在此处请你确认切换。" : "正在处理应用及所需组件。";
+        ProgressStatus = ownerTransfer ? "正在检查使用账户…" : retiredUninstall ? "等待确认。" : $"正在开始{GetOperationLabel(requestedOperation!.Value)}…";
+        StatusTitle = ownerTransfer ? "正在准备切换账户" : retiredUninstall ? "卸载此账户副本" : $"正在{GetOperationLabel(requestedOperation!.Value)}";
+        StatusDetail = ownerTransfer ? "完成身份检查后，将在此处请你确认切换。"
+            : retiredUninstall ? "移除当前账户已不再使用的 ClashSharp 副本。" : "正在处理应用及所需组件。";
         StatusBadge = "执行中";
         int acceptProgress = 1;
         TaskScheduler confirmationScheduler = SynchronizationContext.Current is null
             ? TaskScheduler.Current : TaskScheduler.FromCurrentSynchronizationContext();
+        bool retiredStarted = false;
 
         try
         {
@@ -405,17 +415,29 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
                 ProgressValue = value.Percent;
                 IsProgressIndeterminate = false;
-                ProgressStatus = ProgressMessages.TryGetValue(value.MessageKey, out string? message)
+                ProgressStatus = retiredUninstall ? DescribeRetiredUninstallProgress(value.MessageKey)
+                    : ProgressMessages.TryGetValue(value.MessageKey, out string? message)
                     ? message
                     : "正在执行当前操作…";
             });
 
+            if (retiredUninstall)
+            {
+                if (!await ConfirmRetiredUninstallAsync(generation, generation.Cancellation.Token))
+                {
+                    throw new InstallerUserCancelledException("installer.retired_uninstall.declined");
+                }
+                generation.Cancellation.Token.ThrowIfCancellationRequested();
+                retiredStarted = true;
+            }
             InstallerExecutionResult result = ownerTransfer
                 ? await transfer!.TransferAndExecuteAsync((confirmation, token) =>
                     Task.Factory.StartNew(() => ConfirmOwnerTransferAsync(confirmation, generation, token),
                         CancellationToken.None, TaskCreationOptions.DenyChildAttach, confirmationScheduler).Unwrap(),
                     progress, generation.Cancellation.Token)
-                : await _runtime.ExecuteAsync(requestedOperation!.Value, progress, generation.Cancellation.Token);
+                : retiredUninstall
+                    ? await retired!.UninstallRetiredAccountAsync(progress, generation.Cancellation.Token)
+                    : await _runtime.ExecuteAsync(requestedOperation!.Value, progress, generation.Cancellation.Token);
             Interlocked.Exchange(ref acceptProgress, 0);
             if (!IsCurrent(generation))
             {
@@ -424,6 +446,10 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
             ValidateExecutionResult(result);
             ApplyExecutionResult(result);
+            if (retiredUninstall)
+            {
+                ApplyRetiredUninstallResult(result);
+            }
         }
         catch (OperationCanceledException) when (generation.Cancellation.IsCancellationRequested)
         {
@@ -445,6 +471,14 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         finally
         {
             Interlocked.Exchange(ref acceptProgress, 0);
+            if (retiredUninstall && IsCurrent(generation) && StatusBadge == "已取消")
+            {
+                StatusDetail = retiredStarted ? RetiredUninstallRecoveryDetail : "尚未开始卸载此账户副本。";
+            }
+            else if (retiredUninstall && IsCurrent(generation) && StatusBadge == "失败")
+            {
+                StatusDetail = DescribeRetiredUninstallFailure(DiagnosticCode);
+            }
             CompleteOperation(generation);
         }
     }
@@ -628,6 +662,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         SecondaryActionCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         OwnerTransferCommand.NotifyCanExecuteChanged();
+        RetiredUninstallCommand.NotifyCanExecuteChanged();
     }
 
     private void NotifyActionVisibility()
@@ -636,6 +671,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         OnPropertyChanged(nameof(IsSecondaryActionVisible));
         OnPropertyChanged(nameof(IsCancelActionVisible));
         OnPropertyChanged(nameof(IsOwnerTransferActionVisible));
+        OnPropertyChanged(nameof(IsRetiredUninstallActionVisible));
     }
 
     private void ApplyProductState(InstallerRuntimeReadiness readiness)

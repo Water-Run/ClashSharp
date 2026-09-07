@@ -89,6 +89,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnRetiredUninstallConfirmationVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true && sender is FrameworkElement confirmation && IsLoaded)
+        {
+            confirmation.BringIntoView();
+            _ = DeclineRetiredUninstallButton.Focus();
+        }
+    }
+
     private void DisposeViewModel()
     {
         if (_viewModelDisposed)

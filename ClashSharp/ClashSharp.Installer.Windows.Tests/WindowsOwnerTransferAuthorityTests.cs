@@ -10,6 +10,39 @@ namespace ClashSharp.Installer.Windows.Tests;
 
 public sealed partial class WindowsOwnerTransferAuthorityTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RetiredUninstallBarrierBlocksBothOfferAndConfirmedTransferBeforeAnyMutation(bool offer)
+    {
+        using var fixture = new Fixture();
+        var retired = new AllowRetiredUninstallAdmission
+        {
+            Inspect = _ => throw new InstallerProtocolException("installer.retired_uninstall.pending"),
+        };
+        Task operation;
+        if (offer)
+        {
+            var source = new WindowsOwnerTransferOfferSource(new GlobalLock(fixture), new ReleaseVerifier(fixture),
+                fixture.Inner.Backend, () => throw new InvalidOperationException("Inspection must not start."), retired);
+            var request = new InstallerOwnerTransferRequest(new string('a', 64), InstallerOperation.Install,
+                fixture.Inner.Journal.Continuation.ExpectedPackageVersion, fixture.Inner.Journal.Continuation.InstallerPayloadSha256);
+            operation = source.CaptureAsync(request, WindowsOwnerTransferAccessFixture.NextSid, default);
+        }
+        else
+        {
+            var factory = new WindowsOwnerTransferAuthorityFactory(new GlobalLock(fixture), new AppLocks(fixture),
+                new ReleaseVerifier(fixture), fixture.Inner.Backend, new TransferFactory(fixture), new NormalFactory(fixture), retired);
+            operation = factory.CreateAsync(fixture.Confirmed, WindowsOwnerTransferAccessFixture.NextSid, default);
+        }
+        var failure = await Assert.ThrowsAsync<InstallerProtocolException>(() => operation);
+        Assert.Equal("installer.retired_uninstall.pending", failure.DiagnosticCode);
+        Assert.Empty(fixture.Active);
+        Assert.Empty(fixture.Inner.Mutations);
+        Assert.Null(fixture.Persistence.Bytes);
+        Assert.DoesNotContain("release-verify", fixture.Events);
+    }
+
     [Fact]
     public async Task TransfersThroughRealPhasesThenRetainsAllAuthorityAcrossOrdinaryPrepare()
     {
@@ -323,7 +356,7 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
             Persistence = new(this);
             OrdinaryStore = new(this);
             Factory = new(new GlobalLock(this), new AppLocks(this), new ReleaseVerifier(this),
-                Inner.Backend, new TransferFactory(this), new NormalFactory(this));
+                Inner.Backend, new TransferFactory(this), new NormalFactory(this), new AllowRetiredUninstallAdmission());
         }
         internal Task<WindowsOwnerTransferHandoff> CreateAsync(CancellationToken cancellationToken = default) =>
             Factory.CreateAsync(Confirmed, WindowsOwnerTransferAccessFixture.NextSid, cancellationToken);
