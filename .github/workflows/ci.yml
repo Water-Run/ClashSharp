@@ -45,6 +45,10 @@ jobs:
       - name: Restore locked dependencies
         run: dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
 
+      - name: Verify third-party notices and final MSIX contract
+        shell: pwsh
+        run: ./ClashSharp/Installer/Test-ThirdPartyNoticesContract.ps1
+
       - name: Verify formatting
         env:
           Platform: x64

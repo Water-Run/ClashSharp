@@ -77,6 +77,15 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup Condition="'$(ClashSharpThirdPartyNoticesPath)'!=''">
+    <Content Include="$(ClashSharpThirdPartyNoticesPath)">
+      <Link>ThirdParty\THIRD-PARTY-NOTICES.zip</Link>
+      <TargetPath>ThirdParty\THIRD-PARTY-NOTICES.zip</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup Condition="'$(ClashSharpInstallerServiceRoot)'!='' and '$(ClashSharpInstallerWatchdogRoot)'!=''">
     <Content Include="$(ClashSharpInstallerServiceRoot)\**\*">
       <Link>Binaries\Service\%(RecursiveDir)%(Filename)%(Extension)</Link>
@@ -133,6 +142,7 @@
     <Error Condition="'$(SelfContained)'!='true'" Text="Formal MSIX packaging must include the .NET runtime for offline installation." />
     <Error Condition="'$(WindowsAppSDKSelfContained)'!='false'" Text="Formal MSIX packaging uses the separately pinned Windows App Runtime framework package." />
     <Error Condition="'$(ClashSharpInstallerServiceRoot)'=='' or '$(ClashSharpInstallerWatchdogRoot)'==''" Text="Formal MSIX packaging must provide fresh Installer component staging roots." />
+    <Error Condition="'$(ClashSharpThirdPartyNoticesPath)'=='' or !Exists('$(ClashSharpThirdPartyNoticesPath)')" Text="Formal MSIX packaging must provide the verified third-party notices archive." />
     <Error Condition="!Exists('$(ClashSharpInstallerServiceRoot)\ClashSharp.MihomoService.exe')" Text="Installer service staging is missing ClashSharp.MihomoService.exe." />
     <Error Condition="!Exists('$(ClashSharpInstallerWatchdogRoot)\ClashSharp.RecoveryWatchdog.exe')" Text="Installer watchdog staging is missing ClashSharp.RecoveryWatchdog.exe." />
     <Error Condition="!Exists('Binaries\mihomo.exe')" Text="MSIX content is missing Binaries\mihomo.exe." />

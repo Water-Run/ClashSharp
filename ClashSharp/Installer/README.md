@@ -40,6 +40,17 @@ Windows App Runtime x64 包的长度、摘要和签名者。下载脚本使用�
 缓存损坏、输入更新或依赖漂移会终止构建，更新输入需要代码审查。
 NuGet 包和 SDK 由各项目锁文件与 global.json 固定。
 
+构建会离线生成 THIRD-PARTY-NOTICES.zip，覆盖主程序、服务、恢复进程和安装器的
+NuGet 构建/运行输入与 SDK 下载依赖。生成器用 SDK 自带的 NuGet 读取器验证实际
+包的内容摘要和签名包内容完整性，再与锁文件及固定下载摘要比对；不会通过复制
+缓存侧车文件来代替内容校验。许可、通知和 nuspec 元数据保留原始字节，缺少包内
+许可原文的已知依赖使用 ThirdParty/catalog.json 中精确匹配的来源快照。
+
+同一份说明 ZIP 随安装器提供，并包含在主 MSIX 的 ThirdParty 目录内；打包会读取
+最终 MSIX 确认其内部副本的摘要和文档引用。payload-provenance.json 记录它的
+摘要、长度和输入数量。说明包中的 inventory.json 区分依赖来源并记录对应项目，
+不包含构建机的 NuGet 缓存或用户目录路径。
+
 MSIX 内携带 .NET 10 运行时；WinUI 使用随安装器携带的独立微软
 Windows App Runtime framework MSIX。构建直接检查最终主包中的 runtimeconfig、
 RID、CLR/host 文件和原生 x64 PE 头，再验证依赖的身份、签名、时间戳与固定摘要。
@@ -78,5 +89,7 @@ GeoData 使用 [MetaCubeX/meta-rules-dat 固定数据提交](https://github.com/
 生成与归属信息见固定的
 [上游说明](https://github.com/MetaCubeX/meta-rules-dat/blob/4178770badecb1b349fbcd62c737e0d7a2079729/README.md)
 和 [仓库许可](https://github.com/MetaCubeX/meta-rules-dat/blob/4178770badecb1b349fbcd62c737e0d7a2079729/LICENSE)。
-该数据汇总了多个上游；正式发行仍须随候选归档相应来源与第三方许可，
-不能把生成器仓库的许可视为全部数据的唯一许可。
+该数据汇总了多个上游。说明包现在保留上述固定提交的 README、LICENSE 和生成
+工作流，并将它们绑定到四个数据文件；生成工作流仍引用了会变化的上游分支。
+这组快照不能重建当时全部上游输入，也不是完整的对应源代码发行包。正式发行仍须
+补齐相应源代码与上游数据许可归档，不能把生成器仓库的许可视为全部数据的唯一许可。

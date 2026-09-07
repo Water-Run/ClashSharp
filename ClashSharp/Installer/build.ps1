@@ -389,6 +389,13 @@ if (-not $mihomoNotice.Contains(
     throw "Mihomo notice does not match the pinned release manifest."
 }
 
+$thirdPartyModule = Assert-ClashSharpOrdinaryPath -LiteralPath (Join-Path $installerRoot 'ThirdPartyNotices.psm1') -RequireFile
+Import-Module -Name $thirdPartyModule -Force
+$thirdPartyNoticesPath = Join-Path $packagingRunRoot 'THIRD-PARTY-NOTICES.zip'
+$thirdPartyNotices = New-ClashSharpThirdPartyNotices -RepositoryRoot $repoRoot -OutputPath $thirdPartyNoticesPath
+$null = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $thirdPartyNoticesPath
+Write-Host "Third-party notices: $($thirdPartyNotices.PackageCount) NuGet inputs, $($thirdPartyNotices.DocumentCount) original documents."
+
 New-Item -ItemType Directory -Force -Path $signingDir | Out-Null
 $certificatePfxExists = Test-Path -LiteralPath $certificatePfxPath -PathType Leaf
 $certificateCerExists = Test-Path -LiteralPath $certificateCerPath -PathType Leaf
@@ -557,6 +564,7 @@ dotnet publish $appProject `
     -p:AppxPackageDir=$appPackageStagingRoot `
     -p:ClashSharpInstallerServiceRoot=$serviceStagingRoot `
     -p:ClashSharpInstallerWatchdogRoot=$watchdogStagingRoot `
+    "-p:ClashSharpThirdPartyNoticesPath=$thirdPartyNoticesPath" `
     -p:PackageCertificateThumbprint=$($signingCertificate.Thumbprint)
 if ($LASTEXITCODE -ne 0) {
     throw "MSIX publish failed with exit code $LASTEXITCODE."
@@ -578,6 +586,7 @@ if ($appPackages.Count -ne 1) {
     throw "The isolated build did not produce exactly one primary Clash# MSIX package."
 }
 $appPackage = $appPackages[0]
+$null = Assert-ClashSharpMsixThirdPartyNotices -LiteralPath $appPackage.FullName -ExpectedContract $thirdPartyNotices
 $dotNetRuntimeContract = Get-ClashSharpMsixDotNetRuntimeContract -LiteralPath $appPackage.FullName
 $appIdentity = Get-ClashSharpMsixIdentity -LiteralPath $appPackage.FullName
 if (-not $appIdentity.Publisher.Equals($manifestPublisher, [StringComparison]::Ordinal) -or
@@ -702,6 +711,15 @@ $certificatePayloadFile = Get-Item -LiteralPath $certificatePayloadPath -Force
 $provenance = [ordered]@{
     schemaVersion = 1
     dotNetRuntime = $dotNetRuntimeContract
+    thirdPartyNotices = [ordered]@{
+        path = 'THIRD-PARTY-NOTICES.zip'
+        msixPath = 'ThirdParty/THIRD-PARTY-NOTICES.zip'
+        length = $thirdPartyNotices.Length
+        sha256 = $thirdPartyNotices.Sha256
+        packageCount = $thirdPartyNotices.PackageCount
+        documentCount = $thirdPartyNotices.DocumentCount
+        geoDataUpstreamInputRevisionsRecorded = $thirdPartyNotices.GeoDataUpstreamInputRevisionsRecorded
+    }
     releaseInputs = [ordered]@{
         sha256 = (Get-FileHash -LiteralPath $releaseInputFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
         dotnetSdkVersion = $sdkVersion.Trim()
@@ -886,6 +904,12 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
         -Value "$installerSha256 *$(Split-Path -Leaf $installerExecutable)"
     Write-Host "Installer artifact SHA-256: $installerSha256"
 
+    $promotedNoticesPath = Join-Path $promotionStagingRoot 'THIRD-PARTY-NOTICES.zip'
+    Copy-Item -LiteralPath $thirdPartyNoticesPath -Destination $promotedNoticesPath
+    $promotedNotices = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $promotedNoticesPath
+    if ($promotedNotices.Sha256 -cne $thirdPartyNotices.Sha256) {
+        throw 'Promoted third-party notices differ from the verified MSIX input.'
+    }
     $promotionPayloadDir = Join-Path $promotionStagingRoot "payload"
     $null = Copy-ClashSharpVerifiedDirectory `
         -Source $payloadStagingDir `

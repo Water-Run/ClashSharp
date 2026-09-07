@@ -1,0 +1,423 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "1.0.0",
+  "documents": [
+    {
+      "file": "dotnet-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/dotnet/dotnet/b0f34d51fccc69fd334253924abd8d6853fad7aa/LICENSE.TXT",
+      "length": 1115,
+      "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
+    },
+    {
+      "file": "yamldotnet-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/aaubry/YamlDotNet/748334a8fa7c227740018b284b71ad95cc6b7fc7/LICENSE.txt",
+      "length": 1110,
+      "sha256": "daea8b7f1b2bab48ea12ad50b0ce91634669d99d7dd0cb64aed8dffeeef69ed3"
+    },
+    {
+      "file": "sqlitepclraw-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/ericsink/SQLitePCL.raw/f3f967adafad853375597a6387cacb7573c5b343/LICENSE.TXT",
+      "length": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "windows-sdk-license.rtf",
+      "sourceUrl": "https://download.microsoft.com/download/0/F/F/0FF2B061-47DD-4F55-89B6-FD1D8C44F14D/sdk_license.rtf",
+      "length": 246945,
+      "sha256": "dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62"
+    },
+    {
+      "file": "geodata-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/4178770badecb1b349fbcd62c737e0d7a2079729/LICENSE",
+      "length": 35149,
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "file": "geodata-readme.md",
+      "sourceUrl": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/4178770badecb1b349fbcd62c737e0d7a2079729/README.md",
+      "length": 11360,
+      "sha256": "f8331ea1270bab8df1be58c6bd36064eacb80b4c98d1a243266617d5b544dd4a"
+    },
+    {
+      "file": "geodata-generation.yml.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/4178770badecb1b349fbcd62c737e0d7a2079729/.github/workflows/run.yml",
+      "length": 22364,
+      "sha256": "37813dea8ae503e580582698fc3fe31ff40695882e9699b8b285b770c2a9dbe8"
+    }
+  ],
+  "packageLicenseSupplements": [
+    {
+      "id": "Microsoft.AspNetCore.App.Runtime.win-x64",
+      "version": "10.0.5",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Data.Sqlite.Core",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Data.Sqlite",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Abstractions",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Binder",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.CommandLine",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.EnvironmentVariables",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.FileExtensions",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Json",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.UserSecrets",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Diagnostics.Abstractions",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Diagnostics",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Abstractions",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Physical",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.FileSystemGlobbing",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Hosting.Abstractions",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Hosting.WindowsServices",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Hosting",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Abstractions",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Configuration",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Console",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Debug",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.EventLog",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.EventSource",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Options.ConfigurationExtensions",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Options",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Primitives",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.NET.ILLink.Tasks",
+      "version": "10.0.5",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.NETCore.App.Crossgen2.win-x64",
+      "version": "10.0.5",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.NETCore.App.Runtime.win-x64",
+      "version": "10.0.5",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Win32.SystemEvents",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Windows.SDK.BuildTools",
+      "version": "10.0.28000.1721",
+      "licenseType": "url",
+      "licenseValue": "https://aka.ms/WinSDKLicenseURL",
+      "document": "windows-sdk-license.rtf"
+    },
+    {
+      "id": "Microsoft.Windows.SDK.NET.Ref",
+      "version": "10.0.22000.57",
+      "licenseType": "url",
+      "licenseValue": "https://aka.ms/WinSDKLicenseURL",
+      "document": "windows-sdk-license.rtf"
+    },
+    {
+      "id": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
+      "version": "10.0.5",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "SQLitePCLRaw.bundle_e_sqlite3",
+      "version": "3.0.3",
+      "licenseType": "expression",
+      "licenseValue": "Apache-2.0",
+      "document": "sqlitepclraw-license.txt"
+    },
+    {
+      "id": "SQLitePCLRaw.config.e_sqlite3",
+      "version": "3.0.3",
+      "licenseType": "expression",
+      "licenseValue": "Apache-2.0",
+      "document": "sqlitepclraw-license.txt"
+    },
+    {
+      "id": "SQLitePCLRaw.core",
+      "version": "3.0.3",
+      "licenseType": "expression",
+      "licenseValue": "Apache-2.0",
+      "document": "sqlitepclraw-license.txt"
+    },
+    {
+      "id": "SQLitePCLRaw.provider.e_sqlite3",
+      "version": "3.0.3",
+      "licenseType": "expression",
+      "licenseValue": "Apache-2.0",
+      "document": "sqlitepclraw-license.txt"
+    },
+    {
+      "id": "System.Diagnostics.EventLog",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "System.Drawing.Common",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "System.IO.FileSystem.AccessControl",
+      "version": "5.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "System.Numerics.Tensors",
+      "version": "9.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "System.ServiceProcess.ServiceController",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "YamlDotNet",
+      "version": "18.1.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "yamldotnet-license.txt"
+    }
+  ],
+  "downloadDependencies": [
+    {
+      "id": "Microsoft.AspNetCore.App.Runtime.win-x64",
+      "version": "10.0.5",
+      "sha512": "0LJB/7Q1a2wKzEMXMhqU9y36ocq62NDRd+EmfA2zm8+hTE99fz8ew5AA9TInxGOoom0QOYqy5e4f8UW0txoGiw=="
+    },
+    {
+      "id": "Microsoft.NETCore.App.Crossgen2.win-x64",
+      "version": "10.0.5",
+      "sha512": "yUHwnJPp3FUx0nIRRgTPvooQLZ59uTSpk4uCfFwfziWiynUNj6phXArJ20RmINm0IkU3c0wvTJOZniptdDFeFg=="
+    },
+    {
+      "id": "Microsoft.NETCore.App.Runtime.win-x64",
+      "version": "10.0.5",
+      "sha512": "ry8l2wGKCI72avPu1COSFxpPUYaggizPiJgq1o3KYhcDxu+kHY2mUENMOkJmSEs30oSabTI7V8V7bmaFYTQqcQ=="
+    },
+    {
+      "id": "Microsoft.Windows.SDK.NET.Ref",
+      "version": "10.0.22000.57",
+      "sha512": "rIWQjfPwTww8IBzYhh4VQ5DZapBJ/buTaOmHL7i+EPLfIlRYj1u54nOV4yqiU0Jdq2xLMww00+DClJgms7IDWQ=="
+    },
+    {
+      "id": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
+      "version": "10.0.5",
+      "sha512": "V4oMcmoYea9I8TnMurNJuBTFpL1v9H/Qf2Utti7sN6CpoB5jQzJh9MDnOfDESsh3AT83c3NJK+WDaAAp6NBOuA=="
+    }
+  ],
+  "geoDataEvidence": {
+    "dataCommit": "8b2495481407ab931fbc201a245f1982b60b5a70",
+    "sourceCommit": "4178770badecb1b349fbcd62c737e0d7a2079729",
+    "documents": [
+      "geodata-license.txt",
+      "geodata-readme.md",
+      "geodata-generation.yml.txt"
+    ],
+    "upstreamInputRevisionsRecorded": false
+  }
+}
