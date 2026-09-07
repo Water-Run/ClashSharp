@@ -92,6 +92,26 @@ Windows 的旧服务步骤只接受 StartupBlocked。它重新核对同一候选
 
 该服务步骤尚未接入完整阶段执行器及专用认证入口。机器 ACL 迁移、association 切换、证书账本保留、双账户清理和确认界面继续实现，生产 mutation 门保持原有关闭状态。
 
+## M4p 机器共享目录权限迁移
+
+`WindowsOwnerTransferMachineAccess` 只接受 PreviousServiceRemoved。只读状态端口核对两份已记录 profile、固定根布局及旧服务缺席；持有的候选在修改前后复核。它不保存阶段、不修改 association、不创建缺失目录，也不申请全局机器权限或双 App 屏障；这些资源仍由后续专用执行器持续拥有。
+
+`WindowsOwnerTransferAccessTree` 先固定卷根和受信任祖先，再验证 Program Files/ClashSharp 与 ProgramData/ClashSharp 下的固定布局。Service 仅允许 current、staging、previous 三个载荷目录，服务数据仅允许 association.json 和规范命名的受保护服务私有目录。整个遍历最多 256 个对象、产品根下深度 12；普通文件必须没有重解析点且只有一个硬链接，拒绝设备名、替代数据流、歧义路径、未知根成员和额外权限。全部验证完成后才写 DACL。
+
+共享根只接受 Administrators owner、受保护 DACL、SYSTEM/Administrators FullControl 及准确旧/新 SID 的 ReadAndExecute/Synchronize 三条规则。载荷后代与 association 必须是对应的继承规则。Installer 保持旧 SID 三条规则；InstallerAuthority 保持 Administrators owner 的私有两条规则；服务私有目录保持 LocalSystem owner 的私有两条规则。私有边界不递归枚举或修改。
+
+Installer 边界仅额外固定已知的 v2 目录和普通日志文件，按旧权限只读检查准确 Prepared 字节。不能在这一阶段复用普通旧账户读取器：公共 ClashSharp 根已经可能换成新权限，而原读取器要求整个旧账户目录链始终一致。专用的只读日志句柄跨越这次权限变化，拒绝共享写入和删除；普通读取器的要求没有被放宽。
+
+原生适配器只申请读权限及必要的 WRITE_DAC，不申请删除、写文件内容或修改 owner 权限。通过 [SetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setsecurityinfo) 修改已固定对象的 DACL。由于 Windows 会传播可继承规则，实现预先验证整个传播范围，按父项先于子项推进，并逐项复核；若系统已完成子项继承则不再写入。取消或 I/O 失败保留已完成的 ACL 和原持久阶段，以便准确重放。
+
+新增 62 项模拟边界测试覆盖阶段与候选拒绝、双方 profile、服务重新出现、恢复日志变更、整树预检、私有边界、限制、取消/故障恢复、诊断脱敏及等待中的候选复核资源生命周期。Windows 安全子集 536 项通过，完整解决方案构建零警告、零错误。
+
+真实隔离 Windows 的种子、LocalSystem 私有目录、部分执行和新进程恢复四个进程通过 65 项断言。第一次权限执行在两处共享根修改后中断，恢复进程完成另两处；Windows 自动转移全部已检查的继承后代，再次执行零写入。association、普通 Prepared 及私有文件字节均保留；Installer/v2、InstallerAuthority、服务私有边界的原始安全描述符摘要均未变化。句柄阻止目录、association 和日志改名，也阻止日志/association 写入，所有进程结束时句柄计数为零。实际被测 Windows 程序集 SHA-256 为 `714e113a7869d9e2cef1dda1a75ad15479474c3a894f2de0f467028065881ca4`，来自直接 x64 项目构建，收据保存了对应 Core 摘要。
+
+额外尝试的 MAXIMUM_ALLOWED、同卷移动及独占子句柄夹具均未形成期望的旧继承子项状态，失败记录原样保留，不计入上述通过项。前两种得到受保护的旧 ACL，后一种仍自动更新继承 ACL；生产实现不使用这些注入方法。逐子项显式补写的恢复分支目前只有模拟测试，不能将这些夹具当作该分支的原生证明。没有改动本机代理，也没有在本阶段启动真实服务、内核或修改证书。
+
+完整阶段执行器、后续 association/证书/Installer 状态迁移、双账户清理与确认界面仍需继续。正式执行门维持关闭。
+
 ## 持久迁移的接入要求
 
 换绑必须是独立用例。后续接入不能再次让普通写入方法凭布尔值覆盖旧证据：

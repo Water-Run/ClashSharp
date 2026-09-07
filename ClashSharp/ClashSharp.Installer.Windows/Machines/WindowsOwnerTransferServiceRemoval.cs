@@ -1,29 +1,17 @@
 using ClashSharp.Installer.Contracts;
-using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
-internal interface IWindowsOwnerTransferServiceBackend
+internal interface IWindowsOwnerTransferServiceBackend : IWindowsOwnerTransferStateBackend
 {
-    string ResolveTargetProfile(string targetSid, CancellationToken cancellationToken);
-
-    WindowsMachineDeploymentPlan CreatePlan(
-        InstallerRequest request,
-        InstallerReleaseManifest manifest,
-        InstallerMachineAssociation association,
-        string targetProfileRoot,
-        bool removalPlan);
-
     IWindowsMachineRootGuard CreateRootGuard(WindowsMachineDeploymentPlan plan, bool createMissing);
 
     IWindowsMachineAssociationStore CreateAssociationStore(WindowsMachineDeploymentPlan plan, IWindowsMachineRootGuard rootGuard);
 
     Task StopDeleteServiceAsync(WindowsMachineDeploymentPlan plan, CancellationToken cancellationToken);
-
-    void VerifyServiceAbsent(CancellationToken cancellationToken);
 }
 
 /// <summary>
