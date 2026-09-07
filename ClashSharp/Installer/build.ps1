@@ -389,13 +389,6 @@ if (-not $mihomoNotice.Contains(
     throw "Mihomo notice does not match the pinned release manifest."
 }
 
-$thirdPartyModule = Assert-ClashSharpOrdinaryPath -LiteralPath (Join-Path $installerRoot 'ThirdPartyNotices.psm1') -RequireFile
-Import-Module -Name $thirdPartyModule -Force
-$thirdPartyNoticesPath = Join-Path $packagingRunRoot 'THIRD-PARTY-NOTICES.zip'
-$thirdPartyNotices = New-ClashSharpThirdPartyNotices -RepositoryRoot $repoRoot -OutputPath $thirdPartyNoticesPath
-$null = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $thirdPartyNoticesPath
-Write-Host "Third-party notices: $($thirdPartyNotices.PackageCount) NuGet inputs, $($thirdPartyNotices.DocumentCount) original documents."
-
 New-Item -ItemType Directory -Force -Path $signingDir | Out-Null
 $certificatePfxExists = Test-Path -LiteralPath $certificatePfxPath -PathType Leaf
 $certificateCerExists = Test-Path -LiteralPath $certificateCerPath -PathType Leaf
@@ -491,6 +484,12 @@ try {
 $null = Assert-ClashSharpOrdinaryPath -LiteralPath $packagingRunRoot -AllowMissing
 $null = New-Item -ItemType Directory -Path $packagingRunRoot
 $null = Assert-ClashSharpOrdinaryPath -LiteralPath $packagingRunRoot -RequireDirectory
+$thirdPartyModule = Assert-ClashSharpOrdinaryPath -LiteralPath (Join-Path $installerRoot 'ThirdPartyNotices.psm1') -RequireFile
+Import-Module -Name $thirdPartyModule -Force
+$thirdPartyNoticesPath = Join-Path $packagingRunRoot 'THIRD-PARTY-NOTICES.zip'
+$thirdPartyNotices = New-ClashSharpThirdPartyNotices -RepositoryRoot $repoRoot -OutputPath $thirdPartyNoticesPath
+$null = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $thirdPartyNoticesPath
+Write-Host "Third-party notices: $($thirdPartyNotices.PackageCount) NuGet inputs, $($thirdPartyNotices.DocumentCount) original documents."
 Set-Location $installerRoot
 $null = New-Item -ItemType Directory -Path $componentStagingRoot
 dotnet publish $serviceProject `
