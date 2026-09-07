@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Security.Cryptography;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
+using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Transactions;
 using ClashSharp.Windows.FileSecurity;
 
@@ -12,7 +13,7 @@ namespace ClashSharp.Installer.Windows.Machines;
 /// Protected Installer and service-private directories terminate enumeration and retain their ACLs.
 /// Parents precede descendants so partial inheritance propagation can be completed on replay.
 /// </summary>
-internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwnerTransferAssociationBoundary
+internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwnerTransferCertificateBoundary
 {
     private const int MaximumEntries = 256;
     private const int MaximumDepth = 12;
@@ -22,12 +23,14 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
     private readonly string _previousSid;
     private readonly string _nextSid;
     private readonly string? _associationTemporaryPath;
+    private readonly Purpose _purpose;
     private readonly List<Node> _nodes = [];
     private readonly HashSet<string> _paths = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     private WindowsOwnerTransferAccessTree(
-        IWindowsOwnerTransferAccessNative native, string previousSid, string nextSid, string? associationTemporaryPath = null)
+        IWindowsOwnerTransferAccessNative native, string previousSid, string nextSid,
+        Purpose purpose = Purpose.MachineAccess, string? associationTemporaryPath = null)
     {
         ArgumentNullException.ThrowIfNull(native);
         WindowsOwnerTransferAccessPolicy.ValidateParticipants(previousSid, nextSid);
@@ -35,6 +38,7 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
         _previousSid = previousSid;
         _nextSid = nextSid;
         _associationTemporaryPath = associationTemporaryPath;
+        _purpose = purpose;
     }
 
     internal static WindowsOwnerTransferAccessTree Acquire(
@@ -50,7 +54,18 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
     {
         ArgumentNullException.ThrowIfNull(plan);
         plan.Validate();
-        var tree = new WindowsOwnerTransferAccessTree(native, plan.Previous.OwnerSid, plan.Next.OwnerSid, plan.TemporaryPath);
+        var tree = new WindowsOwnerTransferAccessTree(native, plan.Previous.OwnerSid, plan.Next.OwnerSid,
+            Purpose.Association, plan.TemporaryPath);
+        return AcquireCore(plan.Roots, tree, cancellationToken);
+    }
+
+    internal static IWindowsOwnerTransferCertificateBoundary AcquireForCertificateTransfer(
+        WindowsOwnerTransferCertificatePlan plan, IWindowsOwnerTransferAccessNative native, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        plan.Validate();
+        var tree = new WindowsOwnerTransferAccessTree(native, plan.Journal.PreviousOwner.Association.OwnerSid,
+            plan.Journal.NextOwner.Association.OwnerSid, Purpose.Certificates);
         return AcquireCore(plan.Roots, tree, cancellationToken);
     }
 
@@ -65,7 +80,7 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
             tree.AcquireAnchors(roots.CommonApplicationDataRoot, cancellationToken);
             tree.AcquireNode(new Spec(Path.Combine(roots.ProgramFilesRoot, "ClashSharp"), Role.ProgramFilesProduct), 0, cancellationToken);
             tree.AcquireNode(new Spec(Path.Combine(roots.CommonApplicationDataRoot, "ClashSharp"), Role.ProgramDataProduct), 0, cancellationToken);
-            tree.Reverify(requireTransferred: tree._associationTemporaryPath is not null, cancellationToken);
+            tree.Reverify(requireTransferred: tree._purpose != Purpose.MachineAccess, cancellationToken);
             return tree;
         }
         catch
@@ -80,6 +95,9 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
 
     void IWindowsOwnerTransferAssociationBoundary.VerifyContinuation(InstallerTransactionJournal expected) =>
         VerifyContinuation(expected);
+
+    void IWindowsOwnerTransferCertificateBoundary.VerifyAssociation(InstallerMachineAssociation expected) =>
+        VerifyAssociation(expected);
 
     internal void VerifyAssociation(InstallerMachineAssociation expected)
     {
@@ -122,7 +140,7 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
     internal void ApplyAndVerify(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_associationTemporaryPath is not null)
+        if (_purpose != Purpose.MachineAccess)
         {
             throw new InstallerProtocolException("installer.owner_transfer.access_read_only");
         }
@@ -200,7 +218,7 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
         {
             throw new InstallerProtocolException("installer.owner_transfer.access_tree_limit");
         }
-        IWindowsOwnerTransferAccessLease lease = _native.Open(spec.Path, spec.Directory, spec.CanChange && _associationTemporaryPath is null);
+        IWindowsOwnerTransferAccessLease lease = _native.Open(spec.Path, spec.Directory, spec.CanChange && _purpose == Purpose.MachineAccess);
         WindowsDirectorySecuritySnapshot original;
         try
         {
@@ -214,7 +232,7 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
         var node = new Node(spec, lease, original);
         // After the first guarded observation, the tree owns every remaining failure path.
         _nodes.Add(node);
-        Validate(node, requireTransferred: _associationTemporaryPath is not null);
+        Validate(node, requireTransferred: _purpose != Purpose.MachineAccess);
         // The protected Installer subtree is opaque except for this fixed, read-only barrier.
         // A normal reader requires the old product-root ACL and cannot span its transfer.
         if (spec.Role is Role.InstallerBoundary or Role.ContinuationDirectory)
@@ -223,6 +241,13 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
             AcquireNode(new Spec(Path.Combine(spec.Path, installer
                 ? InstallerStateLayout.VersionDirectoryName : InstallerStateLayout.JournalFileName),
                 installer ? Role.ContinuationDirectory : Role.ContinuationFile), checked(depth + 1), cancellationToken);
+        }
+        if (_purpose == Purpose.Certificates && spec.Role == Role.AuthorityBoundary)
+        {
+            // The caller already persisted its private journal here. Read-only acquisition must
+            // never create a missing private state root or enumerate unrelated account archives.
+            AcquireNode(new Spec(Path.Combine(spec.Path, InstallerOwnerTransferStateLayout.VersionDirectoryName),
+                Role.CertificateArchiveDirectory), checked(depth + 1), cancellationToken);
         }
         if (!spec.Enumerate)
         {
@@ -285,7 +310,8 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
             Role.Anchor => WindowsDirectoryAccessPolicy.IsTrustedRenameAnchor(security),
             Role.InstallerBoundary or Role.ContinuationDirectory or Role.ContinuationFile => WindowsOwnerTransferAccessPolicy.HasOwnerAccess(
                 security, _previousSid, node.Spec.Directory, node.Spec.Inherited),
-            Role.AuthorityBoundary => WindowsOwnerTransferAccessPolicy.HasPrivateDirectoryAccess(security, service: false),
+            Role.AuthorityBoundary or Role.CertificateArchiveDirectory =>
+                WindowsOwnerTransferAccessPolicy.HasPrivateDirectoryAccess(security, service: false),
             Role.ServiceBoundary => WindowsOwnerTransferAccessPolicy.HasPrivateDirectoryAccess(security, service: true),
             _ => WindowsOwnerTransferAccessPolicy.HasOwnerAccess(
                     security, _nextSid, node.Spec.Directory, node.Spec.Inherited)
@@ -375,14 +401,16 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
     {
         Anchor, ProgramFilesProduct, ProgramDataProduct, MachineRoot, ServiceDataRoot,
         PayloadDirectory, PayloadFile, Association, InstallerBoundary, AuthorityBoundary, ServiceBoundary,
-        ContinuationDirectory, ContinuationFile,
+        ContinuationDirectory, ContinuationFile, CertificateArchiveDirectory,
     }
+
+    private enum Purpose { MachineAccess, Association, Certificates }
 
     private sealed record Spec(string Path, Role Role)
     {
         internal bool Directory => Role is not (Role.PayloadFile or Role.Association or Role.ContinuationFile);
         internal bool PreservedBoundary => Role is Role.InstallerBoundary or Role.AuthorityBoundary or Role.ServiceBoundary
-            or Role.ContinuationDirectory or Role.ContinuationFile;
+            or Role.ContinuationDirectory or Role.ContinuationFile or Role.CertificateArchiveDirectory;
         internal bool CanChange => Role != Role.Anchor && !PreservedBoundary;
         internal bool Inherited => Role is Role.PayloadDirectory or Role.PayloadFile or Role.Association or Role.ContinuationFile;
         internal bool Enumerate => Directory && CanChange;
