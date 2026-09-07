@@ -164,7 +164,23 @@ Windows 的 `WindowsOwnerTransferCertificates` 复核同一候选、双方 profi
 - 现有 certificate ownership store 只保存一个目标 SID 的账本。旧账本不能改写 TargetSid 或在有引用时删除；需要保留原证书归属证据，并定义旧账户包的保留/移除及后续独立卸载路径。目录 ACL 转移本身不能解决这项多账户状态问题。
 - 确认界面应明确说明旧账户的服务接管将停止，以及旧包、配置和证书如何处理。只有这条独立确认路径可以申请迁移权限；普通 Repair、静默参数和恢复一个不匹配的候选不能隐式发起换绑。
 
-这些要求尚未全部实现。下一步连接专用阶段执行器、证书账本保存和确认界面。当前生产 mutation 门继续关闭，跨账户请求仍拒绝；协议、存储及普通入口检查的测试不是换绑功能完成的证明。
+截至 M4s，证书账本迁移、六阶段 Windows 执行器和最终只读观察已实现。尚需专用认证确认入口、连续持有全局与双 App 屏障，以及向普通安装/修复事务的交接。当前生产 mutation 门继续关闭，跨账户请求仍拒绝；协议、存储及阶段执行器测试不是完整换绑功能完成的证明。
+
+## M4s 固定状态权限迁移与阶段组合
+
+Prepared 阶段在旧账户权限下枚举整个固定 Installer 子树，只接受 v2、可选的本事务普通 Prepared 和可选的旧活动证书文件。普通记录缺失时通过现有受保护存储写入；已有准确记录直接重放，其他事务不覆盖。记录允许在写入期间出现，完成前必须通过单链接、ACL、原生只读句柄及准确内容复核。旧版 transaction.json 和任何未知残留在服务修改之前即被拒绝。
+
+CertificateStateTransferred 阶段仅将 Installer、v2、普通 Prepared 和可选活动证书文件转移给新 SID。共有机器目录必须已经全部转移，私有目录与文件字节不变。目录树先完整验证再执行 DACL 写入；允许这四个位置具有准确旧/新权限组合，禁止对其他节点申请 WRITE_DAC。父目录自动继承后，已经满足目标权限的子节点不再写入；部分成功后仍保留原阶段供重放。
+
+证书文件读取独立于写入接口：Prepared 和 AssociationTransferred 读取旧活动 ACL，CertificateStateTransferred 允许准确旧/新 ACL，InstallerAccessTransferred 与 Verified 只接受新 ACL。实际文件写操作仍仅允许 AssociationTransferred。最终状态必须为新账本活动、旧账本私有归档、目标重复归档不存在。
+
+WindowsOwnerTransferCompletion 只读取，核对目标机器权限、关联、普通 Prepared、证书归属和服务不存在。候选包异步复核后，启动屏障、Installer 权限和完成观察都会再次核对双方 profile 与固定根，不能用过期账户路径确认成功。
+
+WindowsOwnerTransferPhaseExecutor 将六个步骤交给既有 Core 协调器顺序执行，拒绝跳阶段。协调器持续使用同一私有快照与普通 continuation，准确记录每个已完成边界，Verified 复核后才清除私有记录。执行器依赖由专用已认证会话持有的机器排他、双 App 生命周期屏障和候选包；它自身不会获取这些权限，也不会让普通恢复入口获得跨账户权限。
+
+144 项新增 Windows 测试包含全部 16 种部分 Installer ACL、四种可选账本组合、完整六阶段与八个私有持久边界中断恢复、异步工作排空和晚到状态变化。本机安全测试 3981 项通过，完整构建及格式验证通过。远端 14 个场景在两个进程中通过 499 项原生断言，12 次 Installer DACL 写入；真实普通 store 可在新目标 guard 下读取同一 Prepared，原记录和其他 ACL 保持，全部句柄释放。
+
+最终原生程序集摘要、测试清单和原始收据位置记录在 artifacts/verification/installer-access-validation-m4s.json。此探针使用构造状态和新进程恢复，没有运行完整签名安装器、认证 IPC、双 App 屏障、GUI 或实际断电测试；本机代理及远端服务、证书存储均未修改。
 
 ## 验证
 

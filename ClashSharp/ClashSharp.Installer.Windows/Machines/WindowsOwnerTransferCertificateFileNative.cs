@@ -215,8 +215,7 @@ internal sealed class WindowsOwnerTransferCertificateFileNative : IWindowsOwnerT
         {
             WindowsInstallerPrivateStateSecurity.Validate(security, directory: false);
         }
-        else if (!WindowsOwnerTransferAccessPolicy.HasOwnerAccess(
-            security, plan.Journal.PreviousOwner.Association.OwnerSid, directory: false, inherited: true))
+        else if (!plan.HasActiveFileAccess(security))
         {
             throw new InstallerProtocolException("installer.owner_transfer.certificate_file_invalid");
         }
