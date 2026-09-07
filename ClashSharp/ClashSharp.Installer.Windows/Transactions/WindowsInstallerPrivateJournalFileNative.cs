@@ -2,8 +2,10 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
+using ClashSharp.Installer.Certificates;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Ownership;
+using ClashSharp.Installer.Windows.Certificates;
 using ClashSharp.Installer.Windows.Files;
 using ClashSharp.Windows.FileSecurity;
 using Microsoft.Win32.SafeHandles;
@@ -25,8 +27,9 @@ internal interface IWindowsInstallerPrivateJournalPresenceNative
 }
 
 /// <summary>
-/// Accesses only the fixed private journal leaf under a caller-pinned directory chain. Every file
-/// handle is checked for ordinary kind, a single hard link and an exact private security descriptor.
+/// Accesses one factory-bound private leaf under a caller-pinned directory chain. The ordinary
+/// instance still accepts only the transfer journal; a separate account-bound instance accepts only
+/// that SID's certificate archive. Every handle requires a single ordinary file and exact private ACL.
 /// </summary>
 internal sealed class WindowsInstallerPrivateJournalFileNative :
     IWindowsInstallerPrivateJournalFileNative,
@@ -34,12 +37,24 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
 {
     private const uint MoveFileReplaceExisting = 1;
     private const uint MoveFileWriteThrough = 8;
+    private readonly string _fileName;
+    private readonly int _maximumDocumentBytes;
+    private readonly string _diagnosticPrefix;
 
-    internal static WindowsInstallerPrivateJournalFileNative Instance { get; } = new();
+    internal static WindowsInstallerPrivateJournalFileNative Instance { get; } = new(
+        InstallerOwnerTransferStateLayout.JournalFileName, InstallerOwnerTransferCodec.MaximumDocumentBytes,
+        "installer.owner_transfer");
 
-    private WindowsInstallerPrivateJournalFileNative()
+    private WindowsInstallerPrivateJournalFileNative(string fileName, int maximumDocumentBytes, string diagnosticPrefix)
     {
+        _fileName = fileName;
+        _maximumDocumentBytes = maximumDocumentBytes;
+        _diagnosticPrefix = diagnosticPrefix;
     }
+
+    internal static WindowsInstallerPrivateJournalFileNative CreateForCertificateArchive(string authenticatedTargetSid) =>
+        new(WindowsInstallerCertificateArchiveLayout.GetFileName(authenticatedTargetSid),
+            InstallerCertificateOwnershipCodec.MaximumDocumentBytes, "installer.certificate_archive");
 
     public bool IsPresent(string path, CancellationToken cancellationToken)
     {
@@ -61,9 +76,9 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
         }
 
         long length = RandomAccess.GetLength(file);
-        if (length is < 1 or > InstallerOwnerTransferCodec.MaximumDocumentBytes)
+        if (length < 1 || length > _maximumDocumentBytes)
         {
-            throw new InstallerProtocolException("installer.owner_transfer.document_size_invalid");
+            throw Failure("document_size_invalid");
         }
 
         byte[] bytes = new byte[checked((int)length)];
@@ -76,7 +91,7 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
                 int count = await RandomAccess.ReadAsync(file, bytes.AsMemory(offset), offset, cancellationToken).ConfigureAwait(false);
                 if (count == 0)
                 {
-                    throw new InstallerProtocolException("installer.owner_transfer.document_changed");
+                    throw Failure("document_changed");
                 }
 
                 offset += count;
@@ -84,7 +99,7 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
 
             if (RandomAccess.GetLength(file) != length)
             {
-                throw new InstallerProtocolException("installer.owner_transfer.document_changed");
+                throw Failure("document_changed");
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -103,9 +118,9 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
     public async Task WriteAtomicallyAsync(string path, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
     {
         ValidateJournalPath(path);
-        if (bytes.IsEmpty || bytes.Length > InstallerOwnerTransferCodec.MaximumDocumentBytes)
+        if (bytes.IsEmpty || bytes.Length > _maximumDocumentBytes)
         {
-            throw new InstallerProtocolException("installer.owner_transfer.document_size_invalid");
+            throw Failure("document_size_invalid");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -114,7 +129,7 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
             // Reject an unsafe existing destination before creating any private temporary bytes.
         }
 
-        string temporary = Path.Combine(Path.GetDirectoryName(path)!, $".{InstallerOwnerTransferStateLayout.JournalFileName}.{Guid.NewGuid():N}.tmp");
+        string temporary = Path.Combine(Path.GetDirectoryName(path)!, $".{_fileName}.{Guid.NewGuid():N}.tmp");
         bool temporaryCreated = false;
         try
         {
@@ -142,7 +157,7 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
 
             if (!MoveFileEx(temporary, path, MoveFileReplaceExisting | MoveFileWriteThrough))
             {
-                throw new InstallerStateUncertainException("installer.owner_transfer.atomic_replace_uncertain");
+                throw new InstallerStateUncertainException($"{_diagnosticPrefix}.atomic_replace_uncertain");
             }
 
             temporaryCreated = false;
@@ -173,7 +188,7 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
         return Task.CompletedTask;
     }
 
-    private static SafeFileHandle? OpenPrivateIfPresent(string path)
+    private SafeFileHandle? OpenPrivateIfPresent(string path)
     {
         SafeFileHandle? file = null;
         try
@@ -190,7 +205,7 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
         catch (Exception exception) when (exception is Win32Exception or IOException or UnauthorizedAccessException)
         {
             file?.Dispose();
-            throw new InstallerProtocolException("installer.owner_transfer.file_open_failed");
+            throw Failure("file_open_failed");
         }
         catch
         {
@@ -199,29 +214,29 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
         }
     }
 
-    private static void ValidatePrivateFile(SafeFileHandle file)
+    private void ValidatePrivateFile(SafeFileHandle file)
     {
         _ = WindowsFileSystemNative.GetOrdinaryFileIdentity(file);
         if (WindowsFileSystemNative.GetLinkCount(file) != 1)
         {
-            throw new InstallerProtocolException("installer.owner_transfer.file_links_invalid");
+            throw Failure("file_links_invalid");
         }
 
         WindowsInstallerPrivateStateSecurity.Validate(
             WindowsDirectoryReadLease.ReadSecuritySnapshot(file), directory: false);
     }
 
-    private static void ValidateJournalPath(string path)
+    private void ValidateJournalPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)
             || !string.Equals(path, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(Path.GetFileName(path), InstallerOwnerTransferStateLayout.JournalFileName, StringComparison.Ordinal))
+            || !string.Equals(Path.GetFileName(path), _fileName, StringComparison.Ordinal))
         {
-            throw new InstallerProtocolException("installer.owner_transfer.journal_path_invalid");
+            throw Failure("journal_path_invalid");
         }
     }
 
-    private static void TryDeleteOwnedTemporary(string path)
+    private void TryDeleteOwnedTemporary(string path)
     {
         try
         {
@@ -237,6 +252,8 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
             // private temporary is never trusted as journal state or removed by a subsequent writer.
         }
     }
+
+    private InstallerProtocolException Failure(string suffix) => new($"{_diagnosticPrefix}.{suffix}");
 
     [DllImport("kernel32.dll", EntryPoint = "MoveFileExW", CharSet = CharSet.Unicode, SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

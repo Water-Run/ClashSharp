@@ -1,8 +1,7 @@
-using System.Security.Cryptography;
-using System.Text;
 using ClashSharp.Installer.Certificates;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Ownership;
+using ClashSharp.Installer.Windows.Certificates;
 using ClashSharp.Windows.FileSecurity;
 
 namespace ClashSharp.Installer.Windows.Machines;
@@ -67,7 +66,7 @@ internal sealed record WindowsOwnerTransferCertificatePlan(
     public override string ToString() => "WindowsOwnerTransferCertificatePlan { Private certificate files }";
 
     private string GetArchivePath(string sid) => Path.Combine(PrivateRoot,
-        $"certificate-owner-{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sid)))}.json");
+        WindowsInstallerCertificateArchiveLayout.GetFileName(sid));
 }
 
 /// <summary>Requires pinned active/private parents and continuously held exclusive helper authority.</summary>

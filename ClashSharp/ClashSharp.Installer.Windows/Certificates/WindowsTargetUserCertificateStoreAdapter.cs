@@ -256,41 +256,9 @@ internal sealed class WindowsTargetUserCertificateStoreAdapter
     private static InstallerCertificatePresence InspectStore(
         IWindowsTargetUserCertificateStore store,
         VerifiedInstallerRelease release,
-        CancellationToken cancellationToken)
-    {
-        bool exact = false;
-        bool conflict = false;
-        foreach (WindowsCertificateIdentity identity in
-                 store.EnumerateCertificateIdentities(cancellationToken))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!string.Equals(
-                    identity.Thumbprint,
-                    release.PackageCertificateThumbprint,
-                    StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (string.Equals(
-                    identity.DerSha256,
-                    release.CertificateSha256,
-                    StringComparison.Ordinal))
-            {
-                exact = true;
-            }
-            else
-            {
-                conflict = true;
-            }
-        }
-
-        return conflict
-            ? InstallerCertificatePresence.IdentityConflict
-            : exact
-                ? InstallerCertificatePresence.ExactMatch
-                : InstallerCertificatePresence.Missing;
-    }
+        CancellationToken cancellationToken) =>
+        WindowsCertificateIdentity.InspectStore(store, release.PackageCertificateThumbprint,
+            release.CertificateSha256, cancellationToken);
 
     private static void ValidateExactCertificate(
         X509Certificate2 certificate,
@@ -327,6 +295,32 @@ internal readonly record struct WindowsCertificateIdentity(
     string Thumbprint,
     string DerSha256)
 {
+    internal static InstallerCertificatePresence InspectStore(IWindowsTargetUserCertificateStore store,
+        string thumbprint, string derSha256, CancellationToken cancellationToken)
+    {
+        bool exact = false;
+        bool conflict = false;
+        foreach (WindowsCertificateIdentity identity in store.EnumerateCertificateIdentities(cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (identity.Thumbprint != thumbprint)
+            {
+                continue;
+            }
+            if (identity.DerSha256 == derSha256)
+            {
+                exact = true;
+            }
+            else
+            {
+                conflict = true;
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return conflict ? InstallerCertificatePresence.IdentityConflict
+            : exact ? InstallerCertificatePresence.ExactMatch : InstallerCertificatePresence.Missing;
+    }
+
     internal static WindowsCertificateIdentity FromEncoded(ReadOnlySpan<byte> encoded)
     {
         using X509Certificate2 certificate = X509CertificateLoader.LoadCertificate(encoded);
