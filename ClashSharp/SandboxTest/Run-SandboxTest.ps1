@@ -1,288 +1,120 @@
+#Requires -Version 7.4
+<#
+.SYNOPSIS
+    Runs bound offline package smoke tests in owned Windows Sandbox sessions.
+.DESCRIPTION
+    Requires the Sandbox CLI. Copies only an explicit verified payload, maps inputs read-only,
+    accepts complete candidate-bound reports, and always stops the exact newly reserved guest ID.
+    No package, certificate, service, or proxy mutations run in the host operating system.
+.PARAMETER Launch
+    Starts the prepared guest and waits for terminal evidence; omitted means preparation only.
+.PARAMETER Scenario
+    Comma-separated implemented scenarios. The unfinished full matrix is deliberately rejected.
+.PARAMETER PayloadPath
+    Exact generated payload directory containing payload-provenance.json.
+.PARAMETER TimeoutSeconds
+    Maximum guest execution time, excluding bounded CLI startup and cleanup.
+.PARAMETER AllowSelfSignedCandidate
+    Allows the selected development signer without adding host trust. Guest AppX verifies deployment.
+#>
 [CmdletBinding()]
-param(
-    [switch]$Launch,
-    [string]$Configuration = "Debug",
-    [string]$Scenario = "install-only",
-    [string]$PayloadPath,
-    [int]$TimeoutSeconds = 900
-)
-
+param([switch]$Launch, [string]$Scenario = 'install-only',
+    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$PayloadPath,
+    [ValidateRange(30, 1800)][int]$TimeoutSeconds = 900, [switch]$AllowSelfSignedCandidate)
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
-$scriptRoot = Split-Path -Parent $PSCommandPath
-$repoRoot = Resolve-Path (Join-Path $scriptRoot "..\..")
-$sandboxScript = Join-Path $scriptRoot "scripts\Run-InSandbox.ps1"
-$sandboxReportContract = Join-Path $scriptRoot "SandboxReportContract.psm1"
-$sandboxRoot = Join-Path $scriptRoot ".sandbox"
-$runId = "{0}-{1}" -f `
-    (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ"), `
-    [Guid]::NewGuid().ToString("N")
-
-Import-Module -Name $sandboxReportContract -Force -ErrorAction Stop
-
-<#
-.SYNOPSIS
-Expands and validates the requested Windows Sandbox scenario selection.
-.DESCRIPTION
-Maps an empty selection to install-only, expands all to the default matrix, and rejects unknown
-scenario names before any sandbox files are created.
-.PARAMETER Selection
-Comma-separated scenario names or the all keyword.
-#>
-function Resolve-ScenarioSelection {
-    param([string]$Selection)
-
-    $defaultScenarios = @(
-        "install-only",
-        "launch-no-proxy",
-        "startup-with-proxy-config",
-        "cleanup-uninstall"
-    )
-    $allScenarios = $defaultScenarios + @("real-proxy-optional")
-
-    if ([string]::IsNullOrWhiteSpace($Selection)) {
-        return @("install-only")
+$ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'SandboxHost.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SandboxInputContract.psm1')
+Import-Module (Join-Path $PSScriptRoot 'SandboxReportContract.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..\Installer\PackagingContract.psm1')
+$scenarios = @($Scenario.Split(',') | ForEach-Object { $_.Trim() })
+if ($scenarios.Count -eq 0 -or @($scenarios | Sort-Object -Unique).Count -ne $scenarios.Count) {
+    throw 'sandbox.scenarios.invalid'
+}
+foreach ($name in $scenarios) {
+    if ($name -cnotin @('install-only', 'launch-no-proxy')) {
+        throw 'Only install-only and launch-no-proxy are implemented. The full installer/recovery matrix has not passed.'
     }
-
-    if ($Selection.Trim().Equals("all", [System.StringComparison]::OrdinalIgnoreCase)) {
-        return $defaultScenarios
-    }
-
-    $selected = $Selection.Split(",") |
-        ForEach-Object { $_.Trim() } |
-        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-
-    foreach ($name in $selected) {
-        if ($allScenarios -notcontains $name) {
-            throw "Unknown SandboxTest scenario '$name'. Valid scenarios: $($allScenarios -join ', '), all."
+}
+$mutex = [Threading.Mutex]::new($false, 'Local\ClashSharp.SandboxTest.Runner')
+$acquired = $false
+try {
+    try { $acquired = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $acquired = $true }
+    if (-not $acquired) { throw 'Another ClashSharp Sandbox runner is active.' }
+    $cli = $null
+    if ($Launch) { $cli = (Get-Command wsb.exe -CommandType Application -ErrorAction Stop).Source }
+    foreach ($name in $scenarios) {
+        $plan = New-SandboxCandidatePlan -PayloadPath $PayloadPath -Scenario $name -AllowSelfSignedCandidate:$AllowSelfSignedCandidate
+        $runPath = Join-Path $PSScriptRoot ('.sandbox\runs\' + $plan.runId)
+        $null = Assert-ClashSharpOrdinaryPath $runPath -AllowMissing
+        if (Test-Path -LiteralPath $runPath) { throw 'sandbox.run.exists' }
+        $inputPath = Join-Path $runPath 'inputs'
+        $outputPath = Join-Path $runPath 'reports'
+        $null = [IO.Directory]::CreateDirectory($inputPath)
+        $null = [IO.Directory]::CreateDirectory($outputPath)
+        foreach ($source in @('scripts\Run-InSandbox.ps1', 'SandboxInputContract.psm1')) {
+            $scriptSource = Assert-ClashSharpOrdinaryPath (Join-Path $PSScriptRoot $source) -RequireFile
+            Copy-Item -LiteralPath $scriptSource -Destination (Join-Path $inputPath ([IO.Path]::GetFileName($source)))
         }
-    }
-
-    return @($selected)
-}
-
-<#
-.SYNOPSIS
-Finds the first candidate tree containing both a ClashSharp package and certificate.
-.DESCRIPTION
-Prefers an explicit input and then checks fixed generated locations, returning only a resolved
-directory that contains a matching MSIX or bundle and a certificate.
-.PARAMETER ExplicitPayloadPath
-Optional caller-selected payload root to inspect before the fixed candidates.
-#>
-function Resolve-PayloadSource {
-    param([string]$ExplicitPayloadPath)
-
-    $candidates = @()
-    if (-not [string]::IsNullOrWhiteSpace($ExplicitPayloadPath)) {
-        $candidates += $ExplicitPayloadPath
-    }
-
-    $candidates += @(
-        (Join-Path $repoRoot.Path "artifacts\installer\release\payload"),
-        (Join-Path $repoRoot.Path "ClashSharp\Installer\payload"),
-        (Join-Path $repoRoot.Path "artifacts")
-    )
-
-    foreach ($candidate in $candidates) {
-        if (-not (Test-Path $candidate)) {
-            continue
+        $payloadTarget = Join-Path $inputPath 'payload'
+        foreach ($file in $plan.candidate.files) {
+            $source = Assert-ClashSharpOrdinaryPath (Join-Path $PayloadPath $file.path) -RequireFile
+            $target = Join-Path $payloadTarget $file.path
+            $null = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
+            [IO.File]::Copy($source, $target, $false)
         }
-
-        $resolved = Resolve-Path $candidate
-        $package = Get-ChildItem -LiteralPath $resolved.Path -File -Recurse |
-            Where-Object { $_.Extension -in ".msix", ".msixbundle" -and $_.Name -like "ClashSharp_*" } |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-        $certificate = Get-ChildItem -LiteralPath $resolved.Path -File -Recurse -Filter "*.cer" |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-
-        if ($null -ne $package -and $null -ne $certificate) {
-            return $resolved.Path
+        Assert-SandboxPayload $plan $payloadTarget
+        $planPath = Join-Path $inputPath 'scenario-plan.json'
+        [IO.File]::WriteAllText($planPath, ($plan | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+        $planHash = Get-SandboxFileSha256 $planPath
+        $inputContract = Get-ClashSharpDirectoryContract -LiteralPath $inputPath
+        $configuration = New-SandboxConfiguration $inputPath $outputPath $planHash
+        [IO.File]::WriteAllText((Join-Path $runPath 'scenario.wsb'), $configuration, [Text.UTF8Encoding]::new($false))
+        Write-Host "Prepared $name; run $($plan.runId). Evidence: $outputPath"
+        if (-not $Launch) { continue }
+        $existing = Invoke-SandboxCli $cli @('list', '--raw') | ConvertFrom-Json
+        if (@($existing.WindowsSandboxEnvironments | Where-Object Id -eq $plan.sandboxId).Count -ne 0) {
+            throw 'sandbox.id.already_owned'
         }
-    }
-
-    throw "No usable Clash# MSIX payload was found. Build the installer or pass -PayloadPath."
-}
-
-<#
-.SYNOPSIS
-Copies a selected payload tree into one isolated sandbox shared directory.
-.DESCRIPTION
-Creates the destination and recursively copies every top-level payload entry for the current run.
-.PARAMETER Source
-Resolved payload directory to copy.
-.PARAMETER Destination
-Isolated run directory that receives the payload snapshot.
-#>
-function Copy-Payload {
-    param(
-        [string]$Source,
-        [string]$Destination
-    )
-
-    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-    Get-ChildItem -LiteralPath $Source -Force |
-        ForEach-Object {
-            Copy-Item -LiteralPath $_.FullName -Destination $Destination -Recurse -Force
+        $hostProxyBefore = Get-SandboxProxyFingerprint
+        $hostReceipt = [ordered]@{ schemaVersion = 1; runId = $plan.runId; sandboxId = $plan.sandboxId
+            guestReportAccepted = $false; sandboxAbsent = $false; inputsUnchanged = $false
+            hostProxyUnchanged = $false; finishedAt = $null }
+        try {
+            $started = Invoke-SandboxCli $cli @('start', '--id', $plan.sandboxId, '--config', $configuration, '--raw') | ConvertFrom-Json
+            if ($started.Id -cne $plan.sandboxId) { throw 'sandbox.cli.unexpected_id' }
+            Invoke-SandboxCli $cli @('connect', '--id', $plan.sandboxId, '--raw') -NoCapture
+            $reportPath = Join-Path $outputPath 'result.json'
+            $timer = [Diagnostics.Stopwatch]::StartNew()
+            while (-not (Test-Path -LiteralPath $reportPath)) {
+                if ($timer.Elapsed.TotalSeconds -ge $TimeoutSeconds) { throw 'sandbox.report.timed_out' }
+                Start-Sleep -Milliseconds 500
+            }
+            $null = Assert-ClashSharpOrdinaryPath $reportPath -RequireFile
+            $report = Read-SandboxJson $reportPath
+            Assert-SandboxScenarioReport $report $plan $planHash
+            $hostReceipt.guestReportAccepted = $true
+        } finally {
+            try {
+                $null = Invoke-SandboxCli $cli @('stop', '--id', $plan.sandboxId, '--raw')
+                $remaining = Invoke-SandboxCli $cli @('list', '--raw') | ConvertFrom-Json
+                $hostReceipt.sandboxAbsent = @($remaining.WindowsSandboxEnvironments |
+                    Where-Object Id -eq $plan.sandboxId).Count -eq 0
+                $currentContract = Get-ClashSharpDirectoryContract -LiteralPath $inputPath
+                Compare-ClashSharpDirectoryContract -Expected $inputContract -Actual $currentContract
+                $hostReceipt.inputsUnchanged = $true
+                $hostReceipt.hostProxyUnchanged = (Get-SandboxProxyFingerprint) -ceq $hostProxyBefore
+            } finally {
+                $hostReceipt.finishedAt = [DateTime]::UtcNow.ToString('o')
+                [IO.File]::WriteAllText((Join-Path $runPath 'host-result.json'),
+                    ($hostReceipt | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+            }
+            if (-not $hostReceipt.sandboxAbsent -or -not $hostReceipt.inputsUnchanged -or
+                -not $hostReceipt.hostProxyUnchanged) { throw 'sandbox.host.postcondition_failed' }
         }
-}
-
-<#
-.SYNOPSIS
-Waits for the sandbox guest to publish its scenario report.
-.DESCRIPTION
-Polls the exact report path until it appears or the caller-supplied timeout expires.
-.PARAMETER ReportPath
-Expected result JSON path in the mapped reports directory.
-.PARAMETER Timeout
-Maximum number of seconds to wait.
-#>
-function Wait-SandboxReport {
-    param(
-        [string]$ReportPath,
-        [int]$Timeout
-    )
-
-    $deadline = (Get-Date).AddSeconds($Timeout)
-    while ((Get-Date) -lt $deadline) {
-        if (Test-Path $ReportPath) {
-            return $true
-        }
-
-        Start-Sleep -Seconds 2
+        Write-Host "Passed $name; exact candidate verified and owned Sandbox stopped."
     }
-
-    return $false
-}
-
-<#
-.SYNOPSIS
-Writes one escaped Windows Sandbox configuration for an isolated scenario run.
-.DESCRIPTION
-Maps the resolved shared directory and emits the fixed guest logon command without interpolating
-unescaped XML content.
-.PARAMETER SharedDirectory
-Host directory mapped into the sandbox.
-.PARAMETER Destination
-Literal path of the WSB configuration to create.
-#>
-function Write-SandboxConfiguration {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$SharedDirectory,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Destination
-    )
-
-    $resolvedSharedDirectory = (Resolve-Path -LiteralPath $SharedDirectory).Path
-    $escapedSharedDirectory = [Security.SecurityElement]::Escape($resolvedSharedDirectory)
-    $sandboxDirectory = "C:\Users\WDAGUtilityAccount\Desktop\ClashSharpSandbox"
-    $logonCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $sandboxDirectory\scripts\Run-InSandbox.ps1"
-    $escapedLogonCommand = [Security.SecurityElement]::Escape($logonCommand)
-    $configuration = @"
-<Configuration>
-  <MappedFolders>
-    <MappedFolder>
-      <HostFolder>$escapedSharedDirectory</HostFolder>
-      <SandboxFolder>$sandboxDirectory</SandboxFolder>
-      <ReadOnly>false</ReadOnly>
-    </MappedFolder>
-  </MappedFolders>
-  <LogonCommand>
-    <Command>$escapedLogonCommand</Command>
-  </LogonCommand>
-</Configuration>
-"@
-    # UTF8 is BOM-backed in Windows PowerShell 5.1 and BOM-free in PowerShell 7;
-    # both forms are valid XML and keep the host runner compatible with either shell.
-    Set-Content -LiteralPath $Destination -Value $configuration -Encoding UTF8
-    return (Resolve-Path -LiteralPath $Destination).Path
-}
-
-$scenarios = Resolve-ScenarioSelection -Selection $Scenario
-$payloadSource = Resolve-PayloadSource -ExplicitPayloadPath $PayloadPath
-$preparedRuns = @()
-
-foreach ($scenarioName in $scenarios) {
-    $runDir = Join-Path $sandboxRoot "runs\$runId\$scenarioName"
-    $sharedDir = Join-Path $runDir "shared"
-    $sharedScriptsDir = Join-Path $sharedDir "scripts"
-    $payloadTarget = Join-Path $sharedDir "payload"
-    $reportsDir = Join-Path $sharedDir "reports"
-    $sandboxScriptTarget = Join-Path $sharedScriptsDir "Run-InSandbox.ps1"
-    $scenarioPlanPath = Join-Path $sharedDir "scenario-plan.json"
-    $wsbPath = Join-Path $runDir "ClashSharpSandbox-$scenarioName.wsb"
-    $reportPath = Join-Path $reportsDir "result.json"
-
-    New-Item -ItemType Directory -Force -Path $sharedScriptsDir, $reportsDir | Out-Null
-    Copy-Item -Force -Path $sandboxScript -Destination $sandboxScriptTarget
-    Copy-Payload -Source $payloadSource -Destination $payloadTarget
-
-    $scenarioPlan = [ordered]@{
-        schemaVersion = 1
-        generatedAt = (Get-Date).ToUniversalTime().ToString("o")
-        configuration = $Configuration
-        scenario = $scenarioName
-        runId = $runId
-        repoRoot = $repoRoot.Path
-        payloadSource = $payloadSource
-        paths = [ordered]@{
-            root = "C:\Users\WDAGUtilityAccount\Desktop\ClashSharpSandbox"
-            payloadPath = "C:\Users\WDAGUtilityAccount\Desktop\ClashSharpSandbox\payload"
-            reportsPath = "C:\Users\WDAGUtilityAccount\Desktop\ClashSharpSandbox\reports"
-        }
-    }
-
-    $scenarioPlan | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 -Path $scenarioPlanPath
-
-    $emittedWsbPath = Write-SandboxConfiguration `
-        -SharedDirectory $sharedDir `
-        -Destination $wsbPath
-
-    $preparedRuns += [pscustomobject]@{
-        Scenario = $scenarioName
-        RunId = $runId
-        WsbPath = $emittedWsbPath
-        SharedDir = $sharedDir
-        PlanPath = $scenarioPlanPath
-        ReportPath = $reportPath
-    }
-}
-
-Write-Host ""
-Write-Host "Prepared Sandbox scenario files:"
-foreach ($run in $preparedRuns) {
-    Write-Host "  Scenario: $($run.Scenario)"
-    Write-Host "    WSB: $($run.WsbPath)"
-    Write-Host "    Shared: $($run.SharedDir)"
-    Write-Host "    Plan: $($run.PlanPath)"
-}
-
-if (-not $Launch) {
-    Write-Host "Dry run complete. Re-run with -Launch to open Windows Sandbox."
-    return
-}
-
-foreach ($run in $preparedRuns) {
-    if (-not (Test-Path $run.WsbPath)) {
-        throw "Expected WSB file was not created: $($run.WsbPath)"
-    }
-
-    Start-Process -FilePath $run.WsbPath
-    Write-Host "Windows Sandbox launch requested for scenario '$($run.Scenario)'."
-
-    if (Wait-SandboxReport -ReportPath $run.ReportPath -Timeout $TimeoutSeconds) {
-        $report = Get-Content -Raw -Path $run.ReportPath | ConvertFrom-Json
-        SandboxReportContract\Assert-SandboxScenarioReport `
-            -Report $report `
-            -ExpectedScenario $run.Scenario `
-            -ExpectedRunId $run.RunId
-        Write-Host "Scenario '$($run.Scenario)' passed with bound report evidence."
-    } else {
-        throw "Timed out waiting for scenario '$($run.Scenario)' report: $($run.ReportPath)"
-    }
+} finally {
+    if ($acquired) { $mutex.ReleaseMutex() }
+    $mutex.Dispose()
 }

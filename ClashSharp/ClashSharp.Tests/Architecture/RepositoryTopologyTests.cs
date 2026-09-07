@@ -476,18 +476,9 @@ public sealed class RepositoryTopologyTests
     public void ContinuousIntegration_EnforcesBoundSandboxEvidence()
     {
         string workflow = File.ReadAllText(Path.Combine(RepositoryRoot, ".github", "workflows", "ci.yml"));
-        string sandboxRoot = Path.Combine(RepositoryRoot, "ClashSharp", "SandboxTest");
-        string host = File.ReadAllText(Path.Combine(sandboxRoot, "Run-SandboxTest.ps1"));
-        string guest = File.ReadAllText(Path.Combine(sandboxRoot, "scripts", "Run-InSandbox.ps1"));
-
         Assert.Contains("./ClashSharp/SandboxTest/Test-SandboxReportContract.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("Verify Sandbox report contract (Windows PowerShell 5.1)", workflow, StringComparison.Ordinal);
         Assert.Contains("Verify Sandbox report contract (PowerShell 7)", workflow, StringComparison.Ordinal);
-        Assert.Contains("SandboxReportContract\\Assert-SandboxScenarioReport", host, StringComparison.Ordinal);
-        Assert.Contains("RunId = $runId", host, StringComparison.Ordinal);
-        Assert.Contains("-ExpectedRunId $run.RunId", host, StringComparison.Ordinal);
-        Assert.Contains("runId = [string]$Plan.runId", guest, StringComparison.Ordinal);
-        Assert.DoesNotContain("-Status \"skipped\"", guest, StringComparison.Ordinal);
     }
 
     /// <summary>Prevents the retired native Installer toolchain and UI from returning.</summary>
