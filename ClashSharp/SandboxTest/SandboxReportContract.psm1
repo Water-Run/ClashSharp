@@ -97,12 +97,14 @@ function Assert-SandboxScenarioReport {
         Assert-SandboxObject $launch @('processId', 'packageFullName', 'executableSha256',
             'mainWindowObserved', 'stabilizationMs', 'termination')
         Assert-SandboxStringFields $launch @('packageFullName', 'executableSha256', 'termination')
+        $launchStep = @($Report.steps | Where-Object { $_.name -ceq 'launch-package' })[0]
         if (($launch.processId -isnot [int] -and $launch.processId -isnot [long]) -or $launch.processId -le 0 -or
             $launch.packageFullName -cne $candidate.fullName -or
             $launch.executableSha256 -cne $candidate.executableSha256 -or
             $launch.mainWindowObserved -isnot [bool] -or -not $launch.mainWindowObserved -or
             ($launch.stabilizationMs -isnot [int] -and $launch.stabilizationMs -isnot [long]) -or
-            $launch.stabilizationMs -lt 30000 -or $launch.termination -cne 'owned-process') {
+            $launch.stabilizationMs -lt 30000 -or $launch.stabilizationMs -gt $launchStep.durationMs -or
+            $launch.termination -cne 'owned-process') {
             throw 'sandbox.report.launch'
         }
     }

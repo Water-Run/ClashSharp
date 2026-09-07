@@ -65,11 +65,16 @@ function New-SandboxReportFixture {
     if ($Scenario -ceq 'launch-no-proxy') { $names += 'launch-package' }
     $names += @('cleanup-package', 'cleanup-certificate', 'cleanup-payload', 'verify-cleanup')
     $start = [DateTimeOffset]::Parse('2026-09-07T00:00:00+00:00')
+    $cursor = $start
     $stepList = @()
     for ($index = 0; $index -lt $names.Count; $index++) {
+        $duration = 1000
+        if ($names[$index] -ceq 'launch-package') { $duration = 30000 }
+        $stepFinish = $cursor.AddMilliseconds($duration)
         $stepList += @{ name = $names[$index]; status = 'passed'
-            startedAt = $start.AddSeconds($index).ToString('o')
-            finishedAt = $start.AddSeconds($index + 1).ToString('o'); durationMs = 1000; error = $null }
+            startedAt = $cursor.ToString('o'); finishedAt = $stepFinish.ToString('o')
+            durationMs = $duration; error = $null }
+        $cursor = $stepFinish
     }
     $checks = [ordered]@{
         isolation = @{ inputReadOnly = $true; externalAdapterCount = 0; payloadFilesVerified = 4 }
@@ -85,7 +90,7 @@ function New-SandboxReportFixture {
     }
     return (Copy-SandboxFixture ([ordered]@{ schemaVersion = 2; scenario = $Scenario
         runId = $validPlan.runId; sandboxId = $validPlan.sandboxId; planSha256 = $planHash
-        status = 'passed'; startedAt = $start.ToString('o'); finishedAt = $start.AddSeconds($names.Count).ToString('o')
+        status = 'passed'; startedAt = $start.ToString('o'); finishedAt = $cursor.ToString('o')
         environment = $validEnvironment; steps = $stepList; checks = $checks; failure = $null }))
 }
 
@@ -165,6 +170,7 @@ $reportCases = @(
     @{ Name = 'wrong executable'; Change = { param($r) $r.checks.launch.executableSha256 = 'd' * 64 } },
     @{ Name = 'no window'; Change = { param($r) $r.checks.launch.mainWindowObserved = $false } },
     @{ Name = 'no stabilization'; Change = { param($r) $r.checks.launch.stabilizationMs = 29999 } },
+    @{ Name = 'observation exceeds step duration'; Change = { param($r) $r.checks.launch.stabilizationMs = 30001 } },
     @{ Name = 'claims graceful exit'; Change = { param($r) $r.checks.launch.termination = 'graceful' } }
 )
 $launchPlan = Copy-SandboxFixture $validPlan
