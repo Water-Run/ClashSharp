@@ -54,7 +54,7 @@ public static class InstallerMachineHelperFraming
         return InstallerMachineHelperResultCodec.Parse(payload);
     }
 
-    private static async Task WriteFrameAsync(
+    internal static async Task WriteFrameAsync(
         Stream stream,
         byte[] payload,
         CancellationToken cancellationToken)
@@ -68,7 +68,7 @@ public static class InstallerMachineHelperFraming
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<byte[]> ReadFrameAsync(
+    internal static async Task<byte[]> ReadFrameAsync(
         Stream stream,
         int maximumPayloadBytes,
         CancellationToken cancellationToken)

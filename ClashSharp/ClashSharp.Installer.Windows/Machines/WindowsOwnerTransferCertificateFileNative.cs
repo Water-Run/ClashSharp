@@ -20,15 +20,24 @@ namespace ClashSharp.Installer.Windows.Machines;
 internal sealed class WindowsOwnerTransferCertificateFileNative : IWindowsOwnerTransferCertificateFileNative
 {
     public Task<InstallerOwnerTransferCertificateState> ReadAsync(
-        WindowsOwnerTransferCertificatePlan plan, CancellationToken cancellationToken)
+        WindowsOwnerTransferCertificatePlan plan, CancellationToken cancellationToken) =>
+        ReadForInspectionAsync(plan, privateRootPresent: true, cancellationToken);
+
+    /// <summary>The read-only discovery guard can prove the private root has never been created.</summary>
+    internal Task<InstallerOwnerTransferCertificateState> ReadForInspectionAsync(
+        WindowsOwnerTransferCertificatePlan plan, bool privateRootPresent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
         plan.Validate();
         cancellationToken.ThrowIfCancellationRequested();
+        if (!privateRootPresent && plan.Journal.Phase != InstallerOwnerTransferPhase.Prepared)
+        {
+            throw new InstallerProtocolException("installer.owner_transfer.inspection_phase_invalid");
+        }
         var state = new InstallerOwnerTransferCertificateState(
             ReadLedger(plan.ActivePath, plan, isPrivate: false),
-            ReadLedger(plan.PreviousArchivePath, plan, isPrivate: true),
-            ReadLedger(plan.NextArchivePath, plan, isPrivate: true));
+            privateRootPresent ? ReadLedger(plan.PreviousArchivePath, plan, isPrivate: true) : null,
+            privateRootPresent ? ReadLedger(plan.NextArchivePath, plan, isPrivate: true) : null);
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(state);
     }

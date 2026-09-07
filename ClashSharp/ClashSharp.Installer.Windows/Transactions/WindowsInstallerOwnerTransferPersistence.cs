@@ -40,6 +40,12 @@ internal sealed class WindowsInstallerOwnerTransferPersistence : IInstallerOwner
         return new(guard.RootPath, guard, WindowsInstallerPrivateJournalFileNative.Instance);
     }
 
+    internal static WindowsInstallerOwnerTransferPersistence CreateForRecoveryDefault()
+    {
+        WindowsInstallerTransactionRootGuard guard = WindowsInstallerTransactionRootGuard.CreateReadOnlyOwnerTransferDefault();
+        return new(guard.RootPath, guard, WindowsInstallerPrivateJournalFileNative.Instance);
+    }
+
     public async Task<byte[]?> ReadAsync(CancellationToken cancellationToken)
     {
         await EnsurePrivateAsync(cancellationToken).ConfigureAwait(false);

@@ -94,13 +94,13 @@ public sealed class InstallerExecutableContractTests
             static element =>
                 (string?)element.Attribute("AutomationProperties.Name") ==
                     "ClashSharp 产品实例");
-        Assert.Same(
-            productCard,
-            Assert.Single(
-                shell.Descendants(presentation + "Border"),
-                static element =>
-                    (string?)element.Attribute("Style") ==
-                        "{StaticResource InstallerCardStyle}"));
+        Assert.Equal("{StaticResource InstallerCardStyle}", (string?)productCard.Attribute("Style"));
+        XElement confirmation = Assert.Single(shell.Descendants(presentation + "Border"),
+            static element => (string?)element.Attribute("AutomationProperties.Name") == "切换账户确认");
+        Assert.DoesNotContain(confirmation, productCard.Descendants());
+        XElement[] decisions = confirmation.Descendants(presentation + "Button").ToArray();
+        Assert.Equal(2, decisions.Length);
+        Assert.All(decisions, static button => Assert.NotEqual("True", (string?)button.Attribute("IsDefault")));
         Assert.DoesNotContain(
             shell.Descendants(),
             element => element.Name == presentation + "TabControl"

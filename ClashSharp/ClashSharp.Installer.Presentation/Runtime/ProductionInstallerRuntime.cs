@@ -6,7 +6,7 @@ namespace ClashSharp.Installer.Runtime;
 /// Maps a trusted platform backend into the fixed single-product presentation state without ever
 /// constructing a target SID, release hash, package identity, or privileged command.
 /// </summary>
-public sealed class ProductionInstallerRuntime : IInstallerRuntime, IDisposable
+public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IDisposable
 {
     private readonly IInstallerRuntimeBackend _backend;
     private bool _disposed;
@@ -86,6 +86,29 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IDisposable
 
         cancellationToken.ThrowIfCancellationRequested();
         return _backend.ExecuteAsync(operation, progress, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public bool SupportsOwnerTransfer => _backend is IInstallerOwnerTransferRuntimeBackend { SupportsOwnerTransfer: true };
+
+    /// <inheritdoc />
+    public Task<InstallerExecutionResult> TransferAndExecuteAsync(
+        Func<InstallerOwnerTransferConfirmation, CancellationToken, Task<bool>> confirm,
+        IProgress<InstallerProgress> progress, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(confirm);
+        ArgumentNullException.ThrowIfNull(progress);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_backend is not IInstallerOwnerTransferRuntimeBackend { SupportsOwnerTransfer: true } transfer)
+        {
+            throw new InstallerProtocolException("installer.owner_transfer.unavailable");
+        }
+        return transfer.TransferAndExecuteAsync((offer, token) =>
+        {
+            offer.Validate();
+            return confirm(new(offer.IsRecovery), token);
+        }, progress, cancellationToken);
     }
 
     /// <summary>Stops future calls and releases the trusted backend composition.</summary>

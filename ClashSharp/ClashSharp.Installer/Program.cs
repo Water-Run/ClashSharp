@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
+using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Presentation;
 using ClashSharp.Installer.Runtime;
@@ -29,7 +30,8 @@ internal static class Program
                 return application.Run();
             },
             invalidArgumentsExitCode: InvalidMachineHelperArgumentsExitCode,
-            runPayloadAudit: RunPayloadAudit);
+            runPayloadAudit: RunPayloadAudit,
+            runOwnerTransfer: RunOwnerTransfer);
     }
 
     private static int RunPayloadAudit()
@@ -74,6 +76,33 @@ internal static class Program
         _ = bootstrap;
         return MachineHelperFailedExitCode;
 #endif
+    }
+
+    private static int RunOwnerTransfer(InstallerOwnerTransferBootstrap bootstrap)
+    {
+#if CLASHSHARP_INSTALLER_MUTATION_RUNTIME
+        return RunEnabledOwnerTransfer(bootstrap);
+#else
+        _ = bootstrap;
+        return MachineHelperFailedExitCode;
+#endif
+    }
+
+    private static int RunEnabledOwnerTransfer(InstallerOwnerTransferBootstrap bootstrap)
+    {
+        try
+        {
+            EmbeddedInstallerReleaseManifest release = EmbeddedInstallerReleaseManifest.Load();
+            string executablePath = Environment.ProcessPath
+                ?? throw new InstallerProtocolException("installer.machine_helper.executable_path_missing");
+            WindowsInstallerMachineHelper.RunOwnerTransferAsync(bootstrap, executablePath, release.Bytes, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            return 0;
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            return MachineHelperFailedExitCode;
+        }
     }
 
     // Kept outside the conditional so default builds still compile the complete production

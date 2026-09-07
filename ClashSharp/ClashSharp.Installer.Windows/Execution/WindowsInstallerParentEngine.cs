@@ -2,6 +2,7 @@ using ClashSharp.Installer.Certificates;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Execution;
 using ClashSharp.Installer.Machines;
+using ClashSharp.Installer.Ownership;
 using ClashSharp.Installer.Packages;
 using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Transactions;
@@ -27,6 +28,13 @@ internal interface IWindowsInstallerExecutionSessionFactory
         CancellationToken cancellationToken);
 }
 
+internal interface IWindowsInstallerOwnerTransferSessionFactory
+{
+    Task<InstallerExecutionResult> TransferAndExecuteAsync(
+        Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken);
+}
+
 internal interface IWindowsInstallerParentInspector
 {
     Task<InstallerRuntimeInspection> InspectAsync(
@@ -38,7 +46,7 @@ internal interface IWindowsInstallerParentInspector
 /// Owns trusted request construction for the unelevated Installer parent and creates one bounded
 /// coordinator/helper session per operation.
 /// </summary>
-public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend
+public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IInstallerOwnerTransferRuntimeBackend
 {
     private readonly object _lifetimeSync = new();
     private readonly InstallerReleaseManifest _manifest;
@@ -109,6 +117,40 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend
 
     /// <summary>Gets the release version derived from the embedded manifest.</summary>
     public string ReleaseVersion => _manifest.ExpectedPackageVersion;
+
+    /// <inheritdoc />
+    public bool SupportsOwnerTransfer => _sessionFactory is IWindowsInstallerOwnerTransferSessionFactory;
+
+    /// <inheritdoc />
+    public async Task<InstallerExecutionResult> TransferAndExecuteAsync(
+        Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(confirm);
+        if (_sessionFactory is not IWindowsInstallerOwnerTransferSessionFactory transfer)
+        {
+            throw new InstallerProtocolException("installer.owner_transfer.unavailable");
+        }
+        if (!TryEnter())
+        {
+            return new(InstallerExecutionOutcome.Blocked, "installer.concurrent_action_rejected", null, false);
+        }
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
+                ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
+            return await transfer.TransferAndExecuteAsync(confirm, progress, cancellationToken).ConfigureAwait(false);
+        }
+        catch (InstallerUserCancelledException exception)
+        {
+            return new(InstallerExecutionOutcome.Cancelled, exception.DiagnosticCode, null, false);
+        }
+        finally
+        {
+            Exit();
+        }
+    }
 
     /// <summary>
     /// Reads platform, exact current-user package/process state, and the protected recovery journal
@@ -366,7 +408,7 @@ internal sealed class UnavailableWindowsInstallerParentInspector
 }
 
 internal sealed class WindowsInstallerExecutionSessionFactory
-    : IWindowsInstallerExecutionSessionFactory
+    : IWindowsInstallerExecutionSessionFactory, IWindowsInstallerOwnerTransferSessionFactory
 {
     private readonly byte[] _embeddedManifestBytes;
     private readonly InstallerReleaseManifest _manifest;
@@ -398,14 +440,43 @@ internal sealed class WindowsInstallerExecutionSessionFactory
         _currentSid = currentSid;
     }
 
-    public async Task<IWindowsInstallerExecutionSession> CreateAsync(
-        CancellationToken cancellationToken)
+    public Task<IWindowsInstallerExecutionSession> CreateAsync(CancellationToken cancellationToken) =>
+        CreateAsync(null, cancellationToken);
+
+    public async Task<InstallerExecutionResult> TransferAndExecuteAsync(
+        Func<InstallerOwnerTransferOffer, CancellationToken, Task<bool>> confirm,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        var request = new InstallerRequest(InstallerOperation.Install, _targetSid, false,
+            _manifest.ExpectedPackageVersion, _manifest.InstallerPayloadSha256);
+        InstallerEnvironmentSnapshot environment = await new WindowsInstallerEnvironment(_manifest)
+            .InspectAsync(request, cancellationToken).ConfigureAwait(false);
+        string? blocked = !environment.IsSupported ? environment.BlockingDiagnosticCode ?? "installer.platform.unsupported"
+            : environment.IsApplicationRunning ? "installer.application_running"
+            : environment.InstalledPackageVersion is { } installed
+                && InstallerProtocolValidation.ParsePackageVersion(installed) > InstallerProtocolValidation.ParsePackageVersion(_manifest.ExpectedPackageVersion)
+                ? "installer.package.downgrade_rejected" : null;
+        if (blocked is not null)
+        {
+            return new(InstallerExecutionOutcome.Blocked, blocked, null, false);
+        }
+        InstallerOperation operation = environment.InstalledPackageVersion is null ? InstallerOperation.Install : InstallerOperation.Repair;
+        WindowsOwnerTransferParentHandoff handoff = await WindowsOwnerTransferBroker.CreateDefault(
+            _installerExecutablePath, _manifest, _targetSid).StartAsync(operation, confirm, cancellationToken).ConfigureAwait(false);
+        // CreateAsync takes broker ownership even when cancellation or reader construction fails.
+        await using IWindowsInstallerExecutionSession session = await CreateAsync(handoff.Broker, cancellationToken).ConfigureAwait(false);
+        return await session.ExecuteAsync(request with { Operation = handoff.Continuation.Journal.Operation },
+            progress, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IWindowsInstallerExecutionSession> CreateAsync(
+        WindowsMachineHelperBroker? adoptedBroker, CancellationToken cancellationToken)
+    {
         WindowsInstallerProtectedTransactionReader? transactionReader = null;
-        WindowsMachineHelperBroker? broker = null;
+        WindowsMachineHelperBroker? broker = adoptedBroker;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var environment = new WindowsInstallerEnvironment(_manifest);
             var releaseVerifier = new WindowsInstallerReleaseVerifier(
                 _embeddedManifestBytes,
@@ -415,7 +486,7 @@ internal sealed class WindowsInstallerExecutionSessionFactory
                 new WindowsCurrentUserPackageStoreAdapter());
             transactionReader = WindowsInstallerProtectedTransactionReader.CreateDefault(
                 _targetSid);
-            broker = WindowsMachineHelperBroker.CreateDefault(
+            broker ??= WindowsMachineHelperBroker.CreateDefault(
                 _installerExecutablePath,
                 _manifest);
             var elevatedMachine = new WindowsElevatedMachineAdapter(broker, _currentSid);

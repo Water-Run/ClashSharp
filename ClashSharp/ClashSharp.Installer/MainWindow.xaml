@@ -114,6 +114,24 @@
             </Border>
           </Grid>
         </Border>
+        <Border Margin="0,18,0,0" Padding="22" Style="{StaticResource InstallerCardStyle}"
+                AutomationProperties.Name="切换账户确认"
+                IsVisibleChanged="OnOwnerTransferConfirmationVisibilityChanged"
+                Visibility="{Binding IsOwnerTransferConfirmationVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+          <StackPanel>
+            <TextBlock Text="{Binding OwnerTransferConfirmationTitle}" FontSize="16" FontWeight="SemiBold"
+                       TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+            <TextBlock Margin="0,10,0,16" Style="{StaticResource MutedTextStyle}"
+                       Text="ClashSharp 的系统服务将改为供当前 Windows 账户使用。以前账户的应用和配置会保留，但该账户将无法继续连接此服务。" />
+            <WrapPanel HorizontalAlignment="Right">
+              <Button x:Name="DeclineOwnerTransferButton" Margin="0,0,10,0" Content="暂不切换" Command="{Binding DeclineOwnerTransferCommand}"
+                      IsCancel="True" AutomationProperties.Name="取消账户切换" />
+              <Button Content="确认切换并继续" Command="{Binding ConfirmOwnerTransferCommand}"
+                      Style="{StaticResource InstallerPrimaryButtonStyle}"
+                      AutomationProperties.Name="确认切换使用账户并继续安装" />
+            </WrapPanel>
+          </StackPanel>
+        </Border>
         <Grid Margin="2,18,2,0">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
@@ -129,6 +147,14 @@
                   Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
                   BorderBrush="{StaticResource InstallerBorderBrush}" BorderThickness="1" CornerRadius="6">
             <StackPanel>
+              <StackPanel Margin="0,0,0,18"
+                          Visibility="{Binding IsOwnerTransferActionVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock Text="使用账户" FontWeight="SemiBold" />
+                <TextBlock Margin="0,6,0,10" Style="{StaticResource MutedTextStyle}"
+                           Text="此电脑曾由其他 Windows 账户安装 ClashSharp 时，可将服务切换到当前账户，或继续上次未完成的切换。" />
+                <Button Content="切换使用账户…" Command="{Binding OwnerTransferCommand}" HorizontalAlignment="Left"
+                        AutomationProperties.Name="检查并切换 ClashSharp 的使用账户" />
+              </StackPanel>
               <TextBlock Text="安装内容" FontWeight="SemiBold" />
               <TextBlock Margin="0,6,0,16"
                          Text="桌面应用安装到 Windows 管理的应用目录；代理服务使用固定的系统目录。"

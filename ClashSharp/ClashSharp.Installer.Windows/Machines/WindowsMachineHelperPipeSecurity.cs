@@ -95,9 +95,16 @@ internal static class WindowsMachineHelperPipeSecurity
     {
         ArgumentNullException.ThrowIfNull(bootstrap);
         bootstrap.Validate();
+        return CreateServerStream(bootstrap.Invocation.BuildSessionPipeName(), logonSid);
+    }
+
+    /// <summary>Creates the same protected pipe for an already validated dedicated bootstrap.</summary>
+    internal static NamedPipeServerStream CreateServerStream(string pipeName, SecurityIdentifier logonSid)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
         PipeSecurity security = Create(logonSid);
         return NamedPipeServerStreamAcl.Create(
-            bootstrap.Invocation.BuildSessionPipeName(),
+            pipeName,
             PipeDirection.InOut,
             maxNumberOfServerInstances: 1,
             PipeTransmissionMode.Byte,

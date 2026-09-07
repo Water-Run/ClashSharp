@@ -1,6 +1,7 @@
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Payloads;
+using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -54,6 +55,8 @@ internal sealed class WindowsMachineHelperBroker :
     private readonly IWindowsRunAsProcessLauncher _launcher;
     private readonly WindowsMachineHelperBrokerLimits _limits;
     private readonly Func<int> _currentProcessId;
+    private readonly Lazy<Task> _disposal;
+    private int _disposalRequested;
     private Session? _session;
     private bool _completed;
     private bool _faulted;
@@ -80,6 +83,7 @@ internal sealed class WindowsMachineHelperBroker :
         _launcher = launcher;
         _limits = limits;
         _currentProcessId = currentProcessId;
+        _disposal = new(DisposeCoreAsync, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     internal static WindowsMachineHelperBroker CreateDefault(
@@ -100,12 +104,13 @@ internal sealed class WindowsMachineHelperBroker :
     public async Task<InstallerMachineHelperResult> ExecuteAsync(
         InstallerMachineHelperCommand command)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(_disposed || Volatile.Read(ref _disposalRequested) != 0, this);
         ArgumentNullException.ThrowIfNull(command);
         command.Validate();
         await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed || Volatile.Read(ref _disposalRequested) != 0, this);
             if (_completed)
             {
                 throw new InstallerProtocolException(
@@ -172,13 +177,36 @@ internal sealed class WindowsMachineHelperBroker :
         }
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>
+    /// Takes ownership of an already authenticated dedicated connection after its exact Prepared
+    /// handoff. Only a fresh, unpublished broker may adopt; no new pipe or UAC launch is performed.
+    /// </summary>
+    internal void Adopt(InstallerTransactionSnapshot continuation, IWindowsMachineHelperServer server,
+        IWindowsElevatedHelperProcess process, IWindowsInstallerExecutableTrustLease trustLease)
     {
-        if (_disposed)
+        ArgumentNullException.ThrowIfNull(continuation);
+        ArgumentNullException.ThrowIfNull(server);
+        ArgumentNullException.ThrowIfNull(process);
+        ArgumentNullException.ThrowIfNull(trustLease);
+        continuation.Validate();
+        if (_disposed || Volatile.Read(ref _disposalRequested) != 0 || _faulted || _completed || _session is not null
+            || continuation.Journal.AllowReassociation
+            || continuation.Journal.Operation is not (InstallerOperation.Install or InstallerOperation.Repair)
+            || continuation.Journal.Phase != InstallerTransactionPhase.Prepared)
         {
-            return;
+            throw new InstallerProtocolException("installer.owner_transfer.handoff_invalid");
         }
+        _session = new(continuation.Journal.TransactionId, server, process, trustLease);
+    }
 
+    public ValueTask DisposeAsync()
+    {
+        Interlocked.Exchange(ref _disposalRequested, 1);
+        return new(_disposal.Value);
+    }
+
+    private async Task DisposeCoreAsync()
+    {
         await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
@@ -230,9 +258,7 @@ internal sealed class WindowsMachineHelperBroker :
         }
         catch (OperationCanceledException)
         {
-            process?.Dispose();
-            trustLease?.Dispose();
-            await server.DisposeAsync().ConfigureAwait(false);
+            await DisposeUnadmittedSessionAsync(server, process, trustLease).ConfigureAwait(false);
             throw process is null
                 ? new InstallerProtocolException(
                     "installer.elevation.trust_or_launch_timeout")
@@ -241,9 +267,7 @@ internal sealed class WindowsMachineHelperBroker :
         }
         catch
         {
-            process?.Dispose();
-            trustLease?.Dispose();
-            await server.DisposeAsync().ConfigureAwait(false);
+            await DisposeUnadmittedSessionAsync(server, process, trustLease).ConfigureAwait(false);
             throw;
         }
     }
@@ -299,20 +323,25 @@ internal sealed class WindowsMachineHelperBroker :
     private async Task DisposeSessionAsync()
     {
         Session? session = _session;
-        _session = null;
         if (session is null)
         {
             return;
         }
 
-        await session.DisposeTransportAsync().ConfigureAwait(false);
-        if (session.Process.HasExited)
+        try
         {
-            session.DisposePinnedResources();
+            await session.DisposeTransportAsync().ConfigureAwait(false);
         }
-        else
+        finally
         {
-            _ = ReleasePinnedResourcesAfterExitAsync(session);
+            // Closing the transport requests helper shutdown; it does not prove that a native
+            // operation has stopped. Window shutdown awaits this owned drain before releasing pins.
+            if (!session.Process.HasExited)
+            {
+                await session.Process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            session.DisposePinnedResources();
+            _session = null;
         }
     }
 
@@ -329,21 +358,21 @@ internal sealed class WindowsMachineHelperBroker :
             or AccessViolationException
             or AppDomainUnloadedException);
 
-    private static async Task ReleasePinnedResourcesAfterExitAsync(Session session)
+    private static async Task DisposeUnadmittedSessionAsync(IWindowsMachineHelperServer server,
+        IWindowsElevatedHelperProcess? process, IWindowsInstallerExecutableTrustLease? trust)
     {
         try
         {
-            await session.Process
-                .WaitForExitAsync(CancellationToken.None)
-                .ConfigureAwait(false);
-        }
-        catch (Exception exception) when (IsRecoverable(exception))
-        {
-            // Process termination can no longer affect protocol output after the pipe is closed.
+            await server.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
-            session.DisposePinnedResources();
+            if (process is not null && !process.HasExited)
+            {
+                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            try { process?.Dispose(); }
+            finally { trust?.Dispose(); }
         }
     }
 
@@ -390,9 +419,9 @@ internal sealed class WindowsMachineHelperBroker :
                 return;
             }
 
-            Process.Dispose();
-            TrustLease.Dispose();
             _pinnedResourcesDisposed = true;
+            try { Process.Dispose(); }
+            finally { TrustLease.Dispose(); }
         }
     }
 }

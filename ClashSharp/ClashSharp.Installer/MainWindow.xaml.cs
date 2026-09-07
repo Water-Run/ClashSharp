@@ -80,6 +80,15 @@ public partial class MainWindow : Window
 
     private void OnCloseClicked(object sender, RoutedEventArgs e) => Close();
 
+    private void OnOwnerTransferConfirmationVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true && sender is FrameworkElement confirmation && IsLoaded)
+        {
+            confirmation.BringIntoView();
+            _ = DeclineOwnerTransferButton.Focus();
+        }
+    }
+
     private void DisposeViewModel()
     {
         if (_viewModelDisposed)

@@ -55,6 +55,7 @@ public sealed class WindowsMachineHelperBrokerTests
                 requests,
                 CancellationToken.None));
         Assert.Equal(requests.Length, requests.Position);
+        process.SignalExit();
     }
 
     [Fact]
@@ -141,7 +142,7 @@ public sealed class WindowsMachineHelperBrokerTests
             responses,
             requests,
             static _ => throw new OperationCanceledException());
-        var process = new FakeElevatedProcess(processId: 4243);
+        var process = new FakeElevatedProcess(processId: 4243, exitImmediately: true);
         await using var broker = CreateBroker(
             new RecordingTrustVerifier(),
             serverFactory,
@@ -182,6 +183,39 @@ public sealed class WindowsMachineHelperBrokerTests
         Assert.Equal("installer.elevation.user_cancelled", exception.DiagnosticCode);
         Assert.Equal(0, requests.Length);
         Assert.True(serverFactory.Server.Disposed);
+    }
+
+    [Fact]
+    public async Task ConcurrentDisposalAwaitsHelperExitBeforeReleasingProcessOrSignedImage()
+    {
+        InstallerTransactionSnapshot prepared = Snapshot(Request(), InstallerTransactionPhase.Prepared);
+        InstallerMachineHelperCommand command = Command(InstallerMachineHelperVerb.Prepare, prepared);
+        using MemoryStream responses = await ResponsesAsync(InstallerMachineHelperResult.Succeeded(command, command.GetExpectedSuccessfulState()));
+        using var requests = new MemoryStream();
+        var servers = new RecordingServerFactory(responses, requests);
+        var process = new FakeElevatedProcess(4243);
+        var trust = new RecordingTrustVerifier();
+        var broker = CreateBroker(trust, servers, new RecordingLauncher(process));
+        await broker.ExecuteAsync(command);
+
+        Task first = broker.DisposeAsync().AsTask();
+        Task second = broker.DisposeAsync().AsTask();
+        try
+        {
+            Assert.Same(first, second);
+            Assert.False(first.IsCompleted);
+            Assert.True(servers.Server.Disposed);
+            Assert.False(process.Disposed);
+            Assert.False(trust.LastLease!.Disposed);
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => broker.ExecuteAsync(command));
+        }
+        finally
+        {
+            process.SignalExit();
+            await Task.WhenAll(first, second);
+        }
+        Assert.True(process.Disposed);
+        Assert.True(trust.LastLease!.Disposed);
     }
 
     private static WindowsMachineHelperBroker CreateBroker(

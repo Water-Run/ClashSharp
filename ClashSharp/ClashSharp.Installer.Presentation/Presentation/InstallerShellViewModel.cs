@@ -45,6 +45,9 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
     private bool _hasSecondaryAction;
     private InstallerOperation _primaryOperation = InstallerOperation.Install;
     private InstallerOperation? _secondaryOperation;
+    private TaskCompletionSource<bool>? _ownerTransferDecision;
+    private bool _isOwnerTransferConfirmationVisible;
+    private string _ownerTransferConfirmationTitle = string.Empty;
     private IReadOnlyList<InstallerCapabilityStatus> _capabilities = Array.Empty<InstallerCapabilityStatus>();
 
     /// <summary>Initializes the shell against an explicit readiness/execution port.</summary>
@@ -65,6 +68,12 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
             () => !IsBusy && CanExecuteMutations && HasSecondaryAction,
             SetUnhandledCommandFailure);
         CancelCommand = new DelegateCommand(CancelActiveOperation, () => IsBusy);
+        OwnerTransferCommand = new AsyncDelegateCommand(
+            () => ExecuteOperationAsync(null, ownerTransfer: true), () => IsOwnerTransferActionVisible, SetUnhandledCommandFailure);
+        ConfirmOwnerTransferCommand = new DelegateCommand(
+            () => _ownerTransferDecision?.TrySetResult(true), () => IsOwnerTransferConfirmationVisible);
+        DeclineOwnerTransferCommand = new DelegateCommand(
+            () => _ownerTransferDecision?.TrySetResult(false), () => IsOwnerTransferConfirmationVisible);
     }
 
     /// <inheritdoc />
@@ -81,6 +90,40 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
     /// <summary>Gets the command that cooperatively cancels the active generation.</summary>
     public DelegateCommand CancelCommand { get; }
+
+    /// <summary>Gets the distinct user-initiated account transfer action.</summary>
+    public AsyncDelegateCommand OwnerTransferCommand { get; }
+
+    /// <summary>Gets the explicit decision to accept the currently displayed offer.</summary>
+    public DelegateCommand ConfirmOwnerTransferCommand { get; }
+
+    /// <summary>Gets the decision to decline without creating transfer state.</summary>
+    public DelegateCommand DeclineOwnerTransferCommand { get; }
+
+    /// <summary>Gets whether this trusted composition supplies an idle dedicated transfer action.</summary>
+    public bool IsOwnerTransferActionVisible => !IsBusy && _runtime is IInstallerOwnerTransferRuntime { SupportsOwnerTransfer: true };
+
+    /// <summary>Gets whether the current operation is waiting for explicit user consent.</summary>
+    public bool IsOwnerTransferConfirmationVisible
+    {
+        get => _isOwnerTransferConfirmationVisible;
+        private set
+        {
+            if (SetProperty(ref _isOwnerTransferConfirmationVisible, value))
+            {
+                OnPropertyChanged(nameof(IsCancelActionVisible));
+                ConfirmOwnerTransferCommand.NotifyCanExecuteChanged();
+                DeclineOwnerTransferCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>Gets the localized new-transfer or recovery confirmation heading.</summary>
+    public string OwnerTransferConfirmationTitle
+    {
+        get => _ownerTransferConfirmationTitle;
+        private set => SetProperty(ref _ownerTransferConfirmationTitle, value);
+    }
 
     /// <summary>Gets whether any readiness or mutation task owns the single-flight gate.</summary>
     public bool IsBusy
@@ -103,7 +146,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
     public bool IsSecondaryActionVisible => IsPrimaryActionVisible && HasSecondaryAction;
 
     /// <summary>Gets whether the single active generation exposes cancellation as its only action.</summary>
-    public bool IsCancelActionVisible => IsBusy;
+    public bool IsCancelActionVisible => IsBusy && !IsOwnerTransferConfirmationVisible;
 
     /// <summary>Gets whether the trusted runtime proved every mutation prerequisite.</summary>
     public bool CanExecuteMutations
@@ -319,9 +362,10 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
     private Task ExecuteSecondaryOperationAsync() => ExecuteOperationAsync(_secondaryOperation);
 
-    private async Task ExecuteOperationAsync(InstallerOperation? requestedOperation)
+    private async Task ExecuteOperationAsync(InstallerOperation? requestedOperation, bool ownerTransfer = false)
     {
-        if (!CanExecuteMutations || requestedOperation is null)
+        IInstallerOwnerTransferRuntime? transfer = ownerTransfer ? _runtime as IInstallerOwnerTransferRuntime : null;
+        if (ownerTransfer ? transfer?.SupportsOwnerTransfer != true : !CanExecuteMutations || requestedOperation is null)
         {
             StatusBadge = "已阻止";
             StatusTitle = "暂时无法继续";
@@ -340,13 +384,15 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
 
         IsBusy = true;
         InvalidateReadiness();
-        IsProgressIndeterminate = false;
+        IsProgressIndeterminate = ownerTransfer;
         ProgressValue = 0;
-        ProgressStatus = $"正在开始{GetOperationLabel(requestedOperation.Value)}…";
-        StatusTitle = $"正在{GetOperationLabel(requestedOperation.Value)}";
-        StatusDetail = "正在处理应用及所需组件。";
+        ProgressStatus = ownerTransfer ? "正在检查使用账户…" : $"正在开始{GetOperationLabel(requestedOperation!.Value)}…";
+        StatusTitle = ownerTransfer ? "正在准备切换账户" : $"正在{GetOperationLabel(requestedOperation!.Value)}";
+        StatusDetail = ownerTransfer ? "完成身份检查后，将在此处请你确认切换。" : "正在处理应用及所需组件。";
         StatusBadge = "执行中";
         int acceptProgress = 1;
+        TaskScheduler confirmationScheduler = SynchronizationContext.Current is null
+            ? TaskScheduler.Current : TaskScheduler.FromCurrentSynchronizationContext();
 
         try
         {
@@ -358,15 +404,18 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
                 }
 
                 ProgressValue = value.Percent;
+                IsProgressIndeterminate = false;
                 ProgressStatus = ProgressMessages.TryGetValue(value.MessageKey, out string? message)
                     ? message
                     : "正在执行当前操作…";
             });
 
-            InstallerExecutionResult result = await _runtime.ExecuteAsync(
-                requestedOperation.Value,
-                progress,
-                generation.Cancellation.Token);
+            InstallerExecutionResult result = ownerTransfer
+                ? await transfer!.TransferAndExecuteAsync((confirmation, token) =>
+                    Task.Factory.StartNew(() => ConfirmOwnerTransferAsync(confirmation, generation, token),
+                        CancellationToken.None, TaskCreationOptions.DenyChildAttach, confirmationScheduler).Unwrap(),
+                    progress, generation.Cancellation.Token)
+                : await _runtime.ExecuteAsync(requestedOperation!.Value, progress, generation.Cancellation.Token);
             Interlocked.Exchange(ref acceptProgress, 0);
             if (!IsCurrent(generation))
             {
@@ -377,6 +426,10 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
             ApplyExecutionResult(result);
         }
         catch (OperationCanceledException) when (generation.Cancellation.IsCancellationRequested)
+        {
+            SetCancelledIfCurrent(generation);
+        }
+        catch (InstallerUserCancelledException)
         {
             SetCancelledIfCurrent(generation);
         }
@@ -393,6 +446,37 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         {
             Interlocked.Exchange(ref acceptProgress, 0);
             CompleteOperation(generation);
+        }
+    }
+
+    /// <summary>Runs on the captured UI scheduler, owns its cancellation registration, and drains before the generation ends.</summary>
+    private async Task<bool> ConfirmOwnerTransferAsync(InstallerOwnerTransferConfirmation confirmation,
+        OperationGeneration generation, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(confirmation);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsCurrent(generation) || _ownerTransferDecision is not null)
+        {
+            throw new InstallerProtocolException("installer.owner_transfer.confirmation_unavailable");
+        }
+        var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ownerTransferDecision = decision;
+        OwnerTransferConfirmationTitle = confirmation.IsRecovery ? "继续切换到当前账户？" : "切换到当前账户？";
+        IsOwnerTransferConfirmationVisible = true;
+        ProgressStatus = "等待确认，尚未开始本次切换。";
+        using CancellationTokenRegistration registration = cancellationToken.Register(() => decision.TrySetCanceled(cancellationToken));
+        try
+        {
+            return await decision.Task;
+        }
+        finally
+        {
+            _ownerTransferDecision = null;
+            if (!_disposed)
+            {
+                IsOwnerTransferConfirmationVisible = false;
+                ProgressStatus = cancellationToken.IsCancellationRequested ? "正在收尾…" : "正在处理账户切换…";
+            }
         }
     }
 
@@ -543,6 +627,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         PrimaryActionCommand.NotifyCanExecuteChanged();
         SecondaryActionCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
+        OwnerTransferCommand.NotifyCanExecuteChanged();
     }
 
     private void NotifyActionVisibility()
@@ -550,6 +635,7 @@ public sealed class InstallerShellViewModel : INotifyPropertyChanged, IDisposabl
         OnPropertyChanged(nameof(IsPrimaryActionVisible));
         OnPropertyChanged(nameof(IsSecondaryActionVisible));
         OnPropertyChanged(nameof(IsCancelActionVisible));
+        OnPropertyChanged(nameof(IsOwnerTransferActionVisible));
     }
 
     private void ApplyProductState(InstallerRuntimeReadiness readiness)

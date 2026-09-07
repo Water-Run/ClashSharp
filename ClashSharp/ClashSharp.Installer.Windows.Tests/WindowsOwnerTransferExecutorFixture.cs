@@ -49,6 +49,9 @@ internal sealed class WindowsOwnerTransferExecutorFixture : IDisposable
 
     public void Dispose() => State.Dispose();
 
+    internal WindowsOwnerTransferPhaseExecutor CreateExecutor(IInstallerReleaseLease release) =>
+        new(release, Ordinary, Backend, Native, new AssociationFiles(this), new CertificateFiles(this));
+
     internal sealed class OrdinaryStore(WindowsOwnerTransferExecutorFixture fixture) : IInstallerTransactionStore
     {
         internal int Saves { get; private set; }

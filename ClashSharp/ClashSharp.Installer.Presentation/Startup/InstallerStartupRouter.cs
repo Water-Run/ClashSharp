@@ -1,5 +1,6 @@
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
+using ClashSharp.Installer.Ownership;
 
 namespace ClashSharp.Installer.Presentation;
 
@@ -14,13 +15,15 @@ public static class InstallerStartupRouter
     /// <param name="runUserInterface">Ordinary WPF composition.</param>
     /// <param name="invalidArgumentsExitCode">Stable exit code for invalid reserved grammar.</param>
     /// <param name="runPayloadAudit">Optional read-only audit composition without WPF or elevation.</param>
+    /// <param name="runOwnerTransfer">Optional dedicated ownership helper composition.</param>
     /// <returns>The selected branch exit code, or the invalid-arguments exit code.</returns>
     public static int Run(
         IReadOnlyList<string> arguments,
         Func<InstallerMachineHelperBootstrap, int> runMachineHelper,
         Func<int> runUserInterface,
         int invalidArgumentsExitCode,
-        Func<int>? runPayloadAudit = null)
+        Func<int>? runPayloadAudit = null,
+        Func<InstallerOwnerTransferBootstrap, int>? runOwnerTransfer = null)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(runMachineHelper);
@@ -38,8 +41,14 @@ public static class InstallerStartupRouter
         }
 
         InstallerMachineHelperBootstrap? bootstrap;
+        InstallerOwnerTransferBootstrap? transfer;
         try
         {
+            transfer = InstallerOwnerTransferBootstrap.Parse(arguments);
+            if (transfer is not null)
+            {
+                return runOwnerTransfer is null ? invalidArgumentsExitCode : runOwnerTransfer(transfer);
+            }
             bootstrap = InstallerMachineHelperBootstrap.Parse(arguments);
         }
         catch (InstallerProtocolException)

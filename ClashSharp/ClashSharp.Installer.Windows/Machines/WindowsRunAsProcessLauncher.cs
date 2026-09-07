@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
+using ClashSharp.Installer.Ownership;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -26,7 +27,7 @@ internal interface IWindowsElevatedHelperProcess : IDisposable
 /// Starts the broker-preverified single-file Installer's helper branch through runas on an STA thread.
 /// This launcher validates bootstrap shape, not file identity or Authenticode trust.
 /// </summary>
-internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
+internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher, IWindowsOwnerTransferProcessLauncher
 {
     private const int ErrorCancelled = 1223;
     private readonly Func<ProcessStartInfo, Process?> _start;
@@ -51,6 +52,22 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
         ArgumentNullException.ThrowIfNull(bootstrap);
         cancellationToken.ThrowIfCancellationRequested();
         bootstrap.Validate();
+        return StartAsync(executablePath, bootstrap.ToArguments(), cancellationToken);
+    }
+
+    public Task<IWindowsElevatedHelperProcess> StartAsync(
+        string executablePath, InstallerOwnerTransferBootstrap bootstrap, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(bootstrap);
+        bootstrap.Validate();
+        return StartAsync(executablePath, bootstrap.ToArguments(), cancellationToken);
+    }
+
+    private Task<IWindowsElevatedHelperProcess> StartAsync(
+        string executablePath, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (!Path.IsPathFullyQualified(executablePath))
         {
@@ -69,7 +86,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
                 "installer.elevation.executable_path_invalid");
         }
 
-        ProcessStartInfo startInfo = CreateStartInfo(fullPath, bootstrap);
+        ProcessStartInfo startInfo = CreateStartInfo(fullPath, arguments);
         var completion = new TaskCompletionSource<IWindowsElevatedHelperProcess>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() => StartOnSta(startInfo, completion, cancellationToken))
@@ -90,7 +107,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
 
     private static ProcessStartInfo CreateStartInfo(
         string executablePath,
-        InstallerMachineHelperBootstrap bootstrap)
+        IReadOnlyList<string> arguments)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -101,7 +118,7 @@ internal sealed class WindowsRunAsProcessLauncher : IWindowsRunAsProcessLauncher
             ErrorDialog = false,
             WindowStyle = ProcessWindowStyle.Hidden,
         };
-        foreach (string argument in bootstrap.ToArguments())
+        foreach (string argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
         }
