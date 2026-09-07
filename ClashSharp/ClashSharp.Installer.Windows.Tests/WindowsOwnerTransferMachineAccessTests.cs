@@ -191,7 +191,7 @@ public sealed class WindowsOwnerTransferMachineAccessTests
         Assert.Empty(fixture.Native.Opened);
     }
 
-    private sealed class Fixture : IDisposable
+    internal sealed class Fixture : IDisposable
     {
         private readonly WindowsPayloadFixture _payload = new(createPayload: false, removeCurrentUserCertificateOnDispose: false);
         internal WindowsOwnerTransferAccessFixture Native { get; } = new();
@@ -226,7 +226,7 @@ public sealed class WindowsOwnerTransferMachineAccessTests
         public void Dispose() => _payload.Dispose();
     }
 
-    private sealed class ReleaseLease(Fixture fixture, InstallerReleaseManifest manifest) : IInstallerReleaseLease
+    internal sealed class ReleaseLease(Fixture fixture, InstallerReleaseManifest manifest) : IInstallerReleaseLease
     {
         public VerifiedInstallerRelease Release => new(manifest.ExpectedPackageVersion, manifest.InstallerPayloadSha256,
             true, manifest.PackageCertificateThumbprint, manifest.CertificateSha256, true);
@@ -256,7 +256,7 @@ public sealed class WindowsOwnerTransferMachineAccessTests
         }
     }
 
-    private sealed class Backend(Fixture fixture) : IWindowsOwnerTransferStateBackend
+    internal sealed class Backend(Fixture fixture) : IWindowsOwnerTransferStateBackend
     {
         internal int ServiceChecks { get; private set; }
 

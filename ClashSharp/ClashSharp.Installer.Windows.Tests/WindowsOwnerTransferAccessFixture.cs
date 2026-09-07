@@ -24,6 +24,7 @@ internal sealed class WindowsOwnerTransferAccessFixture : IWindowsOwnerTransferA
     internal static readonly string PrivateService = Path.Combine(ServiceData, Association.BuildServicePipeName());
     internal Dictionary<string, Entry> Entries { get; } = new(StringComparer.OrdinalIgnoreCase);
     internal List<string> Opened { get; } = [];
+    internal List<string> WritableOpened { get; } = [];
     internal List<string> Disposed { get; } = [];
     internal List<string> Writes { get; } = [];
     internal List<string> Enumerated { get; } = [];
@@ -69,6 +70,10 @@ internal sealed class WindowsOwnerTransferAccessFixture : IWindowsOwnerTransferA
     public IWindowsOwnerTransferAccessLease Open(string path, bool directory, bool canChangeAccess)
     {
         Opened.Add(path);
+        if (canChangeAccess)
+        {
+            WritableOpened.Add(path);
+        }
         if (!Entries.TryGetValue(path, out Entry? entry))
         {
             throw new FileNotFoundException("Synthetic tree member missing.");

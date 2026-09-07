@@ -37,26 +37,12 @@ internal sealed class WindowsOwnerTransferMachineAccess
             throw new InstallerProtocolException("installer.owner_transfer.access_phase_invalid");
         }
         cancellationToken.ThrowIfCancellationRequested();
-        var nextRequest = new InstallerRequest(current.Continuation.Operation,
-            current.Continuation.TargetSid, false, current.Continuation.ExpectedPackageVersion,
-            current.Continuation.InstallerPayloadSha256);
+        InstallerRequest nextRequest = WindowsOwnerTransferDeployment.CreateContinuationRequest(current);
         try
         {
             await _release.ReverifyAsync(nextRequest, cancellationToken).ConfigureAwait(false);
-            string previousProfile = ResolveProfile(current.PreviousOwner, cancellationToken);
-            string nextProfile = ResolveProfile(current.NextOwner, cancellationToken);
-            var previousRequest = new InstallerRequest(InstallerOperation.Uninstall,
-                current.PreviousOwner.Association.OwnerSid, false, nextRequest.ExpectedPackageVersion,
-                nextRequest.InstallerPayloadSha256);
-            WindowsMachineDeploymentPlan previous = _backend.CreatePlan(
-                previousRequest, _release.Manifest, current.PreviousOwner.Association, previousProfile, removalPlan: true);
-            WindowsMachineDeploymentPlan next = _backend.CreatePlan(
-                nextRequest, _release.Manifest, current.NextOwner.Association, nextProfile, removalPlan: false);
-            if (previous.Roots != next.Roots || previous.Association != current.PreviousOwner.Association
-                || next.Association != current.NextOwner.Association || previous.Request != previousRequest || next.Request != nextRequest)
-            {
-                throw new InstallerProtocolException("installer.owner_transfer.access_plan_changed");
-            }
+            WindowsMachineDeploymentPlan next = WindowsOwnerTransferDeployment.ResolveNextPlan(
+                current, _release.Manifest, _backend, cancellationToken);
             _backend.VerifyServiceAbsent(cancellationToken);
             using WindowsOwnerTransferAccessTree tree = WindowsOwnerTransferAccessTree.Acquire(
                 next.Roots, _native, current.PreviousOwner.Association.OwnerSid,
@@ -78,16 +64,6 @@ internal sealed class WindowsOwnerTransferMachineAccess
             // native paths or identities in an exception that could cross the helper boundary.
             throw new InstallerProtocolException("installer.owner_transfer.access_failed");
         }
-    }
-
-    private string ResolveProfile(InstallerOwnerTransferParticipant participant, CancellationToken cancellationToken)
-    {
-        string profile = _backend.ResolveTargetProfile(participant.Association.OwnerSid, cancellationToken);
-        if (!string.Equals(profile, participant.ProfileRoot, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InstallerProtocolException("installer.owner_transfer.access_profile_changed");
-        }
-        return profile;
     }
 
 }

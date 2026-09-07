@@ -112,6 +112,24 @@ Installer 边界仅额外固定已知的 v2 目录和普通日志文件，按旧
 
 完整阶段执行器、后续 association/证书/Installer 状态迁移、双账户清理与确认界面仍需继续。正式执行门维持关闭。
 
+## M4q 关联文件原子迁移与恢复
+
+`WindowsOwnerTransferAssociation` 只接受 MachineAccessTransferred，复核同一候选、双方 profile、固定布局、服务缺席和准确普通 Prepared。机器树提供独立的只读租约：共享 ACL 必须全部属于新账户，Installer/v2 仍保持旧账户权限，其他受保护边界保持不变。租约持续固定父目录、载荷和日志；association 叶子由专用文件端口短暂打开，完成观察后释放，允许同目录原子替换。此端口不改变普通 association store 的创建或精确重放限制。
+
+文件端口仅接受记录中的旧 association 或准确的新 association。每次读取都要求普通文件、单硬链接、Administrators owner 和准确的新账户继承 ACL，大小不超过 4 KiB。事务临时文件名由已经持久保存的随机 256 位 continuation ID 导出；只有这个准确名称可以在只读树租约持有期间出现或消失，其他名称、大小写变体或目录对象均拒绝。
+
+恢复时，已知临时文件还必须符合相同文件约束，且字节是本次规范新 association 的准确前缀。空文件、部分写入及完整文件可以据此移除并重建；未知字节、权限或链接原样保留。新临时文件使用独占 CreateNew，写入后调用 [FileStream.Flush(true)](https://learn.microsoft.com/en-us/dotnet/api/system.io.filestream.flush?view=net-10.0)，再次检查旧状态及完整临时文件，再以 [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw) 的 REPLACE_EXISTING 和 WRITE_THROUGH 完成同目录替换。准确新状态且没有临时文件时不执行替换。
+
+替换可能返回错误或迟到的取消，因此步骤在仍持有父目录和 Prepared 句柄时，以不接受取消的观察复核实际文件。只有新 association 已准确提交且临时文件不存在才接受结果；状态无法证明时返回稳定 uncertain 诊断，保留持久阶段。候选、服务缺席、树权限及日志在退出前再次复核。全局机器独占、两份 App 屏障、私有日志和候选的持续持有仍是调用方责任。
+
+新增 43 项测试覆盖完整前置条件、旧/新精确重放、替换确认丢失、错误后的旧或异常状态、日志/权限变化、取消后等待观察收尾及诊断脱敏。完整 Windows 安全子集 579 项通过，0 跳过；18 项目 Release x64 构建零警告、零错误；format 检查 1312 文件，零处变更，无工作区警告。
+
+远端两个独立进程通过 16 个场景、332 项原生断言，包括准确替换、空白/部分/完整临时文件恢复、已提交状态清理、只读句柄下无替换重放，以及陌生归属、无关临时文件、异常权限、硬链接、符号链接、缺失文件和提前取消的拒绝。未涉及替换的文件字节及文件/目录安全描述符摘要均保持，普通日志可重新独占打开，所有树句柄计数和遗留探针进程均为零。
+
+实际被测 Windows 程序集 SHA-256 为 `9102dd2bd8916981729998f4ab5957ba95cccf698691686b0ba7ab9068979c73`，来自直接 x64 项目构建；收据 `artifacts/verification/association-transfer-validation-m4q.json` 同时记录 Core 摘要。临时文件由种子进程构造后交给新进程恢复，该证据不等同于实际掉电测试。探针使用生产文件端口、机器树和全局锁，以及隔离目录、合成身份与载荷；没有验证完整 helper、候选签名或双 App 屏障，也没有启动服务或改动证书和代理。
+
+关联迁移阶段已经实现，证书账本保留、Installer 状态 ACL 迁移和专用认证确认入口继续接入。正式执行门保持关闭，不能将本阶段验证作为完整换绑或正式安装验收。
+
 ## 持久迁移的接入要求
 
 换绑必须是独立用例。后续接入不能再次让普通写入方法凭布尔值覆盖旧证据：
