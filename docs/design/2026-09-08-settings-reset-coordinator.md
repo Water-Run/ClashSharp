@@ -47,3 +47,13 @@ LocalSettings、网络实现或应用单例。
 `1.0.0-m3j-disposal-main.trx`，SHA-256
 `50b02bea6e05b76962c4d483a5d689083c1ba0d7159bfe697791e7fbc6b90ee5`。
 本机代理摘要保持，未执行实际启动注册、路由切换或正常安装。
+
+`cbb6aa6` 的构建测试与离线打包 [CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34194512912)。
+下载四份 TRX 核对共 4557 项通过、0 失败、0 跳过，包含新增 44 项；收据为
+`ci-validation-m3j.json` 和 `ci-reset-coordinator-regressions-m3j.json`。Core 行覆盖率
+为 93.53%、分支覆盖率为 86.73%。
+
+同次开发安装器在远端无全局 .NET 环境完成载荷自检：5 个 WPF 原生库、4 个
+外部载荷文件和 7 个 machine 文件通过，8 个归档文件保持，临时目录及本次进程
+均已清理。没有执行正常安装或改变证书、代理；完整摘要见执行账本及
+`installer-green-validation-m3j.json`。
