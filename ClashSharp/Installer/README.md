@@ -79,8 +79,15 @@ HTTPS CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL 和固定
 CLASHSHARP_WINDOWS_SDK_VERSION。脚本验证签名与时间戳后才产生正式文件名。
 可选的 CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT 必须与仓库固定输入一致。
 
-当前生产安装执行开关仍默认关闭，完整 Windows 11 安装、修复、升级、卸载、
-跨用户关联与故障恢复矩阵尚未完成；开发包不能被提升为 1.0.0 正式发布。
+正式签名构建现在显式编译生产安装与 helper 入口；`-Development` 显式关闭该入口，
+普通项目构建仍使用预览运行时。嵌入清单、签名者固定与可信时间戳校验继续决定
+正式文件能否输出，重命名开发文件不能启用安装权限。CI 用真实 MSBuild 评估三个
+构建配置，并检查缺少正式构建标志或嵌入清单时会拒绝启用。
+
+Windows 11 Sandbox 已通过生产 parent/helper 的安装、修复和卸载事务，卸载后
+包、服务、安装器拥有的两类证书及服务目录均已移除。该验证使用一次性客体信任和
+明确记录的客体目录 ACL 夹具；WPF 页面操作、升级、跨用户关联与完整故障矩阵
+仍需完成，开发包不能被提升为 1.0.0 正式发布。
 最新结果见 [执行账本](../../docs/reviews/1.0.0-execution-ledger.md)。
 
 ## 上游数据来源

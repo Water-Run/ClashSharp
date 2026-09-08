@@ -759,6 +759,7 @@ $installerReleaseManifest = New-ClashSharpInstallerReleaseManifest `
     -AuthenticodeCertificateThumbprint $authenticodeThumbprint `
     -OutputPath $installerReleaseManifestPath
 
+$installerRuntimeProperty = Get-ClashSharpInstallerMutationRuntimeProperty -Development:$Development
 dotnet publish $installerProject `
     -c Release `
     --no-restore `
@@ -774,6 +775,7 @@ dotnet publish $installerProject `
     -p:DebugType=None `
     -p:PublishDocumentationFiles=false `
     -p:ClashSharpFormalInstallerBuild=true `
+    $installerRuntimeProperty `
     "-p:ClashSharpInstallerReleaseManifestPath=$($installerReleaseManifest.FullName)" `
     -o $installerPublishRoot
 if ($LASTEXITCODE -ne 0) {

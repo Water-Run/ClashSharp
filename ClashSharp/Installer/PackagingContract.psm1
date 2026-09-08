@@ -1069,6 +1069,26 @@ function Get-ClashSharpPackageSignature {
     }
 }
 
+function Get-ClashSharpInstallerMutationRuntimeProperty {
+    <#
+    .SYNOPSIS
+        Selects the compiled installer runtime for the requested distribution profile.
+    .DESCRIPTION
+        Returns an explicit MSBuild property so unsigned development packaging cannot inherit
+        mutation activation from the environment. Signed release packaging compiles the production
+        parent and helper; the existing manifest, signer, and timestamp gates still control promotion.
+    .PARAMETER Development
+        Selects the unsigned development profile with installation operations disabled.
+    #>
+    [CmdletBinding()]
+    param([switch] $Development)
+
+    if ($Development) {
+        return '-p:ClashSharpEnableInstallerMutationRuntime=false'
+    }
+    return '-p:ClashSharpEnableInstallerMutationRuntime=true'
+}
+
 Export-ModuleMember -Function @(
     'Assert-ClashSharpOrdinaryPath',
     'Get-ClashSharpDirectoryContract',
@@ -1082,5 +1102,6 @@ Export-ModuleMember -Function @(
     'Get-ClashSharpMsixMachineFileContract',
     'Get-ClashSharpMainPackageDependency',
     'Get-ClashSharpPackageSignature',
+    'Get-ClashSharpInstallerMutationRuntimeProperty',
     'New-ClashSharpInstallerReleaseManifest'
 )

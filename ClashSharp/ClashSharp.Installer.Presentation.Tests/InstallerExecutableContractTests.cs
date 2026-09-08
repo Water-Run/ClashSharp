@@ -185,14 +185,19 @@ public sealed class InstallerExecutableContractTests
     }
 
     [Fact]
-    public void FormalPackagingDoesNotPromoteTheMutationRuntimeWithoutVmEvidence()
+    public void PackagingSelectsTheRuntimeProfileBeforePublishing()
     {
         string buildScript = File.ReadAllText(SourcePath("Installer", "build.ps1"));
 
-        Assert.DoesNotContain(
-            "ClashSharpEnableInstallerMutationRuntime",
+        Assert.Contains(
+            "$installerRuntimeProperty = Get-ClashSharpInstallerMutationRuntimeProperty -Development:$Development",
             buildScript,
             StringComparison.Ordinal);
+        Match publish = Regex.Match(buildScript, @"dotnet publish \$installerProject(?<arguments>.*?)if \(\$LASTEXITCODE", RegexOptions.Singleline);
+        Assert.True(publish.Success);
+        Assert.Contains("$installerRuntimeProperty", publish.Groups["arguments"].Value, StringComparison.Ordinal);
+        Assert.Contains("ClashSharpFormalInstallerBuild=true", publish.Groups["arguments"].Value, StringComparison.Ordinal);
+        Assert.Contains("ClashSharpInstallerReleaseManifestPath", publish.Groups["arguments"].Value, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "CLASHSHARP_INSTALLER_MUTATION_RUNTIME",
             buildScript,
