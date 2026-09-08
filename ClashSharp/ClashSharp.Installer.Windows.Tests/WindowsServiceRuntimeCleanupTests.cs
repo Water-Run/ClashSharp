@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
 using ClashSharp.Installer.Windows.Machines;
@@ -68,6 +69,30 @@ public sealed class WindowsServiceRuntimeCleanupTests
 
         Assert.True(Directory.Exists(fixture.RuntimeRoot));
     }
+
+    [Fact]
+    public void HardLinkCannotChangeAttributesOrDeleteAnExternalAlias()
+    {
+        using var fixture = new Fixture();
+        Directory.CreateDirectory(fixture.RuntimeRoot);
+        string external = Path.Combine(fixture.Plan.ServiceDataRoot, "preserved.yaml");
+        File.WriteAllText(external, "preserve source data");
+        File.SetAttributes(external, FileAttributes.ReadOnly);
+        string alias = Path.Combine(fixture.RuntimeRoot, "alias.yaml");
+        Assert.True(CreateHardLink(alias, external, 0));
+
+        Assert.Throws<InstallerProtocolException>(() =>
+            new WindowsServiceRuntimeCleanup().RemoveAndVerify(fixture.Plan, CancellationToken.None));
+
+        Assert.Equal("preserve source data", File.ReadAllText(external));
+        Assert.True((File.GetAttributes(external) & FileAttributes.ReadOnly) != 0);
+        Assert.True(File.Exists(alias));
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLink(string linkPath, string existingPath, nint securityAttributes);
 
     private sealed class Fixture : IDisposable
     {

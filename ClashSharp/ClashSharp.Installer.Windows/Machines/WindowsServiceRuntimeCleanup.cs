@@ -62,6 +62,10 @@ internal sealed class WindowsServiceRuntimeCleanup
                     else
                     {
                         using SafeFileHandle file = WindowsFileSystemNative.OpenOrdinaryFile(entry);
+                        if (WindowsFileSystemNative.GetLinkCount(file) != 1)
+                        {
+                            throw new IOException("The service runtime contains a multiply linked file.");
+                        }
                         files.Add(entry);
                     }
                 }
