@@ -150,53 +150,12 @@ public sealed class SettingsResetCoordinator
         try
         {
             SettingsRuntimeSnapshot snapshot = operation.CaptureSnapshot();
-            return (snapshot, await TryApplyAsync(operation, snapshot, scope));
+            return (snapshot, await SettingsRuntimeApplier.TryApplyAsync(operation, snapshot, scope));
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             return (default, exception);
         }
-    }
-
-    private static async Task<Exception?> TryApplyAsync(
-        ISettingsResetOperation operation,
-        SettingsRuntimeSnapshot snapshot,
-        SettingsResetScope scope)
-    {
-        List<Exception> failures = [];
-        if (scope == SettingsResetScope.All)
-        {
-            CaptureFailure(() => operation.ApplyLanguage(snapshot.DisplayLanguage), failures);
-            CaptureFailure(() => operation.ApplyTheme(snapshot.AppThemeMode), failures);
-            CaptureFailure(() => operation.ApplyAccentColor(snapshot.AppAccentColorMode, snapshot.AppAccentColorValue), failures);
-        }
-
-        if (scope is SettingsResetScope.All or SettingsResetScope.Startup)
-        {
-            await CaptureFailureAsync(
-                () => operation.ApplyLaunchAtStartupAsync(snapshot.LaunchAtStartupEnabled, CancellationToken.None), failures);
-        }
-
-        if (scope is SettingsResetScope.All or SettingsResetScope.Proxy)
-        {
-            await CaptureFailureAsync(() => operation.RestartConnectionSamplingAsync(CancellationToken.None), failures);
-        }
-
-        if (scope is SettingsResetScope.All or SettingsResetScope.Proxy or SettingsResetScope.TransparentProxy)
-        {
-            await CaptureFailureAsync(
-                () => operation.ApplyNetworkSettingsAsync(snapshot.TransparentProxyEnabled, snapshot.MixedPort, CancellationToken.None), failures);
-        }
-
-        CaptureFailure(() =>
-        {
-            if (operation.CaptureSnapshot() != snapshot)
-            {
-                throw new InvalidOperationException(
-                    "A settings reset participant did not preserve the durable external settings snapshot.");
-            }
-        }, failures);
-        return CombineFailures(failures, "One or more settings reset participants failed to apply the durable state.");
     }
 
     private static async Task RestoreAsync(
@@ -217,7 +176,7 @@ public sealed class SettingsResetCoordinator
                 "The retained reset receipt did not restore the previous durable settings."));
         }
 
-        Exception? activationFailure = await TryApplyAsync(operation, durableTarget, scope);
+        Exception? activationFailure = await SettingsRuntimeApplier.TryApplyAsync(operation, durableTarget, scope);
         if (activationFailure is not null)
         {
             failures.Add(activationFailure);

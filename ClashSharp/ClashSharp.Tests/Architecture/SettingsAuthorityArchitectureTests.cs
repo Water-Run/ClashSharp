@@ -54,10 +54,11 @@ public sealed class SettingsAuthorityArchitectureTests
     {
         string pageComposition = ReadApplicationSource(
             "Presentation/Composition/SettingsPageComposition.cs");
-        Assert.Contains(
-            "runtimeMutation.BeginImportAsync(packagePath, cancellationToken)",
-            pageComposition,
-            StringComparison.Ordinal);
+        Assert.Contains("SettingsImportCoordinator", pageComposition, StringComparison.Ordinal);
+        string importAdapter = ReadApplicationSource("Presentation/Adapters/SettingsImportOperationAdapter.cs");
+        Assert.Contains("runtimeMutation.BeginImportAsync(packagePath, cancellationToken)", importAdapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("receipt.CommitAsync", pageComposition, StringComparison.Ordinal);
+        Assert.DoesNotContain("receipt.RollbackAsync", pageComposition, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "dataPackages.BeginImportAsync(packagePath, cancellationToken)",
             pageComposition,

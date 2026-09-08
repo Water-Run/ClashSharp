@@ -59,11 +59,8 @@ internal readonly record struct SettingsExternalDurableSnapshot(
     int MixedPort);
 
 /// <summary>Retains the pre-import data generation until runtime activation chooses one final decision.</summary>
-internal interface ISettingsDataPackageTransactionReceipt : IAsyncDisposable
+internal interface ISettingsDataPackageTransactionReceipt : IRetainedSettingsTransactionReceipt
 {
-    Task CommitAsync(CancellationToken cancellationToken);
-
-    Task RollbackAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>
