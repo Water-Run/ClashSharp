@@ -28,9 +28,9 @@ internal sealed class SettingsViewModel : ObservableObject
     private const int MinConnectionSamplingIntervalSeconds = 3;
     private const int MaxConnectionSamplingIntervalSeconds = 300;
     private const string DefaultConnectionTestUrl = "https://www.google.com/generate_204";
-    private const string DefaultConnectionTestProxyUrl1 = "https://www.google.com";
-    private const string DefaultConnectionTestProxyUrl2 = "https://github.com";
-    private const string DefaultConnectionTestDirectUrl = "https://www.baidu.com";
+    internal const string DefaultConnectionTestProxyUrl1 = "https://www.google.com";
+    internal const string DefaultConnectionTestProxyUrl2 = "https://github.com";
+    internal const string DefaultConnectionTestDirectUrl = "https://www.baidu.com";
     private const string DefaultTrayVisibleFeatureIds = "status,mode,pages,transparent-proxy,settings,safe-exit";
 
     public static IReadOnlyList<SettingsTrayFeatureDefinition> TrayFeatureDefinitions { get; } =
@@ -669,6 +669,8 @@ internal sealed class SettingsViewModel : ObservableObject
     public string ConnectionTestUrlTitleText => _getString("Settings.ConnectionTestUrl.Title");
 
     public string ConnectionTestUrlDescriptionText => _getString("Settings.ConnectionTestUrl.Description");
+
+    public string ConnectionTestUrlValidationText => _getString("Settings.ConnectionTestUrl.Invalid");
 
     public string ConnectionTestProxyUrl1TitleText => _getString("Settings.ConnectionTestUrl.Proxy1");
 
@@ -2541,9 +2543,7 @@ internal sealed class SettingsViewModel : ObservableObject
             return false;
         }
 
-        _settings.ConnectionTestProxyUrl1 = normalizedProxyUrl1;
-        _settings.ConnectionTestProxyUrl2 = normalizedProxyUrl2;
-        _settings.ConnectionTestDirectUrl = normalizedDirectUrl;
+        _settings.SetConnectionTestUrls(normalizedProxyUrl1, normalizedProxyUrl2, normalizedDirectUrl);
         ConnectionTestProxyUrl1 = normalizedProxyUrl1;
         ConnectionTestProxyUrl2 = normalizedProxyUrl2;
         ConnectionTestDirectUrl = normalizedDirectUrl;
@@ -2553,12 +2553,33 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Restores registered connection-test URLs to defaults.</summary>
     public void ResetConnectionTestUrlsToDefaults()
     {
-        _settings.ConnectionTestProxyUrl1 = DefaultConnectionTestProxyUrl1;
-        _settings.ConnectionTestProxyUrl2 = DefaultConnectionTestProxyUrl2;
-        _settings.ConnectionTestDirectUrl = DefaultConnectionTestDirectUrl;
+        _settings.SetConnectionTestUrls(
+            DefaultConnectionTestProxyUrl1,
+            DefaultConnectionTestProxyUrl2,
+            DefaultConnectionTestDirectUrl);
         ConnectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
         ConnectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
         ConnectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
+    }
+
+    /// <summary>Returns the first invalid editor field, or -1 when all targets can be saved.</summary>
+    /// <param name="proxyUrl1">First proxy target draft.</param>
+    /// <param name="proxyUrl2">Second proxy target draft.</param>
+    /// <param name="directUrl">Direct target draft.</param>
+    /// <returns>Zero-based field index, without modifying drafts or persisted settings.</returns>
+    public static int GetInvalidConnectionTestUrlIndex(string proxyUrl1, string proxyUrl2, string directUrl)
+    {
+        if (!TryNormalizeConnectionTestUrl(proxyUrl1, out _))
+        {
+            return 0;
+        }
+
+        if (!TryNormalizeConnectionTestUrl(proxyUrl2, out _))
+        {
+            return 1;
+        }
+
+        return TryNormalizeConnectionTestUrl(directUrl, out _) ? -1 : 2;
     }
 
     private string FormatConnectionTestUrlSummaryPart(string url)

@@ -2259,7 +2259,6 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("BuildConnectionTestUrlsPanel", settingsCode, StringComparison.Ordinal);
         Assert.Contains("RestoreConnectionTestUrlsButton", settingsCode, StringComparison.Ordinal);
         Assert.Contains("SetConnectionTestUrls", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("ResetConnectionTestUrlsToDefaults", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings opens backup/restore export scope selection in a dialog instead of pinning a scope dropdown on the page.</summary>

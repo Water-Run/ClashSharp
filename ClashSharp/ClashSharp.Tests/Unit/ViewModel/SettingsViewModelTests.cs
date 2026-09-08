@@ -1038,12 +1038,105 @@ public sealed class SettingsViewModelTests
         Assert.Equal("https://github.com", store.ConnectionTestProxyUrl2);
         Assert.Equal("https://baidu.com", store.ConnectionTestDirectUrl);
         Assert.Equal("https://google.com", ReadProperty<string>(viewModel, "ConnectionTestProxyUrl1"));
+        Assert.Equal(1, store.ConnectionTestUrlBatchCount);
 
         InvokeMethod<object?>(viewModel, "ResetConnectionTestUrlsToDefaults", Array.Empty<object>());
 
         Assert.Equal("https://www.google.com", store.ConnectionTestProxyUrl1);
         Assert.Equal("https://github.com", store.ConnectionTestProxyUrl2);
         Assert.Equal("https://www.baidu.com", store.ConnectionTestDirectUrl);
+        Assert.Equal(2, store.ConnectionTestUrlBatchCount);
+    }
+
+    [Theory]
+    [InlineData("", "github.com", "baidu.com", 0)]
+    [InlineData("   ", "github.com", "baidu.com", 0)]
+    [InlineData("ftp://example.test", "github.com", "baidu.com", 0)]
+    [InlineData("google.com", "", "baidu.com", 1)]
+    [InlineData("google.com", "file:///C:/test", "baidu.com", 1)]
+    [InlineData("google.com", "github.com", "", 2)]
+    [InlineData("google.com", "github.com", "https://", 2)]
+    public void ConnectionTestUrls_InvalidDraftIdentifiesFieldAndPreservesAllSettings(
+        string proxyUrl1,
+        string proxyUrl2,
+        string directUrl,
+        int invalidIndex)
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        viewModel.Load();
+
+        Assert.Equal(invalidIndex, SettingsViewModel.GetInvalidConnectionTestUrlIndex(
+            proxyUrl1, proxyUrl2, directUrl));
+        Assert.False(viewModel.SetConnectionTestUrls(proxyUrl1, proxyUrl2, directUrl));
+
+        Assert.Equal(0, store.ConnectionTestUrlBatchCount);
+        Assert.Equal(SettingsViewModel.DefaultConnectionTestProxyUrl1, viewModel.ConnectionTestProxyUrl1);
+        Assert.Equal(SettingsViewModel.DefaultConnectionTestProxyUrl2, viewModel.ConnectionTestProxyUrl2);
+        Assert.Equal(SettingsViewModel.DefaultConnectionTestDirectUrl, viewModel.ConnectionTestDirectUrl);
+        Assert.Equal(viewModel.ConnectionTestProxyUrl1, store.ConnectionTestProxyUrl1);
+        Assert.Equal(viewModel.ConnectionTestProxyUrl2, store.ConnectionTestProxyUrl2);
+        Assert.Equal(viewModel.ConnectionTestDirectUrl, store.ConnectionTestDirectUrl);
+        Assert.Equal("Settings.ConnectionTestUrl.Invalid", viewModel.ConnectionTestUrlValidationText);
+    }
+
+    [Fact]
+    public void ConnectionTestUrls_ValidDraftDoesNotPersistUntilSaved()
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
+
+        Assert.Equal(-1, SettingsViewModel.GetInvalidConnectionTestUrlIndex(
+            " one.example.test ", "http://two.example.test:8080/probe", "https://three.example.test/status"));
+        Assert.Equal(0, store.ConnectionTestUrlBatchCount);
+        Assert.Equal(SettingsViewModel.DefaultConnectionTestProxyUrl1, store.ConnectionTestProxyUrl1);
+
+        Assert.True(viewModel.SetConnectionTestUrls(
+            " one.example.test ", "http://two.example.test:8080/probe", "https://three.example.test/status"));
+
+        Assert.Equal(1, store.ConnectionTestUrlBatchCount);
+        Assert.Equal("https://one.example.test", store.ConnectionTestProxyUrl1);
+        Assert.Equal("http://two.example.test:8080/probe", store.ConnectionTestProxyUrl2);
+        Assert.Equal("https://three.example.test/status", store.ConnectionTestDirectUrl);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConnectionTestUrls_FailedBatchDoesNotPublishUncommittedValues(bool reset)
+    {
+        IOException failure = new("settings write rejected");
+        FakeSettingsStore store = new()
+        {
+            ConnectionTestProxyUrl1 = "https://old-one.example.test",
+            ConnectionTestProxyUrl2 = "https://old-two.example.test",
+            ConnectionTestDirectUrl = "https://old-direct.example.test",
+            ConnectionTestUrlWriteFailure = failure,
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
+
+        IOException observed = Assert.Throws<IOException>(() =>
+        {
+            if (reset)
+            {
+                viewModel.ResetConnectionTestUrlsToDefaults();
+            }
+            else
+            {
+                viewModel.SetConnectionTestUrls("one.example.test", "two.example.test", "three.example.test");
+            }
+        });
+
+        Assert.Same(failure, observed);
+        Assert.Equal(1, store.ConnectionTestUrlBatchCount);
+        Assert.Equal("https://old-one.example.test", store.ConnectionTestProxyUrl1);
+        Assert.Equal("https://old-two.example.test", store.ConnectionTestProxyUrl2);
+        Assert.Equal("https://old-direct.example.test", store.ConnectionTestDirectUrl);
+        Assert.Equal(store.ConnectionTestProxyUrl1, viewModel.ConnectionTestProxyUrl1);
+        Assert.Equal(store.ConnectionTestProxyUrl2, viewModel.ConnectionTestProxyUrl2);
+        Assert.Equal(store.ConnectionTestDirectUrl, viewModel.ConnectionTestDirectUrl);
     }
 
     /// <summary>Verifies data package import and export bindings expose level choices and commands.</summary>
@@ -1884,6 +1977,23 @@ public sealed class SettingsViewModelTests
         public string ConnectionTestProxyUrl2 { get; set; } = "https://github.com";
 
         public string ConnectionTestDirectUrl { get; set; } = "https://www.baidu.com";
+
+        public int ConnectionTestUrlBatchCount { get; private set; }
+
+        public Exception? ConnectionTestUrlWriteFailure { get; set; }
+
+        public void SetConnectionTestUrls(string proxyUrl1, string proxyUrl2, string directUrl)
+        {
+            ConnectionTestUrlBatchCount++;
+            if (ConnectionTestUrlWriteFailure is not null)
+            {
+                throw ConnectionTestUrlWriteFailure;
+            }
+
+            ConnectionTestProxyUrl1 = proxyUrl1;
+            ConnectionTestProxyUrl2 = proxyUrl2;
+            ConnectionTestDirectUrl = directUrl;
+        }
     }
 
     private static SettingsViewModel CreateConnectionTestViewModel(

@@ -487,6 +487,21 @@ public sealed partial class AppSettingsService :
         set => WriteOrdinary(editor => editor.ConnectionTestDirectUrl = value);
     }
 
+    /// <summary>Validates and persists the three connection-test targets under one settings admission.</summary>
+    /// <param name="proxyUrl1">First HTTP or HTTPS proxy test address.</param>
+    /// <param name="proxyUrl2">Second HTTP or HTTPS proxy test address.</param>
+    /// <param name="directUrl">HTTP or HTTPS direct test address.</param>
+    /// <remarks>Observers are notified only after the complete rollback-capable batch is applied.</remarks>
+    public void SetConnectionTestUrls(string proxyUrl1, string proxyUrl2, string directUrl)
+    {
+        WriteOrdinary(editor =>
+        {
+            editor.ConnectionTestProxyUrl1 = proxyUrl1;
+            editor.ConnectionTestProxyUrl2 = proxyUrl2;
+            editor.ConnectionTestDirectUrl = directUrl;
+        });
+    }
+
     /// <summary>Gets or sets whether mainland China display replacement is enabled.</summary>
     /// <value>True when any mainland China feature mode is enabled; defaults to true.</value>
     public bool MainlandChinaDisplayEnabled

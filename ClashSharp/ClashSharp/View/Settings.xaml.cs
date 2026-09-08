@@ -13,6 +13,7 @@ using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
@@ -409,35 +410,66 @@ public sealed partial class Settings : Page
             TextBox proxyUrl1Box = new() { Text = _viewModel.ConnectionTestProxyUrl1, Width = 360 };
             TextBox proxyUrl2Box = new() { Text = _viewModel.ConnectionTestProxyUrl2, Width = 360 };
             TextBox directUrlBox = new() { Text = _viewModel.ConnectionTestDirectUrl, Width = 360 };
-            StackPanel panel = BuildConnectionTestUrlsPanel(proxyUrl1Box, proxyUrl2Box, directUrlBox);
+            InfoBar validationError = new()
+            {
+                Severity = InfoBarSeverity.Error,
+                IsClosable = false,
+                Message = _viewModel.ConnectionTestUrlValidationText,
+            };
+            StackPanel panel = BuildConnectionTestUrlsPanel(
+                proxyUrl1Box, proxyUrl2Box, directUrlBox, validationError);
 
             ThemedContentDialog dialog = new()
             {
                 Title = _viewModel.ConnectionTestUrlTitleText,
                 Content = panel,
                 PrimaryButtonText = _getString("Command.Save"),
-                SecondaryButtonText = _viewModel.ResetText,
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = GetDialogXamlRoot(),
             };
 
-            ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
-            if (result is ContentDialogResult.Secondary)
+            void ValidateDraft(ContentDialog sender, ContentDialogButtonClickEventArgs args)
             {
-                _viewModel.ResetConnectionTestUrlsToDefaults();
-                return;
+                int invalidIndex = SettingsViewModel.GetInvalidConnectionTestUrlIndex(
+                    proxyUrl1Box.Text, proxyUrl2Box.Text, directUrlBox.Text);
+                args.Cancel = invalidIndex >= 0;
+                validationError.IsOpen = args.Cancel;
+                if (invalidIndex >= 0)
+                {
+                    TextBox invalidField = invalidIndex switch
+                    {
+                        0 => proxyUrl1Box,
+                        1 => proxyUrl2Box,
+                        _ => directUrlBox,
+                    };
+                    invalidField.Focus(FocusState.Programmatic);
+                }
             }
 
-            if (result is ContentDialogResult.Primary)
+            dialog.PrimaryButtonClick += ValidateDraft;
+            try
             {
-                _viewModel.SetConnectionTestUrls(proxyUrl1Box.Text, proxyUrl2Box.Text, directUrlBox.Text);
+                ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (result is ContentDialogResult.Primary)
+                {
+                    _viewModel.SetConnectionTestUrls(proxyUrl1Box.Text, proxyUrl2Box.Text, directUrlBox.Text);
+                }
+            }
+            finally
+            {
+                dialog.PrimaryButtonClick -= ValidateDraft;
             }
         });
     }
 
     /// <summary>Builds the connection-test URL editor content.</summary>
-    private StackPanel BuildConnectionTestUrlsPanel(TextBox proxyUrl1Box, TextBox proxyUrl2Box, TextBox directUrlBox)
+    private StackPanel BuildConnectionTestUrlsPanel(
+        TextBox proxyUrl1Box,
+        TextBox proxyUrl2Box,
+        TextBox directUrlBox,
+        InfoBar validationError)
     {
         StackPanel panel = new()
         {
@@ -447,6 +479,7 @@ public sealed partial class Settings : Page
         AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestProxyUrl1TitleText, proxyUrl1Box);
         AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestProxyUrl2TitleText, proxyUrl2Box);
         AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestDirectUrlTitleText, directUrlBox);
+        panel.Children.Add(validationError);
 
         Button restoreButton = new()
         {
@@ -456,9 +489,10 @@ public sealed partial class Settings : Page
         };
         restoreButton.Click += (_, _) =>
         {
-            proxyUrl1Box.Text = "https://www.google.com";
-            proxyUrl2Box.Text = "https://github.com";
-            directUrlBox.Text = "https://www.baidu.com";
+            proxyUrl1Box.Text = SettingsViewModel.DefaultConnectionTestProxyUrl1;
+            proxyUrl2Box.Text = SettingsViewModel.DefaultConnectionTestProxyUrl2;
+            directUrlBox.Text = SettingsViewModel.DefaultConnectionTestDirectUrl;
+            validationError.IsOpen = false;
         };
         panel.Children.Add(restoreButton);
         return panel;
@@ -466,6 +500,7 @@ public sealed partial class Settings : Page
 
     private static void AddConnectionTestUrlEditorRow(StackPanel panel, string label, TextBox textBox)
     {
+        AutomationProperties.SetName(textBox, label);
         panel.Children.Add(new TextBlock
         {
             Text = label,

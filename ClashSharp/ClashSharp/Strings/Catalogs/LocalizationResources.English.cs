@@ -519,6 +519,7 @@ internal static partial class LocalizationResources
             ["Settings.MixedPort.Description"] = "Local HTTP/SOCKS entry used by system and terminal proxy settings.",
             ["Settings.ConnectionTestUrl.Title"] = "Connection test URL",
             ["Settings.ConnectionTestUrl.Description"] = "Target URL used for proxy node connection tests.",
+            ["Settings.ConnectionTestUrl.Invalid"] = "Enter a valid HTTP or HTTPS address.",
             ["Settings.ConnectionTestUrl.Proxy1"] = "URL expected to work through proxy 1",
             ["Settings.ConnectionTestUrl.Proxy2"] = "URL expected to work through proxy 2",
             ["Settings.ConnectionTestUrl.Direct"] = "URL expected to work without proxy",

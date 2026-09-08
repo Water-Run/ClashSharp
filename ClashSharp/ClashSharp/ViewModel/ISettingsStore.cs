@@ -62,9 +62,12 @@ internal interface ISettingsStore
 
     string ConnectionTestUrl { get; set; }
 
-    string ConnectionTestProxyUrl1 { get; set; }
+    string ConnectionTestProxyUrl1 { get; }
 
-    string ConnectionTestProxyUrl2 { get; set; }
+    string ConnectionTestProxyUrl2 { get; }
 
-    string ConnectionTestDirectUrl { get; set; }
+    string ConnectionTestDirectUrl { get; }
+
+    /// <summary>Persists all three connection-test targets in one admitted, rollback-capable batch.</summary>
+    void SetConnectionTestUrls(string proxyUrl1, string proxyUrl2, string directUrl);
 }

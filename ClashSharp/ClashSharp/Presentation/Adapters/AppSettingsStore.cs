@@ -172,21 +172,15 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.ConnectionTestUrl = value;
     }
 
-    public string ConnectionTestProxyUrl1
-    {
-        get => _settings.ConnectionTestProxyUrl1;
-        set => _settings.ConnectionTestProxyUrl1 = value;
-    }
+    public string ConnectionTestProxyUrl1 => _settings.ConnectionTestProxyUrl1;
 
-    public string ConnectionTestProxyUrl2
-    {
-        get => _settings.ConnectionTestProxyUrl2;
-        set => _settings.ConnectionTestProxyUrl2 = value;
-    }
+    public string ConnectionTestProxyUrl2 => _settings.ConnectionTestProxyUrl2;
 
-    public string ConnectionTestDirectUrl
+    public string ConnectionTestDirectUrl => _settings.ConnectionTestDirectUrl;
+
+    /// <inheritdoc />
+    public void SetConnectionTestUrls(string proxyUrl1, string proxyUrl2, string directUrl)
     {
-        get => _settings.ConnectionTestDirectUrl;
-        set => _settings.ConnectionTestDirectUrl = value;
+        _settings.SetConnectionTestUrls(proxyUrl1, proxyUrl2, directUrl);
     }
 }

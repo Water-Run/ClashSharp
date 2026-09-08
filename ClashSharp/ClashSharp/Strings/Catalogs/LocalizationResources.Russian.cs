@@ -521,6 +521,7 @@ internal static partial class LocalizationResources
             ["Settings.MixedPort.Description"] = "Локальный вход HTTP/SOCKS для системного и терминального прокси.",
             ["Settings.ConnectionTestUrl.Title"] = "URL проверки подключения",
             ["Settings.ConnectionTestUrl.Description"] = "Целевой URL для проверки подключения узлов прокси.",
+            ["Settings.ConnectionTestUrl.Invalid"] = "Введите корректный адрес HTTP или HTTPS.",
             ["Settings.ConnectionTestUrl.Proxy1"] = "URL, который должен открываться через прокси 1",
             ["Settings.ConnectionTestUrl.Proxy2"] = "URL, который должен открываться через прокси 2",
             ["Settings.ConnectionTestUrl.Direct"] = "URL, который должен открываться без прокси",

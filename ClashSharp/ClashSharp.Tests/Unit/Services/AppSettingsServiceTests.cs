@@ -8,6 +8,105 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class AppSettingsServiceTests
 {
     [Fact]
+    public async Task ConnectionTestUrlBatch_NotifiesCompleteSnapshotBeforeExclusiveAdmission()
+    {
+        MutationAdmissionBarrier barrier = new();
+        AppSettingsService settings = AppSettingsService.Instance;
+        settings.ConfigureMutationAdmission(barrier);
+        settings.ResetAllSettings();
+        List<(string Proxy1, string Proxy2, string Direct)> observations = [];
+        ValueTask<MutationAdmissionLease> pendingExclusive = default;
+        void OnChanged(object? sender, AppSettingChangedEventArgs change)
+        {
+            if (change.Key is not ("ConnectionTestProxyUrl1" or "ConnectionTestProxyUrl2" or "ConnectionTestDirectUrl"))
+            {
+                return;
+            }
+
+            observations.Add((settings.ConnectionTestProxyUrl1, settings.ConnectionTestProxyUrl2, settings.ConnectionTestDirectUrl));
+            if (observations.Count == 1)
+            {
+                pendingExclusive = barrier.CloseAndDrainAsync(
+                    MutationAdmissionClosure.Destructive, CancellationToken.None);
+            }
+
+            Assert.False(pendingExclusive.IsCompleted);
+        }
+
+        settings.SettingChanged += OnChanged;
+        try
+        {
+            settings.SetConnectionTestUrls("one.example.test", "https://two.example.test", "http://three.example.test");
+
+            await using MutationAdmissionLease exclusive = await pendingExclusive;
+            Assert.True(exclusive.IsExclusive);
+            Assert.Equal(3, observations.Count);
+            Assert.All(observations, observed => Assert.Equal(
+                ("https://one.example.test", "https://two.example.test", "http://three.example.test"), observed));
+        }
+        finally
+        {
+            settings.SettingChanged -= OnChanged;
+            if (barrier.State == MutationAdmissionState.Open)
+            {
+                settings.ResetAllSettings();
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ConnectionTestUrlBatch_InvalidTargetDoesNotWriteOrNotify(int invalidIndex)
+    {
+        ResetSettings();
+        AppSettingsService settings = AppSettingsService.Instance;
+        string[] baseline = [settings.ConnectionTestProxyUrl1, settings.ConnectionTestProxyUrl2, settings.ConnectionTestDirectUrl];
+        string[] requested = ["one.example.test", "two.example.test", "three.example.test"];
+        requested[invalidIndex] = "ftp://invalid.example.test";
+        List<AppSettingChangedEventArgs> changes = [];
+        void OnChanged(object? sender, AppSettingChangedEventArgs change) => changes.Add(change);
+        settings.SettingChanged += OnChanged;
+        try
+        {
+            Assert.Throws<ArgumentException>(() => settings.SetConnectionTestUrls(requested[0], requested[1], requested[2]));
+
+            Assert.Equal(baseline[0], settings.ConnectionTestProxyUrl1);
+            Assert.Equal(baseline[1], settings.ConnectionTestProxyUrl2);
+            Assert.Equal(baseline[2], settings.ConnectionTestDirectUrl);
+            Assert.Empty(changes);
+        }
+        finally
+        {
+            settings.SettingChanged -= OnChanged;
+            ResetSettings();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectionTestUrlBatch_ExclusiveOperationRejectsAllTargets()
+    {
+        MutationAdmissionBarrier barrier = new();
+        AppSettingsService settings = AppSettingsService.Instance;
+        settings.ConfigureMutationAdmission(barrier);
+        settings.ResetAllSettings();
+        string[] baseline = [settings.ConnectionTestProxyUrl1, settings.ConnectionTestProxyUrl2, settings.ConnectionTestDirectUrl];
+
+        await using (MutationAdmissionLease exclusive = await barrier.CloseAndDrainAsync(
+            MutationAdmissionClosure.Destructive, CancellationToken.None))
+        {
+            Assert.Throws<MutationAdmissionRejectedException>(() =>
+                settings.SetConnectionTestUrls("one.example.test", "two.example.test", "three.example.test"));
+            Assert.Equal(baseline[0], settings.ConnectionTestProxyUrl1);
+            Assert.Equal(baseline[1], settings.ConnectionTestProxyUrl2);
+            Assert.Equal(baseline[2], settings.ConnectionTestDirectUrl);
+        }
+
+        settings.ResetAllSettings();
+    }
+
+    [Fact]
     public async Task OrdinarySetter_EnteredBeforeExclusiveClose_MustDrainBeforeExclusiveLease()
     {
         MutationAdmissionBarrier barrier = new();

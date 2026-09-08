@@ -519,6 +519,7 @@ internal static partial class LocalizationResources
             ["Settings.MixedPort.Description"] = "系统代理和终端代理使用的本地 HTTP/SOCKS 入口。",
             ["Settings.ConnectionTestUrl.Title"] = "连接测试 URL",
             ["Settings.ConnectionTestUrl.Description"] = "用于节点连接测试的目标地址。",
+            ["Settings.ConnectionTestUrl.Invalid"] = "请输入有效的 HTTP 或 HTTPS 地址。",
             ["Settings.ConnectionTestUrl.Proxy1"] = "预期通过代理可以访问的 URL 1",
             ["Settings.ConnectionTestUrl.Proxy2"] = "预期通过代理可以访问的 URL 2",
             ["Settings.ConnectionTestUrl.Direct"] = "预期不通过代理即可访问的 URL",
