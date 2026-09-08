@@ -1,6 +1,6 @@
 # Settings generation cutover
 
-版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口、内部设置运行快照，以及 StartupTask、Sampling、Triggers 的实际服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
+版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口、内部设置运行快照，以及 Appearance、StartupTask、Sampling、Triggers 的服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
 
 ## 已实现的存储与迁移
 
@@ -47,6 +47,16 @@ desired 发布与配置安装分开进行。会话持久保存 Running 后，参
 主程序 `AppThemeService` 已使用该路径，配置构造和调色计算没有平台访问。实际生产调色表通过程序集引用测试，覆盖 7 个颜色、41 个画刷、固定 ARGB 混色结果和透明度。透明画刷保持原有 `#00FFFFFF`，与 [Microsoft.UI.Colors.Transparent](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.colors.transparent?view=windows-app-sdk-1.8) 一致。
 
 `WinUiAccentResourceStore` 限制在资源字典所属 UI 线程访问，枚举主字典的局部项，避免将合并字典中的系统资源误当成应用覆盖；跟随系统只移除本服务拥有的覆盖。画刷除颜色外还验证其自身不透明度为 1。资源字典的集合接口及线程关联见 [ResourceDictionary](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.resourcedictionary?view=windows-app-sdk-1.8)。设置页读取实际资源来判断是否尚待应用；主窗口启动步骤也验证目标强调色后才完成。这项修复已接入现有生产设置入口，完整 Appearance 代际参与者和其他外观消费者仍待整体装配。
+
+## Appearance 的完整批次与 UI 操作寿命
+
+`AppearanceSettingsParticipant` 覆盖 registry 中全部十项外观配置。语言、窗口主题和强调色的模式/颜色从 `IAppearanceNativeSettings` 独立观察；托盘、地区显示和磁贴的六项配置由同一代际拥有，通过 `IAppearanceSettingsReader` 暴露不可变已安装快照。构造不访问窗口、资源或偏好存储，快照也不缓存原生 UI 状态。保存 desired 不会改变已安装配置；单键应用从实际已安装值取得配套值，保留其他键的独立待办。
+
+`WinUiAppearanceSettings` 使用注入的实际窗口根元素、语言资源解析器及生产强调色服务，拒绝窗口缺席和错误线程访问。`OwnedUiDispatcher` 将整个同步 UI 回调纳入可等待的操作寿命；排队拒绝不授权其他线程执行，丢失 enqueue 回执时仅撤销未开始的回调。开始后的回调继续完成；窗口寿命结束或代际退休会撤销未开始的工作，并等待已开始的回调结束。主机装配必须将每代独立的操作所有者绑定窗口寿命，并在窗口队列关闭前退休。
+
+原生效果执行后再次读取完整 UI 配置，再原子发布六项消费者策略。最后回执丢失但实际目标完整匹配时可完成发布；部分失败则尝试恢复之前独立观察到的应用内外观，恢复确认后保留失败待办，允许显式重试。恢复也无法验证时保持 unknown，后续探测失败不会盲目重新应用；致命异常图不进入补偿。此恢复能力只替换应用内 UI 配置，不取得偏好写入、网络或系统资源权限。
+
+回归使用真实临时 JSON、facade、代际管理器、生产主程序的完整强调色表及隔离 UI 边界。覆盖全部十键、配套值与其他待办隔离、部分资源写入、失去回执、不可验证补偿、重试、启动重新观察和同一窗口下的代际替换。排队回调测试确认 Running 已持久保存后页面取消仍等待 UI 回调及最后保存，代际切换同时等待这条完整命令。主程序原生适配器也在无窗口进程中直接验证拒绝行为。这些适配器尚未注册进生产代际装配；托盘、磁贴等消费者的读取端口与刷新、正常窗口的实际交互仍在整体切换时接入和验收。
 
 ## StartupTask 与 Sampling 的实际服务适配
 
@@ -131,10 +141,14 @@ Triggers 适配和入口顺序修复新增 22 项回归，本分支累计净增 
 
 同一源提交和验收脚本在 2026-09-08 14:18 UTC 完成实际 Windows Sandbox 运行 `9328bd3fefce42b7a3ed7b70dba422b8`。MSIX SHA-256 为 `20da82391439e06ce0877a5febdeb56c4e1af5be9f0d671afb725810e21bfb22`；12 步全部通过，实际包进程与 EXE 摘要匹配，主窗口稳定 30366 毫秒，凭据、主窗口及最后启动步骤各成功一次，启动失败记录为零。7 项来宾清理成功，沙箱 `4f30c13b-672d-4ac5-b113-fc825f429f49` 已销毁，输入和主机代理不变；收据为 `sandbox-package-validation-accent-runtime.json`。这验证了新资源检查下的默认启动，未执行自定义配色的实际页面操作、正常 WPF 安装器流程或优雅退出。
 
+验收记录提交 `ff0e065` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34237732342)，实际四份 TRX 共 4878 项通过、零失败、零跳过，22 项强调色用例全部核对。合并提交 `35a11c6` 与源提交 tree 同为 `5fcf949bc9d2d71ef07cf2af64f312c31f4ae91a`，收据为 `ci-validation-accent-evidence.json`。该提交只有文档变化，安装器仅核验构建及元数据；原生证据继续绑定上述 `a4f6368` 候选。
+
+Appearance 参与者及 UI 操作所有者新增 26 项回归，本分支累计净增 218 项。完整主程序 2839 项全部通过、零失败、零跳过，用时 59 秒；18 项目 Release x64 构建零警告、零错误，用时 27.66 秒，format 检查 1510 文件、零处变更。收据为 `local-validation-appearance-runtime.json`，报告为 `1.0.0-appearance-runtime-main.trx`、`build-appearance-runtime-complete.log` 和 `format-appearance-runtime-verified.log`。初次定向编译修正了一处异步异常断言的分析器用法，原日志 `test-appearance-dispatcher-components.log` 保留；此前两个定向集合分别通过 22 和 26 项。该节点没有激活新的生产设置权威，完整装配后的 UI 与安装器候选仍需原生验收。
+
 ## 完整切换的剩余依赖
 
 1. 将偏好写入统一为应用层异步 change set；页面、磁贴、触发器和网络提交者使用同一个接口。独立控制端凭据已接入生产调用，后续代际重置继续使用该能力。
-2. 完成 Appearance、Network 的实际 apply/probe 适配器，并将已实现的 Internal、StartupTask、Sampling、Triggers 一起装配；明确读取 desired、有效状态和待办的消费者。
+2. 完成 Network 的实际 apply/probe 适配器，并将已实现的 Appearance、Internal、StartupTask、Sampling、Triggers 一起装配；明确读取 desired、有效状态和待办的消费者，并接通外观变化后的页面刷新。
 3. 在设置驱动的启动步骤之前完成旧事务恢复、代际打开和偏好迁移。profile/log/trigger 与 settings 必须由同一代际容器解析、排空和替换。
 4. 将导入、重置和回滚接入候选代际及 manifest 提交，完成生产消费者替换后，原子替换 `SettingsAuthorityArchitectureTests` 中的临时门禁。
 5. 运行新候选的 CI、打包应用及隔离 Windows 验收，再将完整节点推送 main。
