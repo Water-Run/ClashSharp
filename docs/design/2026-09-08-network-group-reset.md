@@ -31,3 +31,9 @@
 完整 format 检查 1408 个文件、0 处变更。收据为 `local-validation-m3i.json`、
 `1.0.0-m3i-main.trx` 以及 M3i 构建、测试和格式日志。完整设置代际迁移和实际
 WinUI/网络运行时验收仍需继续完成；本次没有修改开发机代理或路由。
+
+`185ded9` 的构建测试与离线打包 [CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34190645348)。
+下载四份 TRX 核对共 4513 项通过、0 失败、0 跳过，包含新增 37 项；收据为
+`ci-validation-m3i.json` 和 `ci-network-reset-regressions-m3i.json`。同次开发安装器
+在无全局 .NET 的远端通过载荷自检，八个归档文件保持、临时目录和本次进程均已
+清理；未执行正常安装。完整摘要见执行账本及 `installer-green-validation-m3i.json`。
