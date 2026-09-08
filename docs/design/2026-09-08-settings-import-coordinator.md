@@ -43,3 +43,10 @@ authority；没有启用第二份设置文件写入或替换既有数据包事�
 `artifacts/verification/local-validation-m3k.json`，结果为 `1.0.0-m3k-main.trx`。
 本次没有修改开发机代理、路由、开机启动或安装状态。完整设置代际迁移与实际
 页面验收继续推进。
+
+`72f698d` 的构建测试与离线打包 [CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34196643675)。
+下载四份 TRX 核对共 4595 项通过、0 失败、0 跳过，包含新增 38 项；收据为
+`ci-validation-m3k.json` 和 `ci-import-coordinator-regressions-m3k.json`。同次开发
+安装器在无全局 .NET 的远端通过绿色载荷校验，八个归档文件保持，临时目录和
+本次进程均已清理；没有正常安装或证书、代理修改。完整摘要见执行账本及
+`installer-green-validation-m3k.json`。
