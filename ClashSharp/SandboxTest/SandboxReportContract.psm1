@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'SandboxStartupEvidence.psm1') -Force
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'SandboxInputContract.psm1')
 
@@ -95,9 +96,14 @@ function Assert-SandboxScenarioReport {
     if ($ExpectedPlan.scenario -ceq 'launch-no-proxy') {
         $launch = $Report.checks.launch
         Assert-SandboxObject $launch @('processId', 'packageFullName', 'executableSha256',
-            'mainWindowObserved', 'stabilizationMs', 'termination')
+            'mainWindowObserved', 'stabilizationMs', 'termination', 'startup')
         Assert-SandboxStringFields $launch @('packageFullName', 'executableSha256', 'termination')
         $launchStep = @($Report.steps | Where-Object { $_.name -ceq 'launch-package' })[0]
+        Assert-SandboxStartupEvidence $launch.startup
+        $launchStart = [DateTimeOffset]::ParseExact($launchStep.startedAt, 'o', [Globalization.CultureInfo]::InvariantCulture)
+        $launchFinish = [DateTimeOffset]::ParseExact($launchStep.finishedAt, 'o', [Globalization.CultureInfo]::InvariantCulture)
+        if ($launch.startup.startedAtUnixTime -lt $launchStart.ToUnixTimeSeconds() -or
+            $launch.startup.startedAtUnixTime -gt $launchFinish.ToUnixTimeSeconds()) { throw 'sandbox.report.startup_time' }
         if (($launch.processId -isnot [int] -and $launch.processId -isnot [long]) -or $launch.processId -le 0 -or
             $launch.packageFullName -cne $candidate.fullName -or
             $launch.executableSha256 -cne $candidate.executableSha256 -or

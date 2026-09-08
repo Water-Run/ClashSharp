@@ -50,6 +50,8 @@
 
 普通偏好重置保留凭据。清除全部数据先停止运行时，再通过独立维护能力删除并确认槽位不存在，随后清理其他数据。进入终态后使用 shutdown maintenance 许可；偏好删除已经开始时，页面取消不会中断后续凭据和文件清理。凭据删除无法确认会使清理失败并停止后续文件删除，避免声称已全部清除。凭据服务的释放发生在主机停止及数据维护之后。
 
+原有 `launch-no-proxy` 验收只确认包身份、窗口存在及稳定时长；启动错误页也可能满足该条件。现补充读取候选本次启动之后的 SQLite 日志聚合，要求 controller-credential（140）、window-shell（600）和最后的 profile-subscription-updates（710）各完成一次且成功，并且没有启动错误。查询使用系统 SQLite 只读连接，不读取凭据值、不输出日志内容，结果时间范围绑定实际 launch 步骤。PowerShell 5.1 与 7 均通过 111 项报告断言和 16 项真实隔离 SQLite 断言，覆盖错误页、未完成流程、重复或过期记录、锁定及损坏数据库；日志为 `startup-evidence-powershell51.log` 和 `startup-evidence-powershell7.log`。这些检查仍不代表全部页面交互或正常安装器流程已验收。
+
 当前生产装配已接入这项拆分；JSON 偏好权威和数据代际整体切换仍未激活。实际打包候选的启动验收将在对应 CI 包产出后执行。
 
 ## 代际服务寿命
@@ -76,6 +78,8 @@
 运行时适配提交 `37f4c51` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34217135381)，实际四份 TRX 共 4795 项通过、零失败、零跳过。合并提交 `95ee8d8` 与源提交的 tree 同为 `a85ebf2b51881d3a38f3e9321100edec68c4b014`，收据为 `ci-validation-settings-generation-runtime.json`。安装器包构建成功，此份包仅核验构建结果及元数据。
 
 凭据拆分验证包含 30 项新用例，并将原先设置类中的凭据删除回归替换为独立数据维护职责的检查，净增 29 项。本分支主程序累计净增 138 项，完整 2759 项通过，零失败、零跳过，用时 52 秒；18 项目构建零警告、零错误，用时 27.21 秒，format 检查 1488 个文件、零处变更。定向 99 项通过；收据为 `local-validation-controller-credentials.json`、`1.0.0-controller-credentials-main.trx`、`build-controller-credentials-complete.log` 和 `format-controller-credentials-verified.log`。首次定向验证的退出夹具重复提交已经终态的许可，调整为可提交退出的独占许可后通过，原报告保留。
+
+凭据拆分提交 `e9026f8` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34221242635)，实际四份 TRX 共 4824 项通过、零失败、零跳过，30 项新凭据用例均核验身份并实际执行。合并提交 `46154b7` 与源提交 tree 同为 `769cfda3cc5b10234366a11dd6e24102e1bc4ab0`，收据为 `ci-validation-controller-credentials.json`。候选开发安装器包已经构建成功；新增启动完成状态检查将在这份候选上进行隔离验收。
 
 持久中断测试使用真实临时仓库、切点注入及新对象重开，运行时参与者为受控模拟。Windows 旧设置适配器已编译，未在开发机读取实际 LocalSettings。实际打包应用的迁移、进程崩溃、完整页面和安装器兼容验收将在生产切换后执行。开发机代理摘要保持 `95e97918ff6de70655b412568cd18dc81c5d6584c607bb9a71ddc72e22460447`。
 
