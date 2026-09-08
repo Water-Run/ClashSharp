@@ -2002,8 +2002,8 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <param name="isEnabled">Switch value.</param>
     public void SetLaunchAtStartupEnabled(bool isEnabled)
     {
-        _pendingLaunchAtStartup = isEnabled;
         _settings.LaunchAtStartupEnabled = isEnabled;
+        _pendingLaunchAtStartup = isEnabled;
         SetProperty(ref _launchAtStartupEnabled, isEnabled, nameof(LaunchAtStartupEnabled));
         ApplyLaunchAtStartupCommand.Execute(null);
     }

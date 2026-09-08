@@ -448,6 +448,54 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(string.Empty, viewModel.OperationErrorText);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LaunchAtStartupPersistenceFailure_DoesNotReplaceAnAcceptedPendingRequest(bool baseline)
+    {
+        FakeSettingsStore store = new() { LaunchAtStartupEnabled = baseline };
+        FakeApplicationErrorSink errorSink = new();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        List<bool> applied = [];
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            errorSink: errorSink,
+            applyLaunchAtStartupAsync: async (enabled, token) =>
+            {
+                applied.Add(enabled);
+                if (applied.Count == 1)
+                {
+                    entered.TrySetResult();
+                    await release.Task.WaitAsync(token);
+                }
+            });
+        viewModel.Load();
+        viewModel.SetLaunchAtStartupEnabled(!baseline);
+        Task operation = Assert.IsAssignableFrom<Task>(viewModel.ApplyLaunchAtStartupCommand.ExecutionTask);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        IOException failure = new("startup setting persistence rejected");
+        try
+        {
+            store.LaunchAtStartupWriteFailure = failure;
+
+            Assert.Same(failure, Record.Exception(() => viewModel.SetLaunchAtStartupEnabled(baseline)));
+            Assert.Equal(!baseline, store.LaunchAtStartupEnabled);
+            Assert.Equal(!baseline, viewModel.LaunchAtStartupEnabled);
+        }
+        finally
+        {
+            store.LaunchAtStartupWriteFailure = null;
+            release.TrySetResult();
+            await operation.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        Assert.Equal(!baseline, Assert.Single(applied));
+        Assert.Equal(!baseline, store.LaunchAtStartupEnabled);
+        Assert.Equal(!baseline, viewModel.LaunchAtStartupEnabled);
+        Assert.Empty(errorSink.Errors);
+    }
+
     /// <summary>Verifies invalid language indexes are ignored.</summary>
     [Theory]
     [InlineData(-1)]
@@ -2060,7 +2108,23 @@ public sealed partial class SettingsViewModelTests
             return value;
         }
 
-        public bool LaunchAtStartupEnabled { get; set; }
+        private bool _launchAtStartupEnabled;
+
+        public Exception? LaunchAtStartupWriteFailure { get; set; }
+
+        public bool LaunchAtStartupEnabled
+        {
+            get => _launchAtStartupEnabled;
+            set
+            {
+                if (LaunchAtStartupWriteFailure is not null)
+                {
+                    throw LaunchAtStartupWriteFailure;
+                }
+
+                _launchAtStartupEnabled = value;
+            }
+        }
 
         public ClashSharpMode CurrentMode { get; set; } = ClashSharpMode.Disabled;
 

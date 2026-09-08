@@ -24,3 +24,9 @@
 
 本地证据为 `1.0.0-m3f-main.trx` 和 `artifacts/verification` 下的 M3f 构建、测试、
 格式日志及 `local-validation-m3f.json`。实际 WinUI 操作和运行时设置组验收继续推进。
+
+`5e606c2` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34187062570)。
+下载四份 TRX 核对共 4459 项通过，包含上述 26 项新增回归，零失败、零跳过。
+对应 `ci-validation-m3f.json` 和 `ci-preference-reset-regressions-m3f.json`；同一
+CI 开发安装器通过远端无全局 .NET 的绿色载荷校验与临时目录清理，收据为
+`installer-green-validation-m3f.json`。
