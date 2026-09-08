@@ -51,3 +51,15 @@ StartupLaunchService，不创建额外设置存储，也不在构造函数中访
 本轮 Windows 注册为模拟，适配器测试明确确认设置使用内存回退；没有修改开发机
 开机启动、代理、证书或安装状态。生产设置仍是唯一 LocalSettings authority，
 完整设置代际迁移与实际 Windows 页面交互继续验收。
+
+提交 `110f62e` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34200577217)。
+下载的四份 TRX 共 4642 项通过、0 失败、0 跳过，包含新增 47 项；退出交接用例
+235.1257 ms 通过。Core 行覆盖率 93.53%、分支覆盖率 86.73%；收据为
+`ci-validation-m3l.json` 和 `ci-startup-coordinator-regressions-m3l.json`。
+旧 CI 的失败报告保留，不以本次成功覆盖。
+
+同一提交的开发安装器通过远端无全局 .NET 的载荷校验，八个文件前后摘要一致，
+临时运行目录清理且无残留进程；未调用正常安装界面。收据为
+`installer-green-validation-m3l.json`。同一 MSIX 还通过了独立 Windows 11
+Sandbox 的安装、主窗口持续 30 秒及清理检查，准确候选和范围见
+[M5g 包启动验证](2026-09-08-package-launch-validation.md)。
