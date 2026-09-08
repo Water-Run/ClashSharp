@@ -25,6 +25,12 @@ internal sealed class MihomoWorker : BackgroundService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    public override async Task StartAsync(CancellationToken cancellationToken)
+    {
+        await _supervisor.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        await base.StartAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         LogServerStarted(_logger, null);

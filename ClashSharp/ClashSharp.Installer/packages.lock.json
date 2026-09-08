@@ -8,6 +8,9 @@
         "resolved": "10.0.5",
         "contentHash": "A+5ZuQ0f449tM+MQrhf6R9ZX7lYpjk/ODEwLYKrnF6111rtARx8fVsm4YznUnQiKnnXfaXNBqgxmil6RW3L3SA=="
       },
+      "clashsharp.core": {
+        "type": "Project"
+      },
       "clashsharp.installer.core": {
         "type": "Project"
       },
@@ -20,6 +23,7 @@
       "clashsharp.installer.windows": {
         "type": "Project",
         "dependencies": {
+          "ClashSharp.Core": "[1.0.0, )",
           "ClashSharp.Installer.Core": "[1.0.0, )"
         }
       }

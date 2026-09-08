@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using ClashSharp.ServiceProtocol;
-using Microsoft.Extensions.DependencyInjection;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -80,7 +79,6 @@ internal sealed class MihomoEffectiveConfigurationMaterializer
             protectDirectory);
     }
 
-    [ActivatorUtilitiesConstructor]
     internal MihomoEffectiveConfigurationMaterializer(MihomoServiceOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);

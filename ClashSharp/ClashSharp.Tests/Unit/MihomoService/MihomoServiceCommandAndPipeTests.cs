@@ -159,8 +159,10 @@ public sealed class MihomoServiceCommandAndPipeTests
     }
 
     /// <summary>Verifies the explicit-ACL server completes a strict framed Hello on Windows.</summary>
-    [Fact]
-    public async Task PipeServer_CompletesFramedHelloForAllowedUser()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public async Task PipeServer_CompletesFramedHelloForAllowedUser(int requestCount)
     {
         using WindowsIdentity identity = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
         SecurityIdentifier sid = identity.User
@@ -206,33 +208,41 @@ public sealed class MihomoServiceCommandAndPipeTests
             logs);
         using CancellationTokenSource stopping = new();
         Task serverTask = server.RunAsync(stopping.Token);
+        List<NamedPipeClientStream> clients = [];
         try
         {
-            await using NamedPipeClientStream client = new(
-                ".",
-                options.PipeName,
-                PipeDirection.InOut,
-                PipeOptions.Asynchronous);
-            await client.ConnectAsync(CancellationToken.None)
-                .WaitAsync(TimeSpan.FromSeconds(5));
-            Guid requestId = Guid.NewGuid();
-            await MihomoServiceIpcFrameCodec.WriteRequestAsync(
-                client,
-                CreateRequest(MihomoServiceIpcCommand.Hello, requestId, token),
-                CancellationToken.None);
-            MihomoServiceIpcResponse response = await MihomoServiceIpcFrameCodec
-                .ReadResponseAsync(client, CancellationToken.None)
-                .WaitAsync(TimeSpan.FromSeconds(5));
+            for (int index = 0; index < requestCount; index++)
+            {
+                NamedPipeClientStream client = new(
+                    ".",
+                    options.PipeName,
+                    PipeDirection.InOut,
+                    PipeOptions.Asynchronous);
+                clients.Add(client);
+                using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(5));
+                await client.ConnectAsync(deadline.Token);
+                Guid requestId = Guid.NewGuid();
+                await MihomoServiceIpcFrameCodec.WriteRequestAsync(
+                    client,
+                    CreateRequest(MihomoServiceIpcCommand.Hello, requestId, token),
+                    deadline.Token);
+                MihomoServiceIpcResponse response = await MihomoServiceIpcFrameCodec
+                    .ReadResponseAsync(client, deadline.Token);
 
-            Assert.True(response.Succeeded);
-            Assert.Equal(requestId, response.RequestId);
-            Assert.Equal(MihomoServiceIpcProtocol.CurrentVersion, response.ProtocolVersion);
-            Assert.Equal("pipe-test", response.Snapshot?.ServiceVersion);
-            Assert.Equal(MihomoServiceChildState.Stopped, response.Snapshot?.ChildState);
-            Assert.Null(response.Validate());
+                Assert.True(response.Succeeded);
+                Assert.Equal(requestId, response.RequestId);
+                Assert.Equal(MihomoServiceIpcProtocol.CurrentVersion, response.ProtocolVersion);
+                Assert.Equal("pipe-test", response.Snapshot?.ServiceVersion);
+                Assert.Equal(MihomoServiceChildState.Stopped, response.Snapshot?.ChildState);
+                Assert.Null(response.Validate());
+            }
         }
         finally
         {
+            foreach (NamedPipeClientStream client in clients)
+            {
+                await client.DisposeAsync();
+            }
             stopping.Cancel();
             await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
         }

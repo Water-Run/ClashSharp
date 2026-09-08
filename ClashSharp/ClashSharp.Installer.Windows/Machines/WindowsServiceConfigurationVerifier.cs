@@ -20,7 +20,8 @@ internal enum WindowsServiceRuntimeState : uint
 internal sealed record WindowsServiceSnapshot(
     WindowsServiceConfiguration Configuration,
     WindowsServiceRuntimeState RuntimeState,
-    string DaclSddl)
+    string DaclSddl,
+    uint ProcessId = 0)
 {
     internal void Validate()
     {
@@ -130,6 +131,12 @@ internal sealed class WindowsServiceConfigurationVerifier
     internal void VerifyInstalled(
         WindowsMachineDeploymentPlan plan,
         bool requireRunning,
+        CancellationToken cancellationToken) =>
+        _ = InspectInstalled(plan, requireRunning, cancellationToken);
+
+    internal WindowsServiceSnapshot InspectInstalled(
+        WindowsMachineDeploymentPlan plan,
+        bool requireRunning,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -143,6 +150,8 @@ internal sealed class WindowsServiceConfigurationVerifier
             throw new InstallerProtocolException(
                 "installer.machine.service_postcondition_failed");
         }
+
+        return actual;
     }
 
     internal void VerifyAbsent(CancellationToken cancellationToken)
@@ -253,9 +262,10 @@ internal sealed class WindowsServiceConfigurationNative
         }
 
         WindowsServiceConfiguration configuration = ReadConfiguration(service, serviceName);
-        WindowsServiceRuntimeState state = ReadRuntimeState(service);
+        ServiceStatusProcess status = ReadRuntimeStatus(service);
         string dacl = ReadDacl(service);
-        return new WindowsServiceSnapshot(configuration, state, dacl);
+        return new WindowsServiceSnapshot(
+            configuration, (WindowsServiceRuntimeState)status.CurrentState, dacl, status.ProcessId);
     }
 
     private static WindowsServiceConfiguration ReadConfiguration(
@@ -382,7 +392,7 @@ internal sealed class WindowsServiceConfigurationNative
         }
     }
 
-    private static WindowsServiceRuntimeState ReadRuntimeState(
+    private static ServiceStatusProcess ReadRuntimeStatus(
         SafeWindowsServiceHandle service)
     {
         int size = Marshal.SizeOf<ServiceStatusProcess>();
@@ -400,8 +410,7 @@ internal sealed class WindowsServiceConfigurationNative
                 throw new Win32Exception(Marshal.GetLastPInvokeError());
             }
 
-            return (WindowsServiceRuntimeState)Marshal
-                .PtrToStructure<ServiceStatusProcess>(buffer).CurrentState;
+            return Marshal.PtrToStructure<ServiceStatusProcess>(buffer);
         }
         finally
         {

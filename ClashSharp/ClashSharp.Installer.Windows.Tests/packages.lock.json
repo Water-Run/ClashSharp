@@ -99,12 +99,16 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "clashsharp.core": {
+        "type": "Project"
+      },
       "clashsharp.installer.core": {
         "type": "Project"
       },
       "clashsharp.installer.windows": {
         "type": "Project",
         "dependencies": {
+          "ClashSharp.Core": "[1.0.0, )",
           "ClashSharp.Installer.Core": "[1.0.0, )"
         }
       }

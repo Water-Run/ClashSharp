@@ -61,6 +61,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
     private int _shutdownRequested;
     private int _disposeStarted;
     private bool _backgroundOperationsSealed;
+    private bool _initialized;
 
     internal MihomoChildSupervisor(
         MihomoServiceOptions options,
@@ -92,8 +93,35 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
             ? typeof(MihomoChildSupervisor).Assembly.GetName().Version?.ToString() ?? "0.0.0"
             : serviceVersion;
         ValidateDurations();
+    }
+
+    /// <summary>Prepares service-owned storage once, serialized with commands and shutdown.</summary>
+    internal async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        await _commandGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfShutdown();
+            InitializeUnderCommandGate(cancellationToken);
+        }
+        finally
+        {
+            _commandGate.Release();
+        }
+    }
+
+    private void InitializeUnderCommandGate(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_initialized)
+        {
+            return;
+        }
+
+        // No child can have been accepted before this gate-protected initialization completes.
         _effectiveConfigurationMaterializer.CleanupStaleAfterConfirmedNoOwnedJob(
             _generationStore.PrepareRuntimeDirectory());
+        _initialized = true;
         _logs.Append("service", "IPC supervisor ready; mihomo is stopped until an authenticated Start command.");
     }
 
@@ -228,6 +256,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
         try
         {
             ThrowIfShutdown();
+            InitializeUnderCommandGate(cancellationToken);
             if (_activeProcess is not null)
             {
                 if (!_activeProcess.HasExited)
@@ -304,6 +333,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
         try
         {
             ThrowIfShutdown();
+            InitializeUnderCommandGate(cancellationToken);
             if (_childState == MihomoServiceChildState.Running
                 && _activeGeneration == generation
                 && string.Equals(_activeConfigurationHash, configurationHash, StringComparison.Ordinal))

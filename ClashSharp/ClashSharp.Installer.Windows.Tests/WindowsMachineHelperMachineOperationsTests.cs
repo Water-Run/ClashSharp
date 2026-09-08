@@ -1081,7 +1081,7 @@ public sealed class WindowsMachineHelperMachineOperationsTests
             }
         }
 
-        public void VerifyServiceInstalled(
+        public Task VerifyServiceInstalledAsync(
             WindowsMachineDeploymentPlan plan,
             CancellationToken cancellationToken)
         {
@@ -1092,6 +1092,8 @@ public sealed class WindowsMachineHelperMachineOperationsTests
                 throw new InstallerProtocolException(
                     "installer.machine.service_postcondition_failed");
             }
+
+            return Task.CompletedTask;
         }
 
         public void VerifyServiceAbsent(CancellationToken cancellationToken)

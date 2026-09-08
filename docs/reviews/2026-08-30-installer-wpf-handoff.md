@@ -1,5 +1,9 @@
 # ClashSharp Installer / WPF 接盘开工单
 
+> M5d 更正：后续中断测试发现服务 DI 装配失败，M5c 的 Running 快照只能证明瞬时状态。
+> 当前已修复装配并接入就绪握手、私有运行目录清理；新签名候选须重新完成实际矩阵。
+> 详见[服务就绪修复](../design/2026-09-08-service-readiness-and-runtime-cleanup.md)。
+
 > 2026-09-08 续接说明：本文保留 8 月迁移期的历史约束和缺口。生产 parent/helper 的真实安装、修复、卸载已在 Windows 11 客体通过；正式签名构建现在明确编译生产入口，普通构建和未签名开发包继续关闭。以下“正式打包也不传入开关”的迁移安排已由[当前实现与证据](../design/2026-09-08-installer-runtime-activation.md)更新，完整 E3/E4 仍是正式发布验收要求，不能把这次事务验证称为完整发布通过。
 
 > 2026-08-31 状态更新：迁移期 Rust/Slint 双轨已删除，C# / WPF Installer 为唯一实现；下文提到的 Rust 文件和差分向量只保留为历史背景。后续实现不得重新引入 Cargo、Rust 或 Slint。当前生产入口仍保持 fail closed，不能把“唯一源码实现”误报为“已通过发布验收”。

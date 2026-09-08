@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Installer.Core\ClashSharp.Installer.Core.csproj" />
   </ItemGroup>
 

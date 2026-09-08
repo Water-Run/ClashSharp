@@ -34,7 +34,7 @@ internal interface IWindowsMachineHelperMachineBackend : IWindowsOwnerTransferSe
 
     void VerifyServicePrepared(CancellationToken cancellationToken);
 
-    void VerifyServiceInstalled(
+    Task VerifyServiceInstalledAsync(
         WindowsMachineDeploymentPlan plan,
         CancellationToken cancellationToken);
 
@@ -88,6 +88,8 @@ internal sealed class WindowsMachineHelperMachineBackend
     private readonly WindowsMachinePayloadMutation _payloadMutation;
     private readonly WindowsServiceConfigurationVerifier _serviceVerifier;
     private readonly WindowsServiceMutation _serviceMutation;
+    private readonly WindowsServiceReadinessVerifier _serviceReadiness;
+    private readonly WindowsServiceRuntimeCleanup _runtimeCleanup = new();
     private readonly WindowsMachineRootCleanup _rootCleanup;
 
     internal WindowsMachineHelperMachineBackend()
@@ -116,6 +118,7 @@ internal sealed class WindowsMachineHelperMachineBackend
             WindowsMachinePayloadSlotNative.Instance,
             _payloadVerifier);
         _serviceVerifier = new WindowsServiceConfigurationVerifier();
+        _serviceReadiness = new WindowsServiceReadinessVerifier();
         _serviceMutation = new WindowsServiceMutation();
         _rootCleanup = new WindowsMachineRootCleanup();
     }
@@ -216,10 +219,10 @@ internal sealed class WindowsMachineHelperMachineBackend
     public void VerifyServicePrepared(CancellationToken cancellationToken) =>
         _serviceVerifier.VerifyPrepared(cancellationToken);
 
-    public void VerifyServiceInstalled(
+    public Task VerifyServiceInstalledAsync(
         WindowsMachineDeploymentPlan plan,
         CancellationToken cancellationToken) =>
-        _serviceVerifier.VerifyInstalled(plan, requireRunning: true, cancellationToken);
+        _serviceReadiness.VerifyAsync(plan, cancellationToken);
 
     public void VerifyServiceAbsent(CancellationToken cancellationToken) =>
         _serviceVerifier.VerifyAbsent(cancellationToken);
@@ -246,8 +249,12 @@ internal sealed class WindowsMachineHelperMachineBackend
 
     public void RemovePayload(
         WindowsMachineDeploymentPlan plan,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
+        _serviceVerifier.VerifyAbsent(cancellationToken);
         _payloadMutation.RemoveAndVerify(plan, cancellationToken);
+        _runtimeCleanup.RemoveAndVerify(plan, cancellationToken);
+    }
 
     public void VerifyPayloadInstalled(
         WindowsMachineDeploymentPlan plan,

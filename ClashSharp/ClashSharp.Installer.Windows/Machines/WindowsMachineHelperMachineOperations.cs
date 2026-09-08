@@ -372,7 +372,8 @@ internal sealed class WindowsMachineHelperMachineOperations
         await context.AssociationStore.VerifyExactAsync(cancellationToken)
             .ConfigureAwait(false);
         _backend.VerifyPayloadInstalled(context.Plan, cancellationToken);
-        _backend.VerifyServiceInstalled(context.Plan, cancellationToken);
+        await _backend.VerifyServiceInstalledAsync(context.Plan, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private void VerifyRemoved(

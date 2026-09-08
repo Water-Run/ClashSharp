@@ -20,6 +20,26 @@ public sealed class MihomoChildSupervisorTests
         Assert.Equal("1.2.3-test", snapshot.ServiceVersion);
         Assert.Empty(context.Launcher.Requests);
         Assert.Null(snapshot.Validate());
+        Assert.False(Directory.Exists(context.Options.ServiceDataDirectory));
+    }
+
+    /// <summary>Initialization owns storage preparation, observes cancellation, and never launches a child.</summary>
+    [Fact]
+    public async Task Initialize_PreCancellationLeavesStorageUntouchedAndCanRetry()
+    {
+        await using MihomoChildSupervisorTestContext context = new([]);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            context.Supervisor.InitializeAsync(cancellation.Token));
+        Assert.False(Directory.Exists(context.Options.ServiceDataDirectory));
+
+        await context.Supervisor.InitializeAsync(CancellationToken.None);
+        Assert.True(Directory.Exists(context.Options.RuntimeDirectory));
+        await context.Supervisor.InitializeAsync(CancellationToken.None);
+        Assert.Empty(context.Launcher.Requests);
+        Assert.Equal(MihomoServiceChildState.Stopped, context.Supervisor.GetSnapshot().ChildState);
     }
 
     /// <summary>Verifies Start launches only the exact immutable bytes and Stop confirms tree exit.</summary>
