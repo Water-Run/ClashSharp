@@ -4,12 +4,13 @@ using System.Reflection;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Unit tests for settings state loading and persistence behavior.</summary>
-public sealed class SettingsViewModelTests
+public sealed partial class SettingsViewModelTests
 {
     /// <summary>Verifies persisted settings are loaded into the view model snapshot.</summary>
     [Fact]
@@ -1991,6 +1992,52 @@ public sealed class SettingsViewModelTests
 
     private sealed class FakeSettingsStore : ISettingsStore
     {
+        public Exception? PreferenceResetFailure { get; set; }
+
+        public SettingsResetScope? LastPreferenceReset { get; private set; }
+
+        public void ResetPreferenceGroup(SettingsResetScope scope)
+        {
+            LastPreferenceReset = scope;
+            if (PreferenceResetFailure is not null)
+            {
+                throw PreferenceResetFailure;
+            }
+
+            switch (scope)
+            {
+                case SettingsResetScope.Basic:
+                    DisplayLanguage = AppLanguage.AutoDetect;
+                    AppThemeMode = AppThemeMode.FollowSystem;
+                    AppAccentColorMode = AppAccentColorMode.FollowSystem;
+                    AppAccentColorValue = "#FF0078D4";
+                    CloseBehaviorMode = CloseBehaviorMode.MinimizeToTray;
+                    break;
+                case SettingsResetScope.Notifications:
+                    NotificationEnabled = true;
+                    NotificationLevel = NotificationLevel.Default;
+                    break;
+                case SettingsResetScope.Triggers:
+                    TriggersEnabled = true;
+                    TriggerNotificationsEnabled = true;
+                    break;
+                case SettingsResetScope.Tray:
+                    TrayUseMonochromeInactiveIcon = false;
+                    TrayVisibleFeatureIds = "status,mode,pages,transparent-proxy,settings,safe-exit";
+                    break;
+                case SettingsResetScope.WindowsNative:
+                    CheckStaleProxyOnStartup = true;
+                    RestoreProxyOnExit = true;
+                    break;
+                case SettingsResetScope.MainlandChina:
+                    MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
+                    MainlandChinaUrlBlockingEnabled = false;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(scope));
+            }
+        }
+
         public AppLanguage DisplayLanguage { get; set; } = AppLanguage.AutoDetect;
 
         public AppThemeMode AppThemeMode { get; set; } = AppThemeMode.FollowSystem;

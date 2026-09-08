@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 
 namespace ClashSharp.ViewModel;
 
@@ -2809,35 +2810,35 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Restores base display settings to defaults.</summary>
     public void ResetBasicSettingsToDefaults()
     {
-        _settings.DisplayLanguage = AppLanguage.AutoDetect;
-        DisplayLanguage = AppLanguage.AutoDetect;
+        _settings.ResetPreferenceGroup(SettingsResetScope.Basic);
+        _displayLanguage = AppLanguage.AutoDetect;
+        _appThemeMode = AppThemeMode.FollowSystem;
+        _appAccentColorMode = AppAccentColorMode.FollowSystem;
+        _appAccentColorValue = DefaultAppAccentColorValue;
+        _closeBehaviorMode = CloseBehaviorMode.MinimizeToTray;
+        OnPropertyChanged(nameof(DisplayLanguage));
+        OnPropertyChanged(nameof(AppThemeMode));
+        OnPropertyChanged(nameof(AppAccentColorMode));
+        OnPropertyChanged(nameof(AppAccentColorValue));
+        OnPropertyChanged(nameof(CloseBehaviorMode));
+        OnPropertyChanged(nameof(IsCustomAccentColorSelected));
         RaiseDisplayLanguageRestartStateChanged();
-
-        _settings.AppThemeMode = AppThemeMode.FollowSystem;
-        AppThemeMode = AppThemeMode.FollowSystem;
-        _applyTheme(AppThemeMode.FollowSystem);
-
-        _settings.AppAccentColorMode = AppAccentColorMode.FollowSystem;
-        _settings.AppAccentColorValue = DefaultAppAccentColorValue;
-        AppAccentColorMode = AppAccentColorMode.FollowSystem;
-        AppAccentColorValue = _settings.AppAccentColorValue;
-
-        _settings.CloseBehaviorMode = CloseBehaviorMode.MinimizeToTray;
-        CloseBehaviorMode = CloseBehaviorMode.MinimizeToTray;
-
+        RaiseAppAccentColorRestartStateChanged();
         RaiseSelectorBindingsChanged();
         RefreshProxyInformation();
         ResetDiagnosticStatusText();
+        _applyTheme(AppThemeMode.FollowSystem);
     }
 
     /// <summary>Restores notification settings to defaults.</summary>
     public void ResetNotificationSettingsToDefaults()
     {
-        _settings.NotificationEnabled = true;
-        SetProperty(ref _notificationEnabled, true, nameof(NotificationEnabled));
-
-        _settings.NotificationLevel = NotificationLevel.Default;
-        NotificationLevel = NotificationLevel.Default;
+        _settings.ResetPreferenceGroup(SettingsResetScope.Notifications);
+        _notificationEnabled = true;
+        _notificationLevel = NotificationLevel.Default;
+        OnPropertyChanged(nameof(NotificationEnabled));
+        OnPropertyChanged(nameof(NotificationLevel));
+        OnPropertyChanged(nameof(NotificationLevelIndex));
         RaiseSelectorBindingsChanged();
     }
 
@@ -2860,25 +2861,23 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Restores trigger settings to defaults.</summary>
     public void ResetTriggerSettingsToDefaults()
     {
-        _settings.TriggersEnabled = true;
-        if (SetProperty(ref _triggersEnabled, true, nameof(TriggersEnabled)))
-        {
-            RaiseTriggerRestartStateChanged();
-        }
-
-        _settings.TriggerNotificationsEnabled = true;
-        SetProperty(ref _triggerNotificationsEnabled, true, nameof(TriggerNotificationsEnabled));
+        _settings.ResetPreferenceGroup(SettingsResetScope.Triggers);
+        _triggersEnabled = true;
+        _triggerNotificationsEnabled = true;
+        OnPropertyChanged(nameof(TriggersEnabled));
+        OnPropertyChanged(nameof(TriggerNotificationsEnabled));
+        RaiseTriggerRestartStateChanged();
     }
 
     /// <summary>Restores taskbar tray settings to defaults without changing deployed services.</summary>
     public void ResetTraySettingsToDefaults()
     {
-        _settings.TrayUseMonochromeInactiveIcon = false;
-        SetProperty(ref _trayUseMonochromeInactiveIcon, false, nameof(TrayUseMonochromeInactiveIcon));
-
-        _settings.TrayVisibleFeatureIds = DefaultTrayVisibleFeatureIds;
-        TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
-
+        _settings.ResetPreferenceGroup(SettingsResetScope.Tray);
+        _trayUseMonochromeInactiveIcon = false;
+        _trayVisibleFeatureIds = DefaultTrayVisibleFeatureIds;
+        OnPropertyChanged(nameof(TrayUseMonochromeInactiveIcon));
+        OnPropertyChanged(nameof(TrayVisibleFeatureIds));
+        OnPropertyChanged(nameof(TrayVisibleFeatureSummaryText));
         RaiseSelectorBindingsChanged();
     }
 
@@ -2915,21 +2914,21 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Restores Windows-native repair settings to defaults.</summary>
     public void ResetWindowsNativeSettingsToDefaults()
     {
-        _settings.CheckStaleProxyOnStartup = true;
-        SetProperty(ref _checkStaleProxyOnStartup, true, nameof(CheckStaleProxyOnStartup));
-
-        _settings.RestoreProxyOnExit = true;
-        SetProperty(ref _restoreProxyOnExit, true, nameof(RestoreProxyOnExit));
+        _settings.ResetPreferenceGroup(SettingsResetScope.WindowsNative);
+        _checkStaleProxyOnStartup = true;
+        _restoreProxyOnExit = true;
+        OnPropertyChanged(nameof(CheckStaleProxyOnStartup));
+        OnPropertyChanged(nameof(RestoreProxyOnExit));
     }
 
     /// <summary>Restores mainland China feature settings to defaults.</summary>
     public void ResetMainlandChinaSettingsToDefaults()
     {
-        _settings.MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
-        MainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
-
-        _settings.MainlandChinaUrlBlockingEnabled = false;
-        SetProperty(ref _mainlandChinaUrlBlockingEnabled, false, nameof(MainlandChinaUrlBlockingEnabled));
+        _settings.ResetPreferenceGroup(SettingsResetScope.MainlandChina);
+        _mainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
+        _mainlandChinaUrlBlockingEnabled = false;
+        OnPropertyChanged(nameof(MainlandChinaFeatureMode));
+        OnPropertyChanged(nameof(MainlandChinaUrlBlockingEnabled));
         RaiseMainlandChinaRestartStateChanged();
         RaiseSelectorBindingsChanged();
     }

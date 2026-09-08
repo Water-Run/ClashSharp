@@ -1,4 +1,5 @@
 using ClashSharp.Model;
+using ClashSharp.Settings;
 
 namespace ClashSharp.ViewModel;
 
@@ -10,6 +11,9 @@ namespace ClashSharp.ViewModel;
 /// </remarks>
 internal interface ISettingsStore
 {
+    /// <summary>Resets one supported preference group as a complete batch before notifying observers.</summary>
+    void ResetPreferenceGroup(SettingsResetScope scope);
+
     AppLanguage DisplayLanguage { get; set; }
 
     AppThemeMode AppThemeMode { get; set; }

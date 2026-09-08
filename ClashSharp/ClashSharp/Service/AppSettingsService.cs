@@ -547,6 +547,23 @@ public sealed partial class AppSettingsService :
         WriteOrdinary(static editor => editor.ResetAllSettings());
     }
 
+    /// <summary>Restores one preference group in a single admitted, rollback-capable batch.</summary>
+    /// <param name="scope">One of the basic, notification, trigger, tray, Windows policy, or regional groups.</param>
+    /// <remarks>Startup and network groups require their runtime coordinators and are not accepted here.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The scope does not name exactly one supported preference group.</exception>
+    public void ResetPreferenceGroup(SettingsResetScope scope)
+    {
+        if (scope is not (SettingsResetScope.Basic or SettingsResetScope.Notifications
+            or SettingsResetScope.Triggers or SettingsResetScope.Tray
+            or SettingsResetScope.WindowsNative or SettingsResetScope.MainlandChina))
+        {
+            throw new ArgumentOutOfRangeException(nameof(scope));
+        }
+
+        IReadOnlyList<SettingDefinition> definitions = SettingsRegistry.Default.GetResetDefinitions(scope);
+        WriteOrdinary(editor => editor.ResetDefinitions(definitions));
+    }
+
     /// <summary>Clears user settings and internal credentials for the destructive clear-all-data operation.</summary>
     internal void ClearAllSettings()
     {

@@ -1,6 +1,7 @@
 using System;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
@@ -14,6 +15,11 @@ internal sealed class AppSettingsStore : ISettingsStore
     public AppSettingsStore(AppSettingsService settings)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+    }
+
+    public void ResetPreferenceGroup(SettingsResetScope scope)
+    {
+        _settings.ResetPreferenceGroup(scope);
     }
 
     public AppLanguage DisplayLanguage

@@ -5,6 +5,7 @@ using System.Runtime.ExceptionServices;
 using System.Threading;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 
 namespace ClashSharp.Service;
 
@@ -291,6 +292,30 @@ public sealed partial class AppSettingsService
             {
                 _pending[key] = null;
             }
+        }
+
+        /// <summary>Stages removal of the exact owned definitions and their legacy aliases.</summary>
+        internal void ResetDefinitions(IReadOnlyList<SettingDefinition> definitions)
+        {
+            EnsureActive();
+            foreach (SettingDefinition definition in definitions)
+            {
+                RemoveOwnedKey(definition.Key.Value);
+                foreach (SettingKey alias in definition.Aliases)
+                {
+                    RemoveOwnedKey(alias.Value);
+                }
+            }
+        }
+
+        private void RemoveOwnedKey(string key)
+        {
+            if (Array.IndexOf(KnownKeys, key) < 0)
+            {
+                throw new InvalidOperationException("A preference reset cannot remove an unowned setting.");
+            }
+
+            _pending[key] = null;
         }
 
         internal void ClearAllSettings()
