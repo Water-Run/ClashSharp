@@ -243,10 +243,10 @@ internal sealed class MihomoGenerationStore
 
     private static void ValidateProtectedRuntimeTree(DirectoryInfo runtimeDirectory)
     {
-        ValidateProtectedRuntimeObject(
-            runtimeDirectory,
+        MihomoRuntimeSecurityPolicy.Validate(
             runtimeDirectory.GetAccessControl(
-                AccessControlSections.Access | AccessControlSections.Owner));
+                AccessControlSections.Access | AccessControlSections.Owner),
+            allowAdministratorOwner: false);
 
         int entryCount = 0;
         Stack<DirectoryInfo> pendingDirectories = new();
@@ -266,17 +266,17 @@ internal sealed class MihomoGenerationStore
                 switch (entry)
                 {
                     case DirectoryInfo childDirectory:
-                        ValidateProtectedRuntimeObject(
-                            childDirectory,
+                        MihomoRuntimeSecurityPolicy.Validate(
                             childDirectory.GetAccessControl(
-                                AccessControlSections.Access | AccessControlSections.Owner));
+                                AccessControlSections.Access | AccessControlSections.Owner),
+                            allowAdministratorOwner: true);
                         pendingDirectories.Push(childDirectory);
                         break;
                     case FileInfo file:
-                        ValidateProtectedRuntimeObject(
-                            file,
+                        MihomoRuntimeSecurityPolicy.Validate(
                             file.GetAccessControl(
-                                AccessControlSections.Access | AccessControlSections.Owner));
+                                AccessControlSections.Access | AccessControlSections.Owner),
+                            allowAdministratorOwner: true);
                         break;
                 }
             }
@@ -305,47 +305,6 @@ internal sealed class MihomoGenerationStore
                     pendingDirectories.Push(childDirectory);
                 }
             }
-        }
-    }
-
-    private static void ValidateProtectedRuntimeObject(
-        FileSystemInfo entry,
-        FileSystemSecurity security)
-    {
-        IdentityReference? owner = security.GetOwner(typeof(SecurityIdentifier));
-        if (owner is not SecurityIdentifier ownerSid
-            || !ownerSid.IsWellKnown(WellKnownSidType.LocalSystemSid))
-        {
-            throw new UnauthorizedAccessException(
-                $"The protected runtime {entry.Name} is not owned by LocalSystem.");
-        }
-
-        AuthorizationRuleCollection rules = security.GetAccessRules(
-            includeExplicit: true,
-            includeInherited: true,
-            typeof(SecurityIdentifier));
-        bool systemCanFullyControl = false;
-        foreach (AuthorizationRule authorizationRule in rules)
-        {
-            if (authorizationRule is not FileSystemAccessRule rule
-                || rule.IdentityReference is not SecurityIdentifier sid
-                || (!sid.IsWellKnown(WellKnownSidType.LocalSystemSid)
-                    && !sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid)))
-            {
-                throw new UnauthorizedAccessException(
-                    $"The protected runtime {entry.Name} has an untrusted ACL.");
-            }
-
-            systemCanFullyControl |= sid.IsWellKnown(WellKnownSidType.LocalSystemSid)
-                && rule.AccessControlType == AccessControlType.Allow
-                && (rule.FileSystemRights & FileSystemRights.FullControl)
-                    == FileSystemRights.FullControl;
-        }
-
-        if (!systemCanFullyControl)
-        {
-            throw new UnauthorizedAccessException(
-                $"The protected runtime {entry.Name} does not grant LocalSystem full control.");
         }
     }
 
