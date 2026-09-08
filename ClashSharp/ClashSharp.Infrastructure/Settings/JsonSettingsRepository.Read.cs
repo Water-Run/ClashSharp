@@ -43,6 +43,14 @@ public sealed partial class JsonSettingsRepository
         if (primary.Kind == SettingsFileReadKind.Missing
             && backup.Kind == SettingsFileReadKind.Missing)
         {
+            if (HasQuarantinedEnvelope())
+            {
+                return SettingsPersistenceResult.Corrupt(
+                    new SettingsPersistenceDiagnostic(
+                        "settings.persistence.quarantined_without_valid_envelope",
+                        SettingsDirectoryPath));
+            }
+
             return SettingsPersistenceResult.Succeeded();
         }
 
@@ -171,6 +179,26 @@ public sealed partial class JsonSettingsRepository
         catch (DirectoryNotFoundException)
         {
         }
+    }
+
+    private bool HasQuarantinedEnvelope()
+    {
+        // Quarantine survives process restart. Its absence from the primary names
+        // must not authorize a new migration over a previously corrupt authority.
+        foreach (string path in Directory.EnumerateFileSystemEntries(SettingsDirectoryPath))
+        {
+            string name = Path.GetFileName(path);
+            foreach (string prefix in new[] { PrimaryFileName + ".corrupt.", BackupFileName + ".corrupt." })
+            {
+                if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    && Guid.TryParseExact(name.AsSpan(prefix.Length), "N", out _))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private enum SettingsFileReadKind
