@@ -1608,6 +1608,34 @@ internal sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Commits a color-picker selection and publishes the complete appearance before notifying observers.</summary>
+    /// <param name="value">Selected hexadecimal color; invalid values are rejected by the settings store.</param>
+    public void SetCustomAppAccentColor(string value)
+    {
+        string persistedColor = _settings.SetCustomAppAccentColor(value);
+        bool modeChanged = _appAccentColorMode != AppAccentColorMode.Custom;
+        bool colorChanged = !string.Equals(_appAccentColorValue, persistedColor, StringComparison.Ordinal);
+        _appAccentColorMode = AppAccentColorMode.Custom;
+        _appAccentColorValue = persistedColor;
+
+        if (modeChanged)
+        {
+            OnPropertyChanged(nameof(AppAccentColorMode));
+            OnPropertyChanged(nameof(AppAccentColorModeIndex));
+            OnPropertyChanged(nameof(IsCustomAccentColorSelected));
+        }
+
+        if (colorChanged)
+        {
+            OnPropertyChanged(nameof(AppAccentColorValue));
+        }
+
+        if (modeChanged || colorChanged)
+        {
+            RaiseAppAccentColorRestartStateChanged();
+        }
+    }
+
     /// <summary>Raises bindable notifications for the app accent color restart marker.</summary>
     private void RaiseAppAccentColorRestartStateChanged()
     {

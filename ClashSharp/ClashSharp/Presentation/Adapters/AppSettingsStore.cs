@@ -46,6 +46,11 @@ internal sealed class AppSettingsStore : ISettingsStore
         set => _settings.AppAccentColorValue = value;
     }
 
+    public string SetCustomAppAccentColor(string value)
+    {
+        return _settings.SetCustomAppAccentColor(value);
+    }
+
     public bool LaunchAtStartupEnabled
     {
         get => _settings.LaunchAtStartupEnabled;

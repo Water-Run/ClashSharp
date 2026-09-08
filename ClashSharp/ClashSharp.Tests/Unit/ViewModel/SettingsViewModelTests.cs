@@ -887,6 +887,77 @@ public sealed class SettingsViewModelTests
         Assert.Equal("#FF2D7D9A", ReadProperty<string>(viewModel, "AppAccentColorValue"));
     }
 
+    [Fact]
+    public void CustomAccentColor_PublishesCompleteSelectionAndOneRestartNotification()
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        viewModel.Load();
+        List<string?> notifications = [];
+        viewModel.PropertyChanged += (_, change) =>
+        {
+            notifications.Add(change.PropertyName);
+            Assert.Equal(AppAccentColorMode.Custom, store.AppAccentColorMode);
+            Assert.Equal("#FF2D7D9A", store.AppAccentColorValue);
+            Assert.Equal(AppAccentColorMode.Custom, viewModel.AppAccentColorMode);
+            Assert.Equal("#FF2D7D9A", viewModel.AppAccentColorValue);
+            Assert.True(viewModel.IsAppAccentColorRestartPending);
+        };
+
+        viewModel.SetCustomAppAccentColor("#FF2D7D9A");
+
+        Assert.Contains(nameof(SettingsViewModel.AppAccentColorMode), notifications);
+        Assert.Contains(nameof(SettingsViewModel.AppAccentColorModeIndex), notifications);
+        Assert.Contains(nameof(SettingsViewModel.IsCustomAccentColorSelected), notifications);
+        Assert.Contains(nameof(SettingsViewModel.AppAccentColorValue), notifications);
+        Assert.Single(notifications, name => name == nameof(SettingsViewModel.IsAppAccentColorRestartPending));
+        Assert.Single(notifications, name => name == nameof(SettingsViewModel.HasRestartRequiredSettings));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CustomAccentColor_FailedSelectionKeepsCommittedAppearance(bool invalidInput)
+    {
+        Exception failure = invalidInput
+            ? new ArgumentException("Invalid test color.")
+            : new IOException("Injected test write failure.");
+        FakeSettingsStore store = new() { CustomAccentColorWriteFailure = failure };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        viewModel.Load();
+        List<string?> notifications = [];
+        viewModel.PropertyChanged += (_, change) => notifications.Add(change.PropertyName);
+
+        Exception? observed = Record.Exception(() => viewModel.SetCustomAppAccentColor("#FF2D7D9A"));
+
+        Assert.Same(failure, observed);
+        Assert.Equal(AppAccentColorMode.FollowSystem, store.AppAccentColorMode);
+        Assert.Equal("#FF0078D4", store.AppAccentColorValue);
+        Assert.Equal(AppAccentColorMode.FollowSystem, viewModel.AppAccentColorMode);
+        Assert.Equal("#FF0078D4", viewModel.AppAccentColorValue);
+        Assert.False(viewModel.IsAppAccentColorRestartPending);
+        Assert.Empty(notifications);
+    }
+
+    [Fact]
+    public void CustomAccentColor_UnchangedSelectionDoesNotRepeatRestartNotifications()
+    {
+        FakeSettingsStore store = new()
+        {
+            AppAccentColorMode = AppAccentColorMode.Custom,
+            AppAccentColorValue = "#FF2D7D9A",
+        };
+        SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
+        viewModel.Load();
+        List<string?> notifications = [];
+        viewModel.PropertyChanged += (_, change) => notifications.Add(change.PropertyName);
+
+        viewModel.SetCustomAppAccentColor("#FF2D7D9A");
+
+        Assert.Empty(notifications);
+        Assert.False(viewModel.IsAppAccentColorRestartPending);
+    }
+
     /// <summary>Verifies custom accent color changes mark the setting as restart-required until reverted.</summary>
     [Fact]
     public void AccentColorSettings_RestartPendingTracksChangesUntilReverted()
@@ -1927,6 +1998,20 @@ public sealed class SettingsViewModelTests
         public AppAccentColorMode AppAccentColorMode { get; set; } = AppAccentColorMode.FollowSystem;
 
         public string AppAccentColorValue { get; set; } = "#FF0078D4";
+
+        public Exception? CustomAccentColorWriteFailure { get; set; }
+
+        public string SetCustomAppAccentColor(string value)
+        {
+            if (CustomAccentColorWriteFailure is not null)
+            {
+                throw CustomAccentColorWriteFailure;
+            }
+
+            AppAccentColorMode = AppAccentColorMode.Custom;
+            AppAccentColorValue = value;
+            return value;
+        }
 
         public bool LaunchAtStartupEnabled { get; set; }
 

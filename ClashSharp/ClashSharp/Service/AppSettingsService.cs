@@ -237,6 +237,22 @@ public sealed partial class AppSettingsService :
         set => WriteOrdinary(editor => editor.AppAccentColorValue = value);
     }
 
+    /// <summary>Persists a selected custom accent color and its mode in one admitted settings batch.</summary>
+    /// <param name="value">A 6- or 8-digit hexadecimal color, optionally prefixed with #.</param>
+    /// <returns>The committed color normalized to #AARRGGBB.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="value"/> is not a valid hexadecimal color.</exception>
+    public string SetCustomAppAccentColor(string value)
+    {
+        string normalized = NormalizeAccentColorValue(value);
+        WriteOrdinary(editor =>
+        {
+            editor.AppAccentColorMode = AppAccentColorMode.Custom;
+            editor.AppAccentColorValue = normalized;
+        });
+        return normalized;
+    }
+
     /// <summary>Gets or sets whether Clash# should launch when the user signs in.</summary>
     /// <value>True when launch-at-startup is requested; defaults to false.</value>
     public bool LaunchAtStartupEnabled

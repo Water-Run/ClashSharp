@@ -8,6 +8,98 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class AppSettingsServiceTests
 {
     [Fact]
+    public async Task CustomAccentColor_NotifiesCompleteNormalizedSelectionBeforeExclusiveAdmission()
+    {
+        MutationAdmissionBarrier barrier = new();
+        AppSettingsService settings = AppSettingsService.Instance;
+        settings.ConfigureMutationAdmission(barrier);
+        settings.ResetAllSettings();
+        List<(AppAccentColorMode Mode, string Color)> observations = [];
+        ValueTask<MutationAdmissionLease> pendingExclusive = default;
+        void OnChanged(object? sender, AppSettingChangedEventArgs change)
+        {
+            if (change.Key is not ("AppAccentColorMode" or "AppAccentColorValue"))
+            {
+                return;
+            }
+
+            observations.Add((settings.AppAccentColorMode, settings.AppAccentColorValue));
+            if (observations.Count == 1)
+            {
+                pendingExclusive = barrier.CloseAndDrainAsync(
+                    MutationAdmissionClosure.Destructive, CancellationToken.None);
+            }
+
+            Assert.False(pendingExclusive.IsCompleted);
+        }
+
+        settings.SettingChanged += OnChanged;
+        try
+        {
+            string persisted = settings.SetCustomAppAccentColor("  #2d7d9a  ");
+
+            await using MutationAdmissionLease exclusive = await pendingExclusive;
+            Assert.True(exclusive.IsExclusive);
+            Assert.Equal("#FF2D7D9A", persisted);
+            Assert.Equal(2, observations.Count);
+            Assert.All(observations, observed => Assert.Equal((AppAccentColorMode.Custom, persisted), observed));
+        }
+        finally
+        {
+            settings.SettingChanged -= OnChanged;
+            if (barrier.State == MutationAdmissionState.Open)
+            {
+                settings.ResetAllSettings();
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("#GG1122")]
+    public void CustomAccentColor_InvalidSelectionPreservesModeAndColor(string? value)
+    {
+        ResetSettings();
+        AppSettingsService settings = AppSettingsService.Instance;
+        List<AppSettingChangedEventArgs> changes = [];
+        void OnChanged(object? sender, AppSettingChangedEventArgs change) => changes.Add(change);
+        settings.SettingChanged += OnChanged;
+        try
+        {
+            Assert.ThrowsAny<ArgumentException>(() => settings.SetCustomAppAccentColor(value!));
+
+            Assert.Equal(AppAccentColorMode.FollowSystem, settings.AppAccentColorMode);
+            Assert.Equal("#FF0078D4", settings.AppAccentColorValue);
+            Assert.Empty(changes);
+        }
+        finally
+        {
+            settings.SettingChanged -= OnChanged;
+            ResetSettings();
+        }
+    }
+
+    [Fact]
+    public async Task CustomAccentColor_ExclusiveOperationPreservesModeAndColor()
+    {
+        MutationAdmissionBarrier barrier = new();
+        AppSettingsService settings = AppSettingsService.Instance;
+        settings.ConfigureMutationAdmission(barrier);
+        settings.ResetAllSettings();
+
+        await using (MutationAdmissionLease exclusive = await barrier.CloseAndDrainAsync(
+            MutationAdmissionClosure.Destructive, CancellationToken.None))
+        {
+            Assert.Throws<MutationAdmissionRejectedException>(() => settings.SetCustomAppAccentColor("#FF2D7D9A"));
+            Assert.Equal(AppAccentColorMode.FollowSystem, settings.AppAccentColorMode);
+            Assert.Equal("#FF0078D4", settings.AppAccentColorValue);
+        }
+
+        settings.ResetAllSettings();
+    }
+
+    [Fact]
     public async Task ConnectionTestUrlBatch_NotifiesCompleteSnapshotBeforeExclusiveAdmission()
     {
         MutationAdmissionBarrier barrier = new();

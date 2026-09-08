@@ -18,6 +18,9 @@ internal interface ISettingsStore
 
     string AppAccentColorValue { get; set; }
 
+    /// <summary>Commits custom mode and color together and returns the normalized persisted color.</summary>
+    string SetCustomAppAccentColor(string value);
+
     bool LaunchAtStartupEnabled { get; set; }
 
     ClashSharpMode CurrentMode { get; set; }

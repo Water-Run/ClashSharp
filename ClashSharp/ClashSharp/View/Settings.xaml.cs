@@ -393,8 +393,8 @@ public sealed partial class Settings : Page
                 return;
             }
 
-            _viewModel.SetAppAccentColorModeIndex((int)AppAccentColorMode.Custom);
-            _viewModel.SetAppAccentColorValue(_formatAccentColor(picker.Color));
+            cancellationToken.ThrowIfCancellationRequested();
+            _viewModel.SetCustomAppAccentColor(_formatAccentColor(picker.Color));
             if (_viewModel.IsAppAccentColorRestartPending)
             {
                 await ShowRestartRequiredDialogAsync(cancellationToken);
@@ -658,6 +658,7 @@ public sealed partial class Settings : Page
 
             if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 _viewModel.SetTrayVisibleFeatureIds(optionList.SelectedOptions.Select(static option => option.Id));
             }
         });
