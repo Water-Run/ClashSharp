@@ -88,6 +88,7 @@
     <Compile Include="..\ClashSharp\Service\AppDataMaintenanceService.cs" Link="Service\AppDataMaintenanceService.cs" />
     <Compile Include="..\ClashSharp\Service\AppDataPathService.cs" Link="Service\AppDataPathService.cs" />
     <Compile Include="..\ClashSharp\Service\ConnectionSamplingService.cs" Link="Service\ConnectionSamplingService.cs" />
+    <Compile Include="..\ClashSharp\Service\ConnectionSamplingService.Configuration.cs" Link="Service\ConnectionSamplingService.Configuration.cs" />
     <Compile Include="..\ClashSharp\Service\ConnectionSamplingServiceFactory.cs" Link="Service\ConnectionSamplingServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationService.cs" Link="Service\CoreConfigurationService.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationServiceFactory.cs" Link="Service\CoreConfigurationServiceFactory.cs" />
@@ -160,6 +161,9 @@
     <Compile Include="..\ClashSharp\Service\StartupLaunchService.cs" Link="Service\StartupLaunchService.cs" />
     <Compile Include="..\ClashSharp\AppHost\Compatibility\StartupSettingsOperationAdapter.cs" Link="AppHost\Compatibility\StartupSettingsOperationAdapter.cs" />
     <Compile Include="..\ClashSharp\AppHost\Compatibility\ConnectionSamplingSettingsOperationAdapter.cs" Link="AppHost\Compatibility\ConnectionSamplingSettingsOperationAdapter.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Settings\SettingsParticipantBinding.cs" Link="AppHost\Settings\SettingsParticipantBinding.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Settings\StartupTaskSettingsParticipant.cs" Link="AppHost\Settings\StartupTaskSettingsParticipant.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Settings\SamplingSettingsParticipant.cs" Link="AppHost\Settings\SamplingSettingsParticipant.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionService.cs" Link="Service\StartupConflictDetectionService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionServiceFactory.cs" Link="Service\StartupConflictDetectionServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\TrayCommandService.cs" Link="Service\TrayCommandService.cs" />

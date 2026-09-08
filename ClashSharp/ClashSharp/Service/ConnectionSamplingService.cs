@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Lifecycle;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Supervision;
 using ClashSharp.Model;
 
@@ -60,6 +61,14 @@ public sealed partial class ConnectionSamplingService : IRuntimeParticipant
 
     private readonly SupervisedLoop _supervisor;
 
+    /// <summary>Serializes complete configuration changes with ordinary lifecycle transitions.</summary>
+    private readonly SemaphoreSlim _configurationGate = new(1, 1);
+
+    private ConnectionSamplingSettings? _explicitSettings;
+
+    /// <summary>Installed loop interval; never reads a desired preference during an iteration.</summary>
+    private int _effectiveIntervalSeconds = 30;
+
     private SupervisorHealthState _lastLoggedHealthState = SupervisorHealthState.Stopped;
 
     private int _lastInsertedCount;
@@ -98,52 +107,66 @@ public sealed partial class ConnectionSamplingService : IRuntimeParticipant
     public bool IsRunning => _supervisor.IsRunning;
 
     /// <inheritdoc />
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!_settings.IsEnabled)
+        await _configurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.CompletedTask;
+            if (IsConfiguredEnabled) { await StartConfiguredLoopAsync(cancellationToken).ConfigureAwait(false); }
         }
-
-        return _supervisor.StartAsync(cancellationToken);
+        finally { _configurationGate.Release(); }
     }
 
     /// <inheritdoc />
-    public Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken)
+    public async Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken)
     {
-        return _supervisor.QuiesceAsync(cancellationToken);
+        await _configurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { return await _supervisor.QuiesceAsync(cancellationToken).ConfigureAwait(false); }
+        finally { _configurationGate.Release(); }
     }
 
     /// <inheritdoc />
-    public Task ResumeAsync(QuiescedState priorState, CancellationToken cancellationToken)
+    public async Task ResumeAsync(QuiescedState priorState, CancellationToken cancellationToken)
     {
-        if (!_settings.IsEnabled)
+        ArgumentNullException.ThrowIfNull(priorState);
+        await _configurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.CompletedTask;
+            if (IsConfiguredEnabled && priorState.WasRunning)
+            {
+                if (!_supervisor.IsRunning) { InstallConfiguredInterval(); }
+                await _supervisor.ResumeAsync(priorState, cancellationToken).ConfigureAwait(false);
+            }
         }
-
-        return _supervisor.ResumeAsync(priorState, cancellationToken);
+        finally { _configurationGate.Release(); }
     }
 
     /// <inheritdoc />
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
-        return _supervisor.StopAsync(cancellationToken);
+        await _configurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { await _supervisor.StopAsync(cancellationToken).ConfigureAwait(false); }
+        finally { _configurationGate.Release(); }
     }
 
     /// <summary>Starts an admitted settings transaction's loop, including a running baseline with a disabled preference.</summary>
-    internal Task StartLoopAsync(CancellationToken cancellationToken) => _supervisor.StartAsync(cancellationToken);
+    internal async Task StartLoopAsync(CancellationToken cancellationToken)
+    {
+        await _configurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { await StartConfiguredLoopAsync(cancellationToken).ConfigureAwait(false); }
+        finally { _configurationGate.Release(); }
+    }
 
     /// <summary>Re-evaluates current settings through an awaited stop-and-start transition.</summary>
     public async Task RestartFromSettingsAsync(CancellationToken cancellationToken)
     {
-        await _supervisor.QuiesceAsync(cancellationToken).ConfigureAwait(false);
-        if (_settings.IsEnabled)
+        await _configurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await _supervisor.StartAsync(cancellationToken).ConfigureAwait(false);
+            await _supervisor.QuiesceAsync(cancellationToken).ConfigureAwait(false);
+            if (IsConfiguredEnabled) { await StartConfiguredLoopAsync(cancellationToken).ConfigureAwait(false); }
         }
+        finally { _configurationGate.Release(); }
     }
 
     /// <summary>Samples active connections once and writes them to SQLite.</summary>
@@ -227,7 +250,7 @@ public sealed partial class ConnectionSamplingService : IRuntimeParticipant
 
     private TimeSpan GetSamplingInterval()
     {
-        return TimeSpan.FromSeconds(Math.Max(0, _settings.IntervalSeconds));
+        return TimeSpan.FromSeconds(Math.Max(0, Volatile.Read(ref _effectiveIntervalSeconds)));
     }
 
     private void OnHealthChanged(SupervisorHealth health)

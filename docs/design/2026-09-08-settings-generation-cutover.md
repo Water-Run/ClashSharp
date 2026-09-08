@@ -1,6 +1,6 @@
 # Settings generation cutover
 
-版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问及公共异步入口；生产 composition 仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
+版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口，以及 StartupTask、Sampling 的实际服务适配器；生产 composition 仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
 
 ## 已实现的存储与迁移
 
@@ -30,6 +30,16 @@
 
 新增回归复现了完整命令的一个衔接缺口：desired 已经提交后，退出开始排空并撤销等待许可，原 session 的普通入口会取消随后的运行时应用。现在 facade 使用内部的已提交命令续行路径，继续验证原许可的有效性，持有原代际，完成全部参与者和保存；后续排队命令仍受撤销控制。直接调用 session 的普通批次入口继续遵守原有 Running 提交前取消规则。
 
+## StartupTask 与 Sampling 的实际服务适配
+
+`StartupTaskSettingsParticipant` 和 `SamplingSettingsParticipant` 在访问运行时之前检查完整 generation descriptor、应用类别、允许的键和原许可的有效性。两者都不写偏好、不重新申请普通许可。StartupTask 通过生产 `StartupLaunchService` 读取 Windows 注册状态；已满足目标时不重复注册，拒绝或未知状态保留待办。应用回执丢失由后续独立平台探测判断。
+
+`ConnectionSamplingService` 现在串行拥有完整的配置与生命周期转换。运行中的循环使用已经安装的间隔；偏好变化不会在下一轮采样中提前生效。显式配置入口等待旧循环及未完成的采样结束，再同时安装启用状态和间隔，随后启动新循环。该入口开始排空后不会因页面取消而放弃任务。探测读取实际循环和已安装的间隔，不访问旧偏好；永久停止的服务不能被报告为已启用。只修改一个采样键时，适配器从同一不可变请求读取配套值，暂停、恢复及重新启用也使用该完整配置。
+
+新增回归使用真实 JSON 会话、生产启动服务和采样 supervisor，Windows、mihomo 及统计存储边界采用隔离模拟。测试覆盖启用、禁用、拒绝后显式重试、回执丢失、错误代际和许可、单键修改、旧循环排空与退出许可关闭，以及尚未应用的 desired 不改变实际间隔。它们没有修改开发机启动任务或访问实际 mihomo。
+
+另外修复了启动服务的异常分类：探测和设置入口先检查完整异常图，嵌套致命异常保持原异常传播，不能返回未知状态或包装成 `StartupLaunchUpdateException`。两项回归先复现旧行为，再验证修复；持久 Running 记录保留给后续进程重新观察。
+
 ## 代际服务寿命
 
 `DataGenerationManager.ExecuteAsync` 在取得代际租约后，从该代际拥有的 `IServiceProvider` 解析服务，并等待完整操作结束才释放租约。`ReadSnapshot` 仅用于同步、无 I/O 的不可变内存快照，不阻塞异步任务。服务容器的异步释放仍由 `DataGenerationScope` 的原生命周期协议负责。
@@ -47,12 +57,16 @@
 
 公共入口追加 9 项回归后，主程序 2714 项全部通过，零失败、零跳过，用时 50 秒；18 项目完整构建零警告、零错误，用时 26.51 秒，format 检查 1464 个文件、零处变更。本分支累计新增 93 项回归。收据为 `local-validation-settings-generation-facade.json`、`1.0.0-settings-facade-main.trx` 及同前缀的构建、格式日志。首次红测有一项许可撤销问题和一项夹具对预建代际目录的错误假设，均保留原报告；错误装配验证以 Settings 目录未创建为实际边界。
 
+公共入口提交 `a08fc4b` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34214328575)，实际下载的四份 TRX 共 4779 项通过，零失败、零跳过。合并提交 `e31dd2c` 与源提交的 tree 同为 `78fe7a3dd89e81d4ba3203ca5dbb16ab4d6b4e35`，验证收据为 `ci-validation-settings-generation-facade.json`。开发安装器包构建成功，尚未为这份包追加原生验收。
+
+实际服务适配和启动异常修复新增 16 项回归，本分支累计新增 109 项。最终完整主程序 2730 项通过，零失败、零跳过，用时 51 秒；18 项目 Release x64 构建零警告、零错误，用时 22.29 秒，format 检查 1473 个文件、零处变更。收据为 `local-validation-settings-generation-runtime.json`、`1.0.0-settings-runtime-final.trx`、`build-settings-runtime-final.log` 和 `format-settings-runtime-verified.log`。两项异常图红测保存在 `1.0.0-settings-runtime-fatal-red.trx`；此前夹具对初始 revision 和匹配 applied/pending 的错误构造也保留独立失败报告，不计为产品缺陷复现。
+
 持久中断测试使用真实临时仓库、切点注入及新对象重开，运行时参与者为受控模拟。Windows 旧设置适配器已编译，未在开发机读取实际 LocalSettings。实际打包应用的迁移、进程崩溃、完整页面和安装器兼容验收将在生产切换后执行。开发机代理摘要保持 `95e97918ff6de70655b412568cd18dc81c5d6584c607bb9a71ddc72e22460447`。
 
 ## 完整切换的剩余依赖
 
 1. 将偏好写入统一为应用层异步 change set；页面、磁贴、触发器和网络提交者使用同一个接口。控制端凭据迁移到独立的内部凭据端口。
-2. 为 Internal、Appearance、Network、StartupTask、Sampling、Triggers 实现真实 apply/probe 适配器，明确读取 desired、有效状态和待办的消费者。
+2. 完成 Internal、Appearance、Network、Triggers 的实际 apply/probe 适配器，并将已实现的 StartupTask、Sampling 一起装配；明确读取 desired、有效状态和待办的消费者。
 3. 在设置驱动的启动步骤之前完成旧事务恢复、代际打开和偏好迁移。profile/log/trigger 与 settings 必须由同一代际容器解析、排空和替换。
 4. 将导入、重置和回滚接入候选代际及 manifest 提交，完成生产消费者替换后，原子替换 `SettingsAuthorityArchitectureTests` 中的临时门禁。
 5. 运行新候选的 CI、打包应用及隔离 Windows 验收，再将完整节点推送 main。

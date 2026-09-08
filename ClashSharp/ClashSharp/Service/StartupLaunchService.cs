@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 
 namespace ClashSharp.Service;
 
@@ -212,11 +213,12 @@ internal sealed partial class StartupLaunchService
 
     private static bool IsPlatformFailure(Exception exception)
     {
-        return exception is InvalidOperationException or
+        return !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && exception is (InvalidOperationException or
             UnauthorizedAccessException or
             ArgumentException or
             NotSupportedException or
-            COMException;
+            COMException);
     }
 
     private StartupLaunchUpdateException CreateUpdateException(
