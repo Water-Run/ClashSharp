@@ -44,5 +44,49 @@ SYSTEM 和 Administrators 完全控制。服务创建的 effective 目录和配�
 运行复现上述重载错误。失败路径的兜底 Remove-AppxPackage 也报告错误，不能将
 客体清理计为通过；每个 Sandbox 最终均由主机销毁，输入与开发机代理未变。
 
-修复后的签名候选仍需重新执行真实启动、重载、旧代际拒绝、停止及产品卸载。
-这里不包含 WPF 操作、普通用户/UAC 交互或实际外网 TUN 转发验收。
+`f1fca8e` 的构建测试与离线打包 [CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34184314054)。
+下载四份 TRX 核对共 4433 项通过、0 失败、0 跳过，包含全部 11 项新回归。
+`ci-validation-m5e.json` 和 `ci-runtime-security-regressions-m5e.json` 保存实际结果。
+
+## 修复候选的 Windows 11 重放
+
+使用同一提交的 CI MSIX 和生产 parent/helper 编译测试入口，签名和信任仅在断网
+Sandbox 中进行。候选 MSIX SHA-256 为
+`7d57b41bb13882eb3ab356f17ad7727675501d24590a1085d62547673c40c411`，
+签名入口为 `cc4cbf12f4ccc82e7996772017d31f4d4ec0b02d03dd855827c0f0303740d02d`。
+两项运行都采用客体卷根 ACL 夹具并在结束时恢复，没有放宽生产安装目录策略。
+
+运行 `f12fac3fab7c4bb5ad43cf6c1c0648e8` 完成安装后的八步真实 IPC 流程：Hello、
+Start、有效配置查询、代理组查询、Reload、新配置查询、旧代际查询拒绝、Stop。
+实际核心从 PID 8164 切换至 7420；持有的旧进程句柄确认退出，新配置为代际 2、
+Global 模式，源文件摘要保持，TUN 开启，mixed-port 为 0，TCP 9090 和 10000
+未监听。重载前的 cache.db 仍由 Administrators 持有，证明修复接纳了实际缓存。
+
+随后生产卸载进程 7320 返回 `installer.completed`、Verified，无待恢复事务。
+在兜底清理之前，包、服务、机器与用户证书、机器载荷及服务运行数据均不存在。
+九项客体清理通过，没有服务宿主崩溃事件；Sandbox 已销毁、输入与开发机代理未变。
+收据为 `artifacts/verification/installer-service-runtime-m5e.json`。
+
+## 核心退出恢复与运行中卸载
+
+同一候选的运行 `4d7bc20fe93f4512b599d5fd82ce1cf9` 使用最小配置验证实际核心退出：
+
+- 启动代际 1 的 Rule 配置后，仅将源文件改成 Global，不发送新配置命令。
+  三次终止准确路径且持有句柄的自有核心后，服务分别创建新进程，继续使用原来的
+  代际 1、摘要和 Rule 模式；未提交的源文件保持原样。
+- 第四次退出后返回 Faulted、无子进程及 `service.child.restart_exhausted`。
+  绑定查询返回 `service.controller.not_ready`，没有有效配置；超过最长重试间隔
+  后仍未启动新核心。
+- 新的显式 Start 接受代际 2，Global 与 TUN 状态通过实际控制查询。
+  探针成功路径未发送 Stop，将 PID 8140 保持运行交给卸载流程。
+- 生产卸载进程 6496 完成服务停止和全部产品清理；卸载前持有的核心句柄确认该
+  进程已退出。产品缺席快照仍先于兜底清理，九项客体清理均通过；服务宿主未崩溃。
+
+收据为 `artifacts/verification/installer-service-recovery-m5e.json`。前一轮夹具
+`82c624f3f4224e0d92dfc1b52c8059a5` 已通过核心恢复，但读取活跃 cache.db 摘要时
+遇到共享冲突，没有执行生产卸载，不能计为全流程通过。其兜底清理另记录到框架
+依赖移除返回 0x80073CF1；修正夹具仅在精确依赖的当前用户注册经复查确实缺席后
+接纳这个结果，其他错误仍失败。最终成功运行未触发该补偿分支。
+
+这些运行使用生产服务和引擎，入口是受客体身份限制的原生 API 探针；不包含 WPF
+操作、普通用户/UAC 交互、服务宿主强制崩溃、主机断电或实际外网 TUN 转发验收。
