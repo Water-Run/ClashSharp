@@ -125,7 +125,11 @@ Triggers 适配和入口顺序修复新增 22 项回归，本分支累计净增 
 
 内部设置提交 `04ded00` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34231353788)，实际四份 TRX 共 4856 项通过、零失败、零跳过，10 项新增用例全部匹配本地身份。合并提交 `0edd44c` 与源提交 tree 同为 `9c766820a60a2aaf974b4dd03ffa4716344b2b8c`，收据为 `ci-validation-internal-settings.json`。开发安装器包构建成功，本次只核验制品元数据。
 
-强调色验证修复追加 22 项回归，本分支累计净增 192 项。完整主程序 2813 项全部通过、零失败、零跳过，用时 57 秒；18 项目 Release x64 构建零警告、零错误，用时 29.06 秒，format 检查 1502 文件、零处变更。收据为 `local-validation-accent-runtime.json`，最终报告为 `1.0.0-accent-production-main.trx`、`build-accent-production-complete.log` 和 `format-accent-production-verified.log`。旧实现的两项失败保存在 `1.0.0-accent-unavailable-red.trx`，编译后已恢复并核对工作文件摘要；初次编译的命名及异常构造分析器诊断也保留原日志。资源存储的成功路径和故障注入使用隔离边界，真实 WinUI 字典及新启动检查需要同一 CI 候选的原生验收。
+强调色验证修复追加 22 项回归，本分支累计净增 192 项。完整主程序 2813 项全部通过、零失败、零跳过，用时 57 秒；18 项目 Release x64 构建零警告、零错误，用时 29.06 秒，format 检查 1502 文件、零处变更。收据为 `local-validation-accent-runtime.json`，最终报告为 `1.0.0-accent-production-main.trx`、`build-accent-production-complete.log` 和 `format-accent-production-verified.log`。旧实现的两项失败保存在 `1.0.0-accent-unavailable-red.trx`，编译后已恢复并核对工作文件摘要；初次编译的命名及异常构造分析器诊断也保留原日志。完整自定义资源表及故障注入使用隔离资源存储边界，默认跟随系统与新启动检查的原生证据如下。
+
+强调色提交 `a4f6368` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34236028856)，实际四份 TRX 共 4878 项通过、零失败、零跳过，22 项新增用例全部核对。合并提交 `6b0d9e3` 与源提交 tree 同为 `1115ea1ac545ee6197a6343cddf23867170418d3`，收据为 `ci-validation-accent-runtime.json`。已下载并验证安装器制品 `10060250945` 的全部 8 个文件；归档共 317688931 字节，SHA-256 为 `b816bde0ef20921ab50e1f89c73936eaab733a407a02375d5a70ae88af9fb193`，安装器版本为 `1.0.0+6b0d9e313394a363e52878bfc4832b17023c613f`。收据为 `installer-artifact-accent-runtime.json`。
+
+同一源提交和验收脚本在 2026-09-08 14:18 UTC 完成实际 Windows Sandbox 运行 `9328bd3fefce42b7a3ed7b70dba422b8`。MSIX SHA-256 为 `20da82391439e06ce0877a5febdeb56c4e1af5be9f0d671afb725810e21bfb22`；12 步全部通过，实际包进程与 EXE 摘要匹配，主窗口稳定 30366 毫秒，凭据、主窗口及最后启动步骤各成功一次，启动失败记录为零。7 项来宾清理成功，沙箱 `4f30c13b-672d-4ac5-b113-fc825f429f49` 已销毁，输入和主机代理不变；收据为 `sandbox-package-validation-accent-runtime.json`。这验证了新资源检查下的默认启动，未执行自定义配色的实际页面操作、正常 WPF 安装器流程或优雅退出。
 
 ## 完整切换的剩余依赖
 
