@@ -551,7 +551,7 @@ public sealed partial class Settings : Page
 
     private async void ResetStartupSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetStartupSettingsToDefaults);
+        await ResetSettingsGroupAsync(_viewModel.ResetStartupSettingsToDefaultsAsync);
     }
 
     private async void ResetNotificationSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -594,10 +594,24 @@ public sealed partial class Settings : Page
     /// <param name="includeServiceDeploymentNote">Whether to append the Installer-owned service notice.</param>
     private Task ResetSettingsGroupAsync(Action resetAction, bool includeServiceDeploymentNote = false)
     {
+        ArgumentNullException.ThrowIfNull(resetAction);
+        return ResetSettingsGroupAsync(token =>
+        {
+            token.ThrowIfCancellationRequested();
+            resetAction();
+            return Task.CompletedTask;
+        }, includeServiceDeploymentNote);
+    }
+
+    /// <summary>Owns an asynchronous group reset until its activation or compensation has drained.</summary>
+    private Task ResetSettingsGroupAsync(
+        Func<CancellationToken, Task> resetAction,
+        bool includeServiceDeploymentNote = false)
+    {
         return RunPageOperationAsync(token => ResetSettingsGroupCoreAsync(resetAction, includeServiceDeploymentNote, token));
     }
 
-    private async Task ResetSettingsGroupCoreAsync(Action resetAction, bool includeServiceDeploymentNote, CancellationToken cancellationToken)
+    private async Task ResetSettingsGroupCoreAsync(Func<CancellationToken, Task> resetAction, bool includeServiceDeploymentNote, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resetAction);
         string message = _viewModel.ResetGroupConfirmMessageText;
@@ -619,7 +633,7 @@ public sealed partial class Settings : Page
         if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            resetAction();
+            await resetAction(cancellationToken);
         }
     }
 

@@ -102,6 +102,12 @@ internal sealed class SettingsRuntimeMutationAdapter
                 _dataPackages.BeginResetSettingsAdmitted(GetLease()));
         }
 
+        public ISettingsResetTransactionReceipt BeginResetStartupSettings()
+        {
+            return new ResetTransactionReceipt(
+                _dataPackages.BeginResetStartupSettingsAdmitted(GetLease()));
+        }
+
         public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
         {
             _settings.WriteAdmitted(GetLease(), editor =>

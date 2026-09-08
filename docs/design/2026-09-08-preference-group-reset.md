@@ -30,3 +30,6 @@
 对应 `ci-validation-m3f.json` 和 `ci-preference-reset-regressions-m3f.json`；同一
 CI 开发安装器通过远端无全局 .NET 的绿色载荷校验与临时目录清理，收据为
 `installer-green-validation-m3f.json`。
+
+启动组后续接入独占的保留事务，见[启动组重置](2026-09-08-startup-group-reset.md)。
+普通偏好组接口继续拒绝启动和网络运行时范围。

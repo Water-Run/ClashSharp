@@ -11,7 +11,7 @@ using ClashSharp.Settings;
 namespace ClashSharp.Tests.Unit.Services;
 
 /// <summary>Unit tests for Clash# XML data package import and export behavior.</summary>
-public sealed class ClashDataPackageServiceTests
+public sealed partial class ClashDataPackageServiceTests
 {
     private const string DefaultMasterHeroStatusLayout =
         "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability";

@@ -19,6 +19,9 @@ internal interface ISettingsDestructiveRuntimeScope : IAsyncDisposable
     /// <summary>Begins one retained full-settings reset using this scope's exclusive settings authority.</summary>
     ISettingsResetTransactionReceipt BeginResetSettings();
 
+    /// <summary>Retains the complete settings generation while resetting only the startup group.</summary>
+    ISettingsResetTransactionReceipt BeginResetStartupSettings();
+
     /// <summary>Restores the durable participant-facing settings through this scope's exclusive authority.</summary>
     void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot);
 

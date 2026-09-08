@@ -19,3 +19,9 @@
 `1.0.0-m3g-main.trx` 及 `artifacts/verification` 下对应构建、测试、格式日志。
 
 这项结果验证请求顺序，不替代真实 Windows 开机启动权限及按组重置的运行时验收。
+
+`c2e12d0` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34188014553)。
+下载四份 TRX 核对共 4461 项通过，包含上述两项回归，零失败、零跳过。收据为
+`ci-validation-m3g.json` 和 `ci-startup-request-regressions-m3g.json`。同一 CI
+开发安装器完成远端无全局 .NET 的绿色载荷校验及自有临时目录清理，收据为
+`installer-green-validation-m3g.json`。

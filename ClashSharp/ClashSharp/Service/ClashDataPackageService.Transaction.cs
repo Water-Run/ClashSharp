@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.Settings;
 
 namespace ClashSharp.Service;
 
@@ -178,8 +179,22 @@ internal sealed partial class ClashDataPackageService
         return BeginResetSettingsCore(admissionLease);
     }
 
+    /// <summary>Resets the startup group while retaining the full rollback snapshot under exclusive admission.</summary>
+    internal DataPackageTransactionReceipt BeginResetStartupSettingsAdmitted(
+        MutationAdmissionLease admissionLease)
+    {
+        ArgumentNullException.ThrowIfNull(admissionLease);
+        if (!admissionLease.IsExclusive)
+        {
+            throw new ArgumentException("A retained startup reset requires exclusive admission.", nameof(admissionLease));
+        }
+
+        return BeginResetSettingsCore(admissionLease, startupOnly: true);
+    }
+
     private DataPackageTransactionReceipt BeginResetSettingsCore(
-        MutationAdmissionLease? admissionLease)
+        MutationAdmissionLease? admissionLease,
+        bool startupOnly = false)
     {
         FileStream transactionLock = AcquireTransactionLock();
         bool leaseTransferred = false;
@@ -205,7 +220,25 @@ internal sealed partial class ClashDataPackageService
             SignalCheckpoint(DataPackageTransactionCheckpoint.ManifestPersisted);
             try
             {
-                WriteSettings(admissionLease, static settings => settings.ResetAllSettings());
+                WriteSettings(admissionLease, settings =>
+                {
+                    if (startupOnly)
+                    {
+                        // Registry metadata supplies defaults; the existing admitted editor remains
+                        // the sole writer. Replay uses the complete desired snapshot in this manifest.
+                        foreach (SettingDefinition definition in SettingsRegistry.Default
+                            .GetResetDefinitions(SettingsResetScope.Startup))
+                        {
+                            SettingDescriptor descriptor = SettingDescriptors.Single(
+                                item => item.Name == definition.Key.Value);
+                            descriptor.Write(settings, definition.DefaultValue.CanonicalText);
+                        }
+                    }
+                    else
+                    {
+                        settings.ResetAllSettings();
+                    }
+                });
                 SignalCheckpoint(DataPackageTransactionCheckpoint.ResetMutationCompleted);
 
                 manifest.DesiredSettings = CaptureSettings();

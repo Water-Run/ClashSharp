@@ -1935,14 +1935,13 @@ public sealed partial class SettingsViewModelTests
         };
         AppLanguage? appliedLanguage = null;
         AppThemeMode? appliedTheme = null;
-        bool? appliedLaunch = null;
         int samplingRestarts = 0;
         SettingsViewModel viewModel = new(
             store,
             language => appliedLanguage = language,
             theme => appliedTheme = theme,
             () => samplingRestarts++,
-            isEnabled => appliedLaunch = isEnabled);
+            _ => { });
         viewModel.Load();
 
         InvokeMethod<object?>(viewModel, "ResetBasicSettingsToDefaults", Array.Empty<object>());
@@ -1954,14 +1953,6 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(CloseBehaviorMode.MinimizeToTray, store.CloseBehaviorMode);
         Assert.Null(appliedLanguage);
         Assert.Equal(AppThemeMode.FollowSystem, appliedTheme);
-
-        InvokeMethod<object?>(viewModel, "ResetStartupSettingsToDefaults", Array.Empty<object>());
-
-        Assert.False(store.LaunchAtStartupEnabled);
-        Assert.True(store.StartupConflictCheckEnabled);
-        Assert.True(store.ShowStartupGuideOnStartup);
-        Assert.Equal(StartupBehaviorMode.LastSetting, store.StartupBehaviorMode);
-        Assert.False(appliedLaunch);
 
         InvokeMethod<object?>(viewModel, "ResetTriggerSettingsToDefaults", Array.Empty<object>());
 
@@ -2365,6 +2356,11 @@ public sealed partial class SettingsViewModelTests
             Assert.True(IsActive);
             Reset?.Invoke();
             return new TrackingSettingsResetReceipt();
+        }
+
+        public ISettingsResetTransactionReceipt BeginResetStartupSettings()
+        {
+            throw new NotSupportedException();
         }
 
         public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)

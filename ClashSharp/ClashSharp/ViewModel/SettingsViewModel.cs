@@ -104,7 +104,7 @@ internal sealed class SettingsViewModel : ObservableObject
 
     private readonly SemaphoreSlim _networkSettingsGate = new(1, 1);
 
-    /// <summary>Serializes full reset commit points within this view model.</summary>
+    /// <summary>Serializes retained reset commit points within this view model.</summary>
     private readonly SemaphoreSlim _resetSettingsGate = new(1, 1);
 
     private Task _networkSettingsRequeueTask = Task.CompletedTask;
@@ -2842,20 +2842,11 @@ internal sealed class SettingsViewModel : ObservableObject
         RaiseSelectorBindingsChanged();
     }
 
-    /// <summary>Restores startup settings to defaults.</summary>
-    public void ResetStartupSettingsToDefaults()
+    /// <summary>Restores the complete startup group and system registration through a retained transaction.</summary>
+    /// <param name="cancellationToken">Cancels before the durable reset; activation and rollback then run to completion.</param>
+    public Task ResetStartupSettingsToDefaultsAsync(CancellationToken cancellationToken)
     {
-        SetLaunchAtStartupEnabled(false);
-
-        _settings.StartupConflictCheckEnabled = true;
-        SetProperty(ref _startupConflictCheckEnabled, true, nameof(StartupConflictCheckEnabled));
-
-        _settings.ShowStartupGuideOnStartup = true;
-        SetProperty(ref _showStartupGuideOnStartup, true, nameof(ShowStartupGuideOnStartup));
-
-        _settings.StartupBehaviorMode = StartupBehaviorMode.LastSetting;
-        StartupBehaviorMode = StartupBehaviorMode.LastSetting;
-        RaiseSelectorBindingsChanged();
+        return ResetSettingsAsync(startupOnly: true, cancellationToken);
     }
 
     /// <summary>Restores trigger settings to defaults.</summary>
@@ -2941,7 +2932,12 @@ internal sealed class SettingsViewModel : ObservableObject
     /// all activation and compensation work uses a non-cancelable token so caller lifetime cannot strand a
     /// partially applied reset.
     /// </remarks>
-    public async Task ResetAllSettingsAsync(CancellationToken cancellationToken)
+    public Task ResetAllSettingsAsync(CancellationToken cancellationToken)
+    {
+        return ResetSettingsAsync(startupOnly: false, cancellationToken);
+    }
+
+    private async Task ResetSettingsAsync(bool startupOnly, CancellationToken cancellationToken)
     {
         await _resetSettingsGate.WaitAsync(cancellationToken);
         bool durableResetStarted = false;
@@ -2953,13 +2949,16 @@ internal sealed class SettingsViewModel : ObservableObject
             await WaitForOutstandingRuntimeSettingsAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             runtimeMutation = await _beginDestructiveRuntimeMutationAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
             ExternalSettingsSnapshot baseline = CaptureExternalSettingsSnapshot();
             restartRequiredBaseline = CaptureRestartRequiredSettingsBaseline();
             durableResetStarted = true;
             try
             {
-                resetReceipt = runtimeMutation.BeginResetSettings()
+                resetReceipt = (startupOnly
+                    ? runtimeMutation.BeginResetStartupSettings()
+                    : runtimeMutation.BeginResetSettings())
                     ?? throw new InvalidOperationException(
                         "The settings reset transaction did not return a receipt.");
             }
@@ -2971,13 +2970,14 @@ internal sealed class SettingsViewModel : ObservableObject
                 ExternalSettingsSnapshot partialCommit = CaptureExternalSettingsSnapshot();
                 Exception? convergenceFailure = await TryApplyExternalSettingsSnapshotAsync(
                     partialCommit,
-                    runtimeMutation);
+                    runtimeMutation,
+                    startupOnly);
                 if (convergenceFailure is not null)
                 {
                     throw EnterResetRecoveryState(resetFailure, convergenceFailure);
                 }
 
-                MarkExternalSettingsApplied(partialCommit);
+                MarkExternalSettingsApplied(partialCommit, startupOnly);
                 IsResetRecoveryRequired = false;
                 OperationErrorText = _getString("Application.UnexpectedError");
                 ExceptionDispatchInfo.Capture(resetFailure).Throw();
@@ -2987,10 +2987,11 @@ internal sealed class SettingsViewModel : ObservableObject
             ExternalSettingsSnapshot committedDefaults = CaptureExternalSettingsSnapshot();
             Exception? activationFailure = await TryApplyExternalSettingsSnapshotAsync(
                 committedDefaults,
-                runtimeMutation);
+                runtimeMutation,
+                startupOnly);
             if (activationFailure is null)
             {
-                MarkExternalSettingsApplied(committedDefaults);
+                MarkExternalSettingsApplied(committedDefaults, startupOnly);
                 IsResetRecoveryRequired = false;
                 OperationErrorText = string.Empty;
                 await CompleteResetReceiptWithRetryAsync(
@@ -3009,13 +3010,14 @@ internal sealed class SettingsViewModel : ObservableObject
 
             Exception? compensationFailure = await TryRestoreExternalSettingsSnapshotAsync(
                 baseline,
-                runtimeMutation);
+                runtimeMutation,
+                startupOnly);
             if (compensationFailure is not null)
             {
                 throw EnterResetRecoveryState(activationFailure, compensationFailure);
             }
 
-            MarkExternalSettingsApplied(baseline);
+            MarkExternalSettingsApplied(baseline, startupOnly);
             IsResetRecoveryRequired = false;
             OperationErrorText = _getString("Application.UnexpectedError");
             ExceptionDispatchInfo.Capture(activationFailure).Throw();
@@ -3045,7 +3047,14 @@ internal sealed class SettingsViewModel : ObservableObject
                     {
                         if (durableResetStarted)
                         {
-                            ReloadAfterSettingsReset(restartRequiredBaseline!.Value);
+                            if (startupOnly)
+                            {
+                                ReloadStartupSettingsAfterReset();
+                            }
+                            else
+                            {
+                                ReloadAfterSettingsReset(restartRequiredBaseline!.Value);
+                            }
                         }
                     }
                     finally
@@ -3146,9 +3155,19 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <summary>Applies every participant, collecting failures so one broken participant cannot hide another split.</summary>
     private async Task ApplyExternalSettingsSnapshotAsync(
         ExternalSettingsSnapshot snapshot,
-        ISettingsDestructiveRuntimeScope runtimeMutation)
+        ISettingsDestructiveRuntimeScope runtimeMutation,
+        bool startupOnly)
     {
         ArgumentNullException.ThrowIfNull(runtimeMutation);
+        if (startupOnly)
+        {
+            await runtimeMutation.ApplyLaunchAtStartupAsync(
+                snapshot.LaunchAtStartupEnabled,
+                CancellationToken.None);
+            VerifyExternalSettingsSnapshot(snapshot);
+            return;
+        }
+
         List<Exception> failures = [];
         CaptureParticipantFailure(
             () => _applyLanguage(snapshot.DisplayLanguage),
@@ -3233,11 +3252,12 @@ internal sealed class SettingsViewModel : ObservableObject
 
     private async Task<Exception?> TryApplyExternalSettingsSnapshotAsync(
         ExternalSettingsSnapshot snapshot,
-        ISettingsDestructiveRuntimeScope runtimeMutation)
+        ISettingsDestructiveRuntimeScope runtimeMutation,
+        bool startupOnly)
     {
         try
         {
-            await ApplyExternalSettingsSnapshotAsync(snapshot, runtimeMutation);
+            await ApplyExternalSettingsSnapshotAsync(snapshot, runtimeMutation, startupOnly);
             return null;
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
@@ -3248,23 +3268,27 @@ internal sealed class SettingsViewModel : ObservableObject
 
     private async Task<Exception?> TryRestoreExternalSettingsSnapshotAsync(
         ExternalSettingsSnapshot baseline,
-        ISettingsDestructiveRuntimeScope runtimeMutation)
+        ISettingsDestructiveRuntimeScope runtimeMutation,
+        bool startupOnly)
     {
         List<Exception> failures = [];
-        CaptureParticipantFailure(
-            () => runtimeMutation.RestoreDurableSettings(new SettingsExternalDurableSnapshot(
-                baseline.DisplayLanguage,
-                baseline.AppThemeMode,
-                baseline.AppAccentColorMode,
-                baseline.AppAccentColorValue,
-                baseline.LaunchAtStartupEnabled,
-                baseline.ConnectionSamplingEnabled,
-                baseline.ConnectionSamplingIntervalSeconds,
-                baseline.CurrentMode,
-                baseline.ActiveProfileId,
-                baseline.TransparentProxyEnabled,
-                baseline.MixedPort)),
-            failures);
+        if (!startupOnly)
+        {
+            CaptureParticipantFailure(
+                () => runtimeMutation.RestoreDurableSettings(new SettingsExternalDurableSnapshot(
+                    baseline.DisplayLanguage,
+                    baseline.AppThemeMode,
+                    baseline.AppAccentColorMode,
+                    baseline.AppAccentColorValue,
+                    baseline.LaunchAtStartupEnabled,
+                    baseline.ConnectionSamplingEnabled,
+                    baseline.ConnectionSamplingIntervalSeconds,
+                    baseline.CurrentMode,
+                    baseline.ActiveProfileId,
+                    baseline.TransparentProxyEnabled,
+                    baseline.MixedPort)),
+                failures);
+        }
         ExternalSettingsSnapshot durableTarget = CaptureExternalSettingsSnapshot();
         if (durableTarget != baseline)
         {
@@ -3274,7 +3298,8 @@ internal sealed class SettingsViewModel : ObservableObject
 
         Exception? activationFailure = await TryApplyExternalSettingsSnapshotAsync(
             durableTarget,
-            runtimeMutation);
+            runtimeMutation,
+            startupOnly);
         if (activationFailure is not null)
         {
             failures.Add(activationFailure);
@@ -3305,10 +3330,15 @@ internal sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    private void MarkExternalSettingsApplied(ExternalSettingsSnapshot snapshot)
+    private void MarkExternalSettingsApplied(ExternalSettingsSnapshot snapshot, bool startupOnly)
     {
         _appliedLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
         _pendingLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
+        if (startupOnly)
+        {
+            return;
+        }
+
         _appliedConnectionSamplingEnabled = snapshot.ConnectionSamplingEnabled;
         _appliedConnectionSamplingIntervalSeconds = snapshot.ConnectionSamplingIntervalSeconds;
         _appliedTransparentProxyEnabled = snapshot.TransparentProxyEnabled;
@@ -3375,6 +3405,20 @@ internal sealed class SettingsViewModel : ObservableObject
         ResetDiagnosticStatusText();
     }
 
+    /// <summary>Publishes the complete startup group without rebasing other groups' pending restart notices.</summary>
+    private void ReloadStartupSettingsAfterReset()
+    {
+        _launchAtStartupEnabled = _settings.LaunchAtStartupEnabled;
+        _startupConflictCheckEnabled = _settings.StartupConflictCheckEnabled;
+        _showStartupGuideOnStartup = _settings.ShowStartupGuideOnStartup;
+        _startupBehaviorMode = _settings.StartupBehaviorMode;
+        OnPropertyChanged(nameof(LaunchAtStartupEnabled));
+        OnPropertyChanged(nameof(StartupConflictCheckEnabled));
+        OnPropertyChanged(nameof(ShowStartupGuideOnStartup));
+        OnPropertyChanged(nameof(StartupBehaviorMode));
+        RaiseSelectorBindingsChanged();
+    }
+
     private readonly record struct RestartRequiredSettingsBaseline(
         MainlandChinaFeatureMode MainlandChinaFeatureMode,
         bool MainlandChinaUrlBlockingEnabled);
@@ -3400,6 +3444,12 @@ internal sealed class SettingsViewModel : ObservableObject
         public ISettingsResetTransactionReceipt BeginResetSettings()
         {
             return beginResetSettings();
+        }
+
+        public ISettingsResetTransactionReceipt BeginResetStartupSettings()
+        {
+            throw new NotSupportedException(
+                "A startup group reset requires an admitted retained transaction.");
         }
 
         public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
