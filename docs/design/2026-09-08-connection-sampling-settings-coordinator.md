@@ -45,3 +45,14 @@
 
 适配器测试明确确认设置使用内存回退；采样源、存储及时间端口为模拟。
 本轮未访问现有 Clash 配置、真实连接数据库或修改开发机代理。
+
+提交 `2e5a4a4` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34203924288)。
+下载的四份 TRX 共 4686 项通过、0 失败、0 跳过，包含新增 44 项；Core 行覆盖率
+93.53%、分支覆盖率 86.73%。收据为 `ci-validation-m3m.json` 和
+`ci-sampling-coordinator-regressions-m3m.json`。
+
+同一提交的开发安装器通过远端无全局 .NET 的自包含载荷验证，八个文件前后摘要
+一致，临时运行目录已清理且无残留进程；收据为 `installer-green-validation-m3m.json`。
+对应 MSIX 在独立 Windows 11 Sandbox 安装后显示主窗口并持续观察 30037 ms，
+12 步及七项清理全部通过，宿主代理与输入未变。准确候选和边界见
+[包启动验证的 M5h 记录](2026-09-08-package-launch-validation.md#m5h-采样事务提交的包启动)。
