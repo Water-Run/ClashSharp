@@ -7,7 +7,7 @@
 `Clash#` 是一个现代化的 Windows 原生代理客户端，基于 [mihomo](https://github.com/MetaCubeX/mihomo) 构建。
 `Clash#` 以`AGPL-3.0`协议开源于[GitHub](https://github.com/Water-Run/ClashSharp).
 
-> 开发状态（2026-09-07）：1.0.0 正在开发。页面操作生命周期、磁贴无障碍、共享备份/恢复交互、连接筛选和日志入库边界已通过源码及自动化验证；现有 Clash 配置通过隔离语义/内核检查，32/32 节点探测与 HTTPS 转发成功。自包含 C# / WPF Installer 仍保留编译门，等待同一签名候选的安装和恢复验收；上述结果不代表生产发布完成。里程碑、证据及剩余工作见 [1.0.0 执行账本](./docs/reviews/1.0.0-execution-ledger.md)，另见[开发基线](./docs/reviews/2026-09-06-development-status-and-next-steps.md)与[架构总审查](./docs/reviews/2026-08-31-project-structure-mvvm-code-quality-installer-audit.md)。
+> 开发状态（2026-09-08）：1.0.0 正在开发。WinUI 页面与磁贴、共享备份/恢复、连接筛选和日志入库边界已有自动化验证，当前 CI 的 4398 项测试全部通过；现有 Clash 配置的 32/32 节点探测与 HTTPS 转发成功。生产安装引擎已在 Windows Sandbox 完成安装、修复、卸载、八项中断/占用恢复及实际系统重启后的恢复。正式签名构建启用生产运行时，开发包保留执行门禁；WPF 交互和完整发布矩阵仍待完成。对应候选、证据和剩余工作见 [1.0.0 执行账本](./docs/reviews/1.0.0-execution-ledger.md)。
 
 ## 关于Windows原生
 
@@ -25,7 +25,7 @@
 
 ### 安装
 
-正式版本发布后，从 [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases) 下载发布包，解压后直接运行带 Authenticode 签名的 `ClashSharp-Installer.exe`。不要使用当前 CI 中间产物代替正式发布包，也不要手动“以管理员身份运行”；应用证书与 MSIX 始终安装到当前用户，仅在配置机器级本地服务时由安装器单独请求 UAC 确认。UAC 必须显示预期的已验证发布者，不能是“未知发布者”。
+正式版本发布后，从 [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases) 下载发布包，解压后在普通用户会话中直接运行带 Authenticode 签名的 `ClashSharp-Installer.exe`。应用包归属当前用户；安装器在配置机器服务及必要的机器证书信任时请求 UAC，请核对已验证的发布者。保留 EXE 与相邻的 `payload` 目录。WPF 安装器自身为绿色自包含程序，无需预装 .NET；当前 CI 开发产物仅用于验证，尚非正式发布包。
 
 > 修复、升级和完整卸载请重新运行 `ClashSharp-Installer.exe`。安装器会在证书/MSIX 被消费期间持续持有只读锁，并在使用前后复核同一文件对象的身份与 SHA-256；部署完成后还会依据签名 block map 逐项复核全部包作者文件，MSIX 同时启用 Windows package-integrity enforcement。不要只从 Windows 应用管理移除 MSIX，否则机器级 Service 资源可能无法同步清理。
 
