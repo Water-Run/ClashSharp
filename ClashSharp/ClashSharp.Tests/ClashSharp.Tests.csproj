@@ -180,6 +180,7 @@
     <Compile Include="..\ClashSharp\ViewModel\IDiagnosticsLog.cs" Link="ViewModel\IDiagnosticsLog.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticStatus.cs" Link="ViewModel\SettingsDiagnosticStatus.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.cs" Link="ViewModel\SettingsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.ResetOperation.cs" Link="ViewModel\SettingsViewModel.ResetOperation.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ISettingsStore.cs" Link="ViewModel\ISettingsStore.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ISettingsDestructiveRuntimeScope.cs" Link="ViewModel\ISettingsDestructiveRuntimeScope.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsProxyInformation.cs" Link="ViewModel\SettingsProxyInformation.cs" />

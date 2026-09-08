@@ -299,10 +299,38 @@ public sealed partial class SettingsViewModelTests
         }
     }
 
+    [Fact]
+    public async Task StartupReset_ReceiptDisposalFailurePreservesRecoveryStateAndRestartRequest()
+    {
+        FakeSettingsStore store = CreateStartupResetStore();
+        IOException registrationFailure = new("Registration unavailable.");
+        IOException disposalFailure = new("Receipt disposal unavailable.");
+        int restarts = 0;
+        StartupResetRuntimeScope scope = new(store)
+        {
+            Apply = (_, _) => Task.FromException(registrationFailure),
+            ReceiptDisposeFailure = disposalFailure,
+        };
+        SettingsViewModel viewModel = CreateStartupResetViewModel(store, scope, () => { restarts++; return true; });
+
+        AggregateException actual = await Assert.ThrowsAsync<AggregateException>(
+            () => viewModel.ResetStartupSettingsToDefaultsAsync(CancellationToken.None));
+
+        Assert.True(viewModel.IsResetRecoveryRequired);
+        Assert.Equal(1, restarts);
+        Assert.Contains(registrationFailure, actual.Flatten().InnerExceptions);
+        Assert.Contains(disposalFailure, actual.Flatten().InnerExceptions);
+        Assert.True(scope.Disposed);
+        Assert.True(scope.Receipt!.Disposed);
+        Assert.Equal(1, scope.Receipt.RollbackCalls);
+        Assert.Equal(0, scope.Receipt.CommitCalls);
+    }
+
     private sealed class StartupResetRuntimeScope(FakeSettingsStore store) : ISettingsDestructiveRuntimeScope
     {
         public Func<bool, CancellationToken, Task> Apply { get; init; } = (_, _) => Task.CompletedTask;
         public Exception? CommitFailure { get; init; }
+        public Exception? ReceiptDisposeFailure { get; init; }
         public TrackingSettingsResetReceipt? Receipt { get; private set; }
         public List<bool> Applied { get; } = [];
         public bool Disposed { get; private set; }
@@ -313,7 +341,7 @@ public sealed partial class SettingsViewModelTests
             Assert.Null(Receipt);
             StartupResetState baseline = StartupResetState.Capture(store);
             StartupResetState.Defaults.Restore(store);
-            return Receipt = new TrackingSettingsResetReceipt(() => baseline.Restore(store), CommitFailure);
+            return Receipt = new TrackingSettingsResetReceipt(() => baseline.Restore(store), CommitFailure, ReceiptDisposeFailure);
         }
 
         public ISettingsResetTransactionReceipt BeginResetSettings() => throw new InvalidOperationException("Unexpected full reset.");

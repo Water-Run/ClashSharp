@@ -64,17 +64,21 @@ public sealed class SettingsAuthorityArchitectureTests
             StringComparison.Ordinal);
 
         string settingsViewModel = ReadApplicationSource("ViewModel/SettingsViewModel.cs");
+        Assert.Contains("SettingsResetCoordinator", settingsViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("resetReceipt.CommitAsync", settingsViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("resetReceipt.RollbackAsync", settingsViewModel, StringComparison.Ordinal);
+        string resetOperation = ReadApplicationSource("ViewModel/SettingsViewModel.ResetOperation.cs");
         Assert.Contains(
             "runtimeMutation.BeginResetSettings()",
-            settingsViewModel,
+            resetOperation,
             StringComparison.Ordinal);
         Assert.Contains(
             "runtimeMutation.BeginResetStartupSettings()",
-            settingsViewModel,
+            resetOperation,
             StringComparison.Ordinal);
         Assert.Contains(
-            "runtimeMutation.BeginResetNetworkSettings(scope, CanToggleTransparentProxy)",
-            settingsViewModel,
+            "runtimeMutation.BeginResetNetworkSettings(scope, transparentProxyEnabled)",
+            resetOperation,
             StringComparison.Ordinal);
 
         string runtimeAdapter = ReadApplicationSource(

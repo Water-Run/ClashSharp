@@ -5,11 +5,11 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
-using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Settings;
 
@@ -21,7 +21,7 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread use.
 /// Side effects: Set methods persist values and may trigger injected application callbacks.
 /// </remarks>
-internal sealed class SettingsViewModel : ObservableObject
+internal sealed partial class SettingsViewModel : ObservableObject
 {
     private const string DefaultAppAccentColorValue = "#FF0078D4";
     private const int MinConnectionSamplingIntervalSeconds = 3;
@@ -2924,175 +2924,61 @@ internal sealed class SettingsViewModel : ObservableObject
         bool durableResetStarted = false;
         RestartRequiredSettingsBaseline? restartRequiredBaseline = null;
         ISettingsDestructiveRuntimeScope? runtimeMutation = null;
-        ISettingsResetTransactionReceipt? resetReceipt = null;
         try
         {
             await WaitForOutstandingRuntimeSettingsAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             runtimeMutation = await _beginDestructiveRuntimeMutationAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-
-            ExternalSettingsSnapshot baseline = CaptureExternalSettingsSnapshot();
             restartRequiredBaseline = CaptureRestartRequiredSettingsBaseline();
             durableResetStarted = true;
             try
             {
-                resetReceipt = (scope switch
-                {
-                    SettingsResetScope.All => runtimeMutation.BeginResetSettings(),
-                    SettingsResetScope.Startup => runtimeMutation.BeginResetStartupSettings(),
-                    SettingsResetScope.Proxy or SettingsResetScope.TransparentProxy =>
-                        runtimeMutation.BeginResetNetworkSettings(scope, CanToggleTransparentProxy),
-                    _ => throw new ArgumentOutOfRangeException(nameof(scope)),
-                })
-                    ?? throw new InvalidOperationException(
-                        "The settings reset transaction did not return a receipt.");
-            }
-            catch (Exception resetFailure) when (!ExceptionGraphClassifier.IsProcessFatal(resetFailure))
-            {
-                // The maintenance callback can fail after removing one or more durable values. Treat
-                // the values that remain readable as authoritative and converge every participant to
-                // that state before reporting the incomplete reset.
-                ExternalSettingsSnapshot partialCommit = CaptureExternalSettingsSnapshot();
-                Exception? convergenceFailure = await TryApplyExternalSettingsSnapshotAsync(
-                    partialCommit,
-                    runtimeMutation,
-                    scope);
-                if (convergenceFailure is not null)
-                {
-                    throw EnterResetRecoveryState(resetFailure, convergenceFailure);
-                }
-
-                MarkExternalSettingsApplied(partialCommit, scope);
-                IsResetRecoveryRequired = false;
-                OperationErrorText = _getString("Application.UnexpectedError");
-                ExceptionDispatchInfo.Capture(resetFailure).Throw();
-                throw;
-            }
-
-            ExternalSettingsSnapshot committedDefaults = CaptureExternalSettingsSnapshot();
-            Exception? activationFailure = await TryApplyExternalSettingsSnapshotAsync(
-                committedDefaults,
-                runtimeMutation,
-                scope);
-            if (activationFailure is null)
-            {
-                MarkExternalSettingsApplied(committedDefaults, scope);
-                IsResetRecoveryRequired = false;
-                OperationErrorText = string.Empty;
-                await CompleteResetReceiptWithRetryAsync(
-                    resetReceipt.CommitAsync,
+                await new SettingsResetCoordinator().ExecuteAsync(
+                    new ResetOperation(this, runtimeMutation),
+                    scope,
+                    CanToggleTransparentProxy,
                     CancellationToken.None);
-                return;
             }
-
-            Exception? durableRollbackFailure = await TryCompleteResetReceiptWithRetryAsync(
-                resetReceipt.RollbackAsync,
-                CancellationToken.None);
-            if (durableRollbackFailure is not null)
+            catch (SettingsResetRecoveryException recoveryFailure) when (!ExceptionGraphClassifier.IsProcessFatal(recoveryFailure))
             {
-                throw EnterResetRecoveryState(activationFailure, durableRollbackFailure);
+                throw EnterResetRecoveryState(recoveryFailure.ActivationFailure, recoveryFailure.RecoveryFailure);
             }
-
-            Exception? compensationFailure = await TryRestoreExternalSettingsSnapshotAsync(
-                baseline,
-                runtimeMutation,
-                scope);
-            if (compensationFailure is not null)
-            {
-                throw EnterResetRecoveryState(activationFailure, compensationFailure);
-            }
-
-            MarkExternalSettingsApplied(baseline, scope);
-            IsResetRecoveryRequired = false;
-            OperationErrorText = _getString("Application.UnexpectedError");
-            ExceptionDispatchInfo.Capture(activationFailure).Throw();
-            throw new UnreachableException();
         }
         finally
         {
             try
             {
-                if (resetReceipt is not null)
+                if (runtimeMutation is not null)
                 {
-                    await resetReceipt.DisposeAsync();
+                    await runtimeMutation.DisposeAsync();
                 }
             }
             finally
             {
                 try
                 {
-                    if (runtimeMutation is not null)
+                    if (durableResetStarted)
                     {
-                        await runtimeMutation.DisposeAsync();
+                        if (scope == SettingsResetScope.Startup)
+                        {
+                            ReloadStartupSettingsAfterReset();
+                        }
+                        else if (scope == SettingsResetScope.All)
+                        {
+                            ReloadAfterSettingsReset(restartRequiredBaseline!.Value);
+                        }
+                        else
+                        {
+                            ReloadNetworkSettingsAfterReset(scope == SettingsResetScope.Proxy);
+                        }
                     }
                 }
                 finally
                 {
-                    try
-                    {
-                        if (durableResetStarted)
-                        {
-                            if (scope == SettingsResetScope.Startup)
-                            {
-                                ReloadStartupSettingsAfterReset();
-                            }
-                            else if (scope == SettingsResetScope.All)
-                            {
-                                ReloadAfterSettingsReset(restartRequiredBaseline!.Value);
-                            }
-                            else
-                            {
-                                ReloadNetworkSettingsAfterReset(scope == SettingsResetScope.Proxy);
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        _resetSettingsGate.Release();
-                    }
+                    _resetSettingsGate.Release();
                 }
             }
-
-        }
-    }
-
-    private static async Task CompleteResetReceiptWithRetryAsync(
-        Func<CancellationToken, Task> completion,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await completion(cancellationToken);
-        }
-        catch (Exception firstFailure) when (!ExceptionGraphClassifier.IsProcessFatal(firstFailure))
-        {
-            try
-            {
-                await completion(CancellationToken.None);
-            }
-            catch (Exception retryFailure) when (!ExceptionGraphClassifier.IsProcessFatal(retryFailure))
-            {
-                throw new AggregateException(
-                    "The retained settings reset decision could not be finalized after retry.",
-                    firstFailure,
-                    retryFailure);
-            }
-        }
-    }
-
-    private static async Task<Exception?> TryCompleteResetReceiptWithRetryAsync(
-        Func<CancellationToken, Task> completion,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await CompleteResetReceiptWithRetryAsync(completion, cancellationToken);
-            return null;
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            return exception;
         }
     }
 
@@ -3125,209 +3011,7 @@ internal sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Captures durable values that have process-external or immediately visible participants.</summary>
-    private ExternalSettingsSnapshot CaptureExternalSettingsSnapshot()
-    {
-        return new ExternalSettingsSnapshot(
-            _settings.DisplayLanguage,
-            _settings.AppThemeMode,
-            _settings.AppAccentColorMode,
-            _settings.AppAccentColorValue,
-            _settings.LaunchAtStartupEnabled,
-            _settings.ConnectionSamplingEnabled,
-            _settings.ConnectionSamplingIntervalSeconds,
-            _settings.CurrentMode,
-            _settings.ActiveProfileId,
-            _settings.TransparentProxyEnabled,
-            _settings.MixedPort);
-    }
-
-    /// <summary>Applies every participant, collecting failures so one broken participant cannot hide another split.</summary>
-    private async Task ApplyExternalSettingsSnapshotAsync(
-        ExternalSettingsSnapshot snapshot,
-        ISettingsDestructiveRuntimeScope runtimeMutation,
-        SettingsResetScope scope)
-    {
-        ArgumentNullException.ThrowIfNull(runtimeMutation);
-        List<Exception> failures = [];
-        if (scope == SettingsResetScope.All)
-        {
-            CaptureParticipantFailure(
-                () => _applyLanguage(snapshot.DisplayLanguage),
-                failures);
-            CaptureParticipantFailure(
-                () => _applyTheme(snapshot.AppThemeMode),
-                failures);
-            CaptureParticipantFailure(
-                () => _applyAccentColor(snapshot.AppAccentColorMode, snapshot.AppAccentColorValue),
-                failures);
-        }
-
-        if (scope is SettingsResetScope.All or SettingsResetScope.Startup)
-        {
-            await CaptureParticipantFailureAsync(
-                () => runtimeMutation.ApplyLaunchAtStartupAsync(
-                    snapshot.LaunchAtStartupEnabled,
-                    CancellationToken.None),
-                failures);
-        }
-
-        if (scope is SettingsResetScope.All or SettingsResetScope.Proxy)
-        {
-            await CaptureParticipantFailureAsync(
-                () => runtimeMutation.RestartConnectionSamplingAsync(CancellationToken.None),
-                failures);
-        }
-
-        if (scope is SettingsResetScope.All or SettingsResetScope.Proxy or SettingsResetScope.TransparentProxy)
-        {
-            await CaptureParticipantFailureAsync(
-                () => ApplyResetNetworkSettingsAsync(snapshot, runtimeMutation),
-                failures);
-        }
-
-        CaptureParticipantFailure(
-            () => VerifyExternalSettingsSnapshot(snapshot),
-            failures);
-
-        if (failures.Count == 1)
-        {
-            ExceptionDispatchInfo.Capture(failures[0]).Throw();
-        }
-
-        if (failures.Count > 1)
-        {
-            throw new AggregateException(
-                "One or more settings reset participants failed to apply the durable state.",
-                failures);
-        }
-    }
-
-    private async Task ApplyResetNetworkSettingsAsync(
-        ExternalSettingsSnapshot snapshot,
-        ISettingsDestructiveRuntimeScope runtimeMutation)
-    {
-        await _networkSettingsGate.WaitAsync(CancellationToken.None);
-        try
-        {
-            await runtimeMutation.ApplyNetworkSettingsAsync(
-                snapshot.TransparentProxyEnabled,
-                snapshot.MixedPort,
-                CancellationToken.None);
-        }
-        finally
-        {
-            _networkSettingsGate.Release();
-        }
-    }
-
-    private static void CaptureParticipantFailure(Action action, ICollection<Exception> failures)
-    {
-        try
-        {
-            action();
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            failures.Add(exception);
-        }
-    }
-
-    private static async Task CaptureParticipantFailureAsync(
-        Func<Task> action,
-        ICollection<Exception> failures)
-    {
-        try
-        {
-            await action();
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            failures.Add(exception);
-        }
-    }
-
-    private async Task<Exception?> TryApplyExternalSettingsSnapshotAsync(
-        ExternalSettingsSnapshot snapshot,
-        ISettingsDestructiveRuntimeScope runtimeMutation,
-        SettingsResetScope scope)
-    {
-        try
-        {
-            await ApplyExternalSettingsSnapshotAsync(snapshot, runtimeMutation, scope);
-            return null;
-        }
-        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            return exception;
-        }
-    }
-
-    private async Task<Exception?> TryRestoreExternalSettingsSnapshotAsync(
-        ExternalSettingsSnapshot baseline,
-        ISettingsDestructiveRuntimeScope runtimeMutation,
-        SettingsResetScope scope)
-    {
-        List<Exception> failures = [];
-        if (scope == SettingsResetScope.All)
-        {
-            CaptureParticipantFailure(
-                () => runtimeMutation.RestoreDurableSettings(new SettingsExternalDurableSnapshot(
-                    baseline.DisplayLanguage,
-                    baseline.AppThemeMode,
-                    baseline.AppAccentColorMode,
-                    baseline.AppAccentColorValue,
-                    baseline.LaunchAtStartupEnabled,
-                    baseline.ConnectionSamplingEnabled,
-                    baseline.ConnectionSamplingIntervalSeconds,
-                    baseline.CurrentMode,
-                    baseline.ActiveProfileId,
-                    baseline.TransparentProxyEnabled,
-                    baseline.MixedPort)),
-                failures);
-        }
-        ExternalSettingsSnapshot durableTarget = CaptureExternalSettingsSnapshot();
-        if (durableTarget != baseline)
-        {
-            failures.Add(new InvalidOperationException(
-                "The retained reset receipt did not restore the previous durable settings."));
-        }
-
-        Exception? activationFailure = await TryApplyExternalSettingsSnapshotAsync(
-            durableTarget,
-            runtimeMutation,
-            scope);
-        if (activationFailure is not null)
-        {
-            failures.Add(activationFailure);
-        }
-
-        if (durableTarget != baseline)
-        {
-            failures.Add(new InvalidOperationException(
-                "The previous durable external settings could not be restored completely."));
-        }
-
-        return failures.Count switch
-        {
-            0 => null,
-            1 => failures[0],
-            _ => new AggregateException(
-                "Settings reset compensation did not restore every participant.",
-                failures),
-        };
-    }
-
-    private void VerifyExternalSettingsSnapshot(ExternalSettingsSnapshot snapshot)
-    {
-        if (CaptureExternalSettingsSnapshot() != snapshot)
-        {
-            throw new InvalidOperationException(
-                "A settings reset participant did not preserve the durable external settings snapshot.");
-        }
-    }
-
-    private void MarkExternalSettingsApplied(ExternalSettingsSnapshot snapshot, SettingsResetScope scope)
+    private void MarkExternalSettingsApplied(SettingsRuntimeSnapshot snapshot, SettingsResetScope scope)
     {
         if (scope is SettingsResetScope.All or SettingsResetScope.Startup)
         {
@@ -3374,19 +3058,6 @@ internal sealed class SettingsViewModel : ObservableObject
             "Settings reset could not converge or compensate every external participant; restart recovery is required.",
             failures);
     }
-
-    private readonly record struct ExternalSettingsSnapshot(
-        AppLanguage DisplayLanguage,
-        AppThemeMode AppThemeMode,
-        AppAccentColorMode AppAccentColorMode,
-        string AppAccentColorValue,
-        bool LaunchAtStartupEnabled,
-        bool ConnectionSamplingEnabled,
-        int ConnectionSamplingIntervalSeconds,
-        ClashSharpMode CurrentMode,
-        string ActiveProfileId,
-        bool TransparentProxyEnabled,
-        int MixedPort);
 
     /// <summary>
     /// Captures the process-applied baseline for regional settings whose existing UI resources are not

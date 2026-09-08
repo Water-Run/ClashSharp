@@ -2418,7 +2418,8 @@ public sealed partial class SettingsViewModelTests
 
     private sealed class TrackingSettingsResetReceipt(
         Action? rollback = null,
-        Exception? commitFailure = null) : ISettingsResetTransactionReceipt
+        Exception? commitFailure = null,
+        Exception? disposeFailure = null) : ISettingsResetTransactionReceipt
     {
         public int CommitCalls { get; private set; }
 
@@ -2446,7 +2447,7 @@ public sealed partial class SettingsViewModelTests
         public ValueTask DisposeAsync()
         {
             Disposed = true;
-            return ValueTask.CompletedTask;
+            return disposeFailure is null ? ValueTask.CompletedTask : ValueTask.FromException(disposeFailure);
         }
     }
 

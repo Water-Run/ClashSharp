@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Settings;
 
@@ -69,11 +70,6 @@ internal interface ISettingsDataPackageTransactionReceipt : IAsyncDisposable
 /// Retains the pre-reset settings generation until external participants either
 /// converge to the defaults or require a durable rollback.
 /// </summary>
-internal interface ISettingsResetTransactionReceipt : IAsyncDisposable
+internal interface ISettingsResetTransactionReceipt : IRetainedSettingsResetReceipt
 {
-    /// <summary>Commits the reset generation and discards its retained backup.</summary>
-    Task CommitAsync(CancellationToken cancellationToken);
-
-    /// <summary>Restores the complete pre-reset settings generation.</summary>
-    Task RollbackAsync(CancellationToken cancellationToken);
 }
