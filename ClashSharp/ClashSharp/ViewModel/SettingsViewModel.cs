@@ -68,7 +68,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Callback invoked when the application accent color changes.</summary>
     private readonly Action<AppAccentColorMode, string> _applyAccentColor;
 
-    /// <summary>Callback invoked when launch-at-startup changes.</summary>
+    /// <summary>Owns startup registration, preference commit, and compensation outside the page.</summary>
     private readonly Func<bool, CancellationToken, Task> _applyLaunchAtStartupAsync;
 
     /// <summary>Callback invoked when background connection sampling settings change.</summary>
@@ -81,9 +81,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private readonly Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>
         _beginDestructiveRuntimeMutationAsync;
 
-    private bool _appliedLaunchAtStartup;
-
     private bool _pendingLaunchAtStartup;
+
+    private int _launchAtStartupRevision;
+
+    private int _appliedLaunchAtStartupRevision;
+
+    private Task _launchAtStartupRequeueTask = Task.CompletedTask;
 
     private bool _appliedConnectionSamplingEnabled;
 
@@ -442,12 +446,18 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _applyAccentColor = applyAccentColor ?? ((_, _) => { });
         ArgumentNullException.ThrowIfNull(applyLaunchAtStartup);
         ArgumentNullException.ThrowIfNull(restartConnectionSampling);
+#if UNIT_TESTS
         _applyLaunchAtStartupAsync = applyLaunchAtStartupAsync ?? ((isEnabled, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             applyLaunchAtStartup(isEnabled);
+            settings.LaunchAtStartupEnabled = isEnabled;
             return Task.CompletedTask;
         });
+#else
+        _applyLaunchAtStartupAsync = applyLaunchAtStartupAsync
+            ?? throw new ArgumentNullException(nameof(applyLaunchAtStartupAsync));
+#endif
         _restartConnectionSamplingAsync = restartConnectionSamplingAsync ?? (cancellationToken =>
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1469,9 +1479,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _loadedAppAccentColorMode = AppAccentColorMode;
         _loadedAppAccentColorValue = AppAccentColorValue;
         RaiseAppAccentColorRestartStateChanged();
-        _appliedLaunchAtStartup = _settings.LaunchAtStartupEnabled;
-        _pendingLaunchAtStartup = _appliedLaunchAtStartup;
-        SetProperty(ref _launchAtStartupEnabled, _appliedLaunchAtStartup, nameof(LaunchAtStartupEnabled));
+        ReloadCommittedLaunchAtStartup();
         RefreshMihomoServiceStatus();
         _appliedTransparentProxyEnabled = _settings.TransparentProxyEnabled;
         _appliedMixedPort = _settings.MixedPort;
@@ -1995,14 +2003,36 @@ internal sealed partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(CanToggleTransparentProxy));
     }
 
-    /// <summary>Persists the launch-at-startup switch and requests system registration sync.</summary>
+    /// <summary>Stages a page choice and requests the application-owned startup transaction.</summary>
     /// <param name="isEnabled">Switch value.</param>
     public void SetLaunchAtStartupEnabled(bool isEnabled)
     {
-        _settings.LaunchAtStartupEnabled = isEnabled;
         _pendingLaunchAtStartup = isEnabled;
         SetProperty(ref _launchAtStartupEnabled, isEnabled, nameof(LaunchAtStartupEnabled));
+        Interlocked.Increment(ref _launchAtStartupRevision);
+        if (ApplyLaunchAtStartupCommand.IsRunning
+            && ApplyLaunchAtStartupCommand.ExecutionTask is Task activeExecution)
+        {
+            if (_launchAtStartupRequeueTask.IsCompleted)
+            {
+                _launchAtStartupRequeueTask = RequeueLaunchAtStartupAsync(activeExecution);
+            }
+
+            return;
+        }
+
         ApplyLaunchAtStartupCommand.Execute(null);
+    }
+
+    /// <summary>Keeps a choice made between transaction completion and command completion observable.</summary>
+    private async Task RequeueLaunchAtStartupAsync(Task activeExecution)
+    {
+        await activeExecution;
+        if (Volatile.Read(ref _launchAtStartupRevision) != Volatile.Read(ref _appliedLaunchAtStartupRevision)
+            && !ApplyLaunchAtStartupCommand.IsRunning)
+        {
+            ApplyLaunchAtStartupCommand.Execute(null);
+        }
     }
 
     /// <summary>Applies the latest requested startup registration and coalesces changes made while an update is running.</summary>
@@ -2011,36 +2041,53 @@ internal sealed partial class SettingsViewModel : ObservableObject
         OperationErrorText = string.Empty;
         while (true)
         {
+            int requestedRevision = Volatile.Read(ref _launchAtStartupRevision);
             bool desiredState = _pendingLaunchAtStartup;
             try
             {
                 await _applyLaunchAtStartupAsync(desiredState, cancellationToken);
             }
-            catch (OperationCanceledException)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
-                RestoreAppliedLaunchAtStartup();
-                throw;
-            }
-            catch
-            {
-                RestoreAppliedLaunchAtStartup();
-                OperationErrorText = _getString("Application.UnexpectedError");
+                try
+                {
+                    ReloadCommittedLaunchAtStartup();
+                }
+                catch (Exception projectionFailure) when (!ExceptionGraphClassifier.IsProcessFatal(projectionFailure))
+                {
+                    OperationErrorText = _getString("Application.UnexpectedError");
+                    throw new AggregateException(
+                        "Startup application failed and its committed preference could not be displayed.",
+                        exception,
+                        projectionFailure);
+                }
+
+                if (!ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+                {
+                    OperationErrorText = _getString("Application.UnexpectedError");
+                }
+
                 throw;
             }
 
-            _appliedLaunchAtStartup = desiredState;
-            if (desiredState == _pendingLaunchAtStartup)
+            Volatile.Write(ref _appliedLaunchAtStartupRevision, requestedRevision);
+            if (requestedRevision == Volatile.Read(ref _launchAtStartupRevision))
             {
-                return;
+                ReloadCommittedLaunchAtStartup();
+                if (Volatile.Read(ref _appliedLaunchAtStartupRevision) == Volatile.Read(ref _launchAtStartupRevision))
+                {
+                    return;
+                }
             }
         }
     }
 
-    private void RestoreAppliedLaunchAtStartup()
+    private void ReloadCommittedLaunchAtStartup()
     {
-        _pendingLaunchAtStartup = _appliedLaunchAtStartup;
-        _settings.LaunchAtStartupEnabled = _appliedLaunchAtStartup;
-        SetProperty(ref _launchAtStartupEnabled, _appliedLaunchAtStartup, nameof(LaunchAtStartupEnabled));
+        bool committed = _settings.LaunchAtStartupEnabled;
+        _pendingLaunchAtStartup = committed;
+        Volatile.Write(ref _appliedLaunchAtStartupRevision, Volatile.Read(ref _launchAtStartupRevision));
+        SetProperty(ref _launchAtStartupEnabled, committed, nameof(LaunchAtStartupEnabled));
     }
 
     /// <summary>Persists a mixed proxy port from number-box input.</summary>
@@ -3002,6 +3049,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 activeTasks.Add(networkRequeueTask);
             }
 
+            Task startupRequeueTask = _launchAtStartupRequeueTask;
+            if (!startupRequeueTask.IsCompleted)
+            {
+                activeTasks.Add(startupRequeueTask);
+            }
+
             if (activeTasks.Count == 0)
             {
                 return;
@@ -3015,8 +3068,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
     {
         if (scope is SettingsResetScope.All or SettingsResetScope.Startup)
         {
-            _appliedLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
             _pendingLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
+            Volatile.Write(ref _appliedLaunchAtStartupRevision, Volatile.Read(ref _launchAtStartupRevision));
         }
 
         if (scope == SettingsResetScope.Startup)

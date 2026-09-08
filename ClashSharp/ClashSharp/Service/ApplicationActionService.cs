@@ -7,6 +7,7 @@ using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Diagnostics;
 using ClashSharp.Model;
 using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
@@ -34,6 +35,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
 
     private readonly IApplicationShutdownCoordinator _shutdown;
     private readonly StartupLaunchService _startupLaunch;
+    private readonly StartupSettingsCoordinator _startupSettings;
 
     internal ApplicationActionService(
         AppSettingsService settings,
@@ -47,7 +49,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         Func<string, string> getString,
         ApplicationLifecycleService lifecycle,
         IApplicationShutdownCoordinator shutdown,
-        StartupLaunchService startupLaunch)
+        StartupLaunchService startupLaunch,
+        StartupSettingsCoordinator startupSettings)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _admissionBarrier = admissionBarrier ?? throw new ArgumentNullException(nameof(admissionBarrier));
@@ -61,6 +64,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
         _shutdown = shutdown ?? throw new ArgumentNullException(nameof(shutdown));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
+        _startupSettings = startupSettings ?? throw new ArgumentNullException(nameof(startupSettings));
         if (Interlocked.CompareExchange(ref _instance, this, null) is not null)
         {
             throw new InvalidOperationException("The primary application action service is already configured.");
@@ -255,52 +259,11 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
             tunRequested);
     }
 
-    private async Task ApplyLaunchAtStartupAsync(
+    private Task ApplyLaunchAtStartupAsync(
         bool isEnabled,
         CancellationToken cancellationToken)
     {
-        await using MutationAdmissionLease admissionLease = await _admissionBarrier
-            .AcquireOrdinaryAsync(cancellationToken)
-            .ConfigureAwait(false);
-        await ApplyLaunchAtStartupCoreAsync(
-            isEnabled,
-            admissionLease,
-            cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task ApplyLaunchAtStartupCoreAsync(
-        bool isEnabled,
-        MutationAdmissionLease admissionLease,
-        CancellationToken cancellationToken)
-    {
-        bool baseline = _settings.LaunchAtStartupEnabled;
-        try
-        {
-            await _startupLaunch.SetEnabledAsync(isEnabled, cancellationToken).ConfigureAwait(false);
-            _settings.WriteAdmitted(
-                admissionLease,
-                editor => editor.LaunchAtStartupEnabled = isEnabled);
-        }
-        catch (Exception applyFailure) when (!ExceptionGraphClassifier.IsProcessFatal(applyFailure))
-        {
-            try
-            {
-                await _startupLaunch.SetEnabledAsync(baseline, CancellationToken.None).ConfigureAwait(false);
-                _settings.WriteAdmitted(
-                    admissionLease,
-                    editor => editor.LaunchAtStartupEnabled = baseline);
-            }
-            catch (Exception compensationFailure) when (!ExceptionGraphClassifier.IsProcessFatal(compensationFailure))
-            {
-                throw new AggregateException(
-                    "Launch-at-startup failed and its previous state could not be restored.",
-                    applyFailure,
-                    compensationFailure);
-            }
-
-            ExceptionDispatchInfo.Capture(applyFailure).Throw();
-            throw;
-        }
+        return _startupSettings.ApplyAsync(isEnabled, cancellationToken);
     }
 
     private async Task ApplyConnectionSamplingAsync(

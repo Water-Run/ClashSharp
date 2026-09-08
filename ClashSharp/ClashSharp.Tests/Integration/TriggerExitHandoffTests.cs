@@ -65,11 +65,14 @@ public sealed class TriggerExitHandoffTests
         ProcessLifetimeRunner runner = new();
         runner.AttachHost(new FakeHost(trace));
 
-        Task processing = runner.ProcessAsync(acceptedRequest, CancellationToken.None);
-        await recreatedCoordinator.AcknowledgeReleasedExecutionAsync(
+        // Own both database users through completion. Timing out only the await left
+        // the runner polling the database while this fixture tried to delete it.
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(30));
+        Task processing = runner.ProcessAsync(acceptedRequest, deadline.Token);
+        Task release = recreatedCoordinator.AcknowledgeReleasedExecutionAsync(
             execution,
-            CancellationToken.None);
-        await processing.WaitAsync(TimeSpan.FromSeconds(2));
+            deadline.Token);
+        await Task.WhenAll(processing, release);
 
         Assert.Equal(
             ["host-stop-enter", "host-stop-unwound", "host-dispose"],

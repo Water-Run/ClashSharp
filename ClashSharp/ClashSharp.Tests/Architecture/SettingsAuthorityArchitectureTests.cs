@@ -115,6 +115,23 @@ public sealed class SettingsAuthorityArchitectureTests
     }
 
     [Fact]
+    public void StartupChanges_ShareTheApplicationCoordinatorWithoutPagePersistence()
+    {
+        string host = ReadApplicationSource("AppHost/ClashSharpAppHostFactory.cs");
+        Assert.Contains("AddSingleton<StartupSettingsCoordinator>()", host, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<IStartupSettingsOperation, StartupSettingsOperationAdapter>()", host, StringComparison.Ordinal);
+        string actions = ReadApplicationSource("Service/ApplicationActionService.cs");
+        Assert.Contains("_startupSettings.ApplyAsync(isEnabled, cancellationToken)", actions, StringComparison.Ordinal);
+        string triggers = ReadApplicationSource("Service/TriggerActionRuntimeAdapter.cs");
+        Assert.Contains(".ApplyAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)", triggers, StringComparison.Ordinal);
+        string viewModel = ReadApplicationSource("ViewModel/SettingsViewModel.cs");
+        int start = viewModel.IndexOf("public void SetLaunchAtStartupEnabled", StringComparison.Ordinal);
+        int end = viewModel.IndexOf("public bool SetMixedPort", start, StringComparison.Ordinal);
+        Assert.DoesNotContain("_settings.LaunchAtStartupEnabled =", viewModel[start..end], StringComparison.Ordinal);
+        Assert.Contains("ReloadCommittedLaunchAtStartup", viewModel[start..end], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ProductionSettingsWriters_UseImmediateOrExplicitAdmission()
     {
         string settingsService = ReadApplicationSource("Service/AppSettingsService.cs");

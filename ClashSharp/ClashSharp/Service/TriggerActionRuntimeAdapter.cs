@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Model;
 using ClashSharp.Model.Triggers;
@@ -19,6 +20,7 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
 {
     private readonly AppSettingsService _settings;
     private readonly StartupLaunchService _startupLaunch;
+    private readonly StartupSettingsCoordinator _startupSettings;
     private readonly ConnectionSamplingService _sampling;
     private readonly MihomoConnectionService _connections;
     private readonly NetworkStateCoordinator _network;
@@ -36,10 +38,12 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         INetworkStateObserver networkObserver,
         IIdempotentTriggerNotificationSink notifications,
         ITriggerLifecycleHandoff exitHandoff,
+        StartupSettingsCoordinator startupSettings,
         MihomoServiceManager? mihomoService = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
+        _startupSettings = startupSettings ?? throw new ArgumentNullException(nameof(startupSettings));
         _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _network = network ?? throw new ArgumentNullException(nameof(network));
@@ -109,13 +113,9 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
                 await _connections.CloseAllConnectionsAsync(cancellationToken).ConfigureAwait(false);
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SetLaunchAtStartup:
-                bool launchAtStartup = RequireBoolean(action);
-                await _startupLaunch
-                    .SetEnabledAsync(launchAtStartup, cancellationToken)
+                await _startupSettings
+                    .ApplyAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)
                     .ConfigureAwait(false);
-                _settings.WriteAdmitted(
-                    admissionLease,
-                    editor => editor.LaunchAtStartupEnabled = launchAtStartup);
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SetTransparentProxy:
                 return await ApplyTransparentProxyAsync(

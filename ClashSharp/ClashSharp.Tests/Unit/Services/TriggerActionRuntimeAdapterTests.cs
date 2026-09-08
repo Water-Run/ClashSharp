@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Model.Triggers;
 using ClashSharp.ServiceProtocol;
@@ -170,7 +171,8 @@ public sealed class TriggerActionRuntimeAdapterTests
             Uninitialized<NetworkStateCoordinator>(),
             new UnusedNetworkStateObserver(),
             new UnusedNotificationSink(),
-            new UnusedLifecycleHandoff());
+            new UnusedLifecycleHandoff(),
+            Uninitialized<StartupSettingsCoordinator>());
     }
 
     private static T Uninitialized<T>() where T : class

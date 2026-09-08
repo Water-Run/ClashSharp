@@ -5,6 +5,7 @@ using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Hosting.Compatibility;
@@ -114,6 +115,8 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(provider => new ApplicationLifecycleService(
                 lifetimeRequests,
                 installAsPrimaryInstance: true));
+            services.AddSingleton<IStartupSettingsOperation, StartupSettingsOperationAdapter>();
+            services.AddSingleton<StartupSettingsCoordinator>();
             services.AddSingleton(provider => new ApplicationActionService(
                 provider.GetRequiredService<AppSettingsService>(),
                 provider.GetRequiredService<MutationAdmissionBarrier>(),
@@ -126,7 +129,8 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<LocalizationService>().GetString,
                 provider.GetRequiredService<ApplicationLifecycleService>(),
                 provider.GetRequiredService<IApplicationShutdownCoordinator>(),
-                provider.GetRequiredService<StartupLaunchService>()));
+                provider.GetRequiredService<StartupLaunchService>(),
+                provider.GetRequiredService<StartupSettingsCoordinator>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton<SettingsRuntimeMutationAdapter>();

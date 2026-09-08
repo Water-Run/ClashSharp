@@ -1338,92 +1338,28 @@ public sealed class AppResourcePackagingTests
             serviceCode,
             StringComparison.Ordinal);
 
-        int actionMutationStart = actionService.IndexOf(
-            "private async Task ApplyLaunchAtStartupAsync(",
-            StringComparison.Ordinal);
-        int actionAdmission = actionService.IndexOf(
-            ".AcquireOrdinaryAsync(cancellationToken)",
-            actionMutationStart,
-            StringComparison.Ordinal);
-        int actionPlatformUpdate = actionService.IndexOf(
-            "await _startupLaunch.SetEnabledAsync(isEnabled, cancellationToken)",
-            actionAdmission,
-            StringComparison.Ordinal);
-        int actionPreferenceCommit = actionService.IndexOf(
-            "_settings.WriteAdmitted(",
-            actionPlatformUpdate,
-            StringComparison.Ordinal);
-        int actionPreferenceLease = actionService.IndexOf(
-            "admissionLease,",
-            actionPreferenceCommit,
-            StringComparison.Ordinal);
-        int actionPreferenceValue = actionService.IndexOf(
-            "editor => editor.LaunchAtStartupEnabled = isEnabled",
-            actionPreferenceLease,
-            StringComparison.Ordinal);
-        Assert.True(actionMutationStart >= 0, "Application action startup mutation boundary is missing.");
-        Assert.True(
-            actionAdmission > actionMutationStart,
-            "Application action startup updates must acquire ordinary mutation admission.");
-        Assert.True(actionPlatformUpdate >= 0, "Application action startup platform update is missing.");
-        Assert.True(
-            actionPreferenceCommit > actionPlatformUpdate,
-            "Application actions must leave the previous preference unchanged when the platform update fails.");
-        Assert.True(
-            actionPreferenceLease > actionPreferenceCommit && actionPreferenceValue > actionPreferenceLease,
-            "Application action startup preference writes must use the admitted settings editor.");
-        Assert.Contains(
-            "editor => editor.LaunchAtStartupEnabled = baseline",
-            actionService,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "_settings.LaunchAtStartupEnabled = isEnabled;",
-            actionService,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "_settings.LaunchAtStartupEnabled = baseline;",
-            actionService,
-            StringComparison.Ordinal);
+        string coordinator = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp.Application", "Settings", "StartupSettingsCoordinator.cs"));
+        string operation = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Compatibility", "StartupSettingsOperationAdapter.cs"));
+        Assert.Contains("_startupSettings.ApplyAsync(isEnabled, cancellationToken)", actionService, StringComparison.Ordinal);
+        Assert.Contains("_admission.AcquireOrdinaryAsync(cancellationToken)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("_admission.EnsureActiveLease(admissionLease)", coordinator, StringComparison.Ordinal);
+        int platformUpdate = coordinator.IndexOf("await ApplyAndVerifyRegistrationAsync(enabled);", StringComparison.Ordinal);
+        Assert.True(platformUpdate >= 0, "The shared coordinator must verify Windows before committing settings.");
+        Assert.True(coordinator.IndexOf("WriteAndVerifyPreference(enabled, admissionLease);", StringComparison.Ordinal) > platformUpdate);
+        Assert.Contains("_settings.WriteAdmitted(admissionLease, editor => editor.LaunchAtStartupEnabled = enabled)", operation, StringComparison.Ordinal);
+        Assert.Contains("baselinePreference, baselineRegistration, admissionLease", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"_settings\.LaunchAtStartupEnabled\s*=(?!=)", actionService);
         Assert.Contains("StartupLaunchService startupLaunch", actionService, StringComparison.Ordinal);
         Assert.DoesNotContain("StartupLaunchService.Instance", actionService, StringComparison.Ordinal);
 
-        int triggerMutationStart = triggerAdapter.IndexOf(
-            "case TriggerActionKind.SetLaunchAtStartup:",
-            StringComparison.Ordinal);
-        int triggerAdmission = triggerAdapter.LastIndexOf(
-            "MutationAdmissionLease admissionLease",
-            triggerMutationStart,
-            StringComparison.Ordinal);
-        int triggerPlatformUpdate = triggerAdapter.IndexOf(
-            ".SetEnabledAsync(launchAtStartup, cancellationToken)",
-            triggerMutationStart,
-            StringComparison.Ordinal);
-        int triggerPreferenceCommit = triggerAdapter.IndexOf(
-            "_settings.WriteAdmitted(",
-            triggerPlatformUpdate,
-            StringComparison.Ordinal);
-        int triggerPreferenceLease = triggerAdapter.IndexOf(
-            "admissionLease,",
-            triggerPreferenceCommit,
-            StringComparison.Ordinal);
-        int triggerPreferenceValue = triggerAdapter.IndexOf(
-            "editor => editor.LaunchAtStartupEnabled = launchAtStartup",
-            triggerPreferenceLease,
-            StringComparison.Ordinal);
-        Assert.True(
-            triggerAdmission >= 0 && triggerAdmission < triggerMutationStart,
-            "Trigger startup updates must receive an admitted mutation lease.");
-        Assert.True(triggerPlatformUpdate >= 0, "Trigger startup platform update is missing.");
-        Assert.True(
-            triggerPreferenceCommit > triggerPlatformUpdate,
-            "Trigger actions must leave the previous preference unchanged when the platform update fails.");
-        Assert.True(
-            triggerPreferenceLease > triggerPreferenceCommit && triggerPreferenceValue > triggerPreferenceLease,
-            "Trigger startup preference writes must use the admitted settings editor.");
-        Assert.DoesNotContain(
-            "_settings.LaunchAtStartupEnabled = launchAtStartup;",
+        Assert.Contains(
+            ".ApplyAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)",
             triggerAdapter,
             StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"_settings\.LaunchAtStartupEnabled\s*=(?!=)", triggerAdapter);
+        Assert.Contains("AddSingleton<StartupSettingsCoordinator>()", hostFactory, StringComparison.Ordinal);
 
         Assert.Contains(
             "StartupLaunchServiceFactory.CreateDefault()",

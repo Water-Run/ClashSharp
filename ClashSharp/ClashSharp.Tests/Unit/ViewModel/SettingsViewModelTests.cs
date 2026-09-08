@@ -451,13 +451,71 @@ public sealed partial class SettingsViewModelTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task LaunchAtStartupPersistenceFailure_DoesNotReplaceAnAcceptedPendingRequest(bool baseline)
+    public async Task LaunchAtStartupRequest_DoesNotPersistBeforeTheRuntimeTransaction(bool baseline)
+    {
+        FakeSettingsStore store = new() { LaunchAtStartupEnabled = baseline };
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            applyLaunchAtStartupAsync: async (enabled, token) =>
+            {
+                await release.Task.WaitAsync(token);
+                store.LaunchAtStartupEnabled = enabled;
+            });
+
+        viewModel.SetLaunchAtStartupEnabled(!baseline);
+        Task operation = Assert.IsAssignableFrom<Task>(viewModel.ApplyLaunchAtStartupCommand.ExecutionTask);
+        try
+        {
+            Assert.Equal(!baseline, viewModel.LaunchAtStartupEnabled);
+            Assert.Equal(baseline, store.LaunchAtStartupEnabled);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await operation.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        Assert.Equal(!baseline, store.LaunchAtStartupEnabled);
+        Assert.Equal(!baseline, viewModel.LaunchAtStartupEnabled);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LaunchAtStartupFailure_ProjectsCommittedSettingsWithoutWritingItsPageBaseline(bool baseline)
+    {
+        FakeSettingsStore store = new() { LaunchAtStartupEnabled = baseline };
+        IOException failure = new("application transaction could not complete recovery");
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            applyLaunchAtStartupAsync: async (enabled, _) =>
+            {
+                await Task.Yield();
+                store.LaunchAtStartupEnabled = enabled;
+                throw failure;
+            });
+
+        viewModel.SetLaunchAtStartupEnabled(!baseline);
+        await Assert.IsAssignableFrom<Task>(viewModel.ApplyLaunchAtStartupCommand.ExecutionTask);
+
+        Assert.Equal(!baseline, store.LaunchAtStartupEnabled);
+        Assert.Equal(!baseline, viewModel.LaunchAtStartupEnabled);
+        Assert.Same(failure, viewModel.ApplyLaunchAtStartupCommand.LastError);
+        Assert.True(viewModel.HasOperationError);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LaunchAtStartupLaterTransactionFailure_PreservesTheEarlierCommittedRequest(bool baseline)
     {
         FakeSettingsStore store = new() { LaunchAtStartupEnabled = baseline };
         FakeApplicationErrorSink errorSink = new();
         TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         List<bool> applied = [];
+        IOException failure = new("startup setting persistence rejected");
         SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
             store,
             errorSink: errorSink,
@@ -469,31 +527,34 @@ public sealed partial class SettingsViewModelTests
                     entered.TrySetResult();
                     await release.Task.WaitAsync(token);
                 }
+
+                if (applied.Count == 2)
+                {
+                    throw failure;
+                }
+
+                store.LaunchAtStartupEnabled = enabled;
             });
         viewModel.Load();
         viewModel.SetLaunchAtStartupEnabled(!baseline);
         Task operation = Assert.IsAssignableFrom<Task>(viewModel.ApplyLaunchAtStartupCommand.ExecutionTask);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        IOException failure = new("startup setting persistence rejected");
         try
         {
-            store.LaunchAtStartupWriteFailure = failure;
-
-            Assert.Same(failure, Record.Exception(() => viewModel.SetLaunchAtStartupEnabled(baseline)));
-            Assert.Equal(!baseline, store.LaunchAtStartupEnabled);
-            Assert.Equal(!baseline, viewModel.LaunchAtStartupEnabled);
+            viewModel.SetLaunchAtStartupEnabled(baseline);
+            Assert.Equal(baseline, store.LaunchAtStartupEnabled);
+            Assert.Equal(baseline, viewModel.LaunchAtStartupEnabled);
         }
         finally
         {
-            store.LaunchAtStartupWriteFailure = null;
             release.TrySetResult();
             await operation.WaitAsync(TimeSpan.FromSeconds(5));
         }
 
-        Assert.Equal(!baseline, Assert.Single(applied));
+        Assert.Equal([!baseline, baseline], applied);
         Assert.Equal(!baseline, store.LaunchAtStartupEnabled);
         Assert.Equal(!baseline, viewModel.LaunchAtStartupEnabled);
-        Assert.Empty(errorSink.Errors);
+        Assert.Same(failure, Assert.Single(errorSink.Errors).Exception);
     }
 
     /// <summary>Verifies invalid language indexes are ignored.</summary>
@@ -1748,9 +1809,11 @@ public sealed partial class SettingsViewModelTests
         AssertExternalSettingsMatchNonDefaultBaseline(store);
     }
 
-    /// <summary>Verifies a scheduled coalesced network write is drained before reset crosses its commit point.</summary>
-    [Fact]
-    public async Task ResetAllSettings_PendingNetworkRequeue_DrainsBeforeDurableReset()
+    /// <summary>Verifies a scheduled coalesced settings write is drained before reset crosses its commit point.</summary>
+    [Theory]
+    [InlineData("_networkSettingsRequeueTask")]
+    [InlineData("_launchAtStartupRequeueTask")]
+    public async Task ResetAllSettings_PendingRuntimeRequeue_DrainsBeforeDurableReset(string fieldName)
     {
         FakeSettingsStore store = CreateNonDefaultExternalSettings();
         bool resetCalled = false;
@@ -1765,7 +1828,7 @@ public sealed partial class SettingsViewModelTests
             },
             clearAllData: () => { });
         FieldInfo? requeueField = typeof(SettingsViewModel).GetField(
-            "_networkSettingsRequeueTask",
+            fieldName,
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(requeueField);
         requeueField.SetValue(viewModel, pendingRequeue.Task);
@@ -2097,23 +2160,7 @@ public sealed partial class SettingsViewModelTests
             return value;
         }
 
-        private bool _launchAtStartupEnabled;
-
-        public Exception? LaunchAtStartupWriteFailure { get; set; }
-
-        public bool LaunchAtStartupEnabled
-        {
-            get => _launchAtStartupEnabled;
-            set
-            {
-                if (LaunchAtStartupWriteFailure is not null)
-                {
-                    throw LaunchAtStartupWriteFailure;
-                }
-
-                _launchAtStartupEnabled = value;
-            }
-        }
+        public bool LaunchAtStartupEnabled { get; set; }
 
         public ClashSharpMode CurrentMode { get; set; } = ClashSharpMode.Disabled;
 
