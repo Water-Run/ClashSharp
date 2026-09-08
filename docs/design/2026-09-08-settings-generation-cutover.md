@@ -1,6 +1,6 @@
 # Settings generation cutover
 
-版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转和代际内服务访问；生产 composition 仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
+版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问及公共异步入口；生产 composition 仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
 
 ## 已实现的存储与迁移
 
@@ -22,18 +22,30 @@
 
 `PrepareStartupAdmittedAsync` 需要独占许可，撤销上一进程留下的 verified applied，创建必要的观察待办。已有 Running 和 Failed 身份继续保留；明确阻止的外部探测保留其处理方式。Restart 批次在 Live 阶段保持待处理，必须由独占启动阶段应用。
 
+## 公共异步入口
+
+`ISettingsAuthority` 与 `GenerationSettingsAuthority` 为页面、磁贴和触发器提供同一条完整命令路径：进入许可、解析当前代际的 `SettingsGenerationContext`、提交完整 desired、依次验证受影响的批次，然后释放代际租约和许可。上下文中的 session 必须匹配租约的完整 descriptor，错误装配在打开其他代际仓库之前被拒绝。快照返回不可变 envelope 和 generation identity，调用者不持有活仓库引用。
+
+复原偏好、失败重试和启动重新观察也经过该入口。多个参与者中后续失败时，前面已验证的证据保留；重试只处理具有新 attempt identity 的失败批次。排队命令在开始前复制输入，外部集合随后变化不会更改已提交的命令内容。
+
+新增回归复现了完整命令的一个衔接缺口：desired 已经提交后，退出开始排空并撤销等待许可，原 session 的普通入口会取消随后的运行时应用。现在 facade 使用内部的已提交命令续行路径，继续验证原许可的有效性，持有原代际，完成全部参与者和保存；后续排队命令仍受撤销控制。直接调用 session 的普通批次入口继续遵守原有 Running 提交前取消规则。
+
 ## 代际服务寿命
 
 `DataGenerationManager.ExecuteAsync` 在取得代际租约后，从该代际拥有的 `IServiceProvider` 解析服务，并等待完整操作结束才释放租约。`ReadSnapshot` 仅用于同步、无 I/O 的不可变内存快照，不阻塞异步任务。服务容器的异步释放仍由 `DataGenerationScope` 的原生命周期协议负责。
 
 真实 JSON 仓库与 manifest 集成回归确认：进行中的设置操作阻止切换；提交后只解析新会话，旧会话拒绝写入；回滚恢复原会话并释放候选会话；解析或操作失败释放租约。生产 profile/log/trigger 的容器装配及导入、重置切换尚待完成。
 
-## 本地验证
+## 本地验证与 CI
 
 - 18 项目 Release x64 完整构建通过，零警告、零错误，用时 26.33 秒。
 - 主程序 2705 项通过，零失败、零跳过，用时 49 秒；本分支新增 84 项回归。
 - 完整 format 加载 1459 个文件，最终检查零处变更。
 - 记录保存在 `artifacts/verification/1.0.0-settings-generation-main.trx`、`build-settings-generation-complete.log`、`format-settings-generation-verified.log` 和 `local-validation-settings-generation-foundation.json`。
+
+基础提交 `2775afe` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34211372829)。实际下载并核验四份 TRX，共 4770 项通过、零失败、零跳过，其中新增 84 项均实际执行。PR 合并提交为 `8febfaf`，其 tree 与 `2775afe` 相同，摘要为 `d325bf6e849ec6edc13602388ae2b8860bc901f4`；收据为 `ci-validation-settings-generation-foundation.json` 和 `ci-settings-generation-foundation-regressions.json`。开发包构建成功，完整生产切换后的候选再执行原生验收。
+
+公共入口追加 9 项回归后，主程序 2714 项全部通过，零失败、零跳过，用时 50 秒；18 项目完整构建零警告、零错误，用时 26.51 秒，format 检查 1464 个文件、零处变更。本分支累计新增 93 项回归。收据为 `local-validation-settings-generation-facade.json`、`1.0.0-settings-facade-main.trx` 及同前缀的构建、格式日志。首次红测有一项许可撤销问题和一项夹具对预建代际目录的错误假设，均保留原报告；错误装配验证以 Settings 目录未创建为实际边界。
 
 持久中断测试使用真实临时仓库、切点注入及新对象重开，运行时参与者为受控模拟。Windows 旧设置适配器已编译，未在开发机读取实际 LocalSettings。实际打包应用的迁移、进程崩溃、完整页面和安装器兼容验收将在生产切换后执行。开发机代理摘要保持 `95e97918ff6de70655b412568cd18dc81c5d6584c607bb9a71ddc72e22460447`。
 

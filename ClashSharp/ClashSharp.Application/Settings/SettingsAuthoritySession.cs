@@ -115,13 +115,18 @@ public sealed partial class SettingsAuthoritySession : IAsyncDisposable
                 : await PersistEditAsync(read.Envelope!, edit(read.Envelope!), waiting).ConfigureAwait(false);
         }, token);
 
-    private async Task<SettingsAuthorityResult> ExecuteAdmittedAsync(
+    private Task<SettingsAuthorityResult> ExecuteAdmittedAsync(
         MutationAdmissionLease lease, Func<CancellationToken, Task<SettingsAuthorityResult>> operation,
+        CancellationToken cancellationToken) => ExecuteAdmittedAsync(lease, operation, honorRevocation: true, cancellationToken);
+
+    private async Task<SettingsAuthorityResult> ExecuteAdmittedAsync(
+        MutationAdmissionLease lease, Func<CancellationToken, Task<SettingsAuthorityResult>> operation, bool honorRevocation,
         CancellationToken cancellationToken)
     {
         ThrowIfClosing();
         _admission.EnsureActiveLease(lease);
-        using CancellationTokenSource waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.RevocationToken);
+        using CancellationTokenSource waiting = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, honorRevocation ? lease.RevocationToken : CancellationToken.None);
         await _operationGate.WaitAsync(waiting.Token).ConfigureAwait(false);
         try
         {

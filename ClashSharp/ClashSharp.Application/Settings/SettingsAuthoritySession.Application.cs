@@ -15,13 +15,25 @@ public sealed partial class SettingsAuthoritySession
     /// <param name="cancellationToken">Cancels waiting and work before running intent is durably acknowledged.</param>
     public Task<SettingsAuthorityResult> ApplyBatchAdmittedAsync(
         Guid batchId, Guid attemptId, ISettingsApplicationParticipant participant, SettingsApplicationPhase phase,
-        MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+        MutationAdmissionLease admissionLease, CancellationToken cancellationToken) =>
+        ApplyBatchEntryAsync(batchId, attemptId, participant, phase, admissionLease, honorRevocation: true, cancellationToken);
+
+    /// <summary>Continues a facade-owned durable command while retaining its active lease across admission drain.</summary>
+    internal Task<SettingsAuthorityResult> ContinueCommittedBatchAdmittedAsync(
+        Guid batchId, Guid attemptId, ISettingsApplicationParticipant participant, SettingsApplicationPhase phase,
+        MutationAdmissionLease admissionLease) =>
+        ApplyBatchEntryAsync(batchId, attemptId, participant, phase, admissionLease, honorRevocation: false, CancellationToken.None);
+
+    private Task<SettingsAuthorityResult> ApplyBatchEntryAsync(
+        Guid batchId, Guid attemptId, ISettingsApplicationParticipant participant, SettingsApplicationPhase phase,
+        MutationAdmissionLease admissionLease, bool honorRevocation,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(participant);
         if (!Enum.IsDefined(phase)) { throw new ArgumentOutOfRangeException(nameof(phase)); }
         if (phase == SettingsApplicationPhase.Startup) { _admission.EnsureActiveExclusiveLease(admissionLease); }
         return ExecuteAdmittedAsync(admissionLease,
-            waiting => ApplyCoreAsync(batchId, attemptId, participant, phase, admissionLease, waiting), cancellationToken);
+            waiting => ApplyCoreAsync(batchId, attemptId, participant, phase, admissionLease, waiting), honorRevocation, cancellationToken);
     }
 
     private async Task<SettingsAuthorityResult> ApplyCoreAsync(
