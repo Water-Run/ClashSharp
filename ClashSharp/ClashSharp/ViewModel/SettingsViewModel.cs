@@ -72,7 +72,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private readonly Func<bool, CancellationToken, Task> _applyLaunchAtStartupAsync;
 
     /// <summary>Callback invoked when background connection sampling settings change.</summary>
-    private readonly Func<CancellationToken, Task> _restartConnectionSamplingAsync;
+    private readonly Func<bool, int, CancellationToken, Task> _applyConnectionSamplingAsync;
 
     /// <summary>Applies requested TUN and mixed-port values through the verified runtime transaction.</summary>
     private readonly Func<bool, int, CancellationToken, Task> _applyNetworkSettingsAsync;
@@ -89,9 +89,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     private Task _launchAtStartupRequeueTask = Task.CompletedTask;
 
-    private bool _appliedConnectionSamplingEnabled;
+    private ConnectionSamplingSettings _pendingConnectionSampling = new(true, 30);
 
-    private int _appliedConnectionSamplingIntervalSeconds;
+    private int _appliedConnectionSamplingRevision;
+
+    private Task _connectionSamplingRequeueTask = Task.CompletedTask;
 
     private int _connectionSamplingRevision;
 
@@ -360,7 +362,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending = null,
         Action<string>? notifyConnectionTestTimeout = null,
         Action<string, string, string, string?>? appendLog = null,
-        Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
+        Func<bool, int, CancellationToken, Task>? applyConnectionSamplingAsync = null,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
         Func<CancellationToken, Task>? clearAllDataAsync = null,
         IReadOnlyList<(AppLanguage Language, string DisplayName)>? supportedLanguages = null,
@@ -388,7 +390,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             isAccentColorRestartPending,
             notifyConnectionTestTimeout,
             appendLog,
-            restartConnectionSamplingAsync,
+            applyConnectionSamplingAsync,
             applyLaunchAtStartupAsync,
             clearAllDataAsync,
             exitApplication,
@@ -424,7 +426,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<AppAccentColorMode, string, bool>? isAccentColorRestartPending,
         Action<string>? notifyConnectionTestTimeout,
         Action<string, string, string, string?>? appendLog,
-        Func<CancellationToken, Task>? restartConnectionSamplingAsync,
+        Func<bool, int, CancellationToken, Task>? applyConnectionSamplingAsync,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync,
         Func<CancellationToken, Task>? clearAllDataAsync,
         Action? exitApplication,
@@ -458,12 +460,19 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _applyLaunchAtStartupAsync = applyLaunchAtStartupAsync
             ?? throw new ArgumentNullException(nameof(applyLaunchAtStartupAsync));
 #endif
-        _restartConnectionSamplingAsync = restartConnectionSamplingAsync ?? (cancellationToken =>
+#if UNIT_TESTS
+        _applyConnectionSamplingAsync = applyConnectionSamplingAsync ?? ((enabled, intervalSeconds, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             restartConnectionSampling();
+            settings.ConnectionSamplingEnabled = enabled;
+            settings.ConnectionSamplingIntervalSeconds = intervalSeconds;
             return Task.CompletedTask;
         });
+#else
+        _applyConnectionSamplingAsync = applyConnectionSamplingAsync
+            ?? throw new ArgumentNullException(nameof(applyConnectionSamplingAsync));
+#endif
         _applyNetworkSettingsAsync = applyNetworkSettingsAsync
             ?? ((transparentProxyEnabled, mixedPort, cancellationToken) =>
             {
@@ -483,7 +492,10 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 return ValueTask.FromResult<ISettingsDestructiveRuntimeScope>(
                     new PassthroughDestructiveRuntimeScope(
                         _applyLaunchAtStartupAsync,
-                        _restartConnectionSamplingAsync,
+                        cancellationToken => _applyConnectionSamplingAsync(
+                            settings.ConnectionSamplingEnabled,
+                            settings.ConnectionSamplingIntervalSeconds,
+                            cancellationToken),
                         _applyNetworkSettingsAsync,
                         () => _beginResetSettings(),
                         snapshot =>
@@ -1488,13 +1500,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             _appliedTransparentProxyEnabled,
             nameof(TransparentProxyEnabled));
         MixedPort = _appliedMixedPort;
-        _appliedConnectionSamplingEnabled = _settings.ConnectionSamplingEnabled;
-        _appliedConnectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
-        SetProperty(
-            ref _connectionSamplingEnabled,
-            _appliedConnectionSamplingEnabled,
-            nameof(ConnectionSamplingEnabled));
-        ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
+        ReloadCommittedConnectionSampling();
         SetProperty(ref _startupConflictCheckEnabled, _settings.StartupConflictCheckEnabled, nameof(StartupConflictCheckEnabled));
         StartupBehaviorMode = _settings.StartupBehaviorMode;
         SetProperty(ref _showStartupGuideOnStartup, _settings.ShowStartupGuideOnStartup, nameof(ShowStartupGuideOnStartup));
@@ -2194,18 +2200,18 @@ internal sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Persists the background sampling switch and restarts sampling.</summary>
+    /// <summary>Stages a sampling choice for the application-owned transaction.</summary>
     /// <param name="isEnabled">Switch value.</param>
     public void SetConnectionSamplingEnabled(bool isEnabled)
     {
-        _settings.ConnectionSamplingEnabled = isEnabled;
+        _pendingConnectionSampling = new ConnectionSamplingSettings(isEnabled, _pendingConnectionSampling.IntervalSeconds);
         SetProperty(ref _connectionSamplingEnabled, isEnabled, nameof(ConnectionSamplingEnabled));
         RequestConnectionSamplingRestart();
     }
 
-    /// <summary>Persists a background sampling interval from number-box input.</summary>
+    /// <summary>Validates and stages a background sampling interval from number-box input.</summary>
     /// <param name="value">Number-box value.</param>
-    /// <returns>True when the value was valid and persisted; otherwise false.</returns>
+    /// <returns>True when the value was valid and queued for application; otherwise false.</returns>
     public bool SetConnectionSamplingIntervalSeconds(double value)
     {
         if (double.IsNaN(value))
@@ -2219,7 +2225,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             return false;
         }
 
-        _settings.ConnectionSamplingIntervalSeconds = intervalSeconds;
+        _pendingConnectionSampling = new ConnectionSamplingSettings(_pendingConnectionSampling.Enabled, intervalSeconds);
         ConnectionSamplingIntervalSeconds = intervalSeconds;
         RequestConnectionSamplingRestart();
         return true;
@@ -2348,57 +2354,100 @@ internal sealed partial class SettingsViewModel : ObservableObject
         RefreshProxyInformation();
     }
 
-    /// <summary>Queues a coalesced sampling restart for the latest persisted sampling settings.</summary>
+    /// <summary>Queues a complete sampling preference pair without saving a page-local baseline.</summary>
     private void RequestConnectionSamplingRestart()
     {
         Interlocked.Increment(ref _connectionSamplingRevision);
+        if (RestartConnectionSamplingCommand.IsRunning
+            && RestartConnectionSamplingCommand.ExecutionTask is Task activeExecution)
+        {
+            if (_connectionSamplingRequeueTask.IsCompleted)
+            {
+                _connectionSamplingRequeueTask = RequeueConnectionSamplingAsync(activeExecution);
+            }
+
+            return;
+        }
+
         RestartConnectionSamplingCommand.Execute(null);
     }
 
-    /// <summary>Applies the latest sampling settings and restores the last applied values when the restart fails.</summary>
+    private async Task RequeueConnectionSamplingAsync(Task activeExecution)
+    {
+        await activeExecution;
+        if (Volatile.Read(ref _connectionSamplingRevision) != Volatile.Read(ref _appliedConnectionSamplingRevision)
+            && !RestartConnectionSamplingCommand.IsRunning)
+        {
+            RestartConnectionSamplingCommand.Execute(null);
+        }
+    }
+
+    /// <summary>Awaits the shared transaction and projects its authoritative result without page compensation writes.</summary>
     private async Task SynchronizeConnectionSamplingAsync(CancellationToken cancellationToken)
     {
         OperationErrorText = string.Empty;
         while (true)
         {
             int requestedRevision = Volatile.Read(ref _connectionSamplingRevision);
-            bool desiredEnabled = _settings.ConnectionSamplingEnabled;
-            int desiredIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
-
+            ConnectionSamplingSettings desired = _pendingConnectionSampling;
             try
             {
-                await _restartConnectionSamplingAsync(cancellationToken);
+                await _applyConnectionSamplingAsync(desired.Enabled, desired.IntervalSeconds, cancellationToken);
             }
-            catch (OperationCanceledException)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
-                RestoreAppliedConnectionSampling();
-                throw;
-            }
-            catch
-            {
-                RestoreAppliedConnectionSampling();
-                OperationErrorText = _getString("Application.UnexpectedError");
+                try
+                {
+                    ReloadCommittedConnectionSampling();
+                }
+                catch (Exception projectionFailure) when (!ExceptionGraphClassifier.IsProcessFatal(projectionFailure))
+                {
+                    OperationErrorText = _getString("Application.UnexpectedError");
+                    throw new AggregateException(
+                        "Sampling application failed and its committed preferences could not be displayed.",
+                        exception,
+                        projectionFailure);
+                }
+
+                if (!ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+                {
+                    OperationErrorText = _getString("Application.UnexpectedError");
+                }
+
                 throw;
             }
 
-            _appliedConnectionSamplingEnabled = desiredEnabled;
-            _appliedConnectionSamplingIntervalSeconds = desiredIntervalSeconds;
+            Volatile.Write(ref _appliedConnectionSamplingRevision, requestedRevision);
             if (requestedRevision == Volatile.Read(ref _connectionSamplingRevision))
             {
-                return;
+                ReloadCommittedConnectionSampling();
+                if (Volatile.Read(ref _appliedConnectionSamplingRevision) == Volatile.Read(ref _connectionSamplingRevision))
+                {
+                    return;
+                }
             }
         }
     }
 
-    private void RestoreAppliedConnectionSampling()
+    private void ReloadCommittedConnectionSampling()
     {
-        _settings.ConnectionSamplingEnabled = _appliedConnectionSamplingEnabled;
-        _settings.ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
-        SetProperty(
-            ref _connectionSamplingEnabled,
-            _appliedConnectionSamplingEnabled,
-            nameof(ConnectionSamplingEnabled));
-        ConnectionSamplingIntervalSeconds = _appliedConnectionSamplingIntervalSeconds;
+        ConnectionSamplingSettings committed = _settings.ReadConnectionSamplingSettings();
+        bool enabledChanged = _connectionSamplingEnabled != committed.Enabled;
+        bool intervalChanged = _connectionSamplingIntervalSeconds != committed.IntervalSeconds;
+        _pendingConnectionSampling = committed;
+        Volatile.Write(ref _appliedConnectionSamplingRevision, Volatile.Read(ref _connectionSamplingRevision));
+        _connectionSamplingEnabled = committed.Enabled;
+        _connectionSamplingIntervalSeconds = committed.IntervalSeconds;
+        if (enabledChanged)
+        {
+            OnPropertyChanged(nameof(ConnectionSamplingEnabled));
+        }
+
+        if (intervalChanged)
+        {
+            OnPropertyChanged(nameof(ConnectionSamplingIntervalSeconds));
+            OnPropertyChanged(nameof(ConnectionSamplingIntervalSecondsValue));
+        }
     }
 
     /// <summary>Persists the startup conflict check switch.</summary>
@@ -3055,6 +3104,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 activeTasks.Add(startupRequeueTask);
             }
 
+            Task samplingRequeueTask = _connectionSamplingRequeueTask;
+            if (!samplingRequeueTask.IsCompleted)
+            {
+                activeTasks.Add(samplingRequeueTask);
+            }
+
             if (activeTasks.Count == 0)
             {
                 return;
@@ -3079,8 +3134,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
         if (scope is SettingsResetScope.All or SettingsResetScope.Proxy)
         {
-            _appliedConnectionSamplingEnabled = snapshot.ConnectionSamplingEnabled;
-            _appliedConnectionSamplingIntervalSeconds = snapshot.ConnectionSamplingIntervalSeconds;
+            _pendingConnectionSampling = new ConnectionSamplingSettings(
+                snapshot.ConnectionSamplingEnabled, snapshot.ConnectionSamplingIntervalSeconds);
+            Volatile.Write(ref _appliedConnectionSamplingRevision, Volatile.Read(ref _connectionSamplingRevision));
         }
 
         _appliedTransparentProxyEnabled = snapshot.TransparentProxyEnabled;

@@ -159,6 +159,7 @@
     <Compile Include="..\ClashSharp\Service\StartupRestoreFallbackService.cs" Link="Service\StartupRestoreFallbackService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupLaunchService.cs" Link="Service\StartupLaunchService.cs" />
     <Compile Include="..\ClashSharp\AppHost\Compatibility\StartupSettingsOperationAdapter.cs" Link="AppHost\Compatibility\StartupSettingsOperationAdapter.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Compatibility\ConnectionSamplingSettingsOperationAdapter.cs" Link="AppHost\Compatibility\ConnectionSamplingSettingsOperationAdapter.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionService.cs" Link="Service\StartupConflictDetectionService.cs" />
     <Compile Include="..\ClashSharp\Service\StartupConflictDetectionServiceFactory.cs" Link="Service\StartupConflictDetectionServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\TrayCommandService.cs" Link="Service\TrayCommandService.cs" />

@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Settings;
 
@@ -38,6 +39,9 @@ internal interface ISettingsStore
     bool ConnectionSamplingEnabled { get; set; }
 
     int ConnectionSamplingIntervalSeconds { get; set; }
+
+    /// <summary>Reads the complete sampling preference pair from one authority snapshot.</summary>
+    ConnectionSamplingSettings ReadConnectionSamplingSettings();
 
     bool StartupConflictCheckEnabled { get; set; }
 

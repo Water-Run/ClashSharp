@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.Settings;
@@ -92,6 +93,8 @@ internal sealed class AppSettingsStore : ISettingsStore
         get => _settings.ConnectionSamplingIntervalSeconds;
         set => _settings.ConnectionSamplingIntervalSeconds = value;
     }
+
+    public ConnectionSamplingSettings ReadConnectionSamplingSettings() => _settings.ReadConnectionSamplingSettings();
 
     public bool StartupConflictCheckEnabled
     {

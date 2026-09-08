@@ -39,12 +39,12 @@ internal sealed class SettingsRuntimeMutationAdapter
             cancellationToken);
     }
 
-    /// <summary>Restarts sampling from the latest persisted settings through the tracked action boundary.</summary>
-    public Task RestartConnectionSamplingAsync(CancellationToken cancellationToken)
+    /// <summary>Applies the complete page choice through the shared sampling transaction.</summary>
+    public Task ApplyConnectionSamplingAsync(bool isEnabled, int intervalSeconds, CancellationToken cancellationToken)
     {
-        return _actions.DispatchAsync(
-            ApplicationActionKind.SetConnectionSampling,
-            _settings.ConnectionSamplingEnabled.ToString(),
+        return _applicationActions.ApplyConnectionSamplingSettingsAsync(
+            isEnabled,
+            intervalSeconds,
             cancellationToken);
     }
 

@@ -172,7 +172,8 @@ public sealed class TriggerActionRuntimeAdapterTests
             new UnusedNetworkStateObserver(),
             new UnusedNotificationSink(),
             new UnusedLifecycleHandoff(),
-            Uninitialized<StartupSettingsCoordinator>());
+            Uninitialized<StartupSettingsCoordinator>(),
+            Uninitialized<ConnectionSamplingSettingsCoordinator>());
     }
 
     private static T Uninitialized<T>() where T : class

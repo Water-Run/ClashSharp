@@ -102,7 +102,7 @@ internal static class SettingsPageComposition
             isAccentColorRestartPending: AppThemeService.IsAccentColorRestartPending,
             notifyConnectionTestTimeout: context.Notifications.NotifyConnectionTestTimeout,
             appendLog: logStorage.AppendLog,
-            restartConnectionSamplingAsync: runtimeMutations.RestartConnectionSamplingAsync,
+            applyConnectionSamplingAsync: runtimeMutations.ApplyConnectionSamplingAsync,
             applyLaunchAtStartupAsync: runtimeMutations.ApplyLaunchAtStartupAsync,
             supportedLanguages: LocalizationService.GetSupportedLanguages().ToArray(),
             applyNetworkSettingsAsync: runtimeMutations.ApplyNetworkSettingsAsync,

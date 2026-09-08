@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Settings;
 
@@ -11,6 +12,15 @@ namespace ClashSharp.Service;
 
 public sealed partial class AppSettingsService
 {
+    /// <summary>Reads the complete sampling preference pair under the same lock used by batch publication.</summary>
+    internal ConnectionSamplingSettings ReadConnectionSamplingSettings()
+    {
+        lock (_syncLock)
+        {
+            return new ConnectionSamplingSettings(ConnectionSamplingEnabled, ConnectionSamplingIntervalSeconds);
+        }
+    }
+
     /// <summary>Executes one synchronous settings write under immediately acquired ordinary admission.</summary>
     private void WriteOrdinary(Action<AppSettingsEditor> mutation)
     {

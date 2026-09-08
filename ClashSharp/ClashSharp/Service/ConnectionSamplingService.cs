@@ -133,6 +133,9 @@ public sealed partial class ConnectionSamplingService : IRuntimeParticipant
         return _supervisor.StopAsync(cancellationToken);
     }
 
+    /// <summary>Starts an admitted settings transaction's loop, including a running baseline with a disabled preference.</summary>
+    internal Task StartLoopAsync(CancellationToken cancellationToken) => _supervisor.StartAsync(cancellationToken);
+
     /// <summary>Re-evaluates current settings through an awaited stop-and-start transition.</summary>
     public async Task RestartFromSettingsAsync(CancellationToken cancellationToken)
     {

@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
-using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
@@ -36,6 +35,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly IApplicationShutdownCoordinator _shutdown;
     private readonly StartupLaunchService _startupLaunch;
     private readonly StartupSettingsCoordinator _startupSettings;
+    private readonly ConnectionSamplingSettingsCoordinator _samplingSettings;
 
     internal ApplicationActionService(
         AppSettingsService settings,
@@ -50,7 +50,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         ApplicationLifecycleService lifecycle,
         IApplicationShutdownCoordinator shutdown,
         StartupLaunchService startupLaunch,
-        StartupSettingsCoordinator startupSettings)
+        StartupSettingsCoordinator startupSettings,
+        ConnectionSamplingSettingsCoordinator samplingSettings)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _admissionBarrier = admissionBarrier ?? throw new ArgumentNullException(nameof(admissionBarrier));
@@ -65,6 +66,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _shutdown = shutdown ?? throw new ArgumentNullException(nameof(shutdown));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
         _startupSettings = startupSettings ?? throw new ArgumentNullException(nameof(startupSettings));
+        _samplingSettings = samplingSettings ?? throw new ArgumentNullException(nameof(samplingSettings));
         if (Interlocked.CompareExchange(ref _instance, this, null) is not null)
         {
             throw new InvalidOperationException("The primary application action service is already configured.");
@@ -266,41 +268,18 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         return _startupSettings.ApplyAsync(isEnabled, cancellationToken);
     }
 
-    private async Task ApplyConnectionSamplingAsync(
+    /// <summary>Applies the settings page's complete sampling choice through the shared coordinator.</summary>
+    internal Task ApplyConnectionSamplingSettingsAsync(
+        bool isEnabled,
+        int intervalSeconds,
+        CancellationToken cancellationToken) =>
+        _samplingSettings.ApplyAsync(new ConnectionSamplingSettings(isEnabled, intervalSeconds), cancellationToken);
+
+    private Task ApplyConnectionSamplingAsync(
         bool isEnabled,
         CancellationToken cancellationToken)
     {
-        await using MutationAdmissionLease admissionLease = await _admissionBarrier
-            .AcquireOrdinaryAsync(cancellationToken)
-            .ConfigureAwait(false);
-        bool baseline = _settings.ConnectionSamplingEnabled;
-        _settings.WriteAdmitted(
-            admissionLease,
-            editor => editor.ConnectionSamplingEnabled = isEnabled);
-        try
-        {
-            await _sampling.RestartFromSettingsAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception applyFailure) when (!ExceptionGraphClassifier.IsProcessFatal(applyFailure))
-        {
-            _settings.WriteAdmitted(
-                admissionLease,
-                editor => editor.ConnectionSamplingEnabled = baseline);
-            try
-            {
-                await _sampling.RestartFromSettingsAsync(CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception compensationFailure) when (!ExceptionGraphClassifier.IsProcessFatal(compensationFailure))
-            {
-                throw new AggregateException(
-                    "Connection sampling failed and its previous state could not be restored.",
-                    applyFailure,
-                    compensationFailure);
-            }
-
-            ExceptionDispatchInfo.Capture(applyFailure).Throw();
-            throw;
-        }
+        return _samplingSettings.SetEnabledAsync(isEnabled, cancellationToken);
     }
 
     /// <summary>Disables an explicitly confirmed conflicting Windows proxy through durable mutation.</summary>

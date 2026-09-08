@@ -117,6 +117,8 @@ internal static class ClashSharpAppHostFactory
                 installAsPrimaryInstance: true));
             services.AddSingleton<IStartupSettingsOperation, StartupSettingsOperationAdapter>();
             services.AddSingleton<StartupSettingsCoordinator>();
+            services.AddSingleton<IConnectionSamplingSettingsOperation, ConnectionSamplingSettingsOperationAdapter>();
+            services.AddSingleton<ConnectionSamplingSettingsCoordinator>();
             services.AddSingleton(provider => new ApplicationActionService(
                 provider.GetRequiredService<AppSettingsService>(),
                 provider.GetRequiredService<MutationAdmissionBarrier>(),
@@ -130,7 +132,8 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<ApplicationLifecycleService>(),
                 provider.GetRequiredService<IApplicationShutdownCoordinator>(),
                 provider.GetRequiredService<StartupLaunchService>(),
-                provider.GetRequiredService<StartupSettingsCoordinator>()));
+                provider.GetRequiredService<StartupSettingsCoordinator>(),
+                provider.GetRequiredService<ConnectionSamplingSettingsCoordinator>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton<SettingsRuntimeMutationAdapter>();

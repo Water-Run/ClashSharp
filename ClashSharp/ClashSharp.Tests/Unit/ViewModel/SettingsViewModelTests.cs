@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Net.Http;
 using System.Reflection;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.Settings;
@@ -691,7 +692,122 @@ public sealed partial class SettingsViewModelTests
         Assert.Same(failure, error.Exception);
     }
 
-    /// <summary>Verifies sampling changes restart the sampling service after persistence.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SamplingSettings_WhileApplicationPending_DoesNotSavePageChoice(bool changeInterval)
+    {
+        FakeSettingsStore store = new() { ConnectionSamplingEnabled = true, ConnectionSamplingIntervalSeconds = 30 };
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            applyConnectionSamplingAsync: (_, _, _) => release.Task);
+        if (changeInterval)
+        {
+            viewModel.SetConnectionSamplingIntervalSeconds(60);
+        }
+        else
+        {
+            viewModel.SetConnectionSamplingEnabled(false);
+        }
+
+        Task application = Assert.IsAssignableFrom<Task>(viewModel.RestartConnectionSamplingCommand.ExecutionTask);
+        bool observedEnabled = store.ConnectionSamplingEnabled;
+        int observedInterval = store.ConnectionSamplingIntervalSeconds;
+        release.SetResult();
+        await application;
+
+        Assert.True(observedEnabled);
+        Assert.Equal(30, observedInterval);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SamplingSettings_WhenBackendFails_PreservesItsAuthoritativeOutcome(bool changeInterval)
+    {
+        FakeSettingsStore store = new() { ConnectionSamplingEnabled = true, ConnectionSamplingIntervalSeconds = 30 };
+        InvalidOperationException failure = new("backend recovery required");
+        FakeApplicationErrorSink errorSink = new();
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
+            store,
+            applyConnectionSamplingAsync: (_, _, _) =>
+            {
+                store.ConnectionSamplingEnabled = false;
+                store.ConnectionSamplingIntervalSeconds = 90;
+                return Task.FromException(failure);
+            },
+            errorSink: errorSink);
+        if (changeInterval)
+        {
+            viewModel.SetConnectionSamplingIntervalSeconds(60);
+        }
+        else
+        {
+            viewModel.SetConnectionSamplingEnabled(false);
+        }
+
+        await Assert.IsAssignableFrom<Task>(viewModel.RestartConnectionSamplingCommand.ExecutionTask);
+
+        Assert.False(store.ConnectionSamplingEnabled);
+        Assert.Equal(90, store.ConnectionSamplingIntervalSeconds);
+        Assert.False(viewModel.ConnectionSamplingEnabled);
+        Assert.Equal(90, viewModel.ConnectionSamplingIntervalSeconds);
+        Assert.Same(failure, Assert.Single(errorSink.Errors).Exception);
+    }
+
+    [Fact]
+    public async Task SamplingSettings_AuthorityReadFails_PreservesApplicationAndProjectionDiagnostics()
+    {
+        FakeSettingsStore store = new();
+        IOException application = new("apply failed");
+        IOException projection = new("snapshot unavailable");
+        FakeApplicationErrorSink sink = new();
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(store,
+            applyConnectionSamplingAsync: (_, _, _) =>
+            {
+                store.SamplingReadFailure = projection;
+                return Task.FromException(application);
+            }, errorSink: sink);
+
+        viewModel.SetConnectionSamplingEnabled(false);
+        await Assert.IsAssignableFrom<Task>(viewModel.RestartConnectionSamplingCommand.ExecutionTask);
+
+        AggregateException result = Assert.IsType<AggregateException>(Assert.Single(sink.Errors).Exception);
+        Assert.Equal([application, projection], result.InnerExceptions);
+        Assert.True(store.ConnectionSamplingEnabled);
+        Assert.Equal(30, store.ConnectionSamplingIntervalSeconds);
+    }
+
+    [Fact]
+    public async Task SamplingSettings_AfterApplication_ProjectsLatestAuthorityPairTogether()
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(store,
+            applyConnectionSamplingAsync: (_, _, _) =>
+            {
+                store.ConnectionSamplingEnabled = true;
+                store.ConnectionSamplingIntervalSeconds = 90;
+                return Task.CompletedTask;
+            });
+        List<(bool Enabled, int Interval)> observed = [];
+        viewModel.PropertyChanged += (_, change) =>
+        {
+            if (change.PropertyName == nameof(SettingsViewModel.ConnectionSamplingEnabled)
+                && viewModel.ConnectionSamplingEnabled)
+            {
+                observed.Add((viewModel.ConnectionSamplingEnabled, viewModel.ConnectionSamplingIntervalSeconds));
+            }
+        };
+
+        viewModel.SetConnectionSamplingEnabled(false);
+        await Assert.IsAssignableFrom<Task>(viewModel.RestartConnectionSamplingCommand.ExecutionTask);
+
+        Assert.Equal((true, 90), Assert.Single(observed));
+        Assert.Equal(90, viewModel.ConnectionSamplingIntervalSeconds);
+    }
+
+    /// <summary>Verifies the legacy synchronous test callback still completes sampling preference changes.</summary>
     [Fact]
     public void SamplingSettings_WhenPersisted_RestartSampling()
     {
@@ -721,7 +837,7 @@ public sealed partial class SettingsViewModelTests
         InvalidOperationException failure = new("sampling restart failed");
         SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
             store,
-            restartConnectionSamplingAsync: async _ =>
+            applyConnectionSamplingAsync: async (_, _, _) =>
             {
                 await Task.Yield();
                 throw failure;
@@ -756,14 +872,17 @@ public sealed partial class SettingsViewModelTests
         List<(bool Enabled, int IntervalSeconds)> appliedSettings = [];
         SettingsViewModel viewModel = CreateRuntimeMutationViewModel(
             store,
-            restartConnectionSamplingAsync: async _ =>
+            applyConnectionSamplingAsync: async (enabled, interval, _) =>
             {
-                appliedSettings.Add((store.ConnectionSamplingEnabled, store.ConnectionSamplingIntervalSeconds));
+                appliedSettings.Add((enabled, interval));
                 if (appliedSettings.Count == 1)
                 {
                     firstRestartStarted.TrySetResult();
                     await releaseFirstRestart.Task;
                 }
+
+                store.ConnectionSamplingEnabled = enabled;
+                store.ConnectionSamplingIntervalSeconds = interval;
             });
 
         viewModel.SetConnectionSamplingEnabled(false);
@@ -1536,7 +1655,7 @@ public sealed partial class SettingsViewModelTests
             clearAllData: () => { },
             applyTheme: themes.Add,
             applyAccentColor: (mode, value) => accents.Add((mode, value)),
-            restartConnectionSamplingAsync: _ =>
+            applyConnectionSamplingAsync: (_, _, _) =>
             {
                 samplingStates.Add((store.ConnectionSamplingEnabled, store.ConnectionSamplingIntervalSeconds));
                 return Task.CompletedTask;
@@ -1604,7 +1723,7 @@ public sealed partial class SettingsViewModelTests
                 participants.Add("startup");
                 return Task.CompletedTask;
             },
-            restartConnectionSamplingAsync: token =>
+            applyConnectionSamplingAsync: (_, _, token) =>
             {
                 Assert.False(token.CanBeCanceled);
                 participants.Add("sampling");
@@ -1813,6 +1932,7 @@ public sealed partial class SettingsViewModelTests
     [Theory]
     [InlineData("_networkSettingsRequeueTask")]
     [InlineData("_launchAtStartupRequeueTask")]
+    [InlineData("_connectionSamplingRequeueTask")]
     public async Task ResetAllSettings_PendingRuntimeRequeue_DrainsBeforeDurableReset(string fieldName)
     {
         FakeSettingsStore store = CreateNonDefaultExternalSettings();
@@ -2092,6 +2212,12 @@ public sealed partial class SettingsViewModelTests
 
     private sealed class FakeSettingsStore : ISettingsStore
     {
+        public Exception? SamplingReadFailure { get; set; }
+
+        public ConnectionSamplingSettings ReadConnectionSamplingSettings() => SamplingReadFailure is null
+            ? new(ConnectionSamplingEnabled, ConnectionSamplingIntervalSeconds)
+            : throw SamplingReadFailure;
+
         public Exception? PreferenceResetFailure { get; set; }
 
         public SettingsResetScope? LastPreferenceReset { get; private set; }
@@ -2277,7 +2403,7 @@ public sealed partial class SettingsViewModelTests
 
     private static SettingsViewModel CreateRuntimeMutationViewModel(
         FakeSettingsStore store,
-        Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
+        Func<bool, int, CancellationToken, Task>? applyConnectionSamplingAsync = null,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
         IApplicationErrorSink? errorSink = null,
         Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync = null)
@@ -2297,7 +2423,7 @@ public sealed partial class SettingsViewModelTests
             () => { },
             () => { },
             (_, _) => Task.FromResult(204),
-            restartConnectionSamplingAsync: restartConnectionSamplingAsync,
+            applyConnectionSamplingAsync: applyConnectionSamplingAsync,
             applyLaunchAtStartupAsync: applyLaunchAtStartupAsync,
             applyNetworkSettingsAsync: applyNetworkSettingsAsync);
         viewModel.Load();
@@ -2323,7 +2449,7 @@ public sealed partial class SettingsViewModelTests
         Action clearAllData,
         Action<AppThemeMode>? applyTheme = null,
         Action<AppAccentColorMode, string>? applyAccentColor = null,
-        Func<CancellationToken, Task>? restartConnectionSamplingAsync = null,
+        Func<bool, int, CancellationToken, Task>? applyConnectionSamplingAsync = null,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
         Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync = null,
         Action? restartApplication = null,
@@ -2354,7 +2480,7 @@ public sealed partial class SettingsViewModelTests
             checkStartupConflictsAsync: NoStartupConflictsAsync,
             notifyConnectionTestTimeout: _ => { },
             appendLog: (_, _, _, _) => { },
-            restartConnectionSamplingAsync: restartConnectionSamplingAsync,
+            applyConnectionSamplingAsync: applyConnectionSamplingAsync,
             applyLaunchAtStartupAsync: applyLaunchAtStartupAsync,
             applyNetworkSettingsAsync: applyNetworkSettingsAsync,
             requestResetRecoveryRestart: requestResetRecoveryRestart,

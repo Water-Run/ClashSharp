@@ -22,6 +22,7 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
     private readonly StartupLaunchService _startupLaunch;
     private readonly StartupSettingsCoordinator _startupSettings;
     private readonly ConnectionSamplingService _sampling;
+    private readonly ConnectionSamplingSettingsCoordinator _samplingSettings;
     private readonly MihomoConnectionService _connections;
     private readonly NetworkStateCoordinator _network;
     private readonly INetworkStateObserver _networkObserver;
@@ -39,12 +40,14 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         IIdempotentTriggerNotificationSink notifications,
         ITriggerLifecycleHandoff exitHandoff,
         StartupSettingsCoordinator startupSettings,
+        ConnectionSamplingSettingsCoordinator samplingSettings,
         MihomoServiceManager? mihomoService = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
         _startupSettings = startupSettings ?? throw new ArgumentNullException(nameof(startupSettings));
         _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
+        _samplingSettings = samplingSettings ?? throw new ArgumentNullException(nameof(samplingSettings));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _network = network ?? throw new ArgumentNullException(nameof(network));
         _networkObserver = networkObserver ?? throw new ArgumentNullException(nameof(networkObserver));
@@ -123,10 +126,9 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
                     admissionLease,
                     cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.SetConnectionSampling:
-                _settings.WriteAdmitted(
-                    admissionLease,
-                    editor => editor.ConnectionSamplingEnabled = RequireBoolean(action));
-                await _sampling.RestartFromSettingsAsync(cancellationToken).ConfigureAwait(false);
+                await _samplingSettings
+                    .SetEnabledAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)
+                    .ConfigureAwait(false);
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SwitchProxyMode:
                 return await ApplyNetworkModeAsync(
