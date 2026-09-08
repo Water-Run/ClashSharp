@@ -691,7 +691,9 @@ public sealed class AppResourcePackagingTests
             Assert.Contains(resourceKey, serviceCode, StringComparison.Ordinal);
         }
 
-        Assert.Contains("new SolidColorBrush", serviceCode, StringComparison.Ordinal);
+        string resourceAdapter = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "Service", "WinUiAccentResourceStore.cs"));
+        Assert.Contains("AccentRuntime.Apply", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("new SolidColorBrush", resourceAdapter, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies region display names are resolved through localization keys.</summary>

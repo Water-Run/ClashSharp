@@ -38,6 +38,16 @@ desired 发布与配置安装分开进行。会话持久保存 Running 后，参
 
 退休阻止新的快照捕获、probe 和 apply，已捕获的历史值及持久数据保持。启动重新观察会识别新消费者的实际默认配置，再安装 durable desired；启动请求要求独占许可。集成测试使用真实 JSON 会话、facade、只读接口和代际管理器，验证代际切换后只解析新实例，原实例已退休，旧磁盘值没有被新实例覆盖。生产消费者的读取端口仍需在整体装配时接入该接口。
 
+## 生产强调色资源的独立验证
+
+原强调色入口在访问 WinUI 资源之前就记录已应用配置，资源不可用或中途写入失败时仍可能向设置页报告成功。两项回归直接调用原主程序程序集，在没有 WinUI Application 的测试进程中复现了跟随系统、自定义颜色都被误报为已应用的问题。
+
+`AccentColorRuntime` 先构造完整不可变资源表，再通过 `IAccentResourceStore` 写入并独立读取所有资源。只有键集合、颜色 ARGB 和资源类型全部匹配，才发布已验证配置。部分写入或无效资源不能证明成功；最后一次写入的回执丢失可由实际完整资源匹配解决。写入后探测暂时失败时，后续读取仍能独立验证已尝试的目标；致命异常图继续传播。
+
+主程序 `AppThemeService` 已使用该路径，配置构造和调色计算没有平台访问。实际生产调色表通过程序集引用测试，覆盖 7 个颜色、41 个画刷、固定 ARGB 混色结果和透明度。透明画刷保持原有 `#00FFFFFF`，与 [Microsoft.UI.Colors.Transparent](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.colors.transparent?view=windows-app-sdk-1.8) 一致。
+
+`WinUiAccentResourceStore` 限制在资源字典所属 UI 线程访问，枚举主字典的局部项，避免将合并字典中的系统资源误当成应用覆盖；跟随系统只移除本服务拥有的覆盖。画刷除颜色外还验证其自身不透明度为 1。资源字典的集合接口及线程关联见 [ResourceDictionary](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.resourcedictionary?view=windows-app-sdk-1.8)。设置页读取实际资源来判断是否尚待应用；主窗口启动步骤也验证目标强调色后才完成。这项修复已接入现有生产设置入口，完整 Appearance 代际参与者和其他外观消费者仍待整体装配。
+
 ## StartupTask 与 Sampling 的实际服务适配
 
 `StartupTaskSettingsParticipant` 和 `SamplingSettingsParticipant` 在访问运行时之前检查完整 generation descriptor、应用类别、允许的键和原许可的有效性。两者都不写偏好、不重新申请普通许可。StartupTask 通过生产 `StartupLaunchService` 读取 Windows 注册状态；已满足目标时不重复注册，拒绝或未知状态保留待办。应用回执丢失由后续独立平台探测判断。
@@ -112,6 +122,10 @@ Triggers 适配和入口顺序修复新增 22 项回归，本分支累计净增 
 触发器提交 `9a331ba` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34229757710)，实际四份 TRX 共 4846 项通过、零失败、零跳过，22 项新增用例逐一匹配本地身份。合并提交 `ad5a3b1` 与源提交 tree 同为 `9de5e93966d08e2174e15ec8260a103e1e2ec661`，收据为 `ci-validation-trigger-settings.json`。开发安装器归档 `10057617117` 共 317653478 字节，SHA-256 为 `234b68e19d297c45b0470ccaece0bbe89fb549139407ee2a8124cc4c15fa3033`；该候选只核验构建与元数据，尚未对这组未装配的适配器追加原生运行验收。
 
 内部设置只读接口与实际配置所有者追加 10 项回归，本分支累计净增 170 项。完整主程序 2791 项全部通过，零失败、零跳过，用时 58 秒；18 项目 Release x64 构建零警告、零错误，用时 26.06 秒，format 检查 1495 个文件、零处变更。收据为 `local-validation-internal-settings.json`，最终报告为 `1.0.0-internal-settings-main.trx`、`build-internal-settings-complete.log` 和 `format-internal-settings-verified.log`。首次编译修正两处测试断言分析器用法；初轮测试的三个失败来自夹具对预建目录及 URL 规范化的错误预期，报告保留于 `1.0.0-internal-settings-components-final.trx`，不计作产品缺陷复现。
+
+内部设置提交 `04ded00` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34231353788)，实际四份 TRX 共 4856 项通过、零失败、零跳过，10 项新增用例全部匹配本地身份。合并提交 `0edd44c` 与源提交 tree 同为 `9c766820a60a2aaf974b4dd03ffa4716344b2b8c`，收据为 `ci-validation-internal-settings.json`。开发安装器包构建成功，本次只核验制品元数据。
+
+强调色验证修复追加 22 项回归，本分支累计净增 192 项。完整主程序 2813 项全部通过、零失败、零跳过，用时 57 秒；18 项目 Release x64 构建零警告、零错误，用时 29.06 秒，format 检查 1502 文件、零处变更。收据为 `local-validation-accent-runtime.json`，最终报告为 `1.0.0-accent-production-main.trx`、`build-accent-production-complete.log` 和 `format-accent-production-verified.log`。旧实现的两项失败保存在 `1.0.0-accent-unavailable-red.trx`，编译后已恢复并核对工作文件摘要；初次编译的命名及异常构造分析器诊断也保留原日志。资源存储的成功路径和故障注入使用隔离边界，真实 WinUI 字典及新启动检查需要同一 CI 候选的原生验收。
 
 ## 完整切换的剩余依赖
 
