@@ -29,6 +29,7 @@ internal sealed class SettingsParticipantBinding
     {
         ArgumentNullException.ThrowIfNull(request);
         _admission.EnsureActiveLease(lease);
+        if (_kind == SettingApplicationKind.Triggers) { _admission.EnsureActiveExclusiveLease(lease); }
         if (!_generation.IsSameGeneration(request.Generation) || request.Batch.ApplicationKind != _kind
             || request.Values.Count == 0 || request.Values.Keys.Any(key => !_keys.Contains(key)))
         {

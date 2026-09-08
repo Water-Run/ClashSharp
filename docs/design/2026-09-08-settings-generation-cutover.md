@@ -1,6 +1,6 @@
 # Settings generation cutover
 
-版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口，以及 StartupTask、Sampling 的实际服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
+版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口，以及 StartupTask、Sampling、Triggers 的实际服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
 
 ## 已实现的存储与迁移
 
@@ -40,6 +40,16 @@
 
 另外修复了启动服务的异常分类：探测和设置入口先检查完整异常图，嵌套致命异常保持原异常传播，不能返回未知状态或包装成 `StartupLaunchUpdateException`。两项回归先复现旧行为，再验证修复；持久 Running 记录保留给后续进程重新观察。
 
+## Triggers 的调度与通知配置
+
+`TriggersSettingsParticipant` 拥有实际 `TriggerScheduler`，调度循环和生产 `TriggerFiredNotificationAdapter` 共同读取 `TriggerSettingsState` 的同一份不可变已安装配置。它覆盖 registry 中的总开关和通知开关，应用后独立探测两者；保存 desired 不会提前改变调度或通知。单键批次保留另一个键的实际值及其独立待办，混合批次完整验证。状态对象检查所属代际，退休后拒绝继续读取。
+
+构造不启动任务或访问存储。主机需要先初始化 trigger 仓库及 outbox，再启动该适配器拥有的 scheduler，最后接入设置应用。未初始化、暂停或停止的循环不能被报告为已应用；显式应用排空当前和排队的评估后安装配置，再恢复同一循环。禁用评估时仍保持维护循环，以便继续重试生命周期释放确认；调度器静默不等于所有持久确认都已完成。开始排空后，页面取消不会截断操作；释放适配器等待实际循环停止后撤销共享配置。
+
+回归复现了设置入口与调度任务互相等待的路径：UI 持有完整设置命令入口并等待调度器退出，而调度任务也在等待该入口。facade 现在先取得独占许可并排空普通调用，再进入命令入口。总开关、通知开关及其复原均采用该顺序；重试在独占许可内解析当前批次，避免预读身份与执行之间的竞态。已持有普通许可的触发器设置写入会在 desired 发布前被拒绝，其他类别的已提交命令仍完成既有续行协议。
+
+测试直接调用主程序程序集中的实际调度适配器和通知适配器，平台、事件、时钟和通知投递边界使用隔离模拟。覆盖排空及取消、丢失回执、恢复失败与显式重试、致命异常图、通知策略、跨代际拒绝、旧实例释放及完整批次。首次完整检查发现测试源码重复编译违反已有 trigger 架构约束，已改为程序集引用，保留原约束；补齐通知键时的两项失败及夹具修正记录也保留。这些适配器尚未注册进生产代际装配。
+
 ## 独立控制端凭据
 
 `AppSettingsService` 及其 editor 不再生成、读取或删除控制端凭据，核心配置偏好端口也不再携带 secret。`IControllerCredentialProvider` 只读取启动时已验证的进程凭据；HTTP、WebSocket 和配置生成使用同一提供者，独占设置操作期间的读取不访问存储、不获取新许可。生产主机拥有 `ControllerCredentialService`，现有静态运行时工厂通过显式启动绑定访问它。
@@ -52,7 +62,7 @@
 
 原有 `launch-no-proxy` 验收只确认包身份、窗口存在及稳定时长；启动错误页也可能满足该条件。现补充读取候选本次启动之后的 SQLite 日志聚合，要求 controller-credential（140）、window-shell（600）和最后的 profile-subscription-updates（710）各完成一次且成功，并且没有启动错误。查询使用系统 SQLite 只读连接，不读取凭据值、不输出日志内容，结果时间范围绑定实际 launch 步骤。PowerShell 5.1 与 7 均通过 111 项报告断言和 16 项真实隔离 SQLite 断言，覆盖错误页、未完成流程、重复或过期记录、锁定及损坏数据库；日志为 `startup-evidence-powershell51.log` 和 `startup-evidence-powershell7.log`。这些检查仍不代表全部页面交互或正常安装器流程已验收。
 
-当前生产装配已接入这项拆分；JSON 偏好权威和数据代际整体切换仍未激活。实际打包候选的启动验收将在对应 CI 包产出后执行。
+当前生产装配已接入这项拆分；JSON 偏好权威和数据代际整体切换仍未激活。该凭据候选已通过下述实际打包启动验收。
 
 ## 代际服务寿命
 
@@ -87,10 +97,14 @@
 
 持久中断测试使用真实临时仓库、切点注入及新对象重开，运行时参与者为受控模拟。Windows 旧设置适配器已编译，未在开发机读取实际 LocalSettings。实际打包应用的迁移、进程崩溃、完整页面和安装器兼容验收将在生产切换后执行。开发机代理摘要保持 `95e97918ff6de70655b412568cd18dc81c5d6584c607bb9a71ddc72e22460447`。
 
+脚本说明修复 `3dbbb4e` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34224586524)，实际四份 TRX 共 4824 项通过、零失败、零跳过。合并提交 `f3ce2e6` 与源提交 tree 同为 `ecd542df0c693a7f74cc3384b7dda2b25013dbe3`，收据为 `ci-validation-startup-help.json`。该次安装器包仅核验构建及元数据，原生启动证据仍绑定上述凭据候选。
+
+Triggers 适配和入口顺序修复新增 22 项回归，本分支累计净增 160 项。完整主程序 2781 项全部通过，零失败、零跳过，用时 56 秒；18 项目 Release x64 构建零警告、零错误，用时 26.04 秒，format 检查 1491 个文件、零处变更。收据为 `local-validation-trigger-settings.json`，最终报告为 `1.0.0-trigger-settings-both-keys.trx`、`build-trigger-settings-both-keys.log` 和 `format-trigger-settings-both-keys-verified.log`。死锁复现保存在 `1.0.0-trigger-settings-cycle-red.trx`；最初通知键遗漏、程序集引用问题及夹具错误报告分别保留，不将先前未完成的验证累计为通过项。
+
 ## 完整切换的剩余依赖
 
 1. 将偏好写入统一为应用层异步 change set；页面、磁贴、触发器和网络提交者使用同一个接口。独立控制端凭据已接入生产调用，后续代际重置继续使用该能力。
-2. 完成 Internal、Appearance、Network、Triggers 的实际 apply/probe 适配器，并将已实现的 StartupTask、Sampling 一起装配；明确读取 desired、有效状态和待办的消费者。
+2. 完成 Internal、Appearance、Network 的实际 apply/probe 适配器，并将已实现的 StartupTask、Sampling、Triggers 一起装配；明确读取 desired、有效状态和待办的消费者。
 3. 在设置驱动的启动步骤之前完成旧事务恢复、代际打开和偏好迁移。profile/log/trigger 与 settings 必须由同一代际容器解析、排空和替换。
 4. 将导入、重置和回滚接入候选代际及 manifest 提交，完成生产消费者替换后，原子替换 `SettingsAuthorityArchitectureTests` 中的临时门禁。
 5. 运行新候选的 CI、打包应用及隔离 Windows 验收，再将完整节点推送 main。

@@ -34,7 +34,8 @@ public sealed class GenerationSettingsAuthority : ISettingsAuthority
     {
         ArgumentNullException.ThrowIfNull(changes);
         SettingValueChange[] snapshot = changes.ToArray();
-        return ExecuteOrdinaryAsync((context, lease, token) => ChangeAndApplyAsync(context, snapshot, transactionId, lease, token), cancellationToken);
+        return ExecuteConsumerAsync((context, lease, token) => ChangeAndApplyAsync(context, snapshot, transactionId, lease, token),
+            RequiresProducerDrain(snapshot.Select(change => change.Key)), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -43,6 +44,7 @@ public sealed class GenerationSettingsAuthority : ISettingsAuthority
     {
         ArgumentNullException.ThrowIfNull(changes);
         SettingValueChange[] snapshot = changes.ToArray();
+        if (RequiresProducerDrain(snapshot.Select(change => change.Key))) { _admission.EnsureActiveExclusiveLease(admissionLease); }
         return ExecuteAdmittedAsync((context, lease, token) => ChangeAndApplyAsync(context, snapshot, transactionId, lease, token),
             admissionLease, cancellationToken);
     }
@@ -52,22 +54,22 @@ public sealed class GenerationSettingsAuthority : ISettingsAuthority
     {
         ArgumentNullException.ThrowIfNull(keys);
         SettingKey[] snapshot = keys.ToArray();
-        return ExecuteOrdinaryAsync(async (context, lease, token) =>
+        return ExecuteConsumerAsync(async (context, lease, token) =>
         {
             SettingsAuthorityResult reverted = await context.Session.RevertAdmittedAsync(snapshot, transactionId, lease, token).ConfigureAwait(false);
             return await ApplyAffectedAsync(context, reverted, snapshot.ToHashSet(), SettingsApplicationPhase.Live, lease).ConfigureAwait(false);
-        }, cancellationToken);
+        }, RequiresProducerDrain(snapshot), cancellationToken);
     }
 
     /// <inheritdoc />
     public Task<SettingsAuthorityResult> RetryAsync(Guid batchId, Guid expectedAttemptId, Guid newAttemptId, CancellationToken cancellationToken) =>
-        ExecuteOrdinaryAsync(async (context, lease, token) =>
+        ExecuteConsumerAsync(async (context, lease, token) =>
         {
             SettingsAuthorityResult retry = await context.Session.RetryAdmittedAsync(batchId, expectedAttemptId, newAttemptId, lease, token).ConfigureAwait(false);
             if (!retry.IsSucceeded) { return retry; }
             SettingsApplicationBatch batch = retry.Envelope!.PendingApplications.Single(item => item.BatchId == batchId);
             return await ApplyOneAsync(context, retry.Envelope, batch, SettingsApplicationPhase.Live, lease).ConfigureAwait(false);
-        }, cancellationToken);
+        }, drainProducers: true, cancellationToken);
 
     /// <inheritdoc />
     public Task<SettingsAuthorityResult> ReconcileStartupAdmittedAsync(
@@ -123,11 +125,24 @@ public sealed class GenerationSettingsAuthority : ISettingsAuthority
         return context.Session.ContinueCommittedBatchAdmittedAsync(batch.BatchId, batch.AttemptId, participant, phase, lease);
     }
 
-    private async Task<SettingsAuthorityResult> ExecuteOrdinaryAsync(
+    private static bool RequiresProducerDrain(IEnumerable<SettingKey> keys) => keys.Any(key =>
+        key == SettingsRegistry.Keys.TriggersEnabled || key == SettingsRegistry.Keys.TriggerNotificationsEnabled);
+
+    private Task<SettingsAuthorityResult> ExecuteOrdinaryAsync(
         Func<SettingsGenerationContext, MutationAdmissionLease, CancellationToken, Task<SettingsAuthorityResult>> command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) => ExecuteConsumerAsync(command, drainProducers: false, cancellationToken);
+
+    private async Task<SettingsAuthorityResult> ExecuteConsumerAsync(
+        Func<SettingsGenerationContext, MutationAdmissionLease, CancellationToken, Task<SettingsAuthorityResult>> command,
+        bool drainProducers, CancellationToken cancellationToken)
     {
-        await using MutationAdmissionLease lease = await _admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
+        // A trigger evaluation can itself submit a settings command. Drain/revoke its ordinary
+        // authority before taking the command gate, so quiescence never waits on that gate's owner.
+        // Retry resolves its batch inside the pinned command; exclusive admission avoids a racy
+        // preflight lookup and covers a retry that must quiesce the trigger scheduler.
+        await using MutationAdmissionLease lease = drainProducers
+            ? await _admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken).ConfigureAwait(false)
+            : await _admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
         return await ExecuteAdmittedAsync(command, lease, cancellationToken).ConfigureAwait(false);
     }
 
