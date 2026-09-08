@@ -34,6 +34,7 @@ internal static class AppDataMaintenanceServiceFactory
         return new AppDataMaintenanceService(
             new AppDataMaintenanceSettingsAdapter(
                 AppSettingsService.Instance),
+            MihomoControllerCredentials.Instance,
             new LegacyAppDataMaintenanceRuntimeAdapter(
                 ConnectionSamplingService.Instance,
                 async cancellationToken =>

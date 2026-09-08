@@ -11,8 +11,15 @@ internal interface IAppDataMaintenanceSettings
     /// <summary>Resets all settings to defaults.</summary>
     void ResetAllSettings();
 
-    /// <summary>Clears both user settings and internal credentials.</summary>
+    /// <summary>Clears only user preferences.</summary>
     void ClearAllSettings();
+}
+
+/// <summary>Deletes private credentials separately from user preference reset.</summary>
+internal interface IAppDataMaintenanceCredentials
+{
+    /// <summary>Verifies credential deletion after the runtime is stopped, using the appropriate maintenance admission.</summary>
+    void ClearAll(bool useTerminalAdmission, CancellationToken cancellationToken);
 }
 
 /// <summary>Clears settings under terminal shutdown admission owned by the host.</summary>
@@ -67,6 +74,7 @@ internal sealed partial class AppDataMaintenanceService
     private readonly IAppDataMaintenanceSettings _settings;
 
     private readonly IAppDataMaintenanceRuntime _runtime;
+    private readonly IAppDataMaintenanceCredentials _credentials;
 
     private readonly IAppDataMaintenanceLogStorage _logStorage;
 
@@ -78,6 +86,7 @@ internal sealed partial class AppDataMaintenanceService
 
     internal AppDataMaintenanceService(
         IAppDataMaintenanceSettings settings,
+        IAppDataMaintenanceCredentials credentials,
         IAppDataMaintenanceRuntime runtime,
         IAppDataMaintenanceLogStorage logStorage,
         IAppDataMaintenanceLocalDataStore localData,
@@ -85,6 +94,7 @@ internal sealed partial class AppDataMaintenanceService
         Func<string, string> getString)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));
         _localData = localData ?? throw new ArgumentNullException(nameof(localData));
@@ -121,6 +131,9 @@ internal sealed partial class AppDataMaintenanceService
             _settings.ClearAllSettings();
         }
 
+        // Preference deletion has started. Finish the owned cleanup even if the page
+        // cancels while observing the reset; the runtime is already stopped.
+        _credentials.ClearAll(useTerminalSettingsAdmission, CancellationToken.None);
         TryClearLogStorage();
         _localData.ClearAll();
         _logStorage.ResetAfterDataDeletion();

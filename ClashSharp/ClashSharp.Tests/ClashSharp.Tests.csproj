@@ -86,6 +86,8 @@
     <Compile Include="..\ClashSharp\Service\ClashDataPackageService.Transaction.cs" Link="Service\ClashDataPackageService.Transaction.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageServiceFactory.cs" Link="Service\ClashDataPackageServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\AppDataMaintenanceService.cs" Link="Service\AppDataMaintenanceService.cs" />
+    <Compile Include="..\ClashSharp\Service\MihomoControllerCredentials.cs" Link="Service\MihomoControllerCredentials.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Startup\ControllerCredentialStartupStep.cs" Link="AppHost\Startup\ControllerCredentialStartupStep.cs" />
     <Compile Include="..\ClashSharp\Service\AppDataPathService.cs" Link="Service\AppDataPathService.cs" />
     <Compile Include="..\ClashSharp\Service\ConnectionSamplingService.cs" Link="Service\ConnectionSamplingService.cs" />
     <Compile Include="..\ClashSharp\Service\ConnectionSamplingService.Configuration.cs" Link="Service\ConnectionSamplingService.Configuration.cs" />

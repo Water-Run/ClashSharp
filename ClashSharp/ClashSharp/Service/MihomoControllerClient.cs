@@ -43,7 +43,7 @@ public sealed class MihomoControllerClient
     public static MihomoControllerClient Instance { get; } = new(
         SharedHttpClient,
         MihomoControllerEndpoint.BaseUri,
-        static () => AppSettingsService.Instance.MihomoControllerSecret,
+        static () => MihomoControllerCredentials.Instance.GetSecret(),
         static () => SharedAppControllerTransport.Capture() is not null,
         new MihomoControllerServiceBroker(MihomoServiceManager.Instance),
         SharedAppControllerTransport,
@@ -75,7 +75,7 @@ public sealed class MihomoControllerClient
         : this(
             SharedHttpClient,
             MihomoControllerEndpoint.BaseUri,
-            static () => AppSettingsService.Instance.MihomoControllerSecret,
+            static () => MihomoControllerCredentials.Instance.GetSecret(),
             static () => SharedAppControllerTransport.Capture() is not null,
             new MihomoControllerServiceBroker(MihomoServiceManager.Instance),
             SharedAppControllerTransport,

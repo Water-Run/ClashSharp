@@ -211,7 +211,7 @@ public sealed partial class CoreConfigurationService
                     mixedPort,
                     mode,
                     transparentProxyEnabled,
-                    _settings.MihomoControllerSecret);
+                    _controllerCredentials.GetSecret());
                 await _validator
                     .ValidateAsync(_configurationDirectoryPath, stagingPath, cancellationToken)
                     .ConfigureAwait(false);

@@ -5,12 +5,14 @@ using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Security;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Hosting.Startup;
 using ClashSharp.Infrastructure.Recovery;
+using ClashSharp.Infrastructure.Security;
 using ClashSharp.Infrastructure.Triggers;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Navigation;
@@ -96,6 +98,10 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<ITriggerRuntimeEventPublisher>(provider =>
                 provider.GetRequiredService<TriggerRuntimeEventHub>());
             services.AddSingleton(mutationAdmission);
+            services.AddSingleton<IControllerCredentialStore, WindowsControllerCredentialStore>();
+            services.AddSingleton<ControllerCredentialService>();
+            services.AddSingleton(_ => MihomoControllerCredentials.Instance);
+            services.AddSingleton<IControllerCredentialProvider>(provider => provider.GetRequiredService<MihomoControllerCredentials>());
             services.AddSingleton<FairAsyncMutationGate>();
             services.AddSingleton<MutationDeadlines>(_ => MutationDeadlines.Default);
             services.AddSingleton<IMutationJournalStore>(_ => new FileMutationJournalStore(
@@ -133,7 +139,8 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<IApplicationShutdownCoordinator>(),
                 provider.GetRequiredService<StartupLaunchService>(),
                 provider.GetRequiredService<StartupSettingsCoordinator>(),
-                provider.GetRequiredService<ConnectionSamplingSettingsCoordinator>()));
+                provider.GetRequiredService<ConnectionSamplingSettingsCoordinator>(),
+                provider.GetRequiredService<IControllerCredentialProvider>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton<SettingsRuntimeMutationAdapter>();
@@ -265,6 +272,7 @@ internal static class ClashSharpAppHostFactory
                     installerTransactionState,
                     provider.GetRequiredService<MutationAdmissionBarrier>()));
             services.AddSingleton<IStartupStep, MutationRecoveryStartupStep>();
+            services.AddSingleton<IStartupStep, ControllerCredentialStartupStep>();
             services.AddSingleton<IStartupStep, StartupRestoreFallbackStep>();
             services.AddSingleton<IStartupStep, ProxyRecoveryStartupStep>();
             services.AddSingleton<IStartupStep, AppSettingsAuditStartupStep>();

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
+using ClashSharp.ApplicationModel.Security;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Diagnostics;
 using ClashSharp.Model;
@@ -22,6 +23,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         ?? throw new InvalidOperationException("Application actions are unavailable before primary host startup.");
 
     private readonly AppSettingsService _settings;
+    private readonly IControllerCredentialProvider _controllerCredentials;
     private readonly MutationAdmissionBarrier _admissionBarrier;
     private readonly NetworkStateCoordinator _network;
     private readonly ConnectionSamplingService _sampling;
@@ -51,9 +53,11 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         IApplicationShutdownCoordinator shutdown,
         StartupLaunchService startupLaunch,
         StartupSettingsCoordinator startupSettings,
-        ConnectionSamplingSettingsCoordinator samplingSettings)
+        ConnectionSamplingSettingsCoordinator samplingSettings,
+        IControllerCredentialProvider controllerCredentials)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _controllerCredentials = controllerCredentials ?? throw new ArgumentNullException(nameof(controllerCredentials));
         _admissionBarrier = admissionBarrier ?? throw new ArgumentNullException(nameof(admissionBarrier));
         _network = network ?? throw new ArgumentNullException(nameof(network));
         _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
@@ -158,9 +162,9 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     internal ValueTask<MutationAdmissionLease> BeginSettingsDestructiveMutationAsync(
         CancellationToken cancellationToken)
     {
-        // Materialize the App-owned controller credential before closing ordinary settings
-        // admission. The Installer-owned service credential is never stored in App settings.
-        _ = _settings.MihomoControllerSecret;
+        // Require the independently verified startup credential before destructive recovery
+        // can generate runtime configuration under exclusive admission. This is a pure read.
+        _ = _controllerCredentials.GetSecret();
         return _admissionBarrier.CloseAndDrainAsync(
             MutationAdmissionClosure.Destructive,
             cancellationToken);
