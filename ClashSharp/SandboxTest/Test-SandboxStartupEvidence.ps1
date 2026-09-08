@@ -46,6 +46,8 @@ function Assert-StartupReadRejected {
     <#
     .SYNOPSIS
         Requires a real SQLite read to reject incomplete or unavailable startup evidence.
+    .DESCRIPTION
+        Counts a negative assertion only when the production reader rejects the owned fixture.
     .PARAMETER Path
         Owned fixture database path.
     #>

@@ -79,7 +79,11 @@
 
 凭据拆分验证包含 30 项新用例，并将原先设置类中的凭据删除回归替换为独立数据维护职责的检查，净增 29 项。本分支主程序累计净增 138 项，完整 2759 项通过，零失败、零跳过，用时 52 秒；18 项目构建零警告、零错误，用时 27.21 秒，format 检查 1488 个文件、零处变更。定向 99 项通过；收据为 `local-validation-controller-credentials.json`、`1.0.0-controller-credentials-main.trx`、`build-controller-credentials-complete.log` 和 `format-controller-credentials-verified.log`。首次定向验证的退出夹具重复提交已经终态的许可，调整为可提交退出的独占许可后通过，原报告保留。
 
-凭据拆分提交 `e9026f8` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34221242635)，实际四份 TRX 共 4824 项通过、零失败、零跳过，30 项新凭据用例均核验身份并实际执行。合并提交 `46154b7` 与源提交 tree 同为 `769cfda3cc5b10234366a11dd6e24102e1bc4ab0`，收据为 `ci-validation-controller-credentials.json`。候选开发安装器包已经构建成功；新增启动完成状态检查将在这份候选上进行隔离验收。
+凭据拆分提交 `e9026f8` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34221242635)，实际四份 TRX 共 4824 项通过、零失败、零跳过，30 项新凭据用例均核验身份并实际执行。合并提交 `46154b7` 与源提交 tree 同为 `769cfda3cc5b10234366a11dd6e24102e1bc4ab0`，收据为 `ci-validation-controller-credentials.json`。开发安装器制品 `10054117859` 共 317646418 字节、8 个文件，安装器版本为 `1.0.0+46154b776b2fbb501a388bee6a3f484905353f96`。整包请求三次返回存储端 `OperationTimedOut` 后，以分段请求取得完整 ZIP，其 SHA-256 与 CI 元数据一致；收据为 `installer-artifact-controller-credentials.json`。
+
+实际 Windows Sandbox 验收使用上述 CI 候选和 `f5a4502` 的验收脚本，二者之间没有程序代码变更。MSIX SHA-256 为 `653c839f2a5c036e6e00622a7f6a1986ed1bcec8b52238e253702849f1a4458c`；运行 `10d6f352c4c3452791e170ff7a32f13f` 在 2026-09-08 11:56 UTC 通过全部 12 步。实际包身份与进程匹配，窗口稳定 30247 毫秒，凭据、交互主窗和最后启动步骤各成功一次，启动失败记录为零。7 项来宾清理均成功，沙箱 `3f577a24-d645-4158-a3f1-99ecb3d4f195` 已销毁，输入及主机代理保持不变；收据为 `sandbox-package-validation-controller-credentials.json`。此运行没有调用正常 WPF 安装器，不代表完整页面交互或优雅退出验收。
+
+验收脚本提交 `f5a4502` 的 CI 安装器构建成功，主程序 2758 项通过、1 项失败：仓库规范检查发现两个 PowerShell 辅助函数缺少 `.DESCRIPTION`。已补齐说明，本地 16 项仓库规范测试全部通过；报告为 `1.0.0-startup-evidence-topology.trx`。原日志和制品保存在 `ci-startup-evidence-failed.log` 与 `ci-tests-startup-evidence-initial.zip`，收据为 `ci-validation-startup-evidence-initial.json`；该失败不涉及程序运行行为。实际 CI 的两版 PowerShell 也各通过 111 项报告及 16 项 SQLite 断言。远端绿色载荷复验的 SSH 在握手阶段关闭，未上传此候选，原有远端 main 仍为 `e3f597c`。
 
 持久中断测试使用真实临时仓库、切点注入及新对象重开，运行时参与者为受控模拟。Windows 旧设置适配器已编译，未在开发机读取实际 LocalSettings。实际打包应用的迁移、进程崩溃、完整页面和安装器兼容验收将在生产切换后执行。开发机代理摘要保持 `95e97918ff6de70655b412568cd18dc81c5d6584c607bb9a71ddc72e22460447`。
 

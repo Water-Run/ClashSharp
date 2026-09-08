@@ -5,6 +5,8 @@ function Assert-SandboxStartupEvidence {
     <#
     .SYNOPSIS
         Requires completed credential, interactive shell, and final startup steps without failures.
+    .DESCRIPTION
+        Rejects partial, duplicated, failed, or incorrectly typed aggregate observations.
     .PARAMETER Evidence
         Aggregate observations from the candidate's startup log after this launch began.
     #>
