@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Hosting.Compatibility;
@@ -106,6 +107,14 @@ internal sealed class SettingsRuntimeMutationAdapter
         {
             return new ResetTransactionReceipt(
                 _dataPackages.BeginResetStartupSettingsAdmitted(GetLease()));
+        }
+
+        public ISettingsResetTransactionReceipt BeginResetNetworkSettings(
+            SettingsResetScope scope,
+            bool transparentProxyEnabled)
+        {
+            return new ResetTransactionReceipt(
+                _dataPackages.BeginResetNetworkSettingsAdmitted(GetLease(), scope, transparentProxyEnabled));
         }
 
         public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)

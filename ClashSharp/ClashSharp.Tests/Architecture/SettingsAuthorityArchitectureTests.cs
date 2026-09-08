@@ -72,12 +72,17 @@ public sealed class SettingsAuthorityArchitectureTests
             "runtimeMutation.BeginResetStartupSettings()",
             settingsViewModel,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "runtimeMutation.BeginResetNetworkSettings(scope, CanToggleTransparentProxy)",
+            settingsViewModel,
+            StringComparison.Ordinal);
 
         string runtimeAdapter = ReadApplicationSource(
             "AppHost/Compatibility/SettingsRuntimeMutationAdapter.cs");
         Assert.Contains("BeginImportAdmittedAsync", runtimeAdapter, StringComparison.Ordinal);
         Assert.Contains("BeginResetSettingsAdmitted", runtimeAdapter, StringComparison.Ordinal);
         Assert.Contains("BeginResetStartupSettingsAdmitted", runtimeAdapter, StringComparison.Ordinal);
+        Assert.Contains("BeginResetNetworkSettingsAdmitted", runtimeAdapter, StringComparison.Ordinal);
         Assert.Contains("WriteAdmitted(GetLease()", runtimeAdapter, StringComparison.Ordinal);
         Assert.DoesNotContain("AsyncLocal", runtimeAdapter, StringComparison.Ordinal);
 

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 
 namespace ClashSharp.ViewModel;
 
@@ -21,6 +22,11 @@ internal interface ISettingsDestructiveRuntimeScope : IAsyncDisposable
 
     /// <summary>Retains the complete settings generation while resetting only the startup group.</summary>
     ISettingsResetTransactionReceipt BeginResetStartupSettings();
+
+    /// <summary>Retains the full generation while resetting one network group to supported defaults.</summary>
+    ISettingsResetTransactionReceipt BeginResetNetworkSettings(
+        SettingsResetScope scope,
+        bool transparentProxyEnabled);
 
     /// <summary>Restores the durable participant-facing settings through this scope's exclusive authority.</summary>
     void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot);

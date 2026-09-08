@@ -189,12 +189,33 @@ internal sealed partial class ClashDataPackageService
             throw new ArgumentException("A retained startup reset requires exclusive admission.", nameof(admissionLease));
         }
 
-        return BeginResetSettingsCore(admissionLease, startupOnly: true);
+        return BeginResetSettingsCore(admissionLease, SettingsResetScope.Startup);
+    }
+
+    /// <summary>Resets one network group under exclusive admission, retaining its complete rollback generation.</summary>
+    internal DataPackageTransactionReceipt BeginResetNetworkSettingsAdmitted(
+        MutationAdmissionLease admissionLease,
+        SettingsResetScope scope,
+        bool transparentProxyEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(admissionLease);
+        if (scope is not (SettingsResetScope.Proxy or SettingsResetScope.TransparentProxy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(scope), "Only one network settings group can be reset.");
+        }
+
+        if (!admissionLease.IsExclusive)
+        {
+            throw new ArgumentException("A retained network reset requires exclusive admission.", nameof(admissionLease));
+        }
+
+        return BeginResetSettingsCore(admissionLease, scope, transparentProxyEnabled);
     }
 
     private DataPackageTransactionReceipt BeginResetSettingsCore(
         MutationAdmissionLease? admissionLease,
-        bool startupOnly = false)
+        SettingsResetScope scope = SettingsResetScope.All,
+        bool? transparentProxyEnabled = null)
     {
         FileStream transactionLock = AcquireTransactionLock();
         bool leaseTransferred = false;
@@ -222,16 +243,23 @@ internal sealed partial class ClashDataPackageService
             {
                 WriteSettings(admissionLease, settings =>
                 {
-                    if (startupOnly)
+                    if (scope != SettingsResetScope.All)
                     {
                         // Registry metadata supplies defaults; the existing admitted editor remains
                         // the sole writer. Replay uses the complete desired snapshot in this manifest.
                         foreach (SettingDefinition definition in SettingsRegistry.Default
-                            .GetResetDefinitions(SettingsResetScope.Startup))
+                            .GetResetDefinitions(scope))
                         {
                             SettingDescriptor descriptor = SettingDescriptors.Single(
                                 item => item.Name == definition.Key.Value);
                             descriptor.Write(settings, definition.DefaultValue.CanonicalText);
+                        }
+
+                        if (transparentProxyEnabled is bool supportedDefault)
+                        {
+                            // The service capability bounds the TUN default. Persist that decision
+                            // in the same batch so replay never has to reinterpret current capability.
+                            settings.TransparentProxyEnabled = supportedDefault;
                         }
                     }
                     else

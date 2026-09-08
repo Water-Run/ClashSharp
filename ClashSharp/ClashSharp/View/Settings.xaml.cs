@@ -571,12 +571,12 @@ public sealed partial class Settings : Page
 
     private async void ResetTransparentProxySettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetTransparentProxySettingsToDefaults, includeServiceDeploymentNote: true);
+        await ResetSettingsGroupAsync(_viewModel.ResetTransparentProxySettingsToDefaultsAsync, includeServiceDeploymentNote: true);
     }
 
     private async void ResetProxySettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetProxySettingsToDefaults, includeServiceDeploymentNote: true);
+        await ResetSettingsGroupAsync(_viewModel.ResetProxySettingsToDefaultsAsync, includeServiceDeploymentNote: true);
     }
 
     private async void ResetWindowsNativeSettingsButton_Click(object sender, RoutedEventArgs e)

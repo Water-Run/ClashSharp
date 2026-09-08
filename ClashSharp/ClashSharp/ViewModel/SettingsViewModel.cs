@@ -24,11 +24,8 @@ namespace ClashSharp.ViewModel;
 internal sealed class SettingsViewModel : ObservableObject
 {
     private const string DefaultAppAccentColorValue = "#FF0078D4";
-    private const int DefaultMixedPort = 10000;
-    private const int DefaultConnectionSamplingIntervalSeconds = 30;
     private const int MinConnectionSamplingIntervalSeconds = 3;
     private const int MaxConnectionSamplingIntervalSeconds = 300;
-    private const string DefaultConnectionTestUrl = "https://www.google.com/generate_204";
     internal const string DefaultConnectionTestProxyUrl1 = "https://www.google.com";
     internal const string DefaultConnectionTestProxyUrl2 = "https://github.com";
     internal const string DefaultConnectionTestDirectUrl = "https://www.baidu.com";
@@ -2846,7 +2843,7 @@ internal sealed class SettingsViewModel : ObservableObject
     /// <param name="cancellationToken">Cancels before the durable reset; activation and rollback then run to completion.</param>
     public Task ResetStartupSettingsToDefaultsAsync(CancellationToken cancellationToken)
     {
-        return ResetSettingsAsync(startupOnly: true, cancellationToken);
+        return ResetSettingsAsync(SettingsResetScope.Startup, cancellationToken);
     }
 
     /// <summary>Restores trigger settings to defaults.</summary>
@@ -2872,34 +2869,18 @@ internal sealed class SettingsViewModel : ObservableObject
         RaiseSelectorBindingsChanged();
     }
 
-    /// <summary>Restores transparent proxy settings to defaults.</summary>
-    public void ResetTransparentProxySettingsToDefaults()
+    /// <summary>Restores the supported transparent proxy default through a retained network transaction.</summary>
+    /// <param name="cancellationToken">Cancels before durable reset; activation and rollback then run to completion.</param>
+    public Task ResetTransparentProxySettingsToDefaultsAsync(CancellationToken cancellationToken)
     {
-        SetTransparentProxyEnabled(CanToggleTransparentProxy);
+        return ResetSettingsAsync(SettingsResetScope.TransparentProxy, cancellationToken);
     }
 
-    /// <summary>Restores proxy runtime settings to defaults.</summary>
-    public void ResetProxySettingsToDefaults()
+    /// <summary>Restores proxy and sampling settings as one retained transaction.</summary>
+    /// <param name="cancellationToken">Cancels before durable reset; activation and rollback then run to completion.</param>
+    public Task ResetProxySettingsToDefaultsAsync(CancellationToken cancellationToken)
     {
-        SetProperty(
-            ref _transparentProxyEnabled,
-            CanToggleTransparentProxy,
-            nameof(TransparentProxyEnabled));
-        MixedPort = DefaultMixedPort;
-        RequestNetworkSettingsApply();
-
-        _settings.ConnectionSamplingEnabled = true;
-        SetProperty(ref _connectionSamplingEnabled, true, nameof(ConnectionSamplingEnabled));
-
-        _settings.ConnectionSamplingIntervalSeconds = DefaultConnectionSamplingIntervalSeconds;
-        ConnectionSamplingIntervalSeconds = DefaultConnectionSamplingIntervalSeconds;
-
-        _settings.ConnectionTestUrl = DefaultConnectionTestUrl;
-        ConnectionTestUrl = _settings.ConnectionTestUrl;
-        ResetConnectionTestUrlsToDefaults();
-
-        RequestConnectionSamplingRestart();
-        RefreshProxyInformation();
+        return ResetSettingsAsync(SettingsResetScope.Proxy, cancellationToken);
     }
 
     /// <summary>Restores Windows-native repair settings to defaults.</summary>
@@ -2934,10 +2915,10 @@ internal sealed class SettingsViewModel : ObservableObject
     /// </remarks>
     public Task ResetAllSettingsAsync(CancellationToken cancellationToken)
     {
-        return ResetSettingsAsync(startupOnly: false, cancellationToken);
+        return ResetSettingsAsync(SettingsResetScope.All, cancellationToken);
     }
 
-    private async Task ResetSettingsAsync(bool startupOnly, CancellationToken cancellationToken)
+    private async Task ResetSettingsAsync(SettingsResetScope scope, CancellationToken cancellationToken)
     {
         await _resetSettingsGate.WaitAsync(cancellationToken);
         bool durableResetStarted = false;
@@ -2956,9 +2937,14 @@ internal sealed class SettingsViewModel : ObservableObject
             durableResetStarted = true;
             try
             {
-                resetReceipt = (startupOnly
-                    ? runtimeMutation.BeginResetStartupSettings()
-                    : runtimeMutation.BeginResetSettings())
+                resetReceipt = (scope switch
+                {
+                    SettingsResetScope.All => runtimeMutation.BeginResetSettings(),
+                    SettingsResetScope.Startup => runtimeMutation.BeginResetStartupSettings(),
+                    SettingsResetScope.Proxy or SettingsResetScope.TransparentProxy =>
+                        runtimeMutation.BeginResetNetworkSettings(scope, CanToggleTransparentProxy),
+                    _ => throw new ArgumentOutOfRangeException(nameof(scope)),
+                })
                     ?? throw new InvalidOperationException(
                         "The settings reset transaction did not return a receipt.");
             }
@@ -2971,13 +2957,13 @@ internal sealed class SettingsViewModel : ObservableObject
                 Exception? convergenceFailure = await TryApplyExternalSettingsSnapshotAsync(
                     partialCommit,
                     runtimeMutation,
-                    startupOnly);
+                    scope);
                 if (convergenceFailure is not null)
                 {
                     throw EnterResetRecoveryState(resetFailure, convergenceFailure);
                 }
 
-                MarkExternalSettingsApplied(partialCommit, startupOnly);
+                MarkExternalSettingsApplied(partialCommit, scope);
                 IsResetRecoveryRequired = false;
                 OperationErrorText = _getString("Application.UnexpectedError");
                 ExceptionDispatchInfo.Capture(resetFailure).Throw();
@@ -2988,10 +2974,10 @@ internal sealed class SettingsViewModel : ObservableObject
             Exception? activationFailure = await TryApplyExternalSettingsSnapshotAsync(
                 committedDefaults,
                 runtimeMutation,
-                startupOnly);
+                scope);
             if (activationFailure is null)
             {
-                MarkExternalSettingsApplied(committedDefaults, startupOnly);
+                MarkExternalSettingsApplied(committedDefaults, scope);
                 IsResetRecoveryRequired = false;
                 OperationErrorText = string.Empty;
                 await CompleteResetReceiptWithRetryAsync(
@@ -3011,13 +2997,13 @@ internal sealed class SettingsViewModel : ObservableObject
             Exception? compensationFailure = await TryRestoreExternalSettingsSnapshotAsync(
                 baseline,
                 runtimeMutation,
-                startupOnly);
+                scope);
             if (compensationFailure is not null)
             {
                 throw EnterResetRecoveryState(activationFailure, compensationFailure);
             }
 
-            MarkExternalSettingsApplied(baseline, startupOnly);
+            MarkExternalSettingsApplied(baseline, scope);
             IsResetRecoveryRequired = false;
             OperationErrorText = _getString("Application.UnexpectedError");
             ExceptionDispatchInfo.Capture(activationFailure).Throw();
@@ -3047,13 +3033,17 @@ internal sealed class SettingsViewModel : ObservableObject
                     {
                         if (durableResetStarted)
                         {
-                            if (startupOnly)
+                            if (scope == SettingsResetScope.Startup)
                             {
                                 ReloadStartupSettingsAfterReset();
                             }
-                            else
+                            else if (scope == SettingsResetScope.All)
                             {
                                 ReloadAfterSettingsReset(restartRequiredBaseline!.Value);
+                            }
+                            else
+                            {
+                                ReloadNetworkSettingsAfterReset(scope == SettingsResetScope.Proxy);
                             }
                         }
                     }
@@ -3156,39 +3146,46 @@ internal sealed class SettingsViewModel : ObservableObject
     private async Task ApplyExternalSettingsSnapshotAsync(
         ExternalSettingsSnapshot snapshot,
         ISettingsDestructiveRuntimeScope runtimeMutation,
-        bool startupOnly)
+        SettingsResetScope scope)
     {
         ArgumentNullException.ThrowIfNull(runtimeMutation);
-        if (startupOnly)
+        List<Exception> failures = [];
+        if (scope == SettingsResetScope.All)
         {
-            await runtimeMutation.ApplyLaunchAtStartupAsync(
-                snapshot.LaunchAtStartupEnabled,
-                CancellationToken.None);
-            VerifyExternalSettingsSnapshot(snapshot);
-            return;
+            CaptureParticipantFailure(
+                () => _applyLanguage(snapshot.DisplayLanguage),
+                failures);
+            CaptureParticipantFailure(
+                () => _applyTheme(snapshot.AppThemeMode),
+                failures);
+            CaptureParticipantFailure(
+                () => _applyAccentColor(snapshot.AppAccentColorMode, snapshot.AppAccentColorValue),
+                failures);
         }
 
-        List<Exception> failures = [];
-        CaptureParticipantFailure(
-            () => _applyLanguage(snapshot.DisplayLanguage),
-            failures);
-        CaptureParticipantFailure(
-            () => _applyTheme(snapshot.AppThemeMode),
-            failures);
-        CaptureParticipantFailure(
-            () => _applyAccentColor(snapshot.AppAccentColorMode, snapshot.AppAccentColorValue),
-            failures);
-        await CaptureParticipantFailureAsync(
-            () => runtimeMutation.ApplyLaunchAtStartupAsync(
-                snapshot.LaunchAtStartupEnabled,
-                CancellationToken.None),
-            failures);
-        await CaptureParticipantFailureAsync(
-            () => runtimeMutation.RestartConnectionSamplingAsync(CancellationToken.None),
-            failures);
-        await CaptureParticipantFailureAsync(
-            () => ApplyResetNetworkSettingsAsync(snapshot, runtimeMutation),
-            failures);
+        if (scope is SettingsResetScope.All or SettingsResetScope.Startup)
+        {
+            await CaptureParticipantFailureAsync(
+                () => runtimeMutation.ApplyLaunchAtStartupAsync(
+                    snapshot.LaunchAtStartupEnabled,
+                    CancellationToken.None),
+                failures);
+        }
+
+        if (scope is SettingsResetScope.All or SettingsResetScope.Proxy)
+        {
+            await CaptureParticipantFailureAsync(
+                () => runtimeMutation.RestartConnectionSamplingAsync(CancellationToken.None),
+                failures);
+        }
+
+        if (scope is SettingsResetScope.All or SettingsResetScope.Proxy or SettingsResetScope.TransparentProxy)
+        {
+            await CaptureParticipantFailureAsync(
+                () => ApplyResetNetworkSettingsAsync(snapshot, runtimeMutation),
+                failures);
+        }
+
         CaptureParticipantFailure(
             () => VerifyExternalSettingsSnapshot(snapshot),
             failures);
@@ -3253,11 +3250,11 @@ internal sealed class SettingsViewModel : ObservableObject
     private async Task<Exception?> TryApplyExternalSettingsSnapshotAsync(
         ExternalSettingsSnapshot snapshot,
         ISettingsDestructiveRuntimeScope runtimeMutation,
-        bool startupOnly)
+        SettingsResetScope scope)
     {
         try
         {
-            await ApplyExternalSettingsSnapshotAsync(snapshot, runtimeMutation, startupOnly);
+            await ApplyExternalSettingsSnapshotAsync(snapshot, runtimeMutation, scope);
             return null;
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
@@ -3269,10 +3266,10 @@ internal sealed class SettingsViewModel : ObservableObject
     private async Task<Exception?> TryRestoreExternalSettingsSnapshotAsync(
         ExternalSettingsSnapshot baseline,
         ISettingsDestructiveRuntimeScope runtimeMutation,
-        bool startupOnly)
+        SettingsResetScope scope)
     {
         List<Exception> failures = [];
-        if (!startupOnly)
+        if (scope == SettingsResetScope.All)
         {
             CaptureParticipantFailure(
                 () => runtimeMutation.RestoreDurableSettings(new SettingsExternalDurableSnapshot(
@@ -3299,7 +3296,7 @@ internal sealed class SettingsViewModel : ObservableObject
         Exception? activationFailure = await TryApplyExternalSettingsSnapshotAsync(
             durableTarget,
             runtimeMutation,
-            startupOnly);
+            scope);
         if (activationFailure is not null)
         {
             failures.Add(activationFailure);
@@ -3330,17 +3327,25 @@ internal sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    private void MarkExternalSettingsApplied(ExternalSettingsSnapshot snapshot, bool startupOnly)
+    private void MarkExternalSettingsApplied(ExternalSettingsSnapshot snapshot, SettingsResetScope scope)
     {
-        _appliedLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
-        _pendingLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
-        if (startupOnly)
+        if (scope is SettingsResetScope.All or SettingsResetScope.Startup)
+        {
+            _appliedLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
+            _pendingLaunchAtStartup = snapshot.LaunchAtStartupEnabled;
+        }
+
+        if (scope == SettingsResetScope.Startup)
         {
             return;
         }
 
-        _appliedConnectionSamplingEnabled = snapshot.ConnectionSamplingEnabled;
-        _appliedConnectionSamplingIntervalSeconds = snapshot.ConnectionSamplingIntervalSeconds;
+        if (scope is SettingsResetScope.All or SettingsResetScope.Proxy)
+        {
+            _appliedConnectionSamplingEnabled = snapshot.ConnectionSamplingEnabled;
+            _appliedConnectionSamplingIntervalSeconds = snapshot.ConnectionSamplingIntervalSeconds;
+        }
+
         _appliedTransparentProxyEnabled = snapshot.TransparentProxyEnabled;
         _appliedMixedPort = snapshot.MixedPort;
         int networkRevision = Interlocked.Increment(ref _networkSettingsRevision);
@@ -3419,6 +3424,39 @@ internal sealed class SettingsViewModel : ObservableObject
         RaiseSelectorBindingsChanged();
     }
 
+    /// <summary>Publishes the selected network group without changing unrelated restart baselines.</summary>
+    private void ReloadNetworkSettingsAfterReset(bool includeProxySettings)
+    {
+        _transparentProxyEnabled = _settings.TransparentProxyEnabled;
+        if (includeProxySettings)
+        {
+            _mixedPort = _settings.MixedPort;
+            _connectionSamplingEnabled = _settings.ConnectionSamplingEnabled;
+            _connectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
+            _connectionTestUrl = _settings.ConnectionTestUrl;
+            _connectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
+            _connectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
+            _connectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
+        }
+
+        OnPropertyChanged(nameof(TransparentProxyEnabled));
+        if (includeProxySettings)
+        {
+            OnPropertyChanged(nameof(MixedPort));
+            OnPropertyChanged(nameof(MixedPortValue));
+            OnPropertyChanged(nameof(ConnectionSamplingEnabled));
+            OnPropertyChanged(nameof(ConnectionSamplingIntervalSeconds));
+            OnPropertyChanged(nameof(ConnectionSamplingIntervalSecondsValue));
+            OnPropertyChanged(nameof(ConnectionTestUrl));
+            OnPropertyChanged(nameof(ConnectionTestProxyUrl1));
+            OnPropertyChanged(nameof(ConnectionTestProxyUrl2));
+            OnPropertyChanged(nameof(ConnectionTestDirectUrl));
+            OnPropertyChanged(nameof(ConnectionTestUrlSummaryText));
+        }
+
+        RefreshProxyInformation();
+    }
+
     private readonly record struct RestartRequiredSettingsBaseline(
         MainlandChinaFeatureMode MainlandChinaFeatureMode,
         bool MainlandChinaUrlBlockingEnabled);
@@ -3450,6 +3488,14 @@ internal sealed class SettingsViewModel : ObservableObject
         {
             throw new NotSupportedException(
                 "A startup group reset requires an admitted retained transaction.");
+        }
+
+        public ISettingsResetTransactionReceipt BeginResetNetworkSettings(
+            SettingsResetScope scope,
+            bool transparentProxyEnabled)
+        {
+            throw new NotSupportedException(
+                "A network group reset requires an admitted retained transaction.");
         }
 
         public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)

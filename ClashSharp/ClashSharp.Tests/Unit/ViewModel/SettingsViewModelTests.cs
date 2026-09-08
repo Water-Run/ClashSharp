@@ -1964,14 +1964,12 @@ public sealed partial class SettingsViewModelTests
         Assert.False(store.TrayUseMonochromeInactiveIcon);
         Assert.Contains("pages", store.TrayVisibleFeatureIds, StringComparison.Ordinal);
 
-        InvokeMethod<object?>(viewModel, "ResetProxySettingsToDefaults", Array.Empty<object>());
-
-        Assert.True(store.TransparentProxyEnabled);
-        Assert.Equal(10000, store.MixedPort);
-        Assert.True(store.ConnectionSamplingEnabled);
-        Assert.Equal(30, store.ConnectionSamplingIntervalSeconds);
-        Assert.Equal("https://www.google.com/generate_204", store.ConnectionTestUrl);
-        Assert.Equal(1, samplingRestarts);
+        Assert.False(store.TransparentProxyEnabled);
+        Assert.Equal(12345, store.MixedPort);
+        Assert.False(store.ConnectionSamplingEnabled);
+        Assert.Equal(90, store.ConnectionSamplingIntervalSeconds);
+        Assert.Equal("https://example.com/test", store.ConnectionTestUrl);
+        Assert.Equal(0, samplingRestarts);
 
         InvokeMethod<object?>(viewModel, "ResetWindowsNativeSettingsToDefaults", Array.Empty<object>());
 
@@ -2285,7 +2283,8 @@ public sealed partial class SettingsViewModelTests
         Func<bool>? requestResetRecoveryRestart = null,
         Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
             beginDestructiveRuntimeMutationAsync = null,
-        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null)
+        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null,
+        IMihomoServiceController? mihomoServiceController = null)
     {
         SettingsViewModel viewModel = new(
             store,
@@ -2313,7 +2312,8 @@ public sealed partial class SettingsViewModelTests
             applyNetworkSettingsAsync: applyNetworkSettingsAsync,
             requestResetRecoveryRestart: requestResetRecoveryRestart,
             beginDestructiveRuntimeMutationAsync: beginDestructiveRuntimeMutationAsync,
-            beginResetSettings: beginResetSettings);
+            beginResetSettings: beginResetSettings,
+            mihomoServiceController: mihomoServiceController);
         viewModel.Load();
         return viewModel;
     }
@@ -2359,6 +2359,13 @@ public sealed partial class SettingsViewModelTests
         }
 
         public ISettingsResetTransactionReceipt BeginResetStartupSettings()
+        {
+            throw new NotSupportedException();
+        }
+
+        public ISettingsResetTransactionReceipt BeginResetNetworkSettings(
+            SettingsResetScope scope,
+            bool transparentProxyEnabled)
         {
             throw new NotSupportedException();
         }

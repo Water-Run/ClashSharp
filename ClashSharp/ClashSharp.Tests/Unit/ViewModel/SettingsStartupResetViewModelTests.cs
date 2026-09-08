@@ -1,4 +1,5 @@
 using ClashSharp.Model;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
@@ -316,6 +317,9 @@ public sealed partial class SettingsViewModelTests
         }
 
         public ISettingsResetTransactionReceipt BeginResetSettings() => throw new InvalidOperationException("Unexpected full reset.");
+
+        public ISettingsResetTransactionReceipt BeginResetNetworkSettings(SettingsResetScope scope, bool transparentProxyEnabled)
+            => throw new InvalidOperationException("Unexpected network reset.");
 
         public Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(string packagePath, CancellationToken cancellationToken)
             => throw new InvalidOperationException("Unexpected import.");

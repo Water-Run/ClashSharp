@@ -28,3 +28,8 @@
 完整 format 检查 1406 个文件、0 处变更。收据为 `local-validation-m3h.json`、
 `1.0.0-m3h-main.trx` 以及 `artifacts/verification` 下的 M3h 构建、测试和格式日志。
 网络设置组事务、完整设置代际迁移和实际 WinUI/StartupTask 验收仍需继续完成。
+
+`97f5560` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34189658318)。
+下载四份 TRX 核对共 4476 项通过，包含上述 15 项回归，零失败、零跳过。收据为
+`ci-validation-m3h.json` 和 `ci-startup-reset-regressions-m3h.json`。网络设置组
+后续接入同一流程，见[网络设置组事务](2026-09-08-network-group-reset.md)。
