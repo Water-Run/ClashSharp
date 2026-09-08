@@ -1,6 +1,6 @@
 # Settings generation cutover
 
-版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口，以及 StartupTask、Sampling、Triggers 的实际服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
+版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口、内部设置运行快照，以及 StartupTask、Sampling、Triggers 的实际服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
 
 ## 已实现的存储与迁移
 
@@ -29,6 +29,14 @@
 复原偏好、失败重试和启动重新观察也经过该入口。多个参与者中后续失败时，前面已验证的证据保留；重试只处理具有新 attempt identity 的失败批次。排队命令在开始前复制输入，外部集合随后变化不会更改已提交的命令内容。
 
 新增回归复现了完整命令的一个衔接缺口：desired 已经提交后，退出开始排空并撤销等待许可，原 session 的普通入口会取消随后的运行时应用。现在 facade 使用内部的已提交命令续行路径，继续验证原许可的有效性，持有原代际，完成全部参与者和保存；后续排队命令仍受撤销控制。直接调用 session 的普通批次入口继续遵守原有 Running 提交前取消规则。
+
+## 内部设置的只读消费者接口
+
+`InternalSettingsParticipant` 只负责 registry 标记为 Internal 的应用内配置。它用规范默认值创建真实内存配置，不读取存储或迁移偏好，也不将构造视为持久 applied 证据。`IInternalSettingsReader` 仅向消费者提供不可变 `InternalSettingsSnapshot`，没有设置写入和仓库访问能力；完整快照包含所属代际，不含其他参与者的设置。
+
+desired 发布与配置安装分开进行。会话持久保存 Running 后，参与者原子替换本批次涉及的值，保留其他已安装值和独立待办；probe 从安装后的快照读取，不复述请求。旧快照的整组地址或策略值不会随下一次应用改变。取消发生在发布前时保留原快照，发布后没有可遗弃的后台操作或 I/O；丢失回执由实际快照重新验证。
+
+退休阻止新的快照捕获、probe 和 apply，已捕获的历史值及持久数据保持。启动重新观察会识别新消费者的实际默认配置，再安装 durable desired；启动请求要求独占许可。集成测试使用真实 JSON 会话、facade、只读接口和代际管理器，验证代际切换后只解析新实例，原实例已退休，旧磁盘值没有被新实例覆盖。生产消费者的读取端口仍需在整体装配时接入该接口。
 
 ## StartupTask 与 Sampling 的实际服务适配
 
@@ -101,10 +109,14 @@
 
 Triggers 适配和入口顺序修复新增 22 项回归，本分支累计净增 160 项。完整主程序 2781 项全部通过，零失败、零跳过，用时 56 秒；18 项目 Release x64 构建零警告、零错误，用时 26.04 秒，format 检查 1491 个文件、零处变更。收据为 `local-validation-trigger-settings.json`，最终报告为 `1.0.0-trigger-settings-both-keys.trx`、`build-trigger-settings-both-keys.log` 和 `format-trigger-settings-both-keys-verified.log`。死锁复现保存在 `1.0.0-trigger-settings-cycle-red.trx`；最初通知键遗漏、程序集引用问题及夹具错误报告分别保留，不将先前未完成的验证累计为通过项。
 
+触发器提交 `9a331ba` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/34229757710)，实际四份 TRX 共 4846 项通过、零失败、零跳过，22 项新增用例逐一匹配本地身份。合并提交 `ad5a3b1` 与源提交 tree 同为 `9de5e93966d08e2174e15ec8260a103e1e2ec661`，收据为 `ci-validation-trigger-settings.json`。开发安装器归档 `10057617117` 共 317653478 字节，SHA-256 为 `234b68e19d297c45b0470ccaece0bbe89fb549139407ee2a8124cc4c15fa3033`；该候选只核验构建与元数据，尚未对这组未装配的适配器追加原生运行验收。
+
+内部设置只读接口与实际配置所有者追加 10 项回归，本分支累计净增 170 项。完整主程序 2791 项全部通过，零失败、零跳过，用时 58 秒；18 项目 Release x64 构建零警告、零错误，用时 26.06 秒，format 检查 1495 个文件、零处变更。收据为 `local-validation-internal-settings.json`，最终报告为 `1.0.0-internal-settings-main.trx`、`build-internal-settings-complete.log` 和 `format-internal-settings-verified.log`。首次编译修正两处测试断言分析器用法；初轮测试的三个失败来自夹具对预建目录及 URL 规范化的错误预期，报告保留于 `1.0.0-internal-settings-components-final.trx`，不计作产品缺陷复现。
+
 ## 完整切换的剩余依赖
 
 1. 将偏好写入统一为应用层异步 change set；页面、磁贴、触发器和网络提交者使用同一个接口。独立控制端凭据已接入生产调用，后续代际重置继续使用该能力。
-2. 完成 Internal、Appearance、Network 的实际 apply/probe 适配器，并将已实现的 StartupTask、Sampling、Triggers 一起装配；明确读取 desired、有效状态和待办的消费者。
+2. 完成 Appearance、Network 的实际 apply/probe 适配器，并将已实现的 Internal、StartupTask、Sampling、Triggers 一起装配；明确读取 desired、有效状态和待办的消费者。
 3. 在设置驱动的启动步骤之前完成旧事务恢复、代际打开和偏好迁移。profile/log/trigger 与 settings 必须由同一代际容器解析、排空和替换。
 4. 将导入、重置和回滚接入候选代际及 manifest 提交，完成生产消费者替换后，原子替换 `SettingsAuthorityArchitectureTests` 中的临时门禁。
 5. 运行新候选的 CI、打包应用及隔离 Windows 验收，再将完整节点推送 main。
