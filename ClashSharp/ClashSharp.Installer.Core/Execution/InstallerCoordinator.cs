@@ -172,7 +172,10 @@ public sealed class InstallerCoordinator : IDisposable
                 InstallerExecutionOutcome.Succeeded,
                 "installer.completed",
                 InstallerTransactionPhase.Verified,
-                recoveryPending: false) with { DirectoryCleanupReport = clearReceipt.DirectoryCleanupReport };
+                recoveryPending: false) with
+            {
+                DirectoryCleanupReport = clearReceipt.DirectoryCleanupReport,
+            };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
