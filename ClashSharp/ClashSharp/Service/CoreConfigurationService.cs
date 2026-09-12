@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Security;
+using ClashSharp.Infrastructure.Files;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -290,7 +291,7 @@ public sealed partial class CoreConfigurationService
             lock (_syncLock)
             {
                 commitAttempted = true;
-                File.Move(stagingPath, profileConfigPath, overwrite: true);
+                CoreConfigurationFilePromotion.Promote(stagingPath, profileConfigPath, cancellationToken);
                 DeleteFileIfPresent(backupPath);
             }
         }
