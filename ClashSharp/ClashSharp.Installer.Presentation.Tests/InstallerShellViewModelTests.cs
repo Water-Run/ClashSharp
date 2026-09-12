@@ -435,6 +435,121 @@ public sealed class InstallerShellViewModelTests
         Assert.Equal("installer.cancelled", viewModel.DiagnosticCode);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancellationImmediatelyReportsDrainAndWindowDisposesOnlyAfterBackendExit(bool inspection)
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int cancellationRequests = 0;
+        var runtime = new ScriptedInstallerRuntime();
+        async Task DrainAsync(CancellationToken token)
+        {
+            using CancellationTokenRegistration registration = token.Register(() => cancellationRequests++);
+            entered.SetResult();
+            await drain.Task;
+            token.ThrowIfCancellationRequested();
+        }
+        if (inspection)
+        {
+            runtime.Inspect = async token =>
+            {
+                await DrainAsync(token);
+                return InstallerPresentationTestData.Readiness();
+            };
+        }
+        else
+        {
+            runtime.Execute = async (_, _, token) =>
+            {
+                await DrainAsync(token);
+                return InstallerPresentationTestData.Result();
+            };
+        }
+        using var viewModel = new InstallerShellViewModel(runtime);
+        if (!inspection) { await viewModel.InitializeAsync(); }
+        Task active = inspection ? viewModel.InitializeAsync() : viewModel.PrimaryActionCommand.ExecuteAsync();
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // This is the Window's close contract: request cancellation, dispose after IsBusy clears.
+            viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(viewModel.IsBusy) && !viewModel.IsBusy) { viewModel.Dispose(); }
+            };
+            viewModel.RequestCancellation();
+            Assert.True(viewModel.IsCancellationRequested);
+            Assert.True(viewModel.IsBusy);
+            Assert.False(active.IsCompleted);
+            Assert.Equal("正在取消操作", viewModel.StatusTitle);
+            Assert.Equal("正在等待操作收尾…", viewModel.ProgressStatus);
+            Assert.False(viewModel.CancelCommand.CanExecute(null));
+            Assert.False(viewModel.PrimaryActionCommand.CanExecute(null));
+            Assert.Equal(0, runtime.DisposeCount);
+            viewModel.RequestCancellation();
+            viewModel.CancelCommand.Execute(null);
+            Assert.Equal(1, cancellationRequests);
+        }
+        finally
+        {
+            drain.TrySetResult();
+            await active.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        Assert.False(viewModel.IsBusy);
+        Assert.Equal("installer.cancelled", viewModel.DiagnosticCode);
+        Assert.Equal(1, runtime.DisposeCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DisposeDuringAcceptedOperationDefersRuntimeDisposalUntilDrain(bool inspection)
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runtime = new ScriptedInstallerRuntime();
+        async Task DrainAsync(CancellationToken token)
+        {
+            entered.SetResult();
+            await drain.Task;
+            token.ThrowIfCancellationRequested();
+        }
+        if (inspection)
+        {
+            runtime.Inspect = async token =>
+            {
+                await DrainAsync(token);
+                return InstallerPresentationTestData.Readiness();
+            };
+        }
+        else
+        {
+            runtime.Execute = async (_, _, token) =>
+            {
+                await DrainAsync(token);
+                return InstallerPresentationTestData.Result();
+            };
+        }
+        using var viewModel = new InstallerShellViewModel(runtime);
+        if (!inspection) { await viewModel.InitializeAsync(); }
+        Task active = inspection ? viewModel.InitializeAsync() : viewModel.PrimaryActionCommand.ExecuteAsync();
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            viewModel.Dispose();
+            viewModel.Dispose();
+            Assert.False(active.IsCompleted);
+            Assert.Equal(0, runtime.DisposeCount);
+        }
+        finally
+        {
+            drain.TrySetResult();
+            await active.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        Assert.Equal(1, runtime.DisposeCount);
+    }
+
     [Fact]
     public async Task ConcurrentRefreshIsIgnoredByTheSingleFlightGate()
     {

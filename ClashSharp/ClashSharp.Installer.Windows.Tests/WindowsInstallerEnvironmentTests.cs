@@ -60,6 +60,37 @@ public sealed class WindowsInstallerEnvironmentTests
         Assert.Equal(0, processInspector.CallCount);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ServerDesktopPolicyReachesProductionPackageInspection(bool hasDesktopExperience)
+    {
+        using var fixture = Fixture();
+        var packageManager = new RecordingPackageManager
+        {
+            Registrations = [Registration(fixture, isHealthy: true)],
+        };
+        var environment = Create(
+            fixture,
+            packageManager,
+            new RecordingProcessInspector(isRunning: false),
+            SupportedFacts() with
+            {
+                IsWorkstation = false,
+                BuildNumber = 26100,
+                IsServerDesktopExperience = hasDesktopExperience,
+            },
+            TargetSid);
+
+        InstallerEnvironmentSnapshot snapshot = await environment.InspectAsync(
+            fixture.Request(targetSid: TargetSid), CancellationToken.None);
+
+        Assert.Equal(hasDesktopExperience, snapshot.IsSupported);
+        Assert.Equal(hasDesktopExperience ? null : "installer.environment.desktop_experience_required", snapshot.BlockingDiagnosticCode);
+        Assert.Equal(fixture.Manifest.ExpectedPackageVersion, snapshot.InstalledPackageVersion);
+        Assert.Equal(string.Empty, packageManager.UserSecurityId);
+    }
+
     [Fact]
     public async Task UnsupportedWindowsStillReportsPackageStateForSafeRemovalDecisions()
     {

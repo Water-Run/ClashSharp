@@ -62,7 +62,7 @@
                 <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedTextStyle}">
                   <Run Text="版本 " />
                   <Run Text="{Binding DisplayVersion, Mode=OneWay}" />
-                  <Run Text="  ·  Windows 11 / x64" />
+                  <Run Text="  ·  Windows / x64" />
                 </TextBlock>
                 <TextBlock Margin="0,5,0,0" Text="桌面应用与代理服务"
                            Style="{StaticResource MutedTextStyle}" />
