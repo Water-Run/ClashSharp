@@ -172,7 +172,7 @@ public sealed class WindowsElevatedMachineAdapterTests
             request,
             InstallerTransactionPhase.Verified);
 
-        InstallerTransactionSnapshot receipt = await adapter.ClearVerifiedAsync(
+        InstallerClearReceipt receipt = await adapter.ClearVerifiedAsync(
             request,
             lease,
             verified,
@@ -182,7 +182,28 @@ public sealed class WindowsElevatedMachineAdapterTests
         Assert.Equal(InstallerMachineHelperVerb.Clear, invocation.Verb);
         invocation.ValidateAgainst(verified);
         Assert.Equal(verified, Assert.Single(broker.Commands).ToDurableState());
-        Assert.Equal(verified, receipt);
+        Assert.Equal(verified, receipt.State);
+        Assert.Null(receipt.DirectoryCleanupReport);
+    }
+
+    [Fact]
+    public async Task SuccessfulClearPreservesTheAuthenticatedDirectoryObservations()
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using var fixture = new WindowsPayloadFixture();
+        InstallerRequest request = fixture.Request(InstallerOperation.Uninstall);
+        await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
+        var report = new InstallerDirectoryCleanupReport(Enum.GetValues<InstallerDirectoryRole>()
+            .Select(role => new InstallerDirectoryCleanupEntry(role, InstallerDirectoryCleanupDisposition.RetainedNonEmpty)));
+        var broker = new RecordingBroker(command => Task.FromResult(
+            InstallerMachineHelperResult.Succeeded(command, SuccessfulState(command)) with { DirectoryCleanupReport = report }));
+        var adapter = new WindowsElevatedMachineAdapter(broker, () => request.TargetSid);
+        InstallerTransactionSnapshot verified = Snapshot(request, InstallerTransactionPhase.Verified);
+
+        InstallerClearReceipt receipt = await adapter.ClearVerifiedAsync(request, lease, verified, CancellationToken.None);
+
+        Assert.Equal(verified, receipt.State);
+        Assert.Equal(report, receipt.DirectoryCleanupReport);
     }
 
     [Fact]

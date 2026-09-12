@@ -104,7 +104,7 @@ public interface IInstallerFinalVerifier
     /// The elevated helper owns this mutation. The unelevated parent must subsequently prove
     /// absence through its read-only transaction view.
     /// </remarks>
-    Task<InstallerTransactionSnapshot> ClearVerifiedAsync(
+    Task<InstallerClearReceipt> ClearVerifiedAsync(
         InstallerRequest request,
         IInstallerReleaseLease release,
         InstallerTransactionSnapshot verifiedState,

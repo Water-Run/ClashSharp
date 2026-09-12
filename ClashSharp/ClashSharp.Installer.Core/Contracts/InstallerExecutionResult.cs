@@ -30,4 +30,8 @@ public sealed record InstallerExecutionResult(
     InstallerExecutionOutcome Outcome,
     string DiagnosticCode,
     InstallerTransactionPhase? LastDurablePhase,
-    bool RecoveryPending);
+    bool RecoveryPending)
+{
+    /// <summary>Gets verified ordinary-uninstall cleanup observations, when available.</summary>
+    public InstallerDirectoryCleanupReport? DirectoryCleanupReport { get; init; }
+}

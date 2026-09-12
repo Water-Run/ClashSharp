@@ -109,7 +109,7 @@ public sealed partial class WindowsRetiredUninstallAuthorityTests
             Send(InstallerMachineHelperVerb.CommitPackage, state, token);
         public Task<InstallerTransactionSnapshot> VerifyAsync(InstallerRequest request, IInstallerReleaseLease release, InstallerTransactionSnapshot state, CancellationToken token) =>
             Send(InstallerMachineHelperVerb.Verify, state, token);
-        public Task<InstallerTransactionSnapshot> ClearVerifiedAsync(InstallerRequest request, IInstallerReleaseLease release, InstallerTransactionSnapshot state, CancellationToken token) =>
-            Send(InstallerMachineHelperVerb.Clear, state, token);
+        public async Task<InstallerClearReceipt> ClearVerifiedAsync(InstallerRequest request, IInstallerReleaseLease release, InstallerTransactionSnapshot state, CancellationToken token) =>
+            new(await Send(InstallerMachineHelperVerb.Clear, state, token));
     }
 }
