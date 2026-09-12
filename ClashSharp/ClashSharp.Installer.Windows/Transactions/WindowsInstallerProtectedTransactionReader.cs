@@ -9,58 +9,80 @@ public sealed class WindowsInstallerProtectedTransactionReader :
     IInstallerTransactionReader,
     IDisposable
 {
-    private readonly WindowsInstallerTransactionRootGuard _rootGuard;
-    private readonly FileInstallerTransactionStore _store;
+    private readonly object _gate = new();
+    private readonly Func<WindowsInstallerTransactionRootGuard> _createRootGuard;
+    private int _activeReads;
     private bool _disposed;
 
     private WindowsInstallerProtectedTransactionReader(
-        WindowsInstallerTransactionRootGuard rootGuard)
+        Func<WindowsInstallerTransactionRootGuard> createRootGuard)
     {
-        ArgumentNullException.ThrowIfNull(rootGuard);
-        _rootGuard = rootGuard;
-        _store = new FileInstallerTransactionStore(rootGuard.RootPath, rootGuard);
+        ArgumentNullException.ThrowIfNull(createRootGuard);
+        _createRootGuard = createRootGuard;
+        // Preserve eager path/SID validation without opening or creating directories.
+        using WindowsInstallerTransactionRootGuard validation = _createRootGuard();
     }
 
     /// <summary>
     /// Creates a non-creating reader for the canonical ProgramData root and exact target SID.
     /// </summary>
     public static WindowsInstallerProtectedTransactionReader CreateDefault(string targetSid) =>
-        new(WindowsInstallerTransactionRootGuard.CreateReadOnlyDefault(targetSid));
+        new(() => WindowsInstallerTransactionRootGuard.CreateReadOnlyDefault(targetSid));
 
     /// <inheritdoc />
     public async Task<InstallerTransactionSnapshot?> LoadAsync(
         CancellationToken cancellationToken)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        await _rootGuard
-            .EnsureProtectedAsync(_rootGuard.RootPath, cancellationToken)
-            .ConfigureAwait(false);
-        if (!_rootGuard.IsProtectedRootPresent)
+        lock (_gate)
         {
-            return null;
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            cancellationToken.ThrowIfCancellationRequested();
+            _activeReads++;
         }
 
-        return await _store.LoadAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Pin the complete chain through the file read, parsing, and content hash. No handles
+            // survive this observation, so the elevated helper can finalize an empty state root.
+            using WindowsInstallerTransactionRootGuard rootGuard = _createRootGuard();
+            await rootGuard.EnsureProtectedAsync(rootGuard.RootPath, cancellationToken)
+                .ConfigureAwait(false);
+            if (!rootGuard.IsProtectedRootPresent)
+            {
+                return null;
+            }
+
+            using var store = new FileInstallerTransactionStore(rootGuard.RootPath, rootGuard);
+            return await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _activeReads--;
+                Monitor.PulseAll(_gate);
+            }
+        }
     }
 
-    /// <summary>Releases the read-only journal and pinned-directory leases.</summary>
+    /// <summary>Rejects new reads and waits for accepted reads to release their pinned leases.</summary>
     public void Dispose()
     {
-        if (_disposed)
+        lock (_gate)
         {
-            return;
+            _disposed = true;
+            while (_activeReads != 0)
+            {
+                Monitor.Wait(_gate);
+            }
         }
-
-        _store.Dispose();
-        _rootGuard.Dispose();
-        _disposed = true;
     }
 
     internal static WindowsInstallerProtectedTransactionReader CreateForTesting(
         string programDataPath,
         string targetSid,
         IWindowsInstallerDirectoryNative native) =>
-        new(WindowsInstallerTransactionRootGuard.CreateReadOnlyForTesting(
+        new(() => WindowsInstallerTransactionRootGuard.CreateReadOnlyForTesting(
             programDataPath,
             targetSid,
             native));
