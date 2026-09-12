@@ -232,7 +232,9 @@ internal sealed class InstallerScenario :
         return FinalResultFactory?.Invoke(durableState) ?? committed;
     }
 
-    public async Task<InstallerTransactionSnapshot> ClearVerifiedAsync(
+    internal InstallerDirectoryCleanupReport? DirectoryCleanupReport { get; set; }
+
+    public async Task<InstallerClearReceipt> ClearVerifiedAsync(
         InstallerRequest request,
         IInstallerReleaseLease release,
         InstallerTransactionSnapshot verifiedState,
@@ -250,7 +252,7 @@ internal sealed class InstallerScenario :
             await FinalClearResponseAction(cancellationToken);
         }
 
-        return verifiedState;
+        return new InstallerClearReceipt(verifiedState, DirectoryCleanupReport);
     }
 }
 

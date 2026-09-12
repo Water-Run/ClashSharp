@@ -29,14 +29,32 @@ public static class InstallerMachineHelperAuthorityLoop
     /// <summary>
     /// Processes an already-authenticated first command, then reads any remaining commands from the stream.
     /// </summary>
+    public static Task RunAsync(
+        Stream authenticatedStream,
+        InstallerMachineHelperAuthoritySession authority,
+        InstallerMachineHelperCommand firstCommand,
+        CancellationToken cancellationToken) =>
+        RunAsync(
+            authenticatedStream,
+            authority,
+            firstCommand,
+            static (_, _, _) => Task.FromResult<InstallerDirectoryCleanupReport?>(null),
+            cancellationToken);
+
+    /// <summary>
+    /// Awaits directory cleanup after a successful uninstall clear and before sending its receipt.
+    /// </summary>
     public static async Task RunAsync(
         Stream authenticatedStream,
         InstallerMachineHelperAuthoritySession authority,
         InstallerMachineHelperCommand firstCommand,
+        Func<InstallerMachineHelperCommand, InstallerMachineHelperResult, CancellationToken,
+            Task<InstallerDirectoryCleanupReport?>> beforeClearReply,
         CancellationToken cancellationToken)
     {
         ValidateArguments(authenticatedStream, authority);
         ArgumentNullException.ThrowIfNull(firstCommand);
+        ArgumentNullException.ThrowIfNull(beforeClearReply);
         InstallerMachineHelperCommand command = firstCommand;
 
         for (int commandCount = 0;
@@ -46,6 +64,17 @@ public static class InstallerMachineHelperAuthorityLoop
             InstallerMachineHelperResult result = await authority
                 .ExecuteAsync(command, cancellationToken)
                 .ConfigureAwait(false);
+            if (command.Verb == InstallerMachineHelperVerb.Clear
+                && result.Outcome == InstallerMachineHelperOutcome.Succeeded
+                && command.ToDurableState().Journal.Operation == InstallerOperation.Uninstall)
+            {
+                InstallerDirectoryCleanupReport? report = await beforeClearReply(
+                        command, result, cancellationToken)
+                    .ConfigureAwait(false);
+                result = result with { DirectoryCleanupReport = report };
+                _ = result.ValidateAgainst(command);
+            }
+
             await InstallerMachineHelperFraming
                 .WriteResultAsync(authenticatedStream, result, cancellationToken)
                 .ConfigureAwait(false);

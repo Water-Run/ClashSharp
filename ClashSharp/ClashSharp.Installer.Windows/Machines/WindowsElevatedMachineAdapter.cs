@@ -90,19 +90,31 @@ public sealed class WindowsElevatedMachineAdapter :
             cancellationToken);
 
     /// <inheritdoc />
-    public Task<InstallerTransactionSnapshot> ClearVerifiedAsync(
+    public async Task<InstallerClearReceipt> ClearVerifiedAsync(
         InstallerRequest request,
         IInstallerReleaseLease release,
         InstallerTransactionSnapshot verifiedState,
-        CancellationToken cancellationToken) =>
-        ExecuteAsync(
+        CancellationToken cancellationToken)
+    {
+        InstallerMachineHelperResult result = await ExecuteResultAsync(
             InstallerMachineHelperVerb.Clear,
             request,
             release,
             verifiedState,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+        return new InstallerClearReceipt(result.ToResultDurableState(), result.DirectoryCleanupReport);
+    }
 
     private async Task<InstallerTransactionSnapshot> ExecuteAsync(
+        InstallerMachineHelperVerb verb,
+        InstallerRequest request,
+        IInstallerReleaseLease release,
+        InstallerTransactionSnapshot durableState,
+        CancellationToken cancellationToken) =>
+        (await ExecuteResultAsync(verb, request, release, durableState, cancellationToken)
+            .ConfigureAwait(false)).ToResultDurableState();
+
+    private async Task<InstallerMachineHelperResult> ExecuteResultAsync(
         InstallerMachineHelperVerb verb,
         InstallerRequest request,
         IInstallerReleaseLease release,
@@ -153,13 +165,13 @@ public sealed class WindowsElevatedMachineAdapter :
                 exception);
         }
 
-        InstallerTransactionSnapshot helperState = result.ValidateAgainst(command);
+        _ = result.ValidateAgainst(command);
         if (result.Outcome != InstallerMachineHelperOutcome.Succeeded)
         {
             throw new InstallerProtocolException(result.DiagnosticCode);
         }
 
-        return helperState;
+        return result;
     }
 
     private WindowsInstallerReleaseLease ValidateBoundary(

@@ -162,7 +162,7 @@ public sealed class InstallerCoordinator : IDisposable
                 InstallerTransactionPhase.Verified);
             durable = await ConfirmHelperStateAsync(durable, cancellationToken)
                 .ConfigureAwait(false);
-            InstallerTransactionSnapshot clearReceipt = await _finalVerifier
+            InstallerClearReceipt clearReceipt = await _finalVerifier
                 .ClearVerifiedAsync(request, releaseLease, durable, cancellationToken)
                 .ConfigureAwait(false);
             ValidateClearReceipt(durable, clearReceipt);
@@ -172,7 +172,7 @@ public sealed class InstallerCoordinator : IDisposable
                 InstallerExecutionOutcome.Succeeded,
                 "installer.completed",
                 InstallerTransactionPhase.Verified,
-                recoveryPending: false);
+                recoveryPending: false) with { DirectoryCleanupReport = clearReceipt.DirectoryCleanupReport };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -475,20 +475,29 @@ public sealed class InstallerCoordinator : IDisposable
 
     private static void ValidateClearReceipt(
         InstallerTransactionSnapshot verifiedState,
-        InstallerTransactionSnapshot? clearReceipt)
+        InstallerClearReceipt? clearReceipt)
     {
         verifiedState.Validate();
-        if (clearReceipt is null)
+        if (clearReceipt?.State is null)
         {
             throw new InstallerProtocolException(
                 "installer.machine_helper.clear_receipt_missing");
         }
 
-        clearReceipt.Validate();
-        if (clearReceipt != verifiedState)
+        clearReceipt.State.Validate();
+        if (clearReceipt.State != verifiedState)
         {
             throw new InstallerProtocolException(
                 "installer.machine_helper.clear_receipt_mismatch");
+        }
+
+        if (clearReceipt.DirectoryCleanupReport is { } cleanup)
+        {
+            cleanup.Validate();
+            if (verifiedState.Journal.Operation != InstallerOperation.Uninstall)
+            {
+                throw new InstallerProtocolException("installer.directory_cleanup.result_binding_invalid");
+            }
         }
     }
 

@@ -40,6 +40,9 @@ public sealed record InstallerMachineHelperResult(
     /// <summary>The only currently supported helper response schema.</summary>
     public const int CurrentSchema = 1;
 
+    /// <summary>Gets path-free directory observations only for a successful uninstall Clear.</summary>
+    public InstallerDirectoryCleanupReport? DirectoryCleanupReport { get; init; }
+
     /// <summary>Creates a successful response for the exact state the helper durably committed.</summary>
     public static InstallerMachineHelperResult Succeeded(
         InstallerMachineHelperCommand command,
@@ -180,6 +183,18 @@ public sealed record InstallerMachineHelperResult(
         {
             throw new InstallerProtocolException(
                 "installer.machine_helper.result_invalid");
+        }
+
+        if (DirectoryCleanupReport is { } cleanup)
+        {
+            cleanup.Validate();
+            if (Outcome != InstallerMachineHelperOutcome.Succeeded
+                || Verb != InstallerMachineHelperVerb.Clear
+                || resultState.Journal.Operation != InstallerOperation.Uninstall
+                || resultState.Journal.Phase != InstallerTransactionPhase.Verified)
+            {
+                throw new InstallerProtocolException("installer.directory_cleanup.result_binding_invalid");
+            }
         }
     }
 

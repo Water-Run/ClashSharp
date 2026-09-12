@@ -473,7 +473,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 return;
             }
 
-            ValidateExecutionResult(result);
+            ValidateExecutionResult(result, ownerTransfer || retiredUninstall ? null : requestedOperation);
             ApplyExecutionResult(result);
             if (retiredUninstall)
             {
@@ -667,8 +667,46 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         if (result.Outcome == InstallerExecutionOutcome.Succeeded)
         {
             ProgressValue = 100;
+            if (result.DirectoryCleanupReport is { } cleanup)
+            {
+                ApplyDirectoryCleanupReport(cleanup);
+            }
         }
     }
+
+    private void ApplyDirectoryCleanupReport(InstallerDirectoryCleanupReport cleanup)
+    {
+        ProgressStatus = "卸载完成。";
+        if (!cleanup.HasRetained)
+        {
+            StatusTitle = "卸载已完成";
+            StatusDetail = "自有空目录已清理或已不存在。可以关闭安装器，或重新检查以管理此应用。";
+            return;
+        }
+
+        StatusTitle = "卸载已完成，部分目录已保留";
+        StatusDetail = "以下目录含有其他内容，或无法确认由安装器创建，因此已保留："
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, cleanup.Entries
+                .Where(static entry => entry.Disposition is
+                    InstallerDirectoryCleanupDisposition.RetainedNonEmpty
+                    or InstallerDirectoryCleanupDisposition.RetainedUnprovenOwnership)
+                .Select(static entry => GetDirectoryLabel(entry.Role) + (entry.Disposition ==
+                    InstallerDirectoryCleanupDisposition.RetainedNonEmpty
+                    ? "：包含其他内容。" : "：无法确认由安装器创建。")))
+            + Environment.NewLine + "可以关闭安装器。";
+    }
+
+    private static string GetDirectoryLabel(InstallerDirectoryRole role) => role switch
+    {
+        InstallerDirectoryRole.ProgramFilesProduct => "程序目录（Program Files\\ClashSharp）",
+        InstallerDirectoryRole.ProgramDataProduct => "共享数据目录（ProgramData\\ClashSharp）",
+        InstallerDirectoryRole.InstallerRoot => "安装记录目录（ProgramData\\ClashSharp\\Installer）",
+        InstallerDirectoryRole.InstallerVersion => "安装记录子目录（ProgramData\\ClashSharp\\Installer\\v2）",
+        InstallerDirectoryRole.AuthorityRoot => "安装管理目录（ProgramData\\ClashSharp\\InstallerAuthority）",
+        InstallerDirectoryRole.AuthorityVersion => "安装管理子目录（ProgramData\\ClashSharp\\InstallerAuthority\\v1）",
+        _ => throw new InstallerProtocolException("installer.runtime.result_invalid"),
+    };
 
     private static string GetRecoveryDetail(InstallerExecutionResult result) => result.RecoveryPending
         ? "进度已保留。请使用本次操作所用的安装器重新检查并继续。"
@@ -809,7 +847,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         };
     }
 
-    private static void ValidateExecutionResult(InstallerExecutionResult result)
+    private static void ValidateExecutionResult(InstallerExecutionResult result, InstallerOperation? ordinaryOperation)
     {
         if (result is null
             || !Enum.IsDefined(result.Outcome)
@@ -820,6 +858,16 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                     || result.LastDurablePhase != InstallerTransactionPhase.Verified)))
         {
             throw new InstallerProtocolException("installer.runtime.result_invalid");
+        }
+
+        if (result.DirectoryCleanupReport is { } cleanup)
+        {
+            if (result.Outcome != InstallerExecutionOutcome.Succeeded
+                || ordinaryOperation != InstallerOperation.Uninstall)
+            {
+                throw new InstallerProtocolException("installer.runtime.result_invalid");
+            }
+            cleanup.Validate();
         }
     }
 

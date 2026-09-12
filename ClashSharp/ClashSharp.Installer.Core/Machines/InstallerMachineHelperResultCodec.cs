@@ -41,6 +41,18 @@ public static class InstallerMachineHelperResultCodec
             writer.WriteString("outcome", OutcomeText(result.Outcome));
             writer.WriteBoolean("postconditionVerified", result.PostconditionVerified);
             writer.WriteString("diagnosticCode", result.DiagnosticCode);
+            if (result.DirectoryCleanupReport is { } cleanup)
+            {
+                writer.WriteStartArray("directoryCleanup");
+                foreach (InstallerDirectoryCleanupEntry entry in cleanup.Entries)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("role", RoleText(entry.Role));
+                    writer.WriteString("disposition", DispositionText(entry.Disposition));
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
+            }
             writer.WriteEndObject();
         }
 
@@ -59,7 +71,7 @@ public static class InstallerMachineHelperResultCodec
             {
                 AllowTrailingCommas = false,
                 CommentHandling = JsonCommentHandling.Disallow,
-                MaxDepth = 2,
+                MaxDepth = 3,
             });
             JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
@@ -70,7 +82,7 @@ public static class InstallerMachineHelperResultCodec
             var observed = new HashSet<string>(StringComparer.Ordinal);
             foreach (JsonProperty property in root.EnumerateObject())
             {
-                if (!RequiredProperties.Contains(property.Name)
+                if ((!RequiredProperties.Contains(property.Name) && property.Name != "directoryCleanup")
                     || !observed.Add(property.Name))
                 {
                     throw new JsonException(
@@ -86,6 +98,7 @@ public static class InstallerMachineHelperResultCodec
                         or "diagnosticCode" => property.Value.ValueKind == JsonValueKind.String,
                     "postconditionVerified" =>
                         property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                    "directoryCleanup" => property.Value.ValueKind == JsonValueKind.Array,
                     _ => false,
                 };
                 if (!validType)
@@ -94,7 +107,7 @@ public static class InstallerMachineHelperResultCodec
                 }
             }
 
-            if (!observed.SetEquals(RequiredProperties))
+            if (!RequiredProperties.IsSubsetOf(observed))
             {
                 throw new JsonException("The helper result property set is incomplete.");
             }
@@ -113,7 +126,11 @@ public static class InstallerMachineHelperResultCodec
                 ParseOutcome(root.GetProperty("outcome").GetString()),
                 root.GetProperty("postconditionVerified").GetBoolean(),
                 root.GetProperty("diagnosticCode").GetString()
-                    ?? throw new JsonException("The helper result diagnostic is null."));
+                    ?? throw new JsonException("The helper result diagnostic is null."))
+            {
+                DirectoryCleanupReport = root.TryGetProperty("directoryCleanup", out JsonElement cleanup)
+                    ? ParseCleanup(cleanup) : null,
+            };
             result.Validate();
             byte[] canonical = Serialize(result);
             if (!CryptographicOperations.FixedTimeEquals(bytes, canonical))
@@ -139,6 +156,79 @@ public static class InstallerMachineHelperResultCodec
                 "installer.machine_helper.result_size_invalid");
         }
     }
+
+    private static InstallerDirectoryCleanupReport ParseCleanup(JsonElement array)
+    {
+        if (array.GetArrayLength() != InstallerDirectoryCleanupReport.DirectoryCount)
+        {
+            throw new JsonException("The directory cleanup observations are incomplete.");
+        }
+        var entries = new List<InstallerDirectoryCleanupEntry>(InstallerDirectoryCleanupReport.DirectoryCount);
+        foreach (JsonElement item in array.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException("A directory cleanup observation must be an object.");
+            }
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (JsonProperty property in item.EnumerateObject())
+            {
+                if (property.Name is not ("role" or "disposition")
+                    || !names.Add(property.Name) || property.Value.ValueKind != JsonValueKind.String)
+                {
+                    throw new JsonException("A directory cleanup observation property is invalid.");
+                }
+            }
+            if (names.Count != 2)
+            {
+                throw new JsonException("A directory cleanup observation is incomplete.");
+            }
+            entries.Add(new InstallerDirectoryCleanupEntry(
+                ParseRole(item.GetProperty("role").GetString()),
+                ParseDisposition(item.GetProperty("disposition").GetString())));
+        }
+        return new InstallerDirectoryCleanupReport(entries);
+    }
+
+    private static string RoleText(InstallerDirectoryRole role) => role switch
+    {
+        InstallerDirectoryRole.ProgramFilesProduct => "program-files-product",
+        InstallerDirectoryRole.ProgramDataProduct => "program-data-product",
+        InstallerDirectoryRole.InstallerRoot => "installer-root",
+        InstallerDirectoryRole.InstallerVersion => "installer-version",
+        InstallerDirectoryRole.AuthorityRoot => "authority-root",
+        InstallerDirectoryRole.AuthorityVersion => "authority-version",
+        _ => throw new InstallerProtocolException("installer.directory_cleanup.report_invalid"),
+    };
+
+    private static InstallerDirectoryRole ParseRole(string? value) => value switch
+    {
+        "program-files-product" => InstallerDirectoryRole.ProgramFilesProduct,
+        "program-data-product" => InstallerDirectoryRole.ProgramDataProduct,
+        "installer-root" => InstallerDirectoryRole.InstallerRoot,
+        "installer-version" => InstallerDirectoryRole.InstallerVersion,
+        "authority-root" => InstallerDirectoryRole.AuthorityRoot,
+        "authority-version" => InstallerDirectoryRole.AuthorityVersion,
+        _ => throw new JsonException("The directory role is invalid."),
+    };
+
+    private static string DispositionText(InstallerDirectoryCleanupDisposition disposition) => disposition switch
+    {
+        InstallerDirectoryCleanupDisposition.Missing => "missing",
+        InstallerDirectoryCleanupDisposition.Deleted => "deleted",
+        InstallerDirectoryCleanupDisposition.RetainedUnprovenOwnership => "retained-unproven-ownership",
+        InstallerDirectoryCleanupDisposition.RetainedNonEmpty => "retained-non-empty",
+        _ => throw new InstallerProtocolException("installer.directory_cleanup.report_invalid"),
+    };
+
+    private static InstallerDirectoryCleanupDisposition ParseDisposition(string? value) => value switch
+    {
+        "missing" => InstallerDirectoryCleanupDisposition.Missing,
+        "deleted" => InstallerDirectoryCleanupDisposition.Deleted,
+        "retained-unproven-ownership" => InstallerDirectoryCleanupDisposition.RetainedUnprovenOwnership,
+        "retained-non-empty" => InstallerDirectoryCleanupDisposition.RetainedNonEmpty,
+        _ => throw new JsonException("The directory disposition is invalid."),
+    };
 
     private static string VerbText(InstallerMachineHelperVerb verb) => verb switch
     {
