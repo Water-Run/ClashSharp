@@ -1069,6 +1069,40 @@ function Get-ClashSharpPackageSignature {
     }
 }
 
+function Get-ClashSharpAuthenticodeTimestampUri {
+    <#
+    .SYNOPSIS
+        Validates the configured RFC3161 timestamp endpoint for Windows SDK SignTool.
+    .DESCRIPTION
+        Accepts absolute HTTP or HTTPS endpoints without credentials, fragments, or whitespace.
+        Some SignTool versions require HTTP even when the provider supports HTTPS. The signed
+        RFC3161 response must still pass the build's final Authenticode and timestamp checks.
+    .PARAMETER Value
+        Timestamp endpoint explicitly configured by the release operator.
+    #>
+    [CmdletBinding()]
+    [OutputType([Uri])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string] $Value
+    )
+
+    $timestampUri = $null
+    if ([string]::IsNullOrWhiteSpace($Value) -or
+        $Value -match '[\s\x00-\x1F\x7F]' -or
+        -not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref] $timestampUri) -or
+        -not $timestampUri.IsWellFormedOriginalString() -or
+        $timestampUri.Scheme -cnotin @('http', 'https') -or
+        [string]::IsNullOrEmpty($timestampUri.Host) -or
+        -not [string]::IsNullOrEmpty($timestampUri.UserInfo) -or
+        -not [string]::IsNullOrEmpty($timestampUri.Fragment)) {
+        throw 'CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL must be an absolute HTTP or HTTPS URI without user information, fragments, or whitespace.'
+    }
+    return $timestampUri
+}
+
 function Get-ClashSharpInstallerMutationRuntimeProperty {
     <#
     .SYNOPSIS
@@ -1102,6 +1136,7 @@ Export-ModuleMember -Function @(
     'Get-ClashSharpMsixMachineFileContract',
     'Get-ClashSharpMainPackageDependency',
     'Get-ClashSharpPackageSignature',
+    'Get-ClashSharpAuthenticodeTimestampUri',
     'Get-ClashSharpInstallerMutationRuntimeProperty',
     'New-ClashSharpInstallerReleaseManifest'
 )

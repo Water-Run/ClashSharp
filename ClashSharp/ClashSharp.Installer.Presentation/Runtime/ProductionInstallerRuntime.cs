@@ -157,7 +157,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         {
             return (
                 "当前系统不支持此操作",
-                "安装与修复仅支持 Windows 11 或更高版本的原生 x64 客户端系统；未执行任何系统更改。");
+                "安装与修复需要 Windows 11+ 或 Windows Server 2025+ 桌面体验，且系统与进程均为 x64；不支持 Server Core。");
         }
 
         if (!inspection.Environment.IsSupported && removalPathAvailable)
@@ -189,34 +189,34 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         bool removalPathAvailable) =>
     [
         new(
-            "Windows 11+ x64 / 安全卸载",
+            "系统要求",
             inspection.Environment.IsSupported
-                ? "已确认 Windows 11+ 客户端、原生 x64 系统与 x64 安装器进程。"
+                ? "当前 Windows 桌面环境和 x64 系统符合安装要求。"
                 : removalPathAvailable
-                    ? "平台不满足安装要求；仅保留不依赖安装目标版本的安全卸载路径。"
-                    : "安装与修复需要 Windows 11+ 原生 x64 客户端。",
+                    ? "当前系统不符合安装要求，仍可卸载已安装的 ClashSharp。"
+                    : "安装与修复需要 Windows 11+ 或 Windows Server 2025+ 桌面体验，且系统与进程均为 x64。",
             platformAllowsVisibleAction),
         new(
-            "签名安装器与内嵌清单",
-            "可信 backend 已验证当前 Installer 映像，并绑定严格内嵌发布身份。",
+            "安装器签名",
+            "安装器签名已通过验证，版本信息与此安装包一致。",
             true),
         new(
-            "当前用户包与进程",
+            "安装状态",
             inspection.Environment.InstalledPackageVersion is null
-                ? "未发现目标包注册，也未把无关同名进程视为产品实例。"
+                ? "当前账户尚未安装 ClashSharp。"
                 : inspection.Environment.IsApplicationRunning
-                    ? "目标包身份已确认，但应用仍在运行。"
-                    : "目标包身份已确认，未发现其应用进程。",
+                    ? "ClashSharp 正在运行，请关闭应用后继续。"
+                    : "当前账户已安装 ClashSharp，应用已关闭。",
             !inspection.Environment.IsApplicationRunning),
         new(
-            "受保护恢复状态",
+            "未完成的操作",
             inspection.DurableTransaction is null
-                ? "未发现待恢复事务。"
-                : "已读取并绑定同一用户、同一发布的待恢复事务。",
+                ? "没有需要继续的安装或维护操作。"
+                : "发现上次未完成的操作，可使用此安装包继续。",
             true),
         new(
-            "认证提权事务",
-            "执行时由同一签名 Installer 的 PID 绑定 Helper 与受保护日志完成最终验证。",
+            "所需权限",
+            "配置系统组件时需要管理员权限；若 Windows 显示提示，请确认后继续。",
             true),
     ];
 

@@ -6,9 +6,11 @@ namespace ClashSharp.Installer.Platform;
 /// <param name="BuildNumber">Native Windows build number, independent of compatibility shims.</param>
 /// <param name="OperatingSystemArchitecture">Native operating-system architecture.</param>
 /// <param name="ProcessArchitecture">Architecture of the running installer process.</param>
+/// <param name="IsServerDesktopExperience">Whether a native server product has the full desktop installation type.</param>
 public sealed record InstallerPlatformFacts(
     bool IsWindows,
     bool IsWorkstation,
     int BuildNumber,
     InstallerCpuArchitecture OperatingSystemArchitecture,
-    InstallerCpuArchitecture ProcessArchitecture);
+    InstallerCpuArchitecture ProcessArchitecture,
+    bool IsServerDesktopExperience = false);

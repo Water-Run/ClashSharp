@@ -2,7 +2,9 @@
 
 安装器采用 WPF，主程序采用 WinUI 3。Installer Core 定义事务与权限协议，
 Presentation 管理页面状态，Windows 适配器负责包、服务、证书和受保护状态。
-正常安装目标仍为 Windows 11 原生 x64。
+安装平台检查接受 Windows 11+ 和 Windows Server 2025+ 桌面体验，系统与安装器进程均须为原生 x64。
+服务器同时核对原生产品类型与 64 位注册表的 InstallationType；Server Core、未知安装类型和较旧服务器仍被拒绝。
+平台检查通过后仍须完成签名、离线依赖、包、服务及最终状态验证；服务器完整安装验收尚待执行。
 
 ## 单页安装与维护
 
@@ -75,9 +77,15 @@ CI 的 Offline Installer package 在干净 Windows runner 上执行以上完整�
 不带 -Development 的构建另外需要受控的 MSIX PFX/CER、精确的
 CLASHSHARP_MSIX_CERTIFICATE_THUMBPRINT、可用的 Authenticode 私钥、
 CLASHSHARP_AUTHENTICODE_CERTIFICATE_THUMBPRINT、
-HTTPS CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL 和固定
+HTTP 或 HTTPS CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL 和固定
 CLASHSHARP_WINDOWS_SDK_VERSION。脚本验证签名与时间戳后才产生正式文件名。
 可选的 CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT 必须与仓库固定输入一致。
+
+时间戳地址须为绝对 URI，不能含用户凭据、片段或空白。使用时间戳服务商公布的
+RFC3161 地址；例如 [DigiCert 官方地址](https://knowledge.digicert.com/general-information/rfc3161-compliant-time-stamp-authority-server)
+为 `http://timestamp.digicert.com`。Windows SDK 10.0.26100.0 的 SignTool 在服务器
+实测中拒绝对应 HTTPS 地址，HTTP 地址成功取得签名时间戳。允许 HTTP 不改变
+`signtool verify /pa /all /tw`、签名者固定、信任链和时间戳证书的最终校验要求。
 
 正式签名构建现在显式编译生产安装与 helper 入口；`-Development` 显式关闭该入口，
 普通项目构建仍使用预览运行时。嵌入清单、签名者固定与可信时间戳校验继续决定

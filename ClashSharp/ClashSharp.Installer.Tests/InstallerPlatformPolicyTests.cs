@@ -46,14 +46,61 @@ public sealed class InstallerPlatformPolicyTests
     }
 
     [Fact]
-    public void WindowsServerProductTypeIsNotTreatedAsWindowsElevenClient()
+    public void WindowsServerWithoutDesktopExperienceIsRejected()
     {
         InstallerPlatformAssessment result = InstallerPlatformPolicy.Evaluate(Facts(
             26100,
             isWorkstation: false));
 
         Assert.False(result.IsSupported);
-        Assert.Equal("installer.environment.windows_client_required", result.DiagnosticCode);
+        Assert.Equal("installer.environment.desktop_experience_required", result.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData(26100)]
+    [InlineData(int.MaxValue)]
+    public void Server2025DesktopExperiencePassesThePlatformGate(int buildNumber)
+    {
+        InstallerPlatformAssessment result = InstallerPlatformPolicy.Evaluate(Facts(
+            buildNumber, isWorkstation: false) with
+        { IsServerDesktopExperience = true });
+
+        Assert.True(result.IsSupported);
+        Assert.Equal("installer.environment.supported", result.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(17763)]
+    [InlineData(20348)]
+    [InlineData(26099)]
+    public void OlderServerDesktopBuildsRemainUnsupported(int buildNumber)
+    {
+        InstallerPlatformAssessment result = InstallerPlatformPolicy.Evaluate(Facts(
+            buildNumber, isWorkstation: false) with
+        { IsServerDesktopExperience = true });
+
+        Assert.False(result.IsSupported);
+        Assert.Equal("installer.environment.windows_server_2025_required", result.DiagnosticCode);
+    }
+
+    [Theory]
+    [InlineData(InstallerCpuArchitecture.Arm64, InstallerCpuArchitecture.X64, "installer.environment.x64_os_required")]
+    [InlineData(InstallerCpuArchitecture.X86, InstallerCpuArchitecture.X86, "installer.environment.x64_os_required")]
+    [InlineData(InstallerCpuArchitecture.X64, InstallerCpuArchitecture.X86, "installer.environment.x64_process_required")]
+    public void ServerDesktopStillRequiresNativeX64(
+        InstallerCpuArchitecture operatingSystemArchitecture,
+        InstallerCpuArchitecture processArchitecture,
+        string diagnosticCode)
+    {
+        InstallerPlatformAssessment result = InstallerPlatformPolicy.Evaluate(Facts(
+            26100, isWorkstation: false,
+            operatingSystemArchitecture: operatingSystemArchitecture,
+            processArchitecture: processArchitecture) with
+        { IsServerDesktopExperience = true });
+
+        Assert.False(result.IsSupported);
+        Assert.Equal(diagnosticCode, result.DiagnosticCode);
     }
 
     [Theory]

@@ -249,6 +249,62 @@ public sealed class WindowsInstallerParentEngineTests
         await execution;
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BlockingInspectionReturnsToCallerAndRetainsLifetimeUntilWorkerDrains(bool disposeWhileActive)
+    {
+        using var fixture = Fixture();
+        using var cancellation = new CancellationTokenSource();
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var returned = new TaskCompletionSource<Task<InstallerRuntimeInspection>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var inspector = new BlockingInspector(entered, release);
+        var factory = new RecordingSessionFactory(static () =>
+            new RecordingSession(static (_, _, _) => Task.FromResult(Success())));
+        using WindowsInstallerParentEngine engine = WindowsInstallerParentEngine.CreateForTesting(
+            fixture.Manifest, TargetSid, factory, new RecordingApplicationLock(), inspector);
+        int callerThread = 0;
+        Task caller = Task.Factory.StartNew(() =>
+        {
+            callerThread = Environment.CurrentManagedThreadId;
+            returned.SetResult(engine.InspectAsync(cancellation.Token));
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        Task<InstallerRuntimeInspection>? inspection = null;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            inspection = await returned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.NotEqual(callerThread, inspector.WorkerThread);
+            Assert.False(inspection.IsCompleted);
+            cancellation.Cancel();
+            if (disposeWhileActive)
+            {
+                engine.Dispose();
+                await Assert.ThrowsAsync<ObjectDisposedException>(() => engine.InspectAsync(CancellationToken.None));
+            }
+            else
+            {
+                InstallerExecutionResult concurrent = await engine.ExecuteAsync(
+                    InstallerOperation.Install, null, CancellationToken.None);
+                Assert.Equal("installer.concurrent_action_rejected", concurrent.DiagnosticCode);
+            }
+            Assert.False(inspection.IsCompleted);
+            Assert.Equal(0, factory.CreateCount);
+        }
+        finally
+        {
+            cancellation.Cancel();
+            release.Set();
+            await caller.WaitAsync(TimeSpan.FromSeconds(5));
+            inspection ??= await returned.Task;
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                inspection.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        Assert.True(inspector.Drained);
+    }
+
     [Fact]
     public async Task InspectionRejectsMissingOrDifferentReleaseResult()
     {
@@ -476,6 +532,35 @@ public sealed class WindowsInstallerParentEngineTests
             Assert.True(Held);
             Held = false;
             DisposeCount++;
+        }
+    }
+
+    private sealed class BlockingInspector(
+        TaskCompletionSource entered,
+        ManualResetEventSlim release) : IWindowsInstallerParentInspector
+    {
+        internal int WorkerThread { get; private set; }
+
+        internal bool Drained { get; private set; }
+
+        public Task<InstallerRuntimeInspection> InspectAsync(InstallerRequest request, CancellationToken cancellationToken)
+        {
+            request.Validate();
+            WorkerThread = Environment.CurrentManagedThreadId;
+            entered.SetResult();
+            try
+            {
+                if (!release.Wait(TimeSpan.FromSeconds(15), CancellationToken.None))
+                {
+                    throw new TimeoutException("Blocking inspection fixture was not released.");
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new InvalidOperationException("Fixture must be cancelled before release.");
+            }
+            finally
+            {
+                Drained = true;
+            }
         }
     }
 

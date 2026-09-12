@@ -318,12 +318,20 @@ public sealed class InstallerExecutableContractTests
     private static string SourcePath(params string[] parts)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "ClashSharp.slnx")))
+        while (directory is not null)
         {
+            if (File.Exists(Path.Combine(directory.FullName, "ClashSharp.slnx")))
+            {
+                return Path.Combine([directory.FullName, .. parts]);
+            }
+            string sourceRoot = Path.Combine(directory.FullName, "ClashSharp");
+            if (File.Exists(Path.Combine(sourceRoot, "ClashSharp.slnx")))
+            {
+                return Path.Combine([sourceRoot, .. parts]);
+            }
             directory = directory.Parent;
         }
 
-        Assert.NotNull(directory);
-        return Path.Combine([directory.FullName, .. parts]);
+        throw new InvalidOperationException("Cannot locate Installer source contracts from the test output.");
     }
 }

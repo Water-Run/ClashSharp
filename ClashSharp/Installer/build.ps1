@@ -810,17 +810,8 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
             -Value "Development-only unsigned Installer. Do not publish or distribute this artifact."
         Write-Warning "Built an explicitly unsigned development Installer. It is not a release artifact."
     } else {
-        $timestampUrlText = [string]$env:CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL
-        try {
-            $timestampUri = [Uri]$timestampUrlText
-        } catch {
-            throw "CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL is not a valid absolute URI."
-        }
-        if (-not $timestampUri.IsAbsoluteUri -or
-            $timestampUri.Scheme -cne "https" -or
-            -not [string]::IsNullOrEmpty($timestampUri.UserInfo)) {
-            throw "CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL must be an HTTPS URI without user information."
-        }
+        $timestampUri = Get-ClashSharpAuthenticodeTimestampUri `
+            -Value ([string]$env:CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL)
 
         $authenticodeCertificate = Get-ChildItem -Path Cert:\CurrentUser\My |
             Where-Object {

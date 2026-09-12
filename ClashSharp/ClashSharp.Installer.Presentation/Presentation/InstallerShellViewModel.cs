@@ -30,7 +30,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     private CancellationTokenSource? _activeCancellation;
     private long _generation;
     private bool _disposed;
+    private bool _runtimeDisposePending;
     private bool _isBusy;
+    private bool _isCancellationRequested;
     private bool _canExecuteMutations;
     private bool _isProgressIndeterminate;
     private int _progressValue;
@@ -67,7 +69,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             ExecuteSecondaryOperationAsync,
             () => !IsBusy && CanExecuteMutations && HasSecondaryAction,
             SetUnhandledCommandFailure);
-        CancelCommand = new DelegateCommand(CancelActiveOperation, () => IsBusy);
+        CancelCommand = new DelegateCommand(CancelActiveOperation, () => IsBusy && !IsCancellationRequested);
         OwnerTransferCommand = new AsyncDelegateCommand(
             () => ExecuteOperationAsync(null, ownerTransfer: true), () => IsOwnerTransferActionVisible, SetUnhandledCommandFailure);
         ConfirmOwnerTransferCommand = new DelegateCommand(
@@ -153,6 +155,19 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     /// <summary>Gets whether the single active generation exposes cancellation as its only action.</summary>
     public bool IsCancelActionVisible => IsBusy && !IsOwnerTransferConfirmationVisible && !IsRetiredUninstallConfirmationVisible;
+
+    /// <summary>Gets whether this generation is waiting for a requested cancellation to finish.</summary>
+    public bool IsCancellationRequested
+    {
+        get => _isCancellationRequested;
+        private set
+        {
+            if (SetProperty(ref _isCancellationRequested, value))
+            {
+                CancelCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
 
     /// <summary>Gets whether the trusted runtime proved every mutation prerequisite.</summary>
     public bool CanExecuteMutations
@@ -271,10 +286,21 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         CancellationTokenSource? cancellation;
         lock (_operationSync)
         {
+            if (_disposed || _activeCancellation is null || IsCancellationRequested)
+            {
+                return;
+            }
+
             cancellation = _activeCancellation;
+            IsCancellationRequested = true;
         }
 
-        cancellation?.Cancel();
+        StatusBadge = "正在取消";
+        StatusTitle = "正在取消操作";
+        StatusDetail = "已请求取消，正在等待当前操作安全结束。";
+        ProgressStatus = "正在等待操作收尾…";
+        IsProgressIndeterminate = true;
+        cancellation.Cancel();
     }
 
     /// <inheritdoc />
@@ -292,7 +318,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             _disposed = true;
             _generation++;
             cancellation = _activeCancellation;
-            runtimeLifetime = _runtime as IDisposable;
+            _runtimeDisposePending = cancellation is not null;
+            runtimeLifetime = _runtimeDisposePending ? null : _runtime as IDisposable;
         }
 
         cancellation?.Cancel();
@@ -307,6 +334,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             return;
         }
 
+        IsCancellationRequested = false;
         IsBusy = true;
         IsProgressIndeterminate = true;
         StatusTitle = "正在检查安装状态";
@@ -390,6 +418,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             return;
         }
 
+        IsCancellationRequested = false;
         IsBusy = true;
         InvalidateReadiness();
         IsProgressIndeterminate = ownerTransfer || retiredUninstall;
@@ -408,7 +437,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         {
             var progress = new Progress<InstallerProgress>(value =>
             {
-                if (Volatile.Read(ref acceptProgress) == 0 || !IsCurrent(generation))
+                if (Volatile.Read(ref acceptProgress) == 0 || !IsCurrent(generation) || IsCancellationRequested)
                 {
                     return;
                 }
@@ -542,16 +571,23 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     private void CompleteOperation(OperationGeneration operation)
     {
         bool wasCurrent;
+        IDisposable? runtimeLifetime = null;
         lock (_operationSync)
         {
             wasCurrent = ReferenceEquals(_activeCancellation, operation.Cancellation);
             if (wasCurrent)
             {
                 _activeCancellation = null;
+                if (_runtimeDisposePending)
+                {
+                    _runtimeDisposePending = false;
+                    runtimeLifetime = _runtime as IDisposable;
+                }
             }
         }
 
         operation.Cancellation.Dispose();
+        runtimeLifetime?.Dispose();
         if (wasCurrent && !_disposed)
         {
             IsBusy = false;

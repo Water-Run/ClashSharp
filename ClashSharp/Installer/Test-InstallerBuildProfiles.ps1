@@ -2,11 +2,12 @@
 
 <#
 .SYNOPSIS
-    Verifies actual MSBuild evaluation for preview, development, and signed installer profiles.
+    Verifies MSBuild installer profiles and the release timestamp endpoint policy.
 .DESCRIPTION
     Evaluates the production WPF project and executes only its activation validation target.
     It never builds, launches, signs, installs, or imports a certificate. Invalid activation
-    combinations must fail before a compiler or any installer runtime can execute.
+    combinations must fail before a compiler or any installer runtime can execute. Timestamp URI
+    cases execute the same endpoint parser used by release signing, without contacting a server.
 #>
 [CmdletBinding()]
 param()
@@ -16,6 +17,39 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'PackagingContract.psm1') -Force
 $project = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\ClashSharp.Installer\ClashSharp.Installer.csproj'))
 $dotnet = (Get-Command dotnet -CommandType Application).Source
+
+$validTimestampUris = @(
+    'http://timestamp.digicert.com',
+    'https://timestamp.digicert.com',
+    'HTTP://timestamp.digicert.com',
+    'https://tsa.example.test:8443/rfc3161',
+    'https://tsa.example.test/rfc3161?profile=sha256'
+)
+foreach ($value in $validTimestampUris) {
+    $uri = Get-ClashSharpAuthenticodeTimestampUri -Value $value
+    if ($uri -isnot [Uri] -or $uri.AbsoluteUri -cne ([Uri]$value).AbsoluteUri) {
+        throw 'Release timestamp policy changed a valid endpoint.'
+    }
+}
+$invalidTimestampUris = @(
+    $null, '', ' ', 'timestamp.digicert.com', '/rfc3161',
+    'file:///C:/timestamp.tsr', 'ftp://tsa.example.test/rfc3161',
+    'http://user@tsa.example.test', 'https://user:secret@tsa.example.test',
+    'https://tsa.example.test/#fragment', 'http://',
+    ' https://tsa.example.test', "https://tsa.example.test`n", 'https://tsa.example.test/time stamp'
+)
+foreach ($value in $invalidTimestampUris) {
+    $rejected = $false
+    try { $null = Get-ClashSharpAuthenticodeTimestampUri -Value $value }
+    catch {
+        if (-not $_.Exception.Message.StartsWith('CLASHSHARP_AUTHENTICODE_TIMESTAMP_URL', [StringComparison]::Ordinal)) {
+            throw
+        }
+        $rejected = $true
+    }
+    if (-not $rejected) { throw 'Release timestamp policy admitted an invalid endpoint.' }
+}
+Write-Output "Timestamp endpoint contract passed: $($validTimestampUris.Count) accepted and $($invalidTimestampUris.Count) rejected URIs."
 
 function Invoke-InstallerProfileBuild {
     <#

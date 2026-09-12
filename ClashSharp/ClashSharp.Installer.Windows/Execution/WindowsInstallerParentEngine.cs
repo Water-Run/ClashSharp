@@ -207,8 +207,11 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
                 AllowReassociation: false,
                 _manifest.ExpectedPackageVersion,
                 _manifest.InstallerPayloadSha256);
-            InstallerRuntimeInspection inspection = await _inspector
-                .InspectAsync(request, cancellationToken)
+            // Authenticode and Windows package inspection contain synchronous native calls.
+            // Own and await their worker inside this generation, including cancellation cleanup.
+            InstallerRuntimeInspection inspection = await Task.Run(
+                () => _inspector.InspectAsync(request, cancellationToken),
+                cancellationToken)
                 .ConfigureAwait(false)
                 ?? throw new InstallerProtocolException(
                     "installer.runtime.inspection_result_missing");

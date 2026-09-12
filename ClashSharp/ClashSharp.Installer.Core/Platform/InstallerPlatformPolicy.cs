@@ -1,10 +1,13 @@
 namespace ClashSharp.Installer.Platform;
 
-/// <summary>Authorizes only native x64 Windows 11 client environments.</summary>
+/// <summary>Authorizes native x64 Windows 11 and Windows Server 2025 desktop environments.</summary>
 public static class InstallerPlatformPolicy
 {
     /// <summary>The first Windows 11 build accepted by the installer.</summary>
     public const int MinimumWindowsBuild = 22000;
+
+    /// <summary>The first Windows Server 2025 build accepted with Desktop Experience.</summary>
+    public const int MinimumWindowsServerBuild = 26100;
 
     /// <summary>Evaluates native facts in a deterministic fail-closed order.</summary>
     /// <param name="facts">Facts captured by the Windows platform adapter.</param>
@@ -18,14 +21,19 @@ public static class InstallerPlatformPolicy
             return Blocked("installer.environment.windows_required");
         }
 
-        if (!facts.IsWorkstation)
+        if (!facts.IsWorkstation && !facts.IsServerDesktopExperience)
         {
-            return Blocked("installer.environment.windows_client_required");
+            return Blocked("installer.environment.desktop_experience_required");
         }
 
-        if (facts.BuildNumber < MinimumWindowsBuild)
+        if (facts.IsWorkstation && facts.BuildNumber < MinimumWindowsBuild)
         {
             return Blocked("installer.environment.windows_11_required");
+        }
+
+        if (!facts.IsWorkstation && facts.BuildNumber < MinimumWindowsServerBuild)
+        {
+            return Blocked("installer.environment.windows_server_2025_required");
         }
 
         if (facts.OperatingSystemArchitecture != InstallerCpuArchitecture.X64)

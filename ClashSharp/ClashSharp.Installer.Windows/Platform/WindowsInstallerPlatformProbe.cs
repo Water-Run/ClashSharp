@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
+using System.Security;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Platform;
+using Microsoft.Win32;
 
 namespace ClashSharp.Installer.Windows.Platform;
 
@@ -8,6 +10,8 @@ namespace ClashSharp.Installer.Windows.Platform;
 public sealed class WindowsInstallerPlatformProbe : IInstallerPlatformProbe
 {
     private const byte WorkstationProductType = 1;
+    private const byte DomainControllerProductType = 2;
+    private const byte ServerProductType = 3;
     private const ushort ProcessorArchitectureIntel = 0;
     private const ushort ProcessorArchitectureArm = 5;
     private const ushort ProcessorArchitectureAmd64 = 9;
@@ -39,16 +43,48 @@ public sealed class WindowsInstallerPlatformProbe : IInstallerPlatformProbe
         }
 
         GetNativeSystemInfo(out NativeSystemInfo systemInfo);
-        InstallerCpuArchitecture processArchitecture = MapProcessArchitecture(
-            RuntimeInformation.ProcessArchitecture);
+        cancellationToken.ThrowIfCancellationRequested();
+        string? installationType = version.ProductType is DomainControllerProductType or ServerProductType
+            ? ReadInstallationType()
+            : null;
+        cancellationToken.ThrowIfCancellationRequested();
 
-        return new InstallerPlatformFacts(
+        return CreateFacts(
+            version.ProductType,
+            checked((int)version.BuildNumber),
+            systemInfo.ProcessorInfo.ProcessorArchitecture,
+            RuntimeInformation.ProcessArchitecture,
+            installationType);
+    }
+
+    internal static InstallerPlatformFacts CreateFacts(
+        byte productType,
+        int buildNumber,
+        ushort nativeArchitecture,
+        Architecture processArchitecture,
+        string? installationType) => new(
             IsWindows: true,
-            IsWorkstation: version.ProductType == WorkstationProductType,
-            BuildNumber: checked((int)version.BuildNumber),
-            OperatingSystemArchitecture: MapNativeArchitecture(
-                systemInfo.ProcessorInfo.ProcessorArchitecture),
-            ProcessArchitecture: processArchitecture);
+            IsWorkstation: productType == WorkstationProductType,
+            BuildNumber: buildNumber,
+            OperatingSystemArchitecture: MapNativeArchitecture(nativeArchitecture),
+            ProcessArchitecture: MapProcessArchitecture(processArchitecture),
+            IsServerDesktopExperience: productType is DomainControllerProductType or ServerProductType
+                && string.Equals(installationType, "Server", StringComparison.Ordinal));
+
+    private static string? ReadInstallationType()
+    {
+        try
+        {
+            // The native product type alone cannot distinguish Server Core from the desktop
+            // installation. Missing, unreadable, or unknown installation types remain unsupported.
+            using RegistryKey machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using RegistryKey? version = machine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion", writable: false);
+            return version?.GetValue("InstallationType", null, RegistryValueOptions.DoNotExpandEnvironmentNames) as string;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SecurityException)
+        {
+            return null;
+        }
     }
 
     private static InstallerCpuArchitecture MapNativeArchitecture(ushort architecture) =>
