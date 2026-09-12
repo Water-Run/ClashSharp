@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
@@ -93,8 +94,10 @@ internal readonly record struct ProfileCatalogSummary(int ProfileCount, int Subs
 /// Thread safety: Public members serialize mutable state through a private lock.
 /// Side effects: Reads and writes the local profile catalog JSON file; persists active profile selection to application settings.
 /// </remarks>
-public sealed partial class ProfileCatalogService
+public sealed partial class ProfileCatalogService : IAsyncDisposable
 {
+    private readonly RepositoryOperationLifetime _operations;
+
     /// <summary>Synchronization object guarding active profile mutations for this service lifetime.</summary>
     private readonly object _syncLock = new();
 
@@ -182,12 +185,17 @@ public sealed partial class ProfileCatalogService
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _mutationCoordinator = mutationCoordinator
             ?? throw new ArgumentNullException(nameof(mutationCoordinator));
+        _operations = new RepositoryOperationLifetime(this);
     }
+
+    /// <summary>Rejects new catalog work and waits for accepted imports, commits, and compensation to finish.</summary>
+    public ValueTask DisposeAsync() => _operations.DisposeAsync();
 
     /// <summary>Returns all known configuration profiles with active-profile state applied.</summary>
     /// <returns>A read-only snapshot of known configuration profiles.</returns>
     public IReadOnlyList<ConfigurationProfile> GetProfiles()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             ProfileCatalogDocument document = LoadDocument();
@@ -207,6 +215,7 @@ public sealed partial class ProfileCatalogService
     /// <returns>A read-only snapshot of known subscription links.</returns>
     public IReadOnlyList<ProfileSubscriptionLink> GetSubscriptionLinks()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             return [.. LoadDocument().Links];
@@ -216,6 +225,7 @@ public sealed partial class ProfileCatalogService
     /// <summary>Returns retained versions for one profile, newest first.</summary>
     public IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
 
         lock (_syncLock)
@@ -229,6 +239,7 @@ public sealed partial class ProfileCatalogService
     /// <summary>Returns enabled subscription links whose update interval has elapsed.</summary>
     public IReadOnlyList<ProfileSubscriptionLink> GetDueSubscriptionLinks(DateTimeOffset now)
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             ProfileCatalogDocument document = LoadDocument();
@@ -262,13 +273,14 @@ public sealed partial class ProfileCatalogService
         }
     }
 
-    internal Task RecordSubscriptionUpdateOutcomeAsync(
+    internal async Task RecordSubscriptionUpdateOutcomeAsync(
         string linkId,
         bool succeeded,
         DateTimeOffset attemptedAt,
         CancellationToken cancellationToken)
     {
-        return _mutationCoordinator.ExecuteAsync(
+        using IDisposable operation = _operations.Enter();
+        _ = await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) =>
             {
@@ -276,7 +288,7 @@ public sealed partial class ProfileCatalogService
                 RecordSubscriptionUpdateOutcome(linkId, succeeded, attemptedAt);
                 return Task.FromResult(true);
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -288,6 +300,7 @@ public sealed partial class ProfileCatalogService
     /// </remarks>
     internal ProfileCatalogSummary GetSummary(ProfileCatalogFallbackStrings fallbackStrings)
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             ProfileCatalogDocument document = LoadDocument(key => key switch
@@ -354,19 +367,20 @@ public sealed partial class ProfileCatalogService
     }
 
     /// <summary>Adds a subscription link inside process-wide mutation admission.</summary>
-    public Task<ProfileSubscriptionLink> AddSubscriptionLinkAsync(
+    public async Task<ProfileSubscriptionLink> AddSubscriptionLinkAsync(
         string name,
         string uri,
         CancellationToken cancellationToken)
     {
-        return _mutationCoordinator.ExecuteAsync(
+        using IDisposable operation = _operations.Enter();
+        return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) =>
             {
                 token.ThrowIfCancellationRequested();
                 return Task.FromResult(AddSubscriptionLinkCore(name, uri));
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Updates editable subscription properties while retaining status and timestamps.</summary>
@@ -446,6 +460,7 @@ public sealed partial class ProfileCatalogService
         int updateIntervalHours,
         CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             async (_, token) =>
@@ -487,6 +502,7 @@ public sealed partial class ProfileCatalogService
         string linkId,
         CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             async (_, token) =>
@@ -534,6 +550,7 @@ public sealed partial class ProfileCatalogService
         string name,
         CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             async (_, token) =>
@@ -554,6 +571,7 @@ public sealed partial class ProfileCatalogService
     /// <summary>Deletes a user profile after moving any active runtime to the built-in profile.</summary>
     public async Task<bool> TryDeleteProfileAsync(string profileId, CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (admissionLease, token) => TryDeleteProfileCoordinatedAsync(
@@ -774,19 +792,20 @@ public sealed partial class ProfileCatalogService
         }
     }
 
-    internal Task<bool> TryUpdateSubscriptionLinkStatusAsync(
+    internal async Task<bool> TryUpdateSubscriptionLinkStatusAsync(
         string linkId,
         string status,
         CancellationToken cancellationToken)
     {
-        return _mutationCoordinator.ExecuteAsync(
+        using IDisposable operation = _operations.Enter();
+        return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) =>
             {
                 token.ThrowIfCancellationRequested();
                 return Task.FromResult(TryUpdateSubscriptionLinkStatus(linkId, status));
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Checks that a subscription link is reachable without importing it.</summary>
@@ -796,6 +815,7 @@ public sealed partial class ProfileCatalogService
     /// <exception cref="HttpRequestException">The subscription endpoint cannot be reached successfully.</exception>
     public async Task<string> CheckSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) => CheckSubscriptionLinkCoordinatedAsync(link, token),
@@ -838,6 +858,7 @@ public sealed partial class ProfileCatalogService
     /// <exception cref="InvalidOperationException">Configuration validation fails.</exception>
     public async Task<ProfileImportResult> ImportSubscriptionLinkAsync(ProfileSubscriptionLink link, CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         ProfileImportResult? result = await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) => ImportSubscriptionLinkCoordinatedAsync(
@@ -851,19 +872,20 @@ public sealed partial class ProfileCatalogService
     }
 
     /// <summary>Imports a scheduler snapshot only if the same enabled revision is still due.</summary>
-    internal Task<ProfileImportResult?> ImportDueSubscriptionLinkAsync(
+    internal async Task<ProfileImportResult?> ImportDueSubscriptionLinkAsync(
         ProfileSubscriptionLink link,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        return _mutationCoordinator.ExecuteAsync(
+        using IDisposable operation = _operations.Enter();
+        return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) => ImportSubscriptionLinkCoordinatedAsync(
                 link,
                 requireDue: true,
                 now: now,
                 cancellationToken: token),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ProfileImportResult?> ImportSubscriptionLinkCoordinatedAsync(
@@ -1064,6 +1086,7 @@ public sealed partial class ProfileCatalogService
     /// <exception cref="InvalidOperationException">Configuration validation fails.</exception>
     public async Task<ProfileImportResult> ImportLocalProfileAsync(string filePath, CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) => ImportLocalProfileCoordinatedAsync(filePath, token),
@@ -1151,6 +1174,7 @@ public sealed partial class ProfileCatalogService
         ProfileHistoryEntry historyEntry,
         CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) => RollbackProfileCoordinatedAsync(historyEntry, token),
@@ -1294,6 +1318,7 @@ public sealed partial class ProfileCatalogService
     /// <exception cref="InvalidOperationException">Configuration validation fails.</exception>
     public async Task<ProfileImportResult> ValidateProfileAsync(ConfigurationProfile profile, CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (_, token) => ValidateProfileCoordinatedAsync(profile, token),
@@ -1339,6 +1364,7 @@ public sealed partial class ProfileCatalogService
         string profileId,
         CancellationToken cancellationToken)
     {
+        using IDisposable operation = _operations.Enter();
         return await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             (admissionLease, token) => TryApplyActiveProfileCoordinatedAsync(
@@ -1408,6 +1434,7 @@ public sealed partial class ProfileCatalogService
     /// <summary>Forgets the cached catalog after local profile data has been deleted externally.</summary>
     internal void ResetAfterDataDeletion()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             _cachedDocument = null;
@@ -1415,9 +1442,10 @@ public sealed partial class ProfileCatalogService
     }
 
     /// <summary>Retries durable post-delete source/history cleanup without reopening a committed delete.</summary>
-    internal Task RetryPendingProfileCleanupAsync(CancellationToken cancellationToken)
+    internal async Task RetryPendingProfileCleanupAsync(CancellationToken cancellationToken)
     {
-        return _mutationCoordinator.ExecuteAsync(
+        using IDisposable operation = _operations.Enter();
+        _ = await _mutationCoordinator.ExecuteAsync(
             Guid.NewGuid(),
             async (_, token) =>
             {
@@ -1425,7 +1453,7 @@ public sealed partial class ProfileCatalogService
                 await RetryPendingProfileCleanupCoreAsync().ConfigureAwait(false);
                 return true;
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RetryPendingProfileCleanupCoreAsync()

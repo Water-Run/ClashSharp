@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,9 +20,8 @@ internal static class ProfileCatalogServiceFactory
     /// <summary>Creates the default service used by profiles, links, statistics, and maintenance flows.</summary>
     public static ProfileCatalogService CreateDefault()
     {
-        return new ProfileCatalogService(
-            Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "ProfileCatalog.json"),
-            Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "mihomo", "history"),
+        return CreateForDirectory(
+            AppDataPathService.ResolveLocalDataDirectory(),
             new ProfileCatalogSettingsAdapter(AppSettingsService.Instance),
             new ProfileCatalogCoreConfigurationAdapter(CoreConfigurationService.Instance),
             new ProfileCatalogRuntimeAdapter(
@@ -31,6 +31,34 @@ internal static class ProfileCatalogServiceFactory
             new ProfileCatalogLogAdapter(LogStorageService.Instance),
             LocalizationService.Instance.GetString,
             LateBoundProfileCatalogMutationCoordinator.Instance);
+    }
+
+    /// <summary>Creates one catalog for an explicit data root with dependencies owned by the same host or generation.</summary>
+    public static ProfileCatalogService CreateForDirectory(
+        string dataDirectory,
+        IProfileCatalogSettings settings,
+        IProfileCatalogCoreConfiguration coreConfiguration,
+        IProfileCatalogRuntime runtime,
+        IProfileCatalogLog log,
+        Func<string, string> getString,
+        IProfileCatalogMutationCoordinator mutationCoordinator)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+        if (!Path.IsPathFullyQualified(dataDirectory))
+        {
+            throw new ArgumentException("The catalog data directory must be absolute.", nameof(dataDirectory));
+        }
+
+        string root = Path.GetFullPath(dataDirectory);
+        return new ProfileCatalogService(
+            Path.Combine(root, "ProfileCatalog.json"),
+            Path.Combine(root, "mihomo", "history"),
+            settings,
+            coreConfiguration,
+            runtime,
+            log,
+            getString,
+            mutationCoordinator);
     }
 }
 

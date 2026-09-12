@@ -8,6 +8,137 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class ProfileCatalogServiceTests
 {
     [Fact]
+    public async Task DisposeAsync_DrainsActivationBeforeRetiringAndPreservesCapturedProfiles()
+    {
+        using TempFile tempFile = new();
+        FakeProfileCatalogSettings settings = new();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeProfileCatalogRuntime runtime = new()
+        {
+            ApplyAsync = () => { entered.TrySetResult(); return release.Task; },
+        };
+        ProfileCatalogService service = CreateService(tempFile.Path, settings, runtime: runtime);
+        IReadOnlyList<ConfigurationProfile> snapshot = service.GetProfiles();
+        Task<bool> activation = service.TryApplyActiveProfileAsync(ProfileCatalogIds.BuiltInDirect, CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task retirement = service.DisposeAsync().AsTask();
+        try
+        {
+            Assert.False(retirement.IsCompleted);
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => service.AddSubscriptionLinkAsync("late", "https://example.test/late", CancellationToken.None));
+            Assert.Throws<ObjectDisposedException>(() => service.GetProfiles());
+            Assert.Throws<ObjectDisposedException>(service.ResetAfterDataDeletion);
+        }
+        finally
+        {
+            release.TrySetResult(true);
+        }
+
+        Assert.True(await activation);
+        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        await service.DisposeAsync();
+        Assert.Equal(ProfileCatalogIds.BuiltInDirect, settings.ActiveProfileId);
+        Assert.Equal(ProfileCatalogIds.BuiltInDirect, Assert.Single(snapshot).Id);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WaitsForRuntimeCompensationAfterPointerFailure()
+    {
+        using TempFile tempFile = new();
+        FakeProfileCatalogSettings settings = new() { FailNextValue = ProfileCatalogIds.BuiltInDirect };
+        TaskCompletionSource compensating = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<bool> release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int attempts = 0;
+        FakeProfileCatalogRuntime runtime = new()
+        {
+            ApplyAsync = () =>
+            {
+                if (++attempts == 1) { return Task.FromResult(true); }
+                compensating.TrySetResult();
+                return release.Task;
+            },
+        };
+        ProfileCatalogService service = CreateService(tempFile.Path, settings, runtime: runtime);
+        Task<bool> activation = service.TryApplyActiveProfileAsync(ProfileCatalogIds.BuiltInDirect, CancellationToken.None);
+        await compensating.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task retirement = service.DisposeAsync().AsTask();
+        try
+        {
+            Assert.False(retirement.IsCompleted);
+        }
+        finally
+        {
+            release.TrySetResult(true);
+        }
+
+        await Assert.ThrowsAsync<IOException>(() => activation);
+        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(2, attempts);
+        Assert.Equal(ProfileCatalogIds.BuiltInDirect, settings.ActiveProfileId);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_OwnsQueuedMutationUntilItsDurableCommit()
+    {
+        using TempFile tempFile = new();
+        MutationAdmissionBarrier admission = new();
+        FairAsyncMutationGate gate = new();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<bool> blocker = gate.ExecuteAsync(Guid.NewGuid(), async (_, _) =>
+        {
+            entered.SetResult();
+            await release.Task;
+            return true;
+        }, CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        ProfileCatalogService service = CreateService(tempFile.Path, new FakeProfileCatalogSettings(),
+            coordinator: new ProfileCatalogMutationCoordinator(admission, gate));
+        Task<ProfileSubscriptionLink> mutation = service.AddSubscriptionLinkAsync("accepted", "https://example.test/accepted", CancellationToken.None);
+        Task retirement = service.DisposeAsync().AsTask();
+        try
+        {
+            Assert.False(mutation.IsCompleted);
+            Assert.False(retirement.IsCompleted);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        Assert.True(await blocker);
+        ProfileSubscriptionLink link = await mutation;
+        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        await using ProfileCatalogService reopened = CreateService(tempFile.Path, new FakeProfileCatalogSettings());
+        Assert.Equal(link.Id, Assert.Single(reopened.GetSubscriptionLinks()).Id);
+    }
+
+    [Fact]
+    public async Task DirectoryFactory_IsPureAndRetiredInstanceCannotWriteIntoReplacement()
+    {
+        using TempFile tempFile = new();
+        string root = Path.GetDirectoryName(tempFile.Path)!;
+        string first = Path.Combine(root, "first");
+        string second = Path.Combine(root, "second");
+        ProfileCatalogService old = CreateForDirectory(first);
+        Assert.False(Directory.Exists(first));
+        ProfileSubscriptionLink saved = await old.AddSubscriptionLinkAsync("old", "https://example.test/old", CancellationToken.None);
+        await old.DisposeAsync();
+        await using ProfileCatalogService replacement = CreateForDirectory(second);
+        _ = await replacement.AddSubscriptionLinkAsync("new", "https://example.test/new", CancellationToken.None);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => old.TryDeleteSubscriptionLinkAsync(saved.Id, CancellationToken.None));
+        await using ProfileCatalogService reopened = CreateForDirectory(first);
+        Assert.Equal(saved.Id, Assert.Single(reopened.GetSubscriptionLinks()).Id);
+        Assert.Equal("new", Assert.Single(replacement.GetSubscriptionLinks()).Name);
+
+        static ProfileCatalogService CreateForDirectory(string directory) => ProfileCatalogServiceFactory.CreateForDirectory(
+            directory, new FakeProfileCatalogSettings(), new FakeProfileCatalogCoreConfiguration(),
+            new FakeProfileCatalogRuntime(), new FakeProfileCatalogLog(), key => key,
+            UncoordinatedProfileCatalogMutationCoordinator.Instance);
+    }
+
+    [Fact]
     public async Task MutationCoordinator_QueuesBehindProcessWideFairGate()
     {
         MutationAdmissionBarrier barrier = new();
@@ -448,7 +579,8 @@ public sealed class ProfileCatalogServiceTests
         string catalogPath,
         FakeProfileCatalogSettings settings,
         FakeProfileCatalogCoreConfiguration? core = null,
-        FakeProfileCatalogRuntime? runtime = null)
+        FakeProfileCatalogRuntime? runtime = null,
+        IProfileCatalogMutationCoordinator? coordinator = null)
     {
         return new ProfileCatalogService(
             catalogPath,
@@ -463,7 +595,7 @@ public sealed class ProfileCatalogServiceTests
                 "ProfileCatalog.Status.Available" => "localized available",
                 _ => key,
             },
-            UncoordinatedProfileCatalogMutationCoordinator.Instance);
+            coordinator ?? UncoordinatedProfileCatalogMutationCoordinator.Instance);
     }
 
     private sealed class FakeProfileCatalogSettings : IProfileCatalogSettings
@@ -539,6 +671,8 @@ public sealed class ProfileCatalogServiceTests
 
     private sealed class FakeProfileCatalogRuntime : IProfileCatalogRuntime
     {
+        public Func<Task<bool>>? ApplyAsync { get; init; }
+
         public bool ApplyResult { get; set; } = true;
 
         public Exception? DeleteException { get; set; }
@@ -550,7 +684,7 @@ public sealed class ProfileCatalogServiceTests
         public Task<bool> ApplyProfileAsync(string profileId, CancellationToken cancellationToken)
         {
             AppliedProfileIds.Add(profileId);
-            return Task.FromResult(ApplyResult);
+            return ApplyAsync?.Invoke() ?? Task.FromResult(ApplyResult);
         }
 
         public Task<ProfileCatalogRuntimeImportResult> ImportAndApplyProfileAsync(

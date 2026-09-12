@@ -66,6 +66,9 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(_ => ConnectionSamplingService.Instance);
             services.AddSingleton(provider =>
             {
+                // Catalog compensation can append a log while disposal drains an active operation.
+                // Capture its dependency first so the host retires the catalog before log storage.
+                _ = provider.GetRequiredService<LogStorageService>();
                 LateBoundProfileCatalogMutationCoordinator.Instance.Configure(
                     provider.GetRequiredService<MutationAdmissionBarrier>(),
                     provider.GetRequiredService<FairAsyncMutationGate>());
