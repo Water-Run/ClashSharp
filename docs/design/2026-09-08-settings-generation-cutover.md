@@ -1,6 +1,6 @@
 # Settings generation cutover
 
-版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口、内部设置运行快照，以及 Appearance、StartupTask、Sampling、Triggers 的服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。页面写入、全部运行时参与者和 profile/log/trigger 仓库寿命需要一起接入后，才替换临时架构门禁并合入 main。
+版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口、内部设置运行快照，以及 Appearance、StartupTask、Sampling、Triggers、Network 的服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。Profile 和 Log 仓库已能退休并等待已接收操作结束，但完整代际容器及页面消费者尚未切换。整体接入后，才替换临时架构门禁并合入 main。
 
 ## 已实现的存储与迁移
 
@@ -148,7 +148,11 @@ Appearance 参与者及 UI 操作所有者新增 26 项回归，本分支累计�
 ## 完整切换的剩余依赖
 
 1. 将偏好写入统一为应用层异步 change set；页面、磁贴、触发器和网络提交者使用同一个接口。独立控制端凭据已接入生产调用，后续代际重置继续使用该能力。
-2. 完成 Network 的实际 apply/probe 适配器，并将已实现的 Appearance、Internal、StartupTask、Sampling、Triggers 一起装配；明确读取 desired、有效状态和待办的消费者，并接通外观变化后的页面刷新。
+2. 将已实现的 Network、Appearance、Internal、StartupTask、Sampling、Triggers 一起装配；先恢复启动时的运行时归属，再执行真实观察，不能用 desired 推定 applied。明确读取 desired、有效状态和待办的消费者，并接通外观变化后的页面刷新。
 3. 在设置驱动的启动步骤之前完成旧事务恢复、代际打开和偏好迁移。profile/log/trigger 与 settings 必须由同一代际容器解析、排空和替换。
 4. 将导入、重置和回滚接入候选代际及 manifest 提交，完成生产消费者替换后，原子替换 `SettingsAuthorityArchitectureTests` 中的临时门禁。
 5. 运行新候选的 CI、打包应用及隔离 Windows 验收，再将完整节点推送 main。
+
+2026-09-12 的 `4640685` 已补齐 Network 四键批次，观察实际配置 generation/hash、SCM 会话、认证控制端以及完整 Windows 代理状态和自有 journal；只有独立观察到上一状态或目标状态，才允许显式重试。Profile 和 Log 的每个已接受操作持有寿命租约到异步工作及补偿结束，退休排空后再释放存储。它们尚不构成生产 JSON 权威切换。
+
+该源码的 CI 5012 项全部通过，完整服务器新包通过实际安装、启动日志及窗口、修复、WPF 窗口和卸载验证。实测修复了默认 DIRECT 循环及配置文件瞬时替换失败；这两项和安装器改进已独立移植到 main `db21085`。新包实测、源码分支和未完成项的准确边界见 [Windows 实机开发与验收记录](../reviews/2026-09-12-server-acceptance.md)。
