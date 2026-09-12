@@ -10,6 +10,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.Infrastructure.Files;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -17,7 +19,9 @@ namespace ClashSharp.Service;
 /// <summary>Describes whether the manifest, applied snapshot, and live config agree.</summary>
 internal readonly record struct RuntimeConfigurationIntegrityObservation(
     bool IsKnown,
-    RuntimeConfigurationActivationPlan? AppliedPlan)
+    RuntimeConfigurationActivationPlan? AppliedPlan,
+    long? AppliedGeneration = null,
+    string? AppliedContentHash = null)
 {
     public static RuntimeConfigurationIntegrityObservation Unknown { get; } = new(false, null);
 
@@ -115,9 +119,10 @@ public sealed partial class CoreConfigurationService
                 return RuntimeConfigurationIntegrityObservation.Unknown;
             }
 
-            return new RuntimeConfigurationIntegrityObservation(true, state.AppliedPlan);
+            return new RuntimeConfigurationIntegrityObservation(true, state.AppliedPlan,
+                state.AppliedGeneration, state.AppliedContentHash);
         }
-        catch (Exception exception) when (exception is
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception) && exception is
             IOException or
             UnauthorizedAccessException or
             JsonException or
@@ -166,6 +171,7 @@ public sealed partial class CoreConfigurationService
         ArgumentNullException.ThrowIfNull(runtime);
         await _runtimeConfigurationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         string? stagingPath = null;
+        bool fatalFailure = false;
         try
         {
             Directory.CreateDirectory(_configurationDirectoryPath);
@@ -217,7 +223,7 @@ public sealed partial class CoreConfigurationService
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
-            catch (OperationCanceledException validationCancellationFailure)
+            catch (OperationCanceledException validationCancellationFailure) when (!ExceptionGraphClassifier.IsProcessFatal(validationCancellationFailure))
             {
                 DeleteFileIfPresent(stagingPath);
                 stagingPath = null;
@@ -233,7 +239,7 @@ public sealed partial class CoreConfigurationService
 
                 throw;
             }
-            catch (Exception validationFailure)
+            catch (Exception validationFailure) when (!ExceptionGraphClassifier.IsProcessFatal(validationFailure))
             {
                 DeleteFileIfPresent(stagingPath);
                 stagingPath = null;
@@ -251,7 +257,8 @@ public sealed partial class CoreConfigurationService
                     stateRollbackFailure);
             }
 
-            File.Move(stagingPath, _configurationFilePath, overwrite: true);
+            await CoreConfigurationFilePromotion.PromoteAsync(stagingPath, _configurationFilePath, cancellationToken)
+                .ConfigureAwait(false);
             stagingPath = null;
 
             Exception? activationFailure = null;
@@ -303,7 +310,7 @@ public sealed partial class CoreConfigurationService
                     MaintenanceFailure = maintenanceFailure,
                 };
             }
-            catch (Exception exception)
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 activationFailure = exception;
             }
@@ -334,14 +341,20 @@ public sealed partial class CoreConfigurationService
                 activationFailure,
                 rollbackFailure);
         }
+        catch (Exception exception) when (ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            // Preserve desired intent and transaction residue for next-start recovery.
+            // Fatal graphs cannot safely run runtime compensation or obscure the original failure.
+            fatalFailure = true;
+            throw;
+        }
         finally
         {
-            if (stagingPath is not null)
+            try
             {
-                DeleteFileIfPresent(stagingPath);
+                if (!fatalFailure && stagingPath is not null) { DeleteFileIfPresent(stagingPath); }
             }
-
-            _runtimeConfigurationGate.Release();
+            finally { _runtimeConfigurationGate.Release(); }
         }
     }
 
@@ -358,7 +371,7 @@ public sealed partial class CoreConfigurationService
                 manifest = JsonSerializer.Deserialize<RuntimeGenerationManifest>(json)
                     ?? throw new InvalidDataException("Runtime configuration generation state is empty.");
             }
-            catch (JsonException exception)
+            catch (JsonException exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 throw new InvalidDataException("Runtime configuration generation state is invalid.", exception);
             }
@@ -387,7 +400,7 @@ public sealed partial class CoreConfigurationService
                     null,
                     null);
             }
-            catch (ArgumentException)
+            catch (ArgumentException exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 // Legacy bytes have never passed this transaction's exact-candidate validation.
                 // Treat malformed residue as untrusted rather than inferring an applied owner plan.
@@ -561,7 +574,7 @@ public sealed partial class CoreConfigurationService
 
             return null;
         }
-        catch (Exception rollbackFailure)
+        catch (Exception rollbackFailure) when (!ExceptionGraphClassifier.IsProcessFatal(rollbackFailure))
         {
             return rollbackFailure;
         }
@@ -576,7 +589,7 @@ public sealed partial class CoreConfigurationService
                 .ConfigureAwait(false);
             return null;
         }
-        catch (Exception persistenceFailure)
+        catch (Exception persistenceFailure) when (!ExceptionGraphClassifier.IsProcessFatal(persistenceFailure))
         {
             return persistenceFailure;
         }
@@ -706,7 +719,7 @@ public sealed partial class CoreConfigurationService
 
             return null;
         }
-        catch (Exception maintenanceFailure)
+        catch (Exception maintenanceFailure) when (!ExceptionGraphClassifier.IsProcessFatal(maintenanceFailure))
         {
             return maintenanceFailure;
         }
@@ -805,7 +818,8 @@ public sealed partial class CoreConfigurationService
                 destination.Flush(flushToDisk: true);
             }
 
-            File.Move(restorePath, _configurationFilePath, overwrite: true);
+            await CoreConfigurationFilePromotion.PromoteAsync(restorePath, _configurationFilePath, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
@@ -824,7 +838,8 @@ public sealed partial class CoreConfigurationService
         try
         {
             await WriteDurableTextAsync(temporaryPath, json, cancellationToken).ConfigureAwait(false);
-            File.Move(temporaryPath, statePath, overwrite: true);
+            await CoreConfigurationFilePromotion.PromoteAsync(temporaryPath, statePath, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {

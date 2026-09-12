@@ -510,6 +510,10 @@ public sealed class RuntimeConfigurationTransactionTests
                 mixedPort: 18000 + index,
                 new RecordingRuntime(),
                 CancellationToken.None);
+            Assert.True(latest.IsApplied,
+                $"Iteration {index}: Outcome={latest.Outcome}; Failure={latest.Failure}; "
+                + $"RollbackFailure={latest.RollbackFailure}; MaintenanceFailure={latest.MaintenanceFailure}");
+            Assert.Equal(index + 1, latest.GenerationState.AppliedGeneration);
         }
 
         Assert.NotNull(latest);
