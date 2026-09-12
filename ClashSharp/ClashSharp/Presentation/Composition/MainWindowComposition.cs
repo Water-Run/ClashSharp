@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.Presentation.Dialogs;
@@ -158,6 +159,10 @@ internal sealed class MainWindowComposition
         {
             ArgumentNullException.ThrowIfNull(root);
             AppThemeService.Apply(root, _settings.AppThemeMode);
+            if (AppThemeService.ReadAccentConfiguration() != new AccentColorConfiguration(_settings.AppAccentColorMode, _settings.AppAccentColorValue))
+            {
+                throw new InvalidOperationException("The startup accent resources do not match the selected configuration.");
+            }
         }
 
         /// <summary>Gets a localized string for shell-owned UI.</summary>

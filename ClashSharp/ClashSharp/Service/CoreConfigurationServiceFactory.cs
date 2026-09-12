@@ -23,6 +23,7 @@ internal static class CoreConfigurationServiceFactory
         return new CoreConfigurationService(
             Path.Combine(AppDataPathService.ResolveLocalDataDirectory(), "mihomo"),
             new CoreConfigurationSettingsAdapter(AppSettingsService.Instance),
+            MihomoControllerCredentials.Instance,
             new CoreConfigurationProfileMetricsAdapter(),
             new CoreConfigurationValidator(),
             LocalizationService.Instance.GetString);
@@ -36,8 +37,6 @@ internal sealed class CoreConfigurationSettingsAdapter(AppSettingsService settin
     public int MixedPort => settings.MixedPort;
 
     public string ActiveProfileId => settings.ActiveProfileId;
-
-    public string MihomoControllerSecret => settings.MihomoControllerSecret;
 }
 
 internal sealed class CoreConfigurationProfileMetricsAdapter : ICoreConfigurationProfileMetrics

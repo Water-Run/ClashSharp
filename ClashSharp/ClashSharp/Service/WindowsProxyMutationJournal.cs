@@ -140,7 +140,12 @@ internal sealed class WindowsProxyMutationJournalFileStore : IWindowsProxyMutati
 
     public WindowsProxyMutationJournal? Read()
     {
-        if (!File.Exists(_journalPath))
+        string content;
+        try { content = File.ReadAllText(_journalPath); }
+        // Only native missing-path leaves prove absence. Wrapped failures, including
+        // fatal inner exceptions, propagate unchanged in every source-linked host.
+        catch (Exception failure) when ((failure is FileNotFoundException or DirectoryNotFoundException)
+            && failure.InnerException is null)
         {
             return null;
         }
@@ -148,7 +153,7 @@ internal sealed class WindowsProxyMutationJournalFileStore : IWindowsProxyMutati
         try
         {
             WindowsProxyMutationJournal journal = JsonSerializer.Deserialize<WindowsProxyMutationJournal>(
-                File.ReadAllText(_journalPath),
+                content,
                 JsonOptions) ?? throw new InvalidDataException("Windows proxy journal is empty.");
             if (journal.SchemaVersion == WindowsProxyMutationJournal.LegacyAppliedOnlySchemaVersion)
             {

@@ -12,7 +12,7 @@ public sealed class DataGenerationScope : IAsyncDisposable
 
     /// <summary>Initializes a paused scope without starting work or touching the filesystem.</summary>
     /// <param name="descriptor">Immutable generation descriptor.</param>
-    /// <param name="ownedLifetime">Optional composite repository lifetime transferred to this scope.</param>
+    /// <param name="ownedLifetime">Optional composite repository lifetime transferred to this scope; scoped service access also requires it to implement <see cref="IServiceProvider"/>.</param>
     public DataGenerationScope(
         DataGenerationDescriptor descriptor,
         IAsyncDisposable? ownedLifetime = null)
@@ -35,6 +35,17 @@ public sealed class DataGenerationScope : IAsyncDisposable
                 return _state;
             }
         }
+    }
+
+    internal TService GetOwnedService<TService>() where TService : class
+    {
+        if (_ownedLifetime is not IServiceProvider provider
+            || provider.GetService(typeof(TService)) is not TService service)
+        {
+            throw new InvalidOperationException("The requested service is not registered in this generation's owned lifetime.");
+        }
+
+        return service;
     }
 
     /// <summary>Disposes an unclaimed staged scope; claimed scopes remain owner-controlled.</summary>

@@ -61,6 +61,18 @@ public sealed class WindowsProxyService
             snapshot.ProxyServer.Value ?? string.Empty);
     }
 
+    /// <summary>Reads the complete effective tuple and durable ownership without restoring or claiming any fields.</summary>
+    internal WindowsProxyOwnershipObservation ObserveOwnership()
+    {
+        lock (_syncLock)
+        {
+            WindowsProxyRegistrySnapshot current = _registry.Read();
+            WindowsProxyMutationJournal? journal = _mutationJournal.Read();
+            journal?.Validate();
+            return new(current, journal);
+        }
+    }
+
     /// <summary>Enables Windows system proxy for the current user with <paramref name="proxyServer"/>.</summary>
     /// <param name="proxyServer">Proxy server string accepted by Windows, such as "127.0.0.1:7890"; must not be null or whitespace.</param>
     /// <exception cref="ArgumentNullException"><paramref name="proxyServer"/> is null.</exception>
@@ -221,4 +233,22 @@ public sealed class WindowsProxyService
     [DllImport("wininet.dll", SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern bool InternetSetOption(nint internet, int option, nint buffer, int bufferLength);
+}
+
+/// <summary>Independent WinINet tuple and journal evidence; a foreign proxy is not Clash# ownership.</summary>
+internal sealed record WindowsProxyOwnershipObservation(
+    WindowsProxyRegistrySnapshot Current, WindowsProxyMutationJournal? Journal)
+{
+    // Releasing Clash# restores a possibly enabled third-party baseline. Requiring
+    // ProxyEnable=0 here would incorrectly claim ownership of that external proxy.
+    public bool HasReleasedOwnership => Journal is null;
+
+    public bool MatchesOwnedProxy(string proxyServer) => Journal is
+    { Phase: WindowsProxyMutationPhase.Applied, PendingApplied: null }
+        && Current == Journal.Applied
+        && Current.ProxyEnable == new WindowsProxyDwordValue(true, 1)
+        && Current.ProxyServer.Exists && Current.ProxyServer.Kind == WindowsProxyStringKind.String
+        && StringComparer.OrdinalIgnoreCase.Equals(Current.ProxyServer.Value, proxyServer)
+        && Current.ProxyOverride == new WindowsProxyStringValue(true, "<local>", WindowsProxyStringKind.String)
+        && Current.AutoConfigUrl == new WindowsProxyStringValue(false, null, WindowsProxyStringKind.None);
 }

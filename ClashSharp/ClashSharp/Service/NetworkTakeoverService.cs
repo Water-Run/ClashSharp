@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Model;
 using ClashSharp.ServiceProtocol;
 
@@ -645,12 +646,12 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
             {
                 throw;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
                 // HttpClient can time out an individual readiness probe without
                 // cancelling the transition's bounded readiness window.
             }
-            catch (Exception exception) when (exception is
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception) && exception is
                 HttpRequestException or
                 JsonException or
                 IOException or

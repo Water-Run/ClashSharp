@@ -9,6 +9,81 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class LogStorageServiceTests
 {
     [Fact]
+    public async Task DisposeAsync_DrainsAcceptedSnapshotAndRejectsLateStorageWork()
+    {
+        using TempDatabase tempDatabase = new();
+        using ManualResetEventSlim release = new();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        LogStorageService service = new(tempDatabase.Path, () => "profile-a");
+        Task<int> write = Task.Run(() => service.AppendConnectionSnapshot(WaitForRelease()));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task retirement = service.DisposeAsync().AsTask();
+        try
+        {
+            Assert.False(retirement.IsCompleted);
+            Assert.Throws<ObjectDisposedException>(() => service.AppendLog("Info", "late", "late", null));
+            Assert.Throws<ObjectDisposedException>(() => service.GetStorageSummary());
+            Assert.Throws<ObjectDisposedException>(service.ResetAfterDataDeletion);
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        Assert.Equal(1, await write);
+        await retirement.WaitAsync(TimeSpan.FromSeconds(5));
+        await service.DisposeAsync();
+        await using LogStorageService reopened = new(tempDatabase.Path, () => "profile-a");
+        Assert.Equal(1, reopened.GetTrafficStatisticsSummary().ConnectionCount);
+
+        IEnumerable<ActiveConnection> WaitForRelease()
+        {
+            entered.SetResult();
+            if (!release.Wait(TimeSpan.FromSeconds(10))) { throw new TimeoutException("The test did not release the accepted snapshot."); }
+            yield return new ActiveConnection("1", "app", "example.test", "MATCH", string.Empty, "DIRECT", 10, 20, DateTimeOffset.UtcNow);
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ReleasesOnlyOwnedDatabaseHandlesAndPreservesCapturedLogs()
+    {
+        using TempDatabase tempDatabase = new();
+        LogStorageService service = new(tempDatabase.Path, () => "profile-a");
+        service.AppendLog("Info", "Before", "saved", null);
+        IReadOnlyList<LogRecord> captured = service.GetRecentLogs(1);
+        await service.DisposeAsync();
+
+        using (FileStream exclusive = new(tempDatabase.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.True(exclusive.Length > 0);
+        }
+
+        Assert.Equal("saved", Assert.Single(captured).Message);
+        string destination = Path.Combine(Path.GetDirectoryName(tempDatabase.Path)!, "new-directory", "export.sqlite3");
+        Assert.Throws<ObjectDisposedException>(() => service.ExportDatabase(destination));
+        Assert.False(Directory.Exists(Path.GetDirectoryName(destination)));
+    }
+
+    [Fact]
+    public async Task DirectoryFactory_IsPureAndRetiredInstanceCannotChangeEitherGeneration()
+    {
+        using TempDatabase tempDatabase = new();
+        string root = Path.GetDirectoryName(tempDatabase.Path)!;
+        string first = Path.Combine(root, "first");
+        string second = Path.Combine(root, "second");
+        LogStorageService old = LogStorageServiceFactory.CreateForDirectory(first, () => "a");
+        Assert.False(Directory.Exists(first));
+        old.AppendLog("Info", "Old", "old", null);
+        await old.DisposeAsync();
+        await using LogStorageService replacement = LogStorageServiceFactory.CreateForDirectory(second, () => "b");
+        replacement.AppendLog("Info", "New", "new", null);
+        Assert.Throws<ObjectDisposedException>(old.ClearAll);
+        await using LogStorageService reopened = LogStorageServiceFactory.CreateForDirectory(first, () => "a");
+        Assert.Equal("old", Assert.Single(reopened.GetRecentLogs(1)).Message);
+        Assert.Equal("new", Assert.Single(replacement.GetRecentLogs(1)).Message);
+    }
+
+    [Fact]
     public void AppendLog_RedactsAndBoundsEveryFieldBeforePersistence()
     {
         using TempDatabase tempDatabase = new();

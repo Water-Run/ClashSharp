@@ -50,6 +50,27 @@ public sealed class SettingsAuthorityArchitectureTests
     }
 
     [Fact]
+    public void ControllerCredentials_AreOwnedSeparatelyFromPreferencesAndOpenedBeforeRuntimeRecovery()
+    {
+        string preferences = ReadApplicationSource("Service/AppSettingsService.cs")
+            + ReadApplicationSource("Service/AppSettingsService.Mutations.cs");
+        Assert.DoesNotContain("MihomoControllerSecret", preferences, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetOrCreateInternalSecret", preferences, StringComparison.Ordinal);
+        Assert.DoesNotContain("RandomNumberGenerator", preferences, StringComparison.Ordinal);
+        string configuration = ReadApplicationSource("Service/CoreConfigurationService.cs");
+        Assert.Contains("IControllerCredentialProvider", configuration, StringComparison.Ordinal);
+        Assert.DoesNotContain("_settings.MihomoControllerSecret", configuration, StringComparison.Ordinal);
+        string host = ReadApplicationSource("AppHost/ClashSharpAppHostFactory.cs");
+        Assert.Contains("AddSingleton<IControllerCredentialStore, WindowsControllerCredentialStore>()", host, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<IStartupStep, ControllerCredentialStartupStep>()", host, StringComparison.Ordinal);
+        string startup = ReadApplicationSource("AppHost/Startup/ControllerCredentialStartupStep.cs");
+        Assert.Contains("Order => 140", startup, StringComparison.Ordinal);
+        Assert.Contains("Order => 125", ReadApplicationSource("AppHost/Startup/InstallerTransactionStartupGate.cs"), StringComparison.Ordinal);
+        Assert.Contains("Order => 150", ReadApplicationSource("AppHost/Startup/MutationRecoveryStartupStep.cs"), StringComparison.Ordinal);
+        Assert.Contains("_credentials.ClearAll", ReadApplicationSource("Service/AppDataMaintenanceService.cs"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SettingsImportAndReset_UseTheScopeOwnedExclusiveAuthority()
     {
         string pageComposition = ReadApplicationSource(

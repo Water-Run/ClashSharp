@@ -52,7 +52,7 @@ try {
         $outputPath = Join-Path $runPath 'reports'
         $null = [IO.Directory]::CreateDirectory($inputPath)
         $null = [IO.Directory]::CreateDirectory($outputPath)
-        foreach ($source in @('scripts\Run-InSandbox.ps1', 'SandboxInputContract.psm1')) {
+        foreach ($source in @('scripts\Run-InSandbox.ps1', 'SandboxInputContract.psm1', 'SandboxStartupEvidence.psm1')) {
             $scriptSource = Assert-ClashSharpOrdinaryPath (Join-Path $PSScriptRoot $source) -RequireFile
             Copy-Item -LiteralPath $scriptSource -Destination (Join-Path $inputPath ([IO.Path]::GetFileName($source)))
         }

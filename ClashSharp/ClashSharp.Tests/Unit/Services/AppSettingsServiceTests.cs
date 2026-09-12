@@ -506,22 +506,6 @@ public sealed class AppSettingsServiceTests
         Assert.True(ReadShowStartupGuideOnStartup());
     }
 
-    /// <summary>Verifies ordinary reset preserves the internal credential while clear-all rotates it.</summary>
-    [Fact]
-    public void ClearAllSettings_RemovesInternalControllerCredential()
-    {
-        AppSettingsService.Instance.ClearAllSettings();
-        string firstSecret = AppSettingsService.Instance.MihomoControllerSecret;
-
-        AppSettingsService.Instance.ResetAllSettings();
-        Assert.Equal(firstSecret, AppSettingsService.Instance.MihomoControllerSecret);
-
-        AppSettingsService.Instance.ClearAllSettings();
-        string rotatedSecret = AppSettingsService.Instance.MihomoControllerSecret;
-
-        Assert.NotEqual(firstSecret, rotatedSecret);
-    }
-
     /// <summary>Verifies settings writes expose one auditable change event and suppress no-op writes.</summary>
     [Fact]
     public void SettingChanged_RaisesForChangedValuesOnly()
