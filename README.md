@@ -13,7 +13,7 @@
 [![Package](https://img.shields.io/badge/Package-MSIX-4c1?style=flat-square)](#installation)
 [![Status](https://img.shields.io/badge/1.0.0-paused%20checkpoint-orange?style=flat-square)](./docs/reviews/2026-09-12-pause-checkpoint.md)
 
-**English** · [简体中文](./README-zh.md)
+**English** · [简体中文](./README-zh.md) · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
 </div>
 
@@ -33,7 +33,21 @@
 | **Networking** | 32/32 isolated node probes and HTTPS forwarding against an existing Clash configuration |
 | **Pending** | WPF page interaction, graceful shutdown, automatic empty-directory cleanup, complete release matrix |
 
-<sub>Exact candidates, evidence boundaries, and remaining work: **[1.0.0 execution ledger](./docs/reviews/1.0.0-execution-ledger.md)** · [pause checkpoint](./docs/reviews/2026-09-12-pause-checkpoint.md) · [server acceptance](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
+<sub>Exact candidates, evidence boundaries, remaining work, and later documentation: **[current development status](./docs/reviews/2026-09-17-development-status.md)** · **[1.0.0 execution ledger](./docs/reviews/1.0.0-execution-ledger.md)** · [pause checkpoint](./docs/reviews/2026-09-12-pause-checkpoint.md) · [server acceptance](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
+
+## Windows-Native by Design
+
+Clash# is native beyond the toolchain — `C#` + WinUI 3, Fluent page design, and `.msix` packaging are the foundation, not the feature set. The application is built around Windows networking behavior rather than generic cross-platform proxy terminology.
+
+| Area | What Clash# provides |
+| :--- | :--- |
+| **Shell** | Native WinUI 3 controls, Fluent icons, and Windows 11 acrylic surfaces |
+| **Master control** | A tile-based surface for status and common actions, modeled on Windows Quick Settings |
+| **Lifecycle** | A dedicated installer/uninstaller, and proxy conflict detection and repair at startup |
+| **Recovery** | On abnormal exit, a one-shot Recovery Watchdog immediately restores the system proxy still owned by Clash#; a logon helper is only the next-logon fallback |
+| **Repair tools** | Quick network repair for WSL, terminals, and the Microsoft Store; proxy residue cleanup; system proxy restoration on exit |
+| **Takeover** | Fail-closed transparent proxy activation through TUN |
+| **Languages** | Interface catalogs for Simplified Chinese, Traditional Chinese, English, Russian, French, German, and Persian (RTL) |
 
 ## Installation
 
@@ -66,19 +80,6 @@ Release dependency resolution and payload assembly are **fully offline**: every 
 - `build.ps1 -Development` produces an explicitly named, non-publishable unsigned artifact.
 
 </details>
-
-## Windows-Native by Design
-
-Clash# is native beyond the toolchain — `C#` + WinUI 3, Fluent page design, and `.msix` packaging are the foundation, not the feature set. The application is built around Windows networking behavior rather than generic cross-platform proxy terminology.
-
-| Area | What Clash# provides |
-| :--- | :--- |
-| **Shell** | Native WinUI 3 controls, Fluent icons, and Windows 11 acrylic surfaces |
-| **Master control** | A tile-based surface for status and common actions, modeled on Windows Quick Settings |
-| **Lifecycle** | A dedicated installer/uninstaller, and proxy conflict detection and repair at startup |
-| **Recovery** | On abnormal exit, a one-shot Recovery Watchdog immediately restores the system proxy still owned by Clash#; a logon helper is only the next-logon fallback |
-| **Repair tools** | Quick network repair for WSL, terminals, and the Microsoft Store; proxy residue cleanup; system proxy restoration on exit |
-| **Takeover** | Fail-closed transparent proxy activation through TUN |
 
 ## Modes and Concepts
 
@@ -125,10 +126,13 @@ Advanced users can configure transparent proxy mode, background connection sampl
 > [!TIP]
 > Mainland China display is **enabled by default**. It changes regional display text and flag presentation at the UI layer only — profiles, logs, search, copy, and exported data are never modified.
 
+The interface language can follow Windows or be set explicitly. Persian uses a right-to-left layout.
+
 ## Documentation
 
 | Document | Contents |
 | :--- | :--- |
+| [Current development status](./docs/reviews/2026-09-17-development-status.md) | Where 1.0.0 stands, closed PR recovery, and remaining work |
 | [1.0.0 execution ledger](./docs/reviews/1.0.0-execution-ledger.md) | Milestones, candidates, evidence, and remaining work |
 | [Pause checkpoint](./docs/reviews/2026-09-12-pause-checkpoint.md) | Exact boundary and resumption entry points for the current pause |
 | [Server acceptance](./docs/reviews/2026-09-12-server-acceptance.md) | Real package install, startup, repair, and uninstall evidence |

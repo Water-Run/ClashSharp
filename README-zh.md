@@ -13,7 +13,7 @@
 [![Package](https://img.shields.io/badge/打包-MSIX-4c1?style=flat-square)](#安装)
 [![Status](https://img.shields.io/badge/1.0.0-暂停检查点-orange?style=flat-square)](./docs/reviews/2026-09-12-pause-checkpoint.md)
 
-[English](./README.md) · **简体中文**
+[English](./README.md) · **简体中文** · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
 </div>
 
@@ -33,7 +33,7 @@
 | **网络** | 现有 Clash 配置的 32/32 节点探测与 HTTPS 转发成功 |
 | **待完成** | WPF 页面交互, 正常退出, 自动空目录清理, 完整发布矩阵 |
 
-<sub>对应候选, 证据边界与剩余工作: **[1.0.0 执行账本](./docs/reviews/1.0.0-execution-ledger.md)** · [暂停检查点](./docs/reviews/2026-09-12-pause-checkpoint.md) · [实机验收](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
+<sub>对应候选, 证据边界, 剩余工作与之后的文档: **[当前开发状态](./docs/reviews/2026-09-17-development-status.md)** · **[1.0.0 执行账本](./docs/reviews/1.0.0-execution-ledger.md)** · [暂停检查点](./docs/reviews/2026-09-12-pause-checkpoint.md) · [实机验收](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
 
 ## 关于 Windows 原生
 
@@ -47,6 +47,7 @@
 | **恢复** | 异常退出时由一次性 Recovery Watchdog 立即恢复仍归 Clash# 所有的系统代理; 登录恢复助手仅作为下次登录兜底 |
 | **修复工具** | WSL, 终端和微软商店的快速网络修正; 代理残留清理; 退出时还原系统代理 |
 | **接管** | 通过 TUN 的 fail-closed 透明代理 |
+| **语言** | 简体中文, 繁體中文, English, Русский, Français, Deutsch, فارسی（从右到左布局） |
 
 以及其它的有关定制内容.
 
@@ -127,10 +128,13 @@ flowchart LR
 > [!TIP]
 > 中国大陆显示**默认开启**. 它只改变 UI 层的地区显示文本与旗帜呈现, 不会修改配置, 日志, 搜索, 复制或导出的数据.
 
+界面语言可跟随 Windows, 也可在设置中显式选择. 波斯语使用从右到左布局.
+
 ## 文档
 
 | 文档 | 内容 |
 | :--- | :--- |
+| [当前开发状态](./docs/reviews/2026-09-17-development-status.md) | 1.0.0 所处位置, 已关闭 PR 的恢复入口, 以及剩余工作 |
 | [1.0.0 执行账本](./docs/reviews/1.0.0-execution-ledger.md) | 里程碑, 候选, 证据与剩余工作 |
 | [暂停检查点](./docs/reviews/2026-09-12-pause-checkpoint.md) | 本次暂停的确切边界与恢复入口 |
 | [实机验收](./docs/reviews/2026-09-12-server-acceptance.md) | 真实新包的安装, 首次启动, 修复与卸载证据 |
