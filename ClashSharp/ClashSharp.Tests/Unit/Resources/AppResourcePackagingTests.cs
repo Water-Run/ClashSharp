@@ -608,6 +608,26 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Func<string, RegionMetadata>", serviceCode, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies the main window binds reading direction from localization instead of a hardcoded layout.</summary>
+    [Fact]
+    public void MainWindow_BindsLayoutDirectionFromLocalization()
+    {
+        string windowPath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
+        string compositionPath = FindSourceFile(
+            "ClashSharp",
+            "ClashSharp",
+            "Presentation",
+            "Composition",
+            "MainWindowComposition.cs");
+
+        string windowCode = File.ReadAllText(windowPath);
+        string compositionCode = File.ReadAllText(compositionPath);
+
+        Assert.Contains("BindLayoutDirection((FrameworkElement)Content)", windowCode, StringComparison.Ordinal);
+        Assert.Contains("FlowDirection.RightToLeft", compositionCode, StringComparison.Ordinal);
+        Assert.Contains("LocalizationService.IsRightToLeft", compositionCode, StringComparison.Ordinal);
+    }
+
     /// <summary>Verifies settings language options are sourced from the centralized language catalog.</summary>
     [Fact]
     public void SettingsViewModel_UsesCentralizedSupportedLanguageList()

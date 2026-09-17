@@ -1344,6 +1344,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             AppLanguage.Russian => "Русский",
             AppLanguage.French => "Français",
             AppLanguage.German => "Deutsch",
+            AppLanguage.Persian => "فارسی",
             _ => _localization.GetString("Settings.Language.AutoDetect"),
         };
     }

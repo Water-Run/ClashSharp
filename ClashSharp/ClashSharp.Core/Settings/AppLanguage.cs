@@ -23,4 +23,7 @@ public enum AppLanguage
 
     /// <summary>German (de).</summary>
     German = 5,
+
+    /// <summary>Persian (fa-IR).</summary>
+    Persian = 6,
 }
