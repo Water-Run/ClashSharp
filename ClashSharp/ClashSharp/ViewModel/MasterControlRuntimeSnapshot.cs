@@ -20,7 +20,9 @@ internal sealed record MasterControlRuntimeSnapshot(
     bool RuntimeOwnershipKnown = false,
     MihomoCoreOwner EffectiveOwner = MihomoCoreOwner.None,
     bool TunRequested = false,
-    bool TunEffective = false)
+    bool TunEffective = false,
+    string ActiveProfileId = "",
+    string ActiveProfileName = "")
 {
     public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
         new CoreConfigurationState(string.Empty, string.Empty, false),

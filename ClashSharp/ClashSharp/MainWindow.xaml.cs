@@ -243,6 +243,25 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _appWindow.Title = "Clash#";
         _appWindow.Closing += OnAppWindowClosing;
         SetTitleBar(AppTitleBar);
+        UpdateTitleBarTheme();
+    }
+
+    private void AppTitleBar_ActualThemeChanged(FrameworkElement sender, object args)
+    {
+        _nativeCapabilities.TryRunWindowHandleFeature(_ => UpdateTitleBarTheme());
+    }
+
+    /// <summary>Keeps native caption buttons aligned with the effective in-app theme.</summary>
+    private void UpdateTitleBarTheme()
+    {
+        if (_appWindow is null)
+        {
+            return;
+        }
+
+        _appWindow.TitleBar.PreferredTheme = AppTitleBar.ActualTheme is ElementTheme.Dark
+            ? TitleBarTheme.Dark
+            : TitleBarTheme.Light;
     }
 
     /// <summary>Subclasses the native window procedure to enforce minimum window dimensions.</summary>

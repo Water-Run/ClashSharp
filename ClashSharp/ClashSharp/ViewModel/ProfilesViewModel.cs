@@ -140,8 +140,17 @@ internal sealed class ProfilesViewModel : ObservableObject
     public ConfigurationProfileDisplay? SelectedProfile
     {
         get => _selectedProfile;
-        set => SetProperty(ref _selectedProfile, value);
+        set
+        {
+            if (SetProperty(ref _selectedProfile, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedProfile));
+            }
+        }
     }
+
+    /// <summary>Gets whether profile actions have a selected target.</summary>
+    public bool HasSelectedProfile => SelectedProfile is not null;
 
     /// <summary>Gets the active profile status text.</summary>
     /// <value>Active profile display text; never null.</value>
@@ -447,7 +456,12 @@ internal sealed class ProfilesViewModel : ObservableObject
             rows.Add(_displayMapper.Map(profile));
         }
 
+        string? selectedProfileId = SelectedProfile?.Model.Id;
         Profiles = rows;
+        SelectedProfile = rows.Find(row => string.Equals(
+            row.Model.Id,
+            selectedProfileId,
+            StringComparison.Ordinal));
         ActiveProfileText = ResolveActiveProfileDisplayText(rows, fallbackProfileId);
     }
 

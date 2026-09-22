@@ -9,64 +9,67 @@
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
-    <Grid Padding="{StaticResource ClashPagePadding}">
-        <StackPanel Spacing="18">
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-
-            <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton x:Name="AddLinkButton" Label="{Binding AddLinkText}" Click="AddLinkButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE710;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="CheckLinksButton" Label="{Binding CheckLinksText}" Click="CheckLinksButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE73E;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="UpdateLinksButton" Label="{Binding UpdateLinksText}" Click="UpdateLinksButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE72C;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="EditLinkButton" Label="{Binding EditLinkText}" Click="EditLinkButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE70F;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="DeleteLinkButton" Label="{Binding DeleteLinkText}" Click="DeleteLinkButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE74D;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-            </CommandBar>
-
-            <ListView x:Name="SubscriptionLinksList" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Padding="4,10" ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="110" />
-                                <ColumnDefinition Width="150" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                <TextBlock Text="{Binding StatusDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-
-                            <TextBlock Grid.Column="1" Text="{Binding UriDisplay}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="2" Text="{Binding UpdateIntervalHours}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Column="3" Text="{Binding LastUpdatedAt}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+    <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
+
+        <CommandBar Grid.Row="1" DefaultLabelPosition="Right" Background="Transparent">
+            <AppBarButton x:Name="AddLinkButton" Label="{Binding AddLinkText}" Click="AddLinkButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE710;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="CheckLinksButton" IsEnabled="{Binding HasSelectedLink}" Label="{Binding CheckLinksText}" Click="CheckLinksButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE73E;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="UpdateLinksButton" IsEnabled="{Binding HasSelectedLink}" Label="{Binding UpdateLinksText}" Click="UpdateLinksButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE72C;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="EditLinkButton" IsEnabled="{Binding HasSelectedLink}" Label="{Binding EditLinkText}" Click="EditLinkButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE70F;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="DeleteLinkButton" IsEnabled="{Binding HasSelectedLink}" Label="{Binding DeleteLinkText}" Click="DeleteLinkButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE74D;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+        </CommandBar>
+
+        <ListView Grid.Row="2" x:Name="SubscriptionLinksList" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="4,10" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="170" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="150" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{Binding StatusDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" Text="{Binding UriDisplay}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="2" Text="{Binding UpdateIntervalHours}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="3" Text="{Binding LastUpdatedAt}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
     </Grid>
 </Page>

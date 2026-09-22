@@ -69,6 +69,61 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
     }
 
     [Fact]
+    public async Task ValidateSelectedProfileAsync_WhenListResetsSelection_CanActivateValidatedProfile()
+    {
+        FakeProfileManagementCatalog catalog = new()
+        {
+            Profiles = [CreateProfile("candidate", isActive: false)],
+            ValidateProfile = static (profile, _) => Task.FromResult(CreateImportResult(profile.Id)),
+        };
+        string? activatedProfileId = null;
+        catalog.SetActiveProfile = (profileId, _) =>
+        {
+            activatedProfileId = profileId;
+            catalog.Profiles = [CreateProfile(profileId, isActive: true)];
+            return Task.FromResult(true);
+        };
+        ProfilesViewModel viewModel = CreateProfilesViewModel(catalog, new RecordingPageLog());
+        await viewModel.LoadAsync(CancellationToken.None);
+        ConfigurationProfileDisplay originalRow = Assert.Single(viewModel.Profiles);
+        viewModel.SelectedProfile = originalRow;
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ProfilesViewModel.Profiles))
+            {
+                viewModel.SelectedProfile = null;
+            }
+        };
+
+        await viewModel.ValidateSelectedProfileAsync(CancellationToken.None);
+
+        Assert.Same(Assert.Single(viewModel.Profiles), viewModel.SelectedProfile);
+        Assert.NotSame(originalRow, viewModel.SelectedProfile);
+        await viewModel.SetSelectedProfileActiveAsync(CancellationToken.None);
+        Assert.Equal("candidate", activatedProfileId);
+        Assert.True(Assert.IsType<ConfigurationProfileDisplay>(viewModel.SelectedProfile).IsActive);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenSelectedProfileDisappears_DoesNotActivateAnotherProfile()
+    {
+        FakeProfileManagementCatalog catalog = new()
+        {
+            Profiles = [CreateProfile("removed", isActive: false)],
+        };
+        ProfilesViewModel viewModel = CreateProfilesViewModel(catalog, new RecordingPageLog());
+        await viewModel.LoadAsync(CancellationToken.None);
+        viewModel.SelectedProfile = Assert.Single(viewModel.Profiles);
+        catalog.Profiles = [CreateProfile("remaining", isActive: true)];
+
+        await viewModel.LoadAsync(CancellationToken.None);
+        await viewModel.SetSelectedProfileActiveAsync(CancellationToken.None);
+
+        Assert.Null(viewModel.SelectedProfile);
+        Assert.Equal("remaining", Assert.Single(viewModel.Profiles).Id);
+    }
+
+    [Fact]
     public async Task SetSelectedProfileActiveAsync_WhenSuccessful_AwaitsReload()
     {
         FakeProfileManagementCatalog catalog = new()
@@ -120,6 +175,33 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => activation);
         Assert.False(Assert.Single(viewModel.Profiles).IsActive);
         Assert.Equal(1, catalog.GetProfilesCallCount);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenSubscriptionListResetsSelection_RetainsTheSameTarget()
+    {
+        FakeSubscriptionLinkCatalog catalog = new() { Links = [CreateLink("selected")] };
+        LinksViewModel viewModel = CreateLinksViewModel(catalog, new RecordingPageLog());
+        await viewModel.LoadAsync(CancellationToken.None);
+        ProfileSubscriptionLinkDisplay originalRow = Assert.Single(viewModel.SubscriptionLinks);
+        viewModel.SelectedLink = originalRow;
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(LinksViewModel.SubscriptionLinks))
+            {
+                viewModel.SelectedLink = null;
+            }
+        };
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Same(Assert.Single(viewModel.SubscriptionLinks), viewModel.SelectedLink);
+        Assert.NotSame(originalRow, viewModel.SelectedLink);
+        Assert.True(viewModel.HasSelectedLink);
+        catalog.Links = [CreateLink("another")];
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Null(viewModel.SelectedLink);
+        Assert.False(viewModel.HasSelectedLink);
     }
 
     [Fact]
@@ -278,6 +360,9 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         public Func<string, CancellationToken, Task<bool>> SetActiveProfile { get; set; } =
             static (_, _) => throw new NotSupportedException();
 
+        public Func<ConfigurationProfile, CancellationToken, Task<ProfileImportResult>> ValidateProfile { get; set; } =
+            static (_, _) => throw new NotSupportedException();
+
         public IReadOnlyList<ConfigurationProfile> GetProfiles()
         {
             GetProfilesCallCount++;
@@ -300,7 +385,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
             ConfigurationProfile profile,
             CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            return ValidateProfile(profile, cancellationToken);
         }
 
         public Task<bool> TrySetActiveProfileAsync(

@@ -1928,7 +1928,7 @@ public sealed class AppResourcePackagingTests
         string projectXml = File.ReadAllText(projectPath);
 
         Assert.Contains("x:Name=\"HeaderLogo\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("Source=\"ms-appx:///Assets/Logo.svg\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Source=\"ms-appx:///Assets/Square150x150Logo.scale-200.png\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Content Remove=\"Assets\\Logo.png\"", projectXml, StringComparison.Ordinal);
         Assert.DoesNotContain("Content Include=\"Assets\\Logo.png\"", projectXml, StringComparison.Ordinal);
         Assert.Contains("Content Include=\"Assets\\Logo.svg\" CopyToOutputDirectory=\"PreserveNewest\"", projectXml, StringComparison.Ordinal);
@@ -2042,14 +2042,15 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Click=\"TileButton_Click\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("UseSystemFocusVisuals=\"True\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.Name=\"{Binding Title, ElementName=Root}\"", infoTileXaml, StringComparison.Ordinal);
-        Assert.Contains("ToolTipService.ToolTip=\"{Binding Description, ElementName=Root}\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("<ToolTipService.ToolTip>", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Description, ElementName=Root}\"", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Tapped=\"TileRoot_Tapped\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SelectedOverlay\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ToggleThumbTransform\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("SwitchOn", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("SwitchOff", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("DoubleAnimation", infoTileXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxLines=\"2\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("TextWrapping=\"NoWrap\"", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ToggleSwitch", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Id == \"edit-tiles\"", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", masterControlCode, StringComparison.Ordinal);
@@ -3163,7 +3164,14 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain(
             properties.Elements(),
             element => element.Name.LocalName == "FileSystemWriteVirtualization" && element.Name != declaration.Name);
-        Assert.Empty(properties.Elements(virtualization + "RegistryWriteVirtualization"));
+        XElement registryDeclaration = Assert.Single(properties.Elements(virtualization + "RegistryWriteVirtualization"));
+        XElement registryExclusions = Assert.Single(registryDeclaration.Elements(virtualization + "ExcludedKeys"));
+        Assert.Equal(
+            @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+            Assert.Single(registryExclusions.Elements(virtualization + "ExcludedKey")).Value);
+        Assert.DoesNotContain(
+            properties.Elements(),
+            element => element.Name.LocalName == "RegistryWriteVirtualization" && element.Name != registryDeclaration.Name);
     }
 
     /// <summary>Counts non-overlapping occurrences of a string fragment.</summary>

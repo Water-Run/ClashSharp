@@ -86,7 +86,10 @@ internal readonly record struct ProfileCatalogFallbackStrings(
     string AvailableStatus);
 
 /// <summary>Profile and subscription counts normalized with production catalog semantics.</summary>
-internal readonly record struct ProfileCatalogSummary(int ProfileCount, int SubscriptionCount);
+internal readonly record struct ProfileCatalogSummary(
+    int ProfileCount,
+    int SubscriptionCount,
+    string ActiveProfileName = "");
 
 /// <summary>Provides local configuration profile and subscription-link data for WinUI pages.</summary>
 /// <remarks>
@@ -298,7 +301,9 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
     /// Thread safety: Serialized by the catalog lock. The supplied strings must be captured on the
     /// localization-owning thread before this method is dispatched to a worker.
     /// </remarks>
-    internal ProfileCatalogSummary GetSummary(ProfileCatalogFallbackStrings fallbackStrings)
+    internal ProfileCatalogSummary GetSummary(
+        ProfileCatalogFallbackStrings fallbackStrings,
+        string? activeProfileId = null)
     {
         using IDisposable operation = _operations.Enter();
         lock (_syncLock)
@@ -309,7 +314,12 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
                 "ProfileCatalog.Status.Available" => fallbackStrings.AvailableStatus,
                 _ => key,
             });
-            return new ProfileCatalogSummary(document.Profiles.Count, document.Links.Count);
+            ConfigurationProfile? activeProfile = document.Profiles.Find(
+                profile => StringComparer.Ordinal.Equals(profile.Id, activeProfileId));
+            return new ProfileCatalogSummary(
+                document.Profiles.Count,
+                document.Links.Count,
+                activeProfile?.Name ?? string.Empty);
         }
     }
 

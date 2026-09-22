@@ -90,6 +90,52 @@ public sealed class MasterControlViewModelTests
     }
 
     [Fact]
+    public async Task LoadAsync_WhenCatalogResolvesActiveProfile_ShowsNameAcrossDashboard()
+    {
+        FakeMasterSettings settings = new() { ActiveProfileId = "local-123" };
+        FakeMasterRuntime runtime = new()
+        {
+            Snapshot = MasterControlRuntimeSnapshot.Unavailable with
+            {
+                ActiveProfileId = "local-123",
+                ActiveProfileName = "Office profile",
+            },
+        };
+        MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+        viewModel.SetHeroStatusSlot(0, MasterHeroStatusItemKind.ActiveProfile);
+
+        Assert.Equal("Office profile", viewModel.InfoTiles.Single(tile => tile.Id == "active-profile").Value);
+        Assert.Equal("Office profile", viewModel.InfoTiles.Single(tile => tile.Id == "profile-count").Detail);
+        Assert.Equal("Office profile", viewModel.HeroStatusItems[0].Value);
+
+        settings.ActiveProfileId = "local-456";
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal("local-456", viewModel.InfoTiles.Single(tile => tile.Id == "active-profile").Value);
+    }
+
+    [Fact]
+    public async Task ApplyModeAsync_WhilePending_ShowsBusyAndRejectsAnotherSelection()
+    {
+        TaskCompletionSource<NetworkTakeoverResult> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeMasterTakeover takeover = new() { PendingResult = completion.Task };
+        MasterControlViewModel viewModel = CreateViewModel(takeover: takeover);
+
+        Task change = viewModel.ApplyModeAsync(ClashSharpMode.Standby, CancellationToken.None);
+        Assert.True(viewModel.IsApplyingMode);
+        Assert.False(viewModel.IsModeSelectionEnabled);
+        await viewModel.ApplyModeAsync(ClashSharpMode.RuleTakeover, CancellationToken.None);
+        Assert.Equal(1, takeover.ApplyCount);
+        completion.SetResult(new NetworkTakeoverResult(ClashSharpMode.Standby, true, false, false, "standby"));
+        await change;
+
+        Assert.False(viewModel.IsApplyingMode);
+        Assert.True(viewModel.IsModeSelectionEnabled);
+        Assert.Equal(ClashSharpMode.Standby, viewModel.SelectedMode);
+    }
+
+    [Fact]
     public async Task LoadAsync_BuildsEightConfigurableHeroStatusItems()
     {
         FakeMasterHeroStatusLayoutService layoutService = new();
@@ -1200,6 +1246,8 @@ public sealed class MasterControlViewModelTests
         /// <value>Configured fake takeover result.</value>
         public NetworkTakeoverResult Result { get; set; } = new(ClashSharpMode.Disabled, false, false, false, "disabled");
 
+        public Task<NetworkTakeoverResult>? PendingResult { get; set; }
+
         /// <summary>Gets or sets an exception to throw when applying a mode.</summary>
         /// <value>Exception thrown when non-null.</value>
         public Exception? ExceptionToThrow { get; set; }
@@ -1221,7 +1269,7 @@ public sealed class MasterControlViewModelTests
             NetworkTakeoverResult result = Result.Mode == ClashSharpMode.Disabled && mode != ClashSharpMode.Disabled
                 ? Result with { Mode = mode }
                 : Result;
-            return Task.FromResult(result);
+            return PendingResult ?? Task.FromResult(result);
         }
     }
 

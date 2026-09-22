@@ -123,15 +123,13 @@
                 Text="{Binding Value, ElementName=Root}"
                 Style="{ThemeResource SubtitleTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                TextWrapping="WrapWholeWords"
-                MaxLines="2"
+                TextWrapping="NoWrap"
                 TextTrimming="CharacterEllipsis" />
             <TextBlock
                 Text="{Binding Detail, ElementName=Root}"
                 Style="{ThemeResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                TextWrapping="WrapWholeWords"
-                MaxLines="2"
+                TextWrapping="NoWrap"
                 TextTrimming="CharacterEllipsis" />
         </StackPanel>
 
@@ -146,10 +144,17 @@
             UseSystemFocusVisuals="True"
             AutomationProperties.Name="{Binding Title, ElementName=Root}"
             AutomationProperties.HelpText="{Binding Value, ElementName=Root}"
-            ToolTipService.ToolTip="{Binding Description, ElementName=Root}"
             Click="TileButton_Click"
             PointerEntered="TileRoot_PointerEntered"
             PointerExited="TileRoot_PointerExited">
+            <ToolTipService.ToolTip>
+                <ToolTip>
+                    <StackPanel MaxWidth="360" Spacing="4">
+                        <TextBlock Text="{Binding Value, ElementName=Root}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Description, ElementName=Root}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </ToolTip>
+            </ToolTipService.ToolTip>
             <Button.Template>
                 <ControlTemplate TargetType="Button">
                     <Border Background="{TemplateBinding Background}" CornerRadius="4" />

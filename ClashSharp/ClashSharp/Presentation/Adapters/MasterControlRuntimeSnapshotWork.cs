@@ -30,7 +30,9 @@ internal sealed record MasterControlRuntimeSnapshotWork(
         cancellationToken.ThrowIfCancellationRequested();
 
         CoreConfigurationState coreConfiguration = GetCoreConfiguration();
-        ProfileCatalogSummary profileSummary = ProfileCatalog.GetSummary(ProfileCatalogFallbackStrings);
+        ProfileCatalogSummary profileSummary = ProfileCatalog.GetSummary(
+            ProfileCatalogFallbackStrings,
+            ActiveProfileId);
 
         cancellationToken.ThrowIfCancellationRequested();
         (int proxyNodeCount, int ruleCount) = GetActiveProfileCounts();
@@ -62,7 +64,9 @@ internal sealed record MasterControlRuntimeSnapshotWork(
             ownership.IsKnown,
             ownership.Owner,
             TunRequested,
-            ownership.TunEffective);
+            ownership.TunEffective,
+            ActiveProfileId,
+            profileSummary.ActiveProfileName);
     }
 
     private RuntimeOwnershipObservation ObserveRuntimeOwnership(CoreConfigurationState coreConfiguration)

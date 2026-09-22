@@ -9,34 +9,36 @@
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
-    <Grid Padding="{StaticResource ClashPagePadding}">
-        <StackPanel Spacing="18">
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-
-            <ListView x:Name="RulesList" ItemsSource="{Binding Rules}">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Padding="4,10" ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="130" />
-                                <ColumnDefinition Width="150" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="100" />
-                                <ColumnDefinition Width="90" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBlock Text="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="1" Text="{Binding RuleType}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Column="2" Text="{Binding PayloadDisplay}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="3" Text="{Binding Action}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="4" Text="{Binding HitCount}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+    <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
+
+        <ListView x:Name="RulesList" Grid.Row="1" ItemsSource="{Binding Rules}">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="4,10" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="90" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="{Binding ProviderNameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="1" Text="{Binding RuleType}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding RuleType}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="2" Text="{Binding PayloadDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding PayloadDisplay}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="3" Text="{Binding Action}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Action}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="4" Text="{Binding HitCount}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
     </Grid>
 </Page>

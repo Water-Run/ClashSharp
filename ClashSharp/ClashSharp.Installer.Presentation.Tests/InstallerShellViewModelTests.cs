@@ -254,6 +254,7 @@ public sealed class InstallerShellViewModelTests
         Assert.Equal("已完成", viewModel.StatusBadge);
         Assert.Equal("操作已完成", viewModel.StatusTitle);
         Assert.Equal(100, viewModel.ProgressValue);
+        Assert.Empty(viewModel.Capabilities);
         Assert.False(viewModel.CanExecuteMutations);
         Assert.False(viewModel.PrimaryActionCommand.CanExecute(parameter: null));
     }

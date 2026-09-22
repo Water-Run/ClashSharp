@@ -723,6 +723,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private void InvalidateReadiness()
     {
+        Capabilities = Array.Empty<InstallerCapabilityStatus>();
         CanExecuteMutations = false;
         _secondaryOperation = null;
         SecondaryActionText = string.Empty;

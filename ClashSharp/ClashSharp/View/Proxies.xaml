@@ -9,7 +9,7 @@
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
-    <Grid Padding="{StaticResource ClashPagePadding}">
+    <ScrollViewer Padding="{StaticResource ClashPagePadding}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch">
         <StackPanel Spacing="18">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
@@ -60,7 +60,7 @@
                 </ListView.ItemTemplate>
             </ListView>
 
-            <ListView x:Name="ProxyNodesList" ItemsSource="{Binding ProxyNodes}">
+            <ListView x:Name="ProxyNodesList" ItemsSource="{Binding ProxyNodes}" MaxHeight="360">
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Grid Padding="4,8" ColumnSpacing="12">
@@ -114,5 +114,5 @@
                 </ListView.ItemTemplate>
             </ListView>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </Page>

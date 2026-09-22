@@ -49,11 +49,17 @@ public sealed class MasterControlRuntimeCatalogBoundaryTests
 
             int expectedProfiles = expectedService.GetProfiles().Count;
             int expectedLinks = expectedService.GetSubscriptionLinks().Count;
+            ConfigurationProfile expectedProfile = expectedService.GetProfiles()[0];
             ProfileCatalogSummary actual = actualService.GetSummary(
-                new ProfileCatalogFallbackStrings("Direct", "Available"));
+                new ProfileCatalogFallbackStrings("Direct", "Available"),
+                expectedProfile.Id);
 
             Assert.Equal(expectedProfiles, actual.ProfileCount);
             Assert.Equal(expectedLinks, actual.SubscriptionCount);
+            Assert.Equal(expectedProfile.Name, actual.ActiveProfileName);
+            Assert.Empty(actualService.GetSummary(
+                new ProfileCatalogFallbackStrings("Direct", "Available"),
+                "missing").ActiveProfileName);
         }
         finally
         {

@@ -118,8 +118,17 @@ internal sealed class LinksViewModel : ObservableObject
     public ProfileSubscriptionLinkDisplay? SelectedLink
     {
         get => _selectedLink;
-        set => SetProperty(ref _selectedLink, value);
+        set
+        {
+            if (SetProperty(ref _selectedLink, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedLink));
+            }
+        }
     }
+
+    /// <summary>Gets whether subscription actions have a selected target.</summary>
+    public bool HasSelectedLink => SelectedLink is not null;
 
     /// <summary>Gets the command that adds link input accepted by the page.</summary>
     /// <value>Asynchronous add command.</value>
@@ -366,6 +375,11 @@ internal sealed class LinksViewModel : ObservableObject
             rows.Add(_displayMapper.Map(link));
         }
 
+        string? selectedLinkId = SelectedLink?.Model.Id;
         SubscriptionLinks = rows;
+        SelectedLink = rows.Find(row => string.Equals(
+            row.Model.Id,
+            selectedLinkId,
+            StringComparison.Ordinal));
     }
 }

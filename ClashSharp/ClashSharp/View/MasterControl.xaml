@@ -28,6 +28,9 @@
             x:Name="ContentHost"
             Spacing="14"
             SizeChanged="ContentHost_SizeChanged">
+            <ProgressBar
+                IsIndeterminate="{Binding IsApplyingMode}"
+                Visibility="{Binding IsApplyingMode, Converter={StaticResource BooleanToVisibilityConverter}}" />
             <InfoBar
                 Message="{Binding OperationErrorText}"
                 Severity="Error"
@@ -58,7 +61,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Logo.svg" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
+                        <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                             <TextBlock Text="Clash#" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
@@ -122,6 +125,7 @@
 
                     <components:MasterModeButton
                         x:Name="DisabledModeButton"
+                        IsEnabled="{Binding IsModeSelectionEnabled}"
                         Grid.ColumnSpan="2"
                         Title="{Binding DisabledModeTitleText}"
                         Description="{Binding DisabledModeDescriptionText}"
@@ -131,6 +135,7 @@
 
                     <components:MasterModeButton
                         x:Name="StandbyModeButton"
+                        IsEnabled="{Binding IsModeSelectionEnabled}"
                         Grid.Row="1"
                         Grid.ColumnSpan="2"
                         Title="{Binding StandbyModeTitleText}"
@@ -141,6 +146,7 @@
 
                     <components:MasterModeButton
                         x:Name="RuleTakeoverModeButton"
+                        IsEnabled="{Binding IsModeSelectionEnabled}"
                         Grid.Row="2"
                         Grid.ColumnSpan="2"
                         Title="{Binding RuleTakeoverModeTitleText}"
@@ -151,6 +157,7 @@
 
                     <components:MasterModeButton
                         x:Name="FullTakeoverModeButton"
+                        IsEnabled="{Binding IsModeSelectionEnabled}"
                         Grid.Row="3"
                         Grid.ColumnSpan="2"
                         Title="{Binding FullTakeoverModeTitleText}"

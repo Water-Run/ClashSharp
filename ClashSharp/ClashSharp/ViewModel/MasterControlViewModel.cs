@@ -80,6 +80,8 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private string _operationErrorText = string.Empty;
 
+    private bool _isApplyingMode;
+
     /// <summary>Backing field for <see cref="CurrentNodeText"/>.</summary>
     private string _currentNodeText = string.Empty;
 
@@ -394,6 +396,22 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     public bool HasOperationError => !string.IsNullOrWhiteSpace(OperationErrorText);
 
+    /// <summary>Gets whether a mode change is awaiting verified completion.</summary>
+    public bool IsApplyingMode
+    {
+        get => _isApplyingMode;
+        private set
+        {
+            if (SetProperty(ref _isApplyingMode, value))
+            {
+                OnPropertyChanged(nameof(IsModeSelectionEnabled));
+            }
+        }
+    }
+
+    /// <summary>Gets whether another mode can be selected.</summary>
+    public bool IsModeSelectionEnabled => !IsApplyingMode;
+
     public string CurrentNodeText
     {
         get => _currentNodeText;
@@ -520,11 +538,11 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <returns>A task that completes after verified success or baseline restoration.</returns>
     /// <remarks>
     /// Cancellation semantics: Cancellation is propagated to the durable network coordinator.
-    /// Thread / reentrancy: Not guarded; callers should use mode commands for UI invocation.
+    /// Thread / reentrancy: UI-thread calls are serialized while a mode change is pending.
     /// </remarks>
     public async Task ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
     {
-        if (mode == SelectedMode && mode == _settings.CurrentMode)
+        if (IsApplyingMode || (mode == SelectedMode && mode == _settings.CurrentMode))
         {
             return;
         }
@@ -535,6 +553,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         string baselineTransparentProxyStatus = TransparentProxyStatusText;
         bool baselineCoreAvailable = _isCoreAvailable;
         OperationErrorText = string.Empty;
+        IsApplyingMode = true;
         try
         {
             NetworkTakeoverResult result = await _takeover
@@ -598,6 +617,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
         finally
         {
+            IsApplyingMode = false;
             OnPropertyChanged(nameof(BasicStatusText));
             RefreshTileValues();
         }
@@ -840,7 +860,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("blocked-url", _settings.MainlandChinaUrlBlockingEnabled
             ? _localization.GetString("Master.Status.On")
             : _localization.GetString("Master.Status.Off"), string.Empty, _settings.MainlandChinaUrlBlockingEnabled);
-        SetTile("active-profile", _settings.ActiveProfileId, string.Empty);
+        SetTile("active-profile", GetActiveProfileDisplayName(), string.Empty);
         SetTile("port", _settings.MixedPort.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
         SetTile("connection-test", "3", _localization.GetString("Master.Tile.ConnectionTest"));
         SetTile("connection-test-proxy-url-1", CompactUrl(_settings.ConnectionTestProxyUrl1), _settings.ConnectionTestProxyUrl1);
@@ -890,7 +910,7 @@ internal sealed class MasterControlViewModel : ObservableObject
                 FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionUploadBytes),
                 FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionDownloadBytes)));
         SetTile("memory-usage", FormatBytes(_runtimeSnapshot.AppWorkingSetBytes), _localization.GetString("Master.Tile.Detail.AppProcess"));
-        SetTile("profile-count", FormatNumber(_runtimeSnapshot.ProfileCount), _settings.ActiveProfileId);
+        SetTile("profile-count", FormatNumber(_runtimeSnapshot.ProfileCount), GetActiveProfileDisplayName());
         SetTile("subscription-count", FormatNumber(_runtimeSnapshot.SubscriptionCount), string.Empty);
         SetTile("proxy-node-count", FormatNumber(_runtimeSnapshot.ProxyNodeCount), string.Empty);
         SetTile("rule-count", FormatNumber(_runtimeSnapshot.RuleCount), string.Empty);
@@ -962,7 +982,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             MasterHeroStatusItemKind.TotalTraffic => FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
             MasterHeroStatusItemKind.ActiveConnections => FormatNumber(_runtimeSnapshot.RuntimeTraffic.ActiveConnectionCount),
             MasterHeroStatusItemKind.CurrentMode => GetModeTitle(SelectedMode),
-            MasterHeroStatusItemKind.ActiveProfile => _settings.ActiveProfileId,
+            MasterHeroStatusItemKind.ActiveProfile => GetActiveProfileDisplayName(),
             MasterHeroStatusItemKind.MihomoService => GetMihomoServiceStatusText(),
             MasterHeroStatusItemKind.StartupLaunch => _settings.LaunchAtStartupEnabled
                 ? _localization.GetString("Master.Status.StartupLaunchOn")
@@ -972,6 +992,14 @@ internal sealed class MasterControlViewModel : ObservableObject
                 : _localization.GetString("Master.Status.Unavailable"),
             _ => string.Empty,
         };
+    }
+
+    private string GetActiveProfileDisplayName()
+    {
+        return StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId)
+            && !string.IsNullOrWhiteSpace(_runtimeSnapshot.ActiveProfileName)
+            ? _runtimeSnapshot.ActiveProfileName
+            : _settings.ActiveProfileId;
     }
 
     private string TileDescription(string key)

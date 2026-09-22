@@ -9,79 +9,83 @@
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
-    <Grid Padding="{StaticResource ClashPagePadding}">
-        <StackPanel Spacing="18">
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
-
-            <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton x:Name="ImportProfileButton" Label="{Binding ImportProfileText}" Click="ImportProfileButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE8E5;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="ValidateProfileButton" Label="{Binding ValidateProfileText}" Click="ValidateProfileButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE73E;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="SetActiveProfileButton" Label="{Binding SetActiveProfileText}" Click="SetActiveProfileButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE73E;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarSeparator />
-                <AppBarButton x:Name="RenameProfileButton" Label="{Binding RenameProfileText}" Click="RenameProfileButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE70F;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="DeleteProfileButton" Label="{Binding DeleteProfileText}" Click="DeleteProfileButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE74D;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="ProfileHistoryButton" Label="{Binding ProfileHistoryText}" Click="ProfileHistoryButton_Click">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE81C;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-            </CommandBar>
-
-            <Grid Style="{StaticResource ClashCardGridStyle}">
-                <StackPanel Spacing="4">
-                    <TextBlock x:Name="CurrentProfileTitleText" Text="{Binding CurrentProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                    <TextBlock x:Name="ActiveProfileText" Text="{Binding ActiveProfileText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                </StackPanel>
-            </Grid>
-
-            <ListView x:Name="ProfilesList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Padding="4,10" ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="190" />
-                                <ColumnDefinition Width="130" />
-                                <ColumnDefinition Width="90" />
-                                <ColumnDefinition Width="90" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                <TextBlock Text="{Binding SourceNameDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-
-                            <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="2" Text="{Binding NodeCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Column="3" Text="{Binding RuleCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Column="4" Text="{Binding UpdatedAt}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+    <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
+
+        <CommandBar Grid.Row="1" DefaultLabelPosition="Right" Background="Transparent">
+            <AppBarButton x:Name="ImportProfileButton" Label="{Binding ImportProfileText}" Click="ImportProfileButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE8E5;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="ValidateProfileButton" IsEnabled="{Binding HasSelectedProfile}" Label="{Binding ValidateProfileText}" Click="ValidateProfileButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE73E;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="SetActiveProfileButton" IsEnabled="{Binding HasSelectedProfile}" Label="{Binding SetActiveProfileText}" Click="SetActiveProfileButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE73E;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarSeparator />
+            <AppBarButton x:Name="RenameProfileButton" IsEnabled="{Binding HasSelectedProfile}" Label="{Binding RenameProfileText}" Click="RenameProfileButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE70F;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="DeleteProfileButton" IsEnabled="{Binding HasSelectedProfile}" Label="{Binding DeleteProfileText}" Click="DeleteProfileButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE74D;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="ProfileHistoryButton" IsEnabled="{Binding HasSelectedProfile}" Label="{Binding ProfileHistoryText}" Click="ProfileHistoryButton_Click">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE81C;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+        </CommandBar>
+
+        <Grid Grid.Row="2" Style="{StaticResource ClashCardGridStyle}">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="CurrentProfileTitleText" Text="{Binding CurrentProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <TextBlock x:Name="ActiveProfileText" Text="{Binding ActiveProfileText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            </StackPanel>
+        </Grid>
+
+        <ListView Grid.Row="3" x:Name="ProfilesList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="4,10" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="190" />
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{Binding SourceNameDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="2" Text="{Binding NodeCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="3" Text="{Binding RuleCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="4" Text="{Binding UpdatedAt}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
     </Grid>
 </Page>

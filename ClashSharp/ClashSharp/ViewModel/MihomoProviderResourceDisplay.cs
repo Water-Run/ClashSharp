@@ -20,5 +20,7 @@ internal sealed record MihomoProviderResourceDisplay(
         Model.ItemCount.ToString("N0", CultureInfo.CurrentCulture);
 
     public string UpdatedAtDisplay =>
-        Model.UpdatedAt?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "-";
+        Model.UpdatedAt is DateTimeOffset updatedAt && updatedAt > DateTimeOffset.MinValue
+            ? updatedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+            : "-";
 }
