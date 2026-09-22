@@ -70,7 +70,9 @@ internal sealed class WindowsInstallerOwnedDirectoryCreationNative : IWindowsIns
         {
             var attributes = new SecurityAttributes
             {
-                Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = pinned.AddrOfPinnedObject(), InheritHandle = 0,
+                Length = Marshal.SizeOf<SecurityAttributes>(),
+                Descriptor = pinned.AddrOfPinnedObject(),
+                InheritHandle = 0,
             };
             if (CreateDirectoryNative(path, ref attributes)) { return true; }
             int error = Marshal.GetLastPInvokeError();

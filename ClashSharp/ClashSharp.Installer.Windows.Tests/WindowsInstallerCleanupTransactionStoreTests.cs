@@ -55,7 +55,7 @@ public sealed class WindowsInstallerCleanupTransactionStoreTests
 
         await store.ClearVerifiedAsync(verified.Journal.TransactionId, verified.ContentHash, CancellationToken.None);
 
-        Assert.Equal(new[] { "inner.load", "ledger.load", "ledger.save", "ledger.load", "inner.clear", "inner.load", "ledger.load" }, events);
+        Assert.Equal(["inner.load", "ledger.load", "ledger.save", "ledger.load", "inner.clear", "inner.load", "ledger.load"], events);
         Assert.Null(inner.Current);
         Assert.Equal(verified, ledger.Current!.Terminal);
         Assert.Equal(owned.Directories, ledger.Current.Directories);

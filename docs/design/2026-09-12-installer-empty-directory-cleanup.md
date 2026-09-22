@@ -1,5 +1,7 @@
 # 安装器空目录终结协议
 
+> 2026-09-22：本模块与测试已归并到 `main` 并完成联合验证。创建归属钩子暂未启用，须与 protected stores、parent reader、helper finalizer 一起接通并验收；下述协议仍是待完成的设计，不能当作已交付的自动清理能力。当前入口见[主线整理](../reviews/2026-09-22-development-status.md)。
+
 **暂停检查点（2026-09-12）**：用户要求收尾并暂停。本文件及同分支的目录归属、原生删除、terminal store 与相关新测试属于未完成工作，单独保存，不包含在本次 main `2c0266b` 源码节点中。完整 Windows 装配、统一编译测试、崩溃恢复矩阵及服务器真实自动清理均未完成，不能将下述设计描述视为已验收功能。已经完成的 reader 句柄寿命、结果协议、Clear 回复前扩展点和 WPF 展示分别在 `96e9cf7`、`2c0266b`。
 
 恢复时先核对本分支未验证源码，接通 protected stores、普通 helper 的 terminal finalizer、parent reader fallback，以及机器根创建归属；再统一执行 Windows 测试和隔离 native 探针。只有实际安装/修复/卸载及清理中断恢复通过后，才能把自动空目录清理计为产品能力。旧账户独立卸载仍须单独评估。

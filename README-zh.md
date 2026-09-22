@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/平台-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)](#安装)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)](./global.json)
 [![Package](https://img.shields.io/badge/打包-MSIX-4c1?style=flat-square)](#安装)
-[![Status](https://img.shields.io/badge/1.0.0-暂停检查点-orange?style=flat-square)](./docs/reviews/2026-09-12-pause-checkpoint.md)
+[![Status](https://img.shields.io/badge/1.0.0-开发中-orange?style=flat-square)](./docs/reviews/2026-09-22-development-status.md)
 
 [English](./README.md) · **简体中文** · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
@@ -20,8 +20,8 @@
 ---
 
 > [!IMPORTANT]
-> **1.0.0 正在开发, 当前停在一个已验证的暂停检查点.**
-> 检查点为 `main` [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), 标签 [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
+> **2026-09-22 已恢复 1.0.0 开发, 积累的代码统一归并到 `main`.**
+> 设置代际切换与自动空目录清理仍待完整生产接入. 下表是历史检查点 [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5) 的证据, 标签为 [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
 > 尚无正式发布 —— 当前 CI 产物仅用于验证, 不是发布包.
 
 | 方面 | 检查点处的状态 |
@@ -33,7 +33,7 @@
 | **网络** | 现有 Clash 配置的 32/32 节点探测与 HTTPS 转发成功 |
 | **待完成** | WPF 页面交互, 正常退出, 自动空目录清理, 完整发布矩阵 |
 
-<sub>对应候选, 证据边界, 剩余工作与之后的文档: **[当前开发状态](./docs/reviews/2026-09-17-development-status.md)** · **[1.0.0 执行账本](./docs/reviews/1.0.0-execution-ledger.md)** · [暂停检查点](./docs/reviews/2026-09-12-pause-checkpoint.md) · [实机验收](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
+<sub>对应候选, 证据边界, 剩余工作与之后的文档: **[当前开发状态](./docs/reviews/2026-09-22-development-status.md)** · **[1.0.0 执行账本](./docs/reviews/1.0.0-execution-ledger.md)** · [暂停检查点](./docs/reviews/2026-09-12-pause-checkpoint.md) · [实机验收](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
 
 ## 关于 Windows 原生
 
@@ -134,7 +134,7 @@ flowchart LR
 
 | 文档 | 内容 |
 | :--- | :--- |
-| [当前开发状态](./docs/reviews/2026-09-17-development-status.md) | 1.0.0 所处位置, 已关闭 PR 的恢复入口, 以及剩余工作 |
+| [当前开发状态](./docs/reviews/2026-09-22-development-status.md) | 1.0.0 所处位置, 主线归并与 PR 处理, 以及剩余工作 |
 | [1.0.0 执行账本](./docs/reviews/1.0.0-execution-ledger.md) | 里程碑, 候选, 证据与剩余工作 |
 | [暂停检查点](./docs/reviews/2026-09-12-pause-checkpoint.md) | 本次暂停的确切边界与恢复入口 |
 | [实机验收](./docs/reviews/2026-09-12-server-acceptance.md) | 真实新包的安装, 首次启动, 修复与卸载证据 |

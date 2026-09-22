@@ -117,7 +117,9 @@ internal static class WindowsInstallerDirectoryLedgerCodec
         {
             using JsonDocument document = JsonDocument.Parse(bytes, new JsonDocumentOptions
             {
-                MaxDepth = 4, AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow,
+                MaxDepth = 4,
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
             });
             JsonElement root = document.RootElement;
             ExactObject(root, "schema", "generation", "createdDirectories", "terminal");

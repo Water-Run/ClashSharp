@@ -259,6 +259,7 @@ public sealed class SettingsRegistryTests
                 "Russian",
                 "French",
                 "German",
+                "Persian",
             ],
             ["AppThemeMode"] = ["FollowSystem", "Light", "Dark"],
             ["AppAccentColorMode"] = ["FollowSystem", "Custom"],

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Network;
@@ -65,7 +66,7 @@ internal sealed class MainWindowComposition
 
     private void ApplyLayoutDirection(FrameworkElement root)
     {
-        root.FlowDirection = LocalizationService.IsRightToLeft(_localization.CurrentLanguage)
+        root.FlowDirection = LocalizationService.IsRightToLeft(_localization.CurrentLanguage, CultureInfo.CurrentUICulture)
             ? FlowDirection.RightToLeft
             : FlowDirection.LeftToRight;
     }
