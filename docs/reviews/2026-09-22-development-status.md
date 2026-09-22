@@ -9,7 +9,7 @@
 | 原入口 | 处理 |
 | --- | --- |
 | PR [#1](https://github.com/Water-Run/ClashSharp/pull/1)、[#2](https://github.com/Water-Run/ClashSharp/pull/2)、[#3](https://github.com/Water-Run/ClashSharp/pull/3) | 均已合并，无遗留开放评审 |
-| PR [#5](https://github.com/Water-Run/ClashSharp/pull/5) / `feat/settings-generation` | 重新处理关闭但未合并的草稿，归并设置基础设施、生产凭据与外观修复、绿色管理程序品牌 |
+| PR [#5](https://github.com/Water-Run/ClashSharp/pull/5) / `feat/settings-generation` | 已合并为 `af35185`，归并设置基础设施、生产凭据与外观修复、绿色管理程序品牌 |
 | `wip/installer-empty-cleanup` / `fix/installer-empty-cleanup` | 通过 merge 保留 `3b95e93` 的完整提交与清理模块，修复联合构建及格式问题；移除未完成的生产创建钩子 |
 | `fix/server-readiness-main` | 提交已属于主线，无独有功能；额外工作树改为 detached HEAD，保留其文件 |
 | 分支策略 | 本地及 origin 仅保留 `main`；历史检查点标签继续保留。后续从 `main` 和本文件继续开发 |
@@ -51,7 +51,9 @@
 | 安装器图标 / runtime / profile / 第三方声明 | 全部通过；runtime 1 正例和 19 反例，第三方契约 30 场景 / 53 断言 |
 | Sandbox 报告 / 启动证据 | 两个 PowerShell 版本各通过 111 / 16 项断言 |
 
-远端 CI 结果由 PR #5 和合并后的 `main` 工作流提供，不能用以上本机结果代替。可复现命令：
+PR 候选 `83f3058` 的[两项远端 CI](https://github.com/Water-Run/ClashSharp/actions/runs/35724023117) 均通过：.NET 构建、格式、测试与覆盖率门禁，以及完整离线开发安装包。已下载四份 TRX 并独立核对：主程序 2938、Core 1022、Presentation 143、Windows 1095，共 **5198 / 5198**，零失败、零跳过。开发包归档为 317846956 字节，artifact ID `10692941057`，仍是未签名验证产物。
+
+PR 合并提交 `af35185` 的 Git tree 与 `83f3058` 完全一致；后续收据更新仅修改本文。远端归并与分支删除后，全部四个历史分支头均为 `main` 的祖先，开放 PR 为零，本地和远端分支仅 `main`。可复现命令：
 
 ```powershell
 dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
@@ -62,7 +64,7 @@ dotnet test ClashSharp/ClashSharp.Installer.Presentation.Tests/ClashSharp.Instal
 dotnet test ClashSharp/ClashSharp.Installer.Windows.Tests/ClashSharp.Installer.Windows.Tests.csproj -c Release -p:Platform=x64 --no-build --filter 'FullyQualifiedName!~WindowsCurrentUserCertificateStoreAdapterTests&FullyQualifiedName!~WindowsTargetUserCertificateStoreAdapterTests'
 ```
 
-格式检查按 [CodingStyle.md](../../CodingStyle.md) 设置 `Platform=x64`。同时执行 CI 中的 PowerShell 5.1/7 语法、图标、打包 runtime、构建 profile、第三方声明与 Sandbox 报告/启动证据契约。六项实际证书存储测试留在隔离 Windows CI，本机未执行；它们不计入本机测试数。日志和 TRX 位于被 Git 忽略的 `artifacts/verification/consolidation-*`。
+格式检查按 [CodingStyle.md](../../CodingStyle.md) 设置 `Platform=x64`。同时执行 CI 中的 PowerShell 5.1/7 语法、图标、打包 runtime、构建 profile、第三方声明与 Sandbox 报告/启动证据契约。本机按类排除两个包含实际证书存储操作的测试类，共 20 项；隔离 Windows CI 全量执行并通过这 20 项，所以本机和 CI 总数不同。日志和 TRX 位于被 Git 忽略的 `artifacts/verification/consolidation-*`。
 
 本轮没有执行正式签名发布、安装卸载或真实代理接管。2026-09-12 的实机记录继续绑定当时的具体候选，不作为新归并代码的原生验收证明。
 
