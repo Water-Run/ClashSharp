@@ -10,6 +10,70 @@ public sealed class WindowsInstallerProtectedTransactionReaderTests
 {
     private const string TargetSid = "S-1-5-21-100-200-300-1001";
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TerminalRemainsVisibleAfterActiveJournalOrEntireStateRootDisappears(bool rootPresent)
+    {
+        using var fixture = new Fixture();
+        InstallerTransactionSnapshot verified = InstallerTransactionSnapshot.Create(fixture.Snapshot.Journal with
+        {
+            Phase = InstallerTransactionPhase.Verified,
+            Generation = 5,
+        });
+        var ledger = new DirectoryCleanupTestLedger { Current = new(1, [], verified) };
+        File.Delete(fixture.JournalPath);
+        fixture.Native.Present = rootPresent;
+        using WindowsInstallerProtectedTransactionReader reader = WindowsInstallerProtectedTransactionReader.CreateForTesting(
+            fixture.ProgramDataPath, TargetSid, fixture.Native, ledger);
+
+        Assert.Equal(verified, await reader.LoadAsync(CancellationToken.None));
+        Assert.Equal(0, fixture.Native.ActiveLeases);
+        Assert.Equal(0, fixture.Native.CreateCount);
+        Assert.Equal(0, ledger.SaveCount);
+        Assert.Equal(0, ledger.DeleteCount);
+
+        ledger.Current = null;
+        Assert.Null(await reader.LoadAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InconsistentActiveAndTerminalTransactionsFailWithoutLosingEitherIdentity()
+    {
+        using var fixture = new Fixture();
+        InstallerTransactionSnapshot verified = InstallerTransactionSnapshot.Create(fixture.Snapshot.Journal with
+        {
+            Phase = InstallerTransactionPhase.Verified,
+            Generation = 5,
+        });
+        var ledger = new DirectoryCleanupTestLedger { Current = new(1, [], verified) };
+        using WindowsInstallerProtectedTransactionReader reader = WindowsInstallerProtectedTransactionReader.CreateForTesting(
+            fixture.ProgramDataPath, TargetSid, fixture.Native, ledger);
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => reader.LoadAsync(CancellationToken.None));
+
+        Assert.Equal("installer.directory_ledger.terminal_identity_mismatch", failure.DiagnosticCode);
+        Assert.Equal(verified, ledger.Current.Terminal);
+        Assert.Equal(fixture.Snapshot.Journal, InstallerTransactionCodec.Parse(File.ReadAllBytes(fixture.JournalPath)));
+        Assert.Equal(0, fixture.Native.ActiveLeases);
+    }
+
+    [Fact]
+    public async Task LedgerReadFailurePropagatesAndReleasesAllDirectoryLeases()
+    {
+        using var fixture = new Fixture();
+        var failure = new IOException("Injected terminal read failure.");
+        var ledger = new DirectoryCleanupTestLedger { BeforeRead = _ => throw failure };
+        using WindowsInstallerProtectedTransactionReader reader = WindowsInstallerProtectedTransactionReader.CreateForTesting(
+            fixture.ProgramDataPath, TargetSid, fixture.Native, ledger);
+
+        Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => reader.LoadAsync(CancellationToken.None)));
+        Assert.Equal(0, fixture.Native.ActiveLeases);
+        ledger.BeforeRead = null;
+        Assert.Equal(fixture.Snapshot, await reader.LoadAsync(CancellationToken.None));
+    }
+
     [Fact]
     public async Task MissingAppearingAndRemovedStateAreObservedWithoutRetainedLeases()
     {

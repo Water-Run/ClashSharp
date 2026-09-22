@@ -11,14 +11,17 @@ public sealed class WindowsInstallerProtectedTransactionReader :
 {
     private readonly object _gate = new();
     private readonly Func<WindowsInstallerTransactionRootGuard> _createRootGuard;
+    private readonly IWindowsInstallerDirectoryLedgerPersistence? _directoryLedger;
     private int _activeReads;
     private bool _disposed;
 
     private WindowsInstallerProtectedTransactionReader(
-        Func<WindowsInstallerTransactionRootGuard> createRootGuard)
+        Func<WindowsInstallerTransactionRootGuard> createRootGuard,
+        IWindowsInstallerDirectoryLedgerPersistence? directoryLedger)
     {
         ArgumentNullException.ThrowIfNull(createRootGuard);
         _createRootGuard = createRootGuard;
+        _directoryLedger = directoryLedger;
         // Preserve eager path/SID validation without opening or creating directories.
         using WindowsInstallerTransactionRootGuard validation = _createRootGuard();
     }
@@ -27,7 +30,8 @@ public sealed class WindowsInstallerProtectedTransactionReader :
     /// Creates a non-creating reader for the canonical ProgramData root and exact target SID.
     /// </summary>
     public static WindowsInstallerProtectedTransactionReader CreateDefault(string targetSid) =>
-        new(() => WindowsInstallerTransactionRootGuard.CreateReadOnlyDefault(targetSid));
+        new(() => WindowsInstallerTransactionRootGuard.CreateReadOnlyDefault(targetSid),
+            WindowsInstallerDirectoryLedgerPersistence.CreateDefault());
 
     /// <inheritdoc />
     public async Task<InstallerTransactionSnapshot?> LoadAsync(
@@ -47,13 +51,19 @@ public sealed class WindowsInstallerProtectedTransactionReader :
             using WindowsInstallerTransactionRootGuard rootGuard = _createRootGuard();
             await rootGuard.EnsureProtectedAsync(rootGuard.RootPath, cancellationToken)
                 .ConfigureAwait(false);
-            if (!rootGuard.IsProtectedRootPresent)
+            InstallerTransactionSnapshot? active = null;
+            if (rootGuard.IsProtectedRootPresent)
             {
-                return null;
+                using var store = new FileInstallerTransactionStore(rootGuard.RootPath, rootGuard);
+                active = await store.LoadAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            using var store = new FileInstallerTransactionStore(rootGuard.RootPath, rootGuard);
-            return await store.LoadAsync(cancellationToken).ConfigureAwait(false);
+            // The terminal is outside the removable root. Its presence must remain observable
+            // after a crash between clearing the active journal and completing directory cleanup.
+            WindowsInstallerDirectoryLedger? ledger = _directoryLedger is null ? null
+                : await _directoryLedger.LoadAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return WindowsInstallerCleanupTransactionReader.Resolve(active, ledger);
         }
         finally
         {
@@ -81,9 +91,10 @@ public sealed class WindowsInstallerProtectedTransactionReader :
     internal static WindowsInstallerProtectedTransactionReader CreateForTesting(
         string programDataPath,
         string targetSid,
-        IWindowsInstallerDirectoryNative native) =>
+        IWindowsInstallerDirectoryNative native,
+        IWindowsInstallerDirectoryLedgerPersistence? directoryLedger = null) =>
         new(() => WindowsInstallerTransactionRootGuard.CreateReadOnlyForTesting(
             programDataPath,
             targetSid,
-            native));
+            native), directoryLedger);
 }

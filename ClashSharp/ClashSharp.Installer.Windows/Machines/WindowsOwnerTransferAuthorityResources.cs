@@ -76,12 +76,14 @@ internal sealed class WindowsOwnerTransferAuthorityResources : IWindowsOwnerTran
             // Installer roots through it, and disposal does not revalidate their transferred ACLs.
             ordinaryRoot = WindowsInstallerTransactionRootGuard.CreateReadOnlyDefault(journal.PreviousOwner.Association.OwnerSid);
             ordinary = new FileInstallerTransactionStore(ordinaryRoot.RootPath, ordinaryRoot);
+            var recoverableOrdinary = new WindowsInstallerCleanupTransactionStore(ordinary,
+                WindowsInstallerDirectoryLedgerPersistence.CreateDefault());
             var directories = new WindowsOwnerTransferAccessNative();
             var certificates = new WindowsOwnerTransferCertificateFileNative();
             return new(persistence, ordinaryRoot, ordinary,
-                new WindowsOwnerTransferPhaseExecutor(release, ordinary, backend, directories,
+                new WindowsOwnerTransferPhaseExecutor(release, recoverableOrdinary, backend, directories,
                     new WindowsOwnerTransferAssociationFileNative(), certificates),
-                new WindowsOwnerTransferPreparationVerifier(directories, certificates, ordinary));
+                new WindowsOwnerTransferPreparationVerifier(directories, certificates, recoverableOrdinary));
         }
         catch
         {

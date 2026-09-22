@@ -8,7 +8,7 @@ using ClashSharp.Installer.Windows.Transactions;
 
 namespace ClashSharp.Installer.Windows.Tests;
 
-public sealed class WindowsMachineHelperHostTests
+public sealed partial class WindowsMachineHelperHostTests
 {
     [Fact]
     public void NativeElevationCheckReportsMembershipWithoutChangingTheCurrentToken()
@@ -749,6 +749,10 @@ public sealed class WindowsMachineHelperHostTests
 
         public InstallerMachineHelperAuthoritySession Session { get; }
 
+        public Task<InstallerDirectoryCleanupReport?> CompleteUninstallAsync(
+            InstallerTransactionSnapshot verified, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("This fixture must not finalize an uninstall.");
+
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
@@ -772,6 +776,7 @@ public sealed class WindowsMachineHelperHostTests
         internal string? TargetSid { get; private set; }
         internal Exception? CreateFailure { get; init; }
         internal Exception? DisposeFailure { get; init; }
+        internal Func<InstallerTransactionSnapshot, CancellationToken, Task<InstallerDirectoryCleanupReport>>? Cleanup { get; init; }
 
         public IWindowsMachineHelperAuthorityResources Create(string targetSid)
         {
@@ -781,7 +786,7 @@ public sealed class WindowsMachineHelperHostTests
             {
                 throw CreateFailure;
             }
-            return new RecordingAuthorityResources(_events, _store, _operations, DisposeFailure);
+            return new RecordingAuthorityResources(_events, _store, _operations, DisposeFailure, Cleanup);
         }
     }
 
@@ -790,15 +795,18 @@ public sealed class WindowsMachineHelperHostTests
     {
         private readonly List<string> _events;
         private readonly Exception? _disposeFailure;
+        private readonly Func<InstallerTransactionSnapshot, CancellationToken, Task<InstallerDirectoryCleanupReport>>? _cleanup;
 
         internal RecordingAuthorityResources(
             List<string> events,
             IInstallerTransactionStore transactionStore,
             IInstallerMachineHelperOperationExecutor operations,
-            Exception? disposeFailure)
+            Exception? disposeFailure,
+            Func<InstallerTransactionSnapshot, CancellationToken, Task<InstallerDirectoryCleanupReport>>? cleanup)
         {
             _events = events;
             _disposeFailure = disposeFailure;
+            _cleanup = cleanup;
             TransactionStore = transactionStore;
             Operations = operations;
         }
@@ -806,6 +814,11 @@ public sealed class WindowsMachineHelperHostTests
         public IInstallerTransactionStore TransactionStore { get; }
 
         public IInstallerMachineHelperOperationExecutor Operations { get; }
+
+        public Task<InstallerDirectoryCleanupReport> CompleteUninstallAsync(
+            InstallerTransactionSnapshot verified, CancellationToken cancellationToken) =>
+            _cleanup?.Invoke(verified, cancellationToken)
+            ?? throw new InvalidOperationException("Unexpected uninstall finalization.");
 
         public ValueTask DisposeAsync()
         {

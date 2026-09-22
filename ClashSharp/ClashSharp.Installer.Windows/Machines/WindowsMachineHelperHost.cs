@@ -25,6 +25,9 @@ internal interface IWindowsMachineHelperAuthorityFactory
 internal interface IWindowsMachineHelperAuthorityLease : IAsyncDisposable
 {
     InstallerMachineHelperAuthoritySession Session { get; }
+
+    Task<InstallerDirectoryCleanupReport?> CompleteUninstallAsync(
+        InstallerTransactionSnapshot verified, CancellationToken cancellationToken);
 }
 
 internal sealed class WindowsMachineHelperAuthorityFactory
@@ -134,6 +137,15 @@ internal sealed class WindowsMachineHelperAuthorityLease
     }
 
     public InstallerMachineHelperAuthoritySession Session { get; }
+
+    public async Task<InstallerDirectoryCleanupReport?> CompleteUninstallAsync(
+        InstallerTransactionSnapshot verified, CancellationToken cancellationToken)
+    {
+        OwnedAuthority owned = _owned ?? throw new ObjectDisposedException(nameof(WindowsMachineHelperAuthorityLease));
+        // Resource disposal releases the transaction/certificate handles, while the outer lease
+        // continues to own application exclusion and the machine mutex until the reply is sent.
+        return await owned.Resources.CompleteUninstallAsync(verified, cancellationToken).ConfigureAwait(false);
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -320,6 +332,7 @@ internal sealed class WindowsMachineHelperHost
                 client.Transport,
                 authority.Session,
                 firstCommand,
+                (command, _, token) => authority.CompleteUninstallAsync(command.ToDurableState(), token),
                 sessionDeadline.Token)
             .ConfigureAwait(false);
     }

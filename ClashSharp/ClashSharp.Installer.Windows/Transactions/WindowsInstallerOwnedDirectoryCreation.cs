@@ -29,6 +29,9 @@ internal sealed class WindowsInstallerOwnedDirectoryCreation
     internal WindowsInstallerOwnedDirectoryCreation(WindowsInstallerDirectoryCleanupLayout layout,
         IWindowsInstallerDirectoryLedgerPersistence ledger, IWindowsInstallerOwnedDirectoryCreationNative native)
     {
+        ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(ledger);
+        ArgumentNullException.ThrowIfNull(native);
         _layout = layout;
         _ledger = ledger;
         _native = native;

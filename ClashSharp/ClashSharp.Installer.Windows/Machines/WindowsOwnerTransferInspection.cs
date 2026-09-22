@@ -72,7 +72,9 @@ internal sealed class WindowsOwnerTransferInspection : IWindowsOwnerTransferInsp
         await association.VerifyExactAsync(cancellationToken).ConfigureAwait(false);
         using WindowsInstallerTransactionRootGuard ordinaryGuard = WindowsInstallerTransactionRootGuard.CreateReadOnlyDefault(previous.OwnerSid);
         using var ordinary = new FileInstallerTransactionStore(ordinaryGuard.RootPath, ordinaryGuard);
-        if (await ordinary.LoadAsync(cancellationToken).ConfigureAwait(false) is not null)
+        var recovery = new WindowsInstallerCleanupTransactionReader(ordinary,
+            WindowsInstallerDirectoryLedgerPersistence.CreateDefault());
+        if (await recovery.LoadAsync(cancellationToken).ConfigureAwait(false) is not null)
         {
             throw new InstallerProtocolException("installer.owner_transfer.ordinary_state_pending");
         }

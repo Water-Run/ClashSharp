@@ -183,6 +183,10 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
         : IWindowsMachineHelperAuthorityLease
     {
         public InstallerMachineHelperAuthoritySession Session { get; } = session;
+        // Owner transfer hands off only a Repair transaction; it cannot authorize uninstall.
+        public Task<InstallerDirectoryCleanupReport?> CompleteUninstallAsync(
+            InstallerTransactionSnapshot verified, CancellationToken cancellationToken) =>
+            throw new InstallerProtocolException("installer.owner_transfer.operation_invalid");
         public ValueTask DisposeAsync() => scope.DisposeAsync();
     }
 

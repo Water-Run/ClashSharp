@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/Платформа-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)](#установка)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)](./global.json)
 [![Package](https://img.shields.io/badge/Пакет-MSIX-4c1?style=flat-square)](#установка)
-[![Status](https://img.shields.io/badge/1.0.0-пауза-orange?style=flat-square)](./docs/reviews/2026-09-22-development-status.md)
+[![Status](https://img.shields.io/badge/1.0.0-development-orange?style=flat-square)](./docs/reviews/2026-09-22-development-status.md)
 
 [English](./README.md) · [简体中文](./README-zh.md) · **Русский** · [فارسی](./README-fa.md)
 
@@ -21,7 +21,7 @@
 
 > [!IMPORTANT]
 > **Разработка 1.0.0 возобновлена 2026-09-22; накопленные изменения объединены в `main`.**
-> Переход настроек на поколения и автоматическая очистка пустых каталогов ещё требуют интеграции. Ниже приведены данные исторической контрольной точки [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), тег [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
+> Переход настроек на поколения продолжается. Автоматическая очистка пустых каталогов подключена к обычному удалению; полная проверка нового установочного пакета ещё предстоит ([запись об интеграции](./docs/reviews/2026-09-22-installer-cleanup-integration.md)). Ниже приведены данные исторической контрольной точки [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), тег [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
 > Официального релиза ещё нет — пакеты CI служат только для проверки, это не выпуск.
 
 | Область | Состояние на контрольной точке |

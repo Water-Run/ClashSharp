@@ -97,6 +97,10 @@ internal sealed class WindowsRetiredUninstallAuthorityFactory(
         : IWindowsMachineHelperAuthorityLease
     {
         public InstallerMachineHelperAuthoritySession Session { get; } = session;
+        // This removes an old user's package while preserving the current owner's shared roots.
+        public Task<InstallerDirectoryCleanupReport?> CompleteUninstallAsync(
+            InstallerTransactionSnapshot verified, CancellationToken cancellationToken) =>
+            Task.FromResult<InstallerDirectoryCleanupReport?>(null);
         public ValueTask DisposeAsync() => scope.DisposeAsync();
     }
 }

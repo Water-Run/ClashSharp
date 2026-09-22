@@ -1,10 +1,10 @@
 # 安装器空目录终结协议
 
-> 2026-09-22：本模块与测试已归并到 `main` 并完成联合验证。创建归属钩子暂未启用，须与 protected stores、parent reader、helper finalizer 一起接通并验收；下述协议仍是待完成的设计，不能当作已交付的自动清理能力。当前入口见[主线整理](../reviews/2026-09-22-development-status.md)。
+> 2026-09-22：创建归属、protected stores、parent reader 与普通 helper finalizer 已一起接入生产装配。已补充终结恢复、回复前释放与中断测试；真实权限和删除使用隔离 Windows CI 验证。同一新安装包的完整安装/修复/卸载及故障矩阵仍须验收，见[接入记录](../reviews/2026-09-22-installer-cleanup-integration.md)。
 
 **暂停检查点（2026-09-12）**：用户要求收尾并暂停。本文件及同分支的目录归属、原生删除、terminal store 与相关新测试属于未完成工作，单独保存，不包含在本次 main `2c0266b` 源码节点中。完整 Windows 装配、统一编译测试、崩溃恢复矩阵及服务器真实自动清理均未完成，不能将下述设计描述视为已验收功能。已经完成的 reader 句柄寿命、结果协议、Clear 回复前扩展点和 WPF 展示分别在 `96e9cf7`、`2c0266b`。
 
-恢复时先核对本分支未验证源码，接通 protected stores、普通 helper 的 terminal finalizer、parent reader fallback，以及机器根创建归属；再统一执行 Windows 测试和隔离 native 探针。只有实际安装/修复/卸载及清理中断恢复通过后，才能把自动空目录清理计为产品能力。旧账户独立卸载仍须单独评估。
+上述暂停状态属于历史快照；恢复后的接入已完成。只有同一候选实际安装/修复/卸载及清理中断恢复通过后，才能把自动空目录清理计为发布验收通过。旧账户独立卸载仍须单独评估。
 
 本批次仅清理安装器可证明创建、身份仍相同且为空的固定目录。既有版本只有目录安全验证，没有公共父目录创建记录；旧目录不补猜归属。
 
@@ -54,6 +54,6 @@ ledger 的 nullable terminal 存储完整 canonical `Verified`、`Uninstall` jou
 
 ## 改动边界与验证
 
-Windows 新增固定 layout/ledger codec、保护文件 persistence、创建记录、事务 store decorator 与终结清理 native；接入 ProtectedStateStores、DirectoryNative、短期 parent reader 和 Windows helper authority。Core 新增六角色报告、clear receipt、严格 helper response 与 before-reply 回调，由独立协作者实施。
+Windows 固定 layout/ledger codec、保护文件 persistence、创建记录、事务 store decorator 与终结清理 native 已接入 ProtectedStateStores、DirectoryNative、短期 parent reader 和普通 Windows helper authority。Core 六角色报告、clear receipt、严格 helper response 与 before-reply 回调由生产 helper 调用。换绑的普通事务检查也观察 terminal，避免越过尚未完成的卸载。旧账户卸载不调用全局终结器，因为新账户仍可能使用共享目录。
 
-测试覆盖：创建/记录顺序、既有目录不认领、对象替换/ACL/reparse、foreign 同名 ledger、异常/取消、terminal-only恢复、清除前后持久边界、释放资源但保留两把 lease、六角色固定顺序、非空与未知归属保留、删除后重观察失败、Clear committed replay、成功回复前异常。所有本地测试使用隔离临时普通路径和注入 native，不修改本机产品/代理/证书。
+测试覆盖：创建/记录顺序、既有目录不认领、对象替换/ACL/reparse、foreign 同名 ledger、异常/取消、terminal-only 恢复、清除前后持久边界、释放资源但保留两把 lease、六角色固定顺序、非空与未知归属保留、删除后重观察失败、Clear committed replay、成功回复前异常。本机测试使用隔离临时普通路径和注入 native，不修改本机产品/代理/证书。新增 `WindowsInstallerDirectoryCleanupNativeTests` 只在隔离的管理员 Windows runner 执行，使用唯一测试目录验证实际原生创建、受保护账本、目录替换、子文件、目录数据流及删除；不使用生产目录。

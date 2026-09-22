@@ -540,6 +540,9 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
     {
         public IInstallerTransactionStore TransactionStore => fixture.OrdinaryStore;
         public IInstallerMachineHelperOperationExecutor Operations { get; } = new NormalOperations(fixture);
+        public Task<InstallerDirectoryCleanupReport> CompleteUninstallAsync(
+            InstallerTransactionSnapshot verified, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Owner transfer cannot finalize an uninstall.");
         public async ValueTask DisposeAsync()
         {
             if (fixture.BeforeOrdinaryDispose is not null)

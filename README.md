@@ -21,7 +21,7 @@
 
 > [!IMPORTANT]
 > **1.0.0 development resumed on 2026-09-22, with accumulated work consolidated into `main`.**
-> Settings generation cutover and automatic empty-directory cleanup still need production integration. The historical checkpoint below is [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), tagged [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
+> Settings generation cutover remains in progress. Automatic empty-directory cleanup is now connected to ordinary uninstall; acceptance of the new installer package remains pending ([integration record](./docs/reviews/2026-09-22-installer-cleanup-integration.md)). The historical checkpoint below is [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), tagged [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
 > No formal release exists yet — CI packages are validation artifacts, not releases.
 
 | Area | State at the checkpoint |

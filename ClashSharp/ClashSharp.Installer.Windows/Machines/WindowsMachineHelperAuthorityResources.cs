@@ -11,6 +11,9 @@ internal interface IWindowsMachineHelperAuthorityResources : IAsyncDisposable
     IInstallerTransactionStore TransactionStore { get; }
 
     IInstallerMachineHelperOperationExecutor Operations { get; }
+
+    Task<InstallerDirectoryCleanupReport> CompleteUninstallAsync(
+        InstallerTransactionSnapshot verified, CancellationToken cancellationToken);
 }
 
 internal interface IWindowsMachineHelperAuthorityResourcesFactory
@@ -45,19 +48,32 @@ internal sealed class WindowsMachineHelperAuthorityResources
 {
     private readonly WindowsInstallerProtectedStateStores _stores;
     private readonly IInstallerMachineHelperOperationExecutor _operations;
+    private readonly WindowsInstallerEmptyDirectoryFinalizer _directoryFinalizer;
     private bool _disposed;
 
-    private WindowsMachineHelperAuthorityResources(
+    internal WindowsMachineHelperAuthorityResources(
         WindowsInstallerProtectedStateStores stores,
-        IInstallerMachineHelperOperationExecutor operations)
+        IInstallerMachineHelperOperationExecutor operations,
+        WindowsInstallerEmptyDirectoryFinalizer directoryFinalizer)
     {
+        ArgumentNullException.ThrowIfNull(stores);
+        ArgumentNullException.ThrowIfNull(operations);
+        ArgumentNullException.ThrowIfNull(directoryFinalizer);
         _stores = stores;
         _operations = operations;
+        _directoryFinalizer = directoryFinalizer;
     }
 
     public IInstallerTransactionStore TransactionStore => _stores.Transactions;
 
     public IInstallerMachineHelperOperationExecutor Operations => _operations;
+
+    public Task<InstallerDirectoryCleanupReport> CompleteUninstallAsync(
+        InstallerTransactionSnapshot verified, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _directoryFinalizer.CompleteAsync(verified, DisposeAsync, cancellationToken);
+    }
 
     internal static WindowsMachineHelperAuthorityResources CreateDefault(
         string targetSid,
@@ -74,7 +90,8 @@ internal sealed class WindowsMachineHelperAuthorityResources
                 operationsFactory(stores.CertificateOwnership)
                 ?? throw new InstallerProtocolException(
                     "installer.machine_helper.operations_missing");
-            return new WindowsMachineHelperAuthorityResources(stores, operations);
+            return new WindowsMachineHelperAuthorityResources(stores, operations,
+                WindowsInstallerEmptyDirectoryFinalizer.CreateDefault());
         }
         catch
         {

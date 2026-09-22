@@ -10,18 +10,22 @@ public sealed class WindowsInstallerProtectedStateStores : IDisposable
 {
     private readonly IDisposable? _rootGuardLifetime;
     private readonly FileInstallerTransactionStore _transactionStore;
+    private readonly IInstallerTransactionStore _transactions;
     private readonly FileInstallerCertificateOwnershipStore _certificateOwnershipStore;
     private bool _disposed;
 
     private WindowsInstallerProtectedStateStores(
         string rootPath,
-        IInstallerTransactionRootGuard rootGuard)
+        IInstallerTransactionRootGuard rootGuard,
+        IWindowsInstallerDirectoryLedgerPersistence? directoryLedger)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(rootGuard);
         RootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
         _rootGuardLifetime = rootGuard as IDisposable;
         _transactionStore = new FileInstallerTransactionStore(RootPath, rootGuard);
+        _transactions = directoryLedger is null ? _transactionStore
+            : new WindowsInstallerCleanupTransactionStore(_transactionStore, directoryLedger);
         _certificateOwnershipStore = new FileInstallerCertificateOwnershipStore(
             RootPath,
             rootGuard);
@@ -31,10 +35,10 @@ public sealed class WindowsInstallerProtectedStateStores : IDisposable
     public string RootPath { get; }
 
     /// <summary>Gets the compare-and-swap installer transaction journal store.</summary>
-    public IInstallerTransactionStore Transactions => _transactionStore;
+    public IInstallerTransactionStore Transactions => _transactions;
 
     /// <summary>Gets the least-authority transaction view intended for the unelevated parent.</summary>
-    public IInstallerTransactionReader TransactionReader => _transactionStore;
+    public IInstallerTransactionReader TransactionReader => _transactions;
 
     /// <summary>Gets the compare-and-swap certificate ownership ledger store.</summary>
     public IInstallerCertificateOwnershipStore CertificateOwnership =>
@@ -49,7 +53,8 @@ public sealed class WindowsInstallerProtectedStateStores : IDisposable
             WindowsInstallerTransactionRootGuard.CreateDefault(targetSid);
         try
         {
-            return new WindowsInstallerProtectedStateStores(guard.RootPath, guard);
+            return new WindowsInstallerProtectedStateStores(guard.RootPath, guard,
+                WindowsInstallerDirectoryLedgerPersistence.CreateDefault());
         }
         catch
         {
@@ -74,6 +79,7 @@ public sealed class WindowsInstallerProtectedStateStores : IDisposable
 
     internal static WindowsInstallerProtectedStateStores CreateForTesting(
         string rootPath,
-        IInstallerTransactionRootGuard rootGuard) =>
-        new(rootPath, rootGuard);
+        IInstallerTransactionRootGuard rootGuard,
+        IWindowsInstallerDirectoryLedgerPersistence? directoryLedger = null) =>
+        new(rootPath, rootGuard, directoryLedger);
 }

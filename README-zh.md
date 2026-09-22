@@ -21,7 +21,7 @@
 
 > [!IMPORTANT]
 > **2026-09-22 已恢复 1.0.0 开发, 积累的代码统一归并到 `main`.**
-> 设置代际切换与自动空目录清理仍待完整生产接入. 下表是历史检查点 [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5) 的证据, 标签为 [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
+> 设置代际切换继续推进. 自动空目录清理已接入普通卸载, 新安装包的完整验收仍待完成, 见[接入记录](./docs/reviews/2026-09-22-installer-cleanup-integration.md). 下表是历史检查点 [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5) 的证据, 标签为 [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
 > 尚无正式发布 —— 当前 CI 产物仅用于验证, 不是发布包.
 
 | 方面 | 检查点处的状态 |
