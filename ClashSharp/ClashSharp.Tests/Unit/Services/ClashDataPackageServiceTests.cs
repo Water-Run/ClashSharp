@@ -129,6 +129,72 @@ public sealed partial class ClashDataPackageServiceTests
         Assert.DoesNotContain("logs.sqlite3", relativePaths);
     }
 
+    /// <summary>Verifies configuration backup succeeds while the core owns its cache exclusively.</summary>
+    [Fact]
+    public async Task ExportAsync_WithLiveCoreCache_ExportsConfigurationWithoutOpeningTheCache()
+    {
+        using TemporaryDirectory directory = new();
+        string profileDirectory = Path.Combine(directory.Path, "mihomo", "profiles", "profile-1");
+        Directory.CreateDirectory(profileDirectory);
+        await File.WriteAllTextAsync(Path.Combine(profileDirectory, "config.yaml"), "rules: []");
+        string cachePath = Path.Combine(directory.Path, "mihomo", "cache.db");
+        using FileStream liveCache = new(cachePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        ClashDataPackageService service = new(new FakeClashDataPackageSettings(), directory.Path);
+        string packagePath = Path.Combine(directory.Path, "live-export.xml");
+
+        await service.ExportAsync(packagePath, ClashDataPackageScope.SettingsAndProxyConfiguration, CancellationToken.None);
+
+        Assert.Equal(["mihomo/profiles/profile-1/config.yaml"], LoadExportedRelativePaths(packagePath));
+        Assert.True(liveCache.CanWrite);
+    }
+
+    /// <summary>Verifies failed publication preserves the previous backup and cleans its temporary file.</summary>
+    [Fact]
+    public async Task ExportAsync_WhenDestinationIsLocked_PreservesExistingBackupAndRemovesStagingFile()
+    {
+        using TemporaryDirectory directory = new();
+        string packagePath = Path.Combine(directory.Path, "existing-backup.xml");
+        await File.WriteAllTextAsync(packagePath, "existing backup");
+        using FileStream existingBackup = new(packagePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        ClashDataPackageService service = new(new FakeClashDataPackageSettings(), directory.Path);
+
+        Exception? failure = await Record.ExceptionAsync(() => service.ExportAsync(
+            packagePath, ClashDataPackageScope.Settings, CancellationToken.None));
+
+        Assert.True(failure is IOException or UnauthorizedAccessException);
+        using StreamReader reader = new(existingBackup, leaveOpen: true);
+        Assert.Equal("existing backup", await reader.ReadToEndAsync());
+        Assert.Empty(Directory.GetFiles(directory.Path, "*.staging.*"));
+    }
+
+    /// <summary>Verifies importing an older backup cannot replace an active core cache.</summary>
+    [Fact]
+    public async Task ImportAsync_WithLegacyCacheEntry_PreservesLockedRuntimeCache()
+    {
+        using TemporaryDirectory directory = new();
+        string coreDirectory = Path.Combine(directory.Path, "mihomo");
+        Directory.CreateDirectory(coreDirectory);
+        string cachePath = Path.Combine(coreDirectory, "cache.db");
+        await File.WriteAllTextAsync(cachePath, "active cache");
+        using FileStream liveCache = new(cachePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        string packagePath = Path.Combine(directory.Path, "legacy-cache.xml");
+        XDocument package = new(new XElement("ClashSharpDataPackage",
+            new XAttribute("Format", "ClashSharp.XmlDataPackage"),
+            new XAttribute("Version", "1"),
+            new XAttribute("Scope", ClashDataPackageScope.SettingsAndProxyConfiguration.ToString()),
+            new XElement("Settings"),
+            new XElement("Files", new XElement("File",
+                new XAttribute("Path", "mihomo/cache.db"),
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("stale cache"))))));
+        await File.WriteAllTextAsync(packagePath, package.ToString(SaveOptions.DisableFormatting));
+        ClashDataPackageService service = new(new FakeClashDataPackageSettings(), directory.Path);
+
+        await service.ImportAsync(packagePath, CancellationToken.None);
+
+        using StreamReader cacheReader = new(liveCache, leaveOpen: true);
+        Assert.Equal("active cache", await cacheReader.ReadToEndAsync());
+    }
+
     /// <summary>Verifies import applies settings and restores package files into local data.</summary>
     [Fact]
     public async Task ImportAsync_AppliesSettingsAndRestoresFiles()

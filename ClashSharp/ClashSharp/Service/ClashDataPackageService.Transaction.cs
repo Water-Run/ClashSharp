@@ -1002,7 +1002,7 @@ internal sealed partial class ClashDataPackageService
                 || !targetPaths.Add(targetPath)
                 || IsTransactionInfrastructurePath(targetPath)
                 || !IsProxyConfigurationImportPath(targetPath)
-                || IsGeneratedRuntimeConfigPath(targetPath))
+                || IsRuntimeOwnedPath(targetPath))
             {
                 throw new InvalidDataException("Data transaction manifest has an unsafe target path.");
             }

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Components;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
@@ -59,8 +60,50 @@ internal sealed class DataPackageDialogPresenter
         cancellationToken.ThrowIfCancellationRequested();
         if (file is not null)
         {
-            await _operations.ExportDataAsync(file.Path, selectedScope, cancellationToken);
+            try
+            {
+                await _operations.ExportDataAsync(file.Path, selectedScope, cancellationToken);
+            }
+            catch (Exception exception) when (
+                !ExceptionGraphClassifier.IsProcessFatal(exception)
+                && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+            {
+                try
+                {
+                    await ShowExportResultAsync(xamlRoot, file.Path, succeeded: false, cancellationToken);
+                }
+                finally
+                {
+                    await _operations.ReportUnexpectedErrorAsync(
+                        "settings-data-export", exception, CancellationToken.None);
+                }
+                return;
+            }
+
+            await ShowExportResultAsync(xamlRoot, file.Path, succeeded: true, cancellationToken);
         }
+    }
+
+    private async Task ShowExportResultAsync(
+        XamlRoot xamlRoot,
+        string destinationPath,
+        bool succeeded,
+        CancellationToken cancellationToken)
+    {
+        ThemedContentDialog result = new()
+        {
+            Title = _getString(succeeded ? "Settings.DataExport.Completed" : "Settings.DataExport.Failed"),
+            Content = new TextBlock
+            {
+                Text = succeeded
+                    ? string.Format(CultureInfo.CurrentCulture, _getString("Settings.DataExport.SavedTo.Format"), destinationPath)
+                    : _getString("Settings.DataExport.Failed.Description"),
+                TextWrapping = TextWrapping.Wrap,
+            },
+            CloseButtonText = _getString("Command.Close"),
+            XamlRoot = xamlRoot,
+        };
+        await result.ShowManagedAsync(cancellationToken);
     }
 
     /// <summary>Imports a package after scope validation and two explicit overwrite confirmations.</summary>

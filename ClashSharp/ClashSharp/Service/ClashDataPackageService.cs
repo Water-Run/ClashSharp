@@ -207,7 +207,18 @@ internal sealed partial class ClashDataPackageService
             ExportSettings(),
             await ExportFilesAsync(fullPackagePath, scope, cancellationToken));
         XDocument document = new(new XDeclaration("1.0", "utf-8", null), root);
-        await File.WriteAllTextAsync(fullPackagePath, document.ToString(SaveOptions.DisableFormatting), cancellationToken);
+        // Publish a complete sibling file so a failed write cannot truncate an existing backup.
+        string stagingPath = fullPackagePath + ".staging." + Guid.NewGuid().ToString("N");
+        try
+        {
+            await File.WriteAllTextAsync(stagingPath, document.ToString(SaveOptions.DisableFormatting), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(stagingPath, fullPackagePath, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(stagingPath);
+        }
     }
 
 #if UNIT_TESTS
@@ -311,7 +322,7 @@ internal sealed partial class ClashDataPackageService
                     "Clash# data packages cannot target private transaction state.");
             }
 
-            if (IsGeneratedRuntimeConfigPath(targetPath))
+            if (IsRuntimeOwnedPath(targetPath))
             {
                 continue;
             }
@@ -466,7 +477,7 @@ internal sealed partial class ClashDataPackageService
 
         foreach (string filePath in EnumerateFilesWithoutReparsePoints(mihomoDirectory))
         {
-            if (!IsGeneratedRuntimeConfigPath(filePath))
+            if (!IsRuntimeOwnedPath(filePath))
             {
                 yield return filePath;
             }
@@ -748,7 +759,8 @@ internal sealed partial class ClashDataPackageService
         }
     }
 
-    private bool IsGeneratedRuntimeConfigPath(string path)
+    // Live core state is neither a portable configuration input nor an import target.
+    private bool IsRuntimeOwnedPath(string path)
     {
         string mihomoDirectoryPath = Path.Combine(
             _localDataDirectory,
@@ -777,7 +789,8 @@ internal sealed partial class ClashDataPackageService
                 Path.GetDirectoryName(normalizedPath),
                 mihomoDirectoryPath,
                 StringComparison.OrdinalIgnoreCase)
-                && (fileName.StartsWith("config.yaml.restore.", StringComparison.OrdinalIgnoreCase)
+                && (fileName.Equals("cache.db", StringComparison.OrdinalIgnoreCase)
+                    || fileName.StartsWith("config.yaml.restore.", StringComparison.OrdinalIgnoreCase)
                     || fileName.StartsWith("config.runtime-state.json.tmp.", StringComparison.OrdinalIgnoreCase));
     }
 
