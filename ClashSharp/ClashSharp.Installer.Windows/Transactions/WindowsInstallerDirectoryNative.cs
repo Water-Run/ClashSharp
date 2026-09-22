@@ -9,7 +9,7 @@ internal sealed class WindowsInstallerDirectoryNative : IWindowsInstallerDirecto
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(security);
-        new DirectoryInfo(path).Create(security);
+        WindowsInstallerOwnedDirectoryCreation.CreateDefault().Create(path, security);
     }
 
     /// <inheritdoc />
