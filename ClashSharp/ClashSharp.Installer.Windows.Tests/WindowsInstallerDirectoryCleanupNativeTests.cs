@@ -27,6 +27,47 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
         Assert.False(File.Exists(fixture.Layout.LedgerPath));
     }
 
+    [Fact]
+    public async Task TerminalSurvivesRemovedRootsAndFreshProtectedStoreRecreatesOnlyOwnedWorkDirectories()
+    {
+        using var fixture = new Fixture();
+        fixture.CreateAllOwned();
+        var interrupted = new WindowsInstallerEmptyDirectoryFinalizer(fixture.Layout,
+            new FailLedgerDeletion(fixture.Ledger), WindowsInstallerEmptyDirectoryNative.Instance);
+        await Assert.ThrowsAsync<IOException>(() => interrupted.CompleteAsync(fixture.Verified,
+            () => ValueTask.CompletedTask, CancellationToken.None));
+        Assert.All(Enum.GetValues<InstallerDirectoryRole>(), role => Assert.False(Directory.Exists(fixture.Layout.GetPath(role))));
+
+        var native = new FixtureDirectoryNative(fixture.Layout, fixture.Ledger);
+        using (var parent = WindowsInstallerProtectedTransactionReader.CreateForTesting(
+            fixture.Layout.ProgramData, fixture.TargetSid, native, fixture.Ledger))
+        {
+            Assert.Equal(fixture.Verified, await parent.LoadAsync(CancellationToken.None));
+        }
+        Assert.All(Enum.GetValues<InstallerDirectoryRole>(), role => Assert.False(Directory.Exists(fixture.Layout.GetPath(role))));
+
+        using (var guard = WindowsInstallerTransactionRootGuard.CreateForTesting(
+            fixture.Layout.ProgramData, fixture.TargetSid, native))
+        using (var stores = WindowsInstallerProtectedStateStores.CreateForTesting(guard.RootPath, guard, fixture.Ledger))
+        {
+            Assert.Equal(fixture.Verified, await stores.Transactions.LoadAsync(CancellationToken.None));
+            Assert.True(Directory.Exists(guard.RootPath));
+            Assert.Empty(Directory.EnumerateFiles(guard.RootPath));
+            Assert.Equal(fixture.Verified, await stores.Transactions.SaveAsync(
+                fixture.Verified.Journal, fixture.Verified.ContentHash, CancellationToken.None));
+            await stores.Transactions.ClearVerifiedAsync(fixture.Verified.Journal.TransactionId,
+                fixture.Verified.ContentHash, CancellationToken.None);
+            Assert.Null(await stores.Transactions.LoadAsync(CancellationToken.None));
+            Assert.Empty(Directory.EnumerateFiles(guard.RootPath));
+        }
+
+        InstallerDirectoryCleanupReport report = await fixture.CompleteAsync();
+
+        Assert.False(report.HasRetained);
+        Assert.All(Enum.GetValues<InstallerDirectoryRole>(), role => Assert.False(Directory.Exists(fixture.Layout.GetPath(role))));
+        Assert.Null(await fixture.Ledger.LoadAsync(CancellationToken.None));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -92,6 +133,10 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
         internal DirectorySecurity Security { get; }
         internal WindowsInstallerDirectoryCleanupLayout Layout { get; }
         internal WindowsInstallerDirectoryLedgerPersistence Ledger { get; }
+        internal string TargetSid { get; }
+        internal InstallerTransactionSnapshot Verified => InstallerTransactionSnapshot.Create(new(InstallerTransactionJournal.CurrentSchema,
+            new string('a', 64), InstallerOperation.Uninstall, TargetSid, false,
+            "1.0.0.0", new string('b', 64), InstallerTransactionPhase.Verified, 5));
         internal string ReplacedDirectory => Path.Combine(_programFiles, "replaced-test-directory");
         internal string? RetainedFile { get; set; }
 
@@ -101,6 +146,7 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
             Assert.True(new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator),
                 "Run native cleanup tests in an isolated elevated Windows runner.");
             string sid = identity.User!.Value;
+            TargetSid = sid;
             Security = WindowsInstallerDirectorySecurityPolicy.CreateProtectedDirectorySecurity(sid);
             _root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "ClashSharp.DirectoryCleanup.Tests." + Guid.NewGuid().ToString("N"));
@@ -129,11 +175,8 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
 
         internal Task<InstallerDirectoryCleanupReport> CompleteAsync()
         {
-            InstallerTransactionSnapshot verified = InstallerTransactionSnapshot.Create(new(InstallerTransactionJournal.CurrentSchema,
-                new string('a', 64), InstallerOperation.Uninstall, "S-1-5-21-100-200-300-1001", false,
-                "1.0.0.0", new string('b', 64), InstallerTransactionPhase.Verified, 5));
             return new WindowsInstallerEmptyDirectoryFinalizer(Layout, Ledger, WindowsInstallerEmptyDirectoryNative.Instance)
-                .CompleteAsync(verified, () => ValueTask.CompletedTask, CancellationToken.None);
+                .CompleteAsync(Verified, () => ValueTask.CompletedTask, CancellationToken.None);
         }
 
         public void Dispose()
@@ -156,5 +199,26 @@ public sealed class WindowsInstallerDirectoryCleanupNativeTests
         {
             if (Directory.Exists(path)) { Directory.Delete(path, recursive: false); }
         }
+    }
+
+    // Substitute only the known-folder layout. Creation, handles, security, and persistence remain native.
+    private sealed class FixtureDirectoryNative(WindowsInstallerDirectoryCleanupLayout layout,
+        IWindowsInstallerDirectoryLedgerPersistence ledger) : IWindowsInstallerDirectoryNative
+    {
+        public void CreateDirectory(string path, DirectorySecurity security) =>
+            new WindowsInstallerOwnedDirectoryCreation(layout, ledger, WindowsInstallerOwnedDirectoryCreationNative.Instance)
+                .Create(path, security);
+
+        public IWindowsInstallerDirectoryLease OpenDirectory(string path) =>
+            new WindowsInstallerDirectoryNative().OpenDirectory(path);
+    }
+
+    private sealed class FailLedgerDeletion(IWindowsInstallerDirectoryLedgerPersistence inner) : IWindowsInstallerDirectoryLedgerPersistence
+    {
+        public Task<WindowsInstallerDirectoryLedger?> LoadAsync(CancellationToken cancellationToken) => inner.LoadAsync(cancellationToken);
+        public Task SaveAsync(WindowsInstallerDirectoryLedger? expected, WindowsInstallerDirectoryLedger desired,
+            CancellationToken cancellationToken) => inner.SaveAsync(expected, desired, cancellationToken);
+        public Task DeleteAsync(WindowsInstallerDirectoryLedger expected, CancellationToken cancellationToken) =>
+            throw new IOException("Injected interruption after the native directories were removed.");
     }
 }

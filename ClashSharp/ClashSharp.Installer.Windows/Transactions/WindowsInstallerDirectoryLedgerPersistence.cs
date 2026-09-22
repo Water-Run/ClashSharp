@@ -190,9 +190,9 @@ internal sealed class WindowsInstallerDirectoryLedgerFileNative : IWindowsInstal
         ValidatePath(path);
         _ = WindowsInstallerDirectoryLedgerCodec.Parse(desired);
         cancellationToken.ThrowIfCancellationRequested();
-        // A protected existing object is held open throughout publication. Delete sharing permits
-        // this authority's atomic replacement; its exact DACL and the pinned parent prohibit user replacement.
-        using SafeFileHandle? original = OpenIfPresent(path, deletion: false, allowDeleteSharing: true);
+        // Pin the authenticated existing object while preparing its replacement. Windows rejects
+        // MoveFileEx replacement of an open destination, even if that handle shares delete access.
+        using SafeFileHandle? original = OpenIfPresent(path, deletion: false);
         byte[]? current = original is null ? null : await ReadHandleAsync(original, cancellationToken).ConfigureAwait(false);
         RequireExpected(expected, current);
         WindowsFileIdentity? originalIdentity = original is null ? null : WindowsFileSystemNative.GetOrdinaryFileIdentity(original);
@@ -212,7 +212,7 @@ internal sealed class WindowsInstallerDirectoryLedgerFileNative : IWindowsInstal
                 stream.Flush(flushToDisk: true);
             }
             cancellationToken.ThrowIfCancellationRequested();
-            using (SafeFileHandle? final = OpenIfPresent(path, deletion: false, allowDeleteSharing: true))
+            using (SafeFileHandle? final = OpenIfPresent(path, deletion: false))
             {
                 if ((final is null) != (originalIdentity is null)
                     || final is not null && WindowsFileSystemNative.GetOrdinaryFileIdentity(final) != originalIdentity)
@@ -224,6 +224,10 @@ internal sealed class WindowsInstallerDirectoryLedgerFileNative : IWindowsInstal
                     RequireExpected(expected, await ReadHandleAsync(final, cancellationToken).ConfigureAwait(false));
                 }
             }
+            // Release only the file handle after the final identity/bytes check. The machine
+            // authority still serializes writers, the parent chain stays pinned, and the exact
+            // protected file DACL prevents an unelevated caller from replacing or editing it.
+            original?.Dispose();
             // Crucially, a missing target is published WITHOUT REPLACE_EXISTING. ProgramData can
             // permit unrelated users to create names; a name won in that race must never be overwritten.
             if (!MoveFileEx(temporary, path, 8U | (originalIdentity is null ? 0U : 1U)))
@@ -283,10 +287,10 @@ internal sealed class WindowsInstallerDirectoryLedgerFileNative : IWindowsInstal
         return bytes;
     }
 
-    private static SafeFileHandle? OpenIfPresent(string path, bool deletion, bool allowDeleteSharing = false)
+    private static SafeFileHandle? OpenIfPresent(string path, bool deletion)
     {
         SafeFileHandle handle = CreateFile(path, 0x80000000U | (deletion ? 0x00010000U : 0U),
-            1U | (allowDeleteSharing ? 4U : 0U), 0, 3, 0x00200000U, 0);
+            1U, 0, 3, 0x00200000U, 0);
         if (handle.IsInvalid)
         {
             int error = Marshal.GetLastPInvokeError();
