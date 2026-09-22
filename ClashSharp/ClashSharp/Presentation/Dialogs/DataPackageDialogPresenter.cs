@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -124,7 +123,9 @@ internal sealed class DataPackageDialogPresenter
         ClashDataPackageScope? scope = _operations.ReadPackageScope(file.Path);
         if (!IsImportableDataPackageScope(scope))
         {
-            throw new InvalidDataException("settings.data_package.invalid_scope");
+            await ShowImportResultAsync(xamlRoot,
+                "Settings.DataImport.Invalid", "Settings.DataImport.Invalid.Description", cancellationToken);
+            return false;
         }
 
         if (!await ConfirmDataImportAsync(xamlRoot, scope!.Value, cancellationToken))
@@ -133,8 +134,43 @@ internal sealed class DataPackageDialogPresenter
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
+        try
+        {
+            await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
+        }
+        catch (Exception exception) when (
+            !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            try
+            {
+                await ShowImportResultAsync(xamlRoot,
+                    "Settings.DataImport.Failed", "Settings.DataImport.Failed.Description", cancellationToken);
+            }
+            finally
+            {
+                await _operations.ReportUnexpectedErrorAsync(
+                    "settings-data-import", exception, CancellationToken.None);
+            }
+            return false;
+        }
+
+        await ShowImportResultAsync(xamlRoot,
+            "Settings.DataImport.Completed", "Settings.DataImport.Completed.Description", cancellationToken);
         return true;
+    }
+
+    private async Task ShowImportResultAsync(
+        XamlRoot xamlRoot, string titleKey, string messageKey, CancellationToken cancellationToken)
+    {
+        ThemedContentDialog result = new()
+        {
+            Title = _getString(titleKey),
+            Content = new TextBlock { Text = _getString(messageKey), TextWrapping = TextWrapping.Wrap },
+            CloseButtonText = _getString("Command.Close"),
+            XamlRoot = xamlRoot,
+        };
+        await result.ShowManagedAsync(cancellationToken);
     }
 
     private async Task<DataPackageExportScope?> SelectDataPackageExportScopeAsync(

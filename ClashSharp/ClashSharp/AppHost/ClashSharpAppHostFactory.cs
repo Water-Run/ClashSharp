@@ -10,6 +10,7 @@ using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Hosting.Compatibility;
+using ClashSharp.Hosting.Settings;
 using ClashSharp.Hosting.Startup;
 using ClashSharp.Infrastructure.Recovery;
 using ClashSharp.Infrastructure.Security;
@@ -147,6 +148,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton<SettingsRuntimeMutationAdapter>();
+            services.AddSingleton<INetworkSettingsRuntime, NetworkSettingsRuntime>();
             services.AddSingleton(_ => new SqliteTriggerRepository(triggerDatabasePath));
             services.AddSingleton<ITriggerRepository>(provider =>
                 provider.GetRequiredService<SqliteTriggerRepository>());

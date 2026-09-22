@@ -186,29 +186,6 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         return _sampling.RestartFromSettingsAsync(cancellationToken);
     }
 
-    /// <summary>Applies network settings through an already-owned destructive admission lease.</summary>
-    internal async Task<NetworkTakeoverResult> ApplyNetworkSettingsAdmittedAsync(
-        bool transparentProxyEnabled,
-        int mixedPort,
-        MutationAdmissionLease admissionLease,
-        CancellationToken cancellationToken)
-    {
-        NetworkIntent? appliedIntent = null;
-        MutationResult<NetworkTransitionResult> mutation = await _network
-            .ApplyAdmittedAsync(
-                () => appliedIntent = NetworkIntent.ChangeMode(
-                    GetSupportedCurrentMode(),
-                    transparentProxyEnabled,
-                    mixedPort),
-                admissionLease,
-                cancellationToken)
-            .ConfigureAwait(false);
-        return CreateNetworkTakeoverResult(
-            mutation,
-            appliedIntent
-                ?? throw new InvalidOperationException("The admitted network mutation did not compose an intent."));
-    }
-
     /// <summary>Changes only the requested TUN preference, reading mode and port under mutation ownership.</summary>
     internal Task<NetworkTakeoverResult> ApplyTransparentProxyAsync(
         bool transparentProxyEnabled,

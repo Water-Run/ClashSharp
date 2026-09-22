@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -53,9 +54,9 @@ internal sealed class LogsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="RecentLogs"/>.</summary>
     private IReadOnlyList<LogRecord> _recentLogs = [];
 
-    private IReadOnlyList<string> _categoryFilterOptions = [];
+    private readonly ObservableCollection<string> _categoryFilterOptions = [];
 
-    private IReadOnlyList<string> _levelFilterOptions = [];
+    private readonly ObservableCollection<string> _levelFilterOptions = [];
 
     private readonly Dictionary<string, string?> _levelFilterValues = new(StringComparer.Ordinal);
 
@@ -147,17 +148,9 @@ internal sealed class LogsViewModel : ObservableObject
         set => ApplySearchText(value);
     }
 
-    public IReadOnlyList<string> LevelFilterOptions
-    {
-        get => _levelFilterOptions;
-        private set => SetProperty(ref _levelFilterOptions, value);
-    }
+    public IReadOnlyList<string> LevelFilterOptions => _levelFilterOptions;
 
-    public IReadOnlyList<string> CategoryFilterOptions
-    {
-        get => _categoryFilterOptions;
-        private set => SetProperty(ref _categoryFilterOptions, value);
-    }
+    public IReadOnlyList<string> CategoryFilterOptions => _categoryFilterOptions;
 
     public string SelectedLevelFilter
     {
@@ -690,12 +683,11 @@ internal sealed class LogsViewModel : ObservableObject
         bool optionsChanged = !LevelFilterOptions.SequenceEqual(options, StringComparer.Ordinal);
         if (optionsChanged)
         {
-            LevelFilterOptions = options;
+            SynchronizeFilterOptions(_levelFilterOptions, options);
         }
         if (!SetProperty(ref _selectedLevelFilter, selectedDisplay, nameof(SelectedLevelFilter))
             && optionsChanged)
         {
-            // Replacing ItemsSource clears the native selection even when its value is unchanged.
             OnPropertyChanged(nameof(SelectedLevelFilter));
         }
         OnPropertyChanged(nameof(SelectedLevelFilterIndex));
@@ -733,7 +725,7 @@ internal sealed class LogsViewModel : ObservableObject
         bool optionsChanged = !CategoryFilterOptions.SequenceEqual(options, StringComparer.Ordinal);
         if (optionsChanged)
         {
-            CategoryFilterOptions = options;
+            SynchronizeFilterOptions(_categoryFilterOptions, options);
         }
         if (!SetProperty(
             ref _selectedCategoryFilter,
@@ -743,6 +735,31 @@ internal sealed class LogsViewModel : ObservableObject
             OnPropertyChanged(nameof(SelectedCategoryFilter));
         }
         OnPropertyChanged(nameof(SelectedCategoryFilterIndex));
+    }
+
+    /// <summary>Keeps the native ItemsSource and surviving items stable as live log sources arrive.</summary>
+    private static void SynchronizeFilterOptions(ObservableCollection<string> current, IReadOnlyList<string> desired)
+    {
+        for (int index = 0; index < desired.Count; index++)
+        {
+            if (index < current.Count && StringComparer.Ordinal.Equals(current[index], desired[index]))
+            {
+                continue;
+            }
+            int existing = current.IndexOf(desired[index]);
+            if (existing >= 0)
+            {
+                current.Move(existing, index);
+            }
+            else
+            {
+                current.Insert(index, desired[index]);
+            }
+        }
+        while (current.Count > desired.Count)
+        {
+            current.RemoveAt(current.Count - 1);
+        }
     }
 
     private static int FindFilterIndex(IReadOnlyList<string> options, string selected)

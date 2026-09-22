@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.Hosting.Settings;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.Settings;
@@ -16,18 +17,21 @@ internal sealed class SettingsRuntimeMutationAdapter
     private readonly ApplicationActionService _applicationActions;
     private readonly AppSettingsService _settings;
     private readonly ClashDataPackageService _dataPackages;
+    private readonly INetworkSettingsRuntime _networkRuntime;
 
     public SettingsRuntimeMutationAdapter(
         IApplicationActionDispatcher actions,
         ApplicationActionService applicationActions,
         AppSettingsService settings,
-        ClashDataPackageService dataPackages)
+        ClashDataPackageService dataPackages,
+        INetworkSettingsRuntime networkRuntime)
     {
         _actions = actions ?? throw new ArgumentNullException(nameof(actions));
         _applicationActions = applicationActions
             ?? throw new ArgumentNullException(nameof(applicationActions));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _dataPackages = dataPackages ?? throw new ArgumentNullException(nameof(dataPackages));
+        _networkRuntime = networkRuntime ?? throw new ArgumentNullException(nameof(networkRuntime));
     }
 
     /// <summary>Applies startup registration through the tracked application action boundary.</summary>
@@ -59,6 +63,7 @@ internal sealed class SettingsRuntimeMutationAdapter
             _applicationActions,
             _dataPackages,
             _settings,
+            _networkRuntime,
             lease);
     }
 
@@ -80,11 +85,13 @@ internal sealed class SettingsRuntimeMutationAdapter
         ApplicationActionService actions,
         ClashDataPackageService dataPackages,
         AppSettingsService settings,
+        INetworkSettingsRuntime networkRuntime,
         MutationAdmissionLease admissionLease) : ISettingsDestructiveRuntimeScope
     {
         private ApplicationActionService? _actions = actions;
         private readonly ClashDataPackageService _dataPackages = dataPackages;
         private readonly AppSettingsService _settings = settings;
+        private readonly INetworkSettingsRuntime _networkRuntime = networkRuntime;
         private MutationAdmissionLease? _admissionLease = admissionLease;
 
         public async Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(
@@ -150,13 +157,18 @@ internal sealed class SettingsRuntimeMutationAdapter
             int mixedPort,
             CancellationToken cancellationToken)
         {
-            _ = await GetActions()
-                .ApplyNetworkSettingsAdmittedAsync(
+            _ = GetLease();
+            // The retained data transaction has already published the desired profile and
+            // settings. Observe the independently verified runtime, not those new preferences,
+            // when deciding whether the previous network generation is safe to replace.
+            await _networkRuntime.RecoverConfigurationAsync(cancellationToken).ConfigureAwait(false);
+            await _networkRuntime.ApplyConfigurationAsync(
+                new NetworkSettingsConfiguration(
+                    _settings.CurrentMode,
+                    _settings.ActiveProfileId,
                     transparentProxyEnabled,
-                    mixedPort,
-                    GetLease(),
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    mixedPort),
+                cancellationToken).ConfigureAwait(false);
         }
 
         public async ValueTask DisposeAsync()

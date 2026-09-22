@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
@@ -32,6 +33,8 @@ public sealed class LogsViewModelTests
         Assert.Same(levels, viewModel.LevelFilterOptions);
         Assert.Equal(("Application", "Error", "needle"), store.LastQuery);
         int visibleCategoryIndex = viewModel.SelectedCategoryFilterIndex;
+        List<NotifyCollectionChangedAction> categoryChanges = [];
+        ((INotifyCollectionChanged)categories).CollectionChanged += (_, args) => categoryChanges.Add(args.Action);
         viewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(viewModel.CategoryFilterOptions))
@@ -48,6 +51,9 @@ public sealed class LogsViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal(2, visibleCategoryIndex);
+        Assert.Same(categories, viewModel.CategoryFilterOptions);
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, categoryChanges);
+        Assert.Contains(NotifyCollectionChangedAction.Add, categoryChanges);
         Assert.Equal("Application", viewModel.CategoryFilterOptions[visibleCategoryIndex]);
         Assert.Equal(3, viewModel.SelectedLevelFilterIndex);
         Assert.Equal(("Application", "Error", "needle"), store.LastQuery);

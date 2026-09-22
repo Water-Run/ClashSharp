@@ -56,6 +56,34 @@ public sealed class NetworkSettingsRuntimeTests
         Assert.Equal(new Host.Model.WindowsProxyState(true, "127.0.0.1:18301"), ports.Proxy);
     }
 
+    [Theory]
+    [InlineData(ClashSharpMode.Disabled)]
+    [InlineData(ClashSharpMode.Standby)]
+    [InlineData(ClashSharpMode.RuleTakeover)]
+    public async Task RestoredProfile_ReplacesVerifiedPreviousGenerationAndCanRestoreBaseline(ClashSharpMode mode)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        NativePorts ports = new();
+        Host.Service.CoreConfigurationService configuration = CreateConfiguration(directory.RootPath);
+        Host.Hosting.Settings.NetworkSettingsRuntime runtime = new(configuration, ports.Takeover, ports.WindowsProxy);
+        NetworkSettingsConfiguration baseline = new(mode, "builtin-direct", false, 18315);
+        await runtime.ApplyConfigurationAsync(baseline, CancellationToken.None);
+        string profilePath = configuration.GetProfileConfigurationPath("restored-profile");
+        Directory.CreateDirectory(Path.GetDirectoryName(profilePath)!);
+        await File.WriteAllTextAsync(profilePath, "proxies: []\nproxy-groups: []\nrules:\n  - MATCH,DIRECT\n");
+
+        NetworkSettingsConfiguration restored = new(mode, "restored-profile", false, 18316);
+        await runtime.ApplyConfigurationAsync(restored, CancellationToken.None);
+        Assert.Equal(restored, await runtime.ReadConfigurationAsync(CancellationToken.None));
+        Assert.Equal("restored-profile", configuration.ObserveRuntimeConfigurationIntegrity().AppliedPlan!.ProfileId);
+        Assert.Equal(mode != ClashSharpMode.Disabled, ports.CoreRunning);
+        Assert.Equal(mode == ClashSharpMode.RuleTakeover, ports.Proxy.IsEnabled);
+
+        await runtime.ApplyConfigurationAsync(baseline, CancellationToken.None);
+        Assert.Equal(baseline, await runtime.ReadConfigurationAsync(CancellationToken.None));
+        Assert.Equal("builtin-direct", configuration.ObserveRuntimeConfigurationIntegrity().AppliedPlan!.ProfileId);
+    }
+
     [Fact]
     public async Task ModifiedConfigOrAppliedSnapshot_CannotProvideGenerationEvidence()
     {
