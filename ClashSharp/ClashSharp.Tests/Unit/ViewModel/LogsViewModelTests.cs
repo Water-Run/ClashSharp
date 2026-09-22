@@ -10,6 +10,43 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Verifies asynchronous log maintenance and preview presentation boundaries.</summary>
 public sealed class LogsViewModelTests
 {
+    [Fact]
+    public async Task LoadAsync_RetainsFiltersAcrossRefreshAndNewCategories()
+    {
+        FakeLogManagementStore store = new() { Sources = ["Application"] };
+        LogsViewModel viewModel = CreateViewModel(store, new TestApplicationErrorSink());
+        await viewModel.LoadAsync(CancellationToken.None);
+        viewModel.SelectedCategoryFilter = "Application";
+        viewModel.SelectedLevelFilter = viewModel.LevelFilterOptions[3];
+        viewModel.ApplySearchText("needle");
+        IReadOnlyList<string> categories = viewModel.CategoryFilterOptions;
+        IReadOnlyList<string> levels = viewModel.LevelFilterOptions;
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Same(categories, viewModel.CategoryFilterOptions);
+        Assert.Same(levels, viewModel.LevelFilterOptions);
+        Assert.Equal(("Application", "Error", "needle"), store.LastQuery);
+        string? visibleCategory = viewModel.SelectedCategoryFilter;
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(viewModel.CategoryFilterOptions))
+            {
+                visibleCategory = null;
+            }
+            else if (args.PropertyName == nameof(viewModel.SelectedCategoryFilter))
+            {
+                visibleCategory = viewModel.SelectedCategoryFilter;
+            }
+        };
+        store.Sources = ["Application", "Startup"];
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("Application", visibleCategory);
+        Assert.Equal(("Application", "Error", "needle"), store.LastQuery);
+    }
+
     /// <summary>Verifies page-owned runtime streaming publishes a bounded display row and honors cancellation.</summary>
     [Fact]
     public async Task WatchRuntimeLogsAsync_PublishesRuntimeLogUntilCancelled()
@@ -429,6 +466,10 @@ public sealed class LogsViewModelTests
 
         public IReadOnlyList<LogRecord> Logs { get; init; } = [];
 
+        public IReadOnlyList<string> Sources { get; set; } = [];
+
+        public (string? Source, string? Level, string? SearchText) LastQuery { get; private set; }
+
         public int PreviewReadCount => Volatile.Read(ref _previewReadCount);
 
         public int StorageSummaryReadCount => Volatile.Read(ref _storageSummaryReadCount);
@@ -441,7 +482,7 @@ public sealed class LogsViewModelTests
 
         public IReadOnlyList<string> GetLogSources()
         {
-            return [];
+            return Sources;
         }
 
         public IReadOnlyList<LogRecord> GetLogs(
@@ -450,6 +491,7 @@ public sealed class LogsViewModelTests
             string? level,
             string? searchText)
         {
+            LastQuery = (source, level, searchText);
             return Logs;
         }
 

@@ -760,6 +760,8 @@ internal static partial class LocalizationResources
             ["Close.ProxyActive.Message"] = "The proxy will stop working after Clash# closes. Exit now?",
             ["Close.Confirm.Title"] = "Close Clash#?",
             ["Close.Confirm.Message"] = "Are you sure you want to close Clash#?",
+            ["Close.Failed.Title"] = "Could not exit safely",
+            ["Close.Failed.Message"] = "Clash# is still running because shutdown could not finish. Check the application log, then try exiting again.",
         });
     }
 }

@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ServiceProtocol;
@@ -13,6 +15,50 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class MihomoControllerClientTests
 {
     private const string ControllerSecret = "controller-test-secret";
+
+    [Fact]
+    public async Task ReceiveTextMessageAsync_CancelPendingSocketRead_IsCallerCancellation()
+    {
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(5));
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        using TcpClient client = new();
+        Task connect = client.ConnectAsync((IPEndPoint)listener.LocalEndpoint, deadline.Token).AsTask();
+        using TcpClient server = await listener.AcceptTcpClientAsync(deadline.Token);
+        await connect;
+        using WebSocket socket = WebSocket.CreateFromStream(
+            client.GetStream(), false, null, Timeout.InfiniteTimeSpan);
+        using CancellationTokenSource cancellation = new();
+        Task<byte[]?> read = MihomoControllerClient.ReceiveTextMessageAsync(socket, cancellation.Token);
+        Assert.False(read.IsCompleted);
+
+        cancellation.Cancel();
+        OperationCanceledException exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => read.WaitAsync(deadline.Token));
+
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
+        Assert.True(ExceptionGraphClassifier.IsCallerCancellation(exception, cancellation.Token));
+    }
+
+    [Fact]
+    public async Task ReceiveTextMessageAsync_TransportFailureWithoutCancellation_RemainsFailure()
+    {
+        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(5));
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        using TcpClient client = new();
+        Task connect = client.ConnectAsync((IPEndPoint)listener.LocalEndpoint, deadline.Token).AsTask();
+        using TcpClient server = await listener.AcceptTcpClientAsync(deadline.Token);
+        await connect;
+        using WebSocket socket = WebSocket.CreateFromStream(
+            client.GetStream(), false, null, Timeout.InfiniteTimeSpan);
+        Task<byte[]?> read = MihomoControllerClient.ReceiveTextMessageAsync(socket, deadline.Token);
+
+        server.Dispose();
+
+        await Assert.ThrowsAsync<WebSocketException>(() => read.WaitAsync(deadline.Token));
+        Assert.False(deadline.IsCancellationRequested);
+    }
 
     /// <summary>Verifies the production local client cannot forward controller credentials through a proxy.</summary>
     [Fact]

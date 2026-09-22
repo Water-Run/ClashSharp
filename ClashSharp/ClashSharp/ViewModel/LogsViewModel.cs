@@ -668,10 +668,19 @@ internal sealed class LogsViewModel : ObservableObject
         _levelFilterValues[options[1]] = "Info";
         _levelFilterValues[options[2]] = "Warning";
         _levelFilterValues[options[3]] = "Error";
-        LevelFilterOptions = options;
-        if (!options.Contains(SelectedLevelFilter, StringComparer.Ordinal))
+        string selectedDisplay = options.Contains(SelectedLevelFilter, StringComparer.Ordinal)
+            ? SelectedLevelFilter
+            : AllLevelsText;
+        bool optionsChanged = !LevelFilterOptions.SequenceEqual(options, StringComparer.Ordinal);
+        if (optionsChanged)
         {
-            SetProperty(ref _selectedLevelFilter, AllLevelsText, nameof(SelectedLevelFilter));
+            LevelFilterOptions = options;
+        }
+        if (!SetProperty(ref _selectedLevelFilter, selectedDisplay, nameof(SelectedLevelFilter))
+            && optionsChanged)
+        {
+            // Replacing ItemsSource clears the native selection even when its value is unchanged.
+            OnPropertyChanged(nameof(SelectedLevelFilter));
         }
     }
 
@@ -704,11 +713,18 @@ internal sealed class LogsViewModel : ObservableObject
             }
         }
 
-        CategoryFilterOptions = options;
-        SetProperty(
+        bool optionsChanged = !CategoryFilterOptions.SequenceEqual(options, StringComparer.Ordinal);
+        if (optionsChanged)
+        {
+            CategoryFilterOptions = options;
+        }
+        if (!SetProperty(
             ref _selectedCategoryFilter,
             selectedDisplay,
-            nameof(SelectedCategoryFilter));
+            nameof(SelectedCategoryFilter)) && optionsChanged)
+        {
+            OnPropertyChanged(nameof(SelectedCategoryFilter));
+        }
     }
 
     private LogRecordDisplay CreateDisplayRow(LogRecord record)

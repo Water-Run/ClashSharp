@@ -49,6 +49,21 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Backing field for <see cref="SettingsText"/>.</summary>
     private string _settingsText = string.Empty;
 
+    private bool _isExitFailureVisible;
+
+    /// <summary>Gets or sets whether the shell exposes a failed safe-exit attempt.</summary>
+    public bool IsExitFailureVisible
+    {
+        get => _isExitFailureVisible;
+        set => SetProperty(ref _isExitFailureVisible, value);
+    }
+
+    /// <summary>Gets the localized safe-exit failure title.</summary>
+    public string ExitFailureTitleText => _localization.GetString("Close.Failed.Title");
+
+    /// <summary>Gets the localized recovery guidance after a safe-exit failure.</summary>
+    public string ExitFailureMessageText => _localization.GetString("Close.Failed.Message");
+
     /// <summary>Initializes a shell view model with localization dependencies.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
     /// <param name="restartState">Optional restart-required state source.</param>
@@ -172,6 +187,8 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         ConnectionsText = _localization.GetString("Nav.Connections");
         StatisticsText = _localization.GetString("Nav.Statistics");
         AboutText = _localization.GetString("Nav.About");
+        OnPropertyChanged(nameof(ExitFailureTitleText));
+        OnPropertyChanged(nameof(ExitFailureMessageText));
         SettingsText = _restartState.IsRestartPending
             ? $"{_localization.GetString("Nav.Settings")}*"
             : _localization.GetString("Nav.Settings");

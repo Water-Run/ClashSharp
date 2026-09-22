@@ -5,6 +5,45 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for full WinINet baseline and ownership semantics.</summary>
 public sealed class WindowsProxyServiceTests
 {
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(false, "corporate:8080")]
+    [InlineData(true, "corporate:8080")]
+    public void PreviewDisabledState_PredictsOwnedReleaseWithoutChangingOwnership(bool enabled, string? server)
+    {
+        FakeWindowsProxyRegistryStore registry = new(Snapshot(enabled, server, "corp", null));
+        FakeWindowsProxyMutationJournalStore journal = new();
+        WindowsProxyService service = new(registry, journal);
+        service.EnableProxy("127.0.0.1:10000");
+        WindowsProxyMutationJournal? ownership = journal.Current;
+        int writes = registry.WriteCount;
+
+        ClashSharp.Model.WindowsProxyState projected = service.PreviewDisabledState();
+
+        Assert.Equal(enabled, projected.IsEnabled);
+        Assert.Equal(server ?? string.Empty, projected.ProxyServer);
+        Assert.Same(ownership, journal.Current);
+        Assert.Equal(writes, registry.WriteCount);
+        service.DisableProxy();
+        Assert.Equal(projected, service.GetCurrentState());
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1:10000", false)]
+    [InlineData("external:8080", true)]
+    public void PreviewDisabledState_RespectsUnownedProxyAndLegacyEndpoint(string server, bool expectedEnabled)
+    {
+        FakeWindowsProxyRegistryStore registry = new(Snapshot(true, server, null, null));
+        WindowsProxyService service = new(registry, new FakeWindowsProxyMutationJournalStore(), () => 10000);
+
+        ClashSharp.Model.WindowsProxyState projected = service.PreviewDisabledState();
+
+        Assert.Equal(expectedEnabled, projected.IsEnabled);
+        Assert.Equal(0, registry.WriteCount);
+        service.DisableProxy();
+        Assert.Equal(projected, service.GetCurrentState());
+    }
+
     [Fact]
     public void DisableProxy_AfterOwnedEnable_RestoresCompleteBaseline()
     {

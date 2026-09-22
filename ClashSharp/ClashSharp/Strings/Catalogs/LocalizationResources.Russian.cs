@@ -760,6 +760,8 @@ internal static partial class LocalizationResources
             ["Close.ProxyActive.Message"] = "Прокси перестанет работать после закрытия Clash#. Выйти сейчас?",
             ["Close.Confirm.Title"] = "Закрыть Clash#?",
             ["Close.Confirm.Message"] = "Вы уверены, что хотите закрыть Clash#?",
+            ["Close.Failed.Title"] = "Не удалось безопасно выйти",
+            ["Close.Failed.Message"] = "Не удалось завершить работу. Clash# продолжает работать. Проверьте журнал приложения и повторите выход.",
         });
     }
 }

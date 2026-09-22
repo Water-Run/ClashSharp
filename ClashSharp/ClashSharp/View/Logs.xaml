@@ -51,7 +51,7 @@
                 x:Name="LogSearchBox"
                 Header="{Binding SearchLabelText}"
                 PlaceholderText="{Binding SearchPlaceholderText}"
-                Text="{Binding SearchText, Mode=TwoWay}"
+                Text="{Binding SearchText, Mode=OneWay}"
                 TextChanged="LogSearchBox_TextChanged"
                 VerticalAlignment="Bottom" />
 
@@ -60,7 +60,7 @@
                 Grid.Column="1"
                 Header="{Binding LevelFilterLabelText}"
                 ItemsSource="{Binding LevelFilterOptions}"
-                SelectedItem="{Binding SelectedLevelFilter, Mode=TwoWay}"
+                SelectedItem="{Binding SelectedLevelFilter, Mode=OneWay}"
                 SelectionChanged="FilterBox_SelectionChanged"
                 HorizontalAlignment="Stretch" />
 
@@ -69,7 +69,7 @@
                 Grid.Column="2"
                 Header="{Binding CategoryFilterLabelText}"
                 ItemsSource="{Binding CategoryFilterOptions}"
-                SelectedItem="{Binding SelectedCategoryFilter, Mode=TwoWay}"
+                SelectedItem="{Binding SelectedCategoryFilter, Mode=OneWay}"
                 SelectionChanged="FilterBox_SelectionChanged"
                 HorizontalAlignment="Stretch" />
 

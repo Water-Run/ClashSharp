@@ -760,6 +760,8 @@ internal static partial class LocalizationResources
             ["Close.ProxyActive.Message"] = "Der Proxy funktioniert nach dem Schließen von Clash# nicht mehr. Jetzt beenden?",
             ["Close.Confirm.Title"] = "Clash# schließen?",
             ["Close.Confirm.Message"] = "Möchten Sie Clash# wirklich schließen?",
+            ["Close.Failed.Title"] = "Sicheres Beenden fehlgeschlagen",
+            ["Close.Failed.Message"] = "Das Beenden konnte nicht abgeschlossen werden. Clash# läuft weiterhin. Prüfen Sie das Anwendungsprotokoll und versuchen Sie erneut, die Anwendung zu beenden.",
         });
     }
 }

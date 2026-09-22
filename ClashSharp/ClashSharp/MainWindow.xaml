@@ -121,7 +121,16 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <Frame x:Name="ContentFrame" />
+            <Grid RowDefinitions="Auto,*">
+                <InfoBar
+                    Margin="24,12,24,0"
+                    IsOpen="{Binding IsExitFailureVisible, Mode=TwoWay}"
+                    IsClosable="True"
+                    Severity="Error"
+                    Title="{Binding ExitFailureTitleText}"
+                    Message="{Binding ExitFailureMessageText}" />
+                <Frame x:Name="ContentFrame" Grid.Row="1" />
+            </Grid>
         </NavigationView>
 
         <Grid

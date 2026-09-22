@@ -903,6 +903,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     private void RequestApplicationExit(string source)
     {
+        Runtime.ViewModel.IsExitFailureVisible = false;
         _exitRequested = _applicationLifecycle.RequestExit(source);
     }
 
@@ -911,6 +912,11 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     {
         _exitRequested = false;
         RefreshTrayMenuPreservingReachability();
+        if (_runtime is not null)
+        {
+            _runtime.ViewModel.IsExitFailureVisible = true;
+        }
+        PrimaryWindowActivation.BringToFront(this);
     }
 
     /// <summary>Allows the App-owned lifetime to close this window after host shutdown succeeds.</summary>

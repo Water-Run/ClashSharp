@@ -59,8 +59,9 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         }
 
         bool useTransparentProxy = ShouldUseTransparentProxy(intent, serviceStatus);
-        NetworkStateSnapshot desired = BuildDesired(intent, observed, useTransparentProxy);
-        string desiredProxyServer = DetermineDesiredProxyServer(intent, observed, desired);
+        WindowsProxyState desiredProxy = DetermineDesiredProxy(intent, observed, useTransparentProxy);
+        NetworkStateSnapshot desired = BuildDesired(intent, observed, useTransparentProxy, desiredProxy);
+        string desiredProxyServer = desiredProxy.ProxyServer;
         string baselineHash = ComputeAggregateHash(
             observed.Snapshot.StateHash,
             _settings.CurrentMode,
@@ -234,16 +235,15 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
 
     private void ApplyProxyRecovery(NetworkPlan plan)
     {
+        LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted =
+            LegacyNetworkPlanPersistence.Deserialize(plan.CompensationData);
         switch (plan.Intent.Kind)
         {
             case NetworkIntentKind.StartupProxyRecovery:
             case NetworkIntentKind.ProxyConflictRepair:
-                if (plan.Desired.SystemProxyEnabled)
-                {
-                    string proxyServer = LegacyNetworkPlanPersistence.Deserialize(plan.CompensationData).DesiredProxyServer;
-                    _windowsProxy.EnableProxy(proxyServer);
-                }
-                else
+                if (ShouldReleaseProxy(
+                    plan.Intent,
+                    new WindowsProxyState(plan.Baseline.SystemProxyEnabled, persisted.BaselineProxyServer)))
                 {
                     _windowsProxy.DisableProxy();
                 }
@@ -257,42 +257,32 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     private NetworkStateSnapshot BuildDesired(
         NetworkIntent intent,
         ObservedNetworkState observed,
-        bool useTransparentProxy)
+        bool useTransparentProxy,
+        WindowsProxyState desiredProxy)
     {
         if (intent.Kind is NetworkIntentKind.StartupProxyRecovery
             or NetworkIntentKind.ProxyConflictRepair)
         {
-            bool shouldDisableProxy = intent.Kind == NetworkIntentKind.ProxyConflictRepair
-                || (_settings.CheckStaleProxyOnStartup
-                    && _proxyRecovery.IsStaleClashProxy(
-                        new WindowsProxyState(observed.Snapshot.SystemProxyEnabled, observed.ProxyServer),
-                        intent.MixedPort));
-            bool proxyEnabled = observed.Snapshot.SystemProxyEnabled && !shouldDisableProxy;
             return CreateSnapshot(
                 observed.Snapshot.Mode,
                 observed.Snapshot.CoreRunning,
-                proxyEnabled,
+                desiredProxy.IsEnabled,
                 observed.Snapshot.TransparentProxyEnabled,
                 observed.Snapshot.MixedPort,
-                observed.ProxyServer,
+                desiredProxy.ProxyServer,
                 isKnown: true);
         }
 
         bool coreRunning = intent.Mode != ClashSharpMode.Disabled;
         bool transparentProxy = useTransparentProxy;
-        bool systemProxy = intent.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
-            && !transparentProxy;
         int effectivePort = intent.MixedPort;
-        string proxyServer = systemProxy
-            ? _proxyRecovery.BuildLoopbackProxyServer(intent.MixedPort)
-            : observed.ProxyServer;
         return CreateSnapshot(
             intent.Mode,
             coreRunning,
-            systemProxy,
+            desiredProxy.IsEnabled,
             transparentProxy,
             effectivePort,
-            proxyServer,
+            desiredProxy.ProxyServer,
             isKnown: true);
     }
 
@@ -311,19 +301,29 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         return serviceStatus.IsKnown && serviceStatus.IsInstalled;
     }
 
-    private static string DetermineDesiredProxyServer(
+    private WindowsProxyState DetermineDesiredProxy(
         NetworkIntent intent,
         ObservedNetworkState observed,
-        NetworkStateSnapshot desired)
+        bool useTransparentProxy)
     {
-        if (intent.Kind is NetworkIntentKind.StartupProxyRecovery or NetworkIntentKind.ProxyConflictRepair
-            || !desired.SystemProxyEnabled)
+        if (intent.Kind is NetworkIntentKind.StartupProxyRecovery or NetworkIntentKind.ProxyConflictRepair)
         {
-            return observed.ProxyServer;
+            WindowsProxyState current = new(observed.Snapshot.SystemProxyEnabled, observed.ProxyServer);
+            return ShouldReleaseProxy(intent, current) ? _windowsProxy.PreviewDisabledState() : current;
         }
 
-        return $"127.0.0.1:{intent.MixedPort.ToString(CultureInfo.InvariantCulture)}";
+        bool claimProxy = intent.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
+            && !useTransparentProxy;
+        // Release restores the journal baseline, including a different server or an external
+        // enabled proxy. Predicting the currently owned tuple makes successful release roll back.
+        return claimProxy
+            ? new WindowsProxyState(true, _proxyRecovery.BuildLoopbackProxyServer(intent.MixedPort))
+            : _windowsProxy.PreviewDisabledState();
     }
+
+    private bool ShouldReleaseProxy(NetworkIntent intent, WindowsProxyState current) =>
+        intent.Kind == NetworkIntentKind.ProxyConflictRepair
+        || (_settings.CheckStaleProxyOnStartup && _proxyRecovery.IsStaleClashProxy(current, intent.MixedPort));
 
     private ObservedNetworkState Observe(MihomoServiceStatus serviceStatus)
     {

@@ -9,6 +9,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Model;
 using ClashSharp.ServiceProtocol;
 
@@ -494,17 +495,29 @@ public sealed class MihomoControllerClient
         return builder.Uri;
     }
 
-    private static async Task<byte[]?> ReceiveTextMessageAsync(
-        ClientWebSocket socket,
+    internal static async Task<byte[]?> ReceiveTextMessageAsync(
+        WebSocket socket,
         CancellationToken cancellationToken)
     {
         byte[] buffer = new byte[16 * 1024];
         using MemoryStream message = new();
         while (true)
         {
-            WebSocketReceiveResult result = await socket
-                .ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken)
-                .ConfigureAwait(false);
+            WebSocketReceiveResult result;
+            try
+            {
+                result = await socket
+                    .ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException exception) when (
+                cancellationToken.IsCancellationRequested
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                // ManagedWebSocket may wrap the socket-abort IOException in caller cancellation.
+                // Normalize only this owned transport operation; preserve unrelated/fatal failures.
+                throw new OperationCanceledException(cancellationToken);
+            }
             if (result.MessageType == WebSocketMessageType.Close)
             {
                 return null;

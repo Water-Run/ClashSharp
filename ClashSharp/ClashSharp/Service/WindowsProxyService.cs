@@ -61,6 +61,24 @@ public sealed class WindowsProxyService
             snapshot.ProxyServer.Value ?? string.Empty);
     }
 
+    /// <summary>Projects release of owned proxy fields without mutating the registry or journal.</summary>
+    internal WindowsProxyState PreviewDisabledState()
+    {
+        lock (_syncLock)
+        {
+            WindowsProxyRegistrySnapshot current = _registry.Read();
+            WindowsProxyMutationJournal? journal = _mutationJournal.Read();
+            WindowsProxyRegistrySnapshot restored = journal is not null
+                ? WindowsProxyOwnershipRestorer.MergeOwnedRestore(current, journal)
+                : IsLegacyManagedLoopbackProxy(current)
+                    ? current with { ProxyEnable = new WindowsProxyDwordValue(true, 0) }
+                    : current;
+            return new WindowsProxyState(
+                restored.ProxyEnable.Exists && restored.ProxyEnable.Value != 0,
+                restored.ProxyServer.Value ?? string.Empty);
+        }
+    }
+
     /// <summary>Reads the complete effective tuple and durable ownership without restoring or claiming any fields.</summary>
     internal WindowsProxyOwnershipObservation ObserveOwnership()
     {

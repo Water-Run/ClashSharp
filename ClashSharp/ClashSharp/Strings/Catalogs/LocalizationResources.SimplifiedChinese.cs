@@ -759,6 +759,8 @@ internal static partial class LocalizationResources
             ["Close.ProxyActive.Message"] = "代理将在 Clash# 关闭后失效，确定要退出吗？",
             ["Close.Confirm.Title"] = "关闭 Clash#？",
             ["Close.Confirm.Message"] = "确定要关闭 Clash# 吗？",
+            ["Close.Failed.Title"] = "未能安全退出",
+            ["Close.Failed.Message"] = "关闭过程未完成，Clash# 仍在运行。请查看应用日志，然后重试退出。",
         });
     }
 }
