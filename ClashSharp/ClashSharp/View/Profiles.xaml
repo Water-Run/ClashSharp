@@ -63,6 +63,22 @@
         </Grid>
 
         <ListView Grid.Row="3" x:Name="ProfilesList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
+            <ListView.Header>
+                <Grid Padding="20,8" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="190" />
+                        <ColumnDefinition Width="130" />
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding ProfileNameColumnText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="1" Text="{Binding StatusColumnText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="2" Text="{Binding NodesColumnText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="3" Text="{Binding RulesColumnText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="4" Text="{Binding UpdatedColumnText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </ListView.Header>
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Grid Padding="4,10" ColumnSpacing="12">
@@ -75,8 +91,8 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Spacing="2">
-                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Text="{Binding SourceNameDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{Binding SourceNameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding SourceNameDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
 
                         <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />

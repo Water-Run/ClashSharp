@@ -708,11 +708,17 @@ public sealed class MasterControlViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
         MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "transparent-proxy");
 
+        Assert.True(tile.IsToggleOn);
+        Assert.Equal("On", tile.Value);
+        Assert.Equal("Current state: Off", tile.Detail);
+
         tile.TileCommand?.Execute(null);
         await Assert.IsAssignableFrom<AsyncRelayCommand>(tile.TileCommand).ExecutionTask!;
 
         Assert.False(settings.TransparentProxyEnabled);
         Assert.False(tile.IsToggleOn);
+        Assert.Equal("Off", tile.Value);
+        Assert.Equal("Current state: Off", tile.Detail);
         Assert.Equal("Off", viewModel.TransparentProxyStatusText);
     }
 
@@ -908,6 +914,7 @@ public sealed class MasterControlViewModelTests
                 "Master.Status.Core" => "Core",
                 "Master.Status.SystemProxy" => "System proxy",
                 "Master.Status.TransparentProxy" => "Transparent proxy",
+                "Master.Status.CurrentRuntime.Format" => "Current state: {0}",
                 "Master.BasicStatus.Unavailable" => "Unavailable",
                 "Master.BasicStatus.Ready" => "Ready",
                 "Master.BasicStatus.Active" => "Active",

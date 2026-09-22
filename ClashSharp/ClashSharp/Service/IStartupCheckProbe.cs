@@ -28,7 +28,7 @@ internal interface IStartupCheckProbe
     /// <summary>Returns the configured local mixed-proxy port.</summary>
     int GetMixedPort(CancellationToken cancellationToken);
 
-    /// <summary>Returns whether the supplied Windows state points to the local proxy port.</summary>
+    /// <summary>Returns whether the supplied state points to the local proxy without a live owned runtime.</summary>
     bool IsStaleProxy(
         WindowsProxyState state,
         int mixedPort,

@@ -15,7 +15,8 @@ internal sealed class StartupGuideComposition(
     MihomoServiceManager mihomoServiceManager,
     StartupRestoreFallbackService startupRestoreFallback,
     WindowsProxyService windowsProxy,
-    ProxyRecoveryService proxyRecovery)
+    ProxyRecoveryService proxyRecovery,
+    MihomoCoreService core)
 {
     /// <summary>Creates a presenter backed by explicitly composed application services.</summary>
     public IStartupGuidePresenter Create(IApplicationErrorSink errorSink)
@@ -28,7 +29,8 @@ internal sealed class StartupGuideComposition(
             mihomoServiceManager,
             startupRestoreFallback,
             windowsProxy,
-            proxyRecovery);
+            proxyRecovery,
+            core);
         StartupCheckService checks = new(
             probe,
             localization.GetString,
@@ -46,7 +48,8 @@ internal sealed class StartupGuideComposition(
         MihomoServiceManager mihomoServiceManager,
         StartupRestoreFallbackService startupRestoreFallback,
         WindowsProxyService windowsProxy,
-        ProxyRecoveryService proxyRecovery) : IStartupCheckProbe
+        ProxyRecoveryService proxyRecovery,
+        MihomoCoreService core) : IStartupCheckProbe
     {
         public bool HasSubscription(CancellationToken cancellationToken)
         {
@@ -90,7 +93,11 @@ internal sealed class StartupGuideComposition(
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return proxyRecovery.IsStaleClashProxy(state, mixedPort);
+            bool runningOwnedProxy = core.IsRunning
+                && !core.HasOwnershipFault
+                && windowsProxy.ObserveOwnership().MatchesOwnedProxy(
+                    proxyRecovery.BuildLoopbackProxyServer(mixedPort));
+            return proxyRecovery.IsStaleClashProxy(state, mixedPort, runningOwnedProxy);
         }
     }
 }

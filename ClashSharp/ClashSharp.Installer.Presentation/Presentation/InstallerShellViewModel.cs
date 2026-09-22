@@ -621,8 +621,11 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
         InvalidateReadiness();
         StatusBadge = "已阻止";
-        StatusTitle = "无法检查安装状态";
-        StatusDetail = "请重新检查；若问题持续，可展开详情查看诊断代码。";
+        bool releaseConflict = diagnosticCode == "installer.transaction.release_conflict";
+        StatusTitle = releaseConflict ? "请使用原安装器继续" : "无法检查安装状态";
+        StatusDetail = releaseConflict
+            ? "另一个版本的安装器留下了未完成的操作。请关闭此窗口，打开启动该操作的安装器，重新检查并继续。"
+            : "请重新检查；若问题持续，可展开详情查看诊断代码。";
         DiagnosticCode = diagnosticCode;
         ProgressStatus = "就绪检查失败。";
     }

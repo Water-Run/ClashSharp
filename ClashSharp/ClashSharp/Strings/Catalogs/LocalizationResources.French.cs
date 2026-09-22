@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Master.Status.CurrentRuntime.Format"] = "État actuel : {0}",
+            ["Profiles.Column.Name"] = "Profil / source",
+            ["Profiles.Column.Status"] = "État",
+            ["Profiles.Column.Nodes"] = "Nœuds",
+            ["Profiles.Column.Rules"] = "Règles",
+            ["Profiles.Column.Updated"] = "Mis à jour",
             ["Nav.MasterControl"] = "Contrôle",
             ["Nav.Proxies"] = "Proxies",
             ["Nav.ProxyNodes"] = "Nœuds",

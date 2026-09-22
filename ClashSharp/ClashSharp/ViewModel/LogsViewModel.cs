@@ -138,6 +138,9 @@ internal sealed class LogsViewModel : ObservableObject
 
     public string EmptyText => _getString("Logs.Empty");
 
+    /// <summary>Gets whether the current combined filters have no visible records.</summary>
+    public bool HasNoLogs => _recentLogs.Count == 0;
+
     public string SearchText
     {
         get => _searchText;
@@ -344,6 +347,7 @@ internal sealed class LogsViewModel : ObservableObject
         RefreshCategoryFilterOptions(sources, snapshot.Request.CategoryFilter);
         _recentLogs = MergeVisibleRuntimeLogs(snapshot.Logs, snapshot.Request);
         OnPropertyChanged(nameof(RecentLogs));
+        OnPropertyChanged(nameof(HasNoLogs));
     }
 
     private void AppendRuntimeLog(string source, string level, string message)
@@ -379,6 +383,7 @@ internal sealed class LogsViewModel : ObservableObject
                 .Take(VisibleLogLimit)
                 .ToList();
             OnPropertyChanged(nameof(RecentLogs));
+            OnPropertyChanged(nameof(HasNoLogs));
         }
 
         if (!_categoryFilterValues.Values.Contains(normalizedSource, StringComparer.Ordinal))

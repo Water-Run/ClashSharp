@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Master.Status.CurrentRuntime.Format"] = "目前執行：{0}",
+            ["Profiles.Column.Name"] = "設定 / 來源",
+            ["Profiles.Column.Status"] = "狀態",
+            ["Profiles.Column.Nodes"] = "節點數",
+            ["Profiles.Column.Rules"] = "規則數",
+            ["Profiles.Column.Updated"] = "更新時間",
             ["Nav.MasterControl"] = "主控",
             ["Nav.Proxies"] = "代理",
             ["Nav.ProxyNodes"] = "節點",

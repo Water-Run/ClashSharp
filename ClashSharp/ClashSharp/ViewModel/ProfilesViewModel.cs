@@ -127,6 +127,21 @@ internal sealed class ProfilesViewModel : ObservableObject
     /// <value>Localized label text.</value>
     public string CurrentProfileTitleText => _getString("Label.CurrentProfile");
 
+    /// <summary>Gets the localized profile and source column heading.</summary>
+    public string ProfileNameColumnText => _getString("Profiles.Column.Name");
+
+    /// <summary>Gets the localized validation status column heading.</summary>
+    public string StatusColumnText => _getString("Profiles.Column.Status");
+
+    /// <summary>Gets the localized node count column heading.</summary>
+    public string NodesColumnText => _getString("Profiles.Column.Nodes");
+
+    /// <summary>Gets the localized rule count column heading.</summary>
+    public string RulesColumnText => _getString("Profiles.Column.Rules");
+
+    /// <summary>Gets the localized update time column heading.</summary>
+    public string UpdatedColumnText => _getString("Profiles.Column.Updated");
+
     /// <summary>Gets profile rows.</summary>
     /// <value>Profile rows; never null.</value>
     public IReadOnlyList<ConfigurationProfileDisplay> Profiles

@@ -44,12 +44,20 @@
             </VisualStateGroup>
             <VisualStateGroup x:Name="SwitchStates">
                 <VisualState x:Name="SwitchOff">
+                    <VisualState.Setters>
+                        <Setter Target="SwitchTrack.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
+                        <Setter Target="ToggleThumb.Background" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </VisualState.Setters>
                     <Storyboard>
                         <DoubleAnimation Storyboard.TargetName="SelectedOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.16" />
                         <DoubleAnimation Storyboard.TargetName="ToggleThumbTransform" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.16" />
                     </Storyboard>
                 </VisualState>
                 <VisualState x:Name="SwitchOn">
+                    <VisualState.Setters>
+                        <Setter Target="SwitchTrack.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                        <Setter Target="ToggleThumb.Background" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
                     <Storyboard>
                         <DoubleAnimation Storyboard.TargetName="SelectedOverlay" Storyboard.TargetProperty="Opacity" To="0.14" Duration="0:0:0.18" />
                         <DoubleAnimation Storyboard.TargetName="ToggleThumbTransform" Storyboard.TargetProperty="X" To="16" Duration="0:0:0.18" />
@@ -102,15 +110,18 @@
                 Width="36"
                 Height="20"
                 CornerRadius="10"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
                 Background="{ThemeResource ControlFillColorTertiaryBrush}"
                 Visibility="{Binding IsToggleVisible, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Border
-                    Width="16"
-                    Height="16"
+                    x:Name="ToggleThumb"
+                    Width="14"
+                    Height="14"
                     Margin="2"
                     HorizontalAlignment="Left"
                     CornerRadius="8"
-                    Background="{ThemeResource AccentFillColorDefaultBrush}">
+                    Background="{ThemeResource TextFillColorSecondaryBrush}">
                     <Border.RenderTransform>
                         <TranslateTransform x:Name="ToggleThumbTransform" />
                     </Border.RenderTransform>

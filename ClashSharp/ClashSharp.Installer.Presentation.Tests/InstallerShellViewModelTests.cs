@@ -339,6 +339,23 @@ public sealed class InstallerShellViewModelTests
     }
 
     [Fact]
+    public async Task ReleaseConflictExplainsWhichInstallerCanResumeAndKeepsMutationsBlocked()
+    {
+        var runtime = new ScriptedInstallerRuntime
+        {
+            Inspect = _ => throw new InstallerProtocolException("installer.transaction.release_conflict"),
+        };
+        using var viewModel = new InstallerShellViewModel(runtime);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("请使用原安装器继续", viewModel.StatusTitle);
+        Assert.Contains("启动该操作的安装器", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.False(viewModel.CanExecuteMutations);
+        Assert.Equal("installer.transaction.release_conflict", viewModel.DiagnosticCode);
+    }
+
+    [Fact]
     public async Task FatalInspectionFailurePropagatesAfterReleasingTheSingleFlightGate()
     {
         var cause = new FatalPresentationTestException("fatal test sentinel");

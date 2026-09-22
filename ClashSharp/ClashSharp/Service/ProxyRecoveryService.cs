@@ -22,12 +22,18 @@ public sealed partial class ProxyRecoveryService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mixedPort"/> is outside the valid TCP port range.</exception>
     public bool IsStaleClashProxy(WindowsProxyState state, int mixedPort)
     {
+        return IsStaleClashProxy(state, mixedPort, hasRunningOwnedProxy: false);
+    }
+
+    /// <summary>Excludes a live, owned proxy when checking residue after startup mode restoration.</summary>
+    internal bool IsStaleClashProxy(WindowsProxyState state, int mixedPort, bool hasRunningOwnedProxy)
+    {
         if (mixedPort is < 1 or > 65535)
         {
             throw new ArgumentOutOfRangeException(nameof(mixedPort), "Port must be in the range [1, 65535].");
         }
 
-        if (!state.IsEnabled || string.IsNullOrWhiteSpace(state.ProxyServer))
+        if (hasRunningOwnedProxy || !state.IsEnabled || string.IsNullOrWhiteSpace(state.ProxyServer))
         {
             return false;
         }

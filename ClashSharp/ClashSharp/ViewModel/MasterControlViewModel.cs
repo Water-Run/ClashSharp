@@ -849,7 +849,10 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("core", GetCoreTileStatusText(), string.Empty);
         SetTile("mihomo-version", _mihomoVersionText, string.Empty);
         SetTile("system-proxy", SystemProxyStatusText, string.Empty);
-        SetTile("transparent-proxy", TransparentProxyStatusText, string.Empty, _settings.TransparentProxyEnabled);
+        SetTile("transparent-proxy", FormatSwitch(_settings.TransparentProxyEnabled),
+            string.Format(CultureInfo.CurrentCulture,
+                _localization.GetString("Master.Status.CurrentRuntime.Format"), TransparentProxyStatusText),
+            _settings.TransparentProxyEnabled);
         SetTile("latency", LatencySummaryText, CurrentNodeText);
         SetTile("startup-launch", _settings.LaunchAtStartupEnabled
             ? _localization.GetString("Master.Status.StartupLaunchOn")

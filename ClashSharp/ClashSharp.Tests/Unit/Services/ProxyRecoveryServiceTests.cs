@@ -46,4 +46,18 @@ public sealed class ProxyRecoveryServiceTests
     {
         return new ProxyRecoveryService();
     }
+
+    /// <summary>Startup checks must not report an actively owned proxy as leftover state.</summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void IsStaleClashProxy_AfterStartupRestoration_RespectsLiveOwnership(bool runningOwnedProxy, bool expectedStale)
+    {
+        ProxyRecoveryService service = CreateService();
+
+        bool stale = service.IsStaleClashProxy(
+            new WindowsProxyState(true, "127.0.0.1:19090"), 19090, runningOwnedProxy);
+
+        Assert.Equal(expectedStale, stale);
+    }
 }
