@@ -15,7 +15,33 @@
     <StackPanel MinWidth="360" MaxWidth="480" Spacing="12">
         <TextBlock x:Name="GuideDescriptionText" TextWrapping="WrapWholeWords" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
         <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel x:Name="ChecksPanel" Spacing="8" />
+            <ItemsControl x:Name="ChecksList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,8" Padding="12" BorderThickness="1" CornerRadius="8"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Width="22" FontSize="16" VerticalAlignment="Top"
+                                          Loaded="StatusIcon_Loaded"
+                                          Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="{Binding Title}" TextWrapping="WrapWholeWords"
+                                               Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    <TextBlock Text="{Binding Description}" TextWrapping="WrapWholeWords"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </ScrollViewer>
     </StackPanel>
 </ContentDialog>

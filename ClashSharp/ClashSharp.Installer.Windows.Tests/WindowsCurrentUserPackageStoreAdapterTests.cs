@@ -280,6 +280,27 @@ public sealed class WindowsCurrentUserPackageStoreAdapterTests
     }
 
     [Fact]
+    public async Task SameIdentityContentConflictIsDiagnosedWithoutRemovingTheInstalledPackage()
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using var fixture = new WindowsPayloadFixture();
+        InstallerRequest request = fixture.Request();
+        await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
+        var cause = new IOException(
+            "sensitive deployment paths", unchecked((int)0x80073CFB));
+        var facade = new FakePackageManagerFacade { DeploymentException = cause };
+        var adapter = Adapter(facade, request);
+
+        InstallerProtocolException exception = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => adapter.DeployAsync(request, lease, CancellationToken.None));
+
+        Assert.Equal("installer.package.content_conflict", exception.DiagnosticCode);
+        Assert.Same(cause, exception.InnerException);
+        Assert.Equal(0, facade.RemoveCalls);
+        Assert.DoesNotContain("sensitive", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FatalDeploymentFailureIsNotConvertedIntoARecoverableProtocolResult()
     {
         WindowsPayloadFixture.AssertWindows11X64();

@@ -126,8 +126,8 @@
   <Style x:Key="InstallerStatusPillStyle" TargetType="Border">
     <Setter Property="Padding" Value="12,6" />
     <Setter Property="CornerRadius" Value="14" />
-    <Setter Property="Background" Value="{StaticResource InstallerAccentSoftBrush}" />
-    <Setter Property="BorderBrush" Value="{StaticResource InstallerAccentBrush}" />
+    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+    <Setter Property="BorderBrush" Value="{StaticResource InstallerBorderBrush}" />
     <Setter Property="BorderThickness" Value="1" />
     <Style.Triggers>
       <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
@@ -152,8 +152,8 @@
     </Style.Triggers>
   </Style>
 
-  <Style x:Key="InstallerAccentTextStyle" TargetType="TextBlock">
-    <Setter Property="Foreground" Value="{StaticResource InstallerAccentBrush}" />
+  <Style x:Key="InstallerStatusTextStyle" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
     <Style.Triggers>
       <DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
         <Setter Property="Foreground"

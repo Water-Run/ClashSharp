@@ -218,7 +218,6 @@ public sealed partial class Logs : Page
         {
             Text = _getString("Logs.Cleanup.Description.ByDate"),
             TextWrapping = TextWrapping.Wrap,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
         };
         ComboBox levelBox = new()
         {
@@ -239,7 +238,6 @@ public sealed partial class Logs : Page
             Text = _viewModel.CleanupPreviewPlaceholderText,
             TextWrapping = TextWrapping.Wrap,
             Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
         };
         StackPanel content = new()
         {
@@ -324,11 +322,12 @@ public sealed partial class Logs : Page
         {
             Title = _getString("Logs.Cleanup.Title"),
             Content = content,
-            MaxWidth = 720,
             PrimaryButtonText = _getString("Command.Cleanup"),
             CloseButtonText = _getString("Command.Cancel"),
             XamlRoot = XamlRoot,
         };
+        // Size the dialog surface without constraining the full-window popup host.
+        dialog.Resources["ContentDialogMaxWidth"] = 720d;
 
         ContentDialogResult result;
         Task initialPreview = UpdatePreviewAsync();

@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using ClashSharp.Model;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace ClashSharp.Components;
 
@@ -29,59 +27,14 @@ public sealed partial class StartupGuideDialog : ContentDialog
         Title = getString("Settings.StartupGuide.Title");
         CloseButtonText = getString("Command.Close");
         GuideDescriptionText.Text = getString("Settings.StartupGuide.Description");
-        foreach (StartupCheckItem check in checks)
-        {
-            ChecksPanel.Children.Add(BuildCheckRow(check));
-        }
+        ChecksList.ItemsSource = checks;
     }
 
-    private static Border BuildCheckRow(StartupCheckItem check)
+    private void StatusIcon_Loaded(object sender, RoutedEventArgs e)
     {
-        Border border = new()
+        if (sender is FontIcon { DataContext: StartupCheckItem check } icon)
         {
-            Padding = new Thickness(12),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            BorderBrush = (Brush)Application.Current.Resources["ControlStrokeColorDefaultBrush"],
-            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-        };
-        Grid row = new()
-        {
-            ColumnSpacing = 10,
-        };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        FontIcon icon = new()
-        {
-            Glyph = check.IsHealthy ? "\uE73E" : "\uE7BA",
-            FontSize = 16,
-            Width = 22,
-            Foreground = new SolidColorBrush(check.IsHealthy ? Colors.SeaGreen : Colors.DarkOrange),
-            VerticalAlignment = VerticalAlignment.Top,
-        };
-        row.Children.Add(icon);
-
-        StackPanel textPanel = new()
-        {
-            Spacing = 2,
-        };
-        Grid.SetColumn(textPanel, 1);
-        textPanel.Children.Add(new TextBlock
-        {
-            Text = check.Title,
-            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
-        });
-        textPanel.Children.Add(new TextBlock
-        {
-            Text = check.Description,
-            TextWrapping = TextWrapping.WrapWholeWords,
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-        });
-        row.Children.Add(textPanel);
-
-        border.Child = row;
-        return border;
+            icon.Glyph = check.IsHealthy ? "\uE73E" : "\uE7BA";
+        }
     }
 }

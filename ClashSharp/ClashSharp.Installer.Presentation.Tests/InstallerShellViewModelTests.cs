@@ -7,6 +7,30 @@ namespace ClashSharp.Installer.Presentation.Tests;
 public sealed class InstallerShellViewModelTests
 {
     [Fact]
+    public async Task ContentConflictExplainsRequiredRecoveryWithoutEnablingBlindRetry()
+    {
+        var runtime = new ScriptedInstallerRuntime
+        {
+            Execute = (_, _, _) => Task.FromResult(new InstallerExecutionResult(
+                InstallerExecutionOutcome.Failed,
+                "installer.package.content_conflict",
+                InstallerTransactionPhase.MachineReserved,
+                RecoveryPending: true)),
+        };
+        using var viewModel = new InstallerShellViewModel(runtime);
+        await viewModel.InitializeAsync();
+
+        await viewModel.PrimaryActionCommand.ExecuteAsync();
+
+        Assert.Equal("同版本安装包内容冲突", viewModel.StatusTitle);
+        Assert.Contains("直接重试无法解决", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.Contains("备份应用数据", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.False(viewModel.CanExecuteMutations);
+        Assert.False(viewModel.PrimaryActionCommand.CanExecute(null));
+        Assert.False(viewModel.SecondaryActionCommand.CanExecute(null));
+    }
+
+    [Fact]
     public void DisposeReleasesRuntimeLifetimeExactlyOnce()
     {
         var runtime = new ScriptedInstallerRuntime();

@@ -65,30 +65,18 @@
                 Grid.Column="1"
                 Header="{Binding LevelFilterLabelText}"
                 ItemsSource="{Binding LevelFilterOptions}"
-                SelectedItem="{Binding SelectedLevelFilter, Mode=OneWay}"
+                SelectedIndex="{Binding SelectedLevelFilterIndex, Mode=OneWay}"
                 SelectionChanged="FilterBox_SelectionChanged"
-                HorizontalAlignment="Stretch">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                HorizontalAlignment="Stretch" />
 
             <ComboBox
                 x:Name="CategoryFilterBox"
                 Grid.Column="2"
                 Header="{Binding CategoryFilterLabelText}"
                 ItemsSource="{Binding CategoryFilterOptions}"
-                SelectedItem="{Binding SelectedCategoryFilter, Mode=OneWay}"
+                SelectedIndex="{Binding SelectedCategoryFilterIndex, Mode=OneWay}"
                 SelectionChanged="FilterBox_SelectionChanged"
-                HorizontalAlignment="Stretch">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+                HorizontalAlignment="Stretch" />
 
             <Button x:Name="RefreshLogsButton" Grid.Column="3" Click="RefreshLogsButton_Click" VerticalAlignment="Bottom" ToolTipService.ToolTip="{Binding RefreshText}">
                 <FontIcon Glyph="&#xE72C;" FontSize="14" />

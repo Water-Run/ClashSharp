@@ -112,7 +112,9 @@ public sealed class WindowsCurrentUserPackageStoreAdapter : IInstallerPackageSto
         catch (Exception exception) when (IsRecoverable(exception))
         {
             throw new InstallerProtocolException(
-                "installer.package.deployment_failed",
+                exception.HResult == unchecked((int)0x80073CFB)
+                    ? "installer.package.content_conflict"
+                    : "installer.package.deployment_failed",
                 exception);
         }
     }

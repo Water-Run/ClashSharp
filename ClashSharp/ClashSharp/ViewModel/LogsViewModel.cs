@@ -165,7 +165,10 @@ internal sealed class LogsViewModel : ObservableObject
         set
         {
             string normalized = string.IsNullOrWhiteSpace(value) ? AllLevelsText : value.Trim();
-            SetProperty(ref _selectedLevelFilter, normalized);
+            if (SetProperty(ref _selectedLevelFilter, normalized))
+            {
+                OnPropertyChanged(nameof(SelectedLevelFilterIndex));
+            }
         }
     }
 
@@ -178,11 +181,18 @@ internal sealed class LogsViewModel : ObservableObject
             if (SetProperty(ref _selectedCategoryFilter, normalized))
             {
                 _requestedSourceFilter = null;
+                OnPropertyChanged(nameof(SelectedCategoryFilterIndex));
                 OnPropertyChanged(nameof(PageTitleText));
                 OnPropertyChanged(nameof(DescriptionText));
             }
         }
     }
+
+    /// <summary>Gets the selected level position for the native ComboBox selection.</summary>
+    public int SelectedLevelFilterIndex => FindFilterIndex(LevelFilterOptions, SelectedLevelFilter);
+
+    /// <summary>Gets the selected category position for the native ComboBox selection.</summary>
+    public int SelectedCategoryFilterIndex => FindFilterIndex(CategoryFilterOptions, SelectedCategoryFilter);
 
     /// <summary>Gets storage usage summary text.</summary>
     /// <value>Formatted storage summary.</value>
@@ -449,6 +459,7 @@ internal sealed class LogsViewModel : ObservableObject
     {
         _requestedSourceFilter = string.IsNullOrWhiteSpace(source) ? null : source.Trim();
         SetProperty(ref _selectedCategoryFilter, string.Empty, nameof(SelectedCategoryFilter));
+        OnPropertyChanged(nameof(SelectedCategoryFilterIndex));
         OnPropertyChanged(nameof(PageTitleText));
         OnPropertyChanged(nameof(DescriptionText));
     }
@@ -687,6 +698,7 @@ internal sealed class LogsViewModel : ObservableObject
             // Replacing ItemsSource clears the native selection even when its value is unchanged.
             OnPropertyChanged(nameof(SelectedLevelFilter));
         }
+        OnPropertyChanged(nameof(SelectedLevelFilterIndex));
     }
 
     private void RefreshCategoryFilterOptions(
@@ -730,6 +742,19 @@ internal sealed class LogsViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(SelectedCategoryFilter));
         }
+        OnPropertyChanged(nameof(SelectedCategoryFilterIndex));
+    }
+
+    private static int FindFilterIndex(IReadOnlyList<string> options, string selected)
+    {
+        for (int index = 0; index < options.Count; index++)
+        {
+            if (StringComparer.Ordinal.Equals(options[index], selected))
+            {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private LogRecordDisplay CreateDisplayRow(LogRecord record)

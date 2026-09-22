@@ -469,12 +469,12 @@ public sealed partial class Settings : Page
             {
                 Title = _viewModel.AppAccentColorTitleText,
                 Content = pickerPanel,
-                MaxWidth = 420,
                 PrimaryButtonText = _viewModel.AppAccentColorPickText,
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = GetDialogXamlRoot(),
             };
+            dialog.Resources["ContentDialogMaxWidth"] = 420d;
 
             if (await dialog.ShowManagedAsync(cancellationToken) is not ContentDialogResult.Primary)
             {

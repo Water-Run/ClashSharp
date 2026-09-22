@@ -15,7 +15,11 @@ public sealed class LogsViewModelTests
     {
         FakeLogManagementStore store = new() { Sources = ["Application"] };
         LogsViewModel viewModel = CreateViewModel(store, new TestApplicationErrorSink());
+        Assert.Equal(-1, viewModel.SelectedLevelFilterIndex);
+        Assert.Equal(-1, viewModel.SelectedCategoryFilterIndex);
         await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal(0, viewModel.SelectedLevelFilterIndex);
+        Assert.Equal(0, viewModel.SelectedCategoryFilterIndex);
         viewModel.SelectedCategoryFilter = "Application";
         viewModel.SelectedLevelFilter = viewModel.LevelFilterOptions[3];
         viewModel.ApplySearchText("needle");
@@ -27,23 +31,25 @@ public sealed class LogsViewModelTests
         Assert.Same(categories, viewModel.CategoryFilterOptions);
         Assert.Same(levels, viewModel.LevelFilterOptions);
         Assert.Equal(("Application", "Error", "needle"), store.LastQuery);
-        string? visibleCategory = viewModel.SelectedCategoryFilter;
+        int visibleCategoryIndex = viewModel.SelectedCategoryFilterIndex;
         viewModel.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(viewModel.CategoryFilterOptions))
             {
-                visibleCategory = null;
+                visibleCategoryIndex = -1;
             }
-            else if (args.PropertyName == nameof(viewModel.SelectedCategoryFilter))
+            else if (args.PropertyName == nameof(viewModel.SelectedCategoryFilterIndex))
             {
-                visibleCategory = viewModel.SelectedCategoryFilter;
+                visibleCategoryIndex = viewModel.SelectedCategoryFilterIndex;
             }
         };
-        store.Sources = ["Application", "Startup"];
+        store.Sources = ["Startup", "Application"];
 
         await viewModel.LoadAsync(CancellationToken.None);
 
-        Assert.Equal("Application", visibleCategory);
+        Assert.Equal(2, visibleCategoryIndex);
+        Assert.Equal("Application", viewModel.CategoryFilterOptions[visibleCategoryIndex]);
+        Assert.Equal(3, viewModel.SelectedLevelFilterIndex);
         Assert.Equal(("Application", "Error", "needle"), store.LastQuery);
     }
 
