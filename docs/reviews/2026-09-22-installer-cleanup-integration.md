@@ -19,7 +19,7 @@
 
 新增 21 项本机可运行测试，覆盖真正的 protected store、authority/session/framing 与 finalizer 装配、terminal-only parent 读取、冲突拒绝、资源释放、两把锁的持续持有、清理失败无成功 frame、取消与部分清理恢复。首次运行暴露了测试 fixture 使用安装相位顺序初始化卸载的问题；修正为实际卸载相位后，45 项相关定向测试全部通过。
 
-另有 **7 项新增原生测试**须在隔离的管理员 Windows CI 全量执行；它们使用唯一的 `ProgramData/ClashSharp.DirectoryCleanup.Tests.<nonce>` 测试根，验证实际创建身份、受保护账本、句柄删除、既有/替换目录保留、普通子文件/目录数据流保留和外来账本拒绝。恢复测试在全部目录已删但账本尚存的切点注入中断，验证真实 parent 不创建目录，fresh protected store 重建工作目录后仍保留原事务且不重建 active 文件，最后继续清理无残留。测试不操作真实产品路径，收尾仅删除确切创建的文件和空目录，不递归删除未知内容。此提交中的本机验证数字不包含这 7 项，也不包含两个实际证书存储测试类的 20 项。
+另有 **7 项新增原生测试**在隔离的管理员 Windows CI 全量执行并通过；它们使用唯一的 `ProgramData/ClashSharp.DirectoryCleanup.Tests.<nonce>` 测试根，验证实际创建身份、受保护账本、句柄删除、既有/替换目录保留、普通子文件/目录数据流保留和外来账本拒绝。恢复测试在全部目录已删但账本尚存的切点注入中断，验证真实 parent 不创建目录，fresh protected store 重建工作目录后仍保留原事务且不重建 active 文件，最后继续清理无残留。测试不操作真实产品路径，收尾仅删除确切创建的文件和空目录，不递归删除未知内容。本机验证数字不包含这 7 项，也不包含两个实际证书存储测试类的 20 项。
 
 ```powershell
 dotnet build ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restore
@@ -32,6 +32,10 @@ dotnet test ClashSharp/ClashSharp.Installer.Windows.Tests/ClashSharp.Installer.W
 CI 执行不带上述过滤器的 Windows 测试，并保留四份 TRX 和完整离线开发包。每次提交的实际结果以绑定该 SHA 的 [CI](https://github.com/Water-Run/ClashSharp/actions/workflows/ci.yml) 为准；本机日志和 TRX 位于忽略目录 `artifacts/verification/directory-cleanup-*`。
 
 接入提交 `996ba3c` 的[首轮 CI](https://github.com/Water-Run/ClashSharp/actions/runs/35730115081) 构建和完整开发包成功，但原生测试中 5 项在账本替换时失败；只有拒绝外来账本的用例通过。独立普通权限临时文件探针复现 Windows 行为：即使旧目标 handle 允许 delete sharing，`MoveFileEx` 替换仍报 Win32 5；关闭该 handle 后替换成功。修复将旧文件 handle 保留至最后一次身份/字节核对，随后关闭它再执行原子替换；机器权威锁、完整父路径 pin、保护 ACL 和首次发布禁止覆盖的约束保持。该失败保留为回归证据，后续必须由相同原生用例复验。
+
+修复提交 `b55a3c4` 的[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/35732063895) 均成功。已下载四份实际 TRX 独立核对：主程序 2938、Installer Core 1022、Presentation 143、Windows 1123，共 **5226 / 5226**，零失败、零跳过。7 项原生用例均实际执行并通过，包括首轮失败的 5 项及新增的完整根目录移除后恢复。Core 覆盖率门禁及完整离线开发包构建也通过；开发包 artifact 为 `10696177397`、317842348 字节，仍不是正式签名发布版。
+
+另尝试 Windows 11 Sandbox：默认来宾的 `C:\` ACL 向 Authenticated Users 授予修改/删除权限，生产路径保护按预期拒绝该环境，因此未验证到提交修复；收紧来宾根 ACL 的单独夹具运行超时，同样不计通过。两次来宾均已销毁并独立确认不存在，源二进制以只读方式映射，未执行宿主安装、证书、服务或代理修改。Sandbox 的原始日志及失败收据保留在忽略目录。上述通过证据绑定未改动系统 ACL 的 Windows CI，不能扩张为完整安装包的原生验收。
 
 ## 剩余验收
 
