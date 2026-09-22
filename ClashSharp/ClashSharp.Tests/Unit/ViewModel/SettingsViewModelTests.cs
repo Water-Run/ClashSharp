@@ -2214,6 +2214,41 @@ public sealed partial class SettingsViewModelTests
 
     private sealed class FakeSettingsStore : ISettingsStore
     {
+        public Func<IReadOnlyList<SettingValueChange>, CancellationToken, Task>? BeforePreferenceApply { get; set; }
+
+        public Func<SettingsResetScope, CancellationToken, Task>? BeforePreferenceReset { get; set; }
+
+        public Func<Task>? AfterPreferenceCommit { get; set; }
+
+        public IReadOnlyList<SettingValueChange> ReadPreferenceChanges(IReadOnlyList<SettingKey> keys) => keys.Select(key =>
+            new SettingValueChange(key, SettingsRegistry.Default.Get(key.Value)
+                .NormalizeValue(GetType().GetProperty(key.Value)!.GetValue(this)!).Value!)).ToArray();
+
+        public async Task ResetPreferenceGroupAsync(SettingsResetScope scope, CancellationToken cancellationToken)
+        {
+            if (BeforePreferenceReset is not null) { await BeforePreferenceReset(scope, cancellationToken); }
+            cancellationToken.ThrowIfCancellationRequested();
+            ResetPreferenceGroup(scope);
+            if (AfterPreferenceCommit is not null) { await AfterPreferenceCommit(); }
+        }
+
+        public async Task ApplyChangesAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken)
+        {
+            if (BeforePreferenceApply is not null) { await BeforePreferenceApply(changes, cancellationToken); }
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (SettingValueChange change in changes)
+            {
+                System.Reflection.PropertyInfo property = GetType().GetProperty(change.Key.Value)!;
+                SettingValue value = change.Value;
+                object typed = value.ValueType == typeof(bool) ? value.Get<bool>()
+                    : value.ValueType == typeof(int) ? value.Get<int>()
+                    : value.ValueType == typeof(string) ? value.Get<string>()
+                    : Enum.Parse(value.ValueType, value.CanonicalText);
+                property.SetValue(this, typed);
+            }
+            if (AfterPreferenceCommit is not null) { await AfterPreferenceCommit(); }
+        }
+
         public Exception? SamplingReadFailure { get; set; }
 
         public ConnectionSamplingSettings ReadConnectionSamplingSettings() => SamplingReadFailure is null

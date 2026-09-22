@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Settings;
@@ -12,6 +15,15 @@ namespace ClashSharp.ViewModel;
 /// </remarks>
 internal interface ISettingsStore
 {
+    /// <summary>Awaits one immutable, canonical preference change set before the page publishes its result.</summary>
+    Task ApplyChangesAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken);
+
+    /// <summary>Awaits a complete preference-group reset before publishing its defaults.</summary>
+    Task ResetPreferenceGroupAsync(SettingsResetScope scope, CancellationToken cancellationToken);
+
+    /// <summary>Reads a coherent committed snapshot to reconcile a command that returned an error.</summary>
+    IReadOnlyList<SettingValueChange> ReadPreferenceChanges(IReadOnlyList<SettingKey> keys);
+
     /// <summary>Resets one supported preference group as a complete batch before notifying observers.</summary>
     void ResetPreferenceGroup(SettingsResetScope scope);
 

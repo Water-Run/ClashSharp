@@ -16,6 +16,7 @@
 
     <ScrollViewer
         x:Name="SettingsScrollViewer"
+        IsEnabled="{Binding IsPreferenceInputEnabled}"
         Padding="24,18,18,24"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
@@ -39,20 +40,20 @@
             <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="LanguageBox" Width="180" ItemsSource="{Binding DisplayLanguageOptions}" SelectedIndex="{Binding DisplayLanguageIndex, Mode=TwoWay}" SelectionChanged="LanguageBox_SelectionChanged" />
+                    <ComboBox x:Name="LanguageBox" Width="180" ItemsSource="{Binding DisplayLanguageOptions}" SelectedIndex="{Binding DisplayLanguageIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="AppThemeModeRow" Title="{Binding AppThemeModeTitleText}" Description="{Binding AppThemeModeDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="AppThemeModeBox" Width="180" ItemsSource="{Binding AppThemeModeOptions}" SelectedIndex="{Binding AppThemeModeIndex, Mode=TwoWay}" />
+                    <ComboBox x:Name="AppThemeModeBox" Width="180" ItemsSource="{Binding AppThemeModeOptions}" SelectedIndex="{Binding AppThemeModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="AppAccentColorRow" Title="{Binding AppAccentColorTitleText}" Description="{Binding AppAccentColorDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <ComboBox x:Name="AppAccentColorModeBox" Width="150" ItemsSource="{Binding AppAccentColorModeOptions}" SelectedIndex="{Binding AppAccentColorModeIndex, Mode=TwoWay}" SelectionChanged="AppAccentColorModeBox_SelectionChanged" />
+                        <ComboBox x:Name="AppAccentColorModeBox" Width="150" ItemsSource="{Binding AppAccentColorModeOptions}" SelectedIndex="{Binding AppAccentColorModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                         <Button
                             x:Name="AppAccentColorSwatchButton"
                             Width="32"
@@ -77,7 +78,7 @@
 
             <components:SettingRow x:Name="CloseBehaviorModeRow" Title="{Binding CloseBehaviorModeTitleText}" Description="{Binding CloseBehaviorModeDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="CloseBehaviorModeBox" Width="220" ItemsSource="{Binding CloseBehaviorModeOptions}" SelectedIndex="{Binding CloseBehaviorModeIndex, Mode=TwoWay}" />
+                    <ComboBox x:Name="CloseBehaviorModeBox" Width="220" ItemsSource="{Binding CloseBehaviorModeOptions}" SelectedIndex="{Binding CloseBehaviorModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -112,7 +113,7 @@
             <components:SettingRow x:Name="StartupConflictCheckRow" Title="{Binding StartupConflictCheckTitleText}" Description="{Binding StartupConflictCheckDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <ToggleSwitch x:Name="StartupConflictCheckToggle" MinWidth="0" IsOn="{Binding StartupConflictCheckEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                        <ToggleSwitch x:Name="StartupConflictCheckToggle" MinWidth="0" IsOn="{Binding StartupConflictCheckEnabled, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                         <Button x:Name="CheckStartupConflictsButton" Click="CheckStartupConflictsButton_Click">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE9D9;" FontSize="14" />
@@ -126,7 +127,7 @@
             <components:SettingRow x:Name="ShowStartupGuideRow" Title="{Binding StartupGuideTitleText}" Description="{Binding StartupGuideDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <ToggleSwitch x:Name="ShowStartupGuideToggle" MinWidth="0" IsOn="{Binding ShowStartupGuideOnStartup, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                        <ToggleSwitch x:Name="ShowStartupGuideToggle" MinWidth="0" IsOn="{Binding ShowStartupGuideOnStartup, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                         <Button x:Name="ShowStartupPromptButton" Click="ShowStartupPromptButton_Click">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE946;" FontSize="14" />
@@ -139,7 +140,7 @@
 
             <components:SettingRow x:Name="StartupBehaviorModeRow" Title="{Binding StartupBehaviorModeTitleText}" Description="{Binding StartupBehaviorModeDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="StartupBehaviorModeBox" Width="180" ItemsSource="{Binding StartupBehaviorModeOptions}" SelectedIndex="{Binding StartupBehaviorModeIndex, Mode=TwoWay}" />
+                    <ComboBox x:Name="StartupBehaviorModeBox" Width="180" ItemsSource="{Binding StartupBehaviorModeOptions}" SelectedIndex="{Binding StartupBehaviorModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
             <HyperlinkButton x:Name="ResetStartupSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetStartupSettingsButton_Click" />
@@ -244,13 +245,13 @@
 
             <components:SettingRow x:Name="CheckStaleProxyRow" Title="{Binding CheckStaleProxyTitleText}" Description="{Binding CheckStaleProxyDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="CheckStaleProxyToggle" MinWidth="0" IsOn="{Binding CheckStaleProxyOnStartup, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="CheckStaleProxyToggle" MinWidth="0" IsOn="{Binding CheckStaleProxyOnStartup, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="RestoreProxyOnExitRow" Title="{Binding RestoreProxyOnExitTitleText}" Description="{Binding RestoreProxyOnExitDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="RestoreProxyOnExitToggle" MinWidth="0" IsOn="{Binding RestoreProxyOnExit, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="RestoreProxyOnExitToggle" MinWidth="0" IsOn="{Binding RestoreProxyOnExit, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -259,13 +260,13 @@
             <TextBlock x:Name="NotificationSectionTitleText" Text="{Binding NotificationSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="NotificationEnabledRow" Title="{Binding NotificationEnabledTitleText}" Description="{Binding NotificationEnabledDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="NotificationEnabledToggle" MinWidth="0" IsOn="{Binding NotificationEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="NotificationEnabledToggle" MinWidth="0" IsOn="{Binding NotificationEnabled, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="NotificationLevelRow" Title="{Binding NotificationTitleText}" Description="{Binding NotificationDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="NotificationLevelBox" Width="180" ItemsSource="{Binding NotificationLevelOptions}" SelectedIndex="{Binding NotificationLevelIndex, Mode=TwoWay}" />
+                    <ComboBox x:Name="NotificationLevelBox" Width="180" ItemsSource="{Binding NotificationLevelOptions}" SelectedIndex="{Binding NotificationLevelIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
             <HyperlinkButton x:Name="ResetNotificationSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetNotificationSettingsButton_Click" />
@@ -273,13 +274,13 @@
             <TextBlock x:Name="TriggerSectionTitleText" Text="{Binding TriggerSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TriggersEnabledRow" Title="{Binding TriggersEnabledTitleText}" Description="{Binding TriggersEnabledDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TriggersEnabledToggle" MinWidth="0" IsOn="{Binding TriggersEnabled, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TriggersEnabledToggle_Toggled" />
+                    <ToggleSwitch x:Name="TriggersEnabledToggle" MinWidth="0" IsOn="{Binding TriggersEnabled, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="PreferenceToggle_Toggled" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="TriggerNotificationsEnabledRow" Title="{Binding TriggerNotificationsEnabledTitleText}" Description="{Binding TriggerNotificationsEnabledDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TriggerNotificationsEnabledToggle" MinWidth="0" IsOn="{Binding TriggerNotificationsEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <ToggleSwitch x:Name="TriggerNotificationsEnabledToggle" MinWidth="0" IsOn="{Binding TriggerNotificationsEnabled, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="PreferenceToggle_Toggled" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
             <HyperlinkButton x:Name="ResetTriggerSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetTriggerSettingsButton_Click" />
@@ -287,7 +288,7 @@
             <TextBlock x:Name="TraySectionTitleText" Text="{Binding TraySectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="TrayUseMonochromeInactiveIconRow" Title="{Binding TrayUseMonochromeInactiveIconTitleText}" Description="{Binding TrayUseMonochromeInactiveIconDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ToggleSwitch x:Name="TrayUseMonochromeInactiveIconToggle" MinWidth="0" IsOn="{Binding TrayUseMonochromeInactiveIcon, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="TrayUseMonochromeInactiveIconToggle_Toggled" />
+                    <ToggleSwitch x:Name="TrayUseMonochromeInactiveIconToggle" MinWidth="0" IsOn="{Binding TrayUseMonochromeInactiveIcon, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}" Toggled="PreferenceToggle_Toggled" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
@@ -309,14 +310,14 @@
             <TextBlock x:Name="MainlandChinaSectionTitleText" Text="{Binding MainlandChinaSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
             <components:SettingRow x:Name="MainlandChinaDisplayRow" Title="{Binding MainlandChinaDisplayTitleText}" Description="{Binding MainlandChinaDisplayDescriptionText}">
                 <components:SettingRow.ActionContent>
-                    <ComboBox x:Name="MainlandChinaFeatureModeBox" Width="280" ItemsSource="{Binding MainlandChinaFeatureModeOptions}" SelectedIndex="{Binding MainlandChinaFeatureModeIndex, Mode=TwoWay}" />
+                    <ComboBox x:Name="MainlandChinaFeatureModeBox" Width="280" ItemsSource="{Binding MainlandChinaFeatureModeOptions}" SelectedIndex="{Binding MainlandChinaFeatureModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
                 </components:SettingRow.ActionContent>
             </components:SettingRow>
 
             <components:SettingRow x:Name="MainlandChinaUrlBlockingRow" Title="{Binding MainlandChinaUrlBlockingTitleText}" Description="{Binding MainlandChinaUrlBlockingDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <ToggleSwitch x:Name="MainlandChinaUrlBlockingToggle" MinWidth="0" IsOn="{Binding MainlandChinaUrlBlockingEnabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                        <ToggleSwitch x:Name="MainlandChinaUrlBlockingToggle" MinWidth="0" IsOn="{Binding MainlandChinaUrlBlockingEnabled, Mode=OneWay}" Toggled="PreferenceToggle_Toggled" OnContent="{x:Null}" OffContent="{x:Null}" />
                     </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>

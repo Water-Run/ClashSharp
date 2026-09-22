@@ -2738,26 +2738,10 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     private static bool TryNormalizeConnectionTestUrl(string value, out string normalizedUrl)
     {
-        normalizedUrl = string.Empty;
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-
-        string normalizedValue = value.Trim();
-        if (!normalizedValue.Contains("://", StringComparison.Ordinal))
-        {
-            normalizedValue = $"https://{normalizedValue}";
-        }
-
-        if (!Uri.TryCreate(normalizedValue, UriKind.Absolute, out Uri? uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-        {
-            return false;
-        }
-
-        normalizedUrl = uri.ToString().TrimEnd('/');
-        return true;
+        SettingNormalizationResult normalized = SettingsRegistry.Default.Get(SettingsRegistry.Keys.ConnectionTestProxyUrl1.Value)
+            .NormalizeValue(value);
+        normalizedUrl = normalized.Value?.Get<string>() ?? string.Empty;
+        return normalized.IsSuccess;
     }
 
     /// <summary>Runs a connection test against the persisted connection-test URLs.</summary>

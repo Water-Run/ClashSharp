@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
 using ClashSharp.Service;
@@ -17,6 +20,15 @@ internal sealed class AppSettingsStore : ISettingsStore
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
+
+    public Task ApplyChangesAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken) =>
+        _settings.ApplyChangesAsync(changes, cancellationToken);
+
+    public Task ResetPreferenceGroupAsync(SettingsResetScope scope, CancellationToken cancellationToken) =>
+        _settings.ResetPreferenceGroupAsync(scope, cancellationToken);
+
+    public IReadOnlyList<SettingValueChange> ReadPreferenceChanges(IReadOnlyList<SettingKey> keys) =>
+        _settings.ReadPreferenceChanges(keys);
 
     public void ResetPreferenceGroup(SettingsResetScope scope)
     {

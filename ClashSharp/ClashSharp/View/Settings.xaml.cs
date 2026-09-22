@@ -11,6 +11,7 @@ using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Lifecycle;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -77,6 +78,7 @@ public sealed partial class Settings : Page
     private void LoadSettings()
     {
         _viewModel.Load();
+        RefreshPreferenceControls();
         UpdateRestartRequiredState();
     }
 
@@ -153,6 +155,115 @@ public sealed partial class Settings : Page
 
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _isViewModelSubscribed = true;
+    }
+
+    private async void PreferenceToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isLoadingSettings || !_isLoaded || !_viewModel.IsPreferenceInputEnabled || sender is not ToggleSwitch toggle) { return; }
+        (SettingKey Key, bool Current) setting = toggle.Name switch
+        {
+            "StartupConflictCheckToggle" => (SettingsRegistry.Keys.StartupConflictCheckEnabled, _viewModel.StartupConflictCheckEnabled),
+            "ShowStartupGuideToggle" => (SettingsRegistry.Keys.ShowStartupGuideOnStartup, _viewModel.ShowStartupGuideOnStartup),
+            "CheckStaleProxyToggle" => (SettingsRegistry.Keys.CheckStaleProxyOnStartup, _viewModel.CheckStaleProxyOnStartup),
+            "RestoreProxyOnExitToggle" => (SettingsRegistry.Keys.RestoreProxyOnExit, _viewModel.RestoreProxyOnExit),
+            "NotificationEnabledToggle" => (SettingsRegistry.Keys.NotificationEnabled, _viewModel.NotificationEnabled),
+            "TrayUseMonochromeInactiveIconToggle" => (SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon, _viewModel.TrayUseMonochromeInactiveIcon),
+            "MainlandChinaUrlBlockingToggle" => (SettingsRegistry.Keys.MainlandChinaUrlBlockingEnabled, _viewModel.MainlandChinaUrlBlockingEnabled),
+            "TriggersEnabledToggle" => (SettingsRegistry.Keys.TriggersEnabled, _viewModel.TriggersEnabled),
+            "TriggerNotificationsEnabledToggle" => (SettingsRegistry.Keys.TriggerNotificationsEnabled, _viewModel.TriggerNotificationsEnabled),
+            _ => throw new InvalidOperationException("The preference toggle is not mapped."),
+        };
+        bool requested = toggle.IsOn;
+        if (requested == setting.Current) { return; }
+        await ApplyPagePreferenceAsync(token => _viewModel.ApplyPreferenceAsync(setting.Key, requested, token));
+    }
+
+    private async void PreferenceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingSettings || !_isLoaded || !_viewModel.IsPreferenceInputEnabled || sender is not ComboBox combo) { return; }
+        int index = combo.SelectedIndex;
+        Func<CancellationToken, Task>? apply = combo.Name switch
+        {
+            "LanguageBox" when index != _viewModel.DisplayLanguageIndex && (index == 0 || index > 0 && Enum.IsDefined((AppLanguage)(index - 1))) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.DisplayLanguage, index == 0 ? AppLanguage.AutoDetect : (AppLanguage)(index - 1), token),
+            "AppThemeModeBox" when index != _viewModel.AppThemeModeIndex && Enum.IsDefined((AppThemeMode)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.AppThemeMode, (AppThemeMode)index, token),
+            "AppAccentColorModeBox" when index != _viewModel.AppAccentColorModeIndex && Enum.IsDefined((AppAccentColorMode)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.AppAccentColorMode, (AppAccentColorMode)index, token),
+            "CloseBehaviorModeBox" when index != _viewModel.CloseBehaviorModeIndex && Enum.IsDefined((CloseBehaviorMode)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.CloseBehaviorMode, (CloseBehaviorMode)index, token),
+            "StartupBehaviorModeBox" when index != _viewModel.StartupBehaviorModeIndex && Enum.IsDefined((StartupBehaviorMode)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.StartupBehaviorMode, (StartupBehaviorMode)index, token),
+            "NotificationLevelBox" when index != _viewModel.NotificationLevelIndex && Enum.IsDefined((NotificationLevel)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.NotificationLevel, (NotificationLevel)index, token),
+            "MainlandChinaFeatureModeBox" when index != _viewModel.MainlandChinaFeatureModeIndex && Enum.IsDefined((MainlandChinaFeatureMode)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.MainlandChinaFeatureMode, (MainlandChinaFeatureMode)index, token),
+            _ => null,
+        };
+        if (apply is not null)
+        {
+            await ApplyPagePreferenceAsync(async token =>
+            {
+                await apply(token);
+                token.ThrowIfCancellationRequested();
+                if (combo.Name == "LanguageBox" && _viewModel.IsDisplayLanguageRestartPending
+                    || combo.Name == "AppAccentColorModeBox" && _viewModel.IsAppAccentColorRestartPending)
+                {
+                    await ShowRestartRequiredDialogAsync(token);
+                }
+            });
+        }
+    }
+
+    private Task ApplyPagePreferenceAsync(Func<CancellationToken, Task> apply)
+    {
+        int visit = _visit;
+        return RunPageOperationAsync(async token =>
+        {
+            try { await apply(token); }
+            finally
+            {
+                if (_isLoaded && visit == _visit) { RefreshPreferenceControls(); }
+            }
+        });
+    }
+
+    private void RefreshPreferenceControls()
+    {
+        // Rebind only these choices. Loading the whole page would reset its restart baseline
+        // and overwrite unrelated staged network or sampling requests.
+        bool wasLoadingSettings = _isLoadingSettings;
+        _isLoadingSettings = true;
+        try
+        {
+            RebindPreference(StartupConflictCheckToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.StartupConflictCheckEnabled));
+            RebindPreference(ShowStartupGuideToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.ShowStartupGuideOnStartup));
+            RebindPreference(CheckStaleProxyToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.CheckStaleProxyOnStartup));
+            RebindPreference(RestoreProxyOnExitToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.RestoreProxyOnExit));
+            RebindPreference(NotificationEnabledToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.NotificationEnabled));
+            RebindPreference(TrayUseMonochromeInactiveIconToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.TrayUseMonochromeInactiveIcon));
+            RebindPreference(MainlandChinaUrlBlockingToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.MainlandChinaUrlBlockingEnabled));
+            RebindPreference(TriggersEnabledToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.TriggersEnabled));
+            RebindPreference(TriggerNotificationsEnabledToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.TriggerNotificationsEnabled));
+            RebindPreference(LanguageBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.DisplayLanguageIndex));
+            RebindPreference(AppThemeModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.AppThemeModeIndex));
+            RebindPreference(AppAccentColorModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.AppAccentColorModeIndex));
+            RebindPreference(CloseBehaviorModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.CloseBehaviorModeIndex));
+            RebindPreference(StartupBehaviorModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.StartupBehaviorModeIndex));
+            RebindPreference(NotificationLevelBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.NotificationLevelIndex));
+            RebindPreference(MainlandChinaFeatureModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.MainlandChinaFeatureModeIndex));
+        }
+        finally { _isLoadingSettings = wasLoadingSettings; }
+    }
+
+    private static void RebindPreference(FrameworkElement control, DependencyProperty property, string sourceProperty)
+    {
+        control.ClearValue(property);
+        control.SetBinding(property, new Binding
+        {
+            Path = new PropertyPath(sourceProperty),
+            Mode = BindingMode.OneWay,
+        });
     }
 
     /// <summary>Returns the window-level XAML root so dialogs center in the visible window.</summary>
@@ -331,29 +442,6 @@ public sealed partial class Settings : Page
         });
     }
 
-    /// <summary>Shows restart guidance when accent color mode changes after initial binding.</summary>
-    /// <param name="sender">Accent color mode combo box. Not null.</param>
-    /// <param name="e">Routed event arguments. Not null.</param>
-    private async void AppAccentColorModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isLoadingSettings || !_viewModel.IsAppAccentColorRestartPending)
-        {
-            return;
-        }
-
-        await RunPageOperationAsync(ShowRestartRequiredDialogAsync);
-    }
-
-    private async void LanguageBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isLoadingSettings || !_viewModel.IsDisplayLanguageRestartPending)
-        {
-            return;
-        }
-
-        await RunPageOperationAsync(ShowRestartRequiredDialogAsync);
-    }
-
     /// <summary>Opens the application accent color picker and persists the selected color.</summary>
     /// <param name="sender">Clicked color swatch button. Not null.</param>
     /// <param name="e">Routed event arguments. Not null.</param>
@@ -394,7 +482,8 @@ public sealed partial class Settings : Page
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            _viewModel.SetCustomAppAccentColor(_formatAccentColor(picker.Color));
+            await _viewModel.ApplyCustomAccentColorAsync(_formatAccentColor(picker.Color), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (_viewModel.IsAppAccentColorRestartPending)
             {
                 await ShowRestartRequiredDialogAsync(cancellationToken);
@@ -454,7 +543,7 @@ public sealed partial class Settings : Page
                 cancellationToken.ThrowIfCancellationRequested();
                 if (result is ContentDialogResult.Primary)
                 {
-                    _viewModel.SetConnectionTestUrls(proxyUrl1Box.Text, proxyUrl2Box.Text, directUrlBox.Text);
+                    await _viewModel.ApplyConnectionTestUrlsAsync(proxyUrl1Box.Text, proxyUrl2Box.Text, directUrlBox.Text, cancellationToken);
                 }
             }
             finally
@@ -523,30 +612,9 @@ public sealed partial class Settings : Page
         await dialog.ShowManagedAsync(cancellationToken);
     }
 
-    private void TriggersEnabledToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_isLoadingSettings || sender is not ToggleSwitch toggle || toggle.IsOn == _viewModel.TriggersEnabled)
-        {
-            return;
-        }
-
-        _viewModel.SetTriggersEnabled(toggle.IsOn);
-        UpdateRestartRequiredState();
-    }
-
-    private void TrayUseMonochromeInactiveIconToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_isLoadingSettings || sender is not ToggleSwitch toggle || toggle.IsOn == _viewModel.TrayUseMonochromeInactiveIcon)
-        {
-            return;
-        }
-
-        _viewModel.SetTrayUseMonochromeInactiveIcon(toggle.IsOn);
-    }
-
     private async void ResetBasicSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetBasicSettingsToDefaults);
+        await ResetSettingsGroupAsync(token => _viewModel.ResetPreferenceGroupAsync(SettingsResetScope.Basic, token));
     }
 
     private async void ResetStartupSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -556,17 +624,17 @@ public sealed partial class Settings : Page
 
     private async void ResetNotificationSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetNotificationSettingsToDefaults);
+        await ResetSettingsGroupAsync(token => _viewModel.ResetPreferenceGroupAsync(SettingsResetScope.Notifications, token));
     }
 
     private async void ResetTriggerSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetTriggerSettingsToDefaults);
+        await ResetSettingsGroupAsync(token => _viewModel.ResetPreferenceGroupAsync(SettingsResetScope.Triggers, token));
     }
 
     private async void ResetTraySettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetTraySettingsToDefaults);
+        await ResetSettingsGroupAsync(token => _viewModel.ResetPreferenceGroupAsync(SettingsResetScope.Tray, token));
     }
 
     private async void ResetTransparentProxySettingsButton_Click(object sender, RoutedEventArgs e)
@@ -581,26 +649,12 @@ public sealed partial class Settings : Page
 
     private async void ResetWindowsNativeSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetWindowsNativeSettingsToDefaults, includeServiceDeploymentNote: true);
+        await ResetSettingsGroupAsync(token => _viewModel.ResetPreferenceGroupAsync(SettingsResetScope.WindowsNative, token), includeServiceDeploymentNote: true);
     }
 
     private async void ResetMainlandChinaSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        await ResetSettingsGroupAsync(_viewModel.ResetMainlandChinaSettingsToDefaults);
-    }
-
-    /// <summary>Confirms and applies a settings-group default reset.</summary>
-    /// <param name="resetAction">Group reset action. Must not be null.</param>
-    /// <param name="includeServiceDeploymentNote">Whether to append the Installer-owned service notice.</param>
-    private Task ResetSettingsGroupAsync(Action resetAction, bool includeServiceDeploymentNote = false)
-    {
-        ArgumentNullException.ThrowIfNull(resetAction);
-        return ResetSettingsGroupAsync(token =>
-        {
-            token.ThrowIfCancellationRequested();
-            resetAction();
-            return Task.CompletedTask;
-        }, includeServiceDeploymentNote);
+        await ResetSettingsGroupAsync(token => _viewModel.ResetPreferenceGroupAsync(SettingsResetScope.MainlandChina, token));
     }
 
     /// <summary>Owns an asynchronous group reset until its activation or compensation has drained.</summary>
@@ -673,7 +727,7 @@ public sealed partial class Settings : Page
             if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                _viewModel.SetTrayVisibleFeatureIds(optionList.SelectedOptions.Select(static option => option.Id));
+                await _viewModel.ApplyTrayVisibleFeatureIdsAsync(optionList.SelectedOptions.Select(static option => option.Id), cancellationToken);
             }
         });
     }

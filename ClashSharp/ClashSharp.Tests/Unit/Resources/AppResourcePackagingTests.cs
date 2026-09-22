@@ -1706,7 +1706,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("EditTrayVisibleFeaturesButton_Click", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("ResetTraySettingsLink", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("SetTrayVisibleFeatureIds", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("await _viewModel.ApplyTrayVisibleFeatureIdsAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("CloseBehaviorModeOptions", settingsViewModel, StringComparison.Ordinal);
         Assert.Contains("TrayVisibleFeatureSummaryText", settingsViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("TrayFadeInactiveIconTitleText", settingsViewModel, StringComparison.Ordinal);
@@ -1724,8 +1724,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("ResolveCurrentVisualState()", systemTray, StringComparison.Ordinal);
         Assert.Contains("TryDisposeIcon(nextIcon)", systemTray, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateInactiveBitmap", systemTray, StringComparison.Ordinal);
-        Assert.Contains("TriggersEnabledToggle_Toggled", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("TrayUseMonochromeInactiveIconToggle_Toggled", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Toggled=\"PreferenceToggle_Toggled\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("\"TriggersEnabledToggle\" => (SettingsRegistry.Keys.TriggersEnabled", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("\"TrayUseMonochromeInactiveIconToggle\" => (SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon", settingsCode, StringComparison.Ordinal);
         Assert.Contains("Mode=OneWay", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ConfirmRestartRequiredSettingChangeAsync", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Settings.RestartSettingConfirm.Title", settingsCode, StringComparison.Ordinal);
@@ -2216,7 +2217,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("x:Name=\"ConnectionTestUrlBox\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("BuildConnectionTestUrlsPanel", settingsCode, StringComparison.Ordinal);
         Assert.Contains("RestoreConnectionTestUrlsButton", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("SetConnectionTestUrls", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("await _viewModel.ApplyConnectionTestUrlsAsync", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings opens backup/restore export scope selection in a dialog instead of pinning a scope dropdown on the page.</summary>

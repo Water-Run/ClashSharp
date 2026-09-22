@@ -1,6 +1,6 @@
 # Settings generation cutover
 
-> 2026-09-22：源码与测试已统一纳入 `main`，后续在主线继续；下述分支和 PR 记录为实现历史。生产偏好仍由 LocalSettings 管理，完整代际切换未激活。当前状态见[主线整理](../reviews/2026-09-22-development-status.md)。
+> 2026-09-22：源码与测试已统一纳入 `main`，后续在主线继续；下述分支和 PR 记录为实现历史。[设置页普通偏好的异步生产入口](../reviews/2026-09-22-settings-preference-commands.md)已接通；生产偏好仍由 LocalSettings 管理，完整代际切换未激活。当前状态见[主线整理](../reviews/2026-09-22-development-status.md)。
 
 版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口、内部设置运行快照，以及 Appearance、StartupTask、Sampling、Triggers、Network 的服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。Profile 和 Log 仓库已能退休并等待已接收操作结束，但完整代际容器及页面消费者尚未切换。整体接入后，才替换临时架构门禁并合入 main。
 

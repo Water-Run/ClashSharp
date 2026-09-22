@@ -1,3 +1,5 @@
+using System.Xml.Linq;
+
 namespace ClashSharp.Tests.Architecture;
 
 /// <summary>
@@ -6,6 +8,19 @@ namespace ClashSharp.Tests.Architecture;
 /// </summary>
 public sealed class SettingsAuthorityArchitectureTests
 {
+    [Fact]
+    public void SettingsPage_OnlyStagedRuntimeChoicesUseTwoWayBindings()
+    {
+        XDocument page = XDocument.Parse(ReadApplicationSource("View/Settings.xaml"));
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        string[] actual = page.Descendants()
+            .Where(element => element.Attributes().Any(attribute => attribute.Value.Contains("Mode=TwoWay", StringComparison.Ordinal)))
+            .Select(element => (string)element.Attribute(xaml + "Name")!)
+            .Order(StringComparer.Ordinal).ToArray();
+        string[] expected = ["LaunchAtStartupToggle", "TransparentProxyToggle", "MixedPortBox", "ConnectionSamplingToggle", "ConnectionSamplingIntervalBox"];
+        Assert.Equal(expected.Order(StringComparer.Ordinal), actual);
+    }
+
     private static readonly string ApplicationRoot = Path.Combine(
         FindRepositoryRoot(),
         "ClashSharp",

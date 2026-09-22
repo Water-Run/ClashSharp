@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
@@ -12,6 +14,85 @@ namespace ClashSharp.Service;
 
 public sealed partial class AppSettingsService
 {
+    /// <summary>Reads the requested page preferences under the batch publication lock.</summary>
+    internal IReadOnlyList<SettingValueChange> ReadPreferenceChanges(IReadOnlyList<SettingKey> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        SettingKey[] requested = keys.ToArray();
+        lock (_syncLock)
+        {
+            return Array.AsReadOnly(requested.Select(key =>
+            {
+                object value = key.Value switch
+                {
+                    nameof(DisplayLanguage) => DisplayLanguage,
+                    nameof(AppThemeMode) => AppThemeMode,
+                    nameof(AppAccentColorMode) => AppAccentColorMode,
+                    nameof(AppAccentColorValue) => AppAccentColorValue,
+                    nameof(StartupConflictCheckEnabled) => StartupConflictCheckEnabled,
+                    nameof(StartupBehaviorMode) => StartupBehaviorMode,
+                    nameof(ShowStartupGuideOnStartup) => ShowStartupGuideOnStartup,
+                    nameof(CloseBehaviorMode) => CloseBehaviorMode,
+                    nameof(TrayUseMonochromeInactiveIcon) => TrayUseMonochromeInactiveIcon,
+                    nameof(TrayVisibleFeatureIds) => TrayVisibleFeatureIds,
+                    nameof(CheckStaleProxyOnStartup) => CheckStaleProxyOnStartup,
+                    nameof(RestoreProxyOnExit) => RestoreProxyOnExit,
+                    nameof(MainlandChinaFeatureMode) => MainlandChinaFeatureMode,
+                    nameof(MainlandChinaUrlBlockingEnabled) => MainlandChinaUrlBlockingEnabled,
+                    nameof(NotificationEnabled) => NotificationEnabled,
+                    nameof(NotificationLevel) => NotificationLevel,
+                    nameof(TriggersEnabled) => TriggersEnabled,
+                    nameof(TriggerNotificationsEnabled) => TriggerNotificationsEnabled,
+                    nameof(ConnectionTestProxyUrl1) => ConnectionTestProxyUrl1,
+                    nameof(ConnectionTestProxyUrl2) => ConnectionTestProxyUrl2,
+                    nameof(ConnectionTestDirectUrl) => ConnectionTestDirectUrl,
+                    _ => throw new ArgumentException("The key is not a page preference.", nameof(keys)),
+                };
+                SettingNormalizationResult normalized = SettingsRegistry.Default.Get(key.Value).NormalizeValue(value);
+                if (!normalized.IsSuccess) { throw new InvalidOperationException("A stored page preference cannot be normalized."); }
+                return new SettingValueChange(key, normalized.Value!);
+            }).ToArray());
+        }
+    }
+
+    /// <summary>Resets one preference group under admission retained through all change notifications.</summary>
+    internal async Task ResetPreferenceGroupAsync(SettingsResetScope scope, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<SettingDefinition> definitions = GetPreferenceResetDefinitions(scope);
+        MutationAdmissionBarrier admission = Volatile.Read(ref _mutationAdmission);
+        using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        WriteAdmitted(lease, editor => editor.ResetDefinitions(definitions));
+    }
+
+    /// <summary>Copies and validates one canonical change set before obtaining write admission.</summary>
+    internal async Task ApplyChangesAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        SettingValueChange[] snapshot = changes.ToArray();
+        if (snapshot.Length == 0 || snapshot.Any(change => change is null)
+            || snapshot.Select(change => change.Key).Distinct().Count() != snapshot.Length)
+        {
+            throw new ArgumentException("A preference change set must contain distinct canonical keys.", nameof(changes));
+        }
+        foreach (SettingValueChange change in snapshot)
+        {
+            SettingDefinition definition = SettingsRegistry.Default.Get(change.Key.Value);
+            SettingNormalizationResult normalized = definition.Normalize(change.Value.CanonicalText);
+            if (!normalized.IsSuccess || !change.Value.Equals(normalized.Value))
+            {
+                throw new ArgumentException("A preference change must match its canonical registry type and value.", nameof(changes));
+            }
+        }
+        MutationAdmissionBarrier admission = Volatile.Read(ref _mutationAdmission);
+        using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        WriteAdmitted(lease, editor =>
+        {
+            foreach (SettingValueChange change in snapshot) { editor.StageCanonical(change); }
+        });
+    }
+
     /// <summary>Reads the complete sampling preference pair under the same lock used by batch publication.</summary>
     internal ConnectionSamplingSettings ReadConnectionSamplingSettings()
     {
@@ -396,6 +477,23 @@ public sealed partial class AppSettingsService
             EnsureActive();
             ArgumentNullException.ThrowIfNull(value);
             _pending[key] = value;
+        }
+
+        internal void StageCanonical(SettingValueChange change)
+        {
+            SettingValue value = change.Value;
+            if (change.Key == SettingsRegistry.Keys.MainlandChinaFeatureMode)
+            {
+                // Retain the legacy alias until the single-authority migration is activated.
+                MainlandChinaFeatureMode = value.Get<MainlandChinaFeatureMode>();
+                return;
+            }
+            object stored = value.ValueType == typeof(bool) ? value.Get<bool>()
+                : value.ValueType == typeof(int) ? value.Get<int>()
+                : value.ValueType == typeof(string) ? value.Get<string>()
+                : value.ValueType.IsEnum ? Convert.ToInt32(Enum.Parse(value.ValueType, value.CanonicalText), CultureInfo.InvariantCulture)
+                : throw new ArgumentException("The setting type is unsupported.", nameof(change));
+            Stage(change.Key.Value, stored);
         }
 
         private void StageEnum<TEnum>(string key, TEnum value)

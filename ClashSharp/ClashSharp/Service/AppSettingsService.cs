@@ -539,6 +539,12 @@ public sealed partial class AppSettingsService :
     /// <exception cref="ArgumentOutOfRangeException">The scope does not name exactly one supported preference group.</exception>
     public void ResetPreferenceGroup(SettingsResetScope scope)
     {
+        IReadOnlyList<SettingDefinition> definitions = GetPreferenceResetDefinitions(scope);
+        WriteOrdinary(editor => editor.ResetDefinitions(definitions));
+    }
+
+    private static IReadOnlyList<SettingDefinition> GetPreferenceResetDefinitions(SettingsResetScope scope)
+    {
         if (scope is not (SettingsResetScope.Basic or SettingsResetScope.Notifications
             or SettingsResetScope.Triggers or SettingsResetScope.Tray
             or SettingsResetScope.WindowsNative or SettingsResetScope.MainlandChina))
@@ -546,8 +552,7 @@ public sealed partial class AppSettingsService :
             throw new ArgumentOutOfRangeException(nameof(scope));
         }
 
-        IReadOnlyList<SettingDefinition> definitions = SettingsRegistry.Default.GetResetDefinitions(scope);
-        WriteOrdinary(editor => editor.ResetDefinitions(definitions));
+        return SettingsRegistry.Default.GetResetDefinitions(scope);
     }
 
     /// <summary>Clears user preferences; private credentials belong to separate data-maintenance authority.</summary>
