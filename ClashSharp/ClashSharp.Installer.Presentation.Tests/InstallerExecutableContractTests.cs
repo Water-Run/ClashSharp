@@ -221,7 +221,7 @@ public sealed class InstallerExecutableContractTests
     }
 
     [Fact]
-    public void ShellUsesCSharpPurpleAsItsAccessibleInstallerAccent()
+    public void ShellUsesBrandGreenAsItsAccessibleInstallerAccent()
     {
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -234,7 +234,7 @@ public sealed class InstallerExecutableContractTests
         XElement accent = Assert.Single(
             theme.Descendants(presentation + "Color"),
             color => (string?)color.Attribute(x + "Key") == "InstallerAccentColor");
-        Assert.Equal("#7355DD", accent.Value.Trim());
+        Assert.Equal("#0C7428", accent.Value.Trim());
         Assert.Contains(
             theme.Descendants(presentation + "DataTrigger"),
             trigger => (string?)trigger.Attribute("Value") == "True"
@@ -249,9 +249,9 @@ public sealed class InstallerExecutableContractTests
             "ClashSharp.Installer",
             "Themes",
             "InstallerTheme.xaml"));
-        Assert.DoesNotContain("#0C7428", themeText, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("#0B7026", themeText, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("#0A6822", themeText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("#7355DD", themeText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("#8066E8", themeText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("#6042C4", themeText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

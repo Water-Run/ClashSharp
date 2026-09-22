@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Threading;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
@@ -67,10 +66,6 @@ public sealed partial class AppSettingsService :
 
     /// <summary>Storage key for the local mixed proxy port.</summary>
     private const string KeyMixedPort = "MixedPort";
-
-    /// <summary>Storage key for the private mihomo controller bearer secret.</summary>
-    /// <remarks>This internal credential is intentionally excluded from user settings reset, export, and audit events.</remarks>
-    private const string KeyMihomoControllerSecret = "MihomoControllerSecret";
 
     /// <summary>Storage key for background connection sampling.</summary>
     private const string KeyConnectionSamplingEnabled = "ConnectionSamplingEnabled";
@@ -300,15 +295,6 @@ public sealed partial class AppSettingsService :
 
             WriteOrdinary(editor => editor.MixedPort = value);
         }
-    }
-
-    /// <summary>Gets the private bearer secret shared with the local mihomo controller.</summary>
-    /// <value>A persistent 256-bit secret encoded as 64 lowercase hexadecimal characters.</value>
-    internal string MihomoControllerSecret
-    {
-        get => GetOrCreateInternalSecret(
-            KeyMihomoControllerSecret,
-            MihomoControllerEndpoint.IsValidSecret);
     }
 
     /// <summary>Gets or sets whether active connections are periodically sampled into SQLite.</summary>
@@ -564,7 +550,7 @@ public sealed partial class AppSettingsService :
         WriteOrdinary(editor => editor.ResetDefinitions(definitions));
     }
 
-    /// <summary>Clears user settings and internal credentials for the destructive clear-all-data operation.</summary>
+    /// <summary>Clears user preferences; private credentials belong to separate data-maintenance authority.</summary>
     internal void ClearAllSettings()
     {
         WriteOrdinary(static editor => editor.ClearAllSettings());
@@ -687,37 +673,6 @@ public sealed partial class AppSettingsService :
         }
 
         return _fallbackValues.TryGetValue(key, out object? fallbackValue) ? fallbackValue : null;
-    }
-
-    /// <summary>Reads or atomically creates one internal 256-bit credential while the settings lock is held.</summary>
-    private string GetOrCreateInternalSecret(
-        string key,
-        Func<string?, bool> validator)
-    {
-        lock (_syncLock)
-        {
-            if (GetValue(key) is string storedSecret && validator(storedSecret))
-            {
-                return storedSecret;
-            }
-        }
-
-        MutationAdmissionBarrier admission = Volatile.Read(ref _mutationAdmission);
-        using MutationAdmissionLease lease = admission.AcquireOrdinary();
-        admission.EnsureActiveLease(lease);
-        lock (_syncLock)
-        {
-            admission.EnsureActiveLease(lease);
-            if (GetValue(key) is string storedSecret && validator(storedSecret))
-            {
-                return storedSecret;
-            }
-
-            string generatedSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32))
-                .ToLowerInvariant();
-            _ = SetValue(key, generatedSecret);
-            return generatedSecret;
-        }
     }
 
     /// <summary>Writes a raw setting value to the preferred backing store.</summary>

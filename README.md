@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)](#installation)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)](./global.json)
 [![Package](https://img.shields.io/badge/Package-MSIX-4c1?style=flat-square)](#installation)
-[![Status](https://img.shields.io/badge/1.0.0-paused%20checkpoint-orange?style=flat-square)](./docs/reviews/2026-09-12-pause-checkpoint.md)
+[![Status](https://img.shields.io/badge/1.0.0-development-orange?style=flat-square)](./docs/reviews/2026-09-22-development-status.md)
 
 **English** · [简体中文](./README-zh.md) · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
@@ -20,8 +20,8 @@
 ---
 
 > [!IMPORTANT]
-> **1.0.0 is in development and currently paused at a verified checkpoint.**
-> The checkpoint is `main` [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), tagged [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
+> **1.0.0 development resumed on 2026-09-22, with accumulated work consolidated into `main`.**
+> Settings generation cutover and automatic empty-directory cleanup still need production integration. The historical checkpoint below is [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), tagged [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
 > No formal release exists yet — CI packages are validation artifacts, not releases.
 
 | Area | State at the checkpoint |
@@ -33,7 +33,7 @@
 | **Networking** | 32/32 isolated node probes and HTTPS forwarding against an existing Clash configuration |
 | **Pending** | WPF page interaction, graceful shutdown, automatic empty-directory cleanup, complete release matrix |
 
-<sub>Exact candidates, evidence boundaries, remaining work, and later documentation: **[current development status](./docs/reviews/2026-09-17-development-status.md)** · **[1.0.0 execution ledger](./docs/reviews/1.0.0-execution-ledger.md)** · [pause checkpoint](./docs/reviews/2026-09-12-pause-checkpoint.md) · [server acceptance](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
+<sub>Exact candidates, evidence boundaries, remaining work, and later documentation: **[current development status](./docs/reviews/2026-09-22-development-status.md)** · **[1.0.0 execution ledger](./docs/reviews/1.0.0-execution-ledger.md)** · [pause checkpoint](./docs/reviews/2026-09-12-pause-checkpoint.md) · [server acceptance](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
 
 ## Windows-Native by Design
 
@@ -132,7 +132,7 @@ The interface language can follow Windows or be set explicitly. Persian uses a r
 
 | Document | Contents |
 | :--- | :--- |
-| [Current development status](./docs/reviews/2026-09-17-development-status.md) | Where 1.0.0 stands, closed PR recovery, and remaining work |
+| [Current development status](./docs/reviews/2026-09-22-development-status.md) | Where 1.0.0 stands, main consolidation and PR handling, and remaining work |
 | [1.0.0 execution ledger](./docs/reviews/1.0.0-execution-ledger.md) | Milestones, candidates, evidence, and remaining work |
 | [Pause checkpoint](./docs/reviews/2026-09-12-pause-checkpoint.md) | Exact boundary and resumption entry points for the current pause |
 | [Server acceptance](./docs/reviews/2026-09-12-server-acceptance.md) | Real package install, startup, repair, and uninstall evidence |

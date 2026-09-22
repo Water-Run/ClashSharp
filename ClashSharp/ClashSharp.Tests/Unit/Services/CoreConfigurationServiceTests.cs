@@ -29,6 +29,7 @@ public sealed class CoreConfigurationServiceTests
         Assert.Contains("mixed-port: 19090", configurationText, StringComparison.Ordinal);
         Assert.Contains("mode: global", configurationText, StringComparison.Ordinal);
         Assert.Contains("tun:\n", configurationText, StringComparison.Ordinal);
+        Assert.Contains(new FixedControllerCredentialProvider().GetSecret(), configurationText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -141,6 +142,7 @@ public sealed class CoreConfigurationServiceTests
         CoreConfigurationService service = new(
             tempDirectory.Path,
             new FakeCoreConfigurationSettings(),
+            new FixedControllerCredentialProvider(),
             metrics,
             new FakeCoreConfigurationValidator(),
             static key => key,
@@ -392,6 +394,7 @@ public sealed class CoreConfigurationServiceTests
         return new CoreConfigurationService(
             configurationDirectory,
             settings ?? new FakeCoreConfigurationSettings(),
+            new FixedControllerCredentialProvider(),
             metrics ?? new FakeCoreConfigurationProfileMetrics(),
             validator ?? new FakeCoreConfigurationValidator(),
             key => key switch
@@ -440,9 +443,6 @@ public sealed class CoreConfigurationServiceTests
         public int MixedPort { get; init; } = 7890;
 
         public string ActiveProfileId { get; init; } = ProfileCatalogIds.BuiltInDirect;
-
-        public string MihomoControllerSecret { get; init; } =
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     }
 
     private sealed class FakeCoreConfigurationProfileMetrics : ICoreConfigurationProfileMetrics

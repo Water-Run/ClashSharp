@@ -1,5 +1,7 @@
 # 1.0.0 暂停检查点（2026-09-12）
 
+> 历史检查点。2026-09-22 已恢复开发并统一到 `main`；后续状态见[主线整理与开发状态](2026-09-22-development-status.md)。本页验收仍只属于当时的候选。
+
 用户要求收尾、推送一个版本并暂停。本次保存 **1.0.0 阶段版本**，程序集及 MSIX 版本保持 `1.0.0.0`；未将其标记为完成全部正式发行验收。
 
 ## 本次 main 内容
@@ -16,8 +18,8 @@
 
 ## 保留工作及恢复入口
 
-- [wip/installer-empty-cleanup](https://github.com/Water-Run/ClashSharp/tree/wip/installer-empty-cleanup) 的 `3b95e93` 保存未完成的目录归属、terminal store、原生删除与新测试。最终完整编译、生产装配及服务器自动清理未验收；恢复步骤见该分支的 `docs/design/2026-09-12-installer-empty-directory-cleanup.md`。
-- [feat/settings-generation](https://github.com/Water-Run/ClashSharp/tree/feat/settings-generation) 保存设置代际开发。对应草稿 PR [#5](https://github.com/Water-Run/ClashSharp/pull/5) 已于 2026-09-17 关闭，不合并进 `main`，分支仍作为恢复入口。生产仍以 LocalSettings 为唯一偏好权威，完整页面消费者切换、导入/重置组合及退出验收待续。当前仓库快照见[2026-09-17 开发状态](2026-09-17-development-status.md)。
+- [wip/installer-empty-cleanup](https://github.com/Water-Run/ClashSharp/tree/3b95e93456918d58eb8a437a2d8905f642b2a3d6) 的 `3b95e93` 保存未完成的目录归属、terminal store、原生删除与新测试。最终完整编译、生产装配及服务器自动清理未验收；恢复步骤见该分支的 `docs/design/2026-09-12-installer-empty-directory-cleanup.md`。
+- [feat/settings-generation](https://github.com/Water-Run/ClashSharp/tree/0508a35df7b0755c86461afaf255814e9e49b4d3) 保存设置代际开发。对应草稿 PR [#5](https://github.com/Water-Run/ClashSharp/pull/5) 已于 2026-09-17 关闭，不合并进 `main`，分支仍作为恢复入口。生产仍以 LocalSettings 为唯一偏好权威，完整页面消费者切换、导入/重置组合及退出验收待续。当前仓库快照见[2026-09-17 开发状态](2026-09-17-development-status.md)。
 - 本机与服务器代理指纹保持。服务器本轮测试包、服务、进程和临时签名材料已清理；本次暂停没有启动新的服务器安装或 native 测试。
 
 后续从这些分支继续，先完成未接通部分并验证，再推进新 main 节点。

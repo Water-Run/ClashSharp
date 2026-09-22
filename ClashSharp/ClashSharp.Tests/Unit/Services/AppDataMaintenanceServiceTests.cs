@@ -1,3 +1,5 @@
+using ClashSharp.ApplicationModel.Mutations;
+using ClashSharp.ApplicationModel.Security;
 using ClashSharp.Service;
 
 namespace ClashSharp.Tests.Unit.Services;
@@ -30,6 +32,7 @@ public sealed class AppDataMaintenanceServiceTests
             [
                 "runtime.shutdown",
                 "settings.clear",
+                "credentials.clear",
                 "logs.clear",
                 "local.clear",
                 "logs.reset",
@@ -75,13 +78,86 @@ public sealed class AppDataMaintenanceServiceTests
         Assert.Equal(["runtime.shutdown"], calls);
     }
 
+    [Fact]
+    public async Task PreferenceReset_PreservesCredentialsAndFullDeletionRemovesThemAfterShutdown()
+    {
+        List<string> calls = [];
+        ControllerCredentialTestStore store = new() { Present = true, Value = ControllerCredentialTestStore.ExistingSecret };
+        store.BeforeDelete = () => { Assert.Contains("runtime.shutdown", calls); calls.Add("credentials.clear"); };
+        MutationAdmissionBarrier admission = new();
+        using ControllerCredentialService owner = new(store, admission);
+        using (MutationAdmissionLease lease = admission.AcquireOrdinary()) { owner.InitializeAdmitted(lease, CancellationToken.None); }
+        MihomoControllerCredentials credentials = new();
+        credentials.Bind(owner, admission);
+        AppDataMaintenanceService service = CreateService(calls, credentials: credentials);
+        service.ResetSettings();
+        Assert.Equal(ControllerCredentialTestStore.ExistingSecret, credentials.GetSecret());
+        Assert.Equal(0, store.Deletes);
+        calls.Clear();
+        await service.ClearDataAsync(CancellationToken.None);
+        Assert.Equal(["runtime.shutdown", "settings.clear", "credentials.clear", "logs.clear", "local.clear", "logs.reset", "profiles.reset"], calls);
+        Assert.False(store.Present);
+        Assert.Throws<ControllerCredentialException>(credentials.GetSecret);
+    }
+
+    [Fact]
+    public async Task TerminalDataDeletion_UsesMaintenanceAdmissionForTheIndependentCredentialSlot()
+    {
+        List<string> calls = [];
+        ControllerCredentialTestStore store = new() { Present = true, Value = ControllerCredentialTestStore.ExistingSecret };
+        MutationAdmissionBarrier admission = new();
+        using ControllerCredentialService owner = new(store, admission);
+        using (MutationAdmissionLease lease = admission.AcquireOrdinary()) { owner.InitializeAdmitted(lease, CancellationToken.None); }
+        MihomoControllerCredentials credentials = new();
+        credentials.Bind(owner, admission);
+        await using (MutationAdmissionLease lease = await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None)) { lease.CommitShutdown(); }
+        store.BeforeDelete = () => calls.Add("credentials.clear");
+        AppDataMaintenanceService service = CreateService(calls, credentials: credentials);
+        service.ClearDataAfterRuntimeShutdown(CancellationToken.None, useTerminalSettingsAdmission: true);
+        Assert.Equal(["settings.clear-terminal", "credentials.clear", "logs.clear", "local.clear", "logs.reset", "profiles.reset"], calls);
+        Assert.False(store.Present);
+        Assert.Throws<MutationAdmissionRejectedException>(() => admission.AcquireOrdinary());
+    }
+
+    [Fact]
+    public async Task UnverifiedCredentialDeletion_StopsBeforeDeletingTheRemainingData()
+    {
+        List<string> calls = [];
+        ControllerCredentialTestStore store = new() { Present = true, Value = ControllerCredentialTestStore.ExistingSecret, IgnoreDeletes = true };
+        store.BeforeDelete = () => calls.Add("credentials.clear");
+        MutationAdmissionBarrier admission = new();
+        using ControllerCredentialService owner = new(store, admission);
+        using (MutationAdmissionLease lease = admission.AcquireOrdinary()) { owner.InitializeAdmitted(lease, CancellationToken.None); }
+        MihomoControllerCredentials credentials = new();
+        credentials.Bind(owner, admission);
+        AppDataMaintenanceService service = CreateService(calls, credentials: credentials);
+        await Assert.ThrowsAsync<ControllerCredentialException>(() => service.ClearDataAsync(CancellationToken.None));
+        Assert.Equal(["runtime.shutdown", "settings.clear", "credentials.clear"], calls);
+        Assert.True(store.Present);
+    }
+
+    [Fact]
+    public async Task CancellationAfterPreferenceDeletion_StillCompletesCredentialAndFileCleanup()
+    {
+        List<string> calls = [];
+        using CancellationTokenSource cancellation = new();
+        AppDataMaintenanceService service = CreateService(calls,
+            settings: new CancellingSettings(calls, cancellation));
+        await service.ClearDataAsync(cancellation.Token);
+        Assert.True(cancellation.IsCancellationRequested);
+        Assert.Equal(["runtime.shutdown", "settings.clear", "credentials.clear", "logs.clear", "local.clear", "logs.reset", "profiles.reset"], calls);
+    }
+
     private static AppDataMaintenanceService CreateService(
         List<string> calls,
         FakeAppDataMaintenanceLogStorage? logStorage = null,
-        IAppDataMaintenanceRuntime? runtime = null)
+        IAppDataMaintenanceRuntime? runtime = null,
+        IAppDataMaintenanceCredentials? credentials = null,
+        IAppDataMaintenanceSettings? settings = null)
     {
         return new AppDataMaintenanceService(
-            new FakeAppDataMaintenanceSettings(calls),
+            settings ?? new FakeAppDataMaintenanceSettings(calls),
+            credentials ?? new FakeCredentials(calls),
             runtime ?? new FakeAppDataMaintenanceRuntime(calls),
             logStorage ?? new FakeAppDataMaintenanceLogStorage(calls),
             new FakeAppDataMaintenanceLocalData(calls),
@@ -89,7 +165,7 @@ public sealed class AppDataMaintenanceServiceTests
             key => key == "Maintenance.LogClearFailed" ? "localized log clear failed" : key);
     }
 
-    private sealed class FakeAppDataMaintenanceSettings(List<string> calls) : IAppDataMaintenanceSettings
+    private sealed class FakeAppDataMaintenanceSettings(List<string> calls) : IAppDataMaintenanceSettings, ITerminalShutdownSettingsMaintenance
     {
         public void ResetAllSettings()
         {
@@ -100,6 +176,23 @@ public sealed class AppDataMaintenanceServiceTests
         {
             calls.Add("settings.clear");
         }
+
+        public void ClearAllSettingsAfterShutdown() => calls.Add("settings.clear-terminal");
+    }
+
+    private sealed class FakeCredentials(List<string> calls) : IAppDataMaintenanceCredentials
+    {
+        public void ClearAll(bool useTerminalAdmission, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            calls.Add("credentials.clear");
+        }
+    }
+
+    private sealed class CancellingSettings(List<string> calls, CancellationTokenSource cancellation) : IAppDataMaintenanceSettings
+    {
+        public void ResetAllSettings() => calls.Add("settings.reset");
+        public void ClearAllSettings() { calls.Add("settings.clear"); cancellation.Cancel(); }
     }
 
     private sealed class FakeAppDataMaintenanceRuntime(List<string> calls) : IAppDataMaintenanceRuntime

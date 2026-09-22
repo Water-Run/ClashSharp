@@ -9,6 +9,8 @@ internal sealed class WindowsInstallerDirectoryNative : IWindowsInstallerDirecto
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(security);
+        // Enable ownership recording together with terminal recovery and finalization; recording
+        // alone leaves durable state that the production uninstall path cannot yet consume.
         new DirectoryInfo(path).Create(security);
     }
 

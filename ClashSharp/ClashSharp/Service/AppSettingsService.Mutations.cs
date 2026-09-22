@@ -331,7 +331,6 @@ public sealed partial class AppSettingsService
         internal void ClearAllSettings()
         {
             ResetAllSettings();
-            _pending[KeyMihomoControllerSecret] = null;
         }
 
         internal IReadOnlyList<AppSettingChangedEventArgs> Commit()

@@ -1,5 +1,7 @@
 # ClashSharp 开发状态（2026-09-17）
 
+> 历史快照。2026-09-22 已恢复开发并归并工作到 `main`；本页的暂停、PR 和分支说明仅描述当时状态。当前入口见[主线整理与开发状态](2026-09-22-development-status.md)。
+
 日期：2026-09-17（Asia/Shanghai）  
 核对基线：远端 `origin/main` 在开始时为 `b2f1842`，与本地 `main` 一致。  
 定位：把 1.0.0 暂停之后的仓库状态、未合并工作入口、本轮文档与语言工作落成一份当前快照。历史里程碑与测试数量仍以 [1.0.0 执行账本](1.0.0-execution-ledger.md) 和 [暂停检查点](2026-09-12-pause-checkpoint.md) 为准。
@@ -24,8 +26,8 @@
 
 | 入口 | 提交 | 内容 | 与 `main` 的关系 |
 |---|---|---|---|
-| [`feat/settings-generation`](https://github.com/Water-Run/ClashSharp/tree/feat/settings-generation) | 关闭前的 PR #5 头 | 设置代际权威、参与者、仓库寿命、凭证与 Appearance/Network/Triggers 的 owned 应用 | 安装器/启动修复已独立回移植到 `main` `db21085` 及后续检查点提交。生产消费者切换、导入/重置组合、退出验收未完成，**不得当作可合并发行** |
-| [`wip/installer-empty-cleanup`](https://github.com/Water-Run/ClashSharp/tree/wip/installer-empty-cleanup) | `3b95e93` | 未完成的目录归属、terminal store、原生删除与新测试 | `main` 已有目录清理报告与成功 Clear 前扩展点，但生产原生删除未接通 |
+| [`feat/settings-generation`](https://github.com/Water-Run/ClashSharp/tree/0508a35df7b0755c86461afaf255814e9e49b4d3) | 关闭前的 PR #5 头 | 设置代际权威、参与者、仓库寿命、凭证与 Appearance/Network/Triggers 的 owned 应用 | 安装器/启动修复已独立回移植到 `main` `db21085` 及后续检查点提交。生产消费者切换、导入/重置组合、退出验收未完成，**不得当作可合并发行** |
+| [`wip/installer-empty-cleanup`](https://github.com/Water-Run/ClashSharp/tree/3b95e93456918d58eb8a437a2d8905f642b2a3d6) | `3b95e93` | 未完成的目录归属、terminal store、原生删除与新测试 | `main` 已有目录清理报告与成功 Clear 前扩展点，但生产原生删除未接通 |
 
 恢复顺序不变：先从对应分支完成未接通部分并验证，再推进新的 `main` 节点。不要把已关闭的草稿 PR 当成丢弃的源码。
 

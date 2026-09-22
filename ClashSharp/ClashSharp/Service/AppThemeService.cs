@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 
 namespace ClashSharp.Service;
@@ -10,12 +12,6 @@ namespace ClashSharp.Service;
 /// <summary>Applies the configured app display style to the active window.</summary>
 internal static class AppThemeService
 {
-    private const string DefaultAccentColorValue = "#FF0078D4";
-
-    private static AppAccentColorMode _appliedAccentColorMode = AppAccentColorMode.FollowSystem;
-
-    private static string _appliedAccentColorValue = DefaultAccentColorValue;
-
     /// <summary>Application resource keys overridden for custom accent colors.</summary>
     private static readonly string[] AccentColorResourceKeys =
     [
@@ -74,6 +70,12 @@ internal static class AppThemeService
         "TextOnAccentFillColorPrimaryBrush",
     ];
 
+    private static readonly AccentColorRuntime AccentRuntime = CreateAccentRuntime(new WinUiAccentResourceStore());
+
+    /// <summary>Composes the complete application palette with the resource dictionary boundary.</summary>
+    internal static AccentColorRuntime CreateAccentRuntime(IAccentResourceStore resources) =>
+        new(resources, AccentColorResourceKeys.Concat(AccentBrushResourceKeys), CreateAccentPalette);
+
     /// <summary>Applies <paramref name="mode"/> to the main window root when available.</summary>
     public static void Apply(AppThemeMode mode)
     {
@@ -101,51 +103,42 @@ internal static class AppThemeService
     /// <param name="colorValue">Custom accent color in #AARRGGBB format.</param>
     public static void ApplyAccentColor(AppAccentColorMode mode, string colorValue)
     {
-        _appliedAccentColorMode = mode;
-        _appliedAccentColorValue = NormalizeAccentColorValue(colorValue);
+        AccentRuntime.Apply(new(mode, NormalizeAccentColorValue(colorValue)));
+    }
 
-        if (Application.Current is null)
-        {
-            return;
-        }
+    /// <summary>Reads accent configuration after verifying the complete primary-dictionary resource set.</summary>
+    public static AccentColorConfiguration ReadAccentConfiguration() => AccentRuntime.CaptureConfiguration();
 
-        ResourceDictionary resources = Application.Current.Resources;
-        if (mode == AppAccentColorMode.FollowSystem)
-        {
-            foreach (string key in AccentColorResourceKeys)
-            {
-                resources.Remove(key);
-            }
+    /// <summary>Builds a complete palette before any application resource is changed.</summary>
+    private static IReadOnlyDictionary<string, AccentResourceValue> CreateAccentPalette(AccentColorConfiguration configuration)
+    {
+        Dictionary<string, AccentResourceValue> resources = new(StringComparer.Ordinal);
+        if (configuration.Mode == AppAccentColorMode.FollowSystem) { return resources; }
+        static AccentResourceValue Brush(Color color) => new(WinUiAccentResourceStore.ToArgb(color), true);
+        static AccentResourceValue ColorValue(Color color) => new(WinUiAccentResourceStore.ToArgb(color), false);
+        Color accentColor = ParseAccentColorOrDefault(configuration.ColorValue);
+        Color white = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+        Color black = Color.FromArgb(0xFF, 0, 0, 0);
+        Color light1 = Blend(accentColor, white, 0.30);
+        Color light2 = Blend(accentColor, white, 0.50);
+        Color light3 = Blend(accentColor, white, 0.70);
+        Color dark1 = Blend(accentColor, black, 0.25);
+        Color dark2 = Blend(accentColor, black, 0.45);
+        Color dark3 = Blend(accentColor, black, 0.65);
+        AccentResourceValue accentBrush = Brush(accentColor);
+        AccentResourceValue light1Brush = Brush(light1);
+        AccentResourceValue light2Brush = Brush(light2);
+        AccentResourceValue disabledAccentBrush = Brush(Color.FromArgb(0x5C, accentColor.R, accentColor.G, accentColor.B));
+        AccentResourceValue whiteBrush = Brush(white);
+        AccentResourceValue transparentBrush = Brush(Color.FromArgb(0, 0xFF, 0xFF, 0xFF));
 
-            foreach (string key in AccentBrushResourceKeys)
-            {
-                resources.Remove(key);
-            }
-
-            return;
-        }
-
-        Color accentColor = ParseAccentColorOrDefault(_appliedAccentColorValue);
-        Color light1 = Blend(accentColor, Colors.White, 0.30);
-        Color light2 = Blend(accentColor, Colors.White, 0.50);
-        Color light3 = Blend(accentColor, Colors.White, 0.70);
-        Color dark1 = Blend(accentColor, Colors.Black, 0.25);
-        Color dark2 = Blend(accentColor, Colors.Black, 0.45);
-        Color dark3 = Blend(accentColor, Colors.Black, 0.65);
-        SolidColorBrush accentBrush = new(accentColor);
-        SolidColorBrush light1Brush = new(light1);
-        SolidColorBrush light2Brush = new(light2);
-        SolidColorBrush disabledAccentBrush = new(Color.FromArgb(0x5C, accentColor.R, accentColor.G, accentColor.B));
-        SolidColorBrush whiteBrush = new(Colors.White);
-        SolidColorBrush transparentBrush = new(Colors.Transparent);
-
-        resources["SystemAccentColor"] = accentColor;
-        resources["SystemAccentColorLight1"] = light1;
-        resources["SystemAccentColorLight2"] = light2;
-        resources["SystemAccentColorLight3"] = light3;
-        resources["SystemAccentColorDark1"] = dark1;
-        resources["SystemAccentColorDark2"] = dark2;
-        resources["SystemAccentColorDark3"] = dark3;
+        resources["SystemAccentColor"] = ColorValue(accentColor);
+        resources["SystemAccentColorLight1"] = ColorValue(light1);
+        resources["SystemAccentColorLight2"] = ColorValue(light2);
+        resources["SystemAccentColorLight3"] = ColorValue(light3);
+        resources["SystemAccentColorDark1"] = ColorValue(dark1);
+        resources["SystemAccentColorDark2"] = ColorValue(dark2);
+        resources["SystemAccentColorDark3"] = ColorValue(dark3);
 
         resources["AccentFillColorDefaultBrush"] = accentBrush;
         resources["AccentFillColorSecondaryBrush"] = light1Brush;
@@ -153,11 +146,11 @@ internal static class AppThemeService
         resources["AccentFillColorDisabledBrush"] = disabledAccentBrush;
         resources["AccentTextFillColorPrimaryBrush"] = whiteBrush;
         resources["AccentTextFillColorSecondaryBrush"] = whiteBrush;
-        resources["AccentTextFillColorTertiaryBrush"] = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
-        resources["AccentTextFillColorDisabledBrush"] = new SolidColorBrush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
+        resources["AccentTextFillColorTertiaryBrush"] = Brush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
+        resources["AccentTextFillColorDisabledBrush"] = Brush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
         resources["AccentButtonBackground"] = accentBrush;
         resources["AccentButtonBackgroundPointerOver"] = light1Brush;
-        resources["AccentButtonBackgroundPressed"] = new SolidColorBrush(dark1);
+        resources["AccentButtonBackgroundPressed"] = Brush(dark1);
         resources["AccentButtonBackgroundDisabled"] = disabledAccentBrush;
         resources["AccentButtonBorderBrush"] = transparentBrush;
         resources["AccentButtonBorderBrushPointerOver"] = transparentBrush;
@@ -166,7 +159,7 @@ internal static class AppThemeService
         resources["AccentButtonForeground"] = whiteBrush;
         resources["AccentButtonForegroundPointerOver"] = whiteBrush;
         resources["AccentButtonForegroundPressed"] = whiteBrush;
-        resources["AccentButtonForegroundDisabled"] = new SolidColorBrush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
+        resources["AccentButtonForegroundDisabled"] = Brush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
         resources["SystemControlBackgroundAccentBrush"] = accentBrush;
         resources["SystemControlDisabledAccentBrush"] = disabledAccentBrush;
         resources["SystemControlForegroundAccentBrush"] = accentBrush;
@@ -188,14 +181,19 @@ internal static class AppThemeService
         resources["ToggleButtonForegroundCheckedPointerOver"] = whiteBrush;
         resources["ToggleButtonForegroundCheckedPressed"] = whiteBrush;
         resources["TextOnAccentFillColorPrimaryBrush"] = whiteBrush;
+        return resources;
     }
 
     /// <summary>Returns whether requested accent settings differ from the currently applied app resources.</summary>
     public static bool IsAccentColorRestartPending(AppAccentColorMode mode, string colorValue)
     {
-        return mode != _appliedAccentColorMode
-            || (mode == AppAccentColorMode.Custom
-                && !StringComparer.OrdinalIgnoreCase.Equals(NormalizeAccentColorValue(colorValue), _appliedAccentColorValue));
+        try
+        {
+            AccentColorConfiguration installed = ReadAccentConfiguration();
+            return mode != installed.Mode || (mode == AppAccentColorMode.Custom
+                && !StringComparer.OrdinalIgnoreCase.Equals(NormalizeAccentColorValue(colorValue), installed.ColorValue));
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception)) { return true; }
     }
 
     /// <summary>Parses an accent color value, returning Windows blue when parsing fails.</summary>

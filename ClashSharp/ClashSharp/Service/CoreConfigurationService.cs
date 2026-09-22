@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Security;
 using ClashSharp.Infrastructure.Files;
 using ClashSharp.Model;
 
@@ -19,9 +20,6 @@ internal interface ICoreConfigurationSettings
 
     /// <summary>Gets the active profile identifier.</summary>
     string ActiveProfileId { get; }
-
-    /// <summary>Gets the private bearer secret for the Clash#-owned mihomo controller.</summary>
-    string MihomoControllerSecret { get; }
 }
 
 /// <summary>Counts profile preview rows from configuration text.</summary>
@@ -62,6 +60,7 @@ public sealed partial class CoreConfigurationService
     private readonly string _configurationFilePath;
 
     private readonly ICoreConfigurationSettings _settings;
+    private readonly IControllerCredentialProvider _controllerCredentials;
 
     private readonly ICoreConfigurationProfileMetrics _profileMetrics;
 
@@ -77,12 +76,14 @@ public sealed partial class CoreConfigurationService
     internal CoreConfigurationService(
         string configurationDirectoryPath,
         ICoreConfigurationSettings settings,
+        IControllerCredentialProvider controllerCredentials,
         ICoreConfigurationProfileMetrics profileMetrics,
         ICoreConfigurationValidator validator,
         Func<string, string> getString)
         : this(
             configurationDirectoryPath,
             settings,
+            controllerCredentials,
             profileMetrics,
             validator,
             getString,
@@ -95,6 +96,7 @@ public sealed partial class CoreConfigurationService
     internal CoreConfigurationService(
         string configurationDirectoryPath,
         ICoreConfigurationSettings settings,
+        IControllerCredentialProvider controllerCredentials,
         ICoreConfigurationProfileMetrics profileMetrics,
         ICoreConfigurationValidator validator,
         Func<string, string> getString,
@@ -106,6 +108,7 @@ public sealed partial class CoreConfigurationService
         _configurationDirectoryPath = Path.GetFullPath(configurationDirectoryPath);
         _configurationFilePath = Path.Combine(_configurationDirectoryPath, "config.yaml");
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _controllerCredentials = controllerCredentials ?? throw new ArgumentNullException(nameof(controllerCredentials));
         _profileMetrics = profileMetrics ?? throw new ArgumentNullException(nameof(profileMetrics));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
@@ -425,7 +428,7 @@ public sealed partial class CoreConfigurationService
                 mixedPort,
                 mode,
                 transparentProxyEnabled,
-                _settings.MihomoControllerSecret);
+                _controllerCredentials.GetSecret());
         }
 
         string profileConfigPath = GetProfileConfigurationPath(profileId);
@@ -442,7 +445,7 @@ public sealed partial class CoreConfigurationService
             mixedPort,
             mode,
             transparentProxyEnabled,
-            _settings.MihomoControllerSecret);
+            _controllerCredentials.GetSecret());
     }
 
     /// <summary>Restores the previous committed configuration and removes only this transaction's sidecars.</summary>

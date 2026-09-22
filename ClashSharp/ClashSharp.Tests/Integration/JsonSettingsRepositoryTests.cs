@@ -312,6 +312,31 @@ public sealed class JsonSettingsRepositoryTests
         Assert.False(File.Exists(repository.BackupPath));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task QuarantinedRepository_ReopeningCannotMasqueradeAsFirstInitialization(bool save)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        DataGenerationDescriptor generation = directory.CreateGeneration(1);
+        JsonSettingsRepository setup = CreateRepository(generation);
+        setup.EnsureLayout();
+        await File.WriteAllTextAsync(setup.PrimaryPath, "{broken-primary");
+        await File.WriteAllTextAsync(setup.BackupPath, "{broken-backup");
+        Assert.Equal(SettingsPersistenceStatus.Corrupt, (await setup.OpenAsync(CancellationToken.None)).Status);
+        JsonSettingsRepository reopened = CreateRepository(generation);
+
+        SettingsPersistenceResult result = save
+            ? await reopened.SaveAsync(SettingsEnvelopeTestData.CreateMatchingEnvelope(), 0, CancellationToken.None)
+            : await reopened.OpenAsync(CancellationToken.None);
+
+        Assert.Equal(SettingsPersistenceStatus.Corrupt, result.Status);
+        Assert.Null(result.Envelope);
+        Assert.False(File.Exists(reopened.PrimaryPath));
+        Assert.False(File.Exists(reopened.BackupPath));
+        Assert.Equal(2, Directory.GetFiles(reopened.SettingsDirectoryPath, "*.corrupt.*").Length);
+    }
+
     /// <summary>Verifies open removes abandoned same-directory candidates without touching other files.</summary>
     [Fact]
     public async Task OpenAsync_OrphanCandidates_CleansOnlyKnownCandidatePrefix()

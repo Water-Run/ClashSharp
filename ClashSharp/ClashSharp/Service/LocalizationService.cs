@@ -66,7 +66,7 @@ public sealed class LocalizationService
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        AppLanguage effectiveLanguage = ResolveEffectiveLanguage(CurrentLanguage);
+        AppLanguage effectiveLanguage = ResolveEffectiveLanguage(CurrentLanguage, CultureInfo.CurrentUICulture);
         if (Translations.TryGetValue(effectiveLanguage, out ReadOnlyDictionary<string, string>? languageMap)
             && languageMap.TryGetValue(key, out string? value))
         {

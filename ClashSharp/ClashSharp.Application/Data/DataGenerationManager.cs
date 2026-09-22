@@ -72,6 +72,9 @@ public sealed partial class DataGenerationManager : IAsyncDisposable
     /// <param name="cancellationToken">Cancels acquisition before a lease is granted.</param>
     /// <returns>A lease that must cover the complete repository operation.</returns>
     public ValueTask<DataGenerationLease> AcquireAsync(CancellationToken cancellationToken)
+        => ValueTask.FromResult(AcquireCore(cancellationToken));
+
+    private DataGenerationLease AcquireCore(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_syncLock)
@@ -93,7 +96,7 @@ public sealed partial class DataGenerationManager : IAsyncDisposable
                 _leaseCount++;
             }
 
-            return ValueTask.FromResult(new DataGenerationLease(this, _currentScope));
+            return new DataGenerationLease(this, _currentScope);
         }
     }
 

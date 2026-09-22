@@ -575,6 +575,7 @@ public sealed class RuntimeConfigurationTransactionTests
         return new CoreConfigurationService(
             configurationDirectory,
             new FakeSettings(),
+            new FixedControllerCredentialProvider(),
             new EmptyMetrics(),
             validator,
             static key => key);
@@ -594,9 +595,6 @@ public sealed class RuntimeConfigurationTransactionTests
         public int MixedPort => 7890;
 
         public string ActiveProfileId => ProfileCatalogIds.BuiltInDirect;
-
-        public string MihomoControllerSecret { get; } =
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     }
 
     private sealed class EmptyMetrics : ICoreConfigurationProfileMetrics

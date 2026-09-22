@@ -219,6 +219,7 @@ public static class SandboxProcessIdentity {
             $startInfo = [Diagnostics.ProcessStartInfo]::new($executable)
             $startInfo.UseShellExecute = $false
             $startInfo.WorkingDirectory = $installedPackage.InstallLocation
+            $launchStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
             $script:launched = [Diagnostics.Process]::Start($startInfo)
             if ([SandboxProcessIdentity]::Read([uint32]$launched.Id) -cne $candidate.fullName) {
                 throw 'sandbox.process.wrong_package'
@@ -239,9 +240,16 @@ public static class SandboxProcessIdentity {
                     throw 'sandbox.window.unstable'
                 }
             }
+            Import-Module 'C:\ClashSharpTestInput\SandboxStartupEvidence.psm1' -Force -ErrorAction Stop
+            $logPath = Join-Path $env:LOCALAPPDATA ('Packages\' + $candidate.familyName + '\LocalState\ClashSharpLogs.sqlite3')
+            $startup = Get-SandboxStartupEvidence -LiteralPath $logPath -StartedAtUnixTime $launchStartedAt
+            $launched.Refresh()
+            if ($launched.HasExited -or $launched.MainWindowHandle -eq [IntPtr]::Zero) {
+                throw 'sandbox.window.unstable'
+            }
             $checks.launch = [ordered]@{ processId = $launched.Id; packageFullName = $candidate.fullName
                 executableSha256 = (Get-SandboxFileSha256 $executable); mainWindowObserved = $true
-                stabilizationMs = [long]$stable.Elapsed.TotalMilliseconds; termination = 'owned-process' }
+                stabilizationMs = [long]$stable.Elapsed.TotalMilliseconds; termination = 'owned-process'; startup = $startup }
         }
     }
 } catch {

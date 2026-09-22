@@ -137,15 +137,17 @@ public sealed partial class SettingsViewModelTests
         Assert.True(changed);
         Assert.Same(originalOptions, viewModel.DisplayLanguageOptions);
         Assert.Equal(0, viewModel.DisplayLanguageIndex);
-        Assert.Equal(7, viewModel.DisplayLanguageOptions.Count);
+        Assert.Equal(8, viewModel.DisplayLanguageOptions.Count);
         Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
 
-        changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.German + 1);
+        changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.Persian + 1);
 
         Assert.True(changed);
         Assert.Same(originalOptions, viewModel.DisplayLanguageOptions);
-        Assert.Equal((int)AppLanguage.German + 1, viewModel.DisplayLanguageIndex);
-        Assert.Equal(7, viewModel.DisplayLanguageOptions.Count);
+        Assert.Equal((int)AppLanguage.Persian + 1, viewModel.DisplayLanguageIndex);
+        Assert.Equal(AppLanguage.Persian, store.DisplayLanguage);
+        Assert.Equal("فارسی", viewModel.DisplayLanguageOptions[viewModel.DisplayLanguageIndex]);
+        Assert.Equal(8, viewModel.DisplayLanguageOptions.Count);
         Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
     }
 
@@ -1050,7 +1052,7 @@ public sealed partial class SettingsViewModelTests
     {
         SettingsViewModel viewModel = new(new FakeSettingsStore(), _ => { }, () => { }, key => key);
 
-        Assert.Equal(7, viewModel.DisplayLanguageOptions.Count);
+        Assert.Equal(8, viewModel.DisplayLanguageOptions.Count);
         Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
         Assert.Equal(3, viewModel.AppThemeModeOptions.Count);
         Assert.All(viewModel.AppThemeModeOptions, Assert.NotEmpty);

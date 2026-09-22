@@ -13,7 +13,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)](#نصب)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)](./global.json)
 [![Package](https://img.shields.io/badge/Package-MSIX-4c1?style=flat-square)](#نصب)
-[![Status](https://img.shields.io/badge/1.0.0-paused%20checkpoint-orange?style=flat-square)](./docs/reviews/2026-09-12-pause-checkpoint.md)
+[![Status](https://img.shields.io/badge/1.0.0-development-orange?style=flat-square)](./docs/reviews/2026-09-22-development-status.md)
 
 [English](./README.md) · [简体中文](./README-zh.md) · [Русский](./README-ru.md) · **فارسی**
 
@@ -22,8 +22,8 @@
 ---
 
 > [!IMPORTANT]
-> **نسخه 1.0.0 در حال توسعه است و اکنون روی یک نقطه بازرسی تأییدشده متوقف شده است.**
-> نقطه بازرسی `main` [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5) با برچسب [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912) است.
+> **توسعه نسخه 1.0.0 در 2026-09-22 از سر گرفته شد و تغییرات انباشته در `main` یکپارچه شدند.**
+> انتقال تنظیمات به نسل‌ها و پاک‌سازی خودکار پوشه‌های خالی هنوز به یکپارچه‌سازی نیاز دارند. جدول زیر مربوط به نقطه بازرسی تاریخی [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5) با برچسب [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912) است.
 > هنوز انتشار رسمی وجود ندارد — بسته‌های CI فقط برای اعتبارسنجی هستند، نه انتشار.
 
 | حوزه | وضعیت در نقطه بازرسی |
@@ -35,7 +35,7 @@
 | **شبکه** | ۳۲/۳۲ آزمایش گره جداشده و ارسال HTTPS روی پیکربندی موجود Clash |
 | **باقی‌مانده** | تعامل صفحات WPF، خروج عادی، پاک‌سازی خودکار پوشه‌های خالی، ماتریس کامل انتشار |
 
-<sub>نامزدهای دقیق، مرز شواهد، کار باقی‌مانده و مستندات بعدی: **[وضعیت فعلی توسعه](./docs/reviews/2026-09-17-development-status.md)** · **[دفتر اجرای 1.0.0](./docs/reviews/1.0.0-execution-ledger.md)** · [نقطه بازرسی توقف](./docs/reviews/2026-09-12-pause-checkpoint.md) · [پذیرش سرور](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
+<sub>نامزدهای دقیق، مرز شواهد، کار باقی‌مانده و مستندات بعدی: **[وضعیت فعلی توسعه](./docs/reviews/2026-09-22-development-status.md)** · **[دفتر اجرای 1.0.0](./docs/reviews/1.0.0-execution-ledger.md)** · [نقطه بازرسی توقف](./docs/reviews/2026-09-12-pause-checkpoint.md) · [پذیرش سرور](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
 
 ## بومی Windows از روی طراحی
 
@@ -138,7 +138,7 @@ flowchart LR
 
 | سند | محتوا |
 | :--- | :--- |
-| [وضعیت فعلی توسعه](./docs/reviews/2026-09-17-development-status.md) | جایگاه 1.0.0، بازیابی PR بسته‌شده، و کار باقی‌مانده |
+| [وضعیت فعلی توسعه](./docs/reviews/2026-09-22-development-status.md) | جایگاه 1.0.0، یکپارچه‌سازی شاخه‌ها در main، و کار باقی‌مانده |
 | [دفتر اجرای 1.0.0](./docs/reviews/1.0.0-execution-ledger.md) | نقاط عطف، نامزدها، شواهد و کار باقی‌مانده |
 | [نقطه بازرسی توقف](./docs/reviews/2026-09-12-pause-checkpoint.md) | مرز دقیق و نقاط ازسرگیری توقف فعلی |
 | [پذیرش سرور](./docs/reviews/2026-09-12-server-acceptance.md) | شواهد نصب، راه‌اندازی، تعمیر و حذف بسته واقعی |

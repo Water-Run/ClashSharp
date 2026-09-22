@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.Security;
 
 namespace ClashSharp.Service;
 
@@ -17,21 +18,5 @@ internal static class MihomoControllerEndpoint
     public static Uri BaseUri { get; } = new($"http://{ListenAddress}/");
 
     /// <summary>Returns whether a persisted controller secret has the generated 256-bit hex shape.</summary>
-    public static bool IsValidSecret(string? secret)
-    {
-        if (secret is not { Length: 64 })
-        {
-            return false;
-        }
-
-        foreach (char character in secret)
-        {
-            if (character is not (>= '0' and <= '9') and not (>= 'a' and <= 'f'))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    public static bool IsValidSecret(string? secret) => ControllerCredentialPolicy.IsValid(secret);
 }

@@ -2,6 +2,15 @@
 
 ClashSharp targets .NET 10 and C# 14. Repository build configuration is authoritative when this document and executable policy disagree.
 
+## Source control
+
+Keep `main` as the only local and remote development branch. Continue development directly on
+`main`; preserve unfinished work as explicit, inactive code with tracked acceptance criteria.
+When consolidating existing branches, preserve their unique commits through merges before
+deleting branch references. Keep historical checkpoint tags and files in detached worktrees.
+Record current implementation and validation status in the development ledger; a merged PR
+does not by itself prove that an unfinished capability is active or ready for release.
+
 ## Language and nullability
 
 Nullable analysis is enabled at project level. Do not add redundant per-file `#nullable enable` directives. Public signatures express nullability accurately, validate inputs at trust boundaries, and use explicit result types for expected operational failures.

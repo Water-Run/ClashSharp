@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Data;
 using ClashSharp.Diagnostics;
 using ClashSharp.Model;
 using Microsoft.Data.Sqlite;
@@ -20,8 +22,13 @@ public readonly record struct LogCleanupPreview(long EntryCount, long EstimatedS
 /// Thread safety: Public methods serialize database access through a private lock.
 /// Side effects: Creates and mutates a local SQLite database under the application data directory.
 /// </remarks>
-public sealed partial class LogStorageService
+public sealed partial class LogStorageService : IAsyncDisposable
 {
+    private readonly RepositoryOperationLifetime _operations;
+    private readonly object _disposalLock = new();
+    private readonly string _connectionString;
+    private Task? _disposeTask;
+
     /// <summary>Synchronization object guarding all SQLite operations for this service lifetime.</summary>
     private readonly object _syncLock = new();
 
@@ -40,6 +47,29 @@ public sealed partial class LogStorageService
 
         _databasePath = Path.GetFullPath(databasePath);
         _getActiveProfileId = getActiveProfileId ?? throw new ArgumentNullException(nameof(getActiveProfileId));
+        _connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = _databasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+        }.ToString();
+        _operations = new RepositoryOperationLifetime(this);
+    }
+
+    /// <summary>Rejects new storage work, drains accepted operations, and releases this database's pooled handles.</summary>
+    public ValueTask DisposeAsync()
+    {
+        lock (_disposalLock)
+        {
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        await _operations.DisposeAsync().ConfigureAwait(false);
+        using SqliteConnection poolIdentity = new(_connectionString);
+        SqliteConnection.ClearPool(poolIdentity);
     }
 
     /// <summary>Gets the absolute SQLite database path used by this service.</summary>
@@ -50,6 +80,7 @@ public sealed partial class LogStorageService
     /// <returns>A <see cref="LogStorageSummary"/> snapshot for the current database state.</returns>
     public LogStorageSummary GetStorageSummary()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -67,6 +98,7 @@ public sealed partial class LogStorageService
     /// <returns>A <see cref="TrafficStatisticsSummary"/> snapshot for the current database state.</returns>
     public TrafficStatisticsSummary GetTrafficStatisticsSummary()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -98,6 +130,7 @@ public sealed partial class LogStorageService
     /// <returns>Total recent traffic bytes.</returns>
     public long GetTrafficBytesSince(DateTimeOffset cutoff)
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -117,6 +150,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
     public IReadOnlyList<TrafficStatisticRow> GetProfileTrafficRows(int limit)
     {
+        using IDisposable operation = _operations.Enter();
         if (limit <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
@@ -145,6 +179,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
     public IReadOnlyList<TrafficStatisticRow> GetDailyTrafficRows(int limit)
     {
+        using IDisposable operation = _operations.Enter();
         if (limit <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
@@ -179,6 +214,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
     public IReadOnlyList<TrafficStatisticRow> GetNodeTrafficRows(int limit)
     {
+        using IDisposable operation = _operations.Enter();
         if (limit <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
@@ -209,6 +245,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentException"><paramref name="nodeName"/> is whitespace.</exception>
     public void UpsertNodeHealth(string nodeName, string regionCode, int? latencyMilliseconds)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentNullException.ThrowIfNull(nodeName);
         ArgumentNullException.ThrowIfNull(regionCode);
 
@@ -261,6 +298,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentNullException"><paramref name="nodeName"/> is null.</exception>
     public int? GetNodeLatencyMilliseconds(string nodeName)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentNullException.ThrowIfNull(nodeName);
 
         if (string.IsNullOrWhiteSpace(nodeName))
@@ -291,6 +329,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentNullException"><paramref name="rules"/> is null.</exception>
     public void EnsureRuleHitRows(IEnumerable<RulePreview> rules)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentNullException.ThrowIfNull(rules);
 
         lock (_syncLock)
@@ -329,6 +368,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="increment"/> is less than or equal to zero.</exception>
     public void IncrementRuleHit(string ruleName, long increment = 1)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentNullException.ThrowIfNull(ruleName);
 
         if (string.IsNullOrWhiteSpace(ruleName))
@@ -369,6 +409,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentNullException"><paramref name="connections"/> is null.</exception>
     public int AppendConnectionSnapshot(IEnumerable<ActiveConnection> connections)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentNullException.ThrowIfNull(connections);
 
         IReadOnlyList<ActiveConnection> snapshot = connections as IReadOnlyList<ActiveConnection>
@@ -434,6 +475,7 @@ public sealed partial class LogStorageService
     /// <returns>Dictionary of rule hit counts.</returns>
     public IReadOnlyDictionary<string, long> GetRuleHitCounts()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -462,6 +504,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentException"><paramref name="level"/>, <paramref name="source"/>, or <paramref name="message"/> is whitespace.</exception>
     public void AppendLog(string level, string source, string message, string? detail)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(message);
@@ -510,6 +553,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
     public IReadOnlyList<LogRecord> GetRecentLogs(int limit)
     {
+        using IDisposable operation = _operations.Enter();
         return GetRecentLogs(limit, source: null);
     }
 
@@ -521,6 +565,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
     public IReadOnlyList<LogRecord> GetRecentLogs(string source, int limit)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         return GetRecentLogs(limit, source.Trim());
     }
@@ -534,6 +579,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than or equal to zero.</exception>
     public IReadOnlyList<LogRecord> GetLogs(int limit, string? source = null, string? level = null, string? searchText = null)
     {
+        using IDisposable operation = _operations.Enter();
         if (limit <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
@@ -580,6 +626,7 @@ public sealed partial class LogStorageService
     /// <summary>Returns a cleanup preview for logs matching optional level and source filters.</summary>
     public LogCleanupPreview PreviewLogCleanup(string? level = null, string? source = null)
     {
+        using IDisposable operation = _operations.Enter();
         string? normalizedLevel = NormalizeOptionalFilter(level);
         string? normalizedSource = NormalizeOptionalFilter(source);
 
@@ -602,6 +649,7 @@ public sealed partial class LogStorageService
     /// <summary>Deletes logs matching optional level and source filters and compacts the database.</summary>
     public long CleanupLogs(string? level = null, string? source = null)
     {
+        using IDisposable operation = _operations.Enter();
         string? normalizedLevel = NormalizeOptionalFilter(level);
         string? normalizedSource = NormalizeOptionalFilter(source);
 
@@ -623,6 +671,7 @@ public sealed partial class LogStorageService
     /// <returns>Distinct source names; never null.</returns>
     public IReadOnlyList<string> GetLogSources()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -650,6 +699,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentException"><paramref name="destinationPath"/> is null, empty, or points to the live database.</exception>
     public void ExportDatabase(string destinationPath)
     {
+        using IDisposable operation = _operations.Enter();
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
 
         string fullDestinationPath = Path.GetFullPath(destinationPath);
@@ -674,6 +724,7 @@ public sealed partial class LogStorageService
             {
                 DataSource = fullDestinationPath,
                 Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = false,
             };
             using SqliteConnection destinationConnection = new(destinationBuilder.ToString());
             destinationConnection.Open();
@@ -779,6 +830,7 @@ public sealed partial class LogStorageService
     /// <param name="cutoff">Exclusive upper bound for records to delete; must be a valid timestamp.</param>
     public void CleanupBefore(DateTimeOffset cutoff)
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -802,6 +854,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="targetSizeBytes"/> is negative.</exception>
     public void CleanupToSize(long targetSizeBytes)
     {
+        using IDisposable operation = _operations.Enter();
         if (targetSizeBytes < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(targetSizeBytes), "Target size must be zero or greater.");
@@ -834,6 +887,7 @@ public sealed partial class LogStorageService
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxLogCount"/> is negative.</exception>
     public void CleanupToLogCount(long maxLogCount)
     {
+        using IDisposable operation = _operations.Enter();
         if (maxLogCount < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(maxLogCount), "Maximum log count must be zero or greater.");
@@ -856,6 +910,7 @@ public sealed partial class LogStorageService
     /// <summary>Deletes all persistent log, connection, traffic, and rule-hit records and compacts the database.</summary>
     public void ClearAll()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             EnsureInitialized();
@@ -877,6 +932,7 @@ public sealed partial class LogStorageService
     /// <summary>Forgets schema initialization after the database file has been deleted externally.</summary>
     internal void ResetAfterDataDeletion()
     {
+        using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
             _isInitialized = false;
@@ -910,13 +966,7 @@ public sealed partial class LogStorageService
     /// <returns>An open <see cref="SqliteConnection"/> instance owned by the caller.</returns>
     private SqliteConnection OpenConnection()
     {
-        SqliteConnectionStringBuilder builder = new()
-        {
-            DataSource = _databasePath,
-            Mode = SqliteOpenMode.ReadWriteCreate,
-        };
-
-        SqliteConnection connection = new(builder.ToString());
+        SqliteConnection connection = new(_connectionString);
         connection.Open();
         return connection;
     }

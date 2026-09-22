@@ -11,7 +11,7 @@
 [![Platform](https://img.shields.io/badge/Платформа-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)](#установка)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)](./global.json)
 [![Package](https://img.shields.io/badge/Пакет-MSIX-4c1?style=flat-square)](#установка)
-[![Status](https://img.shields.io/badge/1.0.0-пауза-orange?style=flat-square)](./docs/reviews/2026-09-12-pause-checkpoint.md)
+[![Status](https://img.shields.io/badge/1.0.0-пауза-orange?style=flat-square)](./docs/reviews/2026-09-22-development-status.md)
 
 [English](./README.md) · [简体中文](./README-zh.md) · **Русский** · [فارسی](./README-fa.md)
 
@@ -20,8 +20,8 @@
 ---
 
 > [!IMPORTANT]
-> **1.0.0 в разработке и сейчас остановлен на проверенной контрольной точке.**
-> Контрольная точка — `main` [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), тег [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
+> **Разработка 1.0.0 возобновлена 2026-09-22; накопленные изменения объединены в `main`.**
+> Переход настроек на поколения и автоматическая очистка пустых каталогов ещё требуют интеграции. Ниже приведены данные исторической контрольной точки [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), тег [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
 > Официального релиза ещё нет — пакеты CI служат только для проверки, это не выпуск.
 
 | Область | Состояние на контрольной точке |
@@ -33,7 +33,7 @@
 | **Сеть** | 32/32 изолированных проверки узлов и HTTPS-пересылка по существующей конфигурации Clash |
 | **Осталось** | Взаимодействие со страницами WPF, штатное завершение, автоматическая очистка пустых каталогов, полная матрица выпуска |
 
-<sub>Точные кандидаты, границы доказательств, оставшаяся работа и позднейшая документация: **[текущее состояние разработки](./docs/reviews/2026-09-17-development-status.md)** · **[журнал 1.0.0](./docs/reviews/1.0.0-execution-ledger.md)** · [контрольная точка паузы](./docs/reviews/2026-09-12-pause-checkpoint.md) · [приёмка на сервере](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
+<sub>Точные кандидаты, границы доказательств, оставшаяся работа и позднейшая документация: **[текущее состояние разработки](./docs/reviews/2026-09-22-development-status.md)** · **[журнал 1.0.0](./docs/reviews/1.0.0-execution-ledger.md)** · [контрольная точка паузы](./docs/reviews/2026-09-12-pause-checkpoint.md) · [приёмка на сервере](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
 
 ## Нативный Windows по замыслу
 
@@ -132,7 +132,7 @@ flowchart LR
 
 | Документ | Содержание |
 | :--- | :--- |
-| [Текущее состояние разработки](./docs/reviews/2026-09-17-development-status.md) | Где находится 1.0.0, восстановление закрытого PR и оставшаяся работа |
+| [Текущее состояние разработки](./docs/reviews/2026-09-22-development-status.md) | Где находится 1.0.0, объединение веток в main и оставшаяся работа |
 | [Журнал 1.0.0](./docs/reviews/1.0.0-execution-ledger.md) | Вехи, кандидаты, доказательства и оставшаяся работа |
 | [Контрольная точка паузы](./docs/reviews/2026-09-12-pause-checkpoint.md) | Точная граница и точки возобновления текущей паузы |
 | [Приёмка на сервере](./docs/reviews/2026-09-12-server-acceptance.md) | Доказательства установки, запуска, восстановления и удаления реального пакета |

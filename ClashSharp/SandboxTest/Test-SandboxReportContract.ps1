@@ -86,7 +86,9 @@ function New-SandboxReportFixture {
     }
     if ($Scenario -ceq 'launch-no-proxy') {
         $checks.launch = @{ processId = 123; packageFullName = $fullName; executableSha256 = ('a' * 64)
-            mainWindowObserved = $true; stabilizationMs = 30000; termination = 'owned-process' }
+            mainWindowObserved = $true; stabilizationMs = 30000; termination = 'owned-process'
+            startup = @{ credentialCompletions = 1; windowCompletions = 1; pipelineCompletions = 1
+                failures = 0; startedAtUnixTime = $start.AddSeconds(7).ToUnixTimeSeconds() } }
     }
     return (Copy-SandboxFixture ([ordered]@{ schemaVersion = 2; scenario = $Scenario
         runId = $validPlan.runId; sandboxId = $validPlan.sandboxId; planSha256 = $planHash
@@ -169,6 +171,14 @@ $reportCases = @(
     @{ Name = 'unpackaged process'; Change = { param($r) $r.checks.launch.packageFullName = '' } },
     @{ Name = 'wrong executable'; Change = { param($r) $r.checks.launch.executableSha256 = 'd' * 64 } },
     @{ Name = 'no window'; Change = { param($r) $r.checks.launch.mainWindowObserved = $false } },
+    @{ Name = 'startup shell only'; Change = { param($r) $r.checks.launch.startup.windowCompletions = 0 } },
+    @{ Name = 'credentials not initialized'; Change = { param($r) $r.checks.launch.startup.credentialCompletions = 0 } },
+    @{ Name = 'pipeline incomplete'; Change = { param($r) $r.checks.launch.startup.pipelineCompletions = 0 } },
+    @{ Name = 'startup failure'; Change = { param($r) $r.checks.launch.startup.failures = 1 } },
+    @{ Name = 'duplicate startup'; Change = { param($r) $r.checks.launch.startup.credentialCompletions = 2 } },
+    @{ Name = 'string readiness'; Change = { param($r) $r.checks.launch.startup.windowCompletions = '1' } },
+    @{ Name = 'stale readiness'; Change = { param($r) $r.checks.launch.startup.startedAtUnixTime-- } },
+    @{ Name = 'future readiness'; Change = { param($r) $r.checks.launch.startup.startedAtUnixTime += 31 } },
     @{ Name = 'no stabilization'; Change = { param($r) $r.checks.launch.stabilizationMs = 29999 } },
     @{ Name = 'observation exceeds step duration'; Change = { param($r) $r.checks.launch.stabilizationMs = 30001 } },
     @{ Name = 'claims graceful exit'; Change = { param($r) $r.checks.launch.termination = 'graceful' } }
