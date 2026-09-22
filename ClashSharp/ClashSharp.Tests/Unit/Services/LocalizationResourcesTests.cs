@@ -39,7 +39,7 @@ public sealed class LocalizationResourcesTests
                     pair => (IReadOnlyDictionary<string, string>)pair.Value);
         IReadOnlySet<string> englishKeys = explicitTranslations[AppLanguage.English].Keys.ToHashSet(StringComparer.Ordinal);
 
-        Assert.Equal(6, explicitTranslations.Count);
+        Assert.Equal(7, explicitTranslations.Count);
         Assert.True(englishKeys.Count >= 704);
         Assert.DoesNotContain(AppLanguage.AutoDetect, explicitTranslations.Keys);
 
@@ -97,6 +97,7 @@ public sealed class LocalizationResourcesTests
             AppLanguage.Russian,
             AppLanguage.French,
             AppLanguage.German,
+            AppLanguage.Persian,
         ];
 
         foreach (AppLanguage language in languages)
@@ -139,6 +140,9 @@ public sealed class LocalizationResourcesTests
     [InlineData(AppLanguage.French, "Settings.ConnectionTest.Succeeded.Format", "Test de connexion réussi, état HTTP : {0}.")]
     [InlineData(AppLanguage.French, "StartupConflict.Proxy.Repair", "Désactiver le proxy")]
     [InlineData(AppLanguage.German, "Settings.ConnectionTest.Succeeded.Format", "Verbindungstest erfolgreich, HTTP-Status: {0}.")]
+    [InlineData(AppLanguage.Persian, "About.ProxyInformation.Title", "این پروکسی")]
+    [InlineData(AppLanguage.Persian, "Settings.ConnectionTest.Succeeded.Format", "آزمایش اتصال موفق بود. وضعیت HTTP: {0}.")]
+    [InlineData(AppLanguage.Persian, "StartupConflict.Proxy.Repair", "غیرفعال کردن پروکسی")]
     public void Translations_PreviouslyMixedValues_AreCorrectLanguage(AppLanguage language, string key, string expected)
     {
         Assert.Equal(expected, LocalizationResources.Translations[language][key]);
@@ -454,6 +458,20 @@ public sealed class LocalizationResourcesTests
         Assert.Equal("中国大陆", LocalizationResources.Translations[AppLanguage.SimplifiedChinese]["Region.MainlandChina.CN"]);
         Assert.Equal("China", LocalizationResources.Translations[AppLanguage.English]["Region.CN"]);
         Assert.Equal("Mainland China", LocalizationResources.Translations[AppLanguage.English]["Region.MainlandChina.CN"]);
+        Assert.Equal("چین", LocalizationResources.Translations[AppLanguage.Persian]["Region.CN"]);
+        Assert.Equal("چین قاره‌ای", LocalizationResources.Translations[AppLanguage.Persian]["Region.MainlandChina.CN"]);
+    }
+
+    /// <summary>Verifies the Persian catalog uses Arabic-script text rather than leftover Latin copies.</summary>
+    [Fact]
+    public void Translations_PersianCatalog_ContainsArabicScriptValues()
+    {
+        string[] arabicValues = LocalizationResources.Translations[AppLanguage.Persian]
+            .Where(pair => pair.Value.Any(IsArabicScript))
+            .Select(pair => pair.Key)
+            .ToArray();
+
+        Assert.True(arabicValues.Length >= 600, $"Persian catalog has too few Arabic-script values: {arabicValues.Length}.");
     }
 
     private static bool IsCjk(char value)
@@ -465,5 +483,14 @@ public sealed class LocalizationResourcesTests
     {
         return value is >= '\u0400' and <= '\u04FF'
             or >= '\u0500' and <= '\u052F';
+    }
+
+    private static bool IsArabicScript(char value)
+    {
+        return value is >= '\u0600' and <= '\u06FF'
+            or >= '\u0750' and <= '\u077F'
+            or >= '\u08A0' and <= '\u08FF'
+            or >= '\uFB50' and <= '\uFDFF'
+            or >= '\uFE70' and <= '\uFEFF';
     }
 }

@@ -111,6 +111,9 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private Task? _mihomoServiceStatusMonitorTask;
     private int _trayRefreshQueued;
 
+    /// <summary>Keeps window FlowDirection aligned with the active display language.</summary>
+    private IDisposable? _layoutDirection;
+
     internal MainWindow(
         IApplicationLifetimeRequestSink startupLifetimeRequests,
         MainWindowComposition composition)
@@ -120,6 +123,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _composition = composition ?? throw new ArgumentNullException(nameof(composition));
         StartupShellSetupPolicy.TryRun(_composition.ApplyStartupAccentColor);
         InitializeComponent();
+        _layoutDirection = _composition.BindLayoutDirection((FrameworkElement)Content);
         Closed += OnWindowClosed;
         StartupShellSetupPolicy.TryRun(InitializeStartupStatus);
         InitializeWindowNativeCapabilities();
@@ -478,6 +482,13 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         }
         finally
         {
+            IDisposable? layoutDirection = _layoutDirection;
+            _layoutDirection = null;
+            if (layoutDirection is not null)
+            {
+                _ = StartupShellSetupPolicy.TryRun(layoutDirection.Dispose);
+            }
+
             _ = StartupShellSetupPolicy.TryRun(_windowLifetime.Dispose);
         }
     }

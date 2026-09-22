@@ -232,6 +232,7 @@ public sealed class InstallerOwnershipArchitectureTests
     [InlineData("Russian", "установщик ClashSharp", "Восстановить")]
     [InlineData("French", "programme d’installation de ClashSharp", "Réparer")]
     [InlineData("German", "ClashSharp-Installationsprogramm", "Reparieren")]
+    [InlineData("Persian", "نصب‌کننده ClashSharp", "تعمیر")]
     public void ServiceDescription_DirectsLifecycleWorkToInstaller(
         string catalog,
         string installerText,
@@ -296,6 +297,7 @@ public sealed class InstallerOwnershipArchitectureTests
     [InlineData("Russian", "установщика ClashSharp", "Восстановить", "прозрачный прокси (TUN)")]
     [InlineData("French", "programme d’installation de ClashSharp", "Réparer", "proxy transparent (TUN)")]
     [InlineData("German", "ClashSharp-Installationsprogramms", "Reparieren", "transparenten Proxy (TUN)")]
+    [InlineData("Persian", "نصب‌کننده ClashSharp", "تعمیر", "پروکسی شفاف (TUN)")]
     public void InstallerTransactionPrompt_DirectsRepairWithoutOfferingAppRepair(
         string catalog,
         string installerText,

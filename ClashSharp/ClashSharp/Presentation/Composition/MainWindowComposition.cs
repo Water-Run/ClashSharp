@@ -50,6 +50,26 @@ internal sealed class MainWindowComposition
             _settings.AppAccentColorValue);
     }
 
+    /// <summary>Keeps the window reading direction aligned with the active display language.</summary>
+    /// <param name="root">Window content root. Must not be null.</param>
+    /// <returns>A subscription that stops updating the root when disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="root"/> is null.</exception>
+    public IDisposable BindLayoutDirection(FrameworkElement root)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        EventHandler handler = (_, _) => ApplyLayoutDirection(root);
+        _localization.LanguageChanged += handler;
+        ApplyLayoutDirection(root);
+        return new LayoutDirectionBinding(_localization, handler);
+    }
+
+    private void ApplyLayoutDirection(FrameworkElement root)
+    {
+        root.FlowDirection = LocalizationService.IsRightToLeft(_localization.CurrentLanguage)
+            ? FlowDirection.RightToLeft
+            : FlowDirection.LeftToRight;
+    }
+
     /// <summary>Resolves startup text without allowing unavailable resources to prevent shell creation.</summary>
     public string ResolveStartupText(string key, string fallback)
     {
@@ -336,5 +356,28 @@ internal sealed class MainWindowComposition
         }
 
         public bool IsRestartPending => _state.IsRestartPending;
+    }
+
+    private sealed class LayoutDirectionBinding : IDisposable
+    {
+        private readonly LocalizationService _localization;
+        private readonly EventHandler _handler;
+        private int _disposed;
+
+        public LayoutDirectionBinding(LocalizationService localization, EventHandler handler)
+        {
+            _localization = localization;
+            _handler = handler;
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            _localization.LanguageChanged -= _handler;
+        }
     }
 }

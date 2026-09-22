@@ -95,6 +95,7 @@ public sealed class LocalizationService
             (AppLanguage.Russian, "Русский"),
             (AppLanguage.French, "Français"),
             (AppLanguage.German, "Deutsch"),
+            (AppLanguage.Persian, "فارسی"),
         ];
     }
 
@@ -103,12 +104,23 @@ public sealed class LocalizationService
     /// <returns>A supported concrete language.</returns>
     public static AppLanguage ResolveEffectiveLanguage(AppLanguage language)
     {
+        return ResolveEffectiveLanguage(language, CultureInfo.CurrentUICulture);
+    }
+
+    /// <summary>Resolves automatic language detection against an explicit UI culture.</summary>
+    /// <param name="language">Configured language value.</param>
+    /// <param name="culture">UI culture used when <paramref name="language"/> is automatic.</param>
+    /// <returns>A supported concrete language.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="culture"/> is null.</exception>
+    public static AppLanguage ResolveEffectiveLanguage(AppLanguage language, CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(culture);
+
         if (language != AppLanguage.AutoDetect)
         {
             return language;
         }
 
-        CultureInfo culture = CultureInfo.CurrentUICulture;
         string cultureName = culture.Name;
         string twoLetterName = culture.TwoLetterISOLanguageName;
 
@@ -128,7 +140,26 @@ public sealed class LocalizationService
             "ru" => AppLanguage.Russian,
             "fr" => AppLanguage.French,
             "de" => AppLanguage.German,
+            "fa" => AppLanguage.Persian,
             _ => AppLanguage.SimplifiedChinese,
         };
+    }
+
+    /// <summary>Returns whether the effective language requires a right-to-left layout.</summary>
+    /// <param name="language">Configured language value.</param>
+    /// <returns><see langword="true"/> when the resolved interface language is right-to-left.</returns>
+    public static bool IsRightToLeft(AppLanguage language)
+    {
+        return IsRightToLeft(language, CultureInfo.CurrentUICulture);
+    }
+
+    /// <summary>Returns whether the effective language requires a right-to-left layout.</summary>
+    /// <param name="language">Configured language value.</param>
+    /// <param name="culture">UI culture used when <paramref name="language"/> is automatic.</param>
+    /// <returns><see langword="true"/> when the resolved interface language is right-to-left.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="culture"/> is null.</exception>
+    public static bool IsRightToLeft(AppLanguage language, CultureInfo culture)
+    {
+        return ResolveEffectiveLanguage(language, culture) == AppLanguage.Persian;
     }
 }
