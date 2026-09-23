@@ -200,6 +200,12 @@ public sealed class MasterControlViewModelTests
         Assert.Equal(
             layoutService.SavedLayout,
             viewModel.HeroStatusSlots.Select(static slot => slot.SelectedKind));
+        Assert.All(viewModel.HeroStatusSlots, slot =>
+            Assert.Equal(slot.SelectedKind, slot.Options[slot.SelectedOptionIndex].Kind));
+
+        viewModel.ResetHeroStatusLayout();
+        Assert.All(viewModel.HeroStatusSlots, slot =>
+            Assert.Equal(slot.SelectedKind, slot.Options[slot.SelectedOptionIndex].Kind));
     }
 
     [Fact]
@@ -225,7 +231,7 @@ public sealed class MasterControlViewModelTests
         DateTimeOffset now = DateTimeOffset.UtcNow;
         RuntimeTrafficRateSnapshot traffic = default;
         MasterControlViewModel viewModel = CreateViewModel(
-            core: core, runtime: runtime, getNow: () => now, getRuntimeTraffic: () => traffic);
+            core: core, runtime: runtime, getNow: () => now, getRuntimeTrafficAsync: _ => Task.FromResult(traffic));
         await viewModel.LoadAsync(CancellationToken.None);
 
         now += TimeSpan.FromSeconds(1);
@@ -260,6 +266,63 @@ public sealed class MasterControlViewModelTests
 
         Assert.Equal("Acceptance HTTP", viewModel.CurrentNodeText);
         Assert.Equal("25 ms", viewModel.LatencySummaryText);
+    }
+
+    [Fact]
+    public async Task LoadAsync_SamplesControllerWithoutTriggerEvaluation()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DashboardTrafficConnections connections = new();
+        RuntimeTrafficRateService sampler = new(connections, () => now);
+        MasterControlViewModel viewModel = CreateViewModel(
+            getNow: () => now, getRuntimeTrafficAsync: sampler.GetSnapshotAsync);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        now += TimeSpan.FromSeconds(1);
+        connections.Connections = [new ActiveConnection(
+            "download", string.Empty, "localhost", "MATCH", string.Empty, "Acceptance HTTP",
+            0, 4096, now)];
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(2, connections.ReadCount);
+        Assert.Equal("4 KB/s", viewModel.InfoTiles.Single(tile => tile.Id == "download-rate").Value);
+        Assert.Equal("1", viewModel.InfoTiles.Single(tile => tile.Id == "active-connections").Value);
+
+        now += TimeSpan.FromSeconds(1);
+        connections.Connections = [];
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal("0 B/s", viewModel.InfoTiles.Single(tile => tile.Id == "download-rate").Value);
+        Assert.Equal("0", viewModel.InfoTiles.Single(tile => tile.Id == "active-connections").Value);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenTrafficUnavailable_ClearsStaleLiveCounters()
+    {
+        bool unavailable = false;
+        MasterControlViewModel viewModel = CreateViewModel(getRuntimeTrafficAsync: _ => unavailable
+            ? Task.FromException<RuntimeTrafficRateSnapshot>(new System.Net.Http.HttpRequestException("offline"))
+            : Task.FromResult(new RuntimeTrafficRateSnapshot(0, 4096, 1, 0, 4096)));
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal("1", viewModel.InfoTiles.Single(tile => tile.Id == "active-connections").Value);
+
+        unavailable = true;
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal("0 B/s", viewModel.InfoTiles.Single(tile => tile.Id == "download-rate").Value);
+        Assert.Equal("0", viewModel.InfoTiles.Single(tile => tile.Id == "active-connections").Value);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenTrafficReadOutlivesPageCancellation_DiscardsSample()
+    {
+        using CancellationTokenSource lifetime = new();
+        TaskCompletionSource<RuntimeTrafficRateSnapshot> completion = new();
+        MasterControlViewModel viewModel = CreateViewModel(getRuntimeTrafficAsync: _ => completion.Task);
+        Task load = viewModel.LoadAsync(lifetime.Token);
+        lifetime.Cancel();
+        completion.SetResult(new RuntimeTrafficRateSnapshot(0, 4096, 2, 0, 4096));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => load);
+        Assert.Equal("0", viewModel.InfoTiles.Single(tile => tile.Id == "active-connections").Value);
     }
 
     [Fact]
@@ -959,7 +1022,7 @@ public sealed class MasterControlViewModelTests
         IApplicationErrorSink? errorSink = null,
         Func<ClashSharpMode, Task>? modeApplied = null,
         Func<MasterControlTileAction, CancellationToken, Task>? presentTileActionAsync = null,
-        Func<RuntimeTrafficRateSnapshot>? getRuntimeTraffic = null)
+        Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? getRuntimeTrafficAsync = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -977,7 +1040,7 @@ public sealed class MasterControlViewModelTests
             actions: actions,
             modeApplied: modeApplied,
             getNow: getNow,
-            getRuntimeTraffic: getRuntimeTraffic);
+            getRuntimeTrafficAsync: getRuntimeTrafficAsync);
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>
@@ -1412,6 +1475,20 @@ public sealed class MasterControlViewModelTests
 
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Snapshot);
+        }
+    }
+
+    private sealed class DashboardTrafficConnections : IRuntimeTrafficConnections
+    {
+        public IReadOnlyList<ActiveConnection> Connections { get; set; } = [];
+
+        public int ReadCount { get; private set; }
+
+        public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ++ReadCount;
+            return Task.FromResult(Connections);
         }
     }
 

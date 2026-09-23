@@ -75,6 +75,45 @@ public sealed class RuntimeTrafficRateServiceTests
         Assert.Equal(40, snapshot.SessionDownloadBytes);
     }
 
+    [Fact]
+    public async Task GetSnapshotAsync_ConcurrentConsumersShareSampleWithoutZeroingRate()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        TaskCompletionSource<IReadOnlyList<ActiveConnection>> response = new();
+        FakeRuntimeTrafficConnections connections = new() { Handler = _ => response.Task };
+        RuntimeTrafficRateService service = new(connections, () => now);
+        Task<RuntimeTrafficRateSnapshot> dashboard = service.GetSnapshotAsync(CancellationToken.None);
+        Task<RuntimeTrafficRateSnapshot> trigger = service.GetSnapshotAsync(CancellationToken.None);
+        response.SetResult([CreateConnection("a", 0, 0)]);
+        Assert.Equal(await dashboard, await trigger);
+        Assert.Equal(1, connections.ReadCount);
+
+        now += TimeSpan.FromSeconds(1);
+        connections.Handler = null;
+        connections.Connections = [CreateConnection("a", 0, 4096)];
+        RuntimeTrafficRateSnapshot first = await service.GetSnapshotAsync(CancellationToken.None);
+        RuntimeTrafficRateSnapshot second = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(4096, first.DownloadBytesPerSecond);
+        Assert.Equal(first, second);
+        Assert.Equal(2, connections.ReadCount);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_CancelledQueuedConsumerDoesNotCancelActiveSample()
+    {
+        using CancellationTokenSource queuedLifetime = new();
+        TaskCompletionSource<IReadOnlyList<ActiveConnection>> response = new();
+        FakeRuntimeTrafficConnections connections = new() { Handler = _ => response.Task };
+        RuntimeTrafficRateService service = new(connections);
+        Task<RuntimeTrafficRateSnapshot> first = service.GetSnapshotAsync(CancellationToken.None);
+        Task<RuntimeTrafficRateSnapshot> queued = service.GetSnapshotAsync(queuedLifetime.Token);
+        queuedLifetime.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queued);
+        response.SetResult([CreateConnection("a", 10, 10)]);
+        Assert.Equal(1, (await first).ActiveConnectionCount);
+        Assert.Equal(1, connections.ReadCount);
+    }
+
     private static ActiveConnection CreateConnection(string id, long uploadBytes, long downloadBytes)
     {
         return new ActiveConnection(
@@ -93,9 +132,15 @@ public sealed class RuntimeTrafficRateServiceTests
     {
         public IReadOnlyList<ActiveConnection> Connections { get; set; } = [];
 
+        public Func<CancellationToken, Task<IReadOnlyList<ActiveConnection>>>? Handler { get; set; }
+
+        public int ReadCount { get; private set; }
+
         public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
         {
-            return Task.FromResult(Connections);
+            cancellationToken.ThrowIfCancellationRequested();
+            ++ReadCount;
+            return Handler?.Invoke(cancellationToken) ?? Task.FromResult(Connections);
         }
     }
 }

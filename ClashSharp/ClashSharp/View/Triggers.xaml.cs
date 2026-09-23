@@ -161,6 +161,7 @@ public sealed partial class Triggers : Page
         SearchableOptionList options = new()
         {
             SearchPlaceholder = _viewModel.SearchConditionsText,
+            EmptyText = _viewModel.NoMatchingOptionsText,
             AllowMultiple = false,
             MaxListHeight = 360,
         };
@@ -189,6 +190,7 @@ public sealed partial class Triggers : Page
         SearchableOptionList options = new()
         {
             SearchPlaceholder = _viewModel.SearchActionsText,
+            EmptyText = _viewModel.NoMatchingOptionsText,
             AllowMultiple = false,
             MaxListHeight = 360,
         };

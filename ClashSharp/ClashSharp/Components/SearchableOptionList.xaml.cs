@@ -17,6 +17,13 @@ public sealed partial class SearchableOptionList : UserControl
         typeof(SearchableOptionList),
         new PropertyMetadata(string.Empty));
 
+    /// <summary>Identifies the <see cref="EmptyText"/> dependency property.</summary>
+    public static readonly DependencyProperty EmptyTextProperty = DependencyProperty.Register(
+        nameof(EmptyText),
+        typeof(string),
+        typeof(SearchableOptionList),
+        new PropertyMetadata(string.Empty));
+
     /// <summary>Identifies the <see cref="MaxListHeight"/> dependency property.</summary>
     public static readonly DependencyProperty MaxListHeightProperty = DependencyProperty.Register(
         nameof(MaxListHeight),
@@ -40,6 +47,13 @@ public sealed partial class SearchableOptionList : UserControl
 
     /// <summary>Gets or sets whether more than one option may be selected.</summary>
     public bool AllowMultiple { get; set; }
+
+    /// <summary>Gets or sets the localized message shown when the filter has no matches.</summary>
+    public string EmptyText
+    {
+        get => (string)GetValue(EmptyTextProperty);
+        set => SetValue(EmptyTextProperty, value);
+    }
 
     /// <summary>Gets or sets the text shown when the search box is empty.</summary>
     public string SearchPlaceholder
@@ -104,6 +118,11 @@ public sealed partial class SearchableOptionList : UserControl
             {
                 FilteredOptions.Add(option);
             }
+        }
+
+        if (EmptyStateText is not null)
+        {
+            EmptyStateText.Visibility = FilteredOptions.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 

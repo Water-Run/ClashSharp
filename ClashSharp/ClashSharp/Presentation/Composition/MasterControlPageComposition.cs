@@ -86,7 +86,7 @@ internal static class MasterControlPageComposition
             new MasterControlRuntimeAdapter(runtimeSnapshotSource),
             new MasterControlActionsAdapter(applicationActions),
             mode => applicationActions.PublishProxyModeAppliedAsync(mode, CancellationToken.None),
-            getRuntimeTraffic: runtimeTrafficRate.GetLatestSnapshot);
+            getRuntimeTrafficAsync: runtimeTrafficRate.GetSnapshotAsync);
 
         return new MasterControlPageDependencies(
             viewModel,

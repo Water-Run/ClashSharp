@@ -26,6 +26,7 @@ internal sealed class RuntimeTrafficRateService
     private readonly IRuntimeTrafficConnections _connections;
     private readonly Func<DateTimeOffset> _getNow;
     private readonly object _syncLock = new();
+    private readonly SemaphoreSlim _samplingGate = new(1, 1);
     private Dictionary<string, ConnectionCounter> _lastCounters = new(StringComparer.Ordinal);
     private DateTimeOffset? _lastSampledAt;
     private RuntimeTrafficRateSnapshot _latestSnapshot;
@@ -46,7 +47,34 @@ internal sealed class RuntimeTrafficRateService
 
     public async Task<RuntimeTrafficRateSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
+        // Dashboard and trigger reads share one app-session counter history. Coalesce overlapping
+        // reads so a second consumer cannot turn the same sample into a spurious zero-rate sample.
+        await _samplingGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            lock (_syncLock)
+            {
+                TimeSpan age = _lastSampledAt is DateTimeOffset sampledAt
+                    ? _getNow() - sampledAt
+                    : TimeSpan.MaxValue;
+                if (age >= TimeSpan.Zero && age < TimeSpan.FromSeconds(1))
+                {
+                    return _latestSnapshot;
+                }
+            }
+
+            return await SampleAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _samplingGate.Release();
+        }
+    }
+
+    private async Task<RuntimeTrafficRateSnapshot> SampleAsync(CancellationToken cancellationToken)
+    {
         IReadOnlyList<ActiveConnection> connections = await _connections.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         DateTimeOffset sampledAt = _getNow();
         Dictionary<string, ConnectionCounter> currentCounters = connections.ToDictionary(
             static connection => connection.Id,

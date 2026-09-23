@@ -2013,8 +2013,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("BuildHeroStatusFlyoutContent", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("foreach (MasterHeroStatusSlotViewModel slot in _viewModel.HeroStatusSlots)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("ItemTemplate = (DataTemplate)Resources[\"MasterHeroStatusOptionTemplate\"]", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("comboBox.SetBinding(Selector.SelectedValueProperty", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("Mode = BindingMode.TwoWay", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("comboBox.SetBinding(Selector.SelectedIndexProperty", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("nameof(MasterHeroStatusSlotViewModel.SelectedOptionIndex)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("Mode = BindingMode.OneWay", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("CalculateHeroStatusFlyoutListHeight", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("VerticalScrollBarVisibility = ScrollBarVisibility.Auto", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged", masterControlCode, StringComparison.Ordinal);

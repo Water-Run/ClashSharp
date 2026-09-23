@@ -5,6 +5,8 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -122,7 +124,11 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private DateTimeOffset? _lastCoreRefreshAt;
 
-    private readonly Func<RuntimeTrafficRateSnapshot>? _getRuntimeTraffic;
+    private readonly Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? _getRuntimeTrafficAsync;
+
+    private RuntimeTrafficRateSnapshot? _liveTraffic;
+
+    private RuntimeTrafficRateSnapshot RuntimeTraffic => _liveTraffic ?? _runtimeSnapshot.RuntimeTraffic;
 
     // A read admitted before a network mutation must not overwrite its result.
     private int _statusRevision;
@@ -147,7 +153,7 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <param name="actions">Optional application action dispatcher; no-op actions are used when omitted.</param>
     /// <param name="modeApplied">Optional observer invoked after a mode transition is committed.</param>
     /// <param name="getNow">Optional clock used for deterministic refresh throttling.</param>
-    /// <param name="getRuntimeTraffic">Optional in-memory traffic snapshot reader for visible-page refreshes.</param>
+    /// <param name="getRuntimeTrafficAsync">Optional cancellable traffic sampler owned by this page.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public MasterControlViewModel(
         IMasterControlLocalization localization,
@@ -165,7 +171,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterControlActions? actions = null,
         Func<ClashSharpMode, Task>? modeApplied = null,
         Func<DateTimeOffset>? getNow = null,
-        Func<RuntimeTrafficRateSnapshot>? getRuntimeTraffic = null)
+        Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? getRuntimeTrafficAsync = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -187,7 +193,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         _runtime = runtime ?? UnavailableMasterControlRuntime.Instance;
         _actions = actions ?? NoMasterControlApplicationActionDispatcher.Instance;
         _getNow = getNow ?? (() => DateTimeOffset.Now);
-        _getRuntimeTraffic = getRuntimeTraffic;
+        _getRuntimeTrafficAsync = getRuntimeTrafficAsync;
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         DisabledModeCommand = new AsyncRelayCommand(
             token => ApplyModeAsync(ClashSharpMode.Disabled, token),
@@ -474,9 +480,14 @@ internal sealed class MasterControlViewModel : ObservableObject
         EnsureInitialized();
         DateTimeOffset now = _getNow();
         int revision = _statusRevision;
+        await RefreshRuntimeTrafficAsync(cancellationToken);
+        if (revision != _statusRevision)
+        {
+            return;
+        }
+
         if (_lastHeavyRefreshAt is DateTimeOffset lastRefresh && now - lastRefresh < LoadRefreshThrottle)
         {
-            RefreshRuntimeTraffic();
             RefreshTileValues();
             return;
         }
@@ -494,7 +505,6 @@ internal sealed class MasterControlViewModel : ObservableObject
             return;
         }
 
-        RefreshRuntimeTraffic();
         OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
         _lastHeavyRefreshAt = now;
@@ -797,11 +807,35 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
     }
 
-    private void RefreshRuntimeTraffic()
+    private async Task RefreshRuntimeTrafficAsync(CancellationToken cancellationToken)
     {
-        if (_getRuntimeTraffic is not null)
+        if (_getRuntimeTrafficAsync is null)
         {
-            _runtimeSnapshot = _runtimeSnapshot with { RuntimeTraffic = _getRuntimeTraffic() };
+            return;
+        }
+
+        int revision = _statusRevision;
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMilliseconds(800));
+        RuntimeTrafficRateSnapshot snapshot;
+        try
+        {
+            snapshot = await _getRuntimeTrafficAsync(timeout.Token);
+            timeout.Token.ThrowIfCancellationRequested();
+        }
+        catch (Exception exception) when (
+            exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            // A stopped or unavailable controller cannot leave old live counters on screen.
+            snapshot = default;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (revision == _statusRevision)
+        {
+            _liveTraffic = snapshot;
         }
     }
 
@@ -965,17 +999,17 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("startup-restore-fallback", GetStartupRestoreFallbackStatusText(), CompactPath(_runtimeSnapshot.StartupRestoreFallback.CommandLine));
         SetTile("mihomo-service", GetMihomoServiceStatusText(), string.Empty);
         SetTile("core-config-file", GetCoreConfigurationStatusText(), CompactPath(_runtimeSnapshot.CoreConfiguration.ConfigPath));
-        SetTile("upload-rate", FormatBytesPerSecond(_runtimeSnapshot.RuntimeTraffic.UploadBytesPerSecond), _localization.GetString("Master.Tile.Detail.Realtime"));
-        SetTile("download-rate", FormatBytesPerSecond(_runtimeSnapshot.RuntimeTraffic.DownloadBytesPerSecond), _localization.GetString("Master.Tile.Detail.Realtime"));
-        SetTile("active-connections", FormatNumber(_runtimeSnapshot.RuntimeTraffic.ActiveConnectionCount), _localization.GetString("Master.Tile.Detail.Realtime"));
+        SetTile("upload-rate", FormatBytesPerSecond(RuntimeTraffic.UploadBytesPerSecond), _localization.GetString("Master.Tile.Detail.Realtime"));
+        SetTile("download-rate", FormatBytesPerSecond(RuntimeTraffic.DownloadBytesPerSecond), _localization.GetString("Master.Tile.Detail.Realtime"));
+        SetTile("active-connections", FormatNumber(RuntimeTraffic.ActiveConnectionCount), _localization.GetString("Master.Tile.Detail.Realtime"));
         SetTile(
             "session-traffic",
-            FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionUploadBytes + _runtimeSnapshot.RuntimeTraffic.SessionDownloadBytes),
+            FormatBytes(RuntimeTraffic.SessionUploadBytes + RuntimeTraffic.SessionDownloadBytes),
             string.Format(
                 CultureInfo.CurrentCulture,
                 _localization.GetString("Statistics.TotalTraffic.Format"),
-                FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionUploadBytes),
-                FormatBytes(_runtimeSnapshot.RuntimeTraffic.SessionDownloadBytes)));
+                FormatBytes(RuntimeTraffic.SessionUploadBytes),
+                FormatBytes(RuntimeTraffic.SessionDownloadBytes)));
         SetTile("memory-usage", FormatBytes(_runtimeSnapshot.AppWorkingSetBytes), _localization.GetString("Master.Tile.Detail.AppProcess"));
         SetTile("profile-count", FormatNumber(_runtimeSnapshot.ProfileCount), GetActiveProfileDisplayName());
         SetTile("subscription-count", FormatNumber(_runtimeSnapshot.SubscriptionCount), string.Empty);
@@ -1044,10 +1078,10 @@ internal sealed class MasterControlViewModel : ObservableObject
             MasterHeroStatusItemKind.TransparentProxy => TransparentProxyStatusText,
             MasterHeroStatusItemKind.CurrentNode => CurrentNodeText,
             MasterHeroStatusItemKind.Latency => LatencySummaryText,
-            MasterHeroStatusItemKind.UploadRate => FormatBytesPerSecond(_runtimeSnapshot.RuntimeTraffic.UploadBytesPerSecond),
-            MasterHeroStatusItemKind.DownloadRate => FormatBytesPerSecond(_runtimeSnapshot.RuntimeTraffic.DownloadBytesPerSecond),
+            MasterHeroStatusItemKind.UploadRate => FormatBytesPerSecond(RuntimeTraffic.UploadBytesPerSecond),
+            MasterHeroStatusItemKind.DownloadRate => FormatBytesPerSecond(RuntimeTraffic.DownloadBytesPerSecond),
             MasterHeroStatusItemKind.TotalTraffic => FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
-            MasterHeroStatusItemKind.ActiveConnections => FormatNumber(_runtimeSnapshot.RuntimeTraffic.ActiveConnectionCount),
+            MasterHeroStatusItemKind.ActiveConnections => FormatNumber(RuntimeTraffic.ActiveConnectionCount),
             MasterHeroStatusItemKind.CurrentMode => GetModeTitle(SelectedMode),
             MasterHeroStatusItemKind.ActiveProfile => GetActiveProfileDisplayName(),
             MasterHeroStatusItemKind.MihomoService => GetMihomoServiceStatusText(),

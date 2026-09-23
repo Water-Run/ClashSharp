@@ -702,6 +702,7 @@ public sealed partial class Settings : Page
             SearchableOptionList optionList = new()
             {
                 SearchPlaceholder = _viewModel.TrayVisibleFeatureSearchPlaceholderText,
+                EmptyText = _getString("Common.NoMatchingOptions"),
                 AllowMultiple = true,
                 MaxListHeight = 360,
             };

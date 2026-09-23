@@ -80,6 +80,8 @@ internal sealed class TriggersViewModel : ObservableObject
 
     public string SearchConditionsText => _getString("Triggers.SearchConditions");
 
+    public string NoMatchingOptionsText => _getString("Common.NoMatchingOptions");
+
     public string SearchActionsText => _getString("Triggers.SearchActions");
 
     public string DeleteTitleText => _getString("Triggers.Delete.Title");

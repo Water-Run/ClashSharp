@@ -10,6 +10,7 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Common.NoMatchingOptions"] = "Нет подходящих вариантов.",
             ["Master.Status.CurrentRuntime.Format"] = "Текущее состояние: {0}",
             ["Profiles.Column.Name"] = "Профиль / источник",
             ["Profiles.Column.Status"] = "Состояние",

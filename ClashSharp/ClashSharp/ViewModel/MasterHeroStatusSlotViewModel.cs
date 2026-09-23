@@ -29,6 +29,29 @@ internal sealed class MasterHeroStatusSlotViewModel : ObservableObject
     public MasterHeroStatusItemKind SelectedKind
     {
         get => _selectedKind;
-        set => SetProperty(ref _selectedKind, value);
+        set
+        {
+            if (SetProperty(ref _selectedKind, value))
+            {
+                OnPropertyChanged(nameof(SelectedOptionIndex));
+            }
+        }
+    }
+
+    /// <summary>Native selector index; avoids enum boxing differences in WinUI SelectedValue bindings.</summary>
+    public int SelectedOptionIndex
+    {
+        get
+        {
+            for (int index = 0; index < Options.Count; index++)
+            {
+                if (Options[index].Kind == SelectedKind)
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
     }
 }

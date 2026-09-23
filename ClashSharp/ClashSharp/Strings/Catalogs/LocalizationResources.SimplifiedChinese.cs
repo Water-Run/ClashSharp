@@ -10,6 +10,7 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Common.NoMatchingOptions"] = "没有匹配的选项。",
             ["Master.Status.CurrentRuntime.Format"] = "当前运行：{0}",
             ["Profiles.Column.Name"] = "配置 / 来源",
             ["Profiles.Column.Status"] = "状态",

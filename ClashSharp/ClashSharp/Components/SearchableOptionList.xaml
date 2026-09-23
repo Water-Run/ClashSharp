@@ -13,6 +13,14 @@
             HorizontalAlignment="Stretch"
             TextChanged="SearchBox_TextChanged" />
 
+        <TextBlock
+            x:Name="EmptyStateText"
+            Text="{Binding EmptyText, ElementName=Root}"
+            Visibility="Collapsed"
+            Margin="0,12"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            TextWrapping="Wrap" />
+
         <ListView
             x:Name="OptionsControl"
             ItemsSource="{Binding FilteredOptions, ElementName=Root}"

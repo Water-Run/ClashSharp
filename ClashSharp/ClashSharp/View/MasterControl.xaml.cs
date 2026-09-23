@@ -180,14 +180,14 @@ public sealed partial class MasterControl : Page
 
     private void HeroStatusSlotComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is not ComboBox { Tag: int slotIndex, SelectedValue: MasterHeroStatusItemKind kind })
+        if (sender is not ComboBox { Tag: int slotIndex, SelectedItem: MasterHeroStatusOptionViewModel option })
         {
             return;
         }
 
         _heroStatusSelection.TryApplySelection(
             slotIndex,
-            kind,
+            option.Kind,
             _viewModel.SetHeroStatusSlot);
     }
 
@@ -226,14 +226,13 @@ public sealed partial class MasterControl : Page
                 MinWidth = 180,
                 ItemsSource = slot.Options,
                 ItemTemplate = (DataTemplate)Resources["MasterHeroStatusOptionTemplate"],
-                SelectedValuePath = nameof(MasterHeroStatusOptionViewModel.Kind),
                 Tag = slot.Index,
             };
-            comboBox.SetBinding(Selector.SelectedValueProperty, new Binding
+            comboBox.SetBinding(Selector.SelectedIndexProperty, new Binding
             {
                 Source = slot,
-                Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.SelectedKind)),
-                Mode = BindingMode.TwoWay,
+                Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.SelectedOptionIndex)),
+                Mode = BindingMode.OneWay,
             });
             comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged;
             Grid.SetColumn(comboBox, 1);
@@ -477,9 +476,10 @@ public sealed partial class MasterControl : Page
         SearchableOptionList optionList = new()
         {
             SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText,
+            EmptyText = _getString("Common.NoMatchingOptions"),
             AllowMultiple = true,
             MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot),
-            Width = editorWidth,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         optionList.SetOptions(_viewModel.InfoTiles.Select(tile => new SearchableOptionItem(
             tile.Id,
@@ -493,7 +493,8 @@ public sealed partial class MasterControl : Page
         StackPanel panel = new()
         {
             Spacing = 10,
-            Width = editorWidth,
+            MaxWidth = editorWidth,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         panel.Children.Add(new TextBlock
         {
@@ -512,6 +513,7 @@ public sealed partial class MasterControl : Page
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = dialogRoot,
         };
+        dialog.Resources["ContentDialogMaxWidth"] = editorWidth + 48d;
 
         if (await dialog.ShowManagedAsync(cancellationToken) is not ContentDialogResult.Primary)
         {
