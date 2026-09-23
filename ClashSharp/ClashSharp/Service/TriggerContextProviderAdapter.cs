@@ -363,7 +363,7 @@ internal sealed class SqliteTriggerTrafficContextSource : ITriggerTrafficContext
         long? allTimeTraffic = includeAllTimeTraffic
             ? await ReadScalarAsync(
                 connection,
-                "SELECT COALESCE(SUM(UploadBytes + DownloadBytes), 0) FROM Connections;",
+                "SELECT COALESCE(SUM(UploadBytes + DownloadBytes), 0) FROM TrafficSnapshots;",
                 null,
                 cancellationToken).ConfigureAwait(false)
             : null;

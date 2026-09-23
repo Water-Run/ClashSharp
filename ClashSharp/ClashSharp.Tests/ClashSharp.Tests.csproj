@@ -100,6 +100,7 @@
     <Compile Include="..\ClashSharp\Service\LogStorageMaintenance.cs" Link="Service\LogStorageMaintenance.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageSchema.cs" Link="Service\LogStorageSchema.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.cs" Link="Service\LogStorageService.cs" />
+    <Compile Include="..\ClashSharp\Service\LogStorageService.Traffic.cs" Link="Service\LogStorageService.Traffic.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageServiceFactory.cs" Link="Service\LogStorageServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\RuntimeTrafficRateService.cs" Link="Service\RuntimeTrafficRateService.cs" />
     <Compile Include="..\ClashSharp\Service\IApplicationActionDispatcher.cs" Link="Service\IApplicationActionDispatcher.cs" />

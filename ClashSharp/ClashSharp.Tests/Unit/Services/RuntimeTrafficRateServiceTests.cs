@@ -8,6 +8,20 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class RuntimeTrafficRateServiceTests
 {
     [Fact]
+    public async Task RefreshAsync_CapturesFinalBytesInsideTheNormalCoalescingInterval()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        FakeRuntimeTrafficConnections connections = new() { UploadTotal = 0, DownloadTotal = 0 };
+        RuntimeTrafficRateService service = new(connections, () => now);
+        await service.GetSnapshotAsync(CancellationToken.None);
+        connections.DownloadTotal = 245760;
+        now = now.AddMilliseconds(100);
+        Assert.Equal(0, (await service.GetSnapshotAsync(CancellationToken.None)).SessionDownloadBytes);
+        Assert.Equal(245760, (await service.RefreshAsync(CancellationToken.None)).SessionDownloadBytes);
+        Assert.Equal(2, connections.ReadCount);
+    }
+
+    [Fact]
     public async Task GetSnapshotAsync_FirstSample_ReturnsZeroRatesAndCurrentConnectionCount()
     {
         DateTimeOffset now = DateTimeOffset.Parse("2026-06-29T08:00:00Z", CultureInfo.InvariantCulture);
@@ -26,8 +40,8 @@ public sealed class RuntimeTrafficRateServiceTests
         Assert.Equal(0, snapshot.UploadBytesPerSecond);
         Assert.Equal(0, snapshot.DownloadBytesPerSecond);
         Assert.Equal(2, snapshot.ActiveConnectionCount);
-        Assert.Equal(0, snapshot.SessionUploadBytes);
-        Assert.Equal(0, snapshot.SessionDownloadBytes);
+        Assert.Equal(150, snapshot.SessionUploadBytes);
+        Assert.Equal(275, snapshot.SessionDownloadBytes);
     }
 
     [Fact]
@@ -49,8 +63,8 @@ public sealed class RuntimeTrafficRateServiceTests
         Assert.Equal(30, snapshot.UploadBytesPerSecond);
         Assert.Equal(60, snapshot.DownloadBytesPerSecond);
         Assert.Equal(1, snapshot.ActiveConnectionCount);
-        Assert.Equal(60, snapshot.SessionUploadBytes);
-        Assert.Equal(120, snapshot.SessionDownloadBytes);
+        Assert.Equal(160, snapshot.SessionUploadBytes);
+        Assert.Equal(320, snapshot.SessionDownloadBytes);
     }
 
     [Fact]
@@ -71,8 +85,8 @@ public sealed class RuntimeTrafficRateServiceTests
 
         Assert.Equal(4, snapshot.UploadBytesPerSecond);
         Assert.Equal(8, snapshot.DownloadBytesPerSecond);
-        Assert.Equal(20, snapshot.SessionUploadBytes);
-        Assert.Equal(40, snapshot.SessionDownloadBytes);
+        Assert.Equal(120, snapshot.SessionUploadBytes);
+        Assert.Equal(240, snapshot.SessionDownloadBytes);
     }
 
     [Fact]
@@ -177,12 +191,12 @@ public sealed class RuntimeTrafficRateServiceTests
         RuntimeTrafficRateSnapshot sample = await service.GetSnapshotAsync(CancellationToken.None);
 
         Assert.Equal(0, sample.ActiveConnectionCount);
-        Assert.Equal(250, sample.SessionUploadBytes);
-        Assert.Equal(200000, sample.SessionDownloadBytes);
+        Assert.Equal(350, sample.SessionUploadBytes);
+        Assert.Equal(201000, sample.SessionDownloadBytes);
         Assert.Equal(100000, sample.DownloadBytesPerSecond);
         now = now.AddSeconds(1);
         RuntimeTrafficRateSnapshot repeated = await service.GetSnapshotAsync(CancellationToken.None);
-        Assert.Equal(200000, repeated.SessionDownloadBytes);
+        Assert.Equal(201000, repeated.SessionDownloadBytes);
         Assert.Equal(0, repeated.DownloadBytesPerSecond);
     }
 
@@ -199,8 +213,8 @@ public sealed class RuntimeTrafficRateServiceTests
         connections.DownloadTotal = 1000;
         now = now.AddSeconds(1);
         RuntimeTrafficRateSnapshot sample = await service.GetSnapshotAsync(CancellationToken.None);
-        Assert.Equal(300, sample.SessionUploadBytes);
-        Assert.Equal(1000, sample.SessionDownloadBytes);
+        Assert.Equal(400, sample.SessionUploadBytes);
+        Assert.Equal(1200, sample.SessionDownloadBytes);
     }
 
     [Fact]

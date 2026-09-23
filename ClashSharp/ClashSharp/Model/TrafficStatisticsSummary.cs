@@ -1,8 +1,8 @@
 namespace ClashSharp.Model;
 
 /// <summary>Summarizes long-term traffic and aggregation records stored in SQLite.</summary>
-/// <param name="TotalUploadBytes">Total uploaded bytes estimated from connection records.</param>
-/// <param name="TotalDownloadBytes">Total downloaded bytes estimated from connection records.</param>
+/// <param name="TotalUploadBytes">Total uploaded bytes from retained traffic snapshots.</param>
+/// <param name="TotalDownloadBytes">Total downloaded bytes from retained traffic snapshots.</param>
 /// <param name="ConnectionCount">Total connection record count.</param>
 /// <param name="SnapshotCount">Total traffic snapshot count.</param>
 /// <param name="ProfileCount">Number of profile traffic aggregation rows.</param>

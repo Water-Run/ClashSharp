@@ -9,6 +9,34 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for network takeover mode application.</summary>
 public sealed class NetworkTakeoverServiceTests
 {
+    [Theory]
+    [InlineData(ClashSharpMode.Disabled, false)]
+    [InlineData(ClashSharpMode.Standby, false)]
+    [InlineData(ClashSharpMode.RuleTakeover, false)]
+    [InlineData(ClashSharpMode.FullTakeover, true)]
+    public async Task ApplyModeAsync_AwaitsFinalTrafficSampleBeforeStoppingEitherOwner(ClashSharpMode mode, bool tun)
+    {
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeNetworkTakeoverCore core = new();
+        FakeNetworkTakeoverMihomoService owner = new(new MihomoServiceStatus(true, true, "running"));
+        NetworkTakeoverService service = CreateService(core: core, serviceStatus: owner,
+            flushTraffic: async cancellationToken =>
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(cancellationToken);
+            });
+        Task<NetworkTakeoverResult> transition = service.ApplyModeAsync(mode, tun, 10000, CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(transition.IsCompleted);
+        Assert.False(core.Stopped);
+        Assert.Equal(0, owner.StopCount);
+        Assert.Equal(0, owner.RestartCount);
+        release.TrySetResult();
+        Assert.Equal(mode, (await transition).Mode);
+        Assert.True(core.Stopped);
+    }
+
     /// <summary>Verifies TUN hands core ownership from the App child to the installed service.</summary>
     [Fact]
     public async Task ApplyModeAsync_WhenTransparentProxyEnabledAndServiceInstalled_UsesTransparentProxy()
@@ -613,7 +641,8 @@ public sealed class NetworkTakeoverServiceTests
         INetworkTakeoverMihomoService? serviceStatus = null,
         FakeNetworkTakeoverProxyRecovery? proxyRecovery = null,
         INetworkTakeoverReadiness? readiness = null,
-        INetworkTakeoverProxySelections? selections = null)
+        INetworkTakeoverProxySelections? selections = null,
+        Func<CancellationToken, Task>? flushTraffic = null)
     {
         return new NetworkTakeoverService(
             configuration ?? new FakeNetworkTakeoverCoreConfiguration(),
@@ -634,7 +663,7 @@ public sealed class NetworkTakeoverServiceTests
                 "NetworkTakeover.TransparentProxyServiceMissing.Full" => "missing full",
                 "NetworkTakeover.TransparentProxyServiceMissing.Rule" => "missing rule",
                 _ => key,
-            }, selections);
+            }, selections, flushTraffic);
     }
 
     private sealed class FakeNetworkTakeoverCoreConfiguration(List<string>? operations = null)

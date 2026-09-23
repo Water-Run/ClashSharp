@@ -116,6 +116,8 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
 
     private readonly INetworkTakeoverProxySelections? _proxySelections;
 
+    private readonly Func<CancellationToken, Task>? _flushTraffic;
+
     private readonly Func<string, string> _getString;
 
     /// <summary>Initializes a new network takeover service instance.</summary>
@@ -127,7 +129,8 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         INetworkTakeoverProxyRecovery proxyRecovery,
         INetworkTakeoverReadiness readiness,
         Func<string, string> getString,
-        INetworkTakeoverProxySelections? proxySelections = null)
+        INetworkTakeoverProxySelections? proxySelections = null,
+        Func<CancellationToken, Task>? flushTraffic = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -137,6 +140,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _proxySelections = proxySelections;
+        _flushTraffic = flushTraffic;
     }
 
     /// <summary>Applies one immutable planned mode without rereading mutable TUN or port settings.</summary>
@@ -252,6 +256,11 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (_flushTraffic is not null)
+        {
+            await _flushTraffic(cancellationToken).ConfigureAwait(false);
+        }
+
         return mode switch
         {
             ClashSharpMode.Disabled => await ApplyDisabledModeAsync(cancellationToken).ConfigureAwait(false),
@@ -711,6 +720,11 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
 
     async Task ICoreConfigurationRuntime.DeactivateAsync(CancellationToken cancellationToken)
     {
+        if (_flushTraffic is not null)
+        {
+            await _flushTraffic(cancellationToken).ConfigureAwait(false);
+        }
+
         _windowsProxy.DisableProxy();
         _core.Stop();
         await EnsureServiceStoppedAsync(cancellationToken).ConfigureAwait(false);

@@ -362,7 +362,7 @@ public sealed class SettingsRuntimeParticipantTests
 
     private sealed class Storage : IConnectionSamplingStorage, IStartupLaunchLog
     {
-        public int AppendConnectionSnapshot(IReadOnlyList<ActiveConnection> connections) => 0;
+        public int AppendTrafficSnapshot(MihomoTrafficSnapshot snapshot) => 0;
         public void AppendLog(string level, string category, string message, string? detail) { }
     }
 
@@ -372,12 +372,12 @@ public sealed class SettingsRuntimeParticipantTests
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource CancellationObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+        public async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
         {
             using CancellationTokenRegistration registration = cancellationToken.Register(() => CancellationObserved.TrySetResult());
             Entered.TrySetResult();
             if (Block) { await Release.Task; }
-            return [];
+            return new MihomoTrafficSnapshot(Guid.NewGuid(), 0, 0, []);
         }
     }
 

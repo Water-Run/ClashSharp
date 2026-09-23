@@ -10,6 +10,36 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for connection sampling orchestration.</summary>
 public sealed class ConnectionSamplingServiceTests
 {
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public async Task FlushAsync_CapturesEnabledTrafficWithoutWaitingForTheLoopInterval(bool enabled, int expectedReads)
+    {
+        FakeConnectionSamplingSource source = new() { DownloadTotal = 245760 };
+        FakeConnectionSamplingStorage storage = new();
+        ConnectionSamplingService service = CreateService(
+            new FakeConnectionSamplingSettings { IsEnabled = enabled, IntervalSeconds = 60 }, source, storage);
+        await service.FlushAsync(CancellationToken.None);
+        Assert.Equal(expectedReads, source.CallCount);
+        Assert.Equal(expectedReads, storage.Snapshots.Count);
+        if (enabled) { Assert.Equal(245760, storage.Snapshots[0].DownloadTotalBytes); }
+    }
+
+    [Fact]
+    public async Task FlushAsync_SerializesWithAnInFlightBackgroundSample()
+    {
+        FakeConnectionSamplingSource source = new() { BlockFirstSample = true };
+        ConnectionSamplingService service = CreateService(source: source);
+        Task first = service.SampleOnceAsync(CancellationToken.None);
+        await source.FirstSampleStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task flush = service.FlushAsync(CancellationToken.None);
+        Assert.False(flush.IsCompleted);
+        Assert.Equal(1, source.CallCount);
+        source.ReleaseFirstSample.TrySetResult(null);
+        await Task.WhenAll(first, flush);
+        Assert.Equal(2, source.CallCount);
+    }
+
     /// <summary>Verifies disabled sampling settings prevent the background loop from starting.</summary>
     [Fact]
     public async Task StartAsync_WhenDisabled_DoesNotStart()
@@ -132,7 +162,7 @@ public sealed class ConnectionSamplingServiceTests
         retry.Complete();
         _ = await clock.TakeDelayAsync();
 
-        ActiveConnection recoveredDelta = Assert.Single(Assert.Single(storage.Snapshots));
+        ActiveConnection recoveredDelta = Assert.Single(Assert.Single(storage.Snapshots).Connections);
         Assert.Equal(100, recoveredDelta.UploadBytes);
         Assert.Equal(200, recoveredDelta.DownloadBytes);
         Assert.Equal(SupervisorHealthState.Recovering, service.Health.State);
@@ -140,9 +170,9 @@ public sealed class ConnectionSamplingServiceTests
         await service.StopAsync(CancellationToken.None);
     }
 
-    /// <summary>Verifies cumulative mihomo byte counters are not persisted twice when a connection remains active.</summary>
+    /// <summary>Preserves closed-connection traffic for the repository's atomic delta calculation.</summary>
     [Fact]
-    public async Task SampleOnceAsync_WhenConnectionCountersAreUnchanged_PersistsOnlyInitialDelta()
+    public async Task SampleOnceAsync_WhenConnectionsClose_PassesTotalsWithoutReconstructingThemFromRows()
     {
         FakeConnectionSamplingStorage storage = new();
         FakeConnectionSamplingSource source = new()
@@ -152,36 +182,19 @@ public sealed class ConnectionSamplingServiceTests
         ConnectionSamplingService service = CreateService(source: source, storage: storage);
 
         await service.SampleOnceAsync(CancellationToken.None);
-        source.Connections = [CreateConnection("connection-1", 100, 200)];
+        source.Connections = [];
+        source.UploadTotal = 150;
+        source.DownloadTotal = 245760;
         await service.SampleOnceAsync(CancellationToken.None);
 
         Assert.Equal(2, storage.Snapshots.Count);
-        ActiveConnection firstDelta = Assert.Single(storage.Snapshots[0]);
+        ActiveConnection firstDelta = Assert.Single(storage.Snapshots[0].Connections);
         Assert.Equal(100, firstDelta.UploadBytes);
         Assert.Equal(200, firstDelta.DownloadBytes);
-        Assert.Empty(storage.Snapshots[1]);
-    }
-
-    /// <summary>Verifies repeated active connection samples persist only the byte increase after the first sample.</summary>
-    [Fact]
-    public async Task SampleOnceAsync_WhenConnectionCountersIncrease_PersistsOnlyCounterDelta()
-    {
-        FakeConnectionSamplingStorage storage = new();
-        FakeConnectionSamplingSource source = new()
-        {
-            Connections = [CreateConnection("connection-1", 100, 200)],
-        };
-        ConnectionSamplingService service = CreateService(source: source, storage: storage);
-
-        await service.SampleOnceAsync(CancellationToken.None);
-        source.Connections = [CreateConnection("connection-1", 140, 260)];
-        await service.SampleOnceAsync(CancellationToken.None);
-
-        Assert.Equal(2, storage.Snapshots.Count);
-        ActiveConnection secondDelta = Assert.Single(storage.Snapshots[1]);
-        Assert.Equal("connection-1", secondDelta.Id);
-        Assert.Equal(40, secondDelta.UploadBytes);
-        Assert.Equal(60, secondDelta.DownloadBytes);
+        Assert.Empty(storage.Snapshots[1].Connections);
+        Assert.Equal(150, storage.Snapshots[1].UploadTotalBytes);
+        Assert.Equal(245760, storage.Snapshots[1].DownloadTotalBytes);
+        Assert.Equal(storage.Snapshots[0].Epoch, storage.Snapshots[1].Epoch);
     }
 
     /// <summary>Verifies restart does not start a replacement sampling loop while the previous loop is still in-flight.</summary>
@@ -270,6 +283,9 @@ public sealed class ConnectionSamplingServiceTests
 
     private sealed class FakeConnectionSamplingSource : IConnectionSamplingSource
     {
+        private readonly Guid _epoch = Guid.NewGuid();
+        public long? UploadTotal { get; set; }
+        public long? DownloadTotal { get; set; }
         public Exception? Exception { get; set; }
 
         public IReadOnlyList<ActiveConnection> Connections { get; set; } = [];
@@ -282,7 +298,7 @@ public sealed class ConnectionSamplingServiceTests
 
         public TaskCompletionSource<object?> ReleaseFirstSample { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+        public async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
         {
             CallCount++;
             if (CallCount == 1)
@@ -299,7 +315,9 @@ public sealed class ConnectionSamplingServiceTests
                 throw Exception;
             }
 
-            return Connections;
+            return new MihomoTrafficSnapshot(_epoch,
+                UploadTotal ?? Connections.Sum(row => row.UploadBytes),
+                DownloadTotal ?? Connections.Sum(row => row.DownloadBytes), Connections);
         }
     }
 
@@ -311,16 +329,16 @@ public sealed class ConnectionSamplingServiceTests
 
         public List<ConnectionSamplingLogEntry> Logs { get; } = [];
 
-        public List<IReadOnlyList<ActiveConnection>> Snapshots { get; } = [];
+        public List<MihomoTrafficSnapshot> Snapshots { get; } = [];
 
-        public int AppendConnectionSnapshot(IReadOnlyList<ActiveConnection> connections)
+        public int AppendTrafficSnapshot(MihomoTrafficSnapshot snapshot)
         {
             if (Exception is not null)
             {
                 throw Exception;
             }
 
-            Snapshots.Add([.. connections]);
+            Snapshots.Add(snapshot);
             return InsertedCount;
         }
 

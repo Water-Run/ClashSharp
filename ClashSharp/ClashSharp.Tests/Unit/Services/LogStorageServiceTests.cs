@@ -9,6 +9,122 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class LogStorageServiceTests
 {
     [Fact]
+    public async Task TrafficSnapshot_ClosedAndShortConnectionsRemainInTotalsAndDailyAndProfileRows()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "profile-a");
+        Guid epoch = Guid.NewGuid();
+        ActiveConnection row = TrafficConnection(100, 1000);
+        storage.AppendTrafficSnapshot(new(epoch, 100, 1000, [row]));
+        storage.AppendTrafficSnapshot(new(epoch, 150, 245760, []));
+        storage.AppendTrafficSnapshot(new(epoch, 150, 245760, []));
+
+        TrafficStatisticsSummary totals = storage.GetTrafficStatisticsSummary();
+        Assert.Equal(150, totals.TotalUploadBytes);
+        Assert.Equal(245760, totals.TotalDownloadBytes);
+        Assert.Equal(2, totals.SnapshotCount);
+        Assert.Equal(1, totals.ConnectionCount);
+        Assert.Equal(245760, Assert.Single(storage.GetDailyTrafficRows(10)).DownloadBytes);
+        Assert.Equal(245760, Assert.Single(storage.GetProfileTrafficRows(10)).DownloadBytes);
+        Assert.Equal(245910, storage.GetTrafficBytesSince(DateTimeOffset.UnixEpoch));
+        Assert.Equal(1, storage.GetRuleHitCounts()[row.RawRuleDisplay]);
+    }
+
+    [Fact]
+    public async Task TrafficSnapshot_ReopenedRepositoryDoesNotDuplicateTotalsConnectionDeltasOrRuleHits()
+    {
+        using TempDatabase database = new();
+        Guid epoch = Guid.NewGuid();
+        ActiveConnection row = TrafficConnection(100, 200);
+        await using (LogStorageService first = new(database.Path, () => "profile-a"))
+        {
+            first.AppendTrafficSnapshot(new(epoch, 100, 200, [row]));
+        }
+
+        await using LogStorageService reopened = new(database.Path, () => "profile-a");
+        Assert.Equal(0, reopened.AppendTrafficSnapshot(new(epoch, 100, 200, [row])));
+        Assert.Equal(1, reopened.AppendTrafficSnapshot(new(epoch, 140, 260,
+            [row with { UploadBytes = 140, DownloadBytes = 260 }])));
+        Assert.Equal(140, reopened.GetTrafficStatisticsSummary().TotalUploadBytes);
+        Assert.Equal(260, reopened.GetTrafficStatisticsSummary().TotalDownloadBytes);
+        Assert.Equal(1, reopened.GetRuleHitCounts()[row.RawRuleDisplay]);
+        Assert.Equal(1, Assert.Single(reopened.GetProfileTrafficRows(10)).SampleCount);
+    }
+
+    [Fact]
+    public async Task TrafficSnapshot_FailedCommitRollsBackRowsAndBaselinesSoRetryCountsOnce()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "profile-a");
+        storage.GetTrafficStatisticsSummary();
+        using SqliteConnection injection = new($"Data Source={database.Path}");
+        injection.Open();
+        using SqliteCommand fault = injection.CreateCommand();
+        fault.CommandText = "CREATE TRIGGER RejectTraffic BEFORE INSERT ON TrafficSnapshots BEGIN SELECT RAISE(FAIL, 'injected'); END;";
+        fault.ExecuteNonQuery();
+        ActiveConnection row = TrafficConnection(20, 50);
+        MihomoTrafficSnapshot sample = new(Guid.NewGuid(), 100, 200, [row]);
+
+        Assert.Throws<SqliteException>(() => storage.AppendTrafficSnapshot(sample));
+        Assert.Equal(0, storage.GetTrafficStatisticsSummary().ConnectionCount);
+        Assert.Empty(storage.GetRuleHitCounts());
+        fault.CommandText = "DROP TRIGGER RejectTraffic;";
+        fault.ExecuteNonQuery();
+        storage.AppendTrafficSnapshot(sample);
+        storage.AppendTrafficSnapshot(sample);
+        Assert.Equal(100, storage.GetTrafficStatisticsSummary().TotalUploadBytes);
+        Assert.Equal(200, storage.GetTrafficStatisticsSummary().TotalDownloadBytes);
+        Assert.Equal(1, storage.GetRuleHitCounts()[row.RawRuleDisplay]);
+    }
+
+    [Fact]
+    public async Task TrafficSnapshot_NewCoreAndResetCountersHaveIndependentBaselines()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "profile-a");
+        Guid nextEpoch = Guid.NewGuid();
+        storage.AppendTrafficSnapshot(new(Guid.NewGuid(), 100, 200, []));
+        storage.AppendTrafficSnapshot(new(nextEpoch, 400, 800, []));
+        storage.AppendTrafficSnapshot(new(nextEpoch, 10, 20, []));
+        Assert.Equal(510, storage.GetTrafficStatisticsSummary().TotalUploadBytes);
+        Assert.Equal(1020, storage.GetTrafficStatisticsSummary().TotalDownloadBytes);
+    }
+
+    [Fact]
+    public async Task TrafficSnapshot_ClearHistoryDoesNotBringOldTrafficBackOnNextSample()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "profile-a");
+        Guid epoch = Guid.NewGuid();
+        ActiveConnection row = TrafficConnection(100, 200);
+        storage.AppendTrafficSnapshot(new(epoch, 100, 200, [row]));
+        storage.ClearAll();
+        storage.AppendTrafficSnapshot(new(epoch, 100, 200, [row]));
+        Assert.Equal(0, storage.GetTrafficStatisticsSummary().TotalDownloadBytes);
+        Assert.Equal(0, storage.GetTrafficStatisticsSummary().ConnectionCount);
+        Assert.Empty(storage.GetRuleHitCounts());
+
+        storage.AppendTrafficSnapshot(new(epoch, 140, 260,
+            [row with { UploadBytes = 140, DownloadBytes = 260 }]));
+        Assert.Equal(40, storage.GetTrafficStatisticsSummary().TotalUploadBytes);
+        Assert.Equal(60, storage.GetTrafficStatisticsSummary().TotalDownloadBytes);
+    }
+
+    [Fact]
+    public async Task TrafficSnapshot_ConcurrentDuplicateReadersCommitOnlyOnce()
+    {
+        using TempDatabase database = new();
+        await using LogStorageService storage = new(database.Path, () => "profile-a");
+        MihomoTrafficSnapshot snapshot = new(Guid.NewGuid(), 50, 100, []);
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(() => storage.AppendTrafficSnapshot(snapshot))));
+        Assert.Equal(100, storage.GetTrafficStatisticsSummary().TotalDownloadBytes);
+        Assert.Equal(1, storage.GetTrafficStatisticsSummary().SnapshotCount);
+    }
+
+    private static ActiveConnection TrafficConnection(long upload, long download) =>
+        new("traffic-test-connection", "test", "example.invalid", "MATCH", string.Empty, "DIRECT", upload, download, DateTimeOffset.UnixEpoch);
+
+    [Fact]
     public async Task DisposeAsync_DrainsAcceptedSnapshotAndRejectsLateStorageWork()
     {
         using TempDatabase tempDatabase = new();

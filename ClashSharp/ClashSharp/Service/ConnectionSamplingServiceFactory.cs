@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Supervision;
@@ -38,17 +37,17 @@ internal sealed class ConnectionSamplingSettingsAdapter(AppSettingsService setti
 
 internal sealed class ConnectionSamplingSourceAdapter(MihomoConnectionService connections) : IConnectionSamplingSource
 {
-    public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+    public Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
     {
-        return connections.GetActiveConnectionsAsync(cancellationToken);
+        return connections.GetTrafficSnapshotAsync(cancellationToken);
     }
 }
 
 internal sealed class ConnectionSamplingStorageAdapter(LogStorageService logStorage) : IConnectionSamplingStorage
 {
-    public int AppendConnectionSnapshot(IReadOnlyList<ActiveConnection> connections)
+    public int AppendTrafficSnapshot(MihomoTrafficSnapshot snapshot)
     {
-        return logStorage.AppendConnectionSnapshot(connections);
+        return logStorage.AppendTrafficSnapshot(snapshot);
     }
 
     public void AppendLog(string level, string category, string message, string? detail)

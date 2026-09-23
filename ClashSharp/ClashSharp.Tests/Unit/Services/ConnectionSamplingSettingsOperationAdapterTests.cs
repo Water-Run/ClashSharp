@@ -157,17 +157,17 @@ public sealed class ConnectionSamplingSettingsOperationAdapterTests
         public bool Block { get; init; }
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+        public async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
         {
             Entered.TrySetResult();
             if (Block) { await Release.Task; }
-            return [];
+            return new MihomoTrafficSnapshot(Guid.NewGuid(), 0, 0, []);
         }
     }
 
     private sealed class Storage : IConnectionSamplingStorage
     {
-        public int AppendConnectionSnapshot(IReadOnlyList<ActiveConnection> connections) => 0;
+        public int AppendTrafficSnapshot(MihomoTrafficSnapshot snapshot) => 0;
         public void AppendLog(string level, string category, string message, string? detail) { }
     }
 

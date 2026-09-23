@@ -104,8 +104,8 @@ public sealed partial class LogStorageService : IAsyncDisposable
             EnsureInitialized();
 
             using SqliteConnection connection = OpenConnection();
-            long totalUploadBytes = ExecuteScalarLong(connection, "SELECT COALESCE(SUM(UploadBytes), 0) FROM Connections;");
-            long totalDownloadBytes = ExecuteScalarLong(connection, "SELECT COALESCE(SUM(DownloadBytes), 0) FROM Connections;");
+            long totalUploadBytes = ExecuteScalarLong(connection, "SELECT COALESCE(SUM(UploadBytes), 0) FROM TrafficSnapshots;");
+            long totalDownloadBytes = ExecuteScalarLong(connection, "SELECT COALESCE(SUM(DownloadBytes), 0) FROM TrafficSnapshots;");
             long connectionCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM Connections;");
             long snapshotCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM TrafficSnapshots;");
             long profileCount = ExecuteScalarLong(connection, "SELECT COUNT(*) FROM ProfileTrafficStats;");
@@ -908,6 +908,7 @@ public sealed partial class LogStorageService : IAsyncDisposable
     }
 
     /// <summary>Deletes all persistent log, connection, traffic, and rule-hit records and compacts the database.</summary>
+    /// <remarks>Retains only live counter baselines so the next sample cannot restore already cleared history.</remarks>
     public void ClearAll()
     {
         using IDisposable operation = _operations.Enter();

@@ -37,7 +37,30 @@ internal static class NetworkTakeoverServiceFactory
             new NetworkTakeoverProxyRecoveryAdapter(ProxyRecoveryService.Instance),
             new NetworkTakeoverReadinessAdapter(MihomoControllerClient.Instance),
             LocalizationService.Instance.GetString,
-            ProxySelectionService.Instance);
+            ProxySelectionService.Instance,
+            FlushTrafficBeforeTransitionAsync);
+    }
+
+    /// <summary>Best-effort final accounting is bounded and cannot prevent network ownership release.</summary>
+    private static async Task FlushTrafficBeforeTransitionAsync(CancellationToken cancellationToken)
+    {
+        if (!MihomoCoreService.Instance.IsRunning && !MihomoServiceManager.Instance.GetLatestStatus().HasRunningChild)
+        {
+            return;
+        }
+
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(2));
+        try
+        {
+            await RuntimeTrafficRateService.Instance.RefreshAsync(deadline.Token).ConfigureAwait(false);
+            await ConnectionSamplingService.Instance.FlushAsync(deadline.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+        {
+            AppendCrashLogSafe("Warning", "Final traffic sample was unavailable before a core transition.", "traffic.final_sample_unavailable");
+        }
     }
 
     /// <summary>Immediately releases owned WinINet state if the App listener disappears.</summary>

@@ -43,7 +43,14 @@ internal sealed class RuntimeTrafficRateService
         }
     }
 
-    public async Task<RuntimeTrafficRateSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
+    public Task<RuntimeTrafficRateSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) =>
+        GetSnapshotCoreAsync(force: false, cancellationToken);
+
+    /// <summary>Reads even a recently sampled controller before a planned core transition.</summary>
+    internal Task<RuntimeTrafficRateSnapshot> RefreshAsync(CancellationToken cancellationToken) =>
+        GetSnapshotCoreAsync(force: true, cancellationToken);
+
+    private async Task<RuntimeTrafficRateSnapshot> GetSnapshotCoreAsync(bool force, CancellationToken cancellationToken)
     {
         // Dashboard and trigger reads share one app-session counter history. Coalesce overlapping
         // reads so a second consumer cannot turn the same sample into a spurious zero-rate sample.
@@ -55,7 +62,7 @@ internal sealed class RuntimeTrafficRateService
                 TimeSpan age = _lastSampledAt is DateTimeOffset sampledAt
                     ? _getNow() - sampledAt
                     : TimeSpan.MaxValue;
-                if (age >= TimeSpan.Zero && age < TimeSpan.FromSeconds(1))
+                if (!force && age >= TimeSpan.Zero && age < TimeSpan.FromSeconds(1))
                 {
                     return _latestSnapshot;
                 }
@@ -81,7 +88,9 @@ internal sealed class RuntimeTrafficRateService
             {
                 _lastSampledAt = sampledAt;
                 _lastCounters = counters;
-                _latestSnapshot = new RuntimeTrafficRateSnapshot(0, 0, counters.Connections.Count, 0, 0);
+                // The core may have handled short requests before any page requested its first sample.
+                _latestSnapshot = new RuntimeTrafficRateSnapshot(0, 0, counters.Connections.Count,
+                    counters.UploadTotalBytes, counters.DownloadTotalBytes);
                 return _latestSnapshot;
             }
 
