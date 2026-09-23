@@ -58,21 +58,19 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                            <TextBlock Text="Clash#" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="Clash#" TextWrapping="NoWrap" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <HyperlinkButton
+                                x:Name="SetHeroStatusDisplayButton"
+                                Content="{Binding SetHeroStatusDisplayText}"
+                                Padding="0"
+                                HorizontalAlignment="Left"
+                                Click="SetHeroStatusDisplayButton_Click" />
                         </StackPanel>
-                        <HyperlinkButton
-                            x:Name="SetHeroStatusDisplayButton"
-                            Grid.Column="2"
-                            Content="{Binding SetHeroStatusDisplayText}"
-                            Padding="0"
-                            VerticalAlignment="Top"
-                            Click="SetHeroStatusDisplayButton_Click" />
                     </Grid>
 
                     <GridView
