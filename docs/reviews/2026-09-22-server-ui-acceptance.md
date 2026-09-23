@@ -480,3 +480,5 @@ fb43a6d 从托盘安全退出后，30 个文件、403,404 字节完成闭合散�
 59f193d 正常退出后闭合备份 30 个文件、489,422 字节；正常卸载核实包、服务与六处自有目录均为零。f584687 于 19:58:24 UTC 正常安装，安装 DLL SHA-256 `493FFD2D6063AD6454FD446FF8DB8B3FDD0C0BE20A24D1914D60ECF3A8981303` 与候选载荷一致，仅验收 SID 注册。安装器 SHA-256 `6E0376F19461A75EDC80B69E557090DE97D5B4B21D98297B0C6EEFFA2BB7ADBD`，MSIX `55298808E9273040B918299ED3F4529B352B631CDCD6D6713B7FE8F5A52F39DB`，签名均为 Valid。[CI](https://github.com/Water-Run/ClashSharp/actions/runs/35911533087) 通过。手动恢复闭合验收夹具，不计自动升级迁移。
 
 恢复任务注册、检测、移除与 Windows 原生状态一致，主程序自启保持关闭；首页磁贴及详情同步。发现设置页异步操作导致键盘焦点丢失，源码已修复，292 项相关回归通过；原生焦点复验、真实登录触发及剩余功能仍待完成。
+
+20:14–20:18 UTC 实测发现恢复入口的第二个缺陷：直接以 --restore-proxy-on-startup 启动仍打开正常主窗口，45 秒后未退出，176 次采样有窗口、内核为零（201402Z-444935638、headless-fallback.json）。WinUI 桌面 LaunchActivatedEventArgs.Arguments 恒为空，现改读取 Environment.GetCommandLineArgs 并排除可执行文件项；3180 项主程序回归通过、无跳过，构建零警告零错误（31.20 秒），格式诊断重跑通过且无工作区警告。依据 [微软 API 说明](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.launchactivatedeventargs.arguments)。此修复和设置焦点修复均待下一候选原生复验，注册成功不代表恢复功能已通过。

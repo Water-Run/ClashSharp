@@ -14,6 +14,8 @@
 
 9 月 23 日 20:07 UTC：`f584687` 已在服务器正常安装，安装 DLL 与候选载荷散列一致，[CI 35911533087](https://github.com/Water-Run/ClashSharp/actions/runs/35911533087) 通过。恢复任务注册/检测/移除与 Windows 实际 StartupTask 状态同步，主程序自启保持关闭；首页磁贴和详情正确显示已注册。完整登录启动路径仍待验证。新增发现设置页异步操作禁用页面后丢失键盘焦点，已补上仅恢复当前页面原控件的逻辑；18 项目构建零警告零错误、292 项相关回归和格式检查通过，待新候选实机复验。测速三个 URL 的逐项空值、无效协议、还原/取消/保存、真实 HTTP 与超时、重启持久化均已验证。
 
+20:14–20:18 UTC 实测发现恢复入口的第二个缺陷：直接以 --restore-proxy-on-startup 启动仍打开正常主窗口，45 秒后未退出，176 次采样有窗口、内核为零（201402Z-444935638、headless-fallback.json）。WinUI 桌面 LaunchActivatedEventArgs.Arguments 恒为空，现改读取 Environment.GetCommandLineArgs 并排除可执行文件项；3180 项主程序回归通过、无跳过，构建零警告零错误（31.20 秒），格式诊断重跑通过且无工作区警告。依据 [微软 API 说明](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.launchactivatedeventargs.arguments)。此修复和设置焦点修复均待下一候选原生复验，注册成功不代表恢复功能已通过。
+
 当前矩阵 **70 项通过、35 项部分完成、36 项待测**；完整多语言与 RTL、小窗口/键盘/托盘、采样统计与清理、安装器剩余故障场景和临时资源回收尚未完成，不能作为完整发布验收。19:03 UTC 再核对本地与远端仅有 `main`，开放 PR 为零。生产设置权威切换仍是独立未完成事项。
 > 本文保留归并提交 `68f450a` 的历史状态和验证数字。后续普通卸载的自动空目录清理已接通，见[清理接入记录](2026-09-22-installer-cleanup-integration.md)；设置页普通偏好与分组重置已接入可等待的生产入口，见[异步偏好接入记录](2026-09-22-settings-preference-commands.md)。完整设置权威切换和发布验收继续推进。
 

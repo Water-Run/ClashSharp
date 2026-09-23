@@ -132,3 +132,5 @@ IP 查询使用 [ipwho.is 官方接口](https://ipwhois.io/documentation)，请�
 19:47–20:07 UTC：测速 URL2、URL3 逐项清空均阻止保存并聚焦对应字段；自定义 URL2 保存后重启仍保留。最小窗口真实测速结果为 Google 超时、隔离 HTTP 夹具 200、Baidu 200，错误与成功均完整显示，Esc 正常退出（194818Z-676985680、194918Z-878187160、195104Z-960102055、195500Z-776668866）。原功能矩阵为 70 通过、35 部分完成、36 待测。
 
 新候选 f584687 注册恢复任务后原生状态由 0 变为 2、移除后回到 0，主程序自启始终为 0（fallback-before-register-1959、fallback-after-register-2000、fallback-after-remove-2001）；界面检测和磁贴详情一致（200003Z-563377752、200047Z-874639769、200108Z-643873886、200712Z-215201430）。完整登录触发与卸载清理仍单列待测。新发现设置页操作结束丢失键盘焦点（200025Z-821083961）；修复恢复操作前页面内控件与原 FocusState，并检查页面生命周期，292 项相关回归、构建及格式检查通过，待候选复验。
+
+20:14–20:18 UTC 实测发现恢复入口的第二个缺陷：直接以 --restore-proxy-on-startup 启动仍打开正常主窗口，45 秒后未退出，176 次采样有窗口、内核为零（201402Z-444935638、headless-fallback.json）。WinUI 桌面 LaunchActivatedEventArgs.Arguments 恒为空，现改读取 Environment.GetCommandLineArgs 并排除可执行文件项；3180 项主程序回归通过、无跳过，构建零警告零错误（31.20 秒），格式诊断重跑通过且无工作区警告。依据 [微软 API 说明](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.launchactivatedeventargs.arguments)。此修复和设置焦点修复均待下一候选原生复验，注册成功不代表恢复功能已通过。

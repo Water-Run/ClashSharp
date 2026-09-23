@@ -77,7 +77,8 @@ public partial class App : Microsoft.UI.Xaml.Application
             DispatcherQueue dispatcherQueue = DispatcherQueue.GetForCurrentThread()
                 ?? throw new InvalidOperationException("The WinUI dispatcher is unavailable during launch.");
             _primaryInstanceBootstrap = new WindowsPrimaryInstanceBootstrap(dispatcherQueue, BringPrimaryWindowToFront);
-            AppLaunchRequest launchRequest = new(args.Arguments);
+            // WinUI desktop launch-event Arguments is always empty, including startup tasks.
+            AppLaunchRequest launchRequest = new(string.Join(" ", Environment.GetCommandLineArgs()[1..]));
             ApplicationBootstrapper bootstrapper = new(
                 _primaryInstanceBootstrap,
                 () => ClashSharpAppHostFactory.Build(launchRequest,
