@@ -901,7 +901,12 @@ public sealed class MihomoControllerClient
 
         bool appOwnedBeforeObservation = _isAppCoreRunning();
         MihomoServiceStatus serviceStatus = _serviceBroker.GetLatestStatus();
-        if (!serviceStatus.IsKnown)
+        // SCM queries publish the host state before the authenticated IPC observation completes.
+        // A running host alone cannot establish either controller ownership or confirmed idleness.
+        if (!serviceStatus.IsKnown
+            || (serviceStatus.IsScmRunning
+                && serviceStatus.ProtocolVersion is null
+                && serviceStatus.IpcFailureCode is null))
         {
             serviceStatus = await _serviceBroker
                 .GetStatusAsync(cancellationToken)

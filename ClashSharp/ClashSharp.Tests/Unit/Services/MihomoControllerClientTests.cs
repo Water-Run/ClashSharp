@@ -17,6 +17,77 @@ public sealed class MihomoControllerClientTests
     private const string ControllerSecret = "controller-test-secret";
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task ScmOnlyCacheIsRefreshedBeforeResolvingControllerOwnership(bool appOwned, bool serviceOwned)
+    {
+        RecordingHttpHandler handler = new("""{"connections":[],"uploadTotal":300,"downloadTotal":500}""");
+        using HttpClient http = new(handler);
+        FakeControllerServiceBroker broker = serviceOwned ? FakeControllerServiceBroker.Running()
+            : new(new MihomoServiceStatus(true, false, "idle")
+            {
+                IsScmRunning = true,
+                ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
+                ServiceSessionId = Guid.NewGuid(),
+                ChildState = MihomoServiceChildState.Stopped,
+            });
+        broker.CachedStatus = new MihomoServiceStatus(true, false, "SCM running") { IsScmRunning = true };
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"),
+            () => ControllerSecret, () => appOwned, broker);
+
+        if (appOwned && serviceOwned)
+        {
+            InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => client.TryGetTrafficSnapshotAsync(CancellationToken.None));
+            Assert.Equal("controller.owner_ambiguous", error.Message);
+            Assert.Empty(handler.Requests);
+            Assert.Empty(broker.Commands);
+        }
+        else
+        {
+            MihomoTrafficSnapshot? result = await client.TryGetTrafficSnapshotAsync(CancellationToken.None);
+            if (!appOwned && !serviceOwned)
+            {
+                Assert.Null(result);
+            }
+            else
+            {
+                Assert.Equal(serviceOwned ? 800 : 500, Assert.IsType<MihomoTrafficSnapshot>(result).DownloadTotalBytes);
+            }
+            Assert.Equal(appOwned ? 1 : 0, handler.Requests.Count);
+            Assert.Equal(serviceOwned ? 1 : 0, broker.Commands.Count);
+        }
+        Assert.Equal(1, broker.StatusQueryCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ScmOnlyCacheRefreshMustStillConfirmChildOwnership(bool ipcFailed)
+    {
+        RecordingHttpHandler handler = new("{}");
+        using HttpClient http = new(handler);
+        MihomoServiceStatus partial = new(true, false, "SCM running") { IsScmRunning = true };
+        FakeControllerServiceBroker broker = new(partial with
+        {
+            IpcFailureCode = ipcFailed ? "service.ipc.timeout" : null,
+        })
+        { CachedStatus = partial };
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"),
+            () => ControllerSecret, () => false, broker);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.TryGetTrafficSnapshotAsync(CancellationToken.None));
+
+        Assert.Equal("controller.owner_unavailable", error.Message);
+        Assert.Equal(1, broker.StatusQueryCount);
+        Assert.Empty(handler.Requests);
+        Assert.Empty(broker.Commands);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task TryGetTrafficSnapshotConfirmedIdleDoesNotContactAController(bool keepHostRunning)
@@ -723,6 +794,10 @@ public sealed class MihomoControllerClientTests
 
         public MihomoServiceStatus Status { get; } = status;
 
+        public MihomoServiceStatus? CachedStatus { get; set; }
+
+        public int StatusQueryCount { get; private set; }
+
         public List<MihomoServiceIpcCommand> Commands { get; } = [];
 
         public List<MihomoServiceIpcControllerBinding> Bindings { get; } = [];
@@ -749,12 +824,13 @@ public sealed class MihomoControllerClientTests
 
         public MihomoServiceStatus GetLatestStatus()
         {
-            return Status;
+            return CachedStatus ?? Status;
         }
 
         public Task<MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            StatusQueryCount++;
             return Task.FromResult(Status);
         }
 
