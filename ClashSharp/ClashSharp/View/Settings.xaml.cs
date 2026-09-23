@@ -379,16 +379,16 @@ public sealed partial class Settings : Page
     {
         int rowIndex = table.RowDefinitions.Count;
         table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        AddConnectionTestText(table, rowIndex, 0, "URL", "CaptionTextBlockStyle", "TextFillColorSecondaryBrush");
-        AddConnectionTestText(table, rowIndex, 1, _viewModel.ConnectionTestStatusColumnText, "CaptionTextBlockStyle", "TextFillColorSecondaryBrush");
-        AddConnectionTestText(table, rowIndex, 2, _viewModel.ConnectionTestLatencyColumnText, "CaptionTextBlockStyle", "TextFillColorSecondaryBrush");
+        AddConnectionTestText(table, rowIndex, 0, "URL", "ClashSecondaryCaptionTextBlockStyle");
+        AddConnectionTestText(table, rowIndex, 1, _viewModel.ConnectionTestStatusColumnText, "ClashSecondaryCaptionTextBlockStyle");
+        AddConnectionTestText(table, rowIndex, 2, _viewModel.ConnectionTestLatencyColumnText, "ClashSecondaryCaptionTextBlockStyle");
     }
 
     private static void AddConnectionTestResultRow(Grid table, ConnectionTestTargetResult result)
     {
         int rowIndex = table.RowDefinitions.Count;
         table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        AddConnectionTestText(table, rowIndex, 0, result.Url, "BodyTextBlockStyle", "TextFillColorPrimaryBrush");
+        AddConnectionTestText(table, rowIndex, 0, result.Url, "BodyTextBlockStyle");
 
         StackPanel statusPanel = new()
         {
@@ -412,7 +412,7 @@ public sealed partial class Settings : Page
         Grid.SetColumn(statusPanel, 1);
         table.Children.Add(statusPanel);
 
-        AddConnectionTestText(table, rowIndex, 2, result.LatencyText, "BodyTextBlockStyle", "TextFillColorPrimaryBrush");
+        AddConnectionTestText(table, rowIndex, 2, result.LatencyText, "BodyTextBlockStyle");
     }
 
     private static Brush GetConnectionTestSummaryBrush(ConnectionTestSummaryState summaryState)
@@ -432,13 +432,12 @@ public sealed partial class Settings : Page
         };
     }
 
-    private static void AddConnectionTestText(Grid table, int rowIndex, int columnIndex, string text, string styleKey, string brushKey)
+    private static void AddConnectionTestText(Grid table, int rowIndex, int columnIndex, string text, string styleKey)
     {
         TextBlock textBlock = new()
         {
             Text = text,
             Style = (Style)Application.Current.Resources[styleKey],
-            Foreground = (Brush)Application.Current.Resources[brushKey],
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
             VerticalAlignment = VerticalAlignment.Center,

@@ -30,7 +30,7 @@ public sealed class DialogPresentationArchitectureTests
         Assert.Empty(bypasses);
     }
 
-    /// <summary>Verifies custom centered overlays share the same per-window admission gate.</summary>
+    /// <summary>Verifies diagnostic dialogs use native modal presentation through the shared gate.</summary>
     [Fact]
     public void CenteredOverlay_UsesWindowDialogCoordinator()
     {
@@ -41,13 +41,13 @@ public sealed class DialogPresentationArchitectureTests
             "CenteredDialogOverlay.cs");
         string source = File.ReadAllText(overlayPath);
 
-        Assert.Contains("WindowDialogCoordinator.TryShowOverlayAsync(", source, StringComparison.Ordinal);
-        Assert.Contains("rootPanel.Unloaded += CompleteForVisualTreeTeardown", source, StringComparison.Ordinal);
-        Assert.Contains("window.Closed += CompleteForWindowClose", source, StringComparison.Ordinal);
+        Assert.Contains("ThemedContentDialog dialog = new()", source, StringComparison.Ordinal);
+        Assert.Contains("await dialog.ShowManagedAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("xamlRoot.Changed += UpdateBounds", source, StringComparison.Ordinal);
         Assert.Contains("finally", source, StringComparison.Ordinal);
-        Assert.Contains("rootPanel.Unloaded -= CompleteForVisualTreeTeardown", source, StringComparison.Ordinal);
-        Assert.Contains("window.Closed -= CompleteForWindowClose", source, StringComparison.Ordinal);
-        Assert.Contains("rootPanel.Children.Remove(overlay)", source, StringComparison.Ordinal);
+        Assert.Contains("xamlRoot.Changed -= UpdateBounds", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("rootPanel.Children", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Application.Current.Resources", source, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies conflict detection, presentation, and repair share the owning visual lifetime.</summary>
@@ -86,9 +86,9 @@ public sealed class DialogPresentationArchitectureTests
         Assert.DoesNotContain("CancellationToken.None", presenter, StringComparison.Ordinal);
 
         Assert.Contains("CancellationToken cancellationToken", overlay, StringComparison.Ordinal);
-        Assert.Contains("closed.TrySetCanceled(cancellationToken)", overlay, StringComparison.Ordinal);
-        Assert.Contains("Func<CancellationToken, Task> showAsync", coordinator, StringComparison.Ordinal);
-        Assert.Contains("await showAsync(cancellationToken)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("await dialog.ShowManagedAsync(cancellationToken)", overlay, StringComparison.Ordinal);
+        Assert.Contains("ShowWithCancellationAsync(dialog, cancellationToken)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("dialog.Hide()", coordinator, StringComparison.Ordinal);
 
         Assert.Contains(
             "Func<Microsoft.UI.Xaml.XamlRoot, CancellationToken, Task> ShowStartupConflicts",

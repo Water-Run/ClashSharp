@@ -7,7 +7,6 @@ using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace ClashSharp.Presentation.Dialogs;
 
@@ -150,8 +149,7 @@ internal static class StartupConflictDialogPresenter
         textPanel.Children.Add(new TextBlock
         {
             Text = issue.Description,
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Style = (Style)Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
             TextWrapping = TextWrapping.Wrap,
         });
         string initialStatus = getString(issue.HasRepairAction
@@ -165,8 +163,7 @@ internal static class StartupConflictDialogPresenter
         TextBlock statusText = new()
         {
             Text = initialStatus,
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Style = (Style)Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
             TextWrapping = TextWrapping.Wrap,
         };
         textPanel.Children.Add(statusText);

@@ -2966,19 +2966,11 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("CenteredDialogOverlay.ShowAsync", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialog dialog = new()", presenterCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Popup", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("App.MainWindow?.Content is FrameworkElement root", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("root.ActualWidth", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("MinWidth = overlaySize.Width", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("HorizontalAlignment = HorizontalAlignment.Stretch", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("App.MainWindow?.Content is not Panel rootPanel", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("Canvas.SetZIndex(overlay", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("rootPanel.Children.Add(overlay)", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("rootPanel.Children.Remove(overlay)", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("HorizontalAlignment = HorizontalAlignment.Center", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("VerticalAlignment = VerticalAlignment.Center", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("SolidBackgroundFillColorBaseBrush", overlayCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("Background = ResourceBrush(\"CardBackgroundFillColorDefaultBrush\"", overlayCode, StringComparison.Ordinal);
-        Assert.Contains("TextWrapping = TextWrapping.Wrap", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("ThemedContentDialog dialog = new()", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("XamlRoot = xamlRoot", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("ContentDialogMaxWidth", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("body.MaxHeight = Math.Max(120, xamlRoot.Size.Height - 240)", overlayCode, StringComparison.Ordinal);
+        Assert.Contains("await dialog.ShowManagedAsync(cancellationToken)", overlayCode, StringComparison.Ordinal);
         Assert.Contains("MaxHeight = Math.Min(420", presenterCode, StringComparison.Ordinal);
     }
 
