@@ -171,6 +171,7 @@
     <Compile Include="..\ClashSharp\Service\TrayCommandService.cs" Link="Service\TrayCommandService.cs" />
     <Compile Include="..\ClashSharp\Service\TrayMenuStateBuilder.cs" Link="Service\TrayMenuStateBuilder.cs" />
     <Compile Include="..\ClashSharp\Service\TrayStatusService.cs" Link="Service\TrayStatusService.cs" />
+    <Compile Include="..\ClashSharp\Service\TrayStatusRuntimeAdapter.cs" Link="Service\TrayStatusRuntimeAdapter.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsNetworkDiagnosticService.cs" Link="Service\WindowsNetworkDiagnosticService.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsDiagnosticMutationJournal.cs" Link="Service\WindowsDiagnosticMutationJournal.cs" />
     <Compile Include="..\ClashSharp\Service\WindowsProxyMutationJournal.cs" Link="Service\WindowsProxyMutationJournal.cs" />

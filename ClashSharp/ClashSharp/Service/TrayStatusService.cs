@@ -9,9 +9,14 @@ namespace ClashSharp.Service;
 /// <summary>Runtime proxy group contract required by <see cref="TrayStatusService"/>.</summary>
 internal interface ITrayStatusRuntime
 {
-    /// <summary>Gets current runtime proxy groups.</summary>
-    Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken);
+    /// <summary>Gets routing mode and groups belonging to one verified runtime generation.</summary>
+    Task<TrayStatusRuntimeSnapshot> GetSnapshotAsync(CancellationToken cancellationToken);
 }
+
+/// <summary>Proxy selections observed without a concurrent runtime configuration transition.</summary>
+internal readonly record struct TrayStatusRuntimeSnapshot(
+    ClashSharpMode Mode,
+    IReadOnlyList<MihomoProxyGroup> Groups);
 
 /// <summary>Node health contract required by <see cref="TrayStatusService"/>.</summary>
 internal interface ITrayStatusHealthStorage
@@ -56,20 +61,22 @@ public sealed partial class TrayStatusService
         TrayStatusSnapshot snapshot;
         try
         {
-            IReadOnlyList<MihomoProxyGroup> groups = await _runtime
-                .GetProxyGroupsAsync(cancellationToken)
+            TrayStatusRuntimeSnapshot runtime = await _runtime
+                .GetSnapshotAsync(cancellationToken)
                 .ConfigureAwait(false);
-            MihomoProxyGroup? primaryGroup = SelectPrimaryGroup(groups);
-            if (primaryGroup is not MihomoProxyGroup group || string.IsNullOrWhiteSpace(group.CurrentSelection))
+            cancellationToken.ThrowIfCancellationRequested();
+            string? nodeName = ResolveCurrentNode(runtime);
+            if (string.IsNullOrWhiteSpace(nodeName))
             {
                 snapshot = TrayStatusSnapshot.Unavailable;
             }
             else
             {
-                string nodeName = group.CurrentSelection.Trim();
                 snapshot = new TrayStatusSnapshot(
                     _filterText(nodeName),
-                    _healthStorage.GetNodeLatencyMilliseconds(nodeName));
+                    nodeName is "DIRECT" or "REJECT" or "REJECT-DROP"
+                        ? null
+                        : _healthStorage.GetNodeLatencyMilliseconds(nodeName));
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -97,11 +104,63 @@ public sealed partial class TrayStatusService
         }
     }
 
-    private static MihomoProxyGroup? SelectPrimaryGroup(IReadOnlyList<MihomoProxyGroup> groups)
+    private static string? ResolveCurrentNode(TrayStatusRuntimeSnapshot runtime)
+    {
+        if (runtime.Mode == ClashSharpMode.Standby)
+        {
+            return "DIRECT";
+        }
+
+        if (runtime.Mode is not (ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover))
+        {
+            return null;
+        }
+
+        MihomoProxyGroup? selected = SelectPrimaryGroup(runtime.Groups, runtime.Mode);
+        HashSet<string> visited = new(StringComparer.Ordinal);
+        while (selected is MihomoProxyGroup group)
+        {
+            if (!visited.Add(group.Name) || string.IsNullOrWhiteSpace(group.CurrentSelection))
+            {
+                return null;
+            }
+
+            string selection = group.CurrentSelection;
+            selected = null;
+            foreach (MihomoProxyGroup candidate in runtime.Groups)
+            {
+                if (StringComparer.Ordinal.Equals(candidate.Name, selection))
+                {
+                    selected = candidate;
+                    break;
+                }
+            }
+
+            if (selected is null)
+            {
+                return selection;
+            }
+        }
+
+        return null;
+    }
+
+    private static MihomoProxyGroup? SelectPrimaryGroup(
+        IReadOnlyList<MihomoProxyGroup> groups,
+        ClashSharpMode mode)
     {
         MihomoProxyGroup? firstSelectableGroup = null;
         foreach (MihomoProxyGroup group in groups)
         {
+            bool isGlobal = StringComparer.Ordinal.Equals(group.Name, "GLOBAL");
+            if (mode == ClashSharpMode.FullTakeover)
+            {
+                if (isGlobal) { return group; }
+                continue;
+            }
+
+            // GLOBAL is inactive in rule mode and must not become a fallback status source.
+            if (isGlobal) { continue; }
             if (string.IsNullOrWhiteSpace(group.CurrentSelection))
             {
                 continue;
