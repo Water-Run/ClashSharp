@@ -32,6 +32,8 @@ internal sealed class TriggerEditorViewModel : ObservableObject
     private TriggerConditionEditorViewModel? _selectedCondition;
     private TriggerActionEditorViewModel? _selectedAction;
     private string? _errorCode;
+    private string? _errorMessageOverride;
+    private object? _errorSource;
     private bool _isStale;
     private int _busy;
 
@@ -233,6 +235,13 @@ internal sealed class TriggerEditorViewModel : ObservableObject
 
     private void SelectedCondition_PropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(TriggerConditionEditorViewModel.ErrorCode)
+            && ReferenceEquals(sender, _errorSource)
+            && SelectedCondition?.HasError == false)
+        {
+            ClearError();
+        }
+
         if (args.PropertyName is nameof(TriggerConditionEditorViewModel.TrafficScope)
             or nameof(TriggerConditionEditorViewModel.RateDirection)
             or nameof(TriggerConditionEditorViewModel.NotificationLevel))
@@ -250,6 +259,13 @@ internal sealed class TriggerEditorViewModel : ObservableObject
 
     private void SelectedAction_PropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(TriggerActionEditorViewModel.ErrorCode)
+            && ReferenceEquals(sender, _errorSource)
+            && SelectedAction?.HasError == false)
+        {
+            ClearError();
+        }
+
         if (args.PropertyName == nameof(TriggerActionEditorViewModel.ProxyMode))
         {
             OnPropertyChanged(nameof(SelectedProxyModeOption));
@@ -291,7 +307,9 @@ internal sealed class TriggerEditorViewModel : ObservableObject
         }
     }
 
-    public string? ErrorMessage => ErrorCode is null ? null : _getString(MapErrorResource(ErrorCode));
+    public string? ErrorMessage => ErrorCode is null
+        ? null
+        : _errorMessageOverride ?? _getString(MapErrorResource(ErrorCode));
 
     public bool HasError => ErrorCode is not null;
 
@@ -433,7 +451,10 @@ internal sealed class TriggerEditorViewModel : ObservableObject
             if (!conditionEditor.TryBuild(out TriggerCondition? condition) || condition is null)
             {
                 SelectedCondition = conditionEditor;
-                SetError(conditionEditor.ErrorCode ?? "trigger.condition.parameters.mismatch");
+                SetError(
+                    conditionEditor.ErrorCode ?? "trigger.condition.parameters.mismatch",
+                    conditionEditor.ErrorMessage,
+                    conditionEditor);
                 return false;
             }
 
@@ -446,7 +467,10 @@ internal sealed class TriggerEditorViewModel : ObservableObject
             if (!actionEditor.TryBuild(out TriggerAction? action) || action is null)
             {
                 SelectedAction = actionEditor;
-                SetError(actionEditor.ErrorCode ?? "trigger.action.parameters.mismatch");
+                SetError(
+                    actionEditor.ErrorCode ?? "trigger.action.parameters.mismatch",
+                    actionEditor.ErrorMessage,
+                    actionEditor);
                 return false;
             }
 
@@ -665,13 +689,18 @@ internal sealed class TriggerEditorViewModel : ObservableObject
 
     private void ClearError()
     {
+        _errorMessageOverride = null;
+        _errorSource = null;
         ErrorCode = null;
     }
 
-    private void SetError(string errorCode)
+    private void SetError(string errorCode, string? errorMessage = null, object? errorSource = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
+        _errorMessageOverride = errorMessage;
+        _errorSource = errorSource;
         ErrorCode = errorCode;
+        OnPropertyChanged(nameof(ErrorMessage));
     }
 
     private async Task ReportUnexpectedAsync(string operationName, Exception exception)

@@ -278,6 +278,29 @@ public sealed class TriggerEditorViewModelTests
         Assert.False(editor.TryBuildDefinition(out _));
         Assert.Same(invalid, editor.SelectedCondition);
         Assert.Equal("Triggers.Validation.PositiveCount", invalid.ErrorMessage);
+        Assert.Equal(invalid.ErrorMessage, editor.ErrorMessage);
+
+        invalid.ThresholdText = "2";
+        Assert.False(editor.HasError);
+        Assert.Null(editor.ErrorMessage);
+    }
+
+    [Fact]
+    public void InvalidRuntime_SummaryRetainsFieldMeaningAcrossSelectionAndClearsWhenCorrected()
+    {
+        TriggerEditorViewModel editor = NewEditor();
+        TriggerConditionEditorViewModel runtime = editor.AddCondition(TriggerConditionTemplate.Runtime);
+        runtime.RuntimeSecondsText = "0";
+
+        Assert.False(editor.TryBuildDefinition(out _));
+        Assert.Equal("Triggers.Validation.PositiveRuntime", editor.ErrorMessage);
+        editor.SelectedCondition = editor.Conditions[0];
+        Assert.Equal("Triggers.Validation.PositiveRuntime", editor.ErrorMessage);
+        editor.SelectedCondition = runtime;
+        runtime.RuntimeSecondsText = "5.5";
+        Assert.False(editor.HasError);
+        Assert.Null(editor.ErrorMessage);
+        Assert.True(editor.TryBuildDefinition(out _));
     }
 
     [Fact]
@@ -293,6 +316,11 @@ public sealed class TriggerEditorViewModelTests
         Assert.False(editor.TryBuildDefinition(out _));
         Assert.Same(invalid, editor.SelectedAction);
         Assert.Equal("Triggers.Validation.NotificationMessageRequired", invalid.ErrorMessage);
+        Assert.Equal(invalid.ErrorMessage, editor.ErrorMessage);
+
+        invalid.NotificationMessage = "corrected";
+        Assert.False(editor.HasError);
+        Assert.Null(editor.ErrorMessage);
     }
 
     [Fact]
