@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Master.Tile.SystemLogRecords"] = "رکوردهای گزارش سیستم",
+            ["Master.Tile.Description.SystemLogRecords"] = "تعداد گزارش‌های سیستم نگهداری‌شده. اندازهٔ پایگاه داده شامل گزارش‌ها و رکوردهای اتصال است.",
+            ["Master.Tile.ConnectionRecords"] = "تاریخچهٔ اتصالات",
+            ["Master.Tile.Description.ConnectionRecords"] = "تعداد رکوردهای اتصال نگهداری‌شده، جدا از اتصالات فعال کنونی.",
+            ["Master.Tile.TrafficSnapshots"] = "نمونه‌های ترافیک",
+            ["Master.Tile.Description.TrafficSnapshots"] = "تعداد نمونه‌های ترافیک نگهداری‌شده برای آمار تاریخی.",
+            ["Master.Tile.NodeHealthRecords"] = "رکوردهای سلامت گره",
+            ["Master.Tile.Description.NodeHealthRecords"] = "تعداد بررسی‌های سلامت گره نگهداری‌شده. عدد دوم تعداد رکوردهای تجمیعی ترافیک گره‌هاست.",
+            ["Master.Tile.Detail.SharedLogDatabase.Format"] = "پایگاه دادهٔ مشترک گزارش‌ها: {0}",
+            ["Master.Tile.Detail.NodeTrafficRecords.Format"] = "رکوردهای ترافیک گره: {0}",
             ["Master.Ip.Details.Format"] = "IP: {0}\nمکان: {1}\nASN: {2}\nارائه‌دهنده: {3}\nسازمان: {4}\nمنطقهٔ زمانی: {5}\nزمان بررسی: {6}\nمنبع: ipwho.is",
             ["Master.Tile.Detail.TrafficTrend"] = "زنده · ۶۰ نمونهٔ اخیر",
             ["Master.Tile.CoreMemory"] = "حافظهٔ هسته",

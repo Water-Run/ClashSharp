@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Master.Tile.SystemLogRecords"] = "系統日誌記錄",
+            ["Master.Tile.Description.SystemLogRecords"] = "保留的系統日誌筆數。資料庫大小包含日誌和連線記錄。",
+            ["Master.Tile.ConnectionRecords"] = "歷史連線記錄",
+            ["Master.Tile.Description.ConnectionRecords"] = "保留的歷史連線筆數，與目前活動連線數量分別統計。",
+            ["Master.Tile.TrafficSnapshots"] = "流量取樣記錄",
+            ["Master.Tile.Description.TrafficSnapshots"] = "用於歷史統計的已保留流量取樣筆數。",
+            ["Master.Tile.NodeHealthRecords"] = "節點健康記錄",
+            ["Master.Tile.Description.NodeHealthRecords"] = "保留的節點健康檢查筆數；附加數量為節點流量彙總記錄。",
+            ["Master.Tile.Detail.SharedLogDatabase.Format"] = "共用日誌資料庫：{0}",
+            ["Master.Tile.Detail.NodeTrafficRecords.Format"] = "節點流量記錄：{0}",
             ["Master.Ip.Details.Format"] = "IP：{0}\n地區：{1}\nASN：{2}\n提供方：{3}\n組織：{4}\n時區：{5}\n檢測時間：{6}\n來源：ipwho.is",
             ["Master.Tile.Detail.TrafficTrend"] = "即時 · 最近 60 次取樣",
             ["Master.Tile.CoreMemory"] = "核心記憶體",

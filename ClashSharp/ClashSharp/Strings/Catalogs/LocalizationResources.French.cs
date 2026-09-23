@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Master.Tile.SystemLogRecords"] = "Journaux système",
+            ["Master.Tile.Description.SystemLogRecords"] = "Nombre d’entrées système conservées. La taille de la base inclut les journaux et les connexions.",
+            ["Master.Tile.ConnectionRecords"] = "Historique des connexions",
+            ["Master.Tile.Description.ConnectionRecords"] = "Nombre de connexions conservées, distinct des connexions actuellement actives.",
+            ["Master.Tile.TrafficSnapshots"] = "Échantillons de trafic",
+            ["Master.Tile.Description.TrafficSnapshots"] = "Nombre d’échantillons de trafic conservés pour les statistiques historiques.",
+            ["Master.Tile.NodeHealthRecords"] = "Contrôles des nœuds",
+            ["Master.Tile.Description.NodeHealthRecords"] = "Nombre de contrôles de santé conservés. Le second nombre indique les enregistrements de trafic des nœuds.",
+            ["Master.Tile.Detail.SharedLogDatabase.Format"] = "Base commune des journaux : {0}",
+            ["Master.Tile.Detail.NodeTrafficRecords.Format"] = "Enregistrements de trafic des nœuds : {0}",
             ["Master.Ip.Details.Format"] = "IP : {0}\nRégion : {1}\nASN : {2}\nFournisseur : {3}\nOrganisation : {4}\nFuseau horaire : {5}\nVérifié : {6}\nSource : ipwho.is",
             ["Master.Tile.Detail.TrafficTrend"] = "Temps réel · 60 mesures récentes",
             ["Master.Tile.CoreMemory"] = "Mémoire du noyau",

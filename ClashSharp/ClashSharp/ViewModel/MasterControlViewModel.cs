@@ -1067,8 +1067,11 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         SetTile("proxy-node-count", FormatNumber(_runtimeSnapshot.ProxyNodeCount), string.Empty);
         SetTile("rule-count", FormatNumber(_runtimeSnapshot.RuleCount), string.Empty);
         SetTile("trigger-count", FormatEnabledCount(_runtimeSnapshot.EnabledTriggerTaskCount, _runtimeSnapshot.TriggerTaskCount), FormatSwitch(_settings.TriggersEnabled));
-        SetTile("system-log-count", FormatNumber(_runtimeSnapshot.LogStorage.LogCount), FormatBytes(_runtimeSnapshot.LogStorage.DatabaseSizeBytes));
-        SetTile("connection-records", FormatNumber(_runtimeSnapshot.LogStorage.ConnectionCount), FormatBytes(_runtimeSnapshot.LogStorage.DatabaseSizeBytes));
+        string logDatabaseSize = string.Format(CultureInfo.CurrentCulture,
+            _localization.GetString("Master.Tile.Detail.SharedLogDatabase.Format"),
+            FormatBytes(_runtimeSnapshot.LogStorage.DatabaseSizeBytes));
+        SetTile("system-log-count", FormatNumber(_runtimeSnapshot.LogStorage.LogCount), logDatabaseSize);
+        SetTile("connection-records", FormatNumber(_runtimeSnapshot.LogStorage.ConnectionCount), logDatabaseSize);
         SetTile(
             "traffic-total",
             FormatBytes((decimal)_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
@@ -1078,7 +1081,10 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes),
                 FormatBytes(_runtimeSnapshot.Traffic.TotalDownloadBytes)));
         SetTile("traffic-snapshots", FormatNumber(_runtimeSnapshot.Traffic.SnapshotCount), string.Empty);
-        SetTile("node-health-records", FormatNumber(_runtimeSnapshot.Traffic.NodeHealthCount), FormatNumber(_runtimeSnapshot.Traffic.NodeCount));
+        SetTile("node-health-records", FormatNumber(_runtimeSnapshot.Traffic.NodeHealthCount),
+            string.Format(CultureInfo.CurrentCulture,
+                _localization.GetString("Master.Tile.Detail.NodeTrafficRecords.Format"),
+                FormatNumber(_runtimeSnapshot.Traffic.NodeCount)));
         RefreshHeroStatusValues();
     }
 
@@ -1711,11 +1717,11 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 owner.CreateTileFromKeys("proxy-node-count", "Nav.ProxyNodes", "\uE8A5", "Page.ProxyNodes.Description", infoType),
                 owner.CreateTileFromKeys("rule-count", "Nav.Rules", "\uE8D7", "Page.Rules.Description", infoType),
                 owner.CreateTileFromKeys("trigger-count", "Settings.Section.Triggers", "\uE9F5", "Page.Triggers.Description", infoType),
-                owner.CreateTileFromKeys("system-log-count", "Statistics.LogsShortcut.Title", "\uE9D9", "Statistics.LogsShortcut.Description", infoType),
-                owner.CreateTileFromKeys("connection-records", "Nav.Connections", "\uE839", "Page.Connections.Description", infoType),
+                owner.CreateTile("system-log-count", "SystemLogRecords", "\uE9D9", infoType),
+                owner.CreateTile("connection-records", "ConnectionRecords", "\uE839", infoType),
                 owner.CreateTileFromKeys("traffic-total", "Statistics.Total.Title", "\uE9D2", "Page.Statistics.Description", infoType),
-                owner.CreateTileFromKeys("traffic-snapshots", "Statistics.ByDate.Title", "\uE121", "Page.Statistics.Description", infoType),
-                owner.CreateTileFromKeys("node-health-records", "Statistics.Node.Title", "\uE8A5", "Page.Statistics.Description", infoType),
+                owner.CreateTile("traffic-snapshots", "TrafficSnapshots", "\uE121", infoType),
+                owner.CreateTile("node-health-records", "NodeHealthRecords", "\uE8A5", infoType),
             ];
         }
     }

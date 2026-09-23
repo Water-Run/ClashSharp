@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Master.Tile.SystemLogRecords"] = "System log records",
+            ["Master.Tile.Description.SystemLogRecords"] = "Number of retained system log entries. The database size includes both logs and connection records.",
+            ["Master.Tile.ConnectionRecords"] = "Connection history",
+            ["Master.Tile.Description.ConnectionRecords"] = "Number of retained connection records, distinct from currently active connections.",
+            ["Master.Tile.TrafficSnapshots"] = "Traffic snapshots",
+            ["Master.Tile.Description.TrafficSnapshots"] = "Number of retained traffic samples used for historical statistics.",
+            ["Master.Tile.NodeHealthRecords"] = "Node health records",
+            ["Master.Tile.Description.NodeHealthRecords"] = "Number of retained node health checks. The secondary count shows node traffic aggregation records.",
+            ["Master.Tile.Detail.SharedLogDatabase.Format"] = "Shared log database: {0}",
+            ["Master.Tile.Detail.NodeTrafficRecords.Format"] = "Node traffic records: {0}",
             ["Master.Ip.Details.Format"] = "IP: {0}\nLocation: {1}\nASN: {2}\nISP: {3}\nOrganization: {4}\nTimezone: {5}\nChecked: {6}\nSource: ipwho.is",
             ["Master.Tile.Detail.TrafficTrend"] = "Realtime · recent 60 samples",
             ["Master.Tile.CoreMemory"] = "Core memory",

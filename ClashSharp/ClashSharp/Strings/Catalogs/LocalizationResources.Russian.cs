@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Master.Tile.SystemLogRecords"] = "Системные записи",
+            ["Master.Tile.Description.SystemLogRecords"] = "Число сохранённых записей системного журнала. Размер базы включает журналы и соединения.",
+            ["Master.Tile.ConnectionRecords"] = "История соединений",
+            ["Master.Tile.Description.ConnectionRecords"] = "Число сохранённых записей соединений, отдельно от текущих активных соединений.",
+            ["Master.Tile.TrafficSnapshots"] = "Замеры трафика",
+            ["Master.Tile.Description.TrafficSnapshots"] = "Число сохранённых замеров трафика для исторической статистики.",
+            ["Master.Tile.NodeHealthRecords"] = "Проверки узлов",
+            ["Master.Tile.Description.NodeHealthRecords"] = "Число сохранённых проверок состояния узлов. Дополнительное число показывает записи трафика узлов.",
+            ["Master.Tile.Detail.SharedLogDatabase.Format"] = "Общая база журналов: {0}",
+            ["Master.Tile.Detail.NodeTrafficRecords.Format"] = "Записи трафика узлов: {0}",
             ["Master.Ip.Details.Format"] = "IP: {0}\nРегион: {1}\nASN: {2}\nПровайдер: {3}\nОрганизация: {4}\nЧасовой пояс: {5}\nПроверено: {6}\nИсточник: ipwho.is",
             ["Master.Tile.Detail.TrafficTrend"] = "В реальном времени · 60 отсчётов",
             ["Master.Tile.CoreMemory"] = "Память ядра",

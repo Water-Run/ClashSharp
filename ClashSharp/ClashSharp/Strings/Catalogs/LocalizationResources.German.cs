@@ -10,6 +10,16 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Master.Tile.SystemLogRecords"] = "Systemprotokolle",
+            ["Master.Tile.Description.SystemLogRecords"] = "Anzahl gespeicherter Systemprotokolle. Die Datenbankgröße umfasst Protokolle und Verbindungen.",
+            ["Master.Tile.ConnectionRecords"] = "Verbindungsverlauf",
+            ["Master.Tile.Description.ConnectionRecords"] = "Anzahl gespeicherter Verbindungen, getrennt von aktuell aktiven Verbindungen.",
+            ["Master.Tile.TrafficSnapshots"] = "Verkehrsmessungen",
+            ["Master.Tile.Description.TrafficSnapshots"] = "Anzahl gespeicherter Verkehrsmessungen für historische Statistiken.",
+            ["Master.Tile.NodeHealthRecords"] = "Knotenprüfungen",
+            ["Master.Tile.Description.NodeHealthRecords"] = "Anzahl gespeicherter Knotenprüfungen. Der Zusatzwert zählt die Verkehrsdatensätze der Knoten.",
+            ["Master.Tile.Detail.SharedLogDatabase.Format"] = "Gemeinsame Protokolldatenbank: {0}",
+            ["Master.Tile.Detail.NodeTrafficRecords.Format"] = "Knoten-Verkehrsdatensätze: {0}",
             ["Master.Ip.Details.Format"] = "IP: {0}\nOrt: {1}\nASN: {2}\nAnbieter: {3}\nOrganisation: {4}\nZeitzone: {5}\nGeprüft: {6}\nQuelle: ipwho.is",
             ["Master.Tile.Detail.TrafficTrend"] = "Echtzeit · letzte 60 Messungen",
             ["Master.Tile.CoreMemory"] = "Kernspeicher",
