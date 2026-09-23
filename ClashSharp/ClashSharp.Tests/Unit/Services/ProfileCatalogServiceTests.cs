@@ -10,6 +10,64 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for profile catalog composition.</summary>
 public sealed class ProfileCatalogServiceTests
 {
+    /// <summary>Bounds stalled response content, preserves committed data, and releases the update gate.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ImportSubscriptionLinkAsync_StalledBody_TimeoutAndCallerCancellationPreserveCommittedState(
+        bool cancelCaller)
+    {
+        using TempFile tempFile = new();
+        FakeProfileCatalogCoreConfiguration core = new();
+        await using ProfileCatalogService service = CreateService(
+            tempFile.Path, new FakeProfileCatalogSettings(), core,
+            downloadTimeout: TimeSpan.FromSeconds(1));
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        ProfileSubscriptionLink link = await service.AddSubscriptionLinkAsync(
+            "Stalled body", $"http://127.0.0.1:{port}/profile.yaml", CancellationToken.None);
+        await ExchangeSubscriptionAsync(listener,
+            token => service.ImportSubscriptionLinkAsync(link, token), "upload=1; download=2; total=1024");
+        ProfileSubscriptionLink baseline = Assert.Single(service.GetSubscriptionLinks());
+        ConfigurationProfile[] profiles = [.. service.GetProfiles()];
+        ProfileHistoryEntry[] history = [.. service.GetProfileHistory("subscription-" + link.Id)];
+        using CancellationTokenSource caller = new();
+        using CancellationTokenSource serverLifetime = new(TimeSpan.FromSeconds(10));
+        TaskCompletionSource headersSent = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task response = ServeSubscriptionAsync(listener, serverLifetime.Token, headersSent: headersSent);
+        Task import = service.ImportSubscriptionLinkAsync(baseline, caller.Token);
+        try
+        {
+            await headersSent.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (cancelCaller) { await caller.CancelAsync(); }
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => import.WaitAsync(TimeSpan.FromSeconds(5)));
+
+            ProfileSubscriptionLink failed = Assert.Single(service.GetSubscriptionLinks());
+            Assert.Equal(cancelCaller ? "ProfileCatalog.Status.Canceled" : "ProfileCatalog.Subscription.UpdateFailed", failed.Status);
+            Assert.Equal(baseline.LastUpdatedAt, failed.LastUpdatedAt);
+            Assert.Equal(baseline.Usage, failed.Usage);
+            Assert.Equal(profiles, service.GetProfiles());
+            Assert.Equal(history, service.GetProfileHistory("subscription-" + link.Id));
+            Assert.Single(core.Imports);
+        }
+        finally
+        {
+            await caller.CancelAsync();
+            await serverLifetime.CancelAsync();
+            try { await import; }
+            catch (OperationCanceledException) when (caller.IsCancellationRequested) { }
+            try { await response; }
+            catch (OperationCanceledException) when (serverLifetime.IsCancellationRequested) { }
+        }
+
+        await ExchangeSubscriptionAsync(listener,
+            token => service.ImportSubscriptionLinkAsync(Assert.Single(service.GetSubscriptionLinks()), token));
+        Assert.Equal(2, core.Imports.Count);
+        Assert.Equal("ProfileCatalog.Subscription.Updated", Assert.Single(service.GetSubscriptionLinks()).Status);
+    }
+
     [Fact]
     public async Task SubscriptionMetadata_CheckImportFailureAndAddressChangePreserveTheirOwnSemantics()
     {
@@ -130,7 +188,8 @@ public sealed class ProfileCatalogServiceTests
     }
 
     private static async Task ServeSubscriptionAsync(
-        TcpListener listener, CancellationToken cancellationToken, string? userInfo = null, int statusCode = 200)
+        TcpListener listener, CancellationToken cancellationToken, string? userInfo = null, int statusCode = 200,
+        TaskCompletionSource? headersSent = null)
     {
         using TcpClient client = await listener.AcceptTcpClientAsync(cancellationToken);
         await using NetworkStream stream = client.GetStream();
@@ -139,8 +198,13 @@ public sealed class ProfileCatalogServiceTests
         const string body = "rules:\n  - MATCH,DIRECT\n";
         string metadata = userInfo is null ? string.Empty : $"Subscription-Userinfo: {userInfo}\r\n";
         byte[] reply = Encoding.UTF8.GetBytes(
-            $"HTTP/1.1 {statusCode} Test\r\n{metadata}Content-Type: text/yaml\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}");
+            $"HTTP/1.1 {statusCode} Test\r\n{metadata}Content-Type: text/yaml\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{(headersSent is null ? body : string.Empty)}");
         await stream.WriteAsync(reply, cancellationToken);
+        if (headersSent is not null)
+        {
+            headersSent.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
     }
 
     [Fact]
@@ -716,7 +780,8 @@ public sealed class ProfileCatalogServiceTests
         FakeProfileCatalogSettings settings,
         FakeProfileCatalogCoreConfiguration? core = null,
         FakeProfileCatalogRuntime? runtime = null,
-        IProfileCatalogMutationCoordinator? coordinator = null)
+        IProfileCatalogMutationCoordinator? coordinator = null,
+        TimeSpan? downloadTimeout = null)
     {
         return new ProfileCatalogService(
             catalogPath,
@@ -731,7 +796,8 @@ public sealed class ProfileCatalogServiceTests
                 "ProfileCatalog.Status.Available" => "localized available",
                 _ => key,
             },
-            coordinator ?? UncoordinatedProfileCatalogMutationCoordinator.Instance);
+            coordinator ?? UncoordinatedProfileCatalogMutationCoordinator.Instance,
+            downloadTimeout);
     }
 
     private sealed class FakeProfileCatalogSettings : IProfileCatalogSettings

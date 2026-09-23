@@ -10,6 +10,20 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Profiles.Status.Imported"] = "Profil importiert.",
+            ["Profiles.Status.ImportFailed"] = "Profil konnte nicht importiert werden. Datei prüfen und erneut versuchen.",
+            ["Profiles.Status.Validated"] = "Profil erfolgreich geprüft.",
+            ["Profiles.Status.ValidateFailed"] = "Profilprüfung fehlgeschlagen. Konfiguration prüfen und erneut versuchen.",
+            ["Profiles.Status.Activated"] = "Aktuelles Profil geändert.",
+            ["Profiles.Status.ActivateFailed"] = "Aktuelles Profil konnte nicht geändert werden. Konfiguration prüfen und erneut versuchen.",
+            ["Profiles.Status.Renamed"] = "Profil umbenannt.",
+            ["Profiles.Status.RenameFailed"] = "Profil konnte nicht umbenannt werden. Namen prüfen und erneut versuchen.",
+            ["Profiles.Status.Deleted"] = "Profil gelöscht.",
+            ["Profiles.Status.DeleteFailed"] = "Profil konnte nicht gelöscht werden. Seite aktualisieren und erneut versuchen.",
+            ["Profiles.Status.Restored"] = "Ausgewählte Verlaufsversion wiederhergestellt.",
+            ["Profiles.Status.RestoreFailed"] = "Version konnte nicht wiederhergestellt werden. Konfiguration prüfen und erneut versuchen.",
+            ["Profiles.Status.HistoryFailed"] = "Profilverlauf konnte nicht geladen werden. Seite aktualisieren und erneut versuchen.",
+            ["Profiles.History.Entry"] = "{0:g}\n{1}\nKnoten: {2} · Regeln: {3}",
             ["Links.Schedule.Automatic.Format"] = "Automatische Aktualisierung: alle {0} Std.",
             ["Links.Schedule.Manual"] = "Automatische Aktualisierung: aus",
             ["Links.Updated.Format"] = "Zuletzt aktualisiert: {0}",

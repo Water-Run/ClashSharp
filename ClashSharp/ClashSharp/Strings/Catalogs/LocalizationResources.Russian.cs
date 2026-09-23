@@ -10,6 +10,20 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Profiles.Status.Imported"] = "Профиль импортирован.",
+            ["Profiles.Status.ImportFailed"] = "Не удалось импортировать профиль. Проверьте файл и повторите попытку.",
+            ["Profiles.Status.Validated"] = "Проверка профиля выполнена успешно.",
+            ["Profiles.Status.ValidateFailed"] = "Проверка профиля не пройдена. Проверьте конфигурацию и повторите попытку.",
+            ["Profiles.Status.Activated"] = "Текущий профиль изменён.",
+            ["Profiles.Status.ActivateFailed"] = "Не удалось сменить текущий профиль. Проверьте конфигурацию и повторите попытку.",
+            ["Profiles.Status.Renamed"] = "Профиль переименован.",
+            ["Profiles.Status.RenameFailed"] = "Не удалось переименовать профиль. Проверьте имя и повторите попытку.",
+            ["Profiles.Status.Deleted"] = "Профиль удалён.",
+            ["Profiles.Status.DeleteFailed"] = "Не удалось удалить профиль. Обновите страницу и повторите попытку.",
+            ["Profiles.Status.Restored"] = "Выбранная версия из истории восстановлена.",
+            ["Profiles.Status.RestoreFailed"] = "Не удалось восстановить версию. Проверьте конфигурацию и повторите попытку.",
+            ["Profiles.Status.HistoryFailed"] = "Не удалось загрузить историю. Обновите страницу и повторите попытку.",
+            ["Profiles.History.Entry"] = "{0:g}\n{1}\nУзлы: {2} · Правила: {3}",
             ["Links.Schedule.Automatic.Format"] = "Автообновление: каждые {0} ч",
             ["Links.Schedule.Manual"] = "Автообновление: выключено",
             ["Links.Updated.Format"] = "Последнее обновление: {0}",

@@ -10,6 +10,20 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Profiles.Status.Imported"] = "Profile imported.",
+            ["Profiles.Status.ImportFailed"] = "Could not import the profile. Check the file and try again.",
+            ["Profiles.Status.Validated"] = "Profile validation succeeded.",
+            ["Profiles.Status.ValidateFailed"] = "Profile validation failed. Check the configuration and try again.",
+            ["Profiles.Status.Activated"] = "Current profile changed.",
+            ["Profiles.Status.ActivateFailed"] = "Could not change the current profile. Check the configuration and try again.",
+            ["Profiles.Status.Renamed"] = "Profile renamed.",
+            ["Profiles.Status.RenameFailed"] = "Could not rename the profile. Check the name and try again.",
+            ["Profiles.Status.Deleted"] = "Profile deleted.",
+            ["Profiles.Status.DeleteFailed"] = "Could not delete the profile. Refresh the page and try again.",
+            ["Profiles.Status.Restored"] = "Selected history version restored.",
+            ["Profiles.Status.RestoreFailed"] = "Could not restore the selected version. Check the configuration and try again.",
+            ["Profiles.Status.HistoryFailed"] = "Could not load profile history. Refresh the page and try again.",
+            ["Profiles.History.Entry"] = "{0:g}\n{1}\nNodes: {2} · Rules: {3}",
             ["Links.Schedule.Automatic.Format"] = "Automatic updates: every {0} h",
             ["Links.Schedule.Manual"] = "Automatic updates: off",
             ["Links.Updated.Format"] = "Last updated: {0}",

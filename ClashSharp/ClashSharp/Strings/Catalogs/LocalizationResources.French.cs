@@ -10,6 +10,20 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Profiles.Status.Imported"] = "Profil importé.",
+            ["Profiles.Status.ImportFailed"] = "Impossible d’importer le profil. Vérifiez le fichier et réessayez.",
+            ["Profiles.Status.Validated"] = "Validation du profil réussie.",
+            ["Profiles.Status.ValidateFailed"] = "Échec de validation du profil. Vérifiez la configuration et réessayez.",
+            ["Profiles.Status.Activated"] = "Profil actuel modifié.",
+            ["Profiles.Status.ActivateFailed"] = "Impossible de changer le profil actuel. Vérifiez la configuration et réessayez.",
+            ["Profiles.Status.Renamed"] = "Profil renommé.",
+            ["Profiles.Status.RenameFailed"] = "Impossible de renommer le profil. Vérifiez le nom et réessayez.",
+            ["Profiles.Status.Deleted"] = "Profil supprimé.",
+            ["Profiles.Status.DeleteFailed"] = "Impossible de supprimer le profil. Actualisez la page et réessayez.",
+            ["Profiles.Status.Restored"] = "Version sélectionnée de l’historique restaurée.",
+            ["Profiles.Status.RestoreFailed"] = "Impossible de restaurer la version sélectionnée. Vérifiez la configuration et réessayez.",
+            ["Profiles.Status.HistoryFailed"] = "Impossible de charger l’historique. Actualisez la page et réessayez.",
+            ["Profiles.History.Entry"] = "{0:g}\n{1}\nNœuds : {2} · Règles : {3}",
             ["Links.Schedule.Automatic.Format"] = "Mise à jour automatique : toutes les {0} h",
             ["Links.Schedule.Manual"] = "Mise à jour automatique : désactivée",
             ["Links.Updated.Format"] = "Dernière mise à jour : {0}",

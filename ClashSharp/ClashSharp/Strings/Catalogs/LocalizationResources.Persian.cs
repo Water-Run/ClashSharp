@@ -10,6 +10,20 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Profiles.Status.Imported"] = "پروفایل وارد شد.",
+            ["Profiles.Status.ImportFailed"] = "وارد کردن پروفایل ممکن نشد. فایل را بررسی و دوباره تلاش کنید.",
+            ["Profiles.Status.Validated"] = "اعتبارسنجی پروفایل موفق بود.",
+            ["Profiles.Status.ValidateFailed"] = "اعتبارسنجی پروفایل ناموفق بود. پیکربندی را بررسی و دوباره تلاش کنید.",
+            ["Profiles.Status.Activated"] = "پروفایل فعلی تغییر کرد.",
+            ["Profiles.Status.ActivateFailed"] = "تغییر پروفایل فعلی ممکن نشد. پیکربندی را بررسی و دوباره تلاش کنید.",
+            ["Profiles.Status.Renamed"] = "نام پروفایل تغییر کرد.",
+            ["Profiles.Status.RenameFailed"] = "تغییر نام پروفایل ممکن نشد. نام را بررسی و دوباره تلاش کنید.",
+            ["Profiles.Status.Deleted"] = "پروفایل حذف شد.",
+            ["Profiles.Status.DeleteFailed"] = "حذف پروفایل ممکن نشد. صفحه را تازه‌سازی و دوباره تلاش کنید.",
+            ["Profiles.Status.Restored"] = "نسخه انتخاب‌شده از تاریخچه بازیابی شد.",
+            ["Profiles.Status.RestoreFailed"] = "بازیابی نسخه ممکن نشد. پیکربندی را بررسی و دوباره تلاش کنید.",
+            ["Profiles.Status.HistoryFailed"] = "بارگیری تاریخچه ممکن نشد. صفحه را تازه‌سازی و دوباره تلاش کنید.",
+            ["Profiles.History.Entry"] = "{0:g}\n{1}\nگره‌ها: {2} · قوانین: {3}",
             ["Links.Schedule.Automatic.Format"] = "به‌روزرسانی خودکار: هر {0} ساعت",
             ["Links.Schedule.Manual"] = "به‌روزرسانی خودکار: خاموش",
             ["Links.Updated.Format"] = "آخرین به‌روزرسانی: {0}",

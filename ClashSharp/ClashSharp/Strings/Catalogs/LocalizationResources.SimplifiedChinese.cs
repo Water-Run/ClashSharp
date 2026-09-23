@@ -10,6 +10,20 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Profiles.Status.Imported"] = "配置已导入。",
+            ["Profiles.Status.ImportFailed"] = "无法导入配置，请检查文件后重试。",
+            ["Profiles.Status.Validated"] = "配置验证通过。",
+            ["Profiles.Status.ValidateFailed"] = "配置验证失败，请检查配置后重试。",
+            ["Profiles.Status.Activated"] = "已切换当前配置。",
+            ["Profiles.Status.ActivateFailed"] = "无法切换当前配置，请检查配置后重试。",
+            ["Profiles.Status.Renamed"] = "配置已重命名。",
+            ["Profiles.Status.RenameFailed"] = "无法重命名配置，请检查名称后重试。",
+            ["Profiles.Status.Deleted"] = "配置已删除。",
+            ["Profiles.Status.DeleteFailed"] = "无法删除配置，请刷新页面后重试。",
+            ["Profiles.Status.Restored"] = "已恢复所选历史版本。",
+            ["Profiles.Status.RestoreFailed"] = "无法恢复所选版本，请检查配置后重试。",
+            ["Profiles.Status.HistoryFailed"] = "无法读取配置历史，请刷新页面后重试。",
+            ["Profiles.History.Entry"] = "{0:g}\n{1}\n节点：{2} · 规则：{3}",
             ["Links.Schedule.Automatic.Format"] = "自动更新：每 {0} 小时",
             ["Links.Schedule.Manual"] = "自动更新：已关闭",
             ["Links.Updated.Format"] = "最后更新：{0}",

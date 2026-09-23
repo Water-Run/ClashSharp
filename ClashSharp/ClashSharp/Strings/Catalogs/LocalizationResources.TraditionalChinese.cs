@@ -10,6 +10,20 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Profiles.Status.Imported"] = "設定檔已匯入。",
+            ["Profiles.Status.ImportFailed"] = "無法匯入設定檔，請檢查檔案後重試。",
+            ["Profiles.Status.Validated"] = "設定檔驗證通過。",
+            ["Profiles.Status.ValidateFailed"] = "設定檔驗證失敗，請檢查設定後重試。",
+            ["Profiles.Status.Activated"] = "已切換目前設定檔。",
+            ["Profiles.Status.ActivateFailed"] = "無法切換目前設定檔，請檢查設定後重試。",
+            ["Profiles.Status.Renamed"] = "設定檔已重新命名。",
+            ["Profiles.Status.RenameFailed"] = "無法重新命名設定檔，請檢查名稱後重試。",
+            ["Profiles.Status.Deleted"] = "設定檔已刪除。",
+            ["Profiles.Status.DeleteFailed"] = "無法刪除設定檔，請重新整理頁面後重試。",
+            ["Profiles.Status.Restored"] = "已還原所選歷史版本。",
+            ["Profiles.Status.RestoreFailed"] = "無法還原所選版本，請檢查設定後重試。",
+            ["Profiles.Status.HistoryFailed"] = "無法讀取設定檔歷史，請重新整理頁面後重試。",
+            ["Profiles.History.Entry"] = "{0:g}\n{1}\n節點：{2} · 規則：{3}",
             ["Links.Schedule.Automatic.Format"] = "自動更新：每 {0} 小時",
             ["Links.Schedule.Manual"] = "自動更新：已關閉",
             ["Links.Updated.Format"] = "最後更新：{0}",

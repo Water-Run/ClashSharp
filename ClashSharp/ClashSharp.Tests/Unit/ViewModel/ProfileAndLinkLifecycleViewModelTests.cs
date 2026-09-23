@@ -7,6 +7,78 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Verifies profile and subscription mutations respect their owning page lifetime.</summary>
 public sealed class ProfileAndLinkLifecycleViewModelTests
 {
+    /// <summary>Rejected mutations and operational failures never leave a misleading success result.</summary>
+    [Theory]
+    [InlineData("activate", false)]
+    [InlineData("activate", true)]
+    [InlineData("rename", false)]
+    [InlineData("rename", true)]
+    [InlineData("delete", false)]
+    [InlineData("delete", true)]
+    public async Task ProfileMutation_WhenRejectedOrFailed_ReportsFailure(string operation, bool throws)
+    {
+        Task<bool> Reject() => throws
+            ? Task.FromException<bool>(new IOException("private configuration path"))
+            : Task.FromResult(false);
+        FakeProfileManagementCatalog catalog = new()
+        {
+            Profiles = [CreateProfile("retained", isActive: true)],
+            SetActiveProfile = (_, _) => Reject(),
+            RenameProfile = (_, _, _) => Reject(),
+            DeleteProfile = (_, _) => Reject(),
+        };
+        ProfilesViewModel viewModel = CreateProfilesViewModel(catalog, new RecordingPageLog());
+        await viewModel.LoadAsync(CancellationToken.None);
+        viewModel.SelectedProfile = Assert.Single(viewModel.Profiles);
+
+        await (operation switch
+        {
+            "activate" => viewModel.SetSelectedProfileActiveAsync(CancellationToken.None),
+            "rename" => viewModel.RenameProfileAsync("retained", "renamed", CancellationToken.None),
+            "delete" => viewModel.DeleteProfileAsync("retained", CancellationToken.None),
+            _ => throw new InvalidOperationException(),
+        });
+
+        Assert.True(viewModel.HasStatusText);
+        Assert.Equal($"Profiles.Status.{char.ToUpperInvariant(operation[0])}{operation[1..]}Failed", viewModel.StatusText);
+        Assert.Equal("retained", Assert.Single(viewModel.Profiles).Id);
+        Assert.Same(viewModel.Profiles[0], viewModel.SelectedProfile);
+    }
+
+    [Fact]
+    public async Task RollbackProfileAsync_ReportsSuccessFailureAndCancellationWithoutStaleFeedback()
+    {
+        FakeProfileManagementCatalog catalog = new()
+        {
+            Profiles = [CreateProfile("retained", isActive: true)],
+            RollbackProfile = (_, _) => Task.FromResult(CreateImportResult("retained")),
+        };
+        ProfilesViewModel viewModel = CreateProfilesViewModel(catalog, new RecordingPageLog());
+        ProfileHistoryEntry entry = new("version", "retained", DateTimeOffset.Now, "source", 1, 2,
+            new string('a', 64), ProfileHistoryApplyOutcome.Stored);
+        await viewModel.LoadAsync(CancellationToken.None);
+        viewModel.SelectedProfile = Assert.Single(viewModel.Profiles);
+        await viewModel.RollbackProfileAsync(entry, CancellationToken.None);
+        Assert.Equal("Profiles.Status.Restored", viewModel.StatusText);
+        Assert.Equal(2, catalog.GetProfilesCallCount);
+        Assert.Same(viewModel.Profiles[0], viewModel.SelectedProfile);
+
+        catalog.RollbackProfile = (_, _) => Task.FromException<ProfileImportResult>(new IOException("private file path"));
+        await viewModel.RollbackProfileAsync(entry, CancellationToken.None);
+        Assert.Equal("Profiles.Status.RestoreFailed", viewModel.StatusText);
+        Assert.Equal(2, catalog.GetProfilesCallCount);
+
+        using CancellationTokenSource lifetime = new();
+        catalog.RollbackProfile = (_, token) =>
+        {
+            lifetime.Cancel();
+            return Task.FromCanceled<ProfileImportResult>(token);
+        };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => viewModel.RollbackProfileAsync(entry, lifetime.Token));
+        Assert.False(viewModel.HasStatusText);
+        Assert.Equal(2, catalog.GetProfilesCallCount);
+    }
+
     [Fact]
     public async Task ImportLocalProfileAsync_WhenSuccessful_ReloadsProfilesAsynchronously()
     {
@@ -27,6 +99,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
 
         ConfigurationProfileDisplay row = Assert.Single(viewModel.Profiles);
         Assert.Equal("after", row.Id);
+        Assert.Equal("Profiles.Status.Imported", viewModel.StatusText);
         Assert.Equal(2, catalog.GetProfilesCallCount);
         Assert.Contains(
             log.Entries,
@@ -62,6 +135,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => import);
         Assert.Equal("visible", Assert.Single(viewModel.Profiles).Id);
+        Assert.False(viewModel.HasStatusText);
         Assert.Equal(1, catalog.GetProfilesCallCount);
         Assert.DoesNotContain(
             log.Entries,
@@ -99,6 +173,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
 
         Assert.Same(Assert.Single(viewModel.Profiles), viewModel.SelectedProfile);
         Assert.NotSame(originalRow, viewModel.SelectedProfile);
+        Assert.Equal("Profiles.Status.Validated", viewModel.StatusText);
         await viewModel.SetSelectedProfileActiveAsync(CancellationToken.None);
         Assert.Equal("candidate", activatedProfileId);
         Assert.True(Assert.IsType<ConfigurationProfileDisplay>(viewModel.SelectedProfile).IsActive);
@@ -142,6 +217,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         await viewModel.SetSelectedProfileActiveAsync(CancellationToken.None);
 
         Assert.True(Assert.Single(viewModel.Profiles).IsActive);
+        Assert.Equal("Profiles.Status.Activated", viewModel.StatusText);
         Assert.Equal(2, catalog.GetProfilesCallCount);
     }
 
@@ -174,6 +250,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => activation);
         Assert.False(Assert.Single(viewModel.Profiles).IsActive);
+        Assert.False(viewModel.HasStatusText);
         Assert.Equal(1, catalog.GetProfilesCallCount);
     }
 
@@ -363,6 +440,15 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         public Func<ConfigurationProfile, CancellationToken, Task<ProfileImportResult>> ValidateProfile { get; set; } =
             static (_, _) => throw new NotSupportedException();
 
+        public Func<string, string, CancellationToken, Task<bool>> RenameProfile { get; set; } =
+            static (_, _, _) => throw new NotSupportedException();
+
+        public Func<string, CancellationToken, Task<bool>> DeleteProfile { get; set; } =
+            static (_, _) => throw new NotSupportedException();
+
+        public Func<ProfileHistoryEntry, CancellationToken, Task<ProfileImportResult>> RollbackProfile { get; set; } =
+            static (_, _) => throw new NotSupportedException();
+
         public IReadOnlyList<ConfigurationProfile> GetProfiles()
         {
             GetProfilesCallCount++;
@@ -400,21 +486,21 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
             string name,
             CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            return RenameProfile(profileId, name, cancellationToken);
         }
 
         public Task<bool> TryDeleteProfileAsync(
             string profileId,
             CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            return DeleteProfile(profileId, cancellationToken);
         }
 
         public Task<ProfileImportResult> RollbackProfileAsync(
             ProfileHistoryEntry historyEntry,
             CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            return RollbackProfile(historyEntry, cancellationToken);
         }
     }
 

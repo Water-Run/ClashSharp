@@ -3,14 +3,19 @@
     x:Class="ClashSharp.View.Profiles"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:ClashSharp.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Loaded="Page_Loaded"
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Page.Resources>
     <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -55,14 +60,17 @@
             </AppBarButton>
         </CommandBar>
 
-        <Grid Grid.Row="2" Style="{StaticResource ClashCardGridStyle}">
+        <InfoBar Grid.Row="2" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
+                 Severity="Informational" Message="{Binding StatusText}"
+                 Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}" />
+        <Grid Grid.Row="3" Style="{StaticResource ClashCardGridStyle}">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="CurrentProfileTitleText" Text="{Binding CurrentProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                 <TextBlock x:Name="ActiveProfileText" Text="{Binding ActiveProfileText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             </StackPanel>
         </Grid>
 
-        <ListView Grid.Row="3" x:Name="ProfilesList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
+        <ListView Grid.Row="4" x:Name="ProfilesList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
             <ListView.Header>
                 <Grid Padding="20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>

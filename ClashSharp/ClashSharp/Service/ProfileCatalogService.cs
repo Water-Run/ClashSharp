@@ -133,6 +133,9 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
 
     private readonly Func<string, string> _getString;
 
+    /// <summary>Bounds the complete download, including streamed response content.</summary>
+    private readonly TimeSpan _subscriptionDownloadTimeout;
+
     /// <summary>Obsolete preview profile identifier removed from early catalog builds.</summary>
     private const string ObsoleteSampleProfileId = "sample-rule-profile";
 
@@ -173,7 +176,8 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
         IProfileCatalogRuntime runtime,
         IProfileCatalogLog log,
         Func<string, string> getString,
-        IProfileCatalogMutationCoordinator mutationCoordinator)
+        IProfileCatalogMutationCoordinator mutationCoordinator,
+        TimeSpan? subscriptionDownloadTimeout = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(catalogPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyRoot);
@@ -188,6 +192,10 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _mutationCoordinator = mutationCoordinator
             ?? throw new ArgumentNullException(nameof(mutationCoordinator));
+        _subscriptionDownloadTimeout = subscriptionDownloadTimeout ?? TimeSpan.FromSeconds(30);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(_subscriptionDownloadTimeout, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            _subscriptionDownloadTimeout, TimeSpan.FromMilliseconds(uint.MaxValue - 1));
         _operations = new RepositoryOperationLifetime(this);
     }
 
@@ -1556,17 +1564,21 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
         return await HttpClient.SendAsync(fallbackRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Reads a subscription profile response with a hard byte limit.</summary>
-    private static async Task<(string ConfigurationText, SubscriptionUsage? Usage)> ReadSubscriptionConfigurationAsync(
+    /// <summary>Bounds response headers and streamed content by one deadline and a hard byte limit.</summary>
+    private async Task<(string ConfigurationText, SubscriptionUsage? Usage)> ReadSubscriptionConfigurationAsync(
         Uri uri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uri);
 
+        // HttpClient.Timeout ends at the headers when ResponseHeadersRead is used.
+        using CancellationTokenSource download = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        download.CancelAfter(_subscriptionDownloadTimeout);
+        CancellationToken downloadToken = download.Token;
         using HttpRequestMessage request = new(HttpMethod.Get, uri);
         using HttpResponseMessage response = await HttpClient.SendAsync(
             request,
             HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken).ConfigureAwait(false);
+            downloadToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         if (response.Content.Headers.ContentLength is long contentLength
@@ -1575,11 +1587,11 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             throw new InvalidOperationException("Subscription profile is larger than the supported limit.");
         }
 
-        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using Stream stream = await response.Content.ReadAsStreamAsync(downloadToken).ConfigureAwait(false);
         using MemoryStream buffer = new();
         byte[] chunk = new byte[8192];
         int bytesRead;
-        while ((bytesRead = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+        while ((bytesRead = await stream.ReadAsync(chunk, downloadToken).ConfigureAwait(false)) > 0)
         {
             if (buffer.Length + bytesRead > MaxSubscriptionDownloadBytes)
             {

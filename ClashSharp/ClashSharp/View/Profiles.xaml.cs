@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
@@ -187,15 +186,20 @@ public sealed partial class Profiles : Page
             ComboBox versionBox = new()
             {
                 Header = _getString("Profiles.Dialog.HistoryVersion"),
-                MinWidth = 420,
+                MinWidth = 260,
+                MaxWidth = 420,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
             };
             foreach (ProfileHistoryEntry entry in historyEntries)
             {
                 versionBox.Items.Add(new ComboBoxItem
                 {
-                    Content = string.Create(
-                        CultureInfo.CurrentCulture,
-                        $"{entry.CreatedAt.ToLocalTime():g} · {entry.SourceName} · {entry.NodeCount}/{entry.RuleCount}"),
+                    Content = new TextBlock
+                    {
+                        Text = _viewModel.GetHistoryEntryText(entry),
+                        TextWrapping = TextWrapping.Wrap,
+                        MaxWidth = 390,
+                    },
                     Tag = entry,
                 });
             }
