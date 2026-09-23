@@ -254,8 +254,7 @@
                                 Header="{Binding ConditionScopeHeaderText}"
                                 ItemsSource="{Binding CurrentEditor.TrafficScopeOptions}"
                                 DisplayMemberPath="Title"
-                                SelectedValuePath="Value"
-                                SelectedValue="{Binding CurrentEditor.SelectedCondition.TrafficScope, Mode=TwoWay}"
+                                SelectedItem="{Binding CurrentEditor.SelectedTrafficScopeOption, Mode=TwoWay}"
                                 HorizontalAlignment="Stretch"
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsTrafficScopeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBox
@@ -266,16 +265,14 @@
                                 Header="{Binding NotificationLevelHeaderText}"
                                 ItemsSource="{Binding CurrentEditor.NotificationLevelOptions}"
                                 DisplayMemberPath="Title"
-                                SelectedValuePath="Value"
-                                SelectedValue="{Binding CurrentEditor.SelectedCondition.NotificationLevel, Mode=TwoWay}"
+                                SelectedItem="{Binding CurrentEditor.SelectedNotificationLevelOption, Mode=TwoWay}"
                                 HorizontalAlignment="Stretch"
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsNotificationLevelVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <ComboBox
                                 Header="{Binding RateDirectionHeaderText}"
                                 ItemsSource="{Binding CurrentEditor.RateDirectionOptions}"
                                 DisplayMemberPath="Title"
-                                SelectedValuePath="Value"
-                                SelectedValue="{Binding CurrentEditor.SelectedCondition.RateDirection, Mode=TwoWay}"
+                                SelectedItem="{Binding CurrentEditor.SelectedRateDirectionOption, Mode=TwoWay}"
                                 HorizontalAlignment="Stretch"
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsRateDirectionVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBox
@@ -340,8 +337,7 @@
                                 Header="{Binding ProxyModeHeaderText}"
                                 ItemsSource="{Binding CurrentEditor.ProxyModeOptions}"
                                 DisplayMemberPath="Title"
-                                SelectedValuePath="Value"
-                                SelectedValue="{Binding CurrentEditor.SelectedAction.ProxyMode, Mode=TwoWay}"
+                                SelectedItem="{Binding CurrentEditor.SelectedProxyModeOption, Mode=TwoWay}"
                                 HorizontalAlignment="Stretch"
                                 Visibility="{Binding CurrentEditor.SelectedAction.IsProxyModeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBox

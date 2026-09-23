@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -78,14 +79,14 @@ internal sealed class TriggerEditorViewModel : ObservableObject
             }
         }
 
-        _selectedCondition = Conditions.FirstOrDefault();
-        _selectedAction = Actions.FirstOrDefault();
         ConditionOptions = CreateConditionOptions();
         ActionOptions = CreateActionOptions();
         TrafficScopeOptions = CreateTrafficScopeOptions();
         RateDirectionOptions = CreateRateDirectionOptions();
         NotificationLevelOptions = CreateNotificationLevelOptions();
         ProxyModeOptions = CreateProxyModeOptions();
+        SelectedCondition = Conditions.FirstOrDefault();
+        SelectedAction = Actions.FirstOrDefault();
     }
 
     public string Id { get; }
@@ -126,13 +127,125 @@ internal sealed class TriggerEditorViewModel : ObservableObject
     public TriggerConditionEditorViewModel? SelectedCondition
     {
         get => _selectedCondition;
-        set => SetProperty(ref _selectedCondition, value);
+        set
+        {
+            if (ReferenceEquals(_selectedCondition, value))
+            {
+                return;
+            }
+
+            if (_selectedCondition is not null)
+            {
+                _selectedCondition.PropertyChanged -= SelectedCondition_PropertyChanged;
+            }
+
+            SetProperty(ref _selectedCondition, value);
+            if (value is not null)
+            {
+                value.PropertyChanged += SelectedCondition_PropertyChanged;
+            }
+
+            NotifyConditionSelection();
+        }
     }
 
     public TriggerActionEditorViewModel? SelectedAction
     {
         get => _selectedAction;
-        set => SetProperty(ref _selectedAction, value);
+        set
+        {
+            if (ReferenceEquals(_selectedAction, value))
+            {
+                return;
+            }
+
+            if (_selectedAction is not null)
+            {
+                _selectedAction.PropertyChanged -= SelectedAction_PropertyChanged;
+            }
+
+            SetProperty(ref _selectedAction, value);
+            if (value is not null)
+            {
+                value.PropertyChanged += SelectedAction_PropertyChanged;
+            }
+
+            OnPropertyChanged(nameof(SelectedProxyModeOption));
+        }
+    }
+
+    // Bind the actual option object so the collapsed selector and its popup share one selection.
+    public TriggerEditorOption<TriggerTrafficScope>? SelectedTrafficScopeOption
+    {
+        get => TrafficScopeOptions.FirstOrDefault(option => option.Value == SelectedCondition?.TrafficScope);
+        set
+        {
+            if (value is not null && SelectedCondition is { } condition && TrafficScopeOptions.Contains(value))
+            {
+                condition.TrafficScope = value.Value;
+            }
+        }
+    }
+
+    public TriggerEditorOption<TriggerTrafficDirection>? SelectedRateDirectionOption
+    {
+        get => RateDirectionOptions.FirstOrDefault(option => option.Value == SelectedCondition?.RateDirection);
+        set
+        {
+            if (value is not null && SelectedCondition is { } condition && RateDirectionOptions.Contains(value))
+            {
+                condition.RateDirection = value.Value;
+            }
+        }
+    }
+
+    public TriggerEditorOption<TriggerNotificationLevel>? SelectedNotificationLevelOption
+    {
+        get => NotificationLevelOptions.FirstOrDefault(option => option.Value == SelectedCondition?.NotificationLevel);
+        set
+        {
+            if (value is not null && SelectedCondition is { } condition && NotificationLevelOptions.Contains(value))
+            {
+                condition.NotificationLevel = value.Value;
+            }
+        }
+    }
+
+    public TriggerEditorOption<ClashSharpMode>? SelectedProxyModeOption
+    {
+        get => ProxyModeOptions.FirstOrDefault(option => option.Value == SelectedAction?.ProxyMode);
+        set
+        {
+            if (value is not null && SelectedAction is { } action && ProxyModeOptions.Contains(value))
+            {
+                action.ProxyMode = value.Value;
+            }
+        }
+    }
+
+    private void SelectedCondition_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(TriggerConditionEditorViewModel.TrafficScope)
+            or nameof(TriggerConditionEditorViewModel.RateDirection)
+            or nameof(TriggerConditionEditorViewModel.NotificationLevel))
+        {
+            NotifyConditionSelection();
+        }
+    }
+
+    private void NotifyConditionSelection()
+    {
+        OnPropertyChanged(nameof(SelectedTrafficScopeOption));
+        OnPropertyChanged(nameof(SelectedRateDirectionOption));
+        OnPropertyChanged(nameof(SelectedNotificationLevelOption));
+    }
+
+    private void SelectedAction_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(TriggerActionEditorViewModel.ProxyMode))
+        {
+            OnPropertyChanged(nameof(SelectedProxyModeOption));
+        }
     }
 
     public ReadOnlyCollection<TriggerEditorOption<TriggerConditionTemplate>> ConditionOptions { get; }

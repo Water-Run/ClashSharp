@@ -469,13 +469,41 @@ internal sealed class TriggersViewModel : ObservableObject
     private void ApplyCatalog(TriggerDefinitionCatalog catalog)
     {
         _generation = catalog.Generation;
-        TriggerTasks.Clear();
+        Dictionary<string, TriggerTaskItemViewModel> existing = TriggerTasks.ToDictionary(
+            static task => task.Id,
+            StringComparer.Ordinal);
+        HashSet<string> retainedIds = catalog.Tasks
+            .Select(static task => task.Definition.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        for (int index = TriggerTasks.Count - 1; index >= 0; index--)
+        {
+            if (!retainedIds.Contains(TriggerTasks[index].Id))
+            {
+                TriggerTasks.RemoveAt(index);
+            }
+        }
+
+        int targetIndex = 0;
         foreach (TriggerDefinitionCatalogItem task in catalog.Tasks)
         {
-            TriggerTasks.Add(new TriggerTaskItemViewModel(
-                task.Definition,
-                task.LastTriggeredAt,
-                _getString));
+            if (existing.TryGetValue(task.Definition.Id, out TriggerTaskItemViewModel? row))
+            {
+                row.Update(task.Definition, task.LastTriggeredAt);
+                int currentIndex = TriggerTasks.IndexOf(row);
+                if (currentIndex != targetIndex)
+                {
+                    TriggerTasks.Move(currentIndex, targetIndex);
+                }
+            }
+            else
+            {
+                TriggerTasks.Insert(targetIndex, new TriggerTaskItemViewModel(
+                    task.Definition,
+                    task.LastTriggeredAt,
+                    _getString));
+            }
+
+            targetIndex++;
         }
 
         OnPropertyChanged(nameof(IsEmpty));

@@ -121,7 +121,9 @@ public sealed partial class Triggers : Page
 
     private async void TriggerEnabledToggle_Toggled(object sender, RoutedEventArgs args)
     {
-        if (sender is not ToggleSwitch { Tag: TriggerTaskItemViewModel item } toggle
+        if (_viewModel.IsBusy
+            || sender is not ToggleSwitch { IsLoaded: true, Tag: TriggerTaskItemViewModel item } toggle
+            || !ReferenceEquals(toggle.DataContext, item)
             || toggle.IsOn == item.IsEnabled)
         {
             return;
@@ -261,9 +263,20 @@ public sealed partial class Triggers : Page
             PrimaryButtonText = _viewModel.AddText,
             CloseButtonText = _viewModel.CancelText,
             DefaultButton = ContentDialogButton.Primary,
+            IsPrimaryButtonEnabled = content.SelectedOptions.Count == 1,
             XamlRoot = XamlRoot,
         };
-        return await dialog.ShowManagedAsync() is ContentDialogResult.Primary;
+        EventHandler selectionChanged = (_, _) =>
+            dialog.IsPrimaryButtonEnabled = content.SelectedOptions.Count == 1;
+        content.SelectionChanged += selectionChanged;
+        try
+        {
+            return await dialog.ShowManagedAsync() is ContentDialogResult.Primary;
+        }
+        finally
+        {
+            content.SelectionChanged -= selectionChanged;
+        }
     }
 
     private async Task AwaitPageOperationAsync(Func<CancellationToken, Task> operation)

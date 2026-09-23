@@ -24,6 +24,54 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed class TriggerEditorViewModelTests
 {
     [Fact]
+    public void OptionSelections_FollowSelectedDraftAndPreserveValuesAcrossTemporaryDeselection()
+    {
+        TriggerEditorViewModel editor = NewEditor();
+        TriggerConditionEditorViewModel traffic = editor.AddCondition(TriggerConditionTemplate.RollingTraffic);
+        Assert.Same(editor.TrafficScopeOptions[0], editor.SelectedTrafficScopeOption);
+        editor.SelectedTrafficScopeOption = editor.TrafficScopeOptions[2];
+        Assert.Equal(TriggerTrafficScope.AllTime, traffic.TrafficScope);
+        editor.SelectedTrafficScopeOption = null;
+        Assert.Equal(TriggerTrafficScope.AllTime, traffic.TrafficScope);
+
+        TriggerConditionEditorViewModel rate = editor.AddCondition(TriggerConditionTemplate.DownloadRate);
+        Assert.Same(editor.RateDirectionOptions[1], editor.SelectedRateDirectionOption);
+        editor.SelectedRateDirectionOption = editor.RateDirectionOptions[0];
+        Assert.Equal(TriggerTrafficDirection.Upload, rate.RateDirection);
+        TriggerConditionEditorViewModel notification = editor.AddCondition(TriggerConditionTemplate.NotificationRaised);
+        Assert.Same(editor.NotificationLevelOptions[1], editor.SelectedNotificationLevelOption);
+        editor.SelectedNotificationLevelOption = editor.NotificationLevelOptions[2];
+        Assert.Equal(TriggerNotificationLevel.More, notification.NotificationLevel);
+
+        List<string?> changes = [];
+        editor.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+        editor.SelectedCondition = traffic;
+        Assert.Contains(nameof(editor.SelectedTrafficScopeOption), changes);
+        Assert.Same(editor.TrafficScopeOptions[2], editor.SelectedTrafficScopeOption);
+        changes.Clear();
+        rate.RateDirection = TriggerTrafficDirection.Download;
+        Assert.Empty(changes);
+        traffic.TrafficScope = TriggerTrafficScope.CurrentSession;
+        Assert.Contains(nameof(editor.SelectedTrafficScopeOption), changes);
+        Assert.Same(editor.TrafficScopeOptions[1], editor.SelectedTrafficScopeOption);
+
+        TriggerActionEditorViewModel mode = editor.AddAction(TriggerActionKind.SwitchProxyMode);
+        var selectedMode = editor.ProxyModeOptions.Single(option => option.Value == ClashSharpMode.Standby);
+        editor.SelectedProxyModeOption = selectedMode;
+        Assert.Equal(ClashSharpMode.Standby, mode.ProxyMode);
+        editor.SelectedProxyModeOption = null;
+        Assert.Same(selectedMode, editor.SelectedProxyModeOption);
+        editor.SelectedAction = editor.Actions[0];
+        editor.SelectedAction = mode;
+        Assert.Same(selectedMode, editor.SelectedProxyModeOption);
+        Assert.True(editor.TryBuildDefinition(out TriggerTaskDefinition? definition));
+        Assert.Equal(TriggerTrafficScope.CurrentSession,
+            Assert.IsType<TrafficConditionParameters>(definition!.Conditions[1].Parameters).Scope);
+        Assert.Equal(ClashSharpMode.Standby,
+            Assert.IsType<ProxyModeActionParameters>(definition.Actions[1].Parameters).Mode);
+    }
+
+    [Fact]
     public async Task OpenEditSaveReload_RoundTripsEveryUntouchedConditionAndActionInOrder()
     {
         TriggerTaskDefinition original = CompleteDefinition("alpha", "Original");
@@ -334,6 +382,49 @@ public sealed class TriggerEditorViewModelTests
         Assert.Equal("trigger.action.exit.must_be_final", editor.ErrorCode);
         Assert.True(editor.TryBuildDefinition(out TriggerTaskDefinition? definition));
         Assert.Equal(TriggerActionKind.ExitApplication, definition!.Actions[^1].Kind);
+    }
+
+    [Fact]
+    public async Task CatalogMutations_PreserveRowsAndPublishDurableToggleStatesWithoutReset()
+    {
+        RecordingDefinitionStore store = new(Catalog(3,
+            CompleteDefinition("alpha", "Alpha"),
+            CompleteDefinition("beta", "Beta")));
+        TriggersViewModel list = NewList(store);
+        await list.LoadAsync(CancellationToken.None);
+        var alpha = list.TriggerTasks[0];
+        var beta = list.TriggerTasks[1];
+        List<System.Collections.Specialized.NotifyCollectionChangedAction> changes = [];
+        list.TriggerTasks.CollectionChanged += (_, args) => changes.Add(args.Action);
+        List<bool> alphaStates = [];
+        List<bool> betaStates = [];
+        alpha.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(alpha.IsEnabled)) { alphaStates.Add(alpha.IsEnabled); }
+        };
+        beta.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(beta.IsEnabled)) { betaStates.Add(beta.IsEnabled); }
+        };
+
+        Assert.True(await list.SetAllTasksEnabledAsync(false, CancellationToken.None));
+        Assert.True(await list.SetAllTasksEnabledAsync(true, CancellationToken.None));
+        Assert.True(await list.SetTaskEnabledAsync("beta", false, CancellationToken.None));
+        Assert.Same(alpha, list.TriggerTasks[0]);
+        Assert.Same(beta, list.TriggerTasks[1]);
+        Assert.Equal([false, true, true], alphaStates);
+        Assert.Equal([false, true, false], betaStates);
+        Assert.True(list.CanEnableAllTriggers);
+        Assert.True(list.CanDisableAllTriggers);
+        Assert.Empty(changes);
+
+        Assert.True(await list.MoveTaskAsync("beta", -1, CancellationToken.None));
+        Assert.Same(beta, list.TriggerTasks[0]);
+        Assert.Same(alpha, list.TriggerTasks[1]);
+        Assert.Equal(System.Collections.Specialized.NotifyCollectionChangedAction.Move, Assert.Single(changes));
+        Assert.True(await list.DeleteTaskAsync("beta", CancellationToken.None));
+        Assert.Same(alpha, Assert.Single(list.TriggerTasks));
+        Assert.DoesNotContain(System.Collections.Specialized.NotifyCollectionChangedAction.Reset, changes);
     }
 
     [Fact]

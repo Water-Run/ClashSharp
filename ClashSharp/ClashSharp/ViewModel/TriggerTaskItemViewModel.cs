@@ -5,7 +5,7 @@ using ClashSharp.Model.Triggers;
 
 namespace ClashSharp.ViewModel;
 
-/// <summary>Immutable bindable row for one persisted trigger definition.</summary>
+/// <summary>Stable bindable row that publishes the latest persisted trigger definition.</summary>
 internal sealed class TriggerTaskItemViewModel : ObservableObject
 {
     private readonly Func<string, string> _getString;
@@ -20,9 +20,29 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
 
-    public TriggerTaskDefinition Definition { get; }
+    public TriggerTaskDefinition Definition { get; private set; }
 
-    public DateTimeOffset? LastTriggeredAt { get; }
+    public DateTimeOffset? LastTriggeredAt { get; private set; }
+
+    /// <summary>Refreshes persisted values without replacing the row bound to an interactive control.</summary>
+    public void Update(TriggerTaskDefinition definition, DateTimeOffset? lastTriggeredAt)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (!StringComparer.Ordinal.Equals(Id, definition.Id))
+        {
+            throw new ArgumentException("A trigger row cannot change identity.", nameof(definition));
+        }
+
+        Definition = definition;
+        LastTriggeredAt = lastTriggeredAt;
+        OnPropertyChanged(nameof(Definition));
+        OnPropertyChanged(nameof(Name));
+        OnPropertyChanged(nameof(IsEnabled));
+        OnPropertyChanged(nameof(ConditionsSummary));
+        OnPropertyChanged(nameof(ActionsSummary));
+        OnPropertyChanged(nameof(LastTriggeredAt));
+        OnPropertyChanged(nameof(LastTriggeredSummary));
+    }
 
     public string Id => Definition.Id;
 
