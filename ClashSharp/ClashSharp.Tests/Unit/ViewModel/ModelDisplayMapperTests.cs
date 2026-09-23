@@ -7,6 +7,21 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Verifies UI filtering is applied by presentation mapping without mutating models.</summary>
 public sealed class ModelDisplayMapperTests
 {
+    [Theory]
+    [InlineData("HTTP", null, false, "host", 443, "Master.Status.LatencyUnavailable")]
+    [InlineData("HTTP", null, true, "host", 443, "ProxyNodes.Latency.Failed")]
+    [InlineData("HTTP", null, true, "", null, "ProxyNodes.Latency.NoEndpoint")]
+    [InlineData("DIRECT", 0, true, "", null, "ProxyNodes.Latency.Direct")]
+    [InlineData("HTTP", 0, true, "host", 443, "0 ms")]
+    [InlineData("HTTP", 42, true, "host", 443, "42 ms")]
+    public void LatencyDisplay_DistinguishesResultsAndIncludesUnits(
+        string protocol, int? latency, bool tested, string host, int? port, string expected)
+    {
+        ProxyNode node = new("Node", protocol, new("UN", "UN", ""), latency, host, port, tested);
+        Assert.Equal(expected, ProxyNodeDisplay.FormatLatency(node,
+            key => key == "Master.Status.Latency.Format" ? "{0} ms" : key));
+    }
+
     /// <summary>Verifies an uninitialized timestamp is not shown as year one.</summary>
     [Fact]
     public void SubscriptionDisplay_NeverUpdatedUsesPlaceholder()

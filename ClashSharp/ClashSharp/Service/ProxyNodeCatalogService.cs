@@ -22,14 +22,17 @@ public sealed partial class ProxyNodeCatalogService
     private readonly IProxyNodeCatalogProfileNodes _profileNodes;
 
     private readonly Func<string, RegionMetadata> _resolveRegion;
+    private readonly Func<ProxyNode, ProxyNode> _applyLastMeasurement;
 
     /// <summary>Initializes a new proxy node catalog service instance.</summary>
     internal ProxyNodeCatalogService(
         IProxyNodeCatalogProfileNodes profileNodes,
-        Func<string, RegionMetadata> resolveRegion)
+        Func<string, RegionMetadata> resolveRegion,
+        Func<ProxyNode, ProxyNode>? applyLastMeasurement = null)
     {
         _profileNodes = profileNodes ?? throw new ArgumentNullException(nameof(profileNodes));
         _resolveRegion = resolveRegion ?? throw new ArgumentNullException(nameof(resolveRegion));
+        _applyLastMeasurement = applyLastMeasurement ?? (static node => node);
     }
 
     /// <summary>Returns nodes from the active imported profile or a direct fallback row when none are available.</summary>
@@ -39,7 +42,12 @@ public sealed partial class ProxyNodeCatalogService
         IReadOnlyList<ProxyNode> parsedNodes = _profileNodes.ParseActiveProfileNodes();
         if (parsedNodes.Count > 0)
         {
-            return parsedNodes;
+            List<ProxyNode> nodes = new(parsedNodes.Count);
+            foreach (ProxyNode node in parsedNodes)
+            {
+                nodes.Add(_applyLastMeasurement(node));
+            }
+            return nodes;
         }
 
         return

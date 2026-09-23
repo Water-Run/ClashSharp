@@ -23,7 +23,7 @@ internal interface IProxyLatencyProbe
 /// <summary>Measures proxy node TCP reachability and records node health statistics.</summary>
 /// <remarks>
 /// Invariants: Probes never mutate proxy configuration or Windows proxy settings.
-/// Thread safety: Stateless service and safe for concurrent calls.
+/// Thread safety: Completed batches are published atomically for concurrent readers.
 /// Side effects: Opens short-lived TCP connections and writes node health rows to SQLite.
 /// </remarks>
 public sealed partial class ProxyLatencyService
@@ -34,6 +34,18 @@ public sealed partial class ProxyLatencyService
     private readonly IProxyLatencyStorage _storage;
 
     private readonly IProxyLatencyProbe _probe;
+
+    private IReadOnlyDictionary<(string Name, string Protocol, string Host, int? Port), ProxyNode> _latestMeasurements =
+        new Dictionary<(string, string, string, int?), ProxyNode>();
+
+    /// <summary>Applies the last completed batch only when the node name and endpoint still match.</summary>
+    public ProxyNode ApplyLastMeasurement(ProxyNode node)
+    {
+        return Volatile.Read(ref _latestMeasurements).TryGetValue(
+            (node.Name, node.Protocol, node.ServerHost, node.ServerPort), out ProxyNode measured)
+            ? node with { LatencyMilliseconds = measured.LatencyMilliseconds, WasLatencyTested = true }
+            : node;
+    }
 
     /// <summary>Initializes the latency service.</summary>
     internal ProxyLatencyService(IProxyLatencyStorage storage, IProxyLatencyProbe probe)
@@ -52,15 +64,19 @@ public sealed partial class ProxyLatencyService
         ArgumentNullException.ThrowIfNull(nodes);
 
         List<ProxyNode> testedNodes = new(nodes.Count);
+        Dictionary<(string, string, string, int?), ProxyNode> measurements = new();
         foreach (ProxyNode node in nodes)
         {
             cancellationToken.ThrowIfCancellationRequested();
             int? latency = await TestNodeAsync(node, cancellationToken).ConfigureAwait(false);
-            ProxyNode testedNode = node with { LatencyMilliseconds = latency };
+            cancellationToken.ThrowIfCancellationRequested();
+            ProxyNode testedNode = node with { LatencyMilliseconds = latency, WasLatencyTested = true };
             testedNodes.Add(testedNode);
             _storage.UpsertNodeHealth(testedNode.Name, testedNode.Region.RegionCode, latency);
+            measurements[(node.Name, node.Protocol, node.ServerHost, node.ServerPort)] = testedNode;
         }
 
+        Volatile.Write(ref _latestMeasurements, measurements);
         return testedNodes;
     }
 

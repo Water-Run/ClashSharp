@@ -378,7 +378,10 @@ internal sealed class ProxiesViewModel : ObservableObject
         List<ProxyNodeDisplay> rows = new(nodes.Count);
         foreach (ProxyNode node in nodes)
         {
-            rows.Add(_displayMapper.Map(node));
+            rows.Add(_displayMapper.Map(node) with
+            {
+                LatencyDisplay = ProxyNodeDisplay.FormatLatency(node, _localization.GetString),
+            });
         }
 
         ProxyNodes = rows;

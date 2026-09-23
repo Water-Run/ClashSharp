@@ -800,7 +800,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             : snapshot.CurrentNodeName;
         LatencySummaryText = snapshot.LatencyMilliseconds is int latency
             ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Master.Status.Latency.Format"), latency)
-            : _localization.GetString("Master.Status.LatencyUnavailable");
+            : _localization.GetString(snapshot.HasCurrentNode
+                ? "Master.Status.LatencyUnavailable"
+                : "Master.Status.Unavailable");
     }
 
     private async Task RefreshRuntimeSnapshotAsync(CancellationToken cancellationToken)

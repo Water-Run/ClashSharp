@@ -643,7 +643,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         StatusDetail = "请使用本次操作所用的安装器重新检查，或保留诊断代码以便排查。";
         DiagnosticCode = diagnosticCode;
         ProgressStatus = "需要恢复或诊断。";
-        ApplySessionFailureGuidance(diagnosticCode);
+        ApplyFailureGuidance(diagnosticCode);
     }
 
     private void ApplyExecutionResult(InstallerExecutionResult result)
@@ -679,7 +679,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
         if (result.Outcome is InstallerExecutionOutcome.Failed or InstallerExecutionOutcome.Blocked)
         {
-            ApplySessionFailureGuidance(result.DiagnosticCode);
+            ApplyFailureGuidance(result.DiagnosticCode);
         }
 
         if (result.Outcome == InstallerExecutionOutcome.Succeeded)
@@ -692,9 +692,21 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         }
     }
 
-    private void ApplySessionFailureGuidance(string diagnosticCode)
+    private void ApplyFailureGuidance(string diagnosticCode)
     {
-        if (diagnosticCode == "installer.concurrent_action_rejected")
+        if (diagnosticCode == "installer.release.locked_file_hash_mismatch")
+        {
+            StatusTitle = "安装文件校验失败";
+            StatusDetail = "文件可能已损坏或与此安装器不匹配。请重新获取同一版本的完整安装包，"
+                + "完整解压后运行其中的安装器，并保留全部随附文件。";
+        }
+        else if (diagnosticCode == "installer.release.payload_file_set_invalid")
+        {
+            StatusTitle = "安装文件不完整或不匹配";
+            StatusDetail = "请重新获取同一版本的完整安装包，完整解压后运行其中的安装器，"
+                + "并保留全部随附文件，不要混用其他版本的文件。";
+        }
+        else if (diagnosticCode == "installer.concurrent_action_rejected")
         {
             StatusTitle = "已有安装操作正在执行";
             StatusDetail = "请等待另一项安装、修复或卸载操作完成，再使用原安装器重新检查。";
@@ -713,7 +725,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         if (!cleanup.HasRetained)
         {
             StatusTitle = "卸载已完成";
-            StatusDetail = "自有空目录已清理或已不存在。可以关闭安装器，或重新检查以管理此应用。";
+            StatusDetail = "ClashSharp 已从此电脑移除。可以关闭安装器，或重新检查以再次安装。";
             return;
         }
 

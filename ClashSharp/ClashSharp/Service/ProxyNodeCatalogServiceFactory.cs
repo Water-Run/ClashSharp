@@ -19,7 +19,8 @@ internal static class ProxyNodeCatalogServiceFactory
     {
         return new ProxyNodeCatalogService(
             new ProxyNodeCatalogProfileNodesAdapter(MihomoProfileParserService.Instance),
-            RegionDisplayService.Instance.Resolve);
+            RegionDisplayService.Instance.Resolve,
+            ProxyLatencyService.Instance.ApplyLastMeasurement);
     }
 }
 

@@ -57,6 +57,7 @@ public sealed partial class MasterControl : Page
     private readonly Func<IReadOnlyList<ProxyNode>> _getProxyNodes;
     private readonly Func<IReadOnlyList<ProxyNode>, CancellationToken, Task<IReadOnlyList<ProxyNode>>> _testProxyLatencyAsync;
     private readonly Action _openSettings;
+    private readonly Func<string, string> _filterDisplayText;
     private readonly MasterHeroStatusSelectionGate _heroStatusSelection = new();
 
     /// <summary>Owns cancellable work for the current visit to this page.</summary>
@@ -77,6 +78,8 @@ public sealed partial class MasterControl : Page
             ?? throw new ArgumentException("A master-control view model is required.", nameof(dependencies));
         _getString = dependencies.GetString
             ?? throw new ArgumentException("A localization function is required.", nameof(dependencies));
+        _filterDisplayText = dependencies.FilterDisplayText
+            ?? throw new ArgumentException("A display text filter is required.", nameof(dependencies));
         _errorSink = dependencies.ErrorSink
             ?? throw new ArgumentException("An application error sink is required.", nameof(dependencies));
         _refreshSession = new PageLoadSession(_errorSink, "master-live-refresh");
@@ -419,6 +422,19 @@ public sealed partial class MasterControl : Page
         };
         ProgressRing progressRing = new() { IsActive = true, Width = 20, Height = 20 };
         StackPanel content = BuildLatencyDialogContent(progressText, timeoutBar, progressRing);
+        StackPanel results = new() { Spacing = 10 };
+        content.Children.Add(new TextBlock
+        {
+            Text = _getString("Master.LatencyDialog.Description"),
+            TextWrapping = TextWrapping.Wrap,
+        });
+        content.Children.Add(new ScrollViewer
+        {
+            Content = results,
+            MaxHeight = 180,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        });
 
         ThemedContentDialog dialog = new()
         {
@@ -449,7 +465,7 @@ public sealed partial class MasterControl : Page
 
         void OnDialogOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
         {
-            latencyTask = RunLatencyTestWithProgressAsync(dialog, progressText, timeoutBar, progressRing, cancellation.Token);
+            latencyTask = RunLatencyTestWithProgressAsync(dialog, progressText, timeoutBar, progressRing, results, cancellation.Token);
         }
     }
 
@@ -462,12 +478,14 @@ public sealed partial class MasterControl : Page
             MinWidth = 360,
         };
 
-        StackPanel progressRow = new()
+        Grid progressRow = new()
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 10,
+            ColumnSpacing = 10,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(progressText, 1);
         progressRow.Children.Add(progressRing);
         progressRow.Children.Add(progressText);
         content.Children.Add(progressRow);
@@ -481,6 +499,7 @@ public sealed partial class MasterControl : Page
         TextBlock progressText,
         ProgressBar timeoutBar,
         ProgressRing progressRing,
+        StackPanel results,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<ProxyNode> nodes = _getProxyNodes();
@@ -505,6 +524,23 @@ public sealed partial class MasterControl : Page
                 CultureInfo.CurrentCulture,
                 _getString("Master.LatencyDialog.Completed.Format"),
                 testedNodes.Count);
+            foreach (ProxyNode node in testedNodes)
+            {
+                Grid row = new() { ColumnSpacing = 12 };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                TextBlock name = new() { Text = _filterDisplayText(node.Name), TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+                TextBlock latency = new()
+                {
+                    Text = ProxyNodeDisplay.FormatLatency(node, _getString),
+                    TextWrapping = TextWrapping.Wrap,
+                    TextAlignment = FlowDirection == FlowDirection.RightToLeft ? TextAlignment.Left : TextAlignment.Right,
+                };
+                Grid.SetColumn(latency, 1);
+                row.Children.Add(name);
+                row.Children.Add(latency);
+                results.Children.Add(row);
+            }
             timeoutBar.Value = 100;
             await RefreshAfterActionAsync(cancellationToken);
         }

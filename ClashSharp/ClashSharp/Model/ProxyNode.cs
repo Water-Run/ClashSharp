@@ -7,6 +7,7 @@ namespace ClashSharp.Model;
 /// <param name="LatencyMilliseconds">Measured latency in milliseconds; null when not tested.</param>
 /// <param name="ServerHost">Proxy server host used for latency probing; empty when unavailable.</param>
 /// <param name="ServerPort">Proxy server port used for latency probing; null when unavailable.</param>
+/// <param name="WasLatencyTested">Whether this endpoint has a completed measurement in this application session.</param>
 /// <remarks>
 /// Invariants: String values are never null.
 /// Thread safety: Immutable value type and inherently thread-safe after construction.
@@ -18,4 +19,5 @@ public readonly record struct ProxyNode(
     RegionMetadata Region,
     int? LatencyMilliseconds,
     string ServerHost = "",
-    int? ServerPort = null);
+    int? ServerPort = null,
+    bool WasLatencyTested = false);

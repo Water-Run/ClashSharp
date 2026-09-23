@@ -66,6 +66,60 @@ public sealed class ProxyLatencyServiceTests
         Assert.Null(Assert.Single(storage.Entries).LatencyMilliseconds);
     }
 
+    [Fact]
+    public async Task CompletedBatch_SurvivesCatalogRefreshWithoutReusingAnotherEndpoint()
+    {
+        ProxyLatencyService service = new(new FakeProxyLatencyStorage(), new FakeProxyLatencyProbe { LatencyMilliseconds = 42 });
+        ProxyNode node = CreateNode("Shared name", "HTTP", "one.example.invalid", 443);
+        await service.TestNodesAsync([node], CancellationToken.None);
+
+        ProxyNodeCatalogService catalog = new(new CatalogNodes(node), code => new(code, code, code), service.ApplyLastMeasurement);
+        ProxyNode refreshed = Assert.Single(catalog.GetNodes());
+        Assert.Equal(42, refreshed.LatencyMilliseconds);
+        Assert.True(refreshed.WasLatencyTested);
+        foreach (ProxyNode changed in new[]
+        {
+            node with { ServerHost = "two.example.invalid" },
+            node with { ServerPort = 8443 },
+            node with { Protocol = "SOCKS5" },
+            node with { Name = "Other" },
+        })
+        {
+            Assert.False(service.ApplyLastMeasurement(changed).WasLatencyTested);
+            Assert.Null(service.ApplyLastMeasurement(changed).LatencyMilliseconds);
+        }
+    }
+
+    [Fact]
+    public async Task CompletedFailure_IsRetainedAndDistinguishedFromUntested()
+    {
+        ProxyLatencyService service = new(new FakeProxyLatencyStorage(), new FakeProxyLatencyProbe());
+        ProxyNode node = CreateNode("Failed", "HTTP", "one.example.invalid", 443);
+        await service.TestNodesAsync([node], CancellationToken.None);
+        Assert.True(service.ApplyLastMeasurement(node).WasLatencyTested);
+        Assert.Null(service.ApplyLastMeasurement(node).LatencyMilliseconds);
+    }
+
+    [Fact]
+    public async Task CancellationDuringProbe_DoesNotPersistOrPublishAFailedMeasurement()
+    {
+        using CancellationTokenSource cancellation = new();
+        FakeProxyLatencyStorage storage = new();
+        FakeProxyLatencyProbe probe = new() { LatencyMilliseconds = 42 };
+        ProxyLatencyService service = new(storage, probe);
+        ProxyNode node = CreateNode("Existing", "HTTP", "one.example.invalid", 443);
+        await service.TestNodesAsync([node], CancellationToken.None);
+        probe.OnProbe = cancellation.Cancel;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.TestNodesAsync([node], cancellation.Token));
+        Assert.Single(storage.Entries);
+        Assert.Equal(42, service.ApplyLastMeasurement(node).LatencyMilliseconds);
+    }
+
+    private sealed class CatalogNodes(ProxyNode node) : IProxyNodeCatalogProfileNodes
+    {
+        public IReadOnlyList<ProxyNode> ParseActiveProfileNodes() => [node];
+    }
+
     private static ProxyNode CreateNode(string name, string protocol, string host, int? port)
     {
         return new ProxyNode(name, protocol, new RegionMetadata("CN", "China", "cn.png"), null, host, port);
@@ -83,6 +137,7 @@ public sealed class ProxyLatencyServiceTests
 
     private sealed class FakeProxyLatencyProbe : IProxyLatencyProbe
     {
+        public Action? OnProbe { get; set; }
         public int? LatencyMilliseconds { get; init; }
 
         public List<ProxyLatencyProbeRequest> Requests { get; } = [];
@@ -90,6 +145,7 @@ public sealed class ProxyLatencyServiceTests
         public Task<int?> ProbeAsync(string host, int port, TimeSpan timeout, CancellationToken cancellationToken)
         {
             Requests.Add(new ProxyLatencyProbeRequest(host, port, timeout));
+            OnProbe?.Invoke();
             return Task.FromResult(LatencyMilliseconds);
         }
     }
