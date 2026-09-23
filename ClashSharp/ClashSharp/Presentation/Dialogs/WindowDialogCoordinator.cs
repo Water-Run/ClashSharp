@@ -39,10 +39,11 @@ internal static class WindowDialogCoordinator
         using (lease)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            // ContentDialog is hosted outside the page tree and does not inherit its theme.
+            // ContentDialog is hosted outside the page tree, including XAML-defined dialogs.
             if (xamlRoot.Content is FrameworkElement root)
             {
                 dialog.RequestedTheme = root.ActualTheme;
+                dialog.FlowDirection = root.FlowDirection;
             }
 
             return await ShowWithCancellationAsync(dialog, cancellationToken);

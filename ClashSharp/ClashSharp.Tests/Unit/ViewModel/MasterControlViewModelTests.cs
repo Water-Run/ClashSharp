@@ -4,6 +4,7 @@ using ClashSharp.Diagnostics;
 using ClashSharp.Infrastructure.Networking;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
@@ -694,6 +695,21 @@ public sealed partial class MasterControlViewModelTests
             tile => Assert.Equal(
                 infoTileLayout.SavedLayout.Contains(tile.Id, StringComparer.Ordinal),
                 tile.IsVisible));
+    }
+
+    [Fact]
+    public async Task InfoTileCatalog_AllVisibleTilesFitPersistedLayoutValidation()
+    {
+        MasterControlViewModel viewModel = CreateViewModel();
+        await viewModel.LoadAsync(CancellationToken.None);
+        string allTileIds = string.Join(",", viewModel.InfoTiles.Select(static tile => tile.Id));
+
+        SettingNormalizationResult result = SettingsRegistry.Default
+            .Get(SettingsRegistry.Keys.MasterInfoTileLayout.Value)
+            .Normalize(allTileIds);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(allTileIds, result.Value!.CanonicalText);
     }
 
     [Fact]

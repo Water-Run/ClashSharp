@@ -490,7 +490,7 @@ public sealed partial class ClashDataPackageServiceTests
     {
         using TemporaryDirectory directory = new();
         string packagePath = Path.Combine(directory.Path, "too-many-info-tiles.xml");
-        string importedLayout = string.Join(",", Enumerable.Range(1, 65).Select(index => $"tile-{index}"));
+        string importedLayout = string.Join(",", Enumerable.Range(1, 129).Select(index => $"tile-{index}"));
         XDocument document = new(
             new XElement("ClashSharpDataPackage",
                 new XAttribute("Format", "ClashSharp.XmlDataPackage"),

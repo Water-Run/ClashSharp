@@ -613,7 +613,7 @@ public sealed partial class SettingsRegistry
                 normalized.Add(canonical);
             }
 
-            if (normalized.Count > 64)
+            if (normalized.Count > 128)
             {
                 return Invalid(SettingValueErrorKind.OutOfRange, "master_info_tile.too_many");
             }

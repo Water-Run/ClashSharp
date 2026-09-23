@@ -66,6 +66,22 @@ public sealed class SettingsRegistryTests
     }
 
     [Fact]
+    public void MasterInfoTileLayout_Allows128ItemsButRejects129()
+    {
+        SettingDefinition definition = SettingsRegistry.Default.Get("MasterInfoTileLayout");
+        string maximumLayout = string.Join(",", Enumerable.Range(1, 128).Select(index => $"tile-{index}"));
+
+        SettingNormalizationResult accepted = definition.Normalize(maximumLayout);
+        SettingNormalizationResult rejected = definition.Normalize(maximumLayout + ",tile-129");
+
+        Assert.True(accepted.IsSuccess);
+        Assert.Equal(maximumLayout, accepted.Value!.CanonicalText);
+        Assert.False(rejected.IsSuccess);
+        Assert.Null(rejected.Value);
+        Assert.Equal(SettingValueErrorKind.OutOfRange, rejected.Error!.Kind);
+    }
+
+    [Fact]
     public void Default_CoversLegacyDisplayFlagAsReadOnlyAlias()
     {
         SettingsRegistry registry = SettingsRegistry.Default;
