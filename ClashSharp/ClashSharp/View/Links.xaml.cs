@@ -155,6 +155,8 @@ public sealed partial class Links : Page
             {
                 Header = _getString("Links.Dialog.AutomaticUpdates"),
                 IsOn = selectedLink.Model.IsEnabled,
+                OnContent = _getString("Master.Status.On"),
+                OffContent = _getString("Master.Status.Off"),
             };
             StackPanel content = new() { Spacing = 12 };
             content.Children.Add(nameBox);

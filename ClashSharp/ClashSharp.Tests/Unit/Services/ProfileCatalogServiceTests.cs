@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
 using ClashSharp.Service;
@@ -7,6 +10,71 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for profile catalog composition.</summary>
 public sealed class ProfileCatalogServiceTests
 {
+    [Fact]
+    public async Task ImportSubscriptionLinkAsync_AutomaticUpdatesDisabled_ManualImportStillSucceeds()
+    {
+        using TempFile tempFile = new();
+        FakeProfileCatalogCoreConfiguration core = new();
+        ProfileCatalogService service = CreateService(tempFile.Path, new FakeProfileCatalogSettings(), core);
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        ProfileSubscriptionLink added = await service.AddSubscriptionLinkAsync(
+            "Manual only", $"http://127.0.0.1:{port}/profile.yaml", CancellationToken.None);
+        Assert.True(await service.TryUpdateSubscriptionLinkAsync(
+            added.Id, added.Name, added.Uri, false, 24, CancellationToken.None));
+        ProfileSubscriptionLink disabled = Assert.Single(service.GetSubscriptionLinks());
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        Task response = ServeSubscriptionAsync(listener, timeout.Token);
+        try
+        {
+            ProfileImportResult imported = await service.ImportSubscriptionLinkAsync(disabled, timeout.Token);
+            await response;
+
+            Assert.Equal("subscription-" + disabled.Id, imported.ProfileId);
+            Assert.Equal("rules:\n  - MATCH,DIRECT\n", Assert.Single(core.Imports).ConfigurationText);
+            ProfileSubscriptionLink updated = Assert.Single(service.GetSubscriptionLinks());
+            Assert.False(updated.IsEnabled);
+            Assert.True(updated.LastUpdatedAt > DateTimeOffset.UnixEpoch);
+        }
+        finally
+        {
+            await timeout.CancelAsync();
+            try { await response; }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested) { }
+        }
+    }
+
+    [Fact]
+    public async Task ImportDueSubscriptionLinkAsync_AutomaticUpdatesDisabled_DoesNotDownloadOrImport()
+    {
+        using TempFile tempFile = new();
+        FakeProfileCatalogCoreConfiguration core = new();
+        ProfileCatalogService service = CreateService(tempFile.Path, new FakeProfileCatalogSettings(), core);
+        ProfileSubscriptionLink added = await service.AddSubscriptionLinkAsync(
+            "Manual only", "http://127.0.0.1:1/profile.yaml", CancellationToken.None);
+        Assert.True(await service.TryUpdateSubscriptionLinkAsync(
+            added.Id, added.Name, added.Uri, false, 24, CancellationToken.None));
+
+        ProfileImportResult? imported = await service.ImportDueSubscriptionLinkAsync(
+            Assert.Single(service.GetSubscriptionLinks()), DateTimeOffset.Now.AddDays(1), CancellationToken.None);
+
+        Assert.Null(imported);
+        Assert.Empty(core.Imports);
+    }
+
+    private static async Task ServeSubscriptionAsync(TcpListener listener, CancellationToken cancellationToken)
+    {
+        using TcpClient client = await listener.AcceptTcpClientAsync(cancellationToken);
+        await using NetworkStream stream = client.GetStream();
+        using StreamReader reader = new(stream, Encoding.ASCII, leaveOpen: true);
+        while (await reader.ReadLineAsync(cancellationToken) is { Length: > 0 }) { }
+        const string body = "rules:\n  - MATCH,DIRECT\n";
+        byte[] reply = Encoding.UTF8.GetBytes(
+            $"HTTP/1.1 200 OK\r\nContent-Type: text/yaml\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}");
+        await stream.WriteAsync(reply, cancellationToken);
+    }
+
     [Fact]
     public async Task DisposeAsync_DrainsActivationBeforeRetiringAndPreservesCapturedProfiles()
     {

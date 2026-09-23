@@ -909,7 +909,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
         ProfileSubscriptionLink currentLink;
         try
         {
-            currentLink = ResolveCurrentSubscriptionLink(link, requireEnabled: true);
+            currentLink = ResolveCurrentSubscriptionLink(link, requireEnabled: requireDue);
         }
         catch (InvalidOperationException) when (requireDue)
         {
