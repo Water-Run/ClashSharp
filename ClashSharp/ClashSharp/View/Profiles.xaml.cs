@@ -112,7 +112,8 @@ public sealed partial class Profiles : Page
 
     private async void RenameProfileButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.SelectedProfile is not ConfigurationProfileDisplay selectedProfile)
+        if (!_viewModel.CanModifySelectedProfile
+            || _viewModel.SelectedProfile is not ConfigurationProfileDisplay selectedProfile)
         {
             return;
         }
@@ -156,7 +157,8 @@ public sealed partial class Profiles : Page
 
     private async void DeleteProfileButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.SelectedProfile is not ConfigurationProfileDisplay selectedProfile)
+        if (!_viewModel.CanModifySelectedProfile
+            || _viewModel.SelectedProfile is not ConfigurationProfileDisplay selectedProfile)
         {
             return;
         }

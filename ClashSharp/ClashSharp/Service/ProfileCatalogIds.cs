@@ -9,5 +9,5 @@ namespace ClashSharp.Service;
 public static class ProfileCatalogIds
 {
     /// <summary>Built-in direct profile used before the user imports a subscription or local profile.</summary>
-    public const string BuiltInDirect = "builtin-direct";
+    public const string BuiltInDirect = Model.ProfileIdentifiers.BuiltInDirect;
 }

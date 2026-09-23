@@ -43,12 +43,12 @@
                 </AppBarButton.Icon>
             </AppBarButton>
             <AppBarSeparator />
-            <AppBarButton x:Name="RenameProfileButton" IsEnabled="{Binding HasSelectedProfile}" Label="{Binding RenameProfileText}" Click="RenameProfileButton_Click">
+            <AppBarButton x:Name="RenameProfileButton" IsEnabled="{Binding CanModifySelectedProfile}" Label="{Binding RenameProfileText}" Click="RenameProfileButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE70F;" />
                 </AppBarButton.Icon>
             </AppBarButton>
-            <AppBarButton x:Name="DeleteProfileButton" IsEnabled="{Binding HasSelectedProfile}" Label="{Binding DeleteProfileText}" Click="DeleteProfileButton_Click">
+            <AppBarButton x:Name="DeleteProfileButton" IsEnabled="{Binding CanModifySelectedProfile}" Label="{Binding DeleteProfileText}" Click="DeleteProfileButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE74D;" />
                 </AppBarButton.Icon>

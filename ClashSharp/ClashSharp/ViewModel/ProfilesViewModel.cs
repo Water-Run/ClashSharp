@@ -185,12 +185,17 @@ internal sealed class ProfilesViewModel : ObservableObject
                 _selectedProfile = value;
                 OnPropertyChanged(nameof(SelectedProfile));
                 OnPropertyChanged(nameof(HasSelectedProfile));
+                OnPropertyChanged(nameof(CanModifySelectedProfile));
             }
         }
     }
 
     /// <summary>Gets whether profile actions have a selected target.</summary>
     public bool HasSelectedProfile => SelectedProfile is not null;
+
+    /// <summary>Gets whether the selected profile supports rename and delete operations.</summary>
+    public bool CanModifySelectedProfile => SelectedProfile is { } selected
+        && !StringComparer.Ordinal.Equals(selected.Model.Id, ProfileIdentifiers.BuiltInDirect);
 
     /// <summary>Gets the active profile status text.</summary>
     /// <value>Active profile display text; never null.</value>

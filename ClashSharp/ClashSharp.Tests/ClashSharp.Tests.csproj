@@ -54,6 +54,7 @@
     <Compile Include="..\ClashSharp\Model\MasterHeroStatusItemKind.cs" Link="Model\MasterHeroStatusItemKind.cs" />
     <Compile Include="..\ClashSharp\Model\CoreConfigurationState.cs" Link="Model\CoreConfigurationState.cs" />
     <Compile Include="..\ClashSharp\Model\ConfigurationProfile.cs" Link="Model\ConfigurationProfile.cs" />
+    <Compile Include="..\ClashSharp\Model\ProfileIdentifiers.cs" Link="Model\ProfileIdentifiers.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileImportResult.cs" Link="Model\ProfileImportResult.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileSubscriptionLink.cs" Link="Model\ProfileSubscriptionLink.cs" />
     <Compile Include="..\ClashSharp\Model\SubscriptionUsage.cs" Link="Model\SubscriptionUsage.cs" />
