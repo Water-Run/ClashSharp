@@ -632,6 +632,15 @@ public sealed record MihomoServiceIpcConnection
 /// <summary>Contains one bounded active-connection snapshot.</summary>
 public sealed record MihomoServiceIpcConnectionSnapshot
 {
+    /// <summary>Gets the child-process counter epoch, unchanged by configuration-only updates.</summary>
+    public Guid? TrafficEpoch { get; init; }
+
+    /// <summary>Gets total uploaded bytes, including connections that have already closed.</summary>
+    public long? UploadTotalBytes { get; init; }
+
+    /// <summary>Gets total downloaded bytes, including connections that have already closed.</summary>
+    public long? DownloadTotalBytes { get; init; }
+
     /// <summary>Gets the active connection rows.</summary>
     public IReadOnlyList<MihomoServiceIpcConnection> Connections { get; init; } =
         Array.Empty<MihomoServiceIpcConnection>();
@@ -640,6 +649,13 @@ public sealed record MihomoServiceIpcConnectionSnapshot
     /// <returns>A nonlocalized error code or null.</returns>
     public string? Validate()
     {
+        if ((TrafficEpoch is not null || UploadTotalBytes is not null || DownloadTotalBytes is not null)
+            && (TrafficEpoch is null || TrafficEpoch == Guid.Empty
+                || UploadTotalBytes is null or < 0 || DownloadTotalBytes is null or < 0))
+        {
+            return "service.ipc.connection_snapshot_traffic_invalid";
+        }
+
         if (Connections is null
             || Connections.Count > MihomoServiceIpcProtocol.MaximumControllerConnections
             || Connections.Count > MihomoServiceIpcProtocol.MaximumControllerAggregateItems)

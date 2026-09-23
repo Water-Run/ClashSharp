@@ -180,6 +180,7 @@ internal sealed class MihomoServiceControllerBroker
                 {
                     ConnectionSnapshot = await GetConnectionsAsync(
                             transport,
+                            context.TrafficEpoch,
                             cancellationToken)
                         .ConfigureAwait(false),
                 },
@@ -242,6 +243,7 @@ internal sealed class MihomoServiceControllerBroker
 
     private static async Task<MihomoServiceIpcConnectionSnapshot> GetConnectionsAsync(
         IMihomoControllerTransport transport,
+        Guid trafficEpoch,
         CancellationToken cancellationToken)
     {
         MihomoControllerHttpResponse response = await SendExpectedAsync(
@@ -256,24 +258,43 @@ internal sealed class MihomoServiceControllerBroker
         using JsonDocument document = ParseStrictJson(response.Content);
         JsonElement root = RequireObject(document.RootElement, "connections response");
         if (!root.TryGetProperty("connections", out JsonElement rows)
-            || rows.ValueKind != JsonValueKind.Array
-            || rows.GetArrayLength() > MihomoServiceIpcProtocol.MaximumControllerConnections)
+            || rows.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null)
+            || rows.ValueKind == JsonValueKind.Array
+                && rows.GetArrayLength() > MihomoServiceIpcProtocol.MaximumControllerConnections)
         {
             throw new InvalidDataException("The connections response is invalid.");
         }
 
-        List<MihomoServiceIpcConnection> connections = new(rows.GetArrayLength());
-        foreach (JsonElement row in rows.EnumerateArray())
+        List<MihomoServiceIpcConnection> connections = [];
+        if (rows.ValueKind == JsonValueKind.Array)
         {
-            connections.Add(ParseConnection(RequireObject(row, "connection")));
+            foreach (JsonElement row in rows.EnumerateArray())
+            {
+                connections.Add(ParseConnection(RequireObject(row, "connection")));
+            }
         }
 
         MihomoServiceIpcConnectionSnapshot snapshot = new()
         {
             Connections = connections,
+            TrafficEpoch = trafficEpoch,
+            UploadTotalBytes = ReadTrafficTotal(root, "uploadTotal"),
+            DownloadTotalBytes = ReadTrafficTotal(root, "downloadTotal"),
         };
         EnsureValid(snapshot.Validate());
         return snapshot;
+    }
+
+    private static long ReadTrafficTotal(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out JsonElement value)
+            || value.ValueKind != JsonValueKind.Number
+            || !value.TryGetInt64(out long total) || total < 0)
+        {
+            throw new InvalidDataException("The connections traffic total is invalid.");
+        }
+
+        return total;
     }
 
     private static async Task<MihomoServiceControllerBrokerPayload> CloseConnectionAsync(

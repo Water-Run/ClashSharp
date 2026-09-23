@@ -54,6 +54,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
     private MihomoEffectiveGeneration? _desiredGeneration;
     private MihomoRuntimeConfigurationPlan? _desiredRuntimePlan;
     private MihomoControllerRuntimeContext? _controllerContext;
+    private Guid _trafficEpoch;
     private CancellationTokenSource? _restartCancellation;
     private long _lifecycleEpoch;
     private int _unexpectedRestartCount;
@@ -580,6 +581,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 _options.MihomoPath,
                 runtimeDirectory,
                 effective.ConfigurationPath));
+            _trafficEpoch = Guid.NewGuid();
             _activeProcess = process;
             SetState(
                 MihomoServiceChildState.Starting,
@@ -1317,7 +1319,10 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 epoch,
                 process.Id,
                 effective.Authority,
-                ready);
+                ready)
+            {
+                TrafficEpoch = _trafficEpoch,
+            };
         }
     }
 

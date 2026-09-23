@@ -49,6 +49,7 @@
 
   <ItemGroup>
     <Compile Include="..\ClashSharp\Model\RuntimeTrafficRateSnapshot.cs" Link="Model\RuntimeTrafficRateSnapshot.cs" />
+    <Compile Include="..\ClashSharp\Model\MihomoTrafficSnapshot.cs" Link="Model\MihomoTrafficSnapshot.cs" />
     <Compile Include="..\ClashSharp\Model\ApplicationActionKind.cs" Link="Model\ApplicationActionKind.cs" />
     <Compile Include="..\ClashSharp\Model\MasterHeroStatusItemKind.cs" Link="Model\MasterHeroStatusItemKind.cs" />
     <Compile Include="..\ClashSharp\Model\CoreConfigurationState.cs" Link="Model\CoreConfigurationState.cs" />

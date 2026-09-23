@@ -132,15 +132,111 @@ public sealed class RuntimeTrafficRateServiceTests
     {
         public IReadOnlyList<ActiveConnection> Connections { get; set; } = [];
 
+        public Guid Epoch { get; set; } = Guid.NewGuid();
+
+        public long? UploadTotal { get; set; }
+
+        public long? DownloadTotal { get; set; }
+
         public Func<CancellationToken, Task<IReadOnlyList<ActiveConnection>>>? Handler { get; set; }
 
         public int ReadCount { get; private set; }
 
-        public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+        public async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ++ReadCount;
-            return Handler?.Invoke(cancellationToken) ?? Task.FromResult(Connections);
+            IReadOnlyList<ActiveConnection> rows = Handler is not null
+                ? await Handler(cancellationToken)
+                : Connections;
+            return new MihomoTrafficSnapshot(Epoch,
+                UploadTotal ?? rows.Sum(row => row.UploadBytes),
+                DownloadTotal ?? rows.Sum(row => row.DownloadBytes), rows);
         }
+    }
+
+    [Fact]
+    public async Task ClosedAndBetweenSampleConnections_ContributeTheirFullCounterDelta()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        FakeRuntimeTrafficConnections connections = new()
+        {
+            UploadTotal = 100,
+            DownloadTotal = 1000,
+            Connections = [CreateConnection("still-open", 100, 1000)],
+        };
+        RuntimeTrafficRateService service = new(connections, () => now);
+        await service.GetSnapshotAsync(CancellationToken.None);
+
+        // The original connection closes and a short request begins and ends between reads.
+        // Neither appears in the second active list; the core totals retain both tails.
+        connections.Connections = [];
+        connections.UploadTotal = 350;
+        connections.DownloadTotal = 201000;
+        now = now.AddSeconds(2);
+        RuntimeTrafficRateSnapshot sample = await service.GetSnapshotAsync(CancellationToken.None);
+
+        Assert.Equal(0, sample.ActiveConnectionCount);
+        Assert.Equal(250, sample.SessionUploadBytes);
+        Assert.Equal(200000, sample.SessionDownloadBytes);
+        Assert.Equal(100000, sample.DownloadBytesPerSecond);
+        now = now.AddSeconds(1);
+        RuntimeTrafficRateSnapshot repeated = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(200000, repeated.SessionDownloadBytes);
+        Assert.Equal(0, repeated.DownloadBytesPerSecond);
+    }
+
+    [Fact]
+    public async Task RestartWithHigherCounters_DoesNotSubtractThePreviousCoreBaseline()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        FakeRuntimeTrafficConnections connections = new() { UploadTotal = 100, DownloadTotal = 200 };
+        RuntimeTrafficRateService service = new(connections, () => now);
+        await service.GetSnapshotAsync(CancellationToken.None);
+
+        connections.Epoch = Guid.NewGuid();
+        connections.UploadTotal = 300;
+        connections.DownloadTotal = 1000;
+        now = now.AddSeconds(1);
+        RuntimeTrafficRateSnapshot sample = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(300, sample.SessionUploadBytes);
+        Assert.Equal(1000, sample.SessionDownloadBytes);
+    }
+
+    [Fact]
+    public async Task FailedRead_DoesNotAdvanceTheCounterOrTimeBaseline()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        FakeRuntimeTrafficConnections connections = new() { UploadTotal = 0, DownloadTotal = 0 };
+        RuntimeTrafficRateService service = new(connections, () => now);
+        await service.GetSnapshotAsync(CancellationToken.None);
+        now = now.AddSeconds(1);
+        connections.Handler = _ => throw new IOException("unavailable");
+        await Assert.ThrowsAsync<IOException>(() => service.GetSnapshotAsync(CancellationToken.None));
+
+        now = now.AddSeconds(1);
+        connections.Handler = null;
+        connections.DownloadTotal = 4096;
+        RuntimeTrafficRateSnapshot sample = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(2048, sample.DownloadBytesPerSecond);
+        Assert.Equal(4096, sample.SessionDownloadBytes);
+    }
+
+    [Fact]
+    public async Task MaximumCounters_DoNotWrapRatesOrSessionTotalsNegative()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        FakeRuntimeTrafficConnections connections = new() { UploadTotal = 0, DownloadTotal = 0 };
+        RuntimeTrafficRateService service = new(connections, () => now);
+        await service.GetSnapshotAsync(CancellationToken.None);
+        now = now.AddSeconds(1);
+        connections.DownloadTotal = long.MaxValue;
+        RuntimeTrafficRateSnapshot sample = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(long.MaxValue, sample.DownloadBytesPerSecond);
+
+        now = now.AddSeconds(1);
+        connections.Epoch = Guid.NewGuid();
+        sample = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(long.MaxValue, sample.SessionDownloadBytes);
     }
 }

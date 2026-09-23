@@ -22,6 +22,8 @@ public sealed class MihomoServiceControllerBrokerTests
         [
             Step.Json(HttpMethod.Get, "/connections", """
                 {
+                  "uploadTotal": 120,
+                  "downloadTotal": 340,
                   "connections": [{
                     "id": "connection-1",
                     "metadata": {
@@ -59,6 +61,37 @@ public sealed class MihomoServiceControllerBrokerTests
         Assert.DoesNotContain(connection.Host, char.IsControl);
         Assert.Equal([(HttpMethod.Get, "/connections")], transport.RequestShapes);
         Assert.Null(result.Payload.ConnectionSnapshot.Validate());
+        Assert.Equal(120, result.Payload.ConnectionSnapshot.UploadTotalBytes);
+        Assert.Equal(340, result.Payload.ConnectionSnapshot.DownloadTotalBytes);
+        Assert.NotEqual(Guid.Empty, result.Payload.ConnectionSnapshot.TrafficEpoch);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    public async Task NoActiveConnections_RetainsTotalsFromCompletedTraffic(string rows)
+    {
+        FakeMihomoChildProcess process = new("broker", 501);
+        await using MihomoChildSupervisorTestContext context = new([process]);
+        string hash = context.WriteConfiguration("mixed-port: 7890\nmode: rule\n");
+        Assert.True((await context.Supervisor.StartAsync(70, hash, CancellationToken.None)).Succeeded);
+        string json = $$"""{"connections":{{rows}},"uploadTotal":12,"downloadTotal":245760}""";
+        RecordingTransportFactory transport = new([
+            Step.Json(HttpMethod.Get, "/connections", json),
+            Step.Json(HttpMethod.Get, "/connections", json),
+        ]);
+        MihomoServiceControllerBroker broker = CreateBroker(context, transport);
+        MihomoServiceIpcRequest request = BrokerRequest(context.Supervisor.GetSnapshot(), MihomoServiceIpcCommand.GetConnections);
+
+        MihomoServiceControllerBrokerResult first = await broker.ExecuteAsync(request, CancellationToken.None);
+        MihomoServiceControllerBrokerResult second = await broker.ExecuteAsync(request, CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+        Assert.True(second.Succeeded);
+        MihomoServiceIpcConnectionSnapshot sample = first.Payload!.ConnectionSnapshot!;
+        Assert.Empty(sample.Connections);
+        Assert.Equal(245760, sample.DownloadTotalBytes);
+        Assert.Equal(sample.TrafficEpoch, second.Payload!.ConnectionSnapshot!.TrafficEpoch);
     }
 
     [Fact]

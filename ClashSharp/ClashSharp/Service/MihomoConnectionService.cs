@@ -45,6 +45,12 @@ public sealed class MihomoConnectionService
         return await _controllerClient.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Reads cumulative counters including traffic from completed connections.</summary>
+    internal Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
+    {
+        return _controllerClient.GetTrafficSnapshotAsync(cancellationToken);
+    }
+
     /// <summary>Streams active connection snapshots from the local controller.</summary>
     /// <param name="cancellationToken">Cancels the WebSocket connection.</param>
     /// <returns>An asynchronous sequence that completes when the socket closes.</returns>

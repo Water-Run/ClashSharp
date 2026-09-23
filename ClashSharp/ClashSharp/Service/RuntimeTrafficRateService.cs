@@ -1,20 +1,18 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
-/// <summary>Reads active connections for runtime traffic sampling.</summary>
+/// <summary>Reads process-wide traffic counters and active connections.</summary>
 internal interface IRuntimeTrafficConnections
 {
-    /// <summary>Gets current active connections.</summary>
-    Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken);
+    /// <summary>Gets cumulative counters, including closed connections, from the current core.</summary>
+    Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken);
 }
 
-/// <summary>Calculates upload and download rates from successive active connection snapshots.</summary>
+/// <summary>Calculates upload and download rates from successive core-wide traffic counters.</summary>
 internal sealed class RuntimeTrafficRateService
 {
 #if UNIT_TESTS
@@ -27,7 +25,7 @@ internal sealed class RuntimeTrafficRateService
     private readonly Func<DateTimeOffset> _getNow;
     private readonly object _syncLock = new();
     private readonly SemaphoreSlim _samplingGate = new(1, 1);
-    private Dictionary<string, ConnectionCounter> _lastCounters = new(StringComparer.Ordinal);
+    private MihomoTrafficSnapshot? _lastCounters;
     private DateTimeOffset? _lastSampledAt;
     private RuntimeTrafficRateSnapshot _latestSnapshot;
 
@@ -73,58 +71,48 @@ internal sealed class RuntimeTrafficRateService
 
     private async Task<RuntimeTrafficRateSnapshot> SampleAsync(CancellationToken cancellationToken)
     {
-        IReadOnlyList<ActiveConnection> connections = await _connections.GetActiveConnectionsAsync(cancellationToken).ConfigureAwait(false);
+        MihomoTrafficSnapshot counters = await _connections.GetTrafficSnapshotAsync(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         DateTimeOffset sampledAt = _getNow();
-        Dictionary<string, ConnectionCounter> currentCounters = connections.ToDictionary(
-            static connection => connection.Id,
-            static connection => new ConnectionCounter(connection.UploadBytes, connection.DownloadBytes),
-            StringComparer.Ordinal);
 
         lock (_syncLock)
         {
             if (_lastSampledAt is null)
             {
                 _lastSampledAt = sampledAt;
-                _lastCounters = currentCounters;
-                _latestSnapshot = new RuntimeTrafficRateSnapshot(0, 0, connections.Count, 0, 0);
+                _lastCounters = counters;
+                _latestSnapshot = new RuntimeTrafficRateSnapshot(0, 0, counters.Connections.Count, 0, 0);
                 return _latestSnapshot;
             }
 
             double seconds = Math.Max(1, (sampledAt - _lastSampledAt.Value).TotalSeconds);
-            long uploadDelta = 0;
-            long downloadDelta = 0;
-            foreach ((string id, ConnectionCounter current) in currentCounters)
-            {
-                if (_lastCounters.TryGetValue(id, out ConnectionCounter previous))
-                {
-                    uploadDelta += current.UploadBytes >= previous.UploadBytes
-                        ? current.UploadBytes - previous.UploadBytes
-                        : current.UploadBytes;
-                    downloadDelta += current.DownloadBytes >= previous.DownloadBytes
-                        ? current.DownloadBytes - previous.DownloadBytes
-                        : current.DownloadBytes;
-                }
-                else
-                {
-                    uploadDelta += current.UploadBytes;
-                    downloadDelta += current.DownloadBytes;
-                }
-            }
+            bool sameEpoch = counters.Epoch == _lastCounters!.Epoch;
+            long uploadDelta = GetDelta(counters.UploadTotalBytes, _lastCounters.UploadTotalBytes, sameEpoch);
+            long downloadDelta = GetDelta(counters.DownloadTotalBytes, _lastCounters.DownloadTotalBytes, sameEpoch);
 
             _lastSampledAt = sampledAt;
-            _lastCounters = currentCounters;
+            _lastCounters = counters;
             _latestSnapshot = new RuntimeTrafficRateSnapshot(
-                (long)Math.Round(uploadDelta / seconds),
-                (long)Math.Round(downloadDelta / seconds),
-                connections.Count,
-                _latestSnapshot.SessionUploadBytes + uploadDelta,
-                _latestSnapshot.SessionDownloadBytes + downloadDelta);
+                GetRate(uploadDelta, seconds),
+                GetRate(downloadDelta, seconds),
+                counters.Connections.Count,
+                AddSaturated(_latestSnapshot.SessionUploadBytes, uploadDelta),
+                AddSaturated(_latestSnapshot.SessionDownloadBytes, downloadDelta));
             return _latestSnapshot;
         }
     }
 
-    private readonly record struct ConnectionCounter(long UploadBytes, long DownloadBytes);
+    private static long GetDelta(long current, long previous, bool sameEpoch) =>
+        sameEpoch && current >= previous ? current - previous : current;
+
+    private static long AddSaturated(long total, long delta) =>
+        total > long.MaxValue - delta ? long.MaxValue : total + delta;
+
+    private static long GetRate(long delta, double seconds)
+    {
+        double rate = Math.Round(delta / seconds);
+        return rate >= long.MaxValue ? long.MaxValue : (long)rate;
+    }
 }
 
 #if !UNIT_TESTS
@@ -138,9 +126,9 @@ internal sealed class RuntimeTrafficConnectionsAdapter : IRuntimeTrafficConnecti
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
     }
 
-    public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+    public Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
     {
-        return _connections.GetActiveConnectionsAsync(cancellationToken);
+        return _connections.GetTrafficSnapshotAsync(cancellationToken);
     }
 }
 #endif

@@ -23,7 +23,11 @@ internal sealed record MihomoControllerRuntimeContext(
     long LifecycleEpoch,
     int ProcessId,
     MihomoControllerAuthority Authority,
-    MihomoServiceIpcEffectiveConfiguration EffectiveConfiguration);
+    MihomoServiceIpcEffectiveConfiguration EffectiveConfiguration)
+{
+    /// <summary>Identifies counter continuity for the exact child, independently of configuration generations.</summary>
+    internal Guid TrafficEpoch { get; init; }
+}
 
 /// <summary>Expected effective fields derived from one exact source generation.</summary>
 internal sealed record MihomoRuntimeConfigurationPlan(

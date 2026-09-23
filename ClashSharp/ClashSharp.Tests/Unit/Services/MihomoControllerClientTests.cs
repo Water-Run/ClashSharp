@@ -16,6 +16,59 @@ public sealed class MihomoControllerClientTests
 {
     private const string ControllerSecret = "controller-test-secret";
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    public async Task GetTrafficSnapshotAsync_EmptyConnectionsRetainGlobalCounters(string rows)
+    {
+        string json = $$"""{"connections":{{rows}},"uploadTotal":1024,"downloadTotal":245760}""";
+        RecordingHttpHandler handler = new(json);
+        using HttpClient http = new(handler);
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"), ControllerSecret);
+
+        MihomoTrafficSnapshot first = await client.GetTrafficSnapshotAsync(CancellationToken.None);
+        MihomoTrafficSnapshot second = await client.GetTrafficSnapshotAsync(CancellationToken.None);
+
+        Assert.Empty(first.Connections);
+        Assert.Equal(1024, first.UploadTotalBytes);
+        Assert.Equal(245760, first.DownloadTotalBytes);
+        Assert.NotEqual(Guid.Empty, first.Epoch);
+        Assert.Equal(first.Epoch, second.Epoch);
+        Assert.All(handler.Requests, request => Assert.Equal("/connections", request.RequestUri!.AbsolutePath));
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("-1")]
+    [InlineData("\"100\"")]
+    [InlineData("1.5")]
+    [InlineData("9223372036854775808")]
+    public async Task GetTrafficSnapshotAsync_InvalidCounterIsRejected(string counter)
+    {
+        string json = $$"""{"connections":null,"uploadTotal":0,"downloadTotal":{{counter}}}""";
+        using HttpClient http = new(new RecordingHttpHandler(json));
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"));
+        await Assert.ThrowsAsync<JsonException>(() => client.GetTrafficSnapshotAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetTrafficSnapshotAsync_ServiceRoutePreservesCountersAndEpoch()
+    {
+        RecordingHttpHandler handler = new("{}");
+        using HttpClient http = new(handler);
+        FakeControllerServiceBroker broker = FakeControllerServiceBroker.Running();
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"),
+            () => ControllerSecret, () => false, broker);
+
+        MihomoTrafficSnapshot snapshot = await client.GetTrafficSnapshotAsync(CancellationToken.None);
+
+        Assert.Equal(broker.TrafficEpoch, snapshot.Epoch);
+        Assert.Equal(400, snapshot.UploadTotalBytes);
+        Assert.Equal(800, snapshot.DownloadTotalBytes);
+        Assert.Single(snapshot.Connections);
+        Assert.Empty(handler.Requests);
+    }
+
     [Fact]
     public async Task ReceiveTextMessageAsync_CancelPendingSocketRead_IsCallerCancellation()
     {
@@ -614,6 +667,7 @@ public sealed class MihomoControllerClientTests
     private sealed class FakeControllerServiceBroker(MihomoServiceStatus status)
         : IMihomoControllerServiceBroker
     {
+        public Guid TrafficEpoch { get; } = Guid.NewGuid();
         private static readonly Guid SessionId = Guid.Parse("9f3b490d-3373-4e9f-986a-0b905ef40c62");
 
         private const string ConfigurationHash =
@@ -693,6 +747,9 @@ public sealed class MihomoControllerClientTests
                 ConnectionSnapshot = command == MihomoServiceIpcCommand.GetConnections
                     ? new MihomoServiceIpcConnectionSnapshot
                     {
+                        TrafficEpoch = TrafficEpoch,
+                        UploadTotalBytes = 400,
+                        DownloadTotalBytes = 800,
                         Connections =
                         [
                             new MihomoServiceIpcConnection

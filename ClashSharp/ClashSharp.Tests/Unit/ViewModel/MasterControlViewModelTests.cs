@@ -1480,15 +1480,18 @@ public sealed class MasterControlViewModelTests
 
     private sealed class DashboardTrafficConnections : IRuntimeTrafficConnections
     {
+        private readonly Guid _epoch = Guid.NewGuid();
+
         public IReadOnlyList<ActiveConnection> Connections { get; set; } = [];
 
         public int ReadCount { get; private set; }
 
-        public Task<IReadOnlyList<ActiveConnection>> GetActiveConnectionsAsync(CancellationToken cancellationToken)
+        public Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ++ReadCount;
-            return Task.FromResult(Connections);
+            return Task.FromResult(new MihomoTrafficSnapshot(_epoch,
+                Connections.Sum(row => row.UploadBytes), Connections.Sum(row => row.DownloadBytes), Connections));
         }
     }
 

@@ -71,6 +71,9 @@ public sealed class MihomoControllerClient
     /// <summary>Routes production WebSocket handshakes through the same PID-bound connector.</summary>
     private readonly HttpMessageInvoker? _webSocketInvoker;
 
+    /// <summary>Stable epoch for explicitly injected integration transports without process ownership.</summary>
+    private readonly Guid _integrationTrafficEpoch = Guid.NewGuid();
+
     /// <summary>Initializes a controller client using the default local endpoint.</summary>
     public MihomoControllerClient()
         : this(
@@ -234,6 +237,66 @@ public sealed class MihomoControllerClient
 
         using JsonDocument document = await GetJsonAsync("connections", cancellationToken).ConfigureAwait(false);
         return ParseActiveConnections(document.RootElement);
+    }
+
+    /// <summary>Reads cumulative counters bound to one authenticated core process.</summary>
+    internal async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
+    {
+        ControllerRoute route = await ResolveRouteAsync(cancellationToken).ConfigureAwait(false);
+        if (route.ServiceBinding is not null)
+        {
+            MihomoServiceIpcResponse response = await SendServiceCommandAsync(
+                route.ServiceBinding,
+                MihomoServiceIpcCommand.GetConnections,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            MihomoServiceIpcConnectionSnapshot snapshot = RequireSuccessful(response).ConnectionSnapshot!;
+            if (snapshot.TrafficEpoch is not Guid epoch
+                || snapshot.UploadTotalBytes is not long upload
+                || snapshot.DownloadTotalBytes is not long download)
+            {
+                throw new InvalidDataException("The service did not return cumulative traffic counters.");
+            }
+
+            return new MihomoTrafficSnapshot(epoch, upload, download, MapConnections(snapshot));
+        }
+
+        MihomoAppProcessIdentity? identity = _appControllerTransport?.Capture();
+        if (_appControllerTransport is not null && identity is null)
+        {
+            throw new MihomoAppControllerIdentityException("The traffic counter owner is unavailable.");
+        }
+
+        using JsonDocument document = await GetJsonAsync("connections", cancellationToken).ConfigureAwait(false);
+        if (identity is { } captured && !_appControllerTransport!.IsStillCurrent(captured))
+        {
+            throw new MihomoAppControllerIdentityException("The traffic counter owner changed during sampling.");
+        }
+
+        JsonElement root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("connections", out JsonElement connections)
+            || connections.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null))
+        {
+            throw new JsonException("The traffic snapshot has invalid connections.");
+        }
+
+        return new MihomoTrafficSnapshot(
+            identity?.Epoch ?? _integrationTrafficEpoch,
+            ReadTrafficTotal(root, "uploadTotal"),
+            ReadTrafficTotal(root, "downloadTotal"),
+            ParseActiveConnections(root));
+    }
+
+    private static long ReadTrafficTotal(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out JsonElement value)
+            || value.ValueKind != JsonValueKind.Number
+            || !value.TryGetInt64(out long total) || total < 0)
+        {
+            throw new JsonException("The traffic snapshot has an invalid cumulative counter.");
+        }
+
+        return total;
     }
 
     /// <summary>Checks whether the authenticated controller exposes the expected effective runtime plan.</summary>
