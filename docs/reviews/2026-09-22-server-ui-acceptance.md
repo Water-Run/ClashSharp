@@ -482,3 +482,12 @@ fb43a6d 从托盘安全退出后，30 个文件、403,404 字节完成闭合散�
 恢复任务注册、检测、移除与 Windows 原生状态一致，主程序自启保持关闭；首页磁贴及详情同步。发现设置页异步操作导致键盘焦点丢失，源码已修复，292 项相关回归通过；原生焦点复验、真实登录触发及剩余功能仍待完成。
 
 20:14–20:18 UTC 实测发现恢复入口的第二个缺陷：直接以 --restore-proxy-on-startup 启动仍打开正常主窗口，45 秒后未退出，176 次采样有窗口、内核为零（201402Z-444935638、headless-fallback.json）。WinUI 桌面 LaunchActivatedEventArgs.Arguments 恒为空，现改读取 Environment.GetCommandLineArgs 并排除可执行文件项；3180 项主程序回归通过、无跳过，构建零警告零错误（31.20 秒），格式诊断重跑通过且无工作区警告。依据 [微软 API 说明](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.launchactivatedeventargs.arguments)。此修复和设置焦点修复均待下一候选原生复验，注册成功不代表恢复功能已通过。
+
+
+### b10deb1 安装、真实登录与启动竞争（20:36–21:04 UTC）
+
+f584687 正常卸载后包、服务及六处自有目录均已消失，两项 Windows StartupTask 注册也被清除。b10deb1 于 20:36 UTC 正常安装；DLL SHA-256 `BC331BC8C45486D217C115688F2105DFE41ED56B37E2413B015DC68880873FFB` 与载荷一致，仅验收 SID 注册。安装器 SHA-256 `B3D6C5E3808411C8441C4EE0F0F97D856C8BE4568FD645CC03B89B9DC38DAD23`，MSIX `46AA89F7A819483A26F66EC016BB47465EA284AE66A825984FE0B5313822E85D`，安装后签名均为 Valid。[CI](https://github.com/Water-Run/ClashSharp/actions/runs/35915168188) 通过。30 个验收文件按散列手动恢复，不计自动迁移。
+
+设置页注册保留键盘焦点，下一个 Tab 到检测按钮，连续十次回车检测没有失焦。恢复程序单独执行 1.646 秒退出、返回 0，六次窗口采样均为零；真实注销/登录到会话 4 后，Windows 自动以恢复参数启动 PID 6044，恢复步骤请求退出，没有剩余应用/内核进程。仅主程序自启时，会话 5 的 PID 10596 正常显示引导和窗口，14 个启动步骤成功，未记录警告或错误。两项同时启用的会话 6 登录中，主程序 PID 12028 先启动，第二进程随后退出，主窗口保留。
+
+补测相反顺序发现启动竞争：恢复程序先启动，150 毫秒后启动主程序，两个进程均返回 0 后退出，80 次采样都没有窗口（`helper-first-150.json`）。原实现把主程序请求重定向给即将退出的恢复实例。现按角色分开实例标识，恢复程序发现已有主程序则退出；主程序等待已注册恢复实例退出后再创建宿主。重复主程序仍重定向到已有主窗口。18 项目构建零警告零错误（33.31 秒），完整主程序回归 3188 / 3188、无跳过（1 分 14 秒），完整格式检查通过；原生复测仍待下一候选。注册及无残留退出通过，不能代替实际代理残留和启动竞争验收。实例注册与退出依据[微软 AppInstance 文档](https://learn.microsoft.com/en-us/windows/apps/develop/launch/multi-instance-apps)。

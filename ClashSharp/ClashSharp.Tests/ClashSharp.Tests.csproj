@@ -82,6 +82,7 @@
     <Compile Include="..\ClashSharp\Model\StartupConflictIssue.cs" Link="Model\StartupConflictIssue.cs" />
     <Compile Include="..\ClashSharp\Model\RuntimeFailureDiagnostics.cs" Link="Model\RuntimeFailureDiagnostics.cs" />
     <Compile Include="..\ClashSharp\AppHost\Startup\StartupConflictSnapshot.cs" Link="Hosting\Startup\StartupConflictSnapshot.cs" />
+    <Compile Include="..\ClashSharp\AppHost\StartupInstanceArbitration.cs" Link="Hosting\StartupInstanceArbitration.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.cs" Link="Service\AppSettingsService.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.Mutations.cs" Link="Service\AppSettingsService.Mutations.cs" />
     <Compile Include="..\ClashSharp\Service\ApplicationLifecycleService.cs" Link="Service\ApplicationLifecycleService.cs" />
