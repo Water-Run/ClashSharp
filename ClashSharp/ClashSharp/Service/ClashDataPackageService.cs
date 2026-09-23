@@ -409,6 +409,12 @@ internal sealed partial class ClashDataPackageService
         return new XElement("Files", files);
     }
 
+    /// <summary>Validates the package header before the UI asks the user to confirm an import.</summary>
+    internal static ClashDataPackageScope ReadImportScope(string packagePath)
+    {
+        return ParsePackageScope(ValidatePackageRoot(LoadBoundedPackage(packagePath)));
+    }
+
     internal static XDocument LoadBoundedPackage(string packagePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
@@ -618,7 +624,7 @@ internal sealed partial class ClashDataPackageService
         admittedSettings.WriteAdmitted(admissionLease, mutation);
     }
 
-    private XElement ValidatePackageRoot(XDocument document)
+    private static XElement ValidatePackageRoot(XDocument document)
     {
         XElement root = document.Root
             ?? throw new InvalidDataException("Clash# data package is empty.");

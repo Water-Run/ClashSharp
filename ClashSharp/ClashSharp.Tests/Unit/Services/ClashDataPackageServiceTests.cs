@@ -16,6 +16,36 @@ public sealed partial class ClashDataPackageServiceTests
     private const string DefaultMasterHeroStatusLayout =
         "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability";
 
+    [Theory]
+    [InlineData("OtherPackage", "ClashSharp.XmlDataPackage", "1", "Settings")]
+    [InlineData("ClashSharpDataPackage", "OtherFormat", "1", "Settings")]
+    [InlineData("ClashSharpDataPackage", "ClashSharp.XmlDataPackage", "999", "Settings")]
+    [InlineData("ClashSharpDataPackage", "ClashSharp.XmlDataPackage", "1", "UnknownScope")]
+    public void ReadImportScope_RejectsUnsupportedHeaderBeforeConfirmation(
+        string rootName, string format, string version, string scope)
+    {
+        using TemporaryDirectory directory = new();
+        string path = Path.Combine(directory.Path, "unsupported.xml");
+        new XDocument(new XElement(rootName,
+            new XAttribute("Format", format), new XAttribute("Version", version),
+            new XAttribute("Scope", scope))).Save(path);
+
+        Assert.Throws<InvalidDataException>(() => ClashDataPackageService.ReadImportScope(path));
+    }
+
+    [Theory]
+    [InlineData(ClashDataPackageScope.Settings)]
+    [InlineData(ClashDataPackageScope.SettingsAndProxyConfiguration)]
+    public async Task ReadImportScope_AcceptsExportedBackups(ClashDataPackageScope scope)
+    {
+        using TemporaryDirectory directory = new();
+        string path = Path.Combine(directory.Path, "backup.xml");
+        ClashDataPackageService service = new(new FakeClashDataPackageSettings(), directory.Path);
+        await service.ExportAsync(path, scope, CancellationToken.None);
+
+        Assert.Equal(scope, ClashDataPackageService.ReadImportScope(path));
+    }
+
     /// <summary>Guards package/reset generation coverage against additions to the canonical registry.</summary>
     [Fact]
     public void SettingsContract_CoversEveryRegistryPackageSetting()

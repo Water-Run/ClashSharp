@@ -161,15 +161,7 @@ internal sealed class SettingsPageOperations(
 
         try
         {
-            string? scopeText = ClashDataPackageService
-                .LoadBoundedPackage(packagePath)
-                .Root?
-                .Attribute("Scope")?
-                .Value;
-            return Enum.TryParse(scopeText, out ClashDataPackageScope scope)
-                && Enum.IsDefined(scope)
-                ? scope
-                : null;
+            return ClashDataPackageService.ReadImportScope(packagePath);
         }
         catch (Exception exception) when (ExceptionGraphClassifier.IsRecoverable(exception))
         {
