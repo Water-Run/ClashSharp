@@ -27,6 +27,12 @@ internal sealed record MihomoControllerRuntimeContext(
 {
     /// <summary>Identifies counter continuity for the exact child, independently of configuration generations.</summary>
     internal Guid TrafficEpoch { get; init; }
+
+    /// <summary>Gets the supervised child's actual start time.</summary>
+    internal DateTimeOffset? CoreStartedAt { get; init; }
+
+    /// <summary>Reads memory from the exact supervised child while the binding is current.</summary>
+    internal Func<long?>? ReadCoreMemory { get; init; }
 }
 
 /// <summary>Expected effective fields derived from one exact source generation.</summary>

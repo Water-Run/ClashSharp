@@ -264,7 +264,7 @@ public sealed class SettingsRegistryMetadataTests
         Internal(
             "MasterInfoTileLayout",
             typeof(string),
-            "core,upload-rate,download-rate,active-connections,transparent-proxy,latency,active-profile,current-mode",
+            "core,upload-rate,download-rate,active-connections,session-traffic,core-memory,system-proxy,transparent-proxy,latency,active-profile,current-mode,subscription-usage,subscription-expiry,profile-updated,core-uptime,mihomo-version,proxy-address,system-info,public-ip,connection-test",
             SettingCategory.Appearance,
             SettingsResetScope.MasterControl,
             SettingApplicationKind.Appearance,

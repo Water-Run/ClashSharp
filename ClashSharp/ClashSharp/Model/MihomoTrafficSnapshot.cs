@@ -8,4 +8,6 @@ internal sealed record MihomoTrafficSnapshot(
     Guid Epoch,
     long UploadTotalBytes,
     long DownloadTotalBytes,
-    IReadOnlyList<ActiveConnection> Connections);
+    IReadOnlyList<ActiveConnection> Connections,
+    long? MemoryBytes = null,
+    DateTimeOffset? CoreStartedAt = null);

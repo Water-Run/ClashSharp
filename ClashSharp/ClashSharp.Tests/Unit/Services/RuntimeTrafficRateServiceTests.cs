@@ -8,6 +8,30 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class RuntimeTrafficRateServiceTests
 {
     [Fact]
+    public async Task RuntimeDiagnostics_TrackCurrentCoreAndRemainUnknownWhenUnsupported()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        FakeRuntimeTrafficConnections connections = new() { MemoryBytes = 12345, StartedAt = now.AddMinutes(-5) };
+        RuntimeTrafficRateService service = new(connections, () => now);
+        RuntimeTrafficRateSnapshot first = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(12345, first.CoreMemoryBytes);
+        Assert.Equal(connections.StartedAt, first.CoreStartedAt);
+        connections.MemoryBytes = 54321;
+        connections.StartedAt = now;
+        connections.Epoch = Guid.NewGuid();
+        now = now.AddSeconds(1);
+        RuntimeTrafficRateSnapshot next = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Equal(54321, next.CoreMemoryBytes);
+        Assert.Equal(connections.StartedAt, next.CoreStartedAt);
+        connections.MemoryBytes = null;
+        connections.StartedAt = null;
+        now = now.AddSeconds(1);
+        next = await service.GetSnapshotAsync(CancellationToken.None);
+        Assert.Null(next.CoreMemoryBytes);
+        Assert.Null(next.CoreStartedAt);
+    }
+
+    [Fact]
     public async Task RefreshAsync_CapturesFinalBytesInsideTheNormalCoalescingInterval()
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -144,6 +168,8 @@ public sealed class RuntimeTrafficRateServiceTests
 
     private sealed class FakeRuntimeTrafficConnections : IRuntimeTrafficConnections
     {
+        public DateTimeOffset? StartedAt { get; set; }
+        public long? MemoryBytes { get; set; }
         public IReadOnlyList<ActiveConnection> Connections { get; set; } = [];
 
         public Guid Epoch { get; set; } = Guid.NewGuid();
@@ -165,7 +191,7 @@ public sealed class RuntimeTrafficRateServiceTests
                 : Connections;
             return new MihomoTrafficSnapshot(Epoch,
                 UploadTotal ?? rows.Sum(row => row.UploadBytes),
-                DownloadTotal ?? rows.Sum(row => row.DownloadBytes), rows);
+                DownloadTotal ?? rows.Sum(row => row.DownloadBytes), rows, MemoryBytes, StartedAt);
         }
     }
 

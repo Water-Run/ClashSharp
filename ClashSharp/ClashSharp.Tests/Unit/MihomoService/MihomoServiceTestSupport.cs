@@ -203,6 +203,10 @@ internal sealed class FakeMihomoChildProcess : IMihomoChildProcess
 
     public int Id { get; }
 
+    public DateTimeOffset? StartedAt { get; set; }
+
+    public long? MemoryBytes { get; set; }
+
     public bool HasExited => Volatile.Read(ref _exitCode) != NotExited;
 
     public int? ExitCode

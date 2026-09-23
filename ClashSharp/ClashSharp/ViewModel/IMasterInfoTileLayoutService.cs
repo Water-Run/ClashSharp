@@ -7,6 +7,8 @@ internal interface IMasterInfoTileLayoutService
 {
     IReadOnlyList<string> GetLayout(IReadOnlyCollection<string> availableTileIds);
 
+    IReadOnlyList<string> GetRecommendedLayout(IReadOnlyCollection<string> availableTileIds);
+
     IReadOnlyList<string> SaveLayout(
         IEnumerable<string> tileIds,
         IReadOnlyCollection<string> availableTileIds);

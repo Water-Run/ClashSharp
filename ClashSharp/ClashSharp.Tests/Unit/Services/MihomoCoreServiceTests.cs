@@ -95,6 +95,8 @@ public sealed class MihomoCoreServiceTests
         MihomoAppProcessIdentity identity = captured.Value;
         Assert.NotEqual(Guid.Empty, identity.Epoch);
         Assert.True(identity.RootProcessId > 0);
+        Assert.NotNull(identity.StartedAt);
+        Assert.True(identity.MemoryBytes > 0);
         Assert.True(service.IsCurrentAppProcessIdentity(identity));
         return identity;
     }

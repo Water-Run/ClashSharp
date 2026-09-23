@@ -11,6 +11,8 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
     private bool _isVisible = true;
     private bool _isToggleOn;
 
+    private double[] _history = [];
+
     public MasterControlInfoTileViewModel(
         string id,
         string title,
@@ -48,6 +50,12 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
     public bool IsToggleVisible { get; }
 
     public ICommand? TileCommand { get; }
+
+    public double[] History
+    {
+        get => _history;
+        set => SetProperty(ref _history, value);
+    }
 
     public string Value
     {

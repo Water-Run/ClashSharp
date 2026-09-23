@@ -66,7 +66,9 @@ internal sealed record MasterControlRuntimeSnapshotWork(
             TunRequested,
             ownership.TunEffective,
             ActiveProfileId,
-            profileSummary.ActiveProfileName);
+            profileSummary.ActiveProfileName,
+            profileSummary.ActiveSubscription,
+            profileSummary.ActiveProfileUpdatedAt);
     }
 
     private RuntimeOwnershipObservation ObserveRuntimeOwnership(CoreConfigurationState coreConfiguration)

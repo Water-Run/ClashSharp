@@ -1322,6 +1322,8 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 ready)
             {
                 TrafficEpoch = _trafficEpoch,
+                CoreStartedAt = process.StartedAt,
+                ReadCoreMemory = () => process.MemoryBytes,
             };
         }
     }

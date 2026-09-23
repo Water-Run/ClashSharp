@@ -6,4 +6,6 @@ internal readonly record struct RuntimeTrafficRateSnapshot(
     long DownloadBytesPerSecond,
     int ActiveConnectionCount,
     long SessionUploadBytes,
-    long SessionDownloadBytes);
+    long SessionDownloadBytes,
+    long? CoreMemoryBytes = null,
+    System.DateTimeOffset? CoreStartedAt = null);

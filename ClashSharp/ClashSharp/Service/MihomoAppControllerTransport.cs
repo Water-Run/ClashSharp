@@ -9,7 +9,8 @@ using System.Threading.Tasks;
 namespace ClashSharp.Service;
 
 /// <summary>Immutable identity for one App-owned mihomo root-process generation.</summary>
-internal readonly record struct MihomoAppProcessIdentity(Guid Epoch, int RootProcessId);
+internal readonly record struct MihomoAppProcessIdentity(
+    Guid Epoch, int RootProcessId, DateTimeOffset? StartedAt = null, long? MemoryBytes = null);
 
 /// <summary>Captures and revalidates the exact App-owned mihomo process generation.</summary>
 internal interface IMihomoAppProcessIdentitySource

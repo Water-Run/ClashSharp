@@ -9,9 +9,21 @@ namespace ClashSharp.Tests.Unit.MihomoService;
 public sealed class MihomoServiceControllerBrokerTests
 {
     [Fact]
+    public void ConnectionSnapshot_RejectsInvalidOptionalRuntimeDiagnostics()
+    {
+        Assert.Null(new MihomoServiceIpcConnectionSnapshot().Validate());
+        Assert.NotNull(new MihomoServiceIpcConnectionSnapshot { MemoryBytes = -1 }.Validate());
+        Assert.NotNull(new MihomoServiceIpcConnectionSnapshot { CoreStartedAt = DateTimeOffset.MinValue }.Validate());
+    }
+
+    [Fact]
     public async Task GetConnections_UsesFixedRouteAndReturnsBoundedProjection()
     {
-        FakeMihomoChildProcess process = new("broker", 501);
+        FakeMihomoChildProcess process = new("broker", 501)
+        {
+            StartedAt = DateTimeOffset.Parse("2026-09-23T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+            MemoryBytes = 52428800,
+        };
         await using MihomoChildSupervisorTestContext context = new([process]);
         string hash = context.WriteConfiguration("mixed-port: 7890\nmode: rule\n");
         Assert.True((await context.Supervisor.StartAsync(
@@ -63,6 +75,8 @@ public sealed class MihomoServiceControllerBrokerTests
         Assert.Null(result.Payload.ConnectionSnapshot.Validate());
         Assert.Equal(120, result.Payload.ConnectionSnapshot.UploadTotalBytes);
         Assert.Equal(340, result.Payload.ConnectionSnapshot.DownloadTotalBytes);
+        Assert.Equal(process.StartedAt, result.Payload.ConnectionSnapshot.CoreStartedAt);
+        Assert.Equal(52428800, result.Payload.ConnectionSnapshot.MemoryBytes);
         Assert.NotEqual(Guid.Empty, result.Payload.ConnectionSnapshot.TrafficEpoch);
     }
 

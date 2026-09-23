@@ -293,10 +293,79 @@ public sealed partial class MasterControl : Page
                 }
                 break;
             case MasterControlTileAction.OpenConnectionTest:
-                _openSettings();
+                await ShowNetworkCheckAsync(false, cancellationToken);
+                break;
+            case MasterControlTileAction.RefreshPublicIp:
+                await ShowNetworkCheckAsync(true, cancellationToken);
+                break;
+            case MasterControlTileAction.CheckUpdates:
+                await ShowNetworkCheckAsync(false, cancellationToken, update: true);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported tile action.");
+        }
+    }
+
+    private async Task ShowNetworkCheckAsync(bool publicIp, CancellationToken cancellationToken, bool update = false)
+    {
+        using CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        TextBlock result = new()
+        {
+            Text = _getString("Master.Diagnostics.Testing"),
+            TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = true,
+            MaxWidth = 460,
+        };
+        ProgressRing progress = new() { IsActive = true, Width = 24, Height = 24 };
+        StackPanel content = new() { Spacing = 12 };
+        content.Children.Add(progress);
+        content.Children.Add(new TextBlock
+        {
+            Text = _getString(update ? "About.Update.Description" : publicIp ? "Master.Tile.Description.PublicIp" : "Master.Diagnostics.CurrentRoute"),
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 460,
+        });
+        content.Children.Add(result);
+        ThemedContentDialog dialog = new()
+        {
+            Title = _getString(update ? "About.Update.Title" : publicIp ? "Master.Tile.PublicIp" : "Master.Tile.ConnectionTest"),
+            Content = new ScrollViewer { Content = content, MaxHeight = Math.Max(160, GetDialogXamlRoot().Size.Height - 240) },
+            CloseButtonText = _getString("Command.Cancel"),
+            XamlRoot = GetDialogXamlRoot(),
+        };
+        Task operation = Task.CompletedTask;
+        dialog.Opened += OnOpened;
+        try { await dialog.ShowManagedAsync(cancellationToken); }
+        finally
+        {
+            dialog.Opened -= OnOpened;
+            await lifetime.CancelAsync();
+            await operation;
+        }
+
+        void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args) => operation = RunAsync();
+        async Task RunAsync()
+        {
+            try
+            {
+                if (update) { await _viewModel.CheckUpdatesAsync(lifetime.Token); }
+                else if (publicIp) { await _viewModel.RefreshPublicIpAsync(lifetime.Token); }
+                else { await _viewModel.CheckWebsitesAsync(lifetime.Token); }
+                lifetime.Token.ThrowIfCancellationRequested();
+                result.Text = update ? _viewModel.UpdateDetails : publicIp ? _viewModel.PublicIpDetails : _viewModel.WebsiteDetails;
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                result.Text = _getString("Master.Diagnostics.Failed");
+                await _errorSink.ReportAsync(new ApplicationError("master-network-check", exception), CancellationToken.None);
+            }
+            finally
+            {
+                progress.IsActive = false;
+                progress.Visibility = Visibility.Collapsed;
+                dialog.CloseButtonText = _getString("Command.Close");
+            }
         }
     }
 
@@ -504,6 +573,19 @@ public sealed partial class MasterControl : Page
         });
         panel.Children.Add(optionList);
 
+        bool recommendedOrder = false;
+        Button restoreLayout = new() { Content = _getString("Master.Tile.RestoreRecommended") };
+        restoreLayout.Click += (_, _) =>
+        {
+            HashSet<string> recommended = _viewModel.RecommendedInfoTileIds.ToHashSet(StringComparer.Ordinal);
+            foreach (SearchableOptionItem option in optionList.Options)
+            {
+                option.IsChecked = recommended.Contains(option.Id);
+            }
+            recommendedOrder = true;
+        };
+        panel.Children.Add(restoreLayout);
+
         ThemedContentDialog dialog = new()
         {
             Title = _viewModel.EditInfoTilesText,
@@ -524,8 +606,9 @@ public sealed partial class MasterControl : Page
         HashSet<string> selectedIds = optionList.SelectedOptions
             .Select(static option => option.Id)
             .ToHashSet(StringComparer.Ordinal);
-        List<string> orderedSelectedIds = _viewModel.VisibleInfoTiles
-            .Select(static tile => tile.Id)
+        IEnumerable<string> initialOrder = recommendedOrder ? _viewModel.RecommendedInfoTileIds
+            : _viewModel.VisibleInfoTiles.Select(static tile => tile.Id);
+        List<string> orderedSelectedIds = initialOrder
             .Where(selectedIds.Contains)
             .ToList();
         HashSet<string> orderedIds = orderedSelectedIds.ToHashSet(StringComparer.Ordinal);

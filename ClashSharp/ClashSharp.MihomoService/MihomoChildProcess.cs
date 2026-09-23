@@ -12,6 +12,10 @@ internal interface IMihomoChildProcess : IDisposable
 {
     int Id { get; }
 
+    DateTimeOffset? StartedAt => null;
+
+    long? MemoryBytes => null;
+
     bool HasExited { get; }
 
     int? ExitCode { get; }
@@ -112,6 +116,30 @@ internal sealed class WindowsMihomoChildProcess : IMihomoChildProcess
     private Process Process => _ownedProcess.Process;
 
     public int Id => Process.Id;
+
+    public DateTimeOffset? StartedAt
+    {
+        get
+        {
+            try { return Process.StartTime.ToUniversalTime(); }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return null;
+            }
+        }
+    }
+
+    public long? MemoryBytes
+    {
+        get
+        {
+            try { Process.Refresh(); return Process.WorkingSet64; }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return null;
+            }
+        }
+    }
 
     public bool HasExited => Process.HasExited;
 

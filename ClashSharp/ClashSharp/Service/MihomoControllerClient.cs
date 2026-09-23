@@ -272,7 +272,8 @@ public sealed class MihomoControllerClient
                 throw new InvalidDataException("The service did not return cumulative traffic counters.");
             }
 
-            return new MihomoTrafficSnapshot(epoch, upload, download, MapConnections(snapshot));
+            return new MihomoTrafficSnapshot(epoch, upload, download, MapConnections(snapshot),
+                snapshot.MemoryBytes, snapshot.CoreStartedAt);
         }
 
         MihomoAppProcessIdentity? identity = _appControllerTransport?.Capture();
@@ -299,7 +300,9 @@ public sealed class MihomoControllerClient
             identity?.Epoch ?? _integrationTrafficEpoch,
             ReadTrafficTotal(root, "uploadTotal"),
             ReadTrafficTotal(root, "downloadTotal"),
-            ParseActiveConnections(root));
+            ParseActiveConnections(root),
+            identity?.MemoryBytes,
+            identity?.StartedAt);
     }
 
     private static long ReadTrafficTotal(JsonElement root, string name)

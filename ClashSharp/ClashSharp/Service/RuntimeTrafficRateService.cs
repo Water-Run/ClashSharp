@@ -90,7 +90,7 @@ internal sealed class RuntimeTrafficRateService
                 _lastCounters = counters;
                 // The core may have handled short requests before any page requested its first sample.
                 _latestSnapshot = new RuntimeTrafficRateSnapshot(0, 0, counters.Connections.Count,
-                    counters.UploadTotalBytes, counters.DownloadTotalBytes);
+                    counters.UploadTotalBytes, counters.DownloadTotalBytes, counters.MemoryBytes, counters.CoreStartedAt);
                 return _latestSnapshot;
             }
 
@@ -106,7 +106,9 @@ internal sealed class RuntimeTrafficRateService
                 GetRate(downloadDelta, seconds),
                 counters.Connections.Count,
                 AddSaturated(_latestSnapshot.SessionUploadBytes, uploadDelta),
-                AddSaturated(_latestSnapshot.SessionDownloadBytes, downloadDelta));
+                AddSaturated(_latestSnapshot.SessionDownloadBytes, downloadDelta),
+                counters.MemoryBytes,
+                counters.CoreStartedAt);
             return _latestSnapshot;
         }
     }

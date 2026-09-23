@@ -219,6 +219,7 @@
     <Compile Include="..\ClashSharp\ViewModel\NoShellRestartState.cs" Link="ViewModel\NoShellRestartState.cs" />
     <Compile Include="..\ClashSharp\ViewModel\CoreVersionDisplayFormatter.cs" Link="ViewModel\CoreVersionDisplayFormatter.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterControlViewModel.cs" Link="ViewModel\MasterControlViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterControlViewModel.Diagnostics.cs" Link="ViewModel\MasterControlViewModel.Diagnostics.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IMasterControlLocalization.cs" Link="ViewModel\IMasterControlLocalization.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IMasterControlCore.cs" Link="ViewModel\IMasterControlCore.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IMasterControlWindowsProxy.cs" Link="ViewModel\IMasterControlWindowsProxy.cs" />

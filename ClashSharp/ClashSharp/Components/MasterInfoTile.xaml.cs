@@ -1,10 +1,12 @@
 using System;
+using System.Linq;
 using System.Windows.Input;
 using ClashSharp.ApplicationModel.Presentation;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 
 namespace ClashSharp.Components;
@@ -20,6 +22,33 @@ public sealed partial class MasterInfoTile : UserControl
     private ICommand? _observedCommand;
 
     private bool _isLoaded;
+
+    /// <summary>Identifies the recent rate samples shown as a compact trend.</summary>
+    public static readonly DependencyProperty HistoryProperty = DependencyProperty.Register(
+        nameof(History), typeof(double[]), typeof(MasterInfoTile),
+        new PropertyMetadata(null, OnHistoryChanged));
+
+    /// <summary>Gets or sets up to sixty recent rate samples.</summary>
+    public double[]? History
+    {
+        get => (double[]?)GetValue(HistoryProperty);
+        set => SetValue(HistoryProperty, value);
+    }
+
+    private static void OnHistoryChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        MasterInfoTile tile = (MasterInfoTile)sender;
+        if (tile.HistoryCanvas is null) { return; }
+        double[] samples = tile.History ?? [];
+        tile.HistoryCanvas.Visibility = samples.Length > 1 ? Visibility.Visible : Visibility.Collapsed;
+        double peak = Math.Max(1, samples.DefaultIfEmpty(0).Max());
+        PointCollection points = new();
+        for (int index = 0; index < samples.Length; index++)
+        {
+            points.Add(new Point(1 + index * 70d / Math.Max(1, samples.Length - 1), 34 - Math.Clamp(samples[index] / peak, 0, 1) * 32));
+        }
+        tile.HistoryLine.Points = points;
+    }
 
     /// <summary>Identifies the <see cref="Title"/> dependency property.</summary>
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
@@ -155,7 +184,22 @@ public sealed partial class MasterInfoTile : UserControl
             return;
         }
 
-        if (TileCommand is not ICommand command || !command.CanExecute(null))
+        if (TileCommand is not ICommand command)
+        {
+            StackPanel content = new() { Spacing = 8, MaxWidth = 420 };
+            foreach (string text in new[] { Title, Value, Detail, Description })
+            {
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    content.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+                }
+            }
+            Flyout flyout = new() { Content = new ScrollViewer { Content = content, MaxHeight = 360 } };
+            flyout.ShowAt(TileButton);
+            return;
+        }
+
+        if (!command.CanExecute(null))
         {
             return;
         }
@@ -165,10 +209,7 @@ public sealed partial class MasterInfoTile : UserControl
 
     private void TileRoot_PointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        if (TileCommand is not null)
-        {
-            _ = VisualStateManager.GoToState(this, "PointerOver", true);
-        }
+        _ = VisualStateManager.GoToState(this, "PointerOver", true);
     }
 
     private void TileRoot_PointerExited(object sender, PointerRoutedEventArgs e)
@@ -267,10 +308,9 @@ public sealed partial class MasterInfoTile : UserControl
             return;
         }
 
-        bool actionable = TileCommand is not null;
-        bool available = _isLoaded && TileCommand?.CanExecute(null) == true;
+        bool available = _isLoaded && (TileCommand is null || TileCommand.CanExecute(null));
         bool running = _isLoaded && TileCommand is IAsyncCommandState { IsRunning: true };
-        TileButton.Visibility = actionable ? Visibility.Visible : Visibility.Collapsed;
+        TileButton.Visibility = Visibility.Visible;
         TileButton.IsEnabled = available;
         ExecutionProgress.IsActive = running;
         ExecutionProgress.Visibility = running ? Visibility.Visible : Visibility.Collapsed;

@@ -52,6 +52,9 @@ internal sealed class MasterInfoTileLayoutService : IMasterInfoTileLayoutService
         return normalized;
     }
 
+    public IReadOnlyList<string> GetRecommendedLayout(IReadOnlyCollection<string> availableTileIds) =>
+        Normalize(DefaultLayout, availableTileIds);
+
     private static IReadOnlyList<string> Parse(string value)
     {
         ArgumentNullException.ThrowIfNull(value);

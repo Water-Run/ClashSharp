@@ -89,7 +89,9 @@ internal readonly record struct ProfileCatalogFallbackStrings(
 internal readonly record struct ProfileCatalogSummary(
     int ProfileCount,
     int SubscriptionCount,
-    string ActiveProfileName = "");
+    string ActiveProfileName = "",
+    ProfileSubscriptionLink? ActiveSubscription = null,
+    DateTimeOffset? ActiveProfileUpdatedAt = null);
 
 /// <summary>Provides local configuration profile and subscription-link data for WinUI pages.</summary>
 /// <remarks>
@@ -327,7 +329,10 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             return new ProfileCatalogSummary(
                 document.Profiles.Count,
                 document.Links.Count,
-                activeProfile?.Name ?? string.Empty);
+                activeProfile?.Name ?? string.Empty,
+                document.Links.Cast<ProfileSubscriptionLink?>().FirstOrDefault(link =>
+                    StringComparer.Ordinal.Equals($"subscription-{link!.Value.Id}", activeProfileId)),
+                activeProfile?.UpdatedAt);
         }
     }
 

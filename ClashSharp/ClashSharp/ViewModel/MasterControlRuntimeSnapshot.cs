@@ -22,7 +22,9 @@ internal sealed record MasterControlRuntimeSnapshot(
     bool TunRequested = false,
     bool TunEffective = false,
     string ActiveProfileId = "",
-    string ActiveProfileName = "")
+    string ActiveProfileName = "",
+    ProfileSubscriptionLink? ActiveSubscription = null,
+    System.DateTimeOffset? ActiveProfileUpdatedAt = null)
 {
     public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
         new CoreConfigurationState(string.Empty, string.Empty, false),

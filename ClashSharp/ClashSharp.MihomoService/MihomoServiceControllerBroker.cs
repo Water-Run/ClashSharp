@@ -181,6 +181,8 @@ internal sealed class MihomoServiceControllerBroker
                     ConnectionSnapshot = await GetConnectionsAsync(
                             transport,
                             context.TrafficEpoch,
+                            context.CoreStartedAt,
+                            context.ReadCoreMemory?.Invoke(),
                             cancellationToken)
                         .ConfigureAwait(false),
                 },
@@ -244,6 +246,8 @@ internal sealed class MihomoServiceControllerBroker
     private static async Task<MihomoServiceIpcConnectionSnapshot> GetConnectionsAsync(
         IMihomoControllerTransport transport,
         Guid trafficEpoch,
+        DateTimeOffset? coreStartedAt,
+        long? coreMemoryBytes,
         CancellationToken cancellationToken)
     {
         MihomoControllerHttpResponse response = await SendExpectedAsync(
@@ -280,6 +284,8 @@ internal sealed class MihomoServiceControllerBroker
             TrafficEpoch = trafficEpoch,
             UploadTotalBytes = ReadTrafficTotal(root, "uploadTotal"),
             DownloadTotalBytes = ReadTrafficTotal(root, "downloadTotal"),
+            MemoryBytes = coreMemoryBytes,
+            CoreStartedAt = coreStartedAt,
         };
         EnsureValid(snapshot.Validate());
         return snapshot;

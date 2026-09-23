@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Net;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.Infrastructure.Networking;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.Presentation.Dialogs;
@@ -29,6 +32,8 @@ internal sealed record MasterControlPageDependencies(
 /// <summary>Builds the explicit dependency graph for the master-control page.</summary>
 internal static class MasterControlPageComposition
 {
+    private static readonly HttpClient ReleaseHttpClient = GitHubReleaseUpdateChecker.CreateHttpClient();
+
     /// <summary>Creates one page dependency graph from the AppHost-owned page context.</summary>
     public static MasterControlPageDependencies Create(
         PageCompositionContext context,
@@ -71,6 +76,17 @@ internal static class MasterControlPageComposition
             () => settings.TransparentProxyEnabled
                 && settings.CurrentMode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover,
             coreConfiguration.ObserveRuntimeConfigurationIntegrity);
+        DashboardNetworkProbe networkProbe = new(() =>
+        {
+            WindowsProxyState proxy = context.WindowsProxy.GetCurrentState();
+            HttpClientHandler handler = new() { UseProxy = proxy.IsEnabled };
+            if (proxy.IsEnabled && !proxy.ProxyServer.Contains(';', StringComparison.Ordinal)
+                && Uri.TryCreate($"http://{proxy.ProxyServer}", UriKind.Absolute, out Uri? address))
+            {
+                handler.Proxy = new WebProxy(address);
+            }
+            return new HttpClient(handler);
+        });
         MasterControlViewModel viewModel = new(
             new MasterControlLocalizationAdapter(localization),
             new MasterControlCoreAdapter(mihomoCore),
@@ -86,7 +102,10 @@ internal static class MasterControlPageComposition
             new MasterControlRuntimeAdapter(runtimeSnapshotSource),
             new MasterControlActionsAdapter(applicationActions),
             mode => applicationActions.PublishProxyModeAppliedAsync(mode, CancellationToken.None),
-            getRuntimeTrafficAsync: runtimeTrafficRate.GetSnapshotAsync);
+            getRuntimeTrafficAsync: runtimeTrafficRate.GetSnapshotAsync,
+            probeWebsiteAsync: networkProbe.CheckWebsiteAsync,
+            probePublicIpAsync: networkProbe.GetPublicIpAsync,
+            updateChecker: new GitHubReleaseUpdateChecker(ReleaseHttpClient, ApplicationVersion.Current));
 
         return new MasterControlPageDependencies(
             viewModel,

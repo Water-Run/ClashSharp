@@ -129,7 +129,12 @@
             </Border>
         </Grid>
 
-        <StackPanel Grid.Row="1" Spacing="4" VerticalAlignment="Bottom">
+        <Grid Grid.Row="1" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+        <StackPanel Spacing="4" VerticalAlignment="Bottom">
             <TextBlock
                 Text="{Binding Value, ElementName=Root}"
                 Style="{ThemeResource SubtitleTextBlockStyle}"
@@ -143,6 +148,10 @@
                 TextWrapping="NoWrap"
                 TextTrimming="CharacterEllipsis" />
         </StackPanel>
+            <Canvas x:Name="HistoryCanvas" Grid.Column="1" Width="72" Height="36" VerticalAlignment="Bottom" Visibility="Collapsed" IsHitTestVisible="False">
+                <Polyline x:Name="HistoryLine" Stroke="{ThemeResource AccentFillColorDefaultBrush}" StrokeThickness="2" />
+            </Canvas>
+        </Grid>
 
         <Button
             x:Name="TileButton"
@@ -162,6 +171,7 @@
                 <ToolTip>
                     <StackPanel MaxWidth="360" Spacing="4">
                         <TextBlock Text="{Binding Value, ElementName=Root}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Detail, ElementName=Root}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding Description, ElementName=Root}" TextWrapping="Wrap" />
                     </StackPanel>
                 </ToolTip>

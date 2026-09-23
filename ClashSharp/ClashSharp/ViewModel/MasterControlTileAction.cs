@@ -9,4 +9,6 @@ internal enum MasterControlTileAction
     ExportConfiguration,
     ImportConfiguration,
     OpenConnectionTest,
+    RefreshPublicIp,
+    CheckUpdates,
 }

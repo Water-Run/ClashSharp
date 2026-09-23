@@ -136,7 +136,7 @@ public sealed class MihomoCoreService
         lock (_syncLock)
         {
             return TryGetCurrentProcessIdentityUnderLock(out MihomoAppProcessIdentity current)
-                && current == identity;
+                && current.Epoch == identity.Epoch && current.RootProcessId == identity.RootProcessId;
         }
     }
 
@@ -544,7 +544,16 @@ public sealed class MihomoCoreService
                 return false;
             }
 
-            identity = new MihomoAppProcessIdentity(_processEpoch, _process.Id);
+            DateTimeOffset? startedAt = null;
+            long? memoryBytes = null;
+            try
+            {
+                startedAt = _process.StartTime.ToUniversalTime();
+                _process.Refresh();
+                memoryBytes = _process.WorkingSet64;
+            }
+            catch (Win32Exception) { /* Optional diagnostics must not change runtime ownership. */ }
+            identity = new MihomoAppProcessIdentity(_processEpoch, _process.Id, startedAt, memoryBytes);
             return true;
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)

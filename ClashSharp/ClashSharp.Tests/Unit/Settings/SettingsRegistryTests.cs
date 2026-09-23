@@ -39,7 +39,7 @@ public sealed class SettingsRegistryTests
             ["MasterHeroStatusLayout"] =
                 "CoreStatus,SystemProxy,TransparentProxy,CurrentNode,UploadRate,DownloadRate,TotalTraffic,Availability",
             ["MasterInfoTileLayout"] =
-                "core,upload-rate,download-rate,active-connections,transparent-proxy,latency,active-profile,current-mode",
+                "core,upload-rate,download-rate,active-connections,session-traffic,core-memory,system-proxy,transparent-proxy,latency,active-profile,current-mode,subscription-usage,subscription-expiry,profile-updated,core-uptime,mihomo-version,proxy-address,system-info,public-ip,connection-test",
             ["ConnectionTestProxyUrl1"] = "https://www.google.com",
             ["ConnectionTestProxyUrl2"] = "https://github.com",
             ["ConnectionTestDirectUrl"] = "https://www.baidu.com",

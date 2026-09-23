@@ -214,6 +214,7 @@
                                 Description="{Binding Description}"
                                 Value="{Binding Value}"
                                 Detail="{Binding Detail}"
+                                History="{Binding History}"
                                 Glyph="{Binding Glyph}"
                                 IsToggleVisible="{Binding IsToggleVisible}"
                                 IsToggleOn="{Binding IsToggleOn, Mode=TwoWay}"

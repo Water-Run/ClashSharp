@@ -1,6 +1,7 @@
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Diagnostics;
+using ClashSharp.Infrastructure.Networking;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -8,7 +9,7 @@ using ClashSharp.ViewModel;
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Unit tests for the master control view model.</summary>
-public sealed class MasterControlViewModelTests
+public sealed partial class MasterControlViewModelTests
 {
     [Fact]
     public void Constructor_DefersPersistedStateAndLayoutReads()
@@ -309,6 +310,7 @@ public sealed class MasterControlViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
         Assert.Equal("0 B/s", viewModel.InfoTiles.Single(tile => tile.Id == "download-rate").Value);
         Assert.Equal("0", viewModel.InfoTiles.Single(tile => tile.Id == "active-connections").Value);
+        Assert.Equal("4 KB", viewModel.InfoTiles.Single(tile => tile.Id == "session-traffic").Value);
     }
 
     [Fact]
@@ -568,7 +570,9 @@ public sealed class MasterControlViewModelTests
         Assert.True(viewModel.InfoTiles.Count >= 49);
         Assert.Equal(viewModel.InfoTiles.Count, viewModel.InfoTiles.Select(static tile => tile.Id).Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(
-            ["core", "upload-rate", "download-rate", "active-connections", "transparent-proxy", "latency", "active-profile", "current-mode"],
+            ["core", "upload-rate", "download-rate", "active-connections", "session-traffic", "core-memory", "system-proxy",
+                "transparent-proxy", "latency", "active-profile", "current-mode", "subscription-usage", "subscription-expiry",
+                "profile-updated", "core-uptime", "mihomo-version", "proxy-address", "system-info", "public-ip", "connection-test"],
             viewModel.VisibleInfoTiles.Select(tile => tile.Id));
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "edit-tiles");
         Assert.DoesNotContain(viewModel.InfoTiles, tile => tile.Id == "backup");
@@ -1022,7 +1026,10 @@ public sealed class MasterControlViewModelTests
         IApplicationErrorSink? errorSink = null,
         Func<ClashSharpMode, Task>? modeApplied = null,
         Func<MasterControlTileAction, CancellationToken, Task>? presentTileActionAsync = null,
-        Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? getRuntimeTrafficAsync = null)
+        Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? getRuntimeTrafficAsync = null,
+        Func<string, CancellationToken, Task<WebsiteProbeResult>>? probeWebsiteAsync = null,
+        Func<CancellationToken, Task<PublicIpInformation>>? probePublicIpAsync = null,
+        IApplicationUpdateChecker? updateChecker = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -1040,7 +1047,10 @@ public sealed class MasterControlViewModelTests
             actions: actions,
             modeApplied: modeApplied,
             getNow: getNow,
-            getRuntimeTrafficAsync: getRuntimeTrafficAsync);
+            getRuntimeTrafficAsync: getRuntimeTrafficAsync,
+            probeWebsiteAsync: probeWebsiteAsync,
+            probePublicIpAsync: probePublicIpAsync,
+            updateChecker: updateChecker);
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>
@@ -1054,6 +1064,7 @@ public sealed class MasterControlViewModelTests
             return key switch
             {
                 "Nav.MasterControl" => "Master",
+                "Master.Ip.Details.Format" => "IP: {0}\nLocation: {1}\nASN: {2}\nISP: {3}\nOrganization: {4}\nTimezone: {5}\nChecked: {6}\nSource: ipwho.is",
                 "Page.MasterControl.Description" => "Description",
                 "Master.StatusControl.Title" => "Status title",
                 "Master.StatusControl.Description" => "Status description",
@@ -1555,6 +1566,9 @@ public sealed class MasterControlViewModelTests
 
     private sealed class FakeMasterInfoTileLayoutService : IMasterInfoTileLayoutService
     {
+        public IReadOnlyList<string> GetRecommendedLayout(IReadOnlyCollection<string> availableTileIds) =>
+            MasterInfoTileLayoutService.DefaultLayout.Where(availableTileIds.Contains).ToArray();
+
         public IReadOnlyList<string> SavedLayout { get; set; } =
             MasterInfoTileLayoutService.DefaultLayout;
 

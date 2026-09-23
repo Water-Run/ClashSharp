@@ -641,6 +641,12 @@ public sealed record MihomoServiceIpcConnectionSnapshot
     /// <summary>Gets total downloaded bytes, including connections that have already closed.</summary>
     public long? DownloadTotalBytes { get; init; }
 
+    /// <summary>Gets the core-reported memory use; absent when unsupported.</summary>
+    public long? MemoryBytes { get; init; }
+
+    /// <summary>Gets the start time of the supervised child, independent of configuration reloads.</summary>
+    public DateTimeOffset? CoreStartedAt { get; init; }
+
     /// <summary>Gets the active connection rows.</summary>
     public IReadOnlyList<MihomoServiceIpcConnection> Connections { get; init; } =
         Array.Empty<MihomoServiceIpcConnection>();
@@ -649,6 +655,11 @@ public sealed record MihomoServiceIpcConnectionSnapshot
     /// <returns>A nonlocalized error code or null.</returns>
     public string? Validate()
     {
+        if (MemoryBytes is < 0 || CoreStartedAt < DateTimeOffset.UnixEpoch)
+        {
+            return "service.ipc.connection_snapshot_runtime_invalid";
+        }
+
         if ((TrafficEpoch is not null || UploadTotalBytes is not null || DownloadTotalBytes is not null)
             && (TrafficEpoch is null || TrafficEpoch == Guid.Empty
                 || UploadTotalBytes is null or < 0 || DownloadTotalBytes is null or < 0))

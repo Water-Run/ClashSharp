@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.Infrastructure.Networking;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -22,7 +23,7 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding and command execution.
 /// Side effects: Commands call injected services that can mutate runtime proxy and core state.
 /// </remarks>
-internal sealed class MasterControlViewModel : ObservableObject
+internal sealed partial class MasterControlViewModel : ObservableObject
 {
     /// <summary>Localization provider used by visible text.</summary>
     private readonly IMasterControlLocalization _localization;
@@ -77,6 +78,8 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <summary>Backing field for <see cref="SystemProxyStatusText"/>.</summary>
     private string _systemProxyStatusText = string.Empty;
 
+    private string _systemProxyAddress = string.Empty;
+
     /// <summary>Backing field for <see cref="TransparentProxyStatusText"/>.</summary>
     private string _transparentProxyStatusText = string.Empty;
 
@@ -128,6 +131,10 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private RuntimeTrafficRateSnapshot? _liveTraffic;
 
+    private readonly Queue<double> _uploadHistory = new();
+    private readonly Queue<double> _downloadHistory = new();
+    private DateTimeOffset? _lastHistoryAt;
+
     private RuntimeTrafficRateSnapshot RuntimeTraffic => _liveTraffic ?? _runtimeSnapshot.RuntimeTraffic;
 
     // A read admitted before a network mutation must not overwrite its result.
@@ -154,6 +161,9 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <param name="modeApplied">Optional observer invoked after a mode transition is committed.</param>
     /// <param name="getNow">Optional clock used for deterministic refresh throttling.</param>
     /// <param name="getRuntimeTrafficAsync">Optional cancellable traffic sampler owned by this page.</param>
+    /// <param name="probeWebsiteAsync">Optional explicit website check using the current network route.</param>
+    /// <param name="probePublicIpAsync">Optional explicit public egress metadata check.</param>
+    /// <param name="updateChecker">Optional read-only release checker.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public MasterControlViewModel(
         IMasterControlLocalization localization,
@@ -171,7 +181,10 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterControlActions? actions = null,
         Func<ClashSharpMode, Task>? modeApplied = null,
         Func<DateTimeOffset>? getNow = null,
-        Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? getRuntimeTrafficAsync = null)
+        Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? getRuntimeTrafficAsync = null,
+        Func<string, CancellationToken, Task<WebsiteProbeResult>>? probeWebsiteAsync = null,
+        Func<CancellationToken, Task<PublicIpInformation>>? probePublicIpAsync = null,
+        IApplicationUpdateChecker? updateChecker = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -194,6 +207,9 @@ internal sealed class MasterControlViewModel : ObservableObject
         _actions = actions ?? NoMasterControlApplicationActionDispatcher.Instance;
         _getNow = getNow ?? (() => DateTimeOffset.Now);
         _getRuntimeTrafficAsync = getRuntimeTrafficAsync;
+        _probeWebsiteAsync = probeWebsiteAsync;
+        _probePublicIpAsync = probePublicIpAsync;
+        _updateChecker = updateChecker;
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         DisabledModeCommand = new AsyncRelayCommand(
             token => ApplyModeAsync(ClashSharpMode.Disabled, token),
@@ -328,6 +344,9 @@ internal sealed class MasterControlViewModel : ObservableObject
     public string VisibleTileText => _localization.GetString("Master.Tile.Visible");
 
     public IReadOnlyList<MasterControlInfoTileViewModel> InfoTiles => _infoTiles;
+
+    public IReadOnlyList<string> RecommendedInfoTileIds => _infoTileLayout.GetRecommendedLayout(
+        _infoTiles.Select(static tile => tile.Id).ToArray());
 
     public IReadOnlyList<MasterControlInfoTileViewModel> VisibleInfoTiles => _visibleInfoTiles;
 
@@ -740,6 +759,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         try
         {
             WindowsProxyState proxyState = _windowsProxy.GetCurrentState();
+            _systemProxyAddress = proxyState.IsEnabled ? proxyState.ProxyServer : string.Empty;
             SystemProxyStatusText = proxyState.IsEnabled
                 ? _localization.GetString("Master.Status.On")
                 : _localization.GetString("Master.Status.Off");
@@ -749,6 +769,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
+            _systemProxyAddress = string.Empty;
         }
     }
 
@@ -828,8 +849,9 @@ internal sealed class MasterControlViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            // A stopped or unavailable controller cannot leave old live counters on screen.
-            snapshot = default;
+            // Clear live process data while preserving completed traffic in this application session.
+            snapshot = new RuntimeTrafficRateSnapshot(0, 0, 0,
+                RuntimeTraffic.SessionUploadBytes, RuntimeTraffic.SessionDownloadBytes);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -944,6 +966,20 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private void RefreshTileValues()
     {
+        string unavailable = _localization.GetString("Master.Status.Unavailable");
+        SetTile("proxy-address", string.IsNullOrWhiteSpace(_systemProxyAddress) ? SystemProxyStatusText : _systemProxyAddress,
+            $"HTTP / SOCKS · 127.0.0.1:{_settings.MixedPort}");
+        SetTile("core-memory", RuntimeTraffic.CoreMemoryBytes is long memory ? FormatBytes(memory) : unavailable,
+            _localization.GetString("Master.Tile.Description.CoreMemory"));
+        SetTile("core-uptime", RuntimeTraffic.CoreStartedAt is DateTimeOffset startedAt && _getNow() >= startedAt
+                ? (_getNow() - startedAt).ToString(@"d\.hh\:mm\:ss", CultureInfo.InvariantCulture) : unavailable,
+            RuntimeTraffic.CoreStartedAt?.ToLocalTime().ToString("G", CultureInfo.CurrentCulture) ?? string.Empty);
+        SetTile("core-owner", _localization.GetString(!_runtimeSnapshot.RuntimeOwnershipKnown
+                ? "Master.Status.Unavailable" : $"Master.Runtime.Owner.{_runtimeSnapshot.EffectiveOwner}"),
+            GetMihomoServiceStatusText());
+        SetTile("system-info", System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            $"{System.Runtime.InteropServices.RuntimeInformation.OSArchitecture} · {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
+        RefreshSubscriptionTiles();
         SetTile("core", GetCoreTileStatusText(), string.Empty);
         SetTile("mihomo-version", _mihomoVersionText, string.Empty);
         SetTile("system-proxy", SystemProxyStatusText, string.Empty);
@@ -963,10 +999,9 @@ internal sealed class MasterControlViewModel : ObservableObject
             : _localization.GetString("Master.Status.Off"), string.Empty, _settings.MainlandChinaUrlBlockingEnabled);
         SetTile("active-profile", GetActiveProfileDisplayName(), string.Empty);
         SetTile("port", _settings.MixedPort.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
-        SetTile("connection-test", "3", _localization.GetString("Master.Tile.ConnectionTest"));
-        SetTile("connection-test-proxy-url-1", CompactUrl(_settings.ConnectionTestProxyUrl1), _settings.ConnectionTestProxyUrl1);
-        SetTile("connection-test-proxy-url-2", CompactUrl(_settings.ConnectionTestProxyUrl2), _settings.ConnectionTestProxyUrl2);
-        SetTile("connection-test-direct-url", CompactUrl(_settings.ConnectionTestDirectUrl), _settings.ConnectionTestDirectUrl);
+        RefreshNetworkDiagnosticTiles();
+        SetTile("app-update", UpdateStatus, _updateCheckedAt?.ToLocalTime().ToString("G", CultureInfo.CurrentCulture)
+            ?? _localization.GetString("Master.Diagnostics.NotTested"));
         SetTile("startup-prompt", _localization.GetString("Settings.StartupGuide.ShowNow"), string.Empty);
         SetTile("startup-conflicts", _localization.GetString("Settings.CheckStartupConflicts.Now"), string.Empty);
         SetTile("export-config", _localization.GetString("Command.Export"), string.Empty);
@@ -999,12 +1034,13 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("startup-restore-fallback", GetStartupRestoreFallbackStatusText(), CompactPath(_runtimeSnapshot.StartupRestoreFallback.CommandLine));
         SetTile("mihomo-service", GetMihomoServiceStatusText(), string.Empty);
         SetTile("core-config-file", GetCoreConfigurationStatusText(), CompactPath(_runtimeSnapshot.CoreConfiguration.ConfigPath));
-        SetTile("upload-rate", FormatBytesPerSecond(RuntimeTraffic.UploadBytesPerSecond), _localization.GetString("Master.Tile.Detail.Realtime"));
-        SetTile("download-rate", FormatBytesPerSecond(RuntimeTraffic.DownloadBytesPerSecond), _localization.GetString("Master.Tile.Detail.Realtime"));
+        SetTile("upload-rate", FormatBytesPerSecond(RuntimeTraffic.UploadBytesPerSecond), _localization.GetString("Master.Tile.Detail.TrafficTrend"));
+        SetTile("download-rate", FormatBytesPerSecond(RuntimeTraffic.DownloadBytesPerSecond), _localization.GetString("Master.Tile.Detail.TrafficTrend"));
+        RefreshTrafficHistory();
         SetTile("active-connections", FormatNumber(RuntimeTraffic.ActiveConnectionCount), _localization.GetString("Master.Tile.Detail.Realtime"));
         SetTile(
             "session-traffic",
-            FormatBytes(RuntimeTraffic.SessionUploadBytes + RuntimeTraffic.SessionDownloadBytes),
+            FormatBytes((decimal)RuntimeTraffic.SessionUploadBytes + RuntimeTraffic.SessionDownloadBytes),
             string.Format(
                 CultureInfo.CurrentCulture,
                 _localization.GetString("Statistics.TotalTraffic.Format"),
@@ -1020,7 +1056,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("connection-records", FormatNumber(_runtimeSnapshot.LogStorage.ConnectionCount), FormatBytes(_runtimeSnapshot.LogStorage.DatabaseSizeBytes));
         SetTile(
             "traffic-total",
-            FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
+            FormatBytes((decimal)_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
             string.Format(
                 CultureInfo.CurrentCulture,
                 _localization.GetString("Statistics.TotalTraffic.Format"),
@@ -1029,6 +1065,55 @@ internal sealed class MasterControlViewModel : ObservableObject
         SetTile("traffic-snapshots", FormatNumber(_runtimeSnapshot.Traffic.SnapshotCount), string.Empty);
         SetTile("node-health-records", FormatNumber(_runtimeSnapshot.Traffic.NodeHealthCount), FormatNumber(_runtimeSnapshot.Traffic.NodeCount));
         RefreshHeroStatusValues();
+    }
+
+    private void RefreshSubscriptionTiles()
+    {
+        bool current = StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId);
+        ProfileSubscriptionLink? subscription = current ? _runtimeSnapshot.ActiveSubscription : null;
+        string missing = _localization.GetString(subscription is null ? "Master.Subscription.Local" : "Links.Metadata.NotProvided");
+        SubscriptionUsage? usage = subscription?.Usage;
+        string used = usage is { UploadBytes: >= 0, DownloadBytes: >= 0 }
+            ? FormatBytes((decimal)usage.UploadBytes.Value + usage.DownloadBytes.Value) : missing;
+        string quota = usage?.TotalBytes is >= 0 ? FormatBytes(usage.TotalBytes.Value) : missing;
+        string expiry = usage?.ExpireUnixSeconds switch
+        {
+            0 => _localization.GetString("Links.Metadata.NoExpiry"),
+            > 0 and <= 253402300799 => DateTimeOffset.FromUnixTimeSeconds(usage.ExpireUnixSeconds.Value)
+                .ToLocalTime().ToString("g", CultureInfo.CurrentCulture),
+            _ => missing,
+        };
+        SetTile("subscription-usage", subscription is null ? missing : $"{used} / {quota}", subscription?.Name ?? GetActiveProfileDisplayName());
+        SetTile("subscription-expiry", expiry, subscription?.Name ?? GetActiveProfileDisplayName());
+        string updated = current && _runtimeSnapshot.ActiveProfileUpdatedAt is DateTimeOffset date && date > DateTimeOffset.UnixEpoch
+            ? date.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : _localization.GetString("Links.Metadata.NotProvided");
+        string schedule = subscription is ProfileSubscriptionLink link
+            ? link.IsEnabled
+                ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Links.Schedule.Automatic.Format"), link.UpdateIntervalHours)
+                : _localization.GetString("Links.Schedule.Manual")
+            : GetActiveProfileDisplayName();
+        SetTile("profile-updated", updated, schedule);
+    }
+
+    private void RefreshTrafficHistory()
+    {
+        DateTimeOffset now = _getNow();
+        if (_lastHistoryAt is DateTimeOffset last && now - last < TimeSpan.FromSeconds(1) && now >= last) { return; }
+        if (_lastHistoryAt is DateTimeOffset previous && (now < previous || now - previous > TimeSpan.FromSeconds(5)))
+        {
+            _uploadHistory.Clear();
+            _downloadHistory.Clear();
+        }
+        _lastHistoryAt = now;
+        _uploadHistory.Enqueue(Math.Max(0, RuntimeTraffic.UploadBytesPerSecond));
+        _downloadHistory.Enqueue(Math.Max(0, RuntimeTraffic.DownloadBytesPerSecond));
+        while (_uploadHistory.Count > 60) { _uploadHistory.Dequeue(); }
+        while (_downloadHistory.Count > 60) { _downloadHistory.Dequeue(); }
+        foreach (MasterControlInfoTileViewModel tile in _infoTiles)
+        {
+            if (tile.Id == "upload-rate") { tile.History = _uploadHistory.ToArray(); }
+            else if (tile.Id == "download-rate") { tile.History = _downloadHistory.ToArray(); }
+        }
     }
 
     private void RefreshHeroStatusValues()
@@ -1080,7 +1165,7 @@ internal sealed class MasterControlViewModel : ObservableObject
             MasterHeroStatusItemKind.Latency => LatencySummaryText,
             MasterHeroStatusItemKind.UploadRate => FormatBytesPerSecond(RuntimeTraffic.UploadBytesPerSecond),
             MasterHeroStatusItemKind.DownloadRate => FormatBytesPerSecond(RuntimeTraffic.DownloadBytesPerSecond),
-            MasterHeroStatusItemKind.TotalTraffic => FormatBytes(_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
+            MasterHeroStatusItemKind.TotalTraffic => FormatBytes((decimal)_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
             MasterHeroStatusItemKind.ActiveConnections => FormatNumber(RuntimeTraffic.ActiveConnectionCount),
             MasterHeroStatusItemKind.CurrentMode => GetModeTitle(SelectedMode),
             MasterHeroStatusItemKind.ActiveProfile => GetActiveProfileDisplayName(),
@@ -1369,10 +1454,10 @@ internal sealed class MasterControlViewModel : ObservableObject
             $"{Math.Max(0, enabledCount):N0}/{Math.Max(0, totalCount):N0}");
     }
 
-    private static string FormatBytes(long bytes)
+    private static string FormatBytes(decimal bytes)
     {
-        double value = Math.Max(0, bytes);
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        decimal value = Math.Max(0, bytes);
+        string[] units = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
         int unitIndex = 0;
         while (value >= 1024 && unitIndex < units.Length - 1)
         {
@@ -1515,11 +1600,22 @@ internal sealed class MasterControlViewModel : ObservableObject
             string infoType = owner._localization.GetString("Master.Tile.Type.Information");
             string controllableType = owner._localization.GetString("Master.Tile.Type.Controllable");
             string actionType = owner._localization.GetString("Master.Tile.Type.Action");
-            string navigationType = owner._localization.GetString("Master.Tile.Type.Navigation");
 
             return
             [
                 owner.CreateTile("core", "Core", "\uE950", infoType),
+                owner.CreateTile("core-memory", "CoreMemory", "\uE950", infoType),
+                owner.CreateTile("core-uptime", "CoreUptime", "\uE916", infoType),
+                owner.CreateTile("core-owner", "CoreOwner", "\uE95A", infoType),
+                owner.CreateTile("proxy-address", "ProxyAddress", "\uE968", infoType),
+                owner.CreateTile("system-info", "SystemInfo", "\uE7F8", infoType),
+                owner.CreateTile("subscription-usage", "SubscriptionUsage", "\uE9D2", infoType),
+                owner.CreateTile("subscription-expiry", "SubscriptionExpiry", "\uE787", infoType),
+                owner.CreateTile("profile-updated", "ProfileUpdated", "\uE895", infoType),
+                owner.CreateTile("public-ip", "PublicIp", "\uE774", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.RefreshPublicIp]),
+                new MasterTileDefinition("app-update", owner._localization.GetString("About.Update.Title"), "\uE895",
+                    owner._localization.GetString("About.Update.Description"), actionType,
+                    Command: owner._tileActionCommands[MasterControlTileAction.CheckUpdates]),
                 owner.CreateTile("upload-rate", "UploadRate", "\uE898", infoType),
                 owner.CreateTile("download-rate", "DownloadRate", "\uE896", infoType),
                 owner.CreateTile("active-connections", "ActiveConnections", "\uE839", infoType),
@@ -1534,10 +1630,10 @@ internal sealed class MasterControlViewModel : ObservableObject
                 owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, command: owner.ToggleUrlBlocking),
                 owner.CreateTile("active-profile", "ActiveProfile", "\uE8A5", infoType),
                 owner.CreateTile("port", "Port", "\uE839", infoType),
-                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", navigationType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.OpenConnectionTest]),
-                owner.CreateTile("connection-test-proxy-url-1", "ConnectionTestProxyUrl1", "\uE774", infoType),
-                owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", infoType),
-                owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", infoType),
+                owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.OpenConnectionTest]),
+                owner.CreateTile("connection-test-proxy-url-1", "ConnectionTestProxyUrl1", "\uE774", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.OpenConnectionTest]),
+                owner.CreateTile("connection-test-proxy-url-2", "ConnectionTestProxyUrl2", "\uE774", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.OpenConnectionTest]),
+                owner.CreateTile("connection-test-direct-url", "ConnectionTestDirectUrl", "\uE8A7", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.OpenConnectionTest]),
                 owner.CreateTile("startup-prompt", "StartupPrompt", "\uE946", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.ShowStartupPrompt]),
                 owner.CreateTile("startup-conflicts", "StartupConflicts", "\uE9D9", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.CheckStartupConflicts]),
                 owner.CreateTile("export-config", "ExportConfig", "\uE74E", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.ExportConfiguration]),
