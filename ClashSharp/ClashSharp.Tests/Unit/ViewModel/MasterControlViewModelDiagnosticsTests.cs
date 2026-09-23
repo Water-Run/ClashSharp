@@ -141,18 +141,47 @@ public sealed partial class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime);
         await viewModel.LoadAsync(CancellationToken.None);
         Assert.Equal("16 EB / 0 B", Tile(viewModel, "subscription-usage").Value);
+        Assert.Contains("Quota exceeded by 16 EB", Tile(viewModel, "subscription-usage").Detail);
         Assert.Equal("16 EB", Tile(viewModel, "session-traffic").Value);
         Assert.Equal("Links.Metadata.NoExpiry", Tile(viewModel, "subscription-expiry").Value);
         runtime.Snapshot = runtime.Snapshot with { ActiveSubscription = link with { Usage = new(null, 100, null, null) } };
         viewModel.InvalidateAfterAction();
         await viewModel.LoadAsync(CancellationToken.None);
         Assert.Equal("Links.Metadata.NotProvided / Links.Metadata.NotProvided", Tile(viewModel, "subscription-usage").Value);
+        Assert.Contains("Upload Links.Metadata.NotProvided / download 100 B", Tile(viewModel, "subscription-usage").Detail);
+        Assert.DoesNotContain("Remaining:", Tile(viewModel, "subscription-usage").Detail);
         settings.ActiveProfileId = "builtin-direct";
         await viewModel.LoadAsync(CancellationToken.None);
         Assert.Equal("Master.Subscription.Local", Tile(viewModel, "subscription-usage").Value);
     }
 
     private static MasterControlInfoTileViewModel Tile(MasterControlViewModel viewModel, string id) => viewModel.InfoTiles.Single(tile => tile.Id == id);
+
+    [Theory]
+    [InlineData(1024, 2048, 4096, 86401, "Remaining: 1 KB", "Days remaining: 2")]
+    [InlineData(2048, 1024, 1024, 1, "Quota exceeded by 2 KB", "Days remaining: 1")]
+    [InlineData(0, 0, 0, 0, "Remaining: 0 B", "Master.Subscription.Expired")]
+    [InlineData(0, 0, 0, -1, "Remaining: 0 B", "Master.Subscription.Expired")]
+    public async Task SubscriptionTiles_ShowBalanceAndExpiryBoundary(long upload, long download, long total,
+        int secondsUntilExpiry, string expectedBalance, string expectedExpiry)
+    {
+        DateTimeOffset now = DateTimeOffset.FromUnixTimeSeconds(1800000000);
+        FakeMasterSettings settings = new() { ActiveProfileId = "subscription-link" };
+        ProfileSubscriptionLink link = new("link", "Provider", "https://example.invalid/sub", true, 24,
+            now, "ok", Usage: new(upload, download, total, now.AddSeconds(secondsUntilExpiry).ToUnixTimeSeconds()));
+        FakeMasterRuntime runtime = new()
+        {
+            Snapshot = MasterControlRuntimeSnapshot.Unavailable with
+            {
+                ActiveProfileId = settings.ActiveProfileId,
+                ActiveSubscription = link,
+            },
+        };
+        MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime, getNow: () => now);
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.StartsWith(expectedBalance + "\n", Tile(viewModel, "subscription-usage").Detail);
+        Assert.Equal(expectedExpiry + "\nProvider", Tile(viewModel, "subscription-expiry").Detail);
+    }
 
     [Fact]
     public async Task TrafficTrends_AreBoundedAndDoNotConnectAcrossSamplingGaps()

@@ -1098,8 +1098,35 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 .ToLocalTime().ToString("g", CultureInfo.CurrentCulture),
             _ => missing,
         };
-        SetTile("subscription-usage", subscription is null ? missing : $"{used} / {quota}", subscription?.Name ?? GetActiveProfileDisplayName());
-        SetTile("subscription-expiry", expiry, subscription?.Name ?? GetActiveProfileDisplayName());
+        string usageDetail = subscription?.Name ?? GetActiveProfileDisplayName();
+        string expiryDetail = usageDetail;
+        if (subscription is ProfileSubscriptionLink activeSubscription)
+        {
+            string transfer = string.Format(CultureInfo.CurrentCulture,
+                _localization.GetString("Statistics.TotalTraffic.Format"),
+                usage?.UploadBytes is >= 0 ? FormatBytes(usage.UploadBytes.Value) : missing,
+                usage?.DownloadBytes is >= 0 ? FormatBytes(usage.DownloadBytes.Value) : missing);
+            usageDetail = $"{transfer}\n{activeSubscription.Name}";
+            if (usage is { UploadBytes: >= 0, DownloadBytes: >= 0, TotalBytes: >= 0 })
+            {
+                decimal remaining = (decimal)usage.TotalBytes.Value - usage.UploadBytes.Value - usage.DownloadBytes.Value;
+                string balance = string.Format(CultureInfo.CurrentCulture,
+                    _localization.GetString(remaining < 0 ? "Master.Subscription.Exceeded.Format" : "Master.Subscription.Remaining.Format"),
+                    FormatBytes(Math.Abs(remaining)));
+                usageDetail = $"{balance}\n{usageDetail}";
+            }
+            if (usage?.ExpireUnixSeconds is > 0 and <= 253402300799)
+            {
+                TimeSpan remaining = DateTimeOffset.FromUnixTimeSeconds(usage.ExpireUnixSeconds.Value) - _getNow();
+                string status = remaining <= TimeSpan.Zero
+                    ? _localization.GetString("Master.Subscription.Expired")
+                    : string.Format(CultureInfo.CurrentCulture, _localization.GetString("Master.Subscription.DaysRemaining.Format"),
+                        Math.Ceiling(remaining.TotalDays));
+                expiryDetail = $"{status}\n{activeSubscription.Name}";
+            }
+        }
+        SetTile("subscription-usage", subscription is null ? missing : $"{used} / {quota}", usageDetail);
+        SetTile("subscription-expiry", expiry, expiryDetail);
         string updated = current && _runtimeSnapshot.ActiveProfileUpdatedAt is DateTimeOffset date && date > DateTimeOffset.UnixEpoch
             ? date.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : _localization.GetString("Links.Metadata.NotProvided");
         string schedule = subscription is ProfileSubscriptionLink link
