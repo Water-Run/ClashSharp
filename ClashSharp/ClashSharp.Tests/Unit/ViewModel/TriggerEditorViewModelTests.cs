@@ -16,6 +16,7 @@ using TriggerConditionTemplate = ClashSharpUi::ClashSharp.ViewModel.TriggerCondi
 using TriggerEditorSaveResult = ClashSharpUi::ClashSharp.ViewModel.TriggerEditorSaveResult;
 using TriggerEditorViewModel = ClashSharpUi::ClashSharp.ViewModel.TriggerEditorViewModel;
 using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
+using TriggerPresentationFactory = ClashSharpUi::ClashSharp.Presentation.Composition.TriggerPresentationFactory;
 using TriggersViewModel = ClashSharpUi::ClashSharp.ViewModel.TriggersViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
@@ -23,6 +24,41 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Verifies lossless multi-condition editing and asynchronous trigger-definition persistence.</summary>
 public sealed class TriggerEditorViewModelTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NavigationReloadRetainsUnsavedDraftUntilExplicitSaveOrCancel(bool existingTask)
+    {
+        RecordingDefinitionStore store = new(Catalog(3, CompleteDefinition("alpha", "Alpha")));
+        TestApplicationErrorSink errors = new();
+        TriggerPresentationFactory factory = new(store, ClashSharpUi::ClashSharp.Service.AppSettingsService.Instance);
+        TriggersViewModel firstPage = factory.CreateViewModel(Localize, errors);
+        Assert.True(await firstPage.LoadAsync(CancellationToken.None));
+        TriggerEditorViewModel draft = existingTask
+            ? Assert.IsType<TriggerEditorViewModel>(firstPage.BeginEdit("alpha"))
+            : firstPage.BeginCreate();
+        draft.Name = "Unsaved navigation draft";
+        TriggerConditionEditorViewModel added = draft.AddCondition(TriggerConditionTemplate.ProxyStarted);
+        draft.SelectedCondition = added;
+
+        TriggersViewModel returningPage = factory.CreateViewModel(Localize, errors);
+        Assert.True(await returningPage.LoadAsync(CancellationToken.None));
+        Assert.Same(draft, returningPage.CurrentEditor);
+        Assert.Equal("Unsaved navigation draft", draft.Name);
+        Assert.Same(added, draft.SelectedCondition);
+        Assert.Contains(added, draft.Conditions);
+        Assert.Equal(0, store.ReplaceCallCount);
+
+        returningPage.CancelEdit();
+        Assert.Null(factory.CreateViewModel(Localize, errors).CurrentEditor);
+        Assert.Equal("Alpha", Assert.Single(store.Current.Tasks).Definition.Name);
+        TriggerEditorViewModel savedDraft = returningPage.BeginCreate();
+        savedDraft.Name = "Explicitly saved";
+        Assert.True(await savedDraft.SaveAsync(CancellationToken.None));
+        Assert.Null(factory.CreateViewModel(Localize, errors).CurrentEditor);
+        Assert.Contains(store.Current.Tasks, task => task.Definition.Name == "Explicitly saved");
+    }
+
     [Fact]
     public void OptionSelections_FollowSelectedDraftAndPreserveValuesAcrossTemporaryDeselection()
     {

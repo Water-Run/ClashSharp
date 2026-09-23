@@ -12,6 +12,7 @@ internal sealed class TriggerPresentationFactory
 {
     private readonly ITriggerDefinitionStore _store;
     private readonly AppSettingsService _settings;
+    private TriggersViewModel? _viewModel;
 
     public TriggerPresentationFactory(
         ITriggerDefinitionStore store,
@@ -25,7 +26,9 @@ internal sealed class TriggerPresentationFactory
         Func<string, string> getString,
         IApplicationErrorSink errorSink)
     {
-        return new TriggersViewModel(
+        // Navigation recreates the page, but its unsaved draft belongs to the application session.
+        // Loading a new page refreshes the catalog while preserving this editor and its conflict token.
+        return _viewModel ??= new TriggersViewModel(
             getString,
             _store,
             new PresentationSettings(_settings),
