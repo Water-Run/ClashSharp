@@ -44,7 +44,7 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorHorizontalChrome = 96;
     private const double InfoTileEditorMinListHeight = 80;
     private const double InfoTileEditorMaxListHeight = 420;
-    private const double InfoTileEditorVerticalChrome = 360;
+    private const double InfoTileEditorVerticalChrome = 406;
 
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
@@ -574,6 +574,45 @@ public sealed partial class MasterControl : Page
         });
         panel.Children.Add(optionList);
 
+        TextBlock selectionCount = new()
+        {
+            TextWrapping = TextWrapping.WrapWholeWords,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        void RefreshSelectionCount()
+        {
+            selectionCount.Text = string.Format(
+                CultureInfo.CurrentCulture,
+                _getString("Master.Tile.SelectedCount.Format"),
+                optionList.SelectedOptions.Count,
+                optionList.Options.Count);
+        }
+        void SetAllChecked(bool isChecked)
+        {
+            // Bulk visibility includes options hidden by the search; only Save commits the draft.
+            foreach (SearchableOptionItem option in optionList.Options)
+            {
+                option.IsChecked = isChecked;
+            }
+            RefreshSelectionCount();
+        }
+        optionList.SelectionChanged += (_, _) => RefreshSelectionCount();
+        Button showAll = new() { Content = _getString("Master.Tile.ShowAll") };
+        Button hideAll = new() { Content = _getString("Master.Tile.HideAll") };
+        showAll.Click += (_, _) => SetAllChecked(true);
+        hideAll.Click += (_, _) => SetAllChecked(false);
+        Grid selectionActions = new() { ColumnSpacing = 10 };
+        selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(hideAll, 1);
+        Grid.SetColumn(selectionCount, 2);
+        selectionActions.Children.Add(showAll);
+        selectionActions.Children.Add(hideAll);
+        selectionActions.Children.Add(selectionCount);
+        panel.Children.Add(selectionActions);
+        RefreshSelectionCount();
+
         bool recommendedOrder = false;
         Button restoreLayout = new() { Content = _getString("Master.Tile.RestoreRecommended") };
         restoreLayout.Click += (_, _) =>
@@ -584,6 +623,7 @@ public sealed partial class MasterControl : Page
                 option.IsChecked = recommended.Contains(option.Id);
             }
             recommendedOrder = true;
+            RefreshSelectionCount();
         };
         panel.Children.Add(restoreLayout);
 
