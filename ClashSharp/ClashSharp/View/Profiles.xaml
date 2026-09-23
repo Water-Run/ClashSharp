@@ -74,11 +74,11 @@
             <ListView.Header>
                 <Grid Padding="20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="190" />
-                        <ColumnDefinition Width="130" />
-                        <ColumnDefinition Width="90" />
-                        <ColumnDefinition Width="90" />
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="0.7*" />
+                        <ColumnDefinition Width="0.7*" />
+                        <ColumnDefinition Width="1.6*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{Binding ProfileNameColumnText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock Grid.Column="1" Text="{Binding StatusColumnText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -91,11 +91,11 @@
                 <DataTemplate>
                     <Grid Padding="4,10" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="190" />
-                            <ColumnDefinition Width="130" />
-                            <ColumnDefinition Width="90" />
-                            <ColumnDefinition Width="90" />
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="0.7*" />
+                            <ColumnDefinition Width="0.7*" />
+                            <ColumnDefinition Width="1.6*" />
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Spacing="2">
@@ -103,10 +103,10 @@
                             <TextBlock Text="{Binding SourceNameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding SourceNameDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
 
-                        <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Grid.Column="2" Text="{Binding NodeCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="3" Text="{Binding RuleCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="4" Text="{Binding UpdatedAt}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding StatusDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Grid.Column="2" Text="{Binding NodeCount}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding NodeCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="3" Text="{Binding RuleCount}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding RuleCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="4" Text="{Binding UpdatedAt}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding UpdatedAt}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

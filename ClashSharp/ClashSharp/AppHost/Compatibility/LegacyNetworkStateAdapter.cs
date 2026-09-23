@@ -188,7 +188,38 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         MihomoServiceStatus serviceStatus = await _mihomoService
             .GetStatusAsync(cancellationToken)
             .ConfigureAwait(false);
-        return Observe(serviceStatus).Snapshot;
+        ObservedNetworkState observed = Observe(serviceStatus);
+        if (observed.Snapshot.IsKnown
+            || _core.IsRunning || _core.HasOwnershipFault
+            || !serviceStatus.HasReleasedChildOwnership
+            || plan.Intent.Kind is not (NetworkIntentKind.ModeTransition or NetworkIntentKind.Shutdown))
+        {
+            return observed.Snapshot;
+        }
+
+        LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted =
+            LegacyNetworkPlanPersistence.Deserialize(plan.CompensationData);
+        bool proxyMatchesJournal =
+            (observed.Snapshot.SystemProxyEnabled == plan.Baseline.SystemProxyEnabled
+                && StringComparer.OrdinalIgnoreCase.Equals(observed.ProxyServer, persisted.BaselineProxyServer))
+            || (observed.Snapshot.SystemProxyEnabled == plan.Desired.SystemProxyEnabled
+                && StringComparer.OrdinalIgnoreCase.Equals(observed.ProxyServer, persisted.DesiredProxyServer));
+        RuntimeConfigurationActivationPlan baselinePlan = new(
+            plan.Baseline.Mode, plan.Baseline.TransparentProxyEnabled, plan.Baseline.MixedPort, _settings.ActiveProfileId);
+        RuntimeConfigurationActivationPlan desiredPlan = new(
+            plan.Desired.Mode, plan.Desired.TransparentProxyEnabled, plan.Desired.MixedPort, _settings.ActiveProfileId);
+        if (!proxyMatchesJournal
+            || !_configuration.CanRecoverInterruptedRuntimeConfiguration(baselinePlan, desiredPlan))
+        {
+            return observed.Snapshot;
+        }
+
+        // The journal, both generation hashes and released owners identify a known
+        // partial transition. Keep normal observation unknown until compensation
+        // has restored and readiness-verified the applied generation.
+        return CreateSnapshot(ClashSharpMode.Faulted, coreRunning: false,
+            observed.Snapshot.SystemProxyEnabled, transparentProxyEnabled: false,
+            plan.Baseline.MixedPort, observed.ProxyServer, isKnown: true);
     }
 
     public async Task CompensateAsync(NetworkPlan plan, CancellationToken cancellationToken)

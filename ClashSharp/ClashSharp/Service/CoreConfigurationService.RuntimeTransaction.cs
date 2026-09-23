@@ -69,6 +69,65 @@ public sealed partial class CoreConfigurationService
         }
     }
 
+    /// <summary>
+    /// Recognizes an interrupted transition for an already restored mutation plan.
+    /// This is read-only evidence for compensation, never an applied-state observation.
+    /// The caller must independently prove that both runtime owners have released.
+    /// </summary>
+    internal bool CanRecoverInterruptedRuntimeConfiguration(
+        RuntimeConfigurationActivationPlan baselinePlan,
+        RuntimeConfigurationActivationPlan desiredPlan)
+    {
+        lock (_runtimeIntegrityObservationLock)
+        {
+            if (!_runtimeConfigurationGate.Wait(0))
+            {
+                return false;
+            }
+
+            try
+            {
+                RuntimeGenerationManifest manifest = JsonSerializer.Deserialize<RuntimeGenerationManifest>(
+                    File.ReadAllText(GetRuntimeGenerationStatePath()))
+                    ?? throw new InvalidDataException("Runtime configuration generation state is empty.");
+                RuntimeConfigurationGenerationState state = manifest.ToState();
+                ValidateRuntimeGenerationState(state, manifest.SchemaVersion);
+                if (state.AppliedGeneration is null
+                    || state.DesiredGeneration <= state.AppliedGeneration
+                    || state.AppliedPlan != baselinePlan
+                    || state.DesiredPlan != desiredPlan)
+                {
+                    return false;
+                }
+
+                string snapshotPath = GetRuntimeSnapshotPath(
+                    state.AppliedGeneration.Value, state.AppliedContentHash!);
+                string snapshotText = File.ReadAllText(snapshotPath);
+                string liveText = File.ReadAllText(_configurationFilePath);
+                string liveHash = ComputeFileHash(_configurationFilePath);
+                RuntimeConfigurationActivationPlan? livePlan =
+                    StringComparer.Ordinal.Equals(liveHash, state.AppliedContentHash) ? baselinePlan
+                    : StringComparer.Ordinal.Equals(liveHash, state.DesiredContentHash) ? desiredPlan : null;
+                return livePlan is not null
+                    && StringComparer.Ordinal.Equals(ComputeFileHash(snapshotPath), state.AppliedContentHash)
+                    && ActivationPlanMatchesConfiguration(baselinePlan,
+                        MihomoYamlSemanticValidator.ReadActivationPlan(snapshotText, baselinePlan.ProfileId))
+                    && ActivationPlanMatchesConfiguration(livePlan,
+                        MihomoYamlSemanticValidator.ReadActivationPlan(liveText, livePlan.ProfileId));
+            }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception) && exception is
+                IOException or UnauthorizedAccessException or JsonException or ArgumentException
+                or CryptographicException or System.Security.SecurityException)
+            {
+                return false;
+            }
+            finally
+            {
+                _runtimeConfigurationGate.Release();
+            }
+        }
+    }
+
     private RuntimeConfigurationIntegrityObservation ObserveRuntimeConfigurationIntegrityCore()
     {
         if (!_runtimeConfigurationGate.Wait(0))

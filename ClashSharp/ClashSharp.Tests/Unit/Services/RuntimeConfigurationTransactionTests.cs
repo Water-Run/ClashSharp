@@ -6,6 +6,90 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for durable mihomo runtime configuration transactions.</summary>
 public sealed class RuntimeConfigurationTransactionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InterruptedGeneration_IsRecoverableOnlyForExactJournalPlans_AndStaysUnknown(bool liveAlreadyRestored)
+    {
+        using TempDirectory directory = new();
+        CoreConfigurationService service = CreateService(directory.Path, new RecordingValidator());
+        RuntimeConfigurationTransactionResult baseline = await service.ApplyRuntimeConfigurationAsync(
+            ClashSharpMode.Disabled, false, 17890, new RecordingRuntime(), CancellationToken.None);
+        string baselineText = File.ReadAllText(baseline.Configuration.ConfigPath);
+        RecordingRuntime interrupted = new();
+#pragma warning disable CA2201 // Deliberately exercise fatal-crash residue without allocating memory.
+        interrupted.ApplyFailures.Enqueue(new OutOfMemoryException("Simulated fatal interruption"));
+#pragma warning restore CA2201
+        await Assert.ThrowsAsync<OutOfMemoryException>(() => service.ApplyRuntimeConfigurationAsync(
+            ClashSharpMode.RuleTakeover, true, 17890, interrupted, CancellationToken.None));
+        RuntimeConfigurationGenerationState state = await service.GetRuntimeGenerationStateAsync(CancellationToken.None);
+        if (liveAlreadyRestored) { File.WriteAllText(baseline.Configuration.ConfigPath, baselineText); }
+        string manifestBefore = File.ReadAllText(Path.Combine(directory.Path, "config.runtime-state.json"));
+        string liveBefore = File.ReadAllText(baseline.Configuration.ConfigPath);
+
+        Assert.True(service.CanRecoverInterruptedRuntimeConfiguration(state.AppliedPlan!, state.DesiredPlan!));
+        Assert.False(service.ObserveRuntimeConfigurationIntegrity().IsKnown);
+        Assert.False(service.CanRecoverInterruptedRuntimeConfiguration(
+            state.AppliedPlan! with { MixedPort = 17891 }, state.DesiredPlan!));
+        Assert.False(service.CanRecoverInterruptedRuntimeConfiguration(
+            state.AppliedPlan!, state.DesiredPlan! with { ProfileId = "another-profile" }));
+        Assert.Equal(manifestBefore, File.ReadAllText(Path.Combine(directory.Path, "config.runtime-state.json")));
+        Assert.Equal(liveBefore, File.ReadAllText(baseline.Configuration.ConfigPath));
+
+        RecordingRuntime recovery = new();
+        await service.ApplyRuntimeConfigurationAsync(ClashSharpMode.Disabled, false, 17890, recovery, CancellationToken.None);
+        Assert.Equal([1, 2], recovery.AppliedGenerations);
+        Assert.True(service.ObserveRuntimeConfigurationIntegrity().IsKnown);
+        Assert.False(service.CanRecoverInterruptedRuntimeConfiguration(state.AppliedPlan!, state.DesiredPlan!));
+    }
+
+    [Theory]
+    [InlineData("live")]
+    [InlineData("snapshot")]
+    [InlineData("missing-live")]
+    [InlineData("manifest")]
+    public async Task InterruptedGeneration_RejectsUntrustedResidue(string fault)
+    {
+        using TempDirectory directory = new();
+        CoreConfigurationService service = CreateService(directory.Path, new RecordingValidator());
+        await service.ApplyRuntimeConfigurationAsync(ClashSharpMode.Disabled, false, 17890, new RecordingRuntime(), CancellationToken.None);
+        RecordingRuntime interrupted = new();
+#pragma warning disable CA2201 // Deliberately exercise fatal-crash residue without allocating memory.
+        interrupted.ApplyFailures.Enqueue(new OutOfMemoryException("Simulated fatal interruption"));
+#pragma warning restore CA2201
+        await Assert.ThrowsAsync<OutOfMemoryException>(() => service.ApplyRuntimeConfigurationAsync(
+            ClashSharpMode.RuleTakeover, true, 17890, interrupted, CancellationToken.None));
+        RuntimeConfigurationGenerationState state = await service.GetRuntimeGenerationStateAsync(CancellationToken.None);
+        string live = Path.Combine(directory.Path, "config.yaml");
+        switch (fault)
+        {
+            case "live": File.AppendAllText(live, "\n# modified\n"); break;
+            case "snapshot": File.AppendAllText(Assert.Single(Directory.GetFiles(Path.Combine(directory.Path, "runtime-generations"), "*.yaml")), "\n# modified\n"); break;
+            case "missing-live": File.Delete(live); break;
+            case "manifest": File.WriteAllText(Path.Combine(directory.Path, "config.runtime-state.json"), "{"); break;
+        }
+
+        Assert.False(service.CanRecoverInterruptedRuntimeConfiguration(state.AppliedPlan!, state.DesiredPlan!));
+        Assert.False(service.ObserveRuntimeConfigurationIntegrity().IsKnown);
+    }
+
+    [Fact]
+    public async Task InterruptedGeneration_ActiveWriterCannotBeClassifiedAsRecoverable()
+    {
+        using TempDirectory directory = new();
+        CoreConfigurationService service = CreateService(directory.Path, new RecordingValidator());
+        RuntimeConfigurationTransactionResult baseline = await service.ApplyRuntimeConfigurationAsync(
+            ClashSharpMode.Disabled, false, 17890, new RecordingRuntime(), CancellationToken.None);
+        bool? duringWrite = null;
+        RecordingRuntime runtime = new()
+        {
+            Applying = (_, _, desired) => duringWrite = service.CanRecoverInterruptedRuntimeConfiguration(
+                baseline.GenerationState.AppliedPlan!, desired)
+        };
+        await service.ApplyRuntimeConfigurationAsync(ClashSharpMode.RuleTakeover, true, 17890, runtime, CancellationToken.None);
+        Assert.Equal(false, duringWrite);
+    }
+
     [Fact]
     public async Task ObserveRuntimeConfigurationIntegrity_ConcurrentReaders_PreserveVerifiedGeneration()
     {

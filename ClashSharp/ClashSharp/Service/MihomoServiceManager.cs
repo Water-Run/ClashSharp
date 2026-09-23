@@ -243,10 +243,12 @@ public sealed partial class MihomoServiceManager
                 return unavailable;
             }
 
+            IpcSessionObservation? activationSession = null;
             try
             {
                 IpcSessionObservation session = await ObserveIpcSessionAsync(cancellationToken)
                     .ConfigureAwait(false);
+                activationSession = session;
                 MihomoServiceIpcResponse response = await SendIpcAsync(
                     MihomoServiceIpcCommand.Reload,
                     generation,
@@ -269,6 +271,16 @@ public sealed partial class MihomoServiceManager
             }
             catch (Exception exception) when (!IsProcessFatal(exception))
             {
+                if (exception is MihomoServiceCommandException && activationSession is { } rejectedSession)
+                {
+                    MihomoServiceStatus? released = await ObserveRejectedActivationAsync(
+                        rejectedSession, GetIpcFailureCode(exception)).ConfigureAwait(false);
+                    if (released is { } confirmedReleased)
+                    {
+                        return confirmedReleased;
+                    }
+                }
+
                 return await CleanupFailedActivationAsync(
                     currentQuery.Status,
                     GetIpcFailureCode(exception)).ConfigureAwait(false);

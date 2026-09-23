@@ -9,114 +9,119 @@
     Unloaded="Page_Unloaded"
     mc:Ignorable="d">
 
-    <ScrollViewer Padding="{StaticResource ClashPagePadding}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch">
-        <StackPanel Spacing="18">
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" TextWrapping="Wrap" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </StackPanel>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <ScrollViewer Padding="{StaticResource ClashPagePadding}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="18">
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                    <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" TextWrapping="Wrap" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
 
-            <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton x:Name="RefreshNodesButton" Label="{Binding RefreshNodesText}" Command="{Binding RefreshNodesCommand}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE72C;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="TestLatencyButton" Label="{Binding TestLatencyText}" Command="{Binding TestLatencyCommand}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE9D9;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton x:Name="RefreshRuntimeButton" Label="{Binding RefreshRuntimeText}" Command="{Binding RefreshRuntimeCommand}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE895;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-            </CommandBar>
+                <CommandBar DefaultLabelPosition="Right" Background="Transparent">
+                    <AppBarButton x:Name="RefreshNodesButton" Label="{Binding RefreshNodesText}" Command="{Binding RefreshNodesCommand}">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE72C;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton x:Name="TestLatencyButton" Label="{Binding TestLatencyText}" Command="{Binding TestLatencyCommand}">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE9D9;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton x:Name="RefreshRuntimeButton" Label="{Binding RefreshRuntimeText}" Command="{Binding RefreshRuntimeCommand}">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE895;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                </CommandBar>
 
-            <TextBlock x:Name="RuntimeStatusText" Text="{Binding RuntimeStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-            <TextBlock x:Name="ProxyGroupsSectionTitleText" Text="{Binding ProxyGroupsSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            <ListView x:Name="ProxyGroupsList" ItemsSource="{Binding ProxyGroups}" MaxHeight="220">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Padding="4,8" ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="1.3*" />
-                                <ColumnDefinition Width="0.8*" />
-                                <ColumnDefinition Width="2*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="1" Text="{Binding Type}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Type}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                            <ComboBox
-                                Grid.Column="2"
-                                MinWidth="0"
-                                HorizontalAlignment="Stretch"
-                                ItemsSource="{Binding Candidates}"
-                                SelectedItem="{Binding CurrentSelection, Mode=OneWay}"
-                                SelectionChanged="ProxyGroupSelectionChanged" />
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-
-            <ListView x:Name="ProxyNodesList" ItemsSource="{Binding ProxyNodes}" MaxHeight="360">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Padding="4,8" ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="1.3*" />
-                                <ColumnDefinition Width="2.5*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="1.2*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid ColumnSpacing="8" VerticalAlignment="Center">
+                <TextBlock x:Name="ProxyGroupsSectionTitleText" Text="{Binding ProxyGroupsSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <ListView x:Name="ProxyGroupsList" ItemsSource="{Binding ProxyGroups}" MaxHeight="220">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Padding="4,8" ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="1.3*" />
+                                    <ColumnDefinition Width="0.8*" />
+                                    <ColumnDefinition Width="2*" />
                                 </Grid.ColumnDefinitions>
-                                <Border Width="28" Height="20" CornerRadius="2" Background="{ThemeResource ControlFillColorDefaultBrush}">
-                                    <Image Source="{Binding Region.FlagAssetPath}" Stretch="UniformToFill" />
-                                </Border>
-                                <TextBlock Grid.Column="1" Text="{Binding Region.DisplayName}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding Region.DisplayName}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Type}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Type}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                <ComboBox
+                                    Grid.Column="2"
+                                    MinWidth="0"
+                                    HorizontalAlignment="Stretch"
+                                    ItemsSource="{Binding Candidates}"
+                                    SelectedItem="{Binding CurrentSelection, Mode=OneWay}"
+                                    SelectionChanged="ProxyGroupSelectionChanged" />
                             </Grid>
-                            <TextBlock Grid.Column="1" Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="2" Text="{Binding Protocol}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Protocol}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock Grid.Column="3" Text="{Binding LatencyDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding LatencyDisplay}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
 
-            <TextBlock x:Name="ProviderResourcesSectionTitleText" Text="{Binding ProviderResourcesSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            <ListView x:Name="ProviderResourcesList" ItemsSource="{Binding ProviderResources}" MaxHeight="220">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Padding="4,8" ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="180" />
-                                <ColumnDefinition Width="130" />
-                                <ColumnDefinition Width="120" />
-                                <ColumnDefinition Width="120" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Grid.Column="1" Text="{Binding TypeDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Text="{Binding DetailDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="3" Text="{Binding ItemCountDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="4" Text="{Binding UpdatedAtDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                            <Button
-                                Grid.Column="5"
-                                Padding="8,4"
-                                Command="{Binding DataContext.UpdateProviderCommand, ElementName=ProviderResourcesList}"
-                                CommandParameter="{Binding}">
-                                <FontIcon Glyph="&#xE895;" FontSize="14" />
-                            </Button>
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-        </StackPanel>
-    </ScrollViewer>
+                <ListView x:Name="ProxyNodesList" ItemsSource="{Binding ProxyNodes}" MaxHeight="360">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Padding="4,8" ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.3*" />
+                                    <ColumnDefinition Width="2.5*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="1.2*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid ColumnSpacing="8" VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="28" Height="20" CornerRadius="2" Background="{ThemeResource ControlFillColorDefaultBrush}">
+                                        <Image Source="{Binding Region.FlagAssetPath}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{Binding Region.DisplayName}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding Region.DisplayName}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                </Grid>
+                                <TextBlock Grid.Column="1" Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="2" Text="{Binding Protocol}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Protocol}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="3" Text="{Binding LatencyDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding LatencyDisplay}" TextAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <TextBlock x:Name="ProviderResourcesSectionTitleText" Text="{Binding ProviderResourcesSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <ListView x:Name="ProviderResourcesList" ItemsSource="{Binding ProviderResources}" MaxHeight="220">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Padding="4,8" ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="1.4*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="0.5*" />
+                                    <ColumnDefinition Width="1.7*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="{Binding TypeDisplay}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding DetailDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding DetailDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="3" Text="{Binding ItemCountDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding ItemCountDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="4" Text="{Binding UpdatedAtDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding UpdatedAtDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                <Button
+                                    Grid.Column="5"
+                                    Padding="8,4"
+                                    Command="{Binding DataContext.UpdateProviderCommand, ElementName=ProviderResourcesList}"
+                                    CommandParameter="{Binding}">
+                                    <FontIcon Glyph="&#xE895;" FontSize="14" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </StackPanel>
+        </ScrollViewer>
+        <TextBlock Grid.Row="1" x:Name="RuntimeStatusText" Margin="32,8,32,16" Text="{Binding RuntimeStatusText}" TextWrapping="Wrap" IsTextSelectionEnabled="True" AutomationProperties.LiveSetting="Polite" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+    </Grid>
 </Page>

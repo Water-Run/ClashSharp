@@ -632,6 +632,70 @@ public sealed class MihomoServiceManagerTests
             runner.Requests.Select(request => request.Arguments[0]));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestartAsync_TrustedRejectionRequiresSameSessionStoppedProofToAvoidElevation(bool sessionChanged)
+    {
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
+        if (sessionChanged)
+        {
+            runner.Results.Enqueue(Completed(0));
+            runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
+        }
+        Guid originalSession = Guid.NewGuid();
+        Guid replacementSession = Guid.NewGuid();
+        bool rejected = false;
+        FakeMihomoServiceIpcClient ipc = new()
+        {
+            ResponseFactory = request =>
+            {
+                if (request.Command == MihomoServiceIpcCommand.Reload)
+                {
+                    rejected = true;
+                    return new MihomoServiceIpcResponse
+                    {
+                        ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
+                        RequestId = request.RequestId,
+                        Succeeded = false,
+                        ErrorCode = "service.config.untrusted",
+                    };
+                }
+
+                return new MihomoServiceIpcResponse
+                {
+                    ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
+                    RequestId = request.RequestId,
+                    Succeeded = true,
+                    Snapshot = new MihomoServiceIpcSnapshot
+                    {
+                        SessionId = rejected && sessionChanged ? replacementSession : originalSession,
+                        ServiceVersion = "test-service",
+                        ChildState = MihomoServiceChildState.Stopped,
+                    },
+                };
+            },
+        };
+
+        MihomoServiceStatus status = await CreateManager(runner, ipcClient: ipc).RestartAsync(
+            Generation, ConfigurationHash, CancellationToken.None);
+
+        Assert.False(status.IsReady);
+        Assert.True(status.HasReleasedChildOwnership);
+        Assert.Equal("service.config.untrusted", status.IpcFailureCode);
+        Assert.Null(status.CleanupFailureCode);
+        Assert.Equal(!sessionChanged, status.IsScmRunning);
+        if (sessionChanged)
+        {
+            Assert.Equal(["query", "stop", "query"], runner.Requests.Select(request => request.Arguments[0]));
+        }
+        else
+        {
+            Assert.Equal("query", Assert.Single(runner.Requests).Arguments[0]);
+        }
+    }
+
     private static MihomoServiceIpcResponse CreateIpcResponse(
         MihomoServiceIpcRequest request,
         Guid sessionId,

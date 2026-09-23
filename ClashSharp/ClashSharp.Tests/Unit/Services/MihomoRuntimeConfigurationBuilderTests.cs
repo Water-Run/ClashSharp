@@ -16,6 +16,30 @@ public sealed class MihomoRuntimeConfigurationBuilderTests
 {
     private const string ControllerSecret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
+    [Theory]
+    [InlineData("./cache/provider.yaml", "cache/provider.yaml")]
+    [InlineData(".\\cache\\provider.yaml", "cache\\provider.yaml")]
+    [InlineData("././cache/provider.yaml", "cache/provider.yaml")]
+    [InlineData("../outside.yaml", "../outside.yaml")]
+    [InlineData("./../outside.yaml", "../outside.yaml")]
+    [InlineData("C:\\outside.yaml", "C:\\outside.yaml")]
+    [InlineData("cache/../outside.yaml", "cache/../outside.yaml")]
+    public void OverrideRuntimeKeys_NormalizesOnlyRedundantProviderPathPrefixes(string path, string expected)
+    {
+        string imported = $"proxy-providers:\n  nodes:\n    type: http\n    url: https://example.invalid/nodes\n    path: '{path}'\nrule-providers:\n  rules:\n    type: http\n    behavior: classical\n    url: https://example.invalid/rules\n    path: '{path}'\nproxies: []\nproxy-groups: []\nrules: [MATCH,DIRECT]\n";
+        string output = MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(
+            imported, 7890, ClashSharpMode.RuleTakeover, true, ControllerSecret);
+        YamlStream yaml = new();
+        yaml.Load(new StringReader(output));
+        YamlMappingNode root = (YamlMappingNode)yaml.Documents[0].RootNode;
+        foreach ((string section, string name) in new[] { ("proxy-providers", "nodes"), ("rule-providers", "rules") })
+        {
+            YamlMappingNode providers = (YamlMappingNode)root.Children[new YamlScalarNode(section)];
+            YamlMappingNode provider = (YamlMappingNode)providers.Children[new YamlScalarNode(name)];
+            Assert.Equal(expected, ((YamlScalarNode)provider.Children[new YamlScalarNode("path")]).Value);
+        }
+    }
+
     private static readonly string[] AdditionalAppOwnedRuntimeKeys =
     [
         "ss-config",

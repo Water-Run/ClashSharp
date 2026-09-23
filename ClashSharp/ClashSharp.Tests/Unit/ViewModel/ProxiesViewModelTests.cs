@@ -173,6 +173,39 @@ public sealed class ProxiesViewModelTests
         Assert.Equal("Provider updated", viewModel.RuntimeStatusText);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MutationFollowedByRefreshFailure_PreservesRowsAndDoesNotReportSuccess(bool selectProxy)
+    {
+        FakeProxyRuntimeController runtime = new();
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(),
+            new FakeProxyLatency(), runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        runtime.RefreshFailure = new System.Net.Http.HttpRequestException("Controller unavailable after mutation");
+
+        if (selectProxy)
+        {
+            await viewModel.SelectProxyAsync(runtime.ProxyGroups[0], "Node B", CancellationToken.None);
+            Assert.Equal(("Proxy", "Node B"), runtime.LastSelection);
+        }
+        else
+        {
+            await viewModel.UpdateProviderAsync(runtime.ProviderResources[0], CancellationToken.None);
+            Assert.NotNull(runtime.LastUpdatedProvider);
+        }
+
+        Assert.NotEqual("Selection applied", viewModel.RuntimeStatusText);
+        Assert.NotEqual("Provider updated", viewModel.RuntimeStatusText);
+        Assert.Equal(runtime.ProviderResources, viewModel.ProviderResources.Select(row => row.Model));
+        Assert.Equal(runtime.ProxyGroups, viewModel.ProxyGroups.Select(row => row.Model));
+        Assert.Equal("Warning", Assert.Single(log.Entries).Level);
+        runtime.RefreshFailure = null;
+        await viewModel.UpdateProviderAsync(runtime.ProviderResources[0], CancellationToken.None);
+        Assert.Equal("Provider updated", viewModel.RuntimeStatusText);
+    }
+
     /// <summary>Fake localization provider for proxies tests.</summary>
     private sealed class FakeProxiesLocalization : IProxiesLocalization
     {
@@ -274,6 +307,8 @@ public sealed class ProxiesViewModelTests
         /// <value>Refresh call count.</value>
         public int RefreshCount { get; private set; }
 
+        public Exception? RefreshFailure { get; set; }
+
         /// <summary>Gets fake strategy groups.</summary>
         /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
         /// <returns>Configured groups.</returns>
@@ -288,7 +323,8 @@ public sealed class ProxiesViewModelTests
         /// <returns>Configured resources.</returns>
         public Task<IReadOnlyList<MihomoProviderResource>> GetProviderResourcesAsync(CancellationToken cancellationToken)
         {
-            return Task.FromResult(ProviderResources);
+            return RefreshFailure is null ? Task.FromResult(ProviderResources)
+                : Task.FromException<IReadOnlyList<MihomoProviderResource>>(RefreshFailure);
         }
 
         /// <summary>Captures one fake strategy group selection.</summary>

@@ -264,12 +264,7 @@ internal sealed class ProxiesViewModel : ObservableObject
     {
         try
         {
-            IReadOnlyList<MihomoProxyGroup> groups =
-                await _runtimeController.GetProxyGroupsAsync(cancellationToken);
-            IReadOnlyList<MihomoProviderResource> providers =
-                await _runtimeController.GetProviderResourcesAsync(cancellationToken);
-            ProxyGroups = MapProxyGroups(groups);
-            ProviderResources = MapProviderResources(providers);
+            await LoadRuntimeAsync(cancellationToken);
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeRefreshed");
         }
         catch (Exception exception) when (
@@ -297,7 +292,7 @@ internal sealed class ProxiesViewModel : ObservableObject
         try
         {
             await _runtimeController.SelectProxyAsync(group.Name, proxyName, cancellationToken);
-            await RefreshRuntimeAsync(cancellationToken);
+            await LoadRuntimeAsync(cancellationToken);
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.SelectionApplied");
             _log.Append("Info", "ProxyNodes", RuntimeStatusText, $"{group.Name} -> {proxyName}");
         }
@@ -332,7 +327,7 @@ internal sealed class ProxiesViewModel : ObservableObject
         try
         {
             await _runtimeController.UpdateProviderAsync(provider, cancellationToken);
-            await RefreshRuntimeAsync(cancellationToken);
+            await LoadRuntimeAsync(cancellationToken);
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.ProviderUpdated");
             _log.Append("Info", "ProxyNodes", RuntimeStatusText, provider.Name);
         }
@@ -354,6 +349,16 @@ internal sealed class ProxiesViewModel : ObservableObject
                 _localization.GetString("ProxyNodes.Status.RuntimeUnavailable"));
             _log.Append("Warning", "ProxyNodes", RuntimeStatusText, code);
         }
+    }
+
+    private async Task LoadRuntimeAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<MihomoProxyGroup> groups =
+            await _runtimeController.GetProxyGroupsAsync(cancellationToken);
+        IReadOnlyList<MihomoProviderResource> providers =
+            await _runtimeController.GetProviderResourcesAsync(cancellationToken);
+        ProxyGroups = MapProxyGroups(groups);
+        ProviderResources = MapProviderResources(providers);
     }
 
     /// <summary>Selects a proxy from a command parameter tuple.</summary>

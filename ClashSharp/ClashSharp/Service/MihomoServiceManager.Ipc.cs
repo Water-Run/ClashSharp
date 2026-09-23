@@ -205,6 +205,32 @@ public sealed partial class MihomoServiceManager
         };
     }
 
+    private async Task<MihomoServiceStatus?> ObserveRejectedActivationAsync(
+        IpcSessionObservation originalSession, string failureCode)
+    {
+        try
+        {
+            IpcSessionObservation observed = await ObserveIpcSessionAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            EnsureSameSession(originalSession.Snapshot, observed.Snapshot);
+            MihomoServiceStatus status = CreateReadyStatus(observed.ProtocolVersion, observed.Snapshot);
+            if (status.HasReleasedChildOwnership)
+            {
+                // A trusted configuration rejection with a stopped child needs no
+                // elevated SCM operation. Uncertain ownership still fails closed.
+                status = status with { IpcFailureCode = failureCode };
+                CacheLatestStatus(status);
+                return status;
+            }
+        }
+        catch (Exception exception) when (!IsProcessFatal(exception))
+        {
+            // Preserve the authoritative SCM fallback below.
+        }
+
+        return null;
+    }
+
     private async Task<MihomoServiceStatus> CleanupFailedActivationAsync(
         MihomoServiceStatus fallbackScmStatus,
         string activationFailureCode)

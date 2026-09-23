@@ -105,6 +105,7 @@ internal static class MihomoRuntimeConfigurationBuilder
             }
         }
 
+        NormalizeProviderCachePaths(managedRoot);
         EnsureSelectionPersistence(managedRoot);
         if (transparentProxyEnabled)
         {
@@ -177,6 +178,39 @@ internal static class MihomoRuntimeConfigurationBuilder
         if (transparentProxyEnabled)
         {
             root.Add(PlainScalar("tun"), BuildTunConfiguration());
+        }
+    }
+
+    private static void NormalizeProviderCachePaths(YamlMappingNode root)
+    {
+        foreach (string section in new[] { "proxy-providers", "rule-providers" })
+        {
+            if (!TryGetScalarKeyValue(root, section, out YamlNode? node)
+                || node is not YamlMappingNode providers)
+            {
+                continue;
+            }
+
+            foreach (YamlNode provider in providers.Children.Values)
+            {
+                if (provider is not YamlMappingNode fields
+                    || !TryGetScalarKeyValue(fields, "path", out YamlNode? pathNode)
+                    || pathNode is not YamlScalarNode { Value: { } path })
+                {
+                    continue;
+                }
+
+                // Standard subscriptions commonly prefix cache paths with ./.
+                // Remove only that redundant prefix; traversal, absolute paths and
+                // unsafe components remain subject to the service trust validator.
+                while (path.StartsWith("./", StringComparison.Ordinal)
+                    || path.StartsWith(".\\", StringComparison.Ordinal))
+                {
+                    path = path[2..];
+                }
+
+                fields.Children[PlainScalar("path")] = new YamlScalarNode(path);
+            }
         }
     }
 
