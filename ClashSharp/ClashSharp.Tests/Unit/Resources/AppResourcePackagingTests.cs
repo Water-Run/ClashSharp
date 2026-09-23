@@ -3046,8 +3046,8 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"LevelFilterBox\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"CategoryFilterBox\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding SearchText, Mode=OneWay}\"", logsXaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedIndex=\"{Binding SelectedLevelFilterIndex, Mode=OneWay}\"", logsXaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedIndex=\"{Binding SelectedCategoryFilterIndex, Mode=OneWay}\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding LevelFilterOptions}\"", logsXaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding CategoryFilterOptions}\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding CreatedAtDisplay}\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding LevelDisplay}\"", logsXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding SourceDisplay}\"", logsXaml, StringComparison.Ordinal);

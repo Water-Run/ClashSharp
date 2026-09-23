@@ -65,7 +65,6 @@
                 Grid.Column="1"
                 Header="{Binding LevelFilterLabelText}"
                 ItemsSource="{Binding LevelFilterOptions}"
-                SelectedIndex="{Binding SelectedLevelFilterIndex, Mode=OneWay}"
                 SelectionChanged="FilterBox_SelectionChanged"
                 HorizontalAlignment="Stretch" />
 
@@ -74,7 +73,6 @@
                 Grid.Column="2"
                 Header="{Binding CategoryFilterLabelText}"
                 ItemsSource="{Binding CategoryFilterOptions}"
-                SelectedIndex="{Binding SelectedCategoryFilterIndex, Mode=OneWay}"
                 SelectionChanged="FilterBox_SelectionChanged"
                 HorizontalAlignment="Stretch" />
 

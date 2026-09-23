@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
@@ -43,6 +44,7 @@ public sealed partial class Logs : Page
 
     private bool _isLoaded;
     private bool _cleanupPending;
+    private bool _synchronizingFilters;
     private int _visit;
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
@@ -68,6 +70,8 @@ public sealed partial class Logs : Page
             return;
         }
         _isLoaded = true;
+        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+        SynchronizeFilterControls();
         int visit = ++_visit;
         await RunObservedPageEventAsync(
             "logs-page-load",
@@ -87,6 +91,7 @@ public sealed partial class Logs : Page
     private async void Page_Unloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
+        _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
         ++_visit;
         _loadSession.Cancel();
         _runtimeLogStreamSession.Cancel();
@@ -114,7 +119,7 @@ public sealed partial class Logs : Page
 
     private async void FilterBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_isLoaded)
+        if (!_isLoaded || _synchronizingFilters || _viewModel.IsUpdatingFilterOptions)
         {
             return;
         }
@@ -143,6 +148,35 @@ public sealed partial class Logs : Page
             await RunObservedPageEventAsync(
                 "logs-category-filter",
                 () => _loadSession.RunAsync(_viewModel.LoadAsync));
+        }
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(LogsViewModel.SelectedLevelFilterIndex)
+            or nameof(LogsViewModel.SelectedCategoryFilterIndex))
+        {
+            SynchronizeFilterControls();
+        }
+    }
+
+    /// <summary>Restores native selection after item changes, even when the desired index is unchanged.</summary>
+    private void SynchronizeFilterControls()
+    {
+        if (!_isLoaded || _viewModel.IsUpdatingFilterOptions)
+        {
+            return;
+        }
+
+        _synchronizingFilters = true;
+        try
+        {
+            LevelFilterBox.SelectedIndex = _viewModel.SelectedLevelFilterIndex;
+            CategoryFilterBox.SelectedIndex = _viewModel.SelectedCategoryFilterIndex;
+        }
+        finally
+        {
+            _synchronizingFilters = false;
         }
     }
 

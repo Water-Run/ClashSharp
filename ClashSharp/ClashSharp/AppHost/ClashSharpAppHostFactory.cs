@@ -196,6 +196,11 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<TriggerActionRuntimeAdapter>();
             services.AddSingleton<ITriggerActionRuntime>(provider =>
                 provider.GetRequiredService<TriggerActionRuntimeAdapter>());
+            services.AddSingleton<ITriggerExecutionLog>(provider => new TriggerExecutionLogAdapter(
+                provider.GetRequiredService<ITriggerDefinitionStore>(),
+                provider.GetRequiredService<LocalizationService>().GetString,
+                provider.GetRequiredService<LogStorageService>().AppendLog,
+                provider.GetRequiredService<IApplicationErrorSink>()));
             services.AddSingleton<TriggerActionExecutor>();
             services.AddSingleton<ITriggerExecutionDispatcher>(provider =>
                 provider.GetRequiredService<TriggerActionExecutor>());

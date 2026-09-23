@@ -152,6 +152,9 @@ internal sealed class LogsViewModel : ObservableObject
 
     public IReadOnlyList<string> CategoryFilterOptions => _categoryFilterOptions;
 
+    /// <summary>Gets whether native selection changes are being caused by an option refresh.</summary>
+    public bool IsUpdatingFilterOptions { get; private set; }
+
     public string SelectedLevelFilter
     {
         get => _selectedLevelFilter;
@@ -738,27 +741,35 @@ internal sealed class LogsViewModel : ObservableObject
     }
 
     /// <summary>Keeps the native ItemsSource and surviving items stable as live log sources arrive.</summary>
-    private static void SynchronizeFilterOptions(ObservableCollection<string> current, IReadOnlyList<string> desired)
+    private void SynchronizeFilterOptions(ObservableCollection<string> current, IReadOnlyList<string> desired)
     {
-        for (int index = 0; index < desired.Count; index++)
+        IsUpdatingFilterOptions = true;
+        try
         {
-            if (index < current.Count && StringComparer.Ordinal.Equals(current[index], desired[index]))
+            for (int index = 0; index < desired.Count; index++)
             {
-                continue;
+                if (index < current.Count && StringComparer.Ordinal.Equals(current[index], desired[index]))
+                {
+                    continue;
+                }
+                int existing = current.IndexOf(desired[index]);
+                if (existing >= 0)
+                {
+                    current.Move(existing, index);
+                }
+                else
+                {
+                    current.Insert(index, desired[index]);
+                }
             }
-            int existing = current.IndexOf(desired[index]);
-            if (existing >= 0)
+            while (current.Count > desired.Count)
             {
-                current.Move(existing, index);
-            }
-            else
-            {
-                current.Insert(index, desired[index]);
+                current.RemoveAt(current.Count - 1);
             }
         }
-        while (current.Count > desired.Count)
+        finally
         {
-            current.RemoveAt(current.Count - 1);
+            IsUpdatingFilterOptions = false;
         }
     }
 

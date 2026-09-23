@@ -9,17 +9,20 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
     private readonly ITriggerRepository _repository;
     private readonly ITriggerActionRuntime _runtime;
     private readonly ITriggerFiredNotificationSink _firedNotifications;
+    private readonly ITriggerExecutionLog? _executionLog;
 
     /// <summary>Initializes one durable action executor.</summary>
     public TriggerActionExecutor(
         ITriggerRepository repository,
         ITriggerActionRuntime runtime,
-        ITriggerFiredNotificationSink firedNotifications)
+        ITriggerFiredNotificationSink firedNotifications,
+        ITriggerExecutionLog? executionLog = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _firedNotifications = firedNotifications
             ?? throw new ArgumentNullException(nameof(firedNotifications));
+        _executionLog = executionLog;
     }
 
     /// <inheritdoc />
@@ -95,6 +98,10 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
         }
 
         ValidateOrderedActions(execution.ExecutionId, execution.TaskRevision, actions);
+        if (actions.Any(static action => action.State != TriggerOutboxState.Succeeded))
+        {
+            await TryWriteExecutionLogAsync(execution, null).ConfigureAwait(false);
+        }
         try
         {
             await _firedNotifications
@@ -126,16 +133,20 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
 
             if (action.State == TriggerOutboxState.HandedOff)
             {
-                results.Add(await ReconcileHandedOffAsync(
+                TriggerActionResult handoffResult = await ReconcileHandedOffAsync(
                     action,
                     admissionLease,
-                    cancellationToken).ConfigureAwait(false));
+                    cancellationToken).ConfigureAwait(false);
+                results.Add(handoffResult);
+                await TryWriteExecutionLogAsync(execution, handoffResult).ConfigureAwait(false);
                 break;
             }
 
             if (action.State is TriggerOutboxState.Failed or TriggerOutboxState.Uncertain)
             {
-                results.Add(ToTerminalResult(action));
+                TriggerActionResult terminalResult = ToTerminalResult(action);
+                results.Add(terminalResult);
+                await TryWriteExecutionLogAsync(execution, terminalResult).ConfigureAwait(false);
                 break;
             }
 
@@ -144,6 +155,7 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
                 admissionLease,
                 cancellationToken).ConfigureAwait(false);
             results.Add(result);
+            await TryWriteExecutionLogAsync(execution, result).ConfigureAwait(false);
             if (result.FinalState != TriggerOutboxState.Succeeded)
             {
                 break;
@@ -424,6 +436,31 @@ public sealed class TriggerActionExecutor : ITriggerExecutionDispatcher
             _ => null,
         };
         return new TriggerActionResult(action, action.State, diagnosticCode);
+    }
+
+    /// <summary>Diagnostic storage and its error sink cannot change a committed business outcome.</summary>
+    private async Task TryWriteExecutionLogAsync(TriggerExecution execution, TriggerActionResult? result)
+    {
+        if (_executionLog is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _executionLog.Write(execution, result);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            try
+            {
+                await _executionLog.ReportFailureAsync(exception).ConfigureAwait(false);
+            }
+            catch (Exception reportingException) when (!ExceptionGraphClassifier.IsProcessFatal(reportingException))
+            {
+                // Both diagnostic stores may be unavailable; durable execution remains authoritative.
+            }
+        }
     }
 
     private void TryReportNotificationFailure(

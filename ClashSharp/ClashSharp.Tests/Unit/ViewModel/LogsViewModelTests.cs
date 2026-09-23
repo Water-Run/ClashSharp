@@ -12,6 +12,38 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed class LogsViewModelTests
 {
     [Fact]
+    public async Task LoadAsync_EmptyRequestedCategorySurvivesNativeItemChangesAndRefresh()
+    {
+        FakeLogManagementStore store = new() { Sources = ["Application"] };
+        LogsViewModel viewModel = CreateViewModel(store, new TestApplicationErrorSink());
+        viewModel.SetSourceFilter("Trigger");
+        int visibleIndex = -1;
+        ((INotifyCollectionChanged)viewModel.CategoryFilterOptions).CollectionChanged += (_, _) =>
+        {
+            Assert.True(viewModel.IsUpdatingFilterOptions);
+            visibleIndex = -1;
+        };
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(viewModel.SelectedCategoryFilterIndex))
+            {
+                Assert.False(viewModel.IsUpdatingFilterOptions);
+                visibleIndex = viewModel.SelectedCategoryFilterIndex;
+            }
+        };
+
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal("Nav.Triggers", viewModel.CategoryFilterOptions[visibleIndex]);
+        store.Sources = ["Application", "Notifications"];
+        await viewModel.LoadAsync(CancellationToken.None);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("Nav.Triggers", viewModel.CategoryFilterOptions[visibleIndex]);
+        Assert.Equal("Trigger", store.LastQuery.Source);
+        Assert.Empty(viewModel.RecentLogs);
+    }
+
+    [Fact]
     public async Task LoadAsync_RetainsFiltersAcrossRefreshAndNewCategories()
     {
         FakeLogManagementStore store = new() { Sources = ["Application"] };

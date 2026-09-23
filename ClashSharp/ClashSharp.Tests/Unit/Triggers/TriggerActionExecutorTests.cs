@@ -9,6 +9,62 @@ namespace ClashSharp.Tests.Unit.Triggers;
 public sealed class TriggerActionExecutorTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_LoggingFailureCannotPreventOrderedDurableActions(bool logFails)
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(execution,
+            [Outbox(execution, 0, NotificationAction()), Outbox(execution, 1, NotificationAction())]);
+        FakeTriggerActionRuntime runtime = new(
+            [TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired(),
+                TriggerActionProbeResult.NotDesired(), TriggerActionProbeResult.Desired()],
+            [TriggerActionApplyResult.Applied(), TriggerActionApplyResult.Applied()]);
+        RecordingExecutionLog log = new((observedExecution, result) =>
+        {
+            Assert.Same(execution, observedExecution);
+            if (result is not null)
+            {
+                Assert.Same(repository.Actions[result.Action.ActionIndex], result.Action);
+                Assert.Equal(TriggerOutboxState.Succeeded, result.FinalState);
+            }
+            if (logFails)
+            {
+                throw new IOException("log store unavailable");
+            }
+        });
+        TriggerActionExecutor executor = new(repository, runtime, NullTriggerFiredNotificationSink.Instance, log);
+        MutationAdmissionBarrier admission = new();
+        await using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(CancellationToken.None);
+
+        await executor.ExecuteAsync(execution, lease, CancellationToken.None);
+        await executor.ExecuteAsync(execution, lease, CancellationToken.None);
+
+        Assert.Equal(2, runtime.ApplyCount);
+        Assert.Equal(new int?[] { null, 0, 1 }, log.ActionIndexes);
+        Assert.Equal(logFails ? 3 : 0, log.FailureCount);
+    }
+
+    private sealed class RecordingExecutionLog(Action<TriggerExecution, TriggerActionResult?> write)
+        : ITriggerExecutionLog
+    {
+        public List<int?> ActionIndexes { get; } = [];
+        public int FailureCount { get; private set; }
+
+        public void Write(TriggerExecution execution, TriggerActionResult? result)
+        {
+            ActionIndexes.Add(result?.Action.ActionIndex);
+            write(execution, result);
+        }
+
+        public Task ReportFailureAsync(Exception exception)
+        {
+            FailureCount++;
+            return Task.FromException(new IOException("diagnostic store unavailable"));
+        }
+    }
+
+    [Theory]
     [MemberData(nameof(CurrentActions))]
     public async Task ExecuteAsync_PendingActionCommitsRunningBeforeEffectAndVerifiedTerminalState(
         TriggerAction action,
