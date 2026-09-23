@@ -170,11 +170,7 @@
             PointerExited="TileRoot_PointerExited">
             <ToolTipService.ToolTip>
                 <ToolTip>
-                    <StackPanel MaxWidth="360" Spacing="4">
-                        <TextBlock Text="{x:Bind Value, Mode=OneWay}" TextWrapping="Wrap" />
-                        <TextBlock Text="{x:Bind Detail, Mode=OneWay}" TextWrapping="Wrap" />
-                        <TextBlock Text="{x:Bind Description, Mode=OneWay}" TextWrapping="Wrap" />
-                    </StackPanel>
+                    <TextBlock MaxWidth="360" Text="{x:Bind GetTooltipText(Value, Detail, Description), Mode=OneWay}" TextWrapping="Wrap" />
                 </ToolTip>
             </ToolTipService.ToolTip>
             <Button.Template>

@@ -187,6 +187,12 @@ public sealed partial class MasterInfoTile : UserControl
         set => SetValue(TileCommandProperty, value);
     }
 
+    /// <summary>Combines the current tile text without empty or repeated explanations.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "WinUI x:Bind calls this function through the control instance.")]
+    public string GetTooltipText(string value, string detail, string description) =>
+        string.Join(Environment.NewLine, new[] { value, detail, description }
+            .Where(text => !string.IsNullOrWhiteSpace(text)).Distinct(StringComparer.Ordinal));
+
     private void TileButton_Click(object sender, RoutedEventArgs e)
     {
         if (_suppressNextTap)
@@ -198,12 +204,10 @@ public sealed partial class MasterInfoTile : UserControl
         if (TileCommand is not ICommand command)
         {
             StackPanel content = new() { Spacing = 8, MaxWidth = 420 };
-            foreach (string text in new[] { Title, Value, Detail, Description })
+            foreach (string text in new[] { Title, Value, Detail, Description }
+                .Where(text => !string.IsNullOrWhiteSpace(text)).Distinct(StringComparer.Ordinal))
             {
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    content.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
-                }
+                content.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
             }
             Flyout flyout = new() { Content = new ScrollViewer { Content = content, MaxHeight = 360 } };
             flyout.ShowAt(TileButton);
