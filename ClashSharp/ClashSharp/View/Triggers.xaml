@@ -51,13 +51,13 @@
                         TextWrapping="WrapWholeWords"
                         Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </StackPanel>
-                <Button Grid.Column="1" Click="EnableAllTriggersButton_Click" IsEnabled="{Binding CanEditTriggers}">
+                <Button Grid.Column="1" Click="EnableAllTriggersButton_Click" IsEnabled="{Binding CanEnableAllTriggers}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE73E;" FontSize="14" />
                         <TextBlock Text="{Binding EnableAllText}" />
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="2" Click="DisableAllTriggersButton_Click" IsEnabled="{Binding CanEditTriggers}">
+                <Button Grid.Column="2" Click="DisableAllTriggersButton_Click" IsEnabled="{Binding CanDisableAllTriggers}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE711;" FontSize="14" />
                         <TextBlock Text="{Binding DisableAllText}" />
@@ -183,7 +183,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <TextBox Header="{Binding NameText}" Text="{Binding CurrentEditor.Name, Mode=TwoWay}" MaxLength="48" />
+                        <TextBox Header="{Binding NameText}" Text="{Binding CurrentEditor.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MaxLength="48" />
                         <ToggleSwitch Grid.Row="1" Header="{Binding EnabledText}" IsOn="{Binding CurrentEditor.IsEnabled, Mode=TwoWay}" MinWidth="0" OnContent="{x:Null}" OffContent="{x:Null}" />
                         <TextBlock
                             Grid.Row="2"
@@ -241,7 +241,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBox
                                     Header="{Binding ConditionThresholdHeaderText}"
-                                    Text="{Binding CurrentEditor.SelectedCondition.ThresholdText, Mode=TwoWay}" />
+                                    Text="{Binding CurrentEditor.SelectedCondition.ThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock
                                     Grid.Column="1"
                                     Margin="0,0,0,8"
@@ -260,7 +260,7 @@
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsTrafficScopeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBox
                                 Header="{Binding WindowSecondsHeaderText}"
-                                Text="{Binding CurrentEditor.SelectedCondition.WindowSecondsText, Mode=TwoWay}"
+                                Text="{Binding CurrentEditor.SelectedCondition.WindowSecondsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsWindowVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <ComboBox
                                 Header="{Binding NotificationLevelHeaderText}"
@@ -280,11 +280,11 @@
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsRateDirectionVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBox
                                 Header="{Binding RuntimeSecondsHeaderText}"
-                                Text="{Binding CurrentEditor.SelectedCondition.RuntimeSecondsText, Mode=TwoWay}"
+                                Text="{Binding CurrentEditor.SelectedCondition.RuntimeSecondsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsRuntimeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBox
                                 Header="{Binding ConditionTimeHeaderText}"
-                                Text="{Binding CurrentEditor.SelectedCondition.TargetTimeText, Mode=TwoWay}"
+                                Text="{Binding CurrentEditor.SelectedCondition.TargetTimeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsTimeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBlock
                                 Text="{Binding CurrentEditor.SelectedCondition.ErrorMessage}"
@@ -346,7 +346,7 @@
                                 Visibility="{Binding CurrentEditor.SelectedAction.IsProxyModeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBox
                                 Header="{Binding NotificationMessageHeaderText}"
-                                Text="{Binding CurrentEditor.SelectedAction.NotificationMessage, Mode=TwoWay}"
+                                Text="{Binding CurrentEditor.SelectedAction.NotificationMessage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                 Visibility="{Binding CurrentEditor.SelectedAction.IsNotificationMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBlock
                                 Text="{Binding CurrentEditor.SelectedAction.ErrorMessage}"

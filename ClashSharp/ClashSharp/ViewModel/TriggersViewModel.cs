@@ -119,12 +119,18 @@ internal sealed class TriggersViewModel : ObservableObject
             {
                 _settings.IsEnabled = value;
                 OnPropertyChanged(nameof(CanEditTriggers));
+                OnPropertyChanged(nameof(CanEnableAllTriggers));
+                OnPropertyChanged(nameof(CanDisableAllTriggers));
                 OnPropertyChanged(nameof(IsDisabledNoticeVisible));
             }
         }
     }
 
     public bool CanEditTriggers => TriggersEnabled && !IsBusy;
+
+    public bool CanEnableAllTriggers => CanEditTriggers && TriggerTasks.Any(static task => !task.IsEnabled);
+
+    public bool CanDisableAllTriggers => CanEditTriggers && TriggerTasks.Any(static task => task.IsEnabled);
 
     public bool IsDisabledNoticeVisible => !TriggersEnabled;
 
@@ -473,6 +479,8 @@ internal sealed class TriggersViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(CanEnableAllTriggers));
+        OnPropertyChanged(nameof(CanDisableAllTriggers));
     }
 
     private bool TryBeginOperation()
@@ -485,6 +493,8 @@ internal sealed class TriggersViewModel : ObservableObject
 
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(CanEditTriggers));
+        OnPropertyChanged(nameof(CanEnableAllTriggers));
+        OnPropertyChanged(nameof(CanDisableAllTriggers));
         return true;
     }
 
@@ -493,6 +503,8 @@ internal sealed class TriggersViewModel : ObservableObject
         Interlocked.Exchange(ref _busy, 0);
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(CanEditTriggers));
+        OnPropertyChanged(nameof(CanEnableAllTriggers));
+        OnPropertyChanged(nameof(CanDisableAllTriggers));
     }
 
     private void SetPersistenceError(
