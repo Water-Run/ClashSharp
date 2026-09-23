@@ -26,7 +26,8 @@ internal sealed record SettingsPageDependencies(
     Func<Color, string> FormatAccentColor,
     IApplicationErrorSink ErrorSink,
     IStartupGuidePresenter StartupGuide,
-    DataPackageDialogPresenter DataPackages);
+    DataPackageDialogPresenter DataPackages,
+    Func<Action, IDisposable> SubscribeToRuntimeSettingsChanges);
 
 /// <summary>Owns settings operations that require file, service, or application-state access.</summary>
 internal interface ISettingsPageOperations
@@ -121,7 +122,42 @@ internal static class SettingsPageComposition
             AppThemeService.FormatAccentColor,
             errorSink,
             context.StartupGuide.Create(errorSink),
-            new DataPackageDialogPresenter(operations, localization.GetString));
+            new DataPackageDialogPresenter(operations, localization.GetString),
+            changed => new RuntimeSettingsSubscription(settings, changed));
+    }
+
+    private sealed class RuntimeSettingsSubscription : IDisposable
+    {
+        private AppSettingsService? _settings;
+        private readonly Action _changed;
+
+        public RuntimeSettingsSubscription(AppSettingsService settings, Action changed)
+        {
+            _settings = settings;
+            _changed = changed;
+            settings.SettingChanged += OnSettingChanged;
+        }
+
+        private void OnSettingChanged(object? sender, AppSettingChangedEventArgs args)
+        {
+            if (args.Key is nameof(AppSettingsService.LaunchAtStartupEnabled)
+                or nameof(AppSettingsService.TransparentProxyEnabled)
+                or nameof(AppSettingsService.MixedPort)
+                or nameof(AppSettingsService.ConnectionSamplingEnabled)
+                or nameof(AppSettingsService.ConnectionSamplingIntervalSeconds))
+            {
+                _changed();
+            }
+        }
+
+        public void Dispose()
+        {
+            AppSettingsService? settings = Interlocked.Exchange(ref _settings, null);
+            if (settings is not null)
+            {
+                settings.SettingChanged -= OnSettingChanged;
+            }
+        }
     }
 
     /// <summary>Creates the shared transactional package port without constructing a settings view model.</summary>

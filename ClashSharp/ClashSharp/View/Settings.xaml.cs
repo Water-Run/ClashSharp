@@ -40,6 +40,8 @@ public sealed partial class Settings : Page
     private readonly IStartupGuidePresenter _startupGuide;
     private readonly DataPackageDialogPresenter _dataPackages;
     private readonly PageOperationSession _pageOperations;
+    private readonly Func<Action, IDisposable> _subscribeToRuntimeSettingsChanges;
+    private IDisposable? _runtimeSettingsSubscription;
 
     /// <summary>True while initial settings are being bound to controls.</summary>
     private bool _isLoadingSettings = true;
@@ -68,6 +70,8 @@ public sealed partial class Settings : Page
         _dataPackages = dependencies.DataPackages
             ?? throw new ArgumentException("A data-package presenter is required.", nameof(dependencies));
         _pageOperations = new PageOperationSession(_errorSink, "settings-page-operation");
+        _subscribeToRuntimeSettingsChanges = dependencies.SubscribeToRuntimeSettingsChanges
+            ?? throw new ArgumentException("A runtime settings subscription is required.", nameof(dependencies));
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
@@ -116,6 +120,9 @@ public sealed partial class Settings : Page
         await RunPageOperationAsync(async token =>
         {
             SubscribeToViewModel();
+            var dispatcher = DispatcherQueue;
+            _runtimeSettingsSubscription = _subscribeToRuntimeSettingsChanges(
+                () => dispatcher.TryEnqueue(() => RefreshRuntimeSettings(visit)));
             CheckStartupConflictsButton.IsEnabled = true;
             _isLoadingSettings = true;
             try
@@ -134,9 +141,14 @@ public sealed partial class Settings : Page
     /// <summary>Stops page work and view-model notifications while the page is outside the visual tree.</summary>
     private async void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _runtimeSettingsSubscription?.Dispose();
+        _runtimeSettingsSubscription = null;
         if (_isViewModelSubscribed)
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.ApplyLaunchAtStartupCommand.PropertyChanged -= OnRuntimeCommandPropertyChanged;
+            _viewModel.ApplyNetworkSettingsCommand.PropertyChanged -= OnRuntimeCommandPropertyChanged;
+            _viewModel.RestartConnectionSamplingCommand.PropertyChanged -= OnRuntimeCommandPropertyChanged;
             _isViewModelSubscribed = false;
         }
 
@@ -144,6 +156,21 @@ public sealed partial class Settings : Page
         _visit++;
         _pageOperations.Cancel();
         await _pageOperations.DrainAsync();
+    }
+
+    private async void RefreshRuntimeSettings(int visit)
+    {
+        if (!_isLoaded || visit != _visit)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(token =>
+        {
+            token.ThrowIfCancellationRequested();
+            _viewModel.RefreshCommittedRuntimeSettings();
+            return Task.CompletedTask;
+        });
     }
 
     private void SubscribeToViewModel()
@@ -154,7 +181,20 @@ public sealed partial class Settings : Page
         }
 
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.ApplyLaunchAtStartupCommand.PropertyChanged += OnRuntimeCommandPropertyChanged;
+        _viewModel.ApplyNetworkSettingsCommand.PropertyChanged += OnRuntimeCommandPropertyChanged;
+        _viewModel.RestartConnectionSamplingCommand.PropertyChanged += OnRuntimeCommandPropertyChanged;
         _isViewModelSubscribed = true;
+    }
+
+    private void OnRuntimeCommandPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AsyncRelayCommand.IsRunning)
+            && sender is AsyncRelayCommand { IsRunning: false })
+        {
+            // A background commit may have arrived while this page's request was still running.
+            RefreshRuntimeSettings(_visit);
+        }
     }
 
     private async void PreferenceToggle_Toggled(object sender, RoutedEventArgs e)

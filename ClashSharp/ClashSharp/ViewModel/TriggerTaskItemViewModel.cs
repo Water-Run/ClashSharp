@@ -100,7 +100,7 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
             RuntimeConditionParameters runtime =>
                 $"{_getString("Triggers.Condition.Runtime")} >= {runtime.Threshold:g}",
             SystemTimeConditionParameters time =>
-                $"{_getString("Triggers.Condition.SystemTime")} >= {time.TargetTime:t}",
+                $"{_getString("Triggers.Condition.SystemTime")} >= {time.TargetTime.ToString("HH:mm:ss.fffffff", CultureInfo.InvariantCulture).TrimEnd('0').TrimEnd('.')}",
             _ => _getString("Triggers.Validation.InvalidCondition"),
         };
     }

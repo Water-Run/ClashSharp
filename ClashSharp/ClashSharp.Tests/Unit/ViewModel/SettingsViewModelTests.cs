@@ -13,6 +13,33 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for settings state loading and persistence behavior.</summary>
 public sealed partial class SettingsViewModelTests
 {
+    [Fact]
+    public void ExternalRuntimeChange_RefreshesCommittedControlsWithoutResettingRestartBaseline()
+    {
+        FakeSettingsStore store = new();
+        SettingsViewModel viewModel = new(store, _ => { }, () => { });
+        viewModel.Load();
+        viewModel.SetDisplayLanguageIndex((int)AppLanguage.French + 1);
+        Assert.True(viewModel.IsDisplayLanguageRestartPending);
+
+        store.LaunchAtStartupEnabled = true;
+        store.TransparentProxyEnabled = true;
+        store.MixedPort = 10888;
+        store.ConnectionSamplingEnabled = false;
+        store.ConnectionSamplingIntervalSeconds = 90;
+        viewModel.RefreshCommittedRuntimeSettings();
+
+        Assert.True(viewModel.LaunchAtStartupEnabled);
+        Assert.True(viewModel.TransparentProxyEnabled);
+        Assert.Equal(10888, viewModel.MixedPort);
+        Assert.False(viewModel.ConnectionSamplingEnabled);
+        Assert.Equal(90, viewModel.ConnectionSamplingIntervalSeconds);
+        Assert.True(viewModel.IsDisplayLanguageRestartPending);
+        Assert.Null(viewModel.ApplyLaunchAtStartupCommand.ExecutionTask);
+        Assert.Null(viewModel.ApplyNetworkSettingsCommand.ExecutionTask);
+        Assert.Null(viewModel.RestartConnectionSamplingCommand.ExecutionTask);
+    }
+
     /// <summary>Verifies persisted settings are loaded into the view model snapshot.</summary>
     [Fact]
     public void Load_CopiesPersistedSettingsIntoProperties()
@@ -716,6 +743,9 @@ public sealed partial class SettingsViewModelTests
         Task application = Assert.IsAssignableFrom<Task>(viewModel.RestartConnectionSamplingCommand.ExecutionTask);
         bool observedEnabled = store.ConnectionSamplingEnabled;
         int observedInterval = store.ConnectionSamplingIntervalSeconds;
+        viewModel.RefreshCommittedRuntimeSettings();
+        Assert.Equal(changeInterval, viewModel.ConnectionSamplingEnabled);
+        Assert.Equal(changeInterval ? 60 : 30, viewModel.ConnectionSamplingIntervalSeconds);
         release.SetResult();
         await application;
 

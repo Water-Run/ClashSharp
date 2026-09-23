@@ -1530,6 +1530,33 @@ internal sealed partial class SettingsViewModel : ObservableObject
         RaiseDisplayLanguageRestartStateChanged();
     }
 
+    /// <summary>Projects externally committed runtime choices without replacing in-flight page requests.</summary>
+    public void RefreshCommittedRuntimeSettings()
+    {
+        if (_resetSettingsGate.CurrentCount == 0)
+        {
+            return;
+        }
+
+        if (!ApplyLaunchAtStartupCommand.IsRunning
+            && Volatile.Read(ref _launchAtStartupRevision) == Volatile.Read(ref _appliedLaunchAtStartupRevision))
+        {
+            ReloadCommittedLaunchAtStartup();
+        }
+
+        if (!ApplyNetworkSettingsCommand.IsRunning
+            && Volatile.Read(ref _networkSettingsRevision) == Volatile.Read(ref _appliedNetworkSettingsRevision))
+        {
+            ReloadCommittedNetworkSettings();
+        }
+
+        if (!RestartConnectionSamplingCommand.IsRunning
+            && Volatile.Read(ref _connectionSamplingRevision) == Volatile.Read(ref _appliedConnectionSamplingRevision))
+        {
+            ReloadCommittedConnectionSampling();
+        }
+    }
+
     /// <summary>Persists a display language selected by combo box index.</summary>
     /// <param name="index">Language enum index.</param>
     /// <returns>True when the language was valid and persisted; otherwise false.</returns>
