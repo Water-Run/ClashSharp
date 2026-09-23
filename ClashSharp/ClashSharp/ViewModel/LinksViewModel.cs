@@ -425,7 +425,7 @@ internal sealed class LinksViewModel : ObservableObject
         List<ProfileSubscriptionLinkDisplay> rows = new(links.Count);
         foreach (ProfileSubscriptionLink link in links)
         {
-            rows.Add(_displayMapper.Map(link));
+            rows.Add(_displayMapper.Map(link).WithDetails(_getString));
         }
 
         string? selectedLinkId = SelectedLink?.Model.Id;

@@ -62,23 +62,25 @@
         <ListView Grid.Row="3" x:Name="SubscriptionLinksList" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single">
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Grid Padding="4,10" ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="170" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="110" />
-                            <ColumnDefinition Width="150" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Text="{Binding StatusDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="1" Text="{Binding UriDisplay}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Grid.Column="2" Text="{Binding UpdateIntervalHours}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="3" Text="{Binding LastUpdatedDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </Grid>
+                    <StackPanel Padding="4,10" Spacing="6">
+                        <TextBlock Text="{Binding NameDisplay}" TextWrapping="Wrap" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Text="{Binding UriDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding UriDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="{Binding StatusDisplay}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <Grid ColumnSpacing="20" RowSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="{Binding ScheduleDisplay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="1" Text="{Binding UpdatedSummary}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="1" Text="{Binding UsageDisplay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ExpiryDisplay}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                    </StackPanel>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>

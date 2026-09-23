@@ -55,6 +55,7 @@
     <Compile Include="..\ClashSharp\Model\ConfigurationProfile.cs" Link="Model\ConfigurationProfile.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileImportResult.cs" Link="Model\ProfileImportResult.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileSubscriptionLink.cs" Link="Model\ProfileSubscriptionLink.cs" />
+    <Compile Include="..\ClashSharp\Model\SubscriptionUsage.cs" Link="Model\SubscriptionUsage.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileHistoryEntry.cs" Link="Model\ProfileHistoryEntry.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsProxyState.cs" Link="Model\WindowsProxyState.cs" />
     <Compile Include="..\ClashSharp\Model\MihomoProviderKind.cs" Link="Model\MihomoProviderKind.cs" />

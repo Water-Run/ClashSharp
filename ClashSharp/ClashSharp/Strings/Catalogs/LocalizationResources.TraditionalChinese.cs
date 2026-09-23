@@ -10,6 +10,13 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Schedule.Automatic.Format"] = "自動更新：每 {0} 小時",
+            ["Links.Schedule.Manual"] = "自動更新：已關閉",
+            ["Links.Updated.Format"] = "最後更新：{0}",
+            ["Links.Usage.Format"] = "已用 / 總量：{0} / {1}",
+            ["Links.Expiry.Format"] = "到期時間：{0}",
+            ["Links.Metadata.NotProvided"] = "未提供",
+            ["Links.Metadata.NoExpiry"] = "無到期限制",
             ["Links.Empty"] = "尚無訂閱。選擇「新增」建立訂閱。",
             ["Links.Validation.Name"] = "請輸入訂閱名稱。",
             ["Links.Validation.Uri"] = "請輸入完整的 HTTP 或 HTTPS 訂閱網址。",

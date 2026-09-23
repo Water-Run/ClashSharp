@@ -10,6 +10,13 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Schedule.Automatic.Format"] = "به‌روزرسانی خودکار: هر {0} ساعت",
+            ["Links.Schedule.Manual"] = "به‌روزرسانی خودکار: خاموش",
+            ["Links.Updated.Format"] = "آخرین به‌روزرسانی: {0}",
+            ["Links.Usage.Format"] = "مصرف: {0} / {1}",
+            ["Links.Expiry.Format"] = "انقضا: {0}",
+            ["Links.Metadata.NotProvided"] = "ارائه نشده",
+            ["Links.Metadata.NoExpiry"] = "بدون انقضا",
             ["Links.Empty"] = "هنوز اشتراکی وجود ندارد. برای ایجاد اشتراک، افزودن را انتخاب کنید.",
             ["Links.Validation.Name"] = "نام اشتراک را وارد کنید.",
             ["Links.Validation.Uri"] = "نشانی کامل اشتراک با HTTP یا HTTPS را وارد کنید.",

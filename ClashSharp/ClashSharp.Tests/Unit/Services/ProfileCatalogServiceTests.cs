@@ -11,6 +11,72 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class ProfileCatalogServiceTests
 {
     [Fact]
+    public async Task SubscriptionMetadata_CheckImportFailureAndAddressChangePreserveTheirOwnSemantics()
+    {
+        using TempFile tempFile = new();
+        FakeProfileCatalogCoreConfiguration core = new();
+        await using ProfileCatalogService service = CreateService(tempFile.Path, new FakeProfileCatalogSettings(), core);
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        ProfileSubscriptionLink added = await service.AddSubscriptionLinkAsync(
+            "Metadata", $"http://127.0.0.1:{port}/profile.yaml", CancellationToken.None);
+        const string header = "upload=1024; download=2048; total=1073741824; expire=1893456000";
+        SubscriptionUsage expected = new(1024, 2048, 1073741824, 1893456000);
+
+        await ExchangeSubscriptionAsync(listener,
+            token => service.CheckSubscriptionLinkAsync(Assert.Single(service.GetSubscriptionLinks()), token), header);
+        ProfileSubscriptionLink checkedLink = Assert.Single(service.GetSubscriptionLinks());
+        Assert.Equal(expected, checkedLink.Usage);
+        Assert.Equal(added.LastUpdatedAt, checkedLink.LastUpdatedAt);
+
+        await ExchangeSubscriptionAsync(listener,
+            token => service.ImportSubscriptionLinkAsync(Assert.Single(service.GetSubscriptionLinks()), token), header);
+        ProfileSubscriptionLink imported = Assert.Single(service.GetSubscriptionLinks());
+        Assert.Equal(expected, imported.Usage);
+        Assert.True(imported.LastUpdatedAt > DateTimeOffset.UnixEpoch);
+        await using (ProfileCatalogService reopened = CreateService(tempFile.Path, new FakeProfileCatalogSettings()))
+        {
+            Assert.Equal(expected, Assert.Single(reopened.GetSubscriptionLinks()).Usage);
+        }
+
+        await ExchangeSubscriptionAsync(listener,
+            token => Assert.ThrowsAsync<HttpRequestException>(() => service.ImportSubscriptionLinkAsync(
+                Assert.Single(service.GetSubscriptionLinks()), token)), "upload=999; download=999", 500);
+        Assert.Equal(expected, Assert.Single(service.GetSubscriptionLinks()).Usage);
+        Assert.Equal(imported.LastUpdatedAt, Assert.Single(service.GetSubscriptionLinks()).LastUpdatedAt);
+
+        Assert.True(await service.TryUpdateSubscriptionLinkAsync(added.Id, "Renamed", added.Uri, false, 48, CancellationToken.None));
+        Assert.Equal(expected, Assert.Single(service.GetSubscriptionLinks()).Usage);
+        await ExchangeSubscriptionAsync(listener,
+            token => service.ImportSubscriptionLinkAsync(Assert.Single(service.GetSubscriptionLinks()), token));
+        Assert.Null(Assert.Single(service.GetSubscriptionLinks()).Usage);
+
+        await ExchangeSubscriptionAsync(listener,
+            token => service.CheckSubscriptionLinkAsync(Assert.Single(service.GetSubscriptionLinks()), token), header);
+        Assert.True(await service.TryUpdateSubscriptionLinkAsync(added.Id, "Renamed", added.Uri + "?new=1", false, 48, CancellationToken.None));
+        Assert.Null(Assert.Single(service.GetSubscriptionLinks()).Usage);
+    }
+
+    private static async Task ExchangeSubscriptionAsync(
+        TcpListener listener, Func<CancellationToken, Task> operation, string? userInfo = null, int statusCode = 200)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        Task response = ServeSubscriptionAsync(listener, timeout.Token, userInfo, statusCode);
+        try
+        {
+            await operation(timeout.Token);
+            await response;
+        }
+        finally
+        {
+            await timeout.CancelAsync();
+            try { await response; }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested) { }
+        }
+    }
+
+    [Fact]
     public async Task ImportSubscriptionLinkAsync_AutomaticUpdatesDisabled_ManualImportStillSucceeds()
     {
         using TempFile tempFile = new();
@@ -63,15 +129,17 @@ public sealed class ProfileCatalogServiceTests
         Assert.Empty(core.Imports);
     }
 
-    private static async Task ServeSubscriptionAsync(TcpListener listener, CancellationToken cancellationToken)
+    private static async Task ServeSubscriptionAsync(
+        TcpListener listener, CancellationToken cancellationToken, string? userInfo = null, int statusCode = 200)
     {
         using TcpClient client = await listener.AcceptTcpClientAsync(cancellationToken);
         await using NetworkStream stream = client.GetStream();
         using StreamReader reader = new(stream, Encoding.ASCII, leaveOpen: true);
         while (await reader.ReadLineAsync(cancellationToken) is { Length: > 0 }) { }
         const string body = "rules:\n  - MATCH,DIRECT\n";
+        string metadata = userInfo is null ? string.Empty : $"Subscription-Userinfo: {userInfo}\r\n";
         byte[] reply = Encoding.UTF8.GetBytes(
-            $"HTTP/1.1 200 OK\r\nContent-Type: text/yaml\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}");
+            $"HTTP/1.1 {statusCode} Test\r\n{metadata}Content-Type: text/yaml\r\nContent-Length: {Encoding.UTF8.GetByteCount(body)}\r\nConnection: close\r\n\r\n{body}");
         await stream.WriteAsync(reply, cancellationToken);
     }
 

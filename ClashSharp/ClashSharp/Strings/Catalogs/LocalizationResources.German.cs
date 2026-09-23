@@ -10,6 +10,13 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Schedule.Automatic.Format"] = "Automatische Aktualisierung: alle {0} Std.",
+            ["Links.Schedule.Manual"] = "Automatische Aktualisierung: aus",
+            ["Links.Updated.Format"] = "Zuletzt aktualisiert: {0}",
+            ["Links.Usage.Format"] = "Verbrauch: {0} / {1}",
+            ["Links.Expiry.Format"] = "Ablauf: {0}",
+            ["Links.Metadata.NotProvided"] = "Nicht angegeben",
+            ["Links.Metadata.NoExpiry"] = "Kein Ablaufdatum",
             ["Links.Empty"] = "Noch keine Abonnements. Wählen Sie Hinzufügen, um eines anzulegen.",
             ["Links.Validation.Name"] = "Geben Sie einen Namen für das Abonnement ein.",
             ["Links.Validation.Uri"] = "Geben Sie eine vollständige HTTP- oder HTTPS-Abonnementadresse ein.",

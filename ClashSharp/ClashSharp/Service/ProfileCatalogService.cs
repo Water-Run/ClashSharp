@@ -441,6 +441,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
                 IsEnabled = isEnabled,
                 UpdateIntervalHours = updateIntervalHours,
                 Revision = checked(existingLink.Revision + 1),
+                Usage = uriChanged ? null : existingLink.Usage,
             };
             ProfileSubscriptionScheduleState schedule = GetOrCreateScheduleState(document, existingLink);
             if (uriChanged)
@@ -766,10 +767,13 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
     /// <summary>Updates the status and timestamp for one subscription link.</summary>
     /// <param name="linkId">Stable link identifier. Must not be null.</param>
     /// <param name="status">New status display text. Must not be null or whitespace.</param>
+    /// <param name="usage">Provider metadata accepted by a successful check.</param>
+    /// <param name="updateUsage">True to replace metadata along with the status.</param>
     /// <returns>True when the link exists and was updated; otherwise false.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="linkId"/> or <paramref name="status"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="status"/> is whitespace.</exception>
-    private bool TryUpdateSubscriptionLinkStatus(string linkId, string status)
+    private bool TryUpdateSubscriptionLinkStatus(
+        string linkId, string status, SubscriptionUsage? usage = null, bool updateUsage = false)
     {
         ArgumentNullException.ThrowIfNull(linkId);
         ArgumentNullException.ThrowIfNull(status);
@@ -793,6 +797,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
                 document.Links[index] = link with
                 {
                     Status = status.Trim(),
+                    Usage = updateUsage ? usage : link.Usage,
                 };
                 SaveDocument(document);
                 return true;
@@ -849,7 +854,8 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             response.EnsureSuccessStatusCode();
 
             string status = FormatString("ProfileCatalog.Subscription.CheckSucceeded.Format", (int)response.StatusCode);
-            TryUpdateSubscriptionLinkStatus(currentLink.Id, status);
+            SubscriptionUsage? usage = ReadSubscriptionUsage(response);
+            TryUpdateSubscriptionLinkStatus(currentLink.Id, status, usage, updateUsage: usage is not null);
             return status;
         }
         catch (Exception exception) when (exception is ArgumentException or HttpRequestException or OperationCanceledException or InvalidOperationException)
@@ -948,7 +954,8 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             EnsureLinkHasHttpUri(link);
             TryUpdateSubscriptionLinkStatus(link.Id, GetString("ProfileCatalog.Subscription.Downloading"));
 
-            string configurationText = await ReadSubscriptionConfigurationAsync(new Uri(link.Uri), cancellationToken).ConfigureAwait(false);
+            (string configurationText, SubscriptionUsage? usage) = await ReadSubscriptionConfigurationAsync(
+                new Uri(link.Uri), cancellationToken).ConfigureAwait(false);
             string profileId = $"subscription-{link.Id}";
             bool isActive = StringComparer.Ordinal.Equals(GetActiveProfileId(), profileId);
             string? previousConfiguration = await _coreConfiguration
@@ -1011,7 +1018,8 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
                         document,
                         link.Id,
                         GetString("ProfileCatalog.Subscription.Updated"),
-                        markSuccessfulUpdate: true);
+                        markSuccessfulUpdate: true,
+                        usage: usage);
                     RecordSubscriptionUpdateOutcome(document, link.Id, succeeded: true, DateTimeOffset.Now);
                     try
                     {
@@ -1549,7 +1557,8 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
     }
 
     /// <summary>Reads a subscription profile response with a hard byte limit.</summary>
-    private static async Task<string> ReadSubscriptionConfigurationAsync(Uri uri, CancellationToken cancellationToken)
+    private static async Task<(string ConfigurationText, SubscriptionUsage? Usage)> ReadSubscriptionConfigurationAsync(
+        Uri uri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uri);
 
@@ -1580,7 +1589,13 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             buffer.Write(chunk, 0, bytesRead);
         }
 
-        return DecodeStrictUtf8(buffer.ToArray());
+        return (DecodeStrictUtf8(buffer.ToArray()), ReadSubscriptionUsage(response));
+    }
+
+    private static SubscriptionUsage? ReadSubscriptionUsage(HttpResponseMessage response)
+    {
+        return response.Headers.TryGetValues("Subscription-Userinfo", out IEnumerable<string>? values)
+            ? SubscriptionUsage.Parse(string.Join(';', values)) : null;
     }
 
     /// <summary>Reads a local profile with byte-growth protection and strict UTF-8 decoding.</summary>
@@ -2092,11 +2107,13 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
     /// <param name="linkId">Stable link identifier. Must not be null.</param>
     /// <param name="status">New link status. Must not be null.</param>
     /// <param name="markSuccessfulUpdate">Whether to record the current time as a completed update.</param>
+    /// <param name="usage">Metadata committed with a successful download; failure paths retain prior metadata.</param>
     private static void UpdateLinkStatus(
         ProfileCatalogDocument document,
         string linkId,
         string status,
-        bool markSuccessfulUpdate = false)
+        bool markSuccessfulUpdate = false,
+        SubscriptionUsage? usage = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(linkId);
@@ -2114,6 +2131,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             {
                 LastUpdatedAt = markSuccessfulUpdate ? DateTimeOffset.Now : link.LastUpdatedAt,
                 Status = status,
+                Usage = markSuccessfulUpdate ? usage : link.Usage,
             };
             return;
         }

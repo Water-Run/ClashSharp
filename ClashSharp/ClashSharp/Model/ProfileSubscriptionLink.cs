@@ -11,6 +11,7 @@ namespace ClashSharp.Model;
 /// <param name="LastUpdatedAt">Last successful update time.</param>
 /// <param name="Status">Current link status display text; never null.</param>
 /// <param name="Revision">Monotonic editable-definition revision used to reject stale imports.</param>
+/// <param name="Usage">Last accepted provider metadata, or null when unavailable.</param>
 /// <remarks>
 /// Invariants: String values are never null; update interval is positive.
 /// Thread safety: Immutable value type and inherently thread-safe after construction.
@@ -24,4 +25,5 @@ public readonly record struct ProfileSubscriptionLink(
     int UpdateIntervalHours,
     DateTimeOffset LastUpdatedAt,
     string Status,
-    long Revision = 0);
+    long Revision = 0,
+    SubscriptionUsage? Usage = null);
