@@ -22,8 +22,8 @@ internal interface IConnectionSamplingSettings
 /// <summary>Reads cumulative mihomo traffic counters and current connections.</summary>
 internal interface IConnectionSamplingSource
 {
-    /// <summary>Returns one snapshot bound to a core process counter epoch.</summary>
-    Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken);
+    /// <summary>Returns an authenticated snapshot, or null when no core is active.</summary>
+    Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Persists sampled connection snapshots and sampling logs.</summary>
@@ -172,9 +172,9 @@ public sealed partial class ConnectionSamplingService : IRuntimeParticipant
         await _sampleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            MihomoTrafficSnapshot snapshot = await _source.GetTrafficSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            MihomoTrafficSnapshot? snapshot = await _source.GetTrafficSnapshotAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            _lastInsertedCount = _storage.AppendTrafficSnapshot(snapshot);
+            _lastInsertedCount = snapshot is null ? 0 : _storage.AppendTrafficSnapshot(snapshot);
         }
         finally
         {

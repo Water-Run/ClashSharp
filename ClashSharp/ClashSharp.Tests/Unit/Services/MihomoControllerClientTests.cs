@@ -17,6 +17,49 @@ public sealed class MihomoControllerClientTests
     private const string ControllerSecret = "controller-test-secret";
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TryGetTrafficSnapshotConfirmedIdleDoesNotContactAController(bool keepHostRunning)
+    {
+        RecordingHttpHandler handler = new("{}");
+        using HttpClient http = new(handler);
+        FakeControllerServiceBroker broker = new(new MihomoServiceStatus(true, false, "stopped")
+        {
+            IsScmRunning = keepHostRunning,
+            ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
+            ServiceSessionId = Guid.NewGuid(),
+            ChildState = MihomoServiceChildState.Stopped,
+        });
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"),
+            () => ControllerSecret, () => false, broker);
+
+        Assert.Null(await client.TryGetTrafficSnapshotAsync(CancellationToken.None));
+        Assert.Empty(handler.Requests);
+        Assert.Empty(broker.Commands);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetTrafficSnapshotAsync(CancellationToken.None));
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.TryGetTrafficSnapshotAsync(cancellation.Token));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TryGetTrafficSnapshotUncertainOrAmbiguousOwnerRemainsAFailure(bool bothOwners)
+    {
+        RecordingHttpHandler handler = new("{}");
+        using HttpClient http = new(handler);
+        FakeControllerServiceBroker broker = bothOwners ? FakeControllerServiceBroker.Running()
+            : new(MihomoServiceStatus.Unknown("unobserved"));
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"),
+            () => ControllerSecret, () => bothOwners, broker);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.TryGetTrafficSnapshotAsync(CancellationToken.None));
+        Assert.Empty(handler.Requests);
+        Assert.Empty(broker.Commands);
+    }
+
+    [Theory]
     [InlineData("null")]
     [InlineData("[]")]
     public async Task GetTrafficSnapshotAsync_EmptyConnectionsRetainGlobalCounters(string rows)
@@ -61,11 +104,16 @@ public sealed class MihomoControllerClientTests
             () => ControllerSecret, () => false, broker);
 
         MihomoTrafficSnapshot snapshot = await client.GetTrafficSnapshotAsync(CancellationToken.None);
+        MihomoTrafficSnapshot sampled = Assert.IsType<MihomoTrafficSnapshot>(
+            await client.TryGetTrafficSnapshotAsync(CancellationToken.None));
 
         Assert.Equal(broker.TrafficEpoch, snapshot.Epoch);
         Assert.Equal(400, snapshot.UploadTotalBytes);
         Assert.Equal(800, snapshot.DownloadTotalBytes);
         Assert.Single(snapshot.Connections);
+        Assert.Equal(snapshot.Epoch, sampled.Epoch);
+        Assert.Equal(snapshot.UploadTotalBytes, sampled.UploadTotalBytes);
+        Assert.Equal(snapshot.DownloadTotalBytes, sampled.DownloadTotalBytes);
         Assert.Empty(handler.Requests);
     }
 

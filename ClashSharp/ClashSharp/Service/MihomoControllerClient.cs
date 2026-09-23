@@ -243,6 +243,21 @@ public sealed class MihomoControllerClient
     internal async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
     {
         ControllerRoute route = await ResolveRouteAsync(cancellationToken).ConfigureAwait(false);
+        return await ReadTrafficSnapshotAsync(route, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Returns no sample when both authenticated runtime owners are conclusively inactive.</summary>
+    internal async Task<MihomoTrafficSnapshot?> TryGetTrafficSnapshotAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ControllerRoute route = await ResolveRouteAsync(cancellationToken, allowInactive: true).ConfigureAwait(false);
+        return route.IsInactive ? null
+            : await ReadTrafficSnapshotAsync(route, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<MihomoTrafficSnapshot> ReadTrafficSnapshotAsync(
+        ControllerRoute route, CancellationToken cancellationToken)
+    {
         if (route.ServiceBinding is not null)
         {
             MihomoServiceIpcResponse response = await SendServiceCommandAsync(
@@ -876,7 +891,7 @@ public sealed class MihomoControllerClient
     }
 
     /// <summary>Resolves exactly one controller owner and fails closed on ambiguity.</summary>
-    private async Task<ControllerRoute> ResolveRouteAsync(CancellationToken cancellationToken)
+    private async Task<ControllerRoute> ResolveRouteAsync(CancellationToken cancellationToken, bool allowInactive = false)
     {
         if (_serviceBroker is null || _isAppCoreRunning is null)
         {
@@ -922,6 +937,10 @@ public sealed class MihomoControllerClient
 
         if (!serviceOwned)
         {
+            if (allowInactive && serviceStatus.HasReleasedChildOwnership)
+            {
+                return new ControllerRoute(null) { IsInactive = true };
+            }
             throw new InvalidOperationException("controller.owner_unavailable");
         }
 
@@ -1296,5 +1315,6 @@ public sealed class MihomoControllerClient
         MihomoServiceIpcControllerBinding? ServiceBinding)
     {
         internal static ControllerRoute Direct => new(null);
+        internal bool IsInactive { get; init; }
     }
 }

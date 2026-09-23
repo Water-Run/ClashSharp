@@ -10,6 +10,31 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for connection sampling orchestration.</summary>
 public sealed class ConnectionSamplingServiceTests
 {
+    [Fact]
+    public async Task ConfirmedIdleRuntimeSkipsStorageAndContinuesSamplingAtNormalInterval()
+    {
+        ControlledSupervisorClock clock = new();
+        FakeConnectionSamplingSource source = new() { IsIdle = true };
+        FakeConnectionSamplingStorage storage = new();
+        ConnectionSamplingService service = CreateService(source: source, storage: storage, clock: clock);
+        await service.FlushAsync(CancellationToken.None);
+        Assert.Empty(storage.Snapshots);
+        await service.StartAsync(CancellationToken.None);
+        (await clock.TakeDelayAsync()).Complete();
+        ControlledDelay next = await clock.TakeDelayAsync();
+        Assert.Equal(TimeSpan.FromSeconds(60), next.Duration);
+        Assert.Empty(storage.Logs);
+        Assert.Empty(storage.Snapshots);
+
+        source.IsIdle = false;
+        source.DownloadTotal = 245760;
+        next.Complete();
+        _ = await clock.TakeDelayAsync();
+        Assert.Equal(245760, Assert.Single(storage.Snapshots).DownloadTotalBytes);
+        Assert.Empty(storage.Logs);
+        await service.StopAsync(CancellationToken.None);
+    }
+
     [Theory]
     [InlineData(true, 1)]
     [InlineData(false, 0)]
@@ -287,6 +312,7 @@ public sealed class ConnectionSamplingServiceTests
         public long? UploadTotal { get; set; }
         public long? DownloadTotal { get; set; }
         public Exception? Exception { get; set; }
+        public bool IsIdle { get; set; }
 
         public IReadOnlyList<ActiveConnection> Connections { get; set; } = [];
 
@@ -298,7 +324,7 @@ public sealed class ConnectionSamplingServiceTests
 
         public TaskCompletionSource<object?> ReleaseFirstSample { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
+        public async Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
         {
             CallCount++;
             if (CallCount == 1)
@@ -315,7 +341,7 @@ public sealed class ConnectionSamplingServiceTests
                 throw Exception;
             }
 
-            return new MihomoTrafficSnapshot(_epoch,
+            return IsIdle ? null : new MihomoTrafficSnapshot(_epoch,
                 UploadTotal ?? Connections.Sum(row => row.UploadBytes),
                 DownloadTotal ?? Connections.Sum(row => row.DownloadBytes), Connections);
         }

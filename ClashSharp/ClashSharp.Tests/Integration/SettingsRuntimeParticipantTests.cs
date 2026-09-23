@@ -372,7 +372,7 @@ public sealed class SettingsRuntimeParticipantTests
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource CancellationObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
+        public async Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
         {
             using CancellationTokenRegistration registration = cancellationToken.Register(() => CancellationObserved.TrySetResult());
             Entered.TrySetResult();

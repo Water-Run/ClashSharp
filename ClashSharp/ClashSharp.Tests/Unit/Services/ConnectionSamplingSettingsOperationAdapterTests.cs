@@ -157,7 +157,7 @@ public sealed class ConnectionSamplingSettingsOperationAdapterTests
         public bool Block { get; init; }
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
+        public async Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
         {
             Entered.TrySetResult();
             if (Block) { await Release.Task; }

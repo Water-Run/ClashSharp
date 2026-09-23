@@ -37,9 +37,9 @@ internal sealed class ConnectionSamplingSettingsAdapter(AppSettingsService setti
 
 internal sealed class ConnectionSamplingSourceAdapter(MihomoConnectionService connections) : IConnectionSamplingSource
 {
-    public Task<MihomoTrafficSnapshot> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
+    public Task<MihomoTrafficSnapshot?> GetTrafficSnapshotAsync(CancellationToken cancellationToken)
     {
-        return connections.GetTrafficSnapshotAsync(cancellationToken);
+        return connections.TryGetTrafficSnapshotAsync(cancellationToken);
     }
 }
 
