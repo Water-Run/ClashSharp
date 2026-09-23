@@ -120,7 +120,16 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private DateTimeOffset? _lastHeavyRefreshAt;
 
+    private DateTimeOffset? _lastCoreRefreshAt;
+
+    private readonly Func<RuntimeTrafficRateSnapshot>? _getRuntimeTraffic;
+
+    // A read admitted before a network mutation must not overwrite its result.
+    private int _statusRevision;
+
     private static readonly TimeSpan LoadRefreshThrottle = TimeSpan.FromSeconds(5);
+
+    private static readonly TimeSpan CoreRefreshThrottle = TimeSpan.FromMinutes(1);
 
     /// <summary>Initializes a master control view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
@@ -138,6 +147,7 @@ internal sealed class MasterControlViewModel : ObservableObject
     /// <param name="actions">Optional application action dispatcher; no-op actions are used when omitted.</param>
     /// <param name="modeApplied">Optional observer invoked after a mode transition is committed.</param>
     /// <param name="getNow">Optional clock used for deterministic refresh throttling.</param>
+    /// <param name="getRuntimeTraffic">Optional in-memory traffic snapshot reader for visible-page refreshes.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public MasterControlViewModel(
         IMasterControlLocalization localization,
@@ -154,7 +164,8 @@ internal sealed class MasterControlViewModel : ObservableObject
         IMasterControlRuntime? runtime = null,
         IMasterControlActions? actions = null,
         Func<ClashSharpMode, Task>? modeApplied = null,
-        Func<DateTimeOffset>? getNow = null)
+        Func<DateTimeOffset>? getNow = null,
+        Func<RuntimeTrafficRateSnapshot>? getRuntimeTraffic = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -176,6 +187,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         _runtime = runtime ?? UnavailableMasterControlRuntime.Instance;
         _actions = actions ?? NoMasterControlApplicationActionDispatcher.Instance;
         _getNow = getNow ?? (() => DateTimeOffset.Now);
+        _getRuntimeTraffic = getRuntimeTraffic;
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         DisabledModeCommand = new AsyncRelayCommand(
             token => ApplyModeAsync(ClashSharpMode.Disabled, token),
@@ -454,29 +466,45 @@ internal sealed class MasterControlViewModel : ObservableObject
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (IsApplyingMode || _toggleTransparentProxyCommand.IsRunning)
+        {
+            return;
+        }
+
         EnsureInitialized();
         DateTimeOffset now = _getNow();
+        int revision = _statusRevision;
         if (_lastHeavyRefreshAt is DateTimeOffset lastRefresh && now - lastRefresh < LoadRefreshThrottle)
         {
+            RefreshRuntimeTraffic();
             RefreshTileValues();
             return;
         }
 
         RefreshProxyStatus();
         await Task.WhenAll(
-            RefreshCoreStatusAsync(cancellationToken),
+            _lastCoreRefreshAt is DateTimeOffset coreRefresh && now - coreRefresh < CoreRefreshThrottle
+                ? Task.CompletedTask
+                : RefreshCoreStatusAsync(cancellationToken),
             RefreshRuntimeSnapshotAsync(cancellationToken),
             RefreshTrayStatusAsync(cancellationToken));
         cancellationToken.ThrowIfCancellationRequested();
+        if (revision != _statusRevision)
+        {
+            return;
+        }
+
+        RefreshRuntimeTraffic();
         OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
         _lastHeavyRefreshAt = now;
     }
 
     /// <summary>Invalidates cached summaries after a completed action, optionally reloading imported presentation settings.</summary>
-    /// <remarks>The page calls this after its previous load has drained, before starting the next observed load.</remarks>
+    /// <remarks>UI-thread callers invalidate before and after mutations; older asynchronous reads discard their results.</remarks>
     public void InvalidateAfterAction(bool settingsImported = false)
     {
+        ++_statusRevision;
         _lastHeavyRefreshAt = null;
         if (settingsImported)
         {
@@ -508,11 +536,18 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private async Task RefreshCoreStatusAsync(CancellationToken cancellationToken)
     {
+        int revision = _statusRevision;
         try
         {
             string versionText = CoreVersionDisplayFormatter.Format(
                 await _core.GetVersionTextAsync(cancellationToken));
             cancellationToken.ThrowIfCancellationRequested();
+            if (revision != _statusRevision)
+            {
+                return;
+            }
+
+            _lastCoreRefreshAt = _getNow();
             _mihomoVersionText = versionText;
             CoreStatusText = string.Format(
                 CultureInfo.CurrentCulture,
@@ -526,6 +561,12 @@ internal sealed class MasterControlViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (revision != _statusRevision)
+            {
+                return;
+            }
+
+            _lastCoreRefreshAt = _getNow();
             _mihomoVersionText = _localization.GetString("Master.Status.Unavailable");
             CoreStatusText = _localization.GetString("Master.Status.CoreUnavailable");
             _isCoreAvailable = false;
@@ -554,6 +595,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         bool baselineCoreAvailable = _isCoreAvailable;
         OperationErrorText = string.Empty;
         IsApplyingMode = true;
+        InvalidateAfterAction();
         try
         {
             NetworkTakeoverResult result = await _takeover
@@ -617,6 +659,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
         finally
         {
+            InvalidateAfterAction();
             IsApplyingMode = false;
             OnPropertyChanged(nameof(BasicStatusText));
             RefreshTileValues();
@@ -697,16 +740,18 @@ internal sealed class MasterControlViewModel : ObservableObject
         {
             SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
         }
-
-        TransparentProxyStatusText = ResolveTransparentProxyStatus(
-            isTransparentProxyRunning: false,
-            tunRequested: false);
     }
 
     private async Task RefreshTrayStatusAsync(CancellationToken cancellationToken)
     {
+        int revision = _statusRevision;
         TrayStatusSnapshot snapshot = await _trayStatus.GetSnapshotAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+        if (revision != _statusRevision)
+        {
+            return;
+        }
+
         CurrentNodeText = string.IsNullOrWhiteSpace(snapshot.CurrentNodeName)
             ? _localization.GetString("Master.Status.CurrentNodeUnavailable")
             : snapshot.CurrentNodeName;
@@ -717,11 +762,17 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private async Task RefreshRuntimeSnapshotAsync(CancellationToken cancellationToken)
     {
+        int revision = _statusRevision;
         try
         {
             MasterControlRuntimeSnapshot snapshot =
                 await _runtime.GetSnapshotAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            if (revision != _statusRevision)
+            {
+                return;
+            }
+
             _runtimeSnapshot = snapshot;
             TransparentProxyStatusText = snapshot.RuntimeOwnershipKnown
                 ? ResolveTransparentProxyStatus(snapshot.TunEffective, snapshot.TunRequested)
@@ -736,8 +787,21 @@ internal sealed class MasterControlViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (revision != _statusRevision)
+            {
+                return;
+            }
+
             _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
             TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
+        }
+    }
+
+    private void RefreshRuntimeTraffic()
+    {
+        if (_getRuntimeTraffic is not null)
+        {
+            _runtimeSnapshot = _runtimeSnapshot with { RuntimeTraffic = _getRuntimeTraffic() };
         }
     }
 
@@ -1066,6 +1130,7 @@ internal sealed class MasterControlViewModel : ObservableObject
 
     private async Task ToggleTransparentProxyAsync(CancellationToken cancellationToken)
     {
+        InvalidateAfterAction();
         bool desired = !_settings.TransparentProxyEnabled;
         OperationErrorText = string.Empty;
         try
@@ -1097,6 +1162,7 @@ internal sealed class MasterControlViewModel : ObservableObject
         }
         finally
         {
+            InvalidateAfterAction();
             RefreshTileValues();
         }
     }

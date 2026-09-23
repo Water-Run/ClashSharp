@@ -64,6 +64,8 @@ public sealed partial class MasterControl : Page
     /// <summary>Tracks the latest load so unload and a later reload can observe its completion.</summary>
     private Task _loadTask = Task.CompletedTask;
 
+    private readonly PageLoadSession _refreshSession;
+
     private double _heroStatusItemWidth = PreferredHeroStatusItemWidth;
     private double _infoTileItemWidth = PreferredInfoTileWidth;
 
@@ -76,6 +78,7 @@ public sealed partial class MasterControl : Page
             ?? throw new ArgumentException("A localization function is required.", nameof(dependencies));
         _errorSink = dependencies.ErrorSink
             ?? throw new ArgumentException("An application error sink is required.", nameof(dependencies));
+        _refreshSession = new PageLoadSession(_errorSink, "master-live-refresh");
         _tileActions = dependencies.TileActions
             ?? throw new ArgumentException("A tile action session is required.", nameof(dependencies));
         _dataPackages = dependencies.DataPackages
@@ -108,7 +111,7 @@ public sealed partial class MasterControl : Page
 
         CancellationTokenSource lifetime = new();
         _pageLifetime = lifetime;
-        await _tileActions.DrainAsync();
+        await Task.WhenAll(_tileActions.DrainAsync(), _refreshSession.DrainAsync());
         if (!ReferenceEquals(_pageLifetime, lifetime))
         {
             return;
@@ -116,6 +119,17 @@ public sealed partial class MasterControl : Page
 
         _tileActions.Activate(PresentTileActionAsync);
         await LoadForCurrentPageAsync();
+        if (ReferenceEquals(_pageLifetime, lifetime))
+        {
+            await _refreshSession.RunAsync(async cancellationToken =>
+            {
+                using PeriodicTimer timer = new(TimeSpan.FromSeconds(1));
+                while (await timer.WaitForNextTickAsync(cancellationToken))
+                {
+                    await LoadForCurrentPageAsync();
+                }
+            }, cancellationToken: lifetime.Token);
+        }
     }
 
     private async Task LoadForCurrentPageAsync()
@@ -298,10 +312,11 @@ public sealed partial class MasterControl : Page
 
         _pageLifetime = null;
         _tileActions.Deactivate();
+        _refreshSession.Cancel();
         lifetime.Cancel();
         try
         {
-            await Task.WhenAll(_loadTask, _tileActions.DrainAsync());
+            await Task.WhenAll(_loadTask, _tileActions.DrainAsync(), _refreshSession.DrainAsync());
         }
         finally
         {

@@ -217,6 +217,95 @@ public sealed class MasterControlViewModelTests
         Assert.Equal(1, runtime.SnapshotCount);
     }
 
+    [Fact]
+    public async Task LoadAsync_RefreshesLiveTrafficWithoutRepeatingStorageOrVersionProbes()
+    {
+        FakeMasterCore core = new();
+        FakeMasterRuntime runtime = new();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        RuntimeTrafficRateSnapshot traffic = default;
+        MasterControlViewModel viewModel = CreateViewModel(
+            core: core, runtime: runtime, getNow: () => now, getRuntimeTraffic: () => traffic);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        now += TimeSpan.FromSeconds(1);
+        traffic = new RuntimeTrafficRateSnapshot(1024, 4096, 2, 1024, 4096);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("4 KB/s", viewModel.InfoTiles.Single(tile => tile.Id == "download-rate").Value);
+        Assert.Equal("2", viewModel.InfoTiles.Single(tile => tile.Id == "active-connections").Value);
+        Assert.Equal(1, runtime.SnapshotCount);
+        Assert.Equal(1, core.VersionProbeCount);
+
+        now += TimeSpan.FromSeconds(5);
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal(2, runtime.SnapshotCount);
+        Assert.Equal(1, core.VersionProbeCount);
+
+        now += TimeSpan.FromMinutes(1);
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal(2, core.VersionProbeCount);
+    }
+
+    [Fact]
+    public async Task ApplyModeAsync_NextVisibleRefreshUpdatesNodeWithinThrottleWindow()
+    {
+        FakeMasterTrayStatus tray = new();
+        MasterControlViewModel viewModel = CreateViewModel(trayStatus: tray);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        await viewModel.ApplyModeAsync(ClashSharpMode.RuleTakeover, CancellationToken.None);
+        tray.Snapshot = new TrayStatusSnapshot("Acceptance HTTP", 25);
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("Acceptance HTTP", viewModel.CurrentNodeText);
+        Assert.Equal("25 ms", viewModel.LatencySummaryText);
+    }
+
+    [Fact]
+    public async Task LoadAsync_DiscardsReadsStartedBeforeModeChangeAndRefreshesAgain()
+    {
+        TaskCompletionSource<MasterControlRuntimeSnapshot> runtimeResult = new();
+        TaskCompletionSource<TrayStatusSnapshot> trayResult = new();
+        FakeMasterRuntime runtime = new() { SnapshotTask = runtimeResult.Task };
+        FakeMasterTrayStatus tray = new() { GetSnapshotAsyncHandler = _ => trayResult.Task };
+        MasterControlViewModel viewModel = CreateViewModel(runtime: runtime, trayStatus: tray);
+        Task load = viewModel.LoadAsync(CancellationToken.None);
+
+        await viewModel.ApplyModeAsync(ClashSharpMode.RuleTakeover, CancellationToken.None);
+        string appliedTunStatus = viewModel.TransparentProxyStatusText;
+        runtimeResult.SetResult(MasterControlRuntimeSnapshot.Unavailable);
+        trayResult.SetResult(new TrayStatusSnapshot("Old node", 100));
+        await load;
+
+        Assert.Equal(appliedTunStatus, viewModel.TransparentProxyStatusText);
+        Assert.NotEqual("Old node", viewModel.CurrentNodeText);
+        runtime.SnapshotTask = null;
+        tray.GetSnapshotAsyncHandler = null;
+        tray.Snapshot = new TrayStatusSnapshot("New node", 20);
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal("New node", viewModel.CurrentNodeText);
+        Assert.Equal(2, runtime.SnapshotCount);
+    }
+
+    [Fact]
+    public async Task LoadAsync_DoesNotProbeDuringPendingModeChange()
+    {
+        TaskCompletionSource<NetworkTakeoverResult> completion = new();
+        FakeMasterTakeover takeover = new() { PendingResult = completion.Task };
+        FakeMasterRuntime runtime = new();
+        MasterControlViewModel viewModel = CreateViewModel(takeover: takeover, runtime: runtime);
+        Task change = viewModel.ApplyModeAsync(ClashSharpMode.Standby, CancellationToken.None);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal(0, runtime.SnapshotCount);
+
+        completion.SetResult(new NetworkTakeoverResult(ClashSharpMode.Standby, true, false, false, "applied"));
+        await change;
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal(1, runtime.SnapshotCount);
+    }
+
     /// <summary>Verifies applying a mode updates presentation state without persisting from the view model.</summary>
     [Fact]
     public async Task ApplyModeAsync_WhenTakeoverSucceeds_UpdatesStateAndLogs()
@@ -869,7 +958,8 @@ public sealed class MasterControlViewModelTests
         IMasterControlActions? actions = null,
         IApplicationErrorSink? errorSink = null,
         Func<ClashSharpMode, Task>? modeApplied = null,
-        Func<MasterControlTileAction, CancellationToken, Task>? presentTileActionAsync = null)
+        Func<MasterControlTileAction, CancellationToken, Task>? presentTileActionAsync = null,
+        Func<RuntimeTrafficRateSnapshot>? getRuntimeTraffic = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -886,7 +976,8 @@ public sealed class MasterControlViewModelTests
             runtime ?? new FakeMasterRuntime(),
             actions: actions,
             modeApplied: modeApplied,
-            getNow: getNow);
+            getNow: getNow,
+            getRuntimeTraffic: getRuntimeTraffic);
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>
