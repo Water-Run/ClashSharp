@@ -2044,7 +2044,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("UseSystemFocusVisuals=\"True\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.Name=\"{Binding Title, ElementName=Root}\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("<ToolTipService.ToolTip>", infoTileXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding Description, ElementName=Root}\"", infoTileXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind Description, Mode=OneWay}\"", infoTileXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Tapped=\"TileRoot_Tapped\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SelectedOverlay\"", infoTileXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ToggleThumbTransform\"", infoTileXaml, StringComparison.Ordinal);

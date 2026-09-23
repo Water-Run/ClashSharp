@@ -184,6 +184,8 @@
                     CanReorderItems="True"
                     CanDragItems="True"
                     TabFocusNavigation="Local"
+                    TabNavigation="Local"
+                    IsTabStop="False"
                     AllowDrop="True"
                     DragItemsCompleted="InfoTileGrid_DragItemsCompleted"
                     IsItemClickEnabled="False"
@@ -207,6 +209,7 @@
                             <Setter Property="MinWidth" Value="220" />
                             <Setter Property="IsTabStop" Value="False" />
                             <Setter Property="TabFocusNavigation" Value="Local" />
+                            <Setter Property="TabNavigation" Value="Local" />
                         </Style>
                     </GridView.ItemContainerStyle>
                     <GridView.ItemTemplate>

@@ -171,9 +171,9 @@
             <ToolTipService.ToolTip>
                 <ToolTip>
                     <StackPanel MaxWidth="360" Spacing="4">
-                        <TextBlock Text="{Binding Value, ElementName=Root}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding Detail, ElementName=Root}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding Description, ElementName=Root}" TextWrapping="Wrap" />
+                        <TextBlock Text="{x:Bind Value, Mode=OneWay}" TextWrapping="Wrap" />
+                        <TextBlock Text="{x:Bind Detail, Mode=OneWay}" TextWrapping="Wrap" />
+                        <TextBlock Text="{x:Bind Description, Mode=OneWay}" TextWrapping="Wrap" />
                     </StackPanel>
                 </ToolTip>
             </ToolTipService.ToolTip>
