@@ -432,6 +432,9 @@ public sealed partial class MasterControl : Page
         {
             Content = results,
             MaxHeight = 180,
+            IsTabStop = true,
+            UseSystemFocusVisuals = true,
+            Padding = new Thickness(0, 0, 12, 0),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
         });

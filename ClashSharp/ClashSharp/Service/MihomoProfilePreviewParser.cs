@@ -39,7 +39,11 @@ internal static class MihomoProfilePreviewParser
 
             string serverHost = item.GetScalar("server");
             int? serverPort = TryParsePort(item.GetScalar("port"));
-            string regionCode = InferRegionCode(name + " " + serverHost);
+            string regionCode = InferRegionCode(name);
+            if (regionCode == "UN")
+            {
+                regionCode = InferRegionCode(serverHost);
+            }
             nodes.Add(new ProxyNode(
                 name,
                 protocol.ToUpperInvariant(),
@@ -64,13 +68,18 @@ internal static class MihomoProfilePreviewParser
             }
 
             string url = item.GetScalar("url");
-            string regionCode = InferRegionCode(providerName + " " + url);
+            string serverHost = TryGetHostFromUri(url);
+            string regionCode = InferRegionCode(providerName);
+            if (regionCode == "UN")
+            {
+                regionCode = InferRegionCode(serverHost);
+            }
             nodes.Add(new ProxyNode(
                 providerName,
                 $"PROVIDER/{providerType.ToUpperInvariant()}",
                 resolveRegion(regionCode),
                 null,
-                TryGetHostFromUri(url),
+                serverHost,
                 null));
         }
 
@@ -371,9 +380,9 @@ internal static class MihomoProfilePreviewParser
         return int.TryParse(value, out int port) && port is >= 1 and <= 65535 ? port : null;
     }
 
-    /// <summary>Returns whether <paramref name="text"/> contains any candidate string.</summary>
+    /// <summary>Matches region hints without treating parts of unrelated English words as country codes.</summary>
     /// <param name="text">Search text. Must not be null.</param>
-    /// <param name="candidates">Candidate substrings. Must not be null.</param>
+    /// <param name="candidates">Lowercase region hints. Must not be null.</param>
     /// <returns>True when a candidate is present.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="text"/> or <paramref name="candidates"/> is null.</exception>
     private static bool ContainsAny(string text, params string[] candidates)
@@ -383,9 +392,18 @@ internal static class MihomoProfilePreviewParser
 
         foreach (string candidate in candidates)
         {
-            if (text.Contains(candidate, StringComparison.Ordinal))
+            int offset = 0;
+            while ((offset = text.IndexOf(candidate, offset, StringComparison.Ordinal)) >= 0)
             {
-                return true;
+                int end = offset + candidate.Length;
+                bool startsWord = offset == 0 || text[offset - 1] is not (>= 'a' and <= 'z');
+                bool endsWord = end == text.Length || text[end] is not (>= 'a' and <= 'z');
+                if (startsWord && endsWord)
+                {
+                    return true;
+                }
+
+                offset = end;
             }
         }
 

@@ -13,6 +13,49 @@ namespace ClashSharp.Tests.Unit.Services;
 /// </remarks>
 public sealed class MihomoProfilePreviewParserTests
 {
+    /// <summary>Verifies English words do not accidentally imply a country, while common labels still work.</summary>
+    [Theory]
+    [InlineData("Long node - 完整结果可读性 - long-name", "UN")]
+    [InlineData("remote", "UN")]
+    [InlineData("network", "UN")]
+    [InlineData("business", "UN")]
+    [InlineData("fragment", "UN")]
+    [InlineData("[DE] Frankfurt 01", "DE")]
+    [InlineData("HK01", "HK")]
+    [InlineData("US-02", "US")]
+    [InlineData("tokyo primary", "JP")]
+    [InlineData("node de", "DE")]
+    public void ParseNodes_RegionHints_RequireWordBoundaries(string name, string expectedRegion)
+    {
+        string configuration = $"proxies:\n  - {{name: '{name}', type: http, server: 127.0.0.1, port: 8080}}";
+
+        ProxyNode node = Assert.Single(MihomoProfilePreviewParser.ParseNodes(configuration, ResolveRegion));
+
+        Assert.Equal(expectedRegion, node.Region.RegionCode);
+    }
+
+    /// <summary>Verifies a named region takes priority over a conflicting host hint.</summary>
+    [Fact]
+    public void ParseNodes_NamedRegion_TakesPriorityOverHost()
+    {
+        const string Configuration = "proxies:\n  - {name: US-01, type: http, server: hk.example.invalid, port: 8080}";
+
+        ProxyNode node = Assert.Single(MihomoProfilePreviewParser.ParseNodes(Configuration, ResolveRegion));
+
+        Assert.Equal("US", node.Region.RegionCode);
+    }
+
+    /// <summary>Verifies subscription paths and query values do not invent a provider region.</summary>
+    [Fact]
+    public void ParseNodes_ProviderUrlPath_DoesNotInferRegion()
+    {
+        const string Configuration = "proxy-providers:\n  remote: {type: http, url: 'https://example.invalid/us/list?region=hk'}";
+
+        ProxyNode node = Assert.Single(MihomoProfilePreviewParser.ParseNodes(Configuration, ResolveRegion));
+
+        Assert.Equal("UN", node.Region.RegionCode);
+    }
+
     /// <summary>Verifies block-list proxy nodes are parsed with protocol, host, port, and inferred region metadata.</summary>
     [Fact]
     public void ParseNodes_BlockProxyList_ReturnsNodePreviewRows()
