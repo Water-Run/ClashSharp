@@ -338,6 +338,34 @@ public sealed partial class MasterControlViewModelTests
     }
 
     [Fact]
+    public async Task LoadAsync_NewPageWithStoppedCore_RetainsSharedSessionTotalsWithoutStaleLiveData()
+    {
+        FakeMasterRuntime runtime = new()
+        {
+            Snapshot = MasterControlRuntimeSnapshot.Unavailable with
+            {
+                RuntimeTraffic = new RuntimeTrafficRateSnapshot(1024, 4096, 2, 1024, 4096, 5000, DateTimeOffset.UtcNow),
+            },
+        };
+        MasterControlViewModel viewModel = CreateViewModel(runtime: runtime,
+            getRuntimeTrafficAsync: _ => Task.FromException<RuntimeTrafficRateSnapshot>(
+                new InvalidOperationException("controller.owner_unavailable")));
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("5 KB", viewModel.InfoTiles.Single(tile => tile.Id == "session-traffic").Value);
+        Assert.Equal("0 B/s", viewModel.InfoTiles.Single(tile => tile.Id == "download-rate").Value);
+        Assert.Equal("0", viewModel.InfoTiles.Single(tile => tile.Id == "active-connections").Value);
+        Assert.Equal("Unavailable", viewModel.InfoTiles.Single(tile => tile.Id == "core-memory").Value);
+        Assert.Equal("Unavailable", viewModel.InfoTiles.Single(tile => tile.Id == "core-uptime").Value);
+
+        runtime.Snapshot = MasterControlRuntimeSnapshot.Unavailable;
+        viewModel.InvalidateAfterAction();
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Equal("5 KB", viewModel.InfoTiles.Single(tile => tile.Id == "session-traffic").Value);
+    }
+
+    [Fact]
     public async Task LoadAsync_WhenTrafficReadOutlivesPageCancellation_DiscardsSample()
     {
         using CancellationTokenSource lifetime = new();

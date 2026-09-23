@@ -135,7 +135,19 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     private readonly Queue<double> _downloadHistory = new();
     private DateTimeOffset? _lastHistoryAt;
 
-    private RuntimeTrafficRateSnapshot RuntimeTraffic => _liveTraffic ?? _runtimeSnapshot.RuntimeTraffic;
+    private RuntimeTrafficRateSnapshot RuntimeTraffic
+    {
+        get
+        {
+            RuntimeTrafficRateSnapshot traffic = _liveTraffic ?? _runtimeSnapshot.RuntimeTraffic;
+            // The shared sampler outlives page visits and may capture final bytes before a core stops.
+            return traffic with
+            {
+                SessionUploadBytes = Math.Max(traffic.SessionUploadBytes, _runtimeSnapshot.RuntimeTraffic.SessionUploadBytes),
+                SessionDownloadBytes = Math.Max(traffic.SessionDownloadBytes, _runtimeSnapshot.RuntimeTraffic.SessionDownloadBytes),
+            };
+        }
+    }
 
     // A read admitted before a network mutation must not overwrite its result.
     private int _statusRevision;
