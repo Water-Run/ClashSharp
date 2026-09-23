@@ -117,6 +117,52 @@ public sealed class ProfilesViewModelTests
             UncoordinatedProfileCatalogMutationCoordinator.Instance);
     }
 
+    /// <summary>Verifies accepted and rejected input produce visible results and correct selection state.</summary>
+    [Fact]
+    public async Task LinksViewModel_AddAndDelete_ReportResultsAndSelectOnlyExistingRows()
+    {
+        using TempDirectory tempDirectory = new();
+        ProfileCatalogService profiles = CreateProfileCatalog(tempDirectory);
+        LogStorageService logs = new(Path.Combine(tempDirectory.Path, "links-feedback.db"), static () => "profile");
+        LinksViewModel viewModel = new(static key => key, new SubscriptionLinkCatalogAdapter(profiles),
+            new PageLogAdapter(logs), new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+
+        await viewModel.AddSubscriptionLinkAsync("Invalid", string.Empty, CancellationToken.None);
+        Assert.True(viewModel.HasNoLinks);
+        Assert.False(viewModel.HasSelectedLink);
+        Assert.True(viewModel.HasStatusText);
+        Assert.Equal("Links.Status.AddFailed", viewModel.StatusText);
+
+        await viewModel.AddSubscriptionLinkAsync("Example", "https://example.com/profile.yaml", CancellationToken.None);
+        Assert.Same(Assert.Single(viewModel.SubscriptionLinks), viewModel.SelectedLink);
+        Assert.Equal("Links.Status.Added", viewModel.StatusText);
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Same(Assert.Single(viewModel.SubscriptionLinks), viewModel.SelectedLink);
+        await viewModel.DeleteSelectedLinkAsync(CancellationToken.None);
+        Assert.True(viewModel.HasNoLinks);
+        Assert.False(viewModel.HasSelectedLink);
+        Assert.Equal("Links.Status.Deleted", viewModel.StatusText);
+    }
+
+    /// <summary>Verifies malformed editor values remain distinguishable from valid input.</summary>
+    [Theory]
+    [InlineData("", "https://example.com/", 24, "Links.Validation.Name")]
+    [InlineData(" ", "https://example.com/", 24, "Links.Validation.Name")]
+    [InlineData("Name", "", 24, "Links.Validation.Uri")]
+    [InlineData("Name", "not a url", 24, "Links.Validation.Uri")]
+    [InlineData("Name", "file:///C:/config.yaml", 24, "Links.Validation.Uri")]
+    [InlineData("Name", "ftp://example.com/config", 24, "Links.Validation.Uri")]
+    [InlineData("Name", "https://example.com/", 0, "Links.Validation.Interval")]
+    [InlineData("Name", "https://example.com/", 8761, "Links.Validation.Interval")]
+    [InlineData("Name", "https://example.com/", 1.5, "Links.Validation.Interval")]
+    [InlineData("Name", "https://example.com/", double.NaN, "Links.Validation.Interval")]
+    [InlineData("Name", "https://example.com/", 1, null)]
+    [InlineData("Name", "http://127.0.0.1:18080/subscription.yaml", 8760, null)]
+    public void LinksEditor_ValidatesBeforeClosing(string name, string uri, double interval, string? expected)
+    {
+        Assert.Equal(expected, LinksViewModel.ValidateInput(name, uri, interval));
+    }
+
     private sealed class FakeProfileCatalogSettings : IProfileCatalogSettings
     {
         public string ActiveProfileId { get; set; } = string.Empty;

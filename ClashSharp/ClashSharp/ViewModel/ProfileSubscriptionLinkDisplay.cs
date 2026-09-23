@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -15,4 +16,8 @@ internal sealed record ProfileSubscriptionLinkDisplay(
     public int UpdateIntervalHours => Model.UpdateIntervalHours;
 
     public DateTimeOffset LastUpdatedAt => Model.LastUpdatedAt;
+
+    public string LastUpdatedDisplay => Model.LastUpdatedAt <= DateTimeOffset.UnixEpoch
+        ? "—"
+        : Model.LastUpdatedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
 }

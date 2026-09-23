@@ -10,6 +10,19 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Empty"] = "Aucun abonnement. Choisissez Ajouter pour en créer un.",
+            ["Links.Validation.Name"] = "Saisissez un nom d’abonnement.",
+            ["Links.Validation.Uri"] = "Saisissez une URL d’abonnement HTTP ou HTTPS complète.",
+            ["Links.Validation.Interval"] = "Saisissez un nombre entier d’heures entre 1 et 8760.",
+            ["Links.Status.Added"] = "Abonnement ajouté.",
+            ["Links.Status.AddFailed"] = "Impossible d’ajouter l’abonnement. Vérifiez les données et réessayez.",
+            ["Links.Status.CheckFailed"] = "Échec de la vérification. Vérifiez l’adresse et le réseau, puis réessayez.",
+            ["Links.Status.Updated"] = "Profil d’abonnement mis à jour.",
+            ["Links.Status.UpdateFailed"] = "Impossible de mettre à jour le profil. Vérifiez l’abonnement et réessayez.",
+            ["Links.Status.Saved"] = "Modifications de l’abonnement enregistrées.",
+            ["Links.Status.EditFailed"] = "Impossible d’enregistrer l’abonnement. Actualisez la page et réessayez.",
+            ["Links.Status.Deleted"] = "Abonnement supprimé.",
+            ["Links.Status.DeleteFailed"] = "Impossible de supprimer l’abonnement. Actualisez la page et réessayez.",
             ["Common.NoMatchingOptions"] = "Aucune option correspondante.",
             ["Master.Status.CurrentRuntime.Format"] = "État actuel : {0}",
             ["Profiles.Column.Name"] = "Profil / source",

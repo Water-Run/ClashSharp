@@ -157,8 +157,10 @@ internal sealed class ProfilesViewModel : ObservableObject
         get => _selectedProfile;
         set
         {
-            if (SetProperty(ref _selectedProfile, value))
+            if (!ReferenceEquals(_selectedProfile, value))
             {
+                _selectedProfile = value;
+                OnPropertyChanged(nameof(SelectedProfile));
                 OnPropertyChanged(nameof(HasSelectedProfile));
             }
         }

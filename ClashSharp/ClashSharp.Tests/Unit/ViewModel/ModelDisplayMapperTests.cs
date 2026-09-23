@@ -7,6 +7,18 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Verifies UI filtering is applied by presentation mapping without mutating models.</summary>
 public sealed class ModelDisplayMapperTests
 {
+    /// <summary>Verifies an uninitialized timestamp is not shown as year one.</summary>
+    [Fact]
+    public void SubscriptionDisplay_NeverUpdatedUsesPlaceholder()
+    {
+        ModelDisplayMapper mapper = new(static text => text);
+        ProfileSubscriptionLink link = new("id", "Name", "https://example.com/", true, 24, default, "Added");
+        Assert.Equal("—", mapper.Map(link).LastUpdatedDisplay);
+        DateTimeOffset updated = DateTimeOffset.Now;
+        Assert.Equal(updated.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture),
+            mapper.Map(link with { LastUpdatedAt = updated }).LastUpdatedDisplay);
+    }
+
     [Fact]
     public void Map_AppliesInjectedPolicyToAllModelDisplayFields()
     {

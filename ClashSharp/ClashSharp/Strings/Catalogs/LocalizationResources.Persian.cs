@@ -10,6 +10,19 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Empty"] = "هنوز اشتراکی وجود ندارد. برای ایجاد اشتراک، افزودن را انتخاب کنید.",
+            ["Links.Validation.Name"] = "نام اشتراک را وارد کنید.",
+            ["Links.Validation.Uri"] = "نشانی کامل اشتراک با HTTP یا HTTPS را وارد کنید.",
+            ["Links.Validation.Interval"] = "تعداد ساعت را به‌صورت عدد صحیح بین ۱ تا ۸۷۶۰ وارد کنید.",
+            ["Links.Status.Added"] = "اشتراک اضافه شد.",
+            ["Links.Status.AddFailed"] = "افزودن اشتراک ممکن نشد. ورودی را بررسی و دوباره تلاش کنید.",
+            ["Links.Status.CheckFailed"] = "بررسی اشتراک ناموفق بود. نشانی و شبکه را بررسی و دوباره تلاش کنید.",
+            ["Links.Status.Updated"] = "پروفایل اشتراک به‌روز شد.",
+            ["Links.Status.UpdateFailed"] = "به‌روزرسانی پروفایل ممکن نشد. اشتراک را بررسی و دوباره تلاش کنید.",
+            ["Links.Status.Saved"] = "تغییرات اشتراک ذخیره شد.",
+            ["Links.Status.EditFailed"] = "ذخیرهٔ اشتراک ممکن نشد. صفحه را تازه‌سازی و دوباره تلاش کنید.",
+            ["Links.Status.Deleted"] = "اشتراک حذف شد.",
+            ["Links.Status.DeleteFailed"] = "حذف اشتراک ممکن نشد. صفحه را تازه‌سازی و دوباره تلاش کنید.",
             ["Common.NoMatchingOptions"] = "هیچ گزینهٔ منطبقی یافت نشد.",
             ["Master.Status.CurrentRuntime.Format"] = "وضعیت فعلی: {0}",
             ["Profiles.Column.Name"] = "پروفایل / منبع",

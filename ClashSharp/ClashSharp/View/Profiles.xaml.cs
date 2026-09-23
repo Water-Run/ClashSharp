@@ -280,12 +280,7 @@ public sealed partial class Profiles : Page
 
     private void SetOperationBusy(bool isBusy)
     {
-        ImportProfileButton.IsEnabled = !isBusy;
-        ValidateProfileButton.IsEnabled = !isBusy;
-        SetActiveProfileButton.IsEnabled = !isBusy;
-        RenameProfileButton.IsEnabled = !isBusy;
-        DeleteProfileButton.IsEnabled = !isBusy;
-        ProfileHistoryButton.IsEnabled = !isBusy;
+        ProfileCommands.IsEnabled = !isBusy;
         ProfilesList.IsEnabled = !isBusy;
     }
 }

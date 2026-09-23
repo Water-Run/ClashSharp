@@ -96,6 +96,7 @@ public sealed partial class Links : Page
                 XamlRoot = XamlRoot,
             };
 
+            AttachInputValidation(dialog, content, nameBox, uriBox);
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (result == ContentDialogResult.Primary)
@@ -169,14 +170,12 @@ public sealed partial class Links : Page
                 CloseButtonText = _getString("Command.Cancel"),
                 XamlRoot = XamlRoot,
             };
+            AttachInputValidation(dialog, content, nameBox, uriBox, intervalBox);
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (result == ContentDialogResult.Primary)
             {
-                int updateIntervalHours = double.IsFinite(intervalBox.Value)
-                    && intervalBox.Value is >= 1 and <= 8760
-                    ? checked((int)intervalBox.Value)
-                    : selectedLink.Model.UpdateIntervalHours;
+                int updateIntervalHours = checked((int)intervalBox.Value);
                 await _viewModel.EditLinkCommand.ExecuteObservedAsync(
                     new SubscriptionLinkEditRequest(
                         selectedLink.Model.Id,
@@ -241,11 +240,26 @@ public sealed partial class Links : Page
 
     private void SetOperationBusy(bool isBusy)
     {
-        AddLinkButton.IsEnabled = !isBusy;
-        CheckLinksButton.IsEnabled = !isBusy;
-        UpdateLinksButton.IsEnabled = !isBusy;
-        EditLinkButton.IsEnabled = !isBusy;
-        DeleteLinkButton.IsEnabled = !isBusy;
+        // Disable the parent so per-button selection bindings survive every operation.
+        LinkCommands.IsEnabled = !isBusy;
         SubscriptionLinksList.IsEnabled = !isBusy;
+    }
+
+    private void AttachInputValidation(
+        ThemedContentDialog dialog,
+        StackPanel content,
+        TextBox nameBox,
+        TextBox uriBox,
+        NumberBox? intervalBox = null)
+    {
+        InfoBar error = new() { IsClosable = false, Severity = InfoBarSeverity.Error };
+        content.Children.Add(error);
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            string? key = LinksViewModel.ValidateInput(nameBox.Text, uriBox.Text, intervalBox?.Value ?? 24);
+            args.Cancel = key is not null;
+            error.IsOpen = key is not null;
+            error.Message = key is null ? string.Empty : _getString(key);
+        };
     }
 }

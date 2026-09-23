@@ -10,6 +10,19 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Empty"] = "No subscriptions yet. Choose Add to create one.",
+            ["Links.Validation.Name"] = "Enter a subscription name.",
+            ["Links.Validation.Uri"] = "Enter an absolute HTTP or HTTPS subscription URL.",
+            ["Links.Validation.Interval"] = "Enter a whole number of hours from 1 to 8760.",
+            ["Links.Status.Added"] = "Subscription added.",
+            ["Links.Status.AddFailed"] = "Could not add the subscription. Check the input and try again.",
+            ["Links.Status.CheckFailed"] = "Subscription check failed. Check the address and network, then retry.",
+            ["Links.Status.Updated"] = "Subscription profile updated.",
+            ["Links.Status.UpdateFailed"] = "Could not update the profile. Check the subscription and try again.",
+            ["Links.Status.Saved"] = "Subscription changes saved.",
+            ["Links.Status.EditFailed"] = "Could not save the subscription. Refresh the page and try again.",
+            ["Links.Status.Deleted"] = "Subscription deleted.",
+            ["Links.Status.DeleteFailed"] = "Could not delete the subscription. Refresh the page and try again.",
             ["Common.NoMatchingOptions"] = "No matching options.",
             ["Master.Status.CurrentRuntime.Format"] = "Current state: {0}",
             ["Profiles.Column.Name"] = "Profile / source",

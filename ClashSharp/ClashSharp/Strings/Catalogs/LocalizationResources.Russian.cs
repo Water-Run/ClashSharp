@@ -10,6 +10,19 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Empty"] = "Подписок пока нет. Нажмите «Добавить», чтобы создать подписку.",
+            ["Links.Validation.Name"] = "Введите название подписки.",
+            ["Links.Validation.Uri"] = "Введите полный адрес подписки HTTP или HTTPS.",
+            ["Links.Validation.Interval"] = "Введите целое число часов от 1 до 8760.",
+            ["Links.Status.Added"] = "Подписка добавлена.",
+            ["Links.Status.AddFailed"] = "Не удалось добавить подписку. Проверьте данные и повторите попытку.",
+            ["Links.Status.CheckFailed"] = "Проверка не удалась. Проверьте адрес и сеть, затем повторите попытку.",
+            ["Links.Status.Updated"] = "Профиль подписки обновлён.",
+            ["Links.Status.UpdateFailed"] = "Не удалось обновить профиль. Проверьте подписку и повторите попытку.",
+            ["Links.Status.Saved"] = "Изменения подписки сохранены.",
+            ["Links.Status.EditFailed"] = "Не удалось сохранить подписку. Обновите страницу и повторите попытку.",
+            ["Links.Status.Deleted"] = "Подписка удалена.",
+            ["Links.Status.DeleteFailed"] = "Не удалось удалить подписку. Обновите страницу и повторите попытку.",
             ["Common.NoMatchingOptions"] = "Нет подходящих вариантов.",
             ["Master.Status.CurrentRuntime.Format"] = "Текущее состояние: {0}",
             ["Profiles.Column.Name"] = "Профиль / источник",

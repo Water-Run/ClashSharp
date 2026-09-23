@@ -21,7 +21,7 @@
             <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
 
-        <CommandBar Grid.Row="1" DefaultLabelPosition="Right" Background="Transparent">
+        <CommandBar x:Name="ProfileCommands" Grid.Row="1" DefaultLabelPosition="Right" Background="Transparent">
             <AppBarButton x:Name="ImportProfileButton" Label="{Binding ImportProfileText}" Click="ImportProfileButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE8E5;" />

@@ -10,6 +10,19 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Empty"] = "尚無訂閱。選擇「新增」建立訂閱。",
+            ["Links.Validation.Name"] = "請輸入訂閱名稱。",
+            ["Links.Validation.Uri"] = "請輸入完整的 HTTP 或 HTTPS 訂閱網址。",
+            ["Links.Validation.Interval"] = "請輸入 1 到 8760 之間的整數小時數。",
+            ["Links.Status.Added"] = "已新增訂閱。",
+            ["Links.Status.AddFailed"] = "無法新增訂閱，請檢查輸入後重試。",
+            ["Links.Status.CheckFailed"] = "訂閱檢查失敗，請檢查網址與網路後重試。",
+            ["Links.Status.Updated"] = "已更新訂閱設定檔。",
+            ["Links.Status.UpdateFailed"] = "無法更新設定檔，請檢查訂閱後重試。",
+            ["Links.Status.Saved"] = "已儲存訂閱變更。",
+            ["Links.Status.EditFailed"] = "無法儲存訂閱，請重新整理頁面後重試。",
+            ["Links.Status.Deleted"] = "已刪除訂閱。",
+            ["Links.Status.DeleteFailed"] = "無法刪除訂閱，請重新整理頁面後重試。",
             ["Common.NoMatchingOptions"] = "沒有符合的選項。",
             ["Master.Status.CurrentRuntime.Format"] = "目前執行：{0}",
             ["Profiles.Column.Name"] = "設定 / 來源",

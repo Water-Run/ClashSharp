@@ -10,6 +10,19 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Links.Empty"] = "Noch keine Abonnements. Wählen Sie Hinzufügen, um eines anzulegen.",
+            ["Links.Validation.Name"] = "Geben Sie einen Namen für das Abonnement ein.",
+            ["Links.Validation.Uri"] = "Geben Sie eine vollständige HTTP- oder HTTPS-Abonnementadresse ein.",
+            ["Links.Validation.Interval"] = "Geben Sie eine ganze Stundenzahl zwischen 1 und 8760 ein.",
+            ["Links.Status.Added"] = "Abonnement hinzugefügt.",
+            ["Links.Status.AddFailed"] = "Abonnement konnte nicht hinzugefügt werden. Prüfen Sie die Eingaben und versuchen Sie es erneut.",
+            ["Links.Status.CheckFailed"] = "Prüfung fehlgeschlagen. Prüfen Sie Adresse und Netzwerk und versuchen Sie es erneut.",
+            ["Links.Status.Updated"] = "Abonnementprofil aktualisiert.",
+            ["Links.Status.UpdateFailed"] = "Profil konnte nicht aktualisiert werden. Prüfen Sie das Abonnement und versuchen Sie es erneut.",
+            ["Links.Status.Saved"] = "Änderungen am Abonnement gespeichert.",
+            ["Links.Status.EditFailed"] = "Abonnement konnte nicht gespeichert werden. Laden Sie die Seite neu und versuchen Sie es erneut.",
+            ["Links.Status.Deleted"] = "Abonnement gelöscht.",
+            ["Links.Status.DeleteFailed"] = "Abonnement konnte nicht gelöscht werden. Laden Sie die Seite neu und versuchen Sie es erneut.",
             ["Common.NoMatchingOptions"] = "Keine passenden Optionen.",
             ["Master.Status.CurrentRuntime.Format"] = "Aktueller Status: {0}",
             ["Profiles.Column.Name"] = "Profil / Quelle",

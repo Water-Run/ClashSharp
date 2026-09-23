@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security;
 using System.Threading;
@@ -39,6 +40,8 @@ internal sealed class LinksViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="SelectedLink"/>.</summary>
     private ProfileSubscriptionLinkDisplay? _selectedLink;
+
+    private string _statusText = string.Empty;
 
     /// <summary>Initializes a links view model.</summary>
     /// <param name="getString">Localization resolver. Must not be null.</param>
@@ -105,12 +108,47 @@ internal sealed class LinksViewModel : ObservableObject
 
     public string DeleteLinkText => _getString("Command.Delete");
 
+    public string EmptyStateText => _getString("Links.Empty");
+
+    public bool HasNoLinks => SubscriptionLinks.Count == 0;
+
+    public bool HasStatusText => StatusText.Length > 0;
+
+    public string StatusText
+    {
+        get => _statusText;
+        private set
+        {
+            if (SetProperty(ref _statusText, value)) { OnPropertyChanged(nameof(HasStatusText)); }
+        }
+    }
+
+    /// <summary>Validates editor input without closing the dialog or contacting a subscription.</summary>
+    public static string? ValidateInput(string name, string uri, double updateIntervalHours)
+    {
+        if (string.IsNullOrWhiteSpace(name)) { return "Links.Validation.Name"; }
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out Uri? parsed)
+            || parsed.Scheme is not ("http" or "https") || string.IsNullOrWhiteSpace(parsed.Host))
+        {
+            return "Links.Validation.Uri";
+        }
+        if (!double.IsFinite(updateIntervalHours) || updateIntervalHours is < 1 or > 8760
+            || updateIntervalHours != Math.Truncate(updateIntervalHours))
+        {
+            return "Links.Validation.Interval";
+        }
+        return null;
+    }
+
     /// <summary>Gets subscription link rows.</summary>
     /// <value>Subscription link rows; never null.</value>
     public IReadOnlyList<ProfileSubscriptionLinkDisplay> SubscriptionLinks
     {
         get => _subscriptionLinks;
-        private set => SetProperty(ref _subscriptionLinks, value);
+        private set
+        {
+            if (SetProperty(ref _subscriptionLinks, value)) { OnPropertyChanged(nameof(HasNoLinks)); }
+        }
     }
 
     /// <summary>Gets or sets the selected subscription link.</summary>
@@ -120,8 +158,10 @@ internal sealed class LinksViewModel : ObservableObject
         get => _selectedLink;
         set
         {
-            if (SetProperty(ref _selectedLink, value))
+            if (!ReferenceEquals(_selectedLink, value))
             {
+                _selectedLink = value;
+                OnPropertyChanged(nameof(SelectedLink));
                 OnPropertyChanged(nameof(HasSelectedLink));
             }
         }
@@ -178,6 +218,8 @@ internal sealed class LinksViewModel : ObservableObject
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Links", $"Subscription link added: {link.Name}.", link.Uri);
             await LoadAsync(cancellationToken);
+            SelectedLink = SubscriptionLinks.FirstOrDefault(row => row.Model.Id == link.Id);
+            StatusText = _getString("Links.Status.Added");
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -190,6 +232,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Links", "Subscription link could not be added.", exception.Message);
+            StatusText = _getString("Links.Status.AddFailed");
         }
     }
 
@@ -214,6 +257,7 @@ internal sealed class LinksViewModel : ObservableObject
             string status = await _profiles.CheckSubscriptionLinkAsync(link, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Links", $"Subscription link check completed: {status}.", link.Name);
+            StatusText = _displayMapper.MapText(status);
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -227,6 +271,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Links", "Subscription link check failed.", exception.Message);
+            StatusText = _getString("Links.Status.CheckFailed");
         }
 
         await LoadAsync(cancellationToken);
@@ -253,6 +298,7 @@ internal sealed class LinksViewModel : ObservableObject
             ProfileImportResult result = await _profiles.ImportSubscriptionLinkAsync(link, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Links", $"Subscription profile imported: {result.ProfileName}.", result.ConfigPath);
+            StatusText = _getString("Links.Status.Updated");
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -266,6 +312,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Links", "Subscription profile import failed.", exception.Message);
+            StatusText = _getString("Links.Status.UpdateFailed");
         }
 
         await LoadAsync(cancellationToken);
@@ -284,7 +331,9 @@ internal sealed class LinksViewModel : ObservableObject
             {
                 _log.Append("Info", "Links", "Subscription link updated.", request.LinkId);
                 await LoadAsync(cancellationToken);
+                StatusText = _getString("Links.Status.Saved");
             }
+            else { StatusText = _getString("Links.Status.EditFailed"); }
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -297,6 +346,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Links", "Subscription link could not be edited.", exception.Message);
+            StatusText = _getString("Links.Status.EditFailed");
         }
     }
 
@@ -320,7 +370,9 @@ internal sealed class LinksViewModel : ObservableObject
                 SelectedLink = null;
                 _log.Append("Info", "Links", "Subscription link deleted.", selectedLink.Model.Id);
                 await LoadAsync(cancellationToken);
+                StatusText = _getString("Links.Status.Deleted");
             }
+            else { StatusText = _getString("Links.Status.DeleteFailed"); }
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -333,6 +385,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Links", "Subscription link could not be deleted.", exception.Message);
+            StatusText = _getString("Links.Status.DeleteFailed");
         }
     }
 
