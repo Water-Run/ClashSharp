@@ -123,7 +123,7 @@
 
                     <components:MasterModeButton
                         x:Name="DisabledModeButton"
-                        IsEnabled="{Binding IsModeSelectionEnabled}"
+                        IsBusy="{Binding IsApplyingMode}"
                         Grid.ColumnSpan="2"
                         Title="{Binding DisabledModeTitleText}"
                         Description="{Binding DisabledModeDescriptionText}"
@@ -133,7 +133,7 @@
 
                     <components:MasterModeButton
                         x:Name="StandbyModeButton"
-                        IsEnabled="{Binding IsModeSelectionEnabled}"
+                        IsBusy="{Binding IsApplyingMode}"
                         Grid.Row="1"
                         Grid.ColumnSpan="2"
                         Title="{Binding StandbyModeTitleText}"
@@ -144,7 +144,7 @@
 
                     <components:MasterModeButton
                         x:Name="RuleTakeoverModeButton"
-                        IsEnabled="{Binding IsModeSelectionEnabled}"
+                        IsBusy="{Binding IsApplyingMode}"
                         Grid.Row="2"
                         Grid.ColumnSpan="2"
                         Title="{Binding RuleTakeoverModeTitleText}"
@@ -155,7 +155,7 @@
 
                     <components:MasterModeButton
                         x:Name="FullTakeoverModeButton"
-                        IsEnabled="{Binding IsModeSelectionEnabled}"
+                        IsBusy="{Binding IsApplyingMode}"
                         Grid.Row="3"
                         Grid.ColumnSpan="2"
                         Title="{Binding FullTakeoverModeTitleText}"

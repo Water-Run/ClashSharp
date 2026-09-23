@@ -42,6 +42,13 @@ public sealed partial class MasterModeButton : UserControl
         typeof(MasterModeButton),
         new PropertyMetadata(null));
 
+    /// <summary>Identifies the <see cref="IsBusy"/> dependency property.</summary>
+    public static readonly DependencyProperty IsBusyProperty = DependencyProperty.Register(
+        nameof(IsBusy),
+        typeof(bool),
+        typeof(MasterModeButton),
+        new PropertyMetadata(false));
+
     /// <summary>Initializes a mode button and its selection visual states.</summary>
     public MasterModeButton()
     {
@@ -82,6 +89,23 @@ public sealed partial class MasterModeButton : UserControl
     {
         get => (ICommand?)GetValue(CommandProperty);
         set => SetValue(CommandProperty, value);
+    }
+
+    /// <summary>Gets or sets whether a mode transition prevents another selection.</summary>
+    public bool IsBusy
+    {
+        get => (bool)GetValue(IsBusyProperty);
+        set => SetValue(IsBusyProperty, value);
+    }
+
+    private void ModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Keep the button focusable while its command runs. Disabling it moves
+        // keyboard focus into the tile editor and makes a repeated Enter open it.
+        if (!IsBusy && Command is ICommand command && command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
     }
 
     private static void OnIsCheckedChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
