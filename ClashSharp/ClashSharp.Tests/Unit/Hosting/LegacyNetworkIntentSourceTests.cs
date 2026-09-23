@@ -4,27 +4,24 @@ using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
 using LegacyNetworkIntentSource =
     ClashSharpUi::ClashSharp.Hosting.Compatibility.LegacyNetworkIntentSource;
-using LegacyNetworkShutdownPolicy =
-    ClashSharpUi::ClashSharp.Hosting.Compatibility.LegacyNetworkShutdownPolicy;
 
 namespace ClashSharp.Tests.Unit.Hosting;
 
-/// <summary>Verifies launch-specific policies cannot undo startup fallback cleanup.</summary>
+/// <summary>Verifies normal exit honors the configured network policy.</summary>
 public sealed class LegacyNetworkIntentSourceTests
 {
     [Fact]
-    public void CreateShutdownIntent_StartupRestoreFallbackForcesDisabledFinalState()
+    public void CreateShutdownIntent_RestoreOnExitDisablesTakeover()
     {
         NetworkIntent intent = LegacyNetworkIntentSource.CreateShutdownIntent(
             ClashSharpMode.RuleTakeover,
-            restoreProxyOnExit: false,
+            restoreProxyOnExit: true,
             transparentProxyEnabled: true,
-            mixedPort: 7890,
-            LegacyNetworkShutdownPolicy.StartupRestoreFallback);
+            mixedPort: 7890);
 
         Assert.Equal(NetworkIntentKind.Shutdown, intent.Kind);
         Assert.Equal(ClashSharpMode.Disabled, intent.Mode);
-        Assert.False(intent.TransparentProxyEnabled);
+        Assert.True(intent.TransparentProxyEnabled);
         Assert.Equal(7890, intent.MixedPort);
     }
 
@@ -35,8 +32,7 @@ public sealed class LegacyNetworkIntentSourceTests
             ClashSharpMode.FullTakeover,
             restoreProxyOnExit: false,
             transparentProxyEnabled: true,
-            mixedPort: 7890,
-            LegacyNetworkShutdownPolicy.Configured);
+            mixedPort: 7890);
 
         Assert.Equal(NetworkIntentKind.Shutdown, intent.Kind);
         Assert.Equal(ClashSharpMode.FullTakeover, intent.Mode);

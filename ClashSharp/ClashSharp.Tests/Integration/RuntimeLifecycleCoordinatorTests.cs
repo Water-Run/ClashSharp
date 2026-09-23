@@ -9,6 +9,83 @@ namespace ClashSharp.Tests.Integration;
 public sealed class RuntimeLifecycleCoordinatorTests
 {
     [Fact]
+    public async Task ShutdownAsync_PreserveCurrentState_DrainsAndStopsWithoutReadingExitIntent()
+    {
+        List<string> trace = [];
+        MutationAdmissionBarrier barrier = new();
+        MutationAdmissionLease inFlight = await barrier.AcquireOrdinaryAsync(CancellationToken.None);
+        FakeNetworkShutdown network = new(trace);
+        RuntimeLifecycleCoordinator coordinator = new(
+            barrier,
+            network,
+            () => throw new InvalidOperationException("Recovery helpers must not read normal exit settings."),
+            [new FakeParticipant("first", trace, true), new FakeParticipant("second", trace, false)],
+            networkPolicy: RuntimeShutdownNetworkPolicy.PreserveCurrentState);
+
+        Task<RuntimeShutdownResult> shutdown = coordinator.ShutdownAsync(CancellationToken.None);
+        await WaitUntilAsync(() => barrier.State == MutationAdmissionState.Closing);
+        Assert.Empty(trace);
+        Assert.False(shutdown.IsCompleted);
+        await inFlight.DisposeAsync();
+        RuntimeShutdownResult result = await shutdown;
+
+        Assert.Equal(RuntimeShutdownOutcome.PreparedForHostDisposal, result.Outcome);
+        Assert.Null(result.ErrorCode);
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+        Assert.Equal(0, network.CallCount);
+        Assert.Equal(["first.quiesce", "second.quiesce", "second.stop", "first.stop"], trace);
+        Assert.Same(result, await coordinator.ShutdownAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ShutdownAsync_PreserveCurrentState_QuiescenceFailureRestoresAdmission()
+    {
+        List<string> trace = [];
+        MutationAdmissionBarrier barrier = new();
+        FakeNetworkShutdown network = new(trace);
+        RuntimeLifecycleCoordinator coordinator = new(
+            barrier,
+            network,
+            () => throw new InvalidOperationException("No exit intent is allowed."),
+            [new FakeParticipant("first", trace, true),
+             new FakeParticipant("blocked", trace, true) { BlockQuiescenceUntilCancellation = true }],
+            TimeSpan.FromMilliseconds(50),
+            RuntimeShutdownNetworkPolicy.PreserveCurrentState);
+
+        RuntimeShutdownResult result = await coordinator.ShutdownAsync(CancellationToken.None);
+
+        Assert.Equal(RuntimeShutdownOutcome.Aborted, result.Outcome);
+        Assert.Equal("quiescence-timeout", result.ErrorCode);
+        Assert.Equal(MutationAdmissionState.Open, barrier.State);
+        Assert.Equal(0, network.CallCount);
+        Assert.Equal(["first.quiesce", "blocked.quiesce", "first.resume"], trace);
+    }
+
+    [Fact]
+    public async Task ShutdownAsync_PreserveCurrentState_StopFailureIsReportedAfterCommit()
+    {
+        List<string> trace = [];
+        MutationAdmissionBarrier barrier = new();
+        FakeNetworkShutdown network = new(trace);
+        RuntimeLifecycleCoordinator coordinator = new(
+            barrier,
+            network,
+            () => throw new InvalidOperationException("No exit intent is allowed."),
+            [new FakeParticipant("first", trace, true),
+             new FakeParticipant("failed", trace, true) { StopException = new InvalidOperationException("stop failed") }],
+            networkPolicy: RuntimeShutdownNetworkPolicy.PreserveCurrentState);
+
+        RuntimeShutdownResult result = await coordinator.ShutdownAsync(CancellationToken.None);
+
+        Assert.Equal(RuntimeShutdownOutcome.PreparedForHostDisposal, result.Outcome);
+        Assert.Equal("runtime-stop-degraded", result.ErrorCode);
+        Assert.Equal(["failed"], result.DegradedParticipants);
+        Assert.Equal(MutationAdmissionState.ClosedForShutdown, barrier.State);
+        Assert.Equal(0, network.CallCount);
+        Assert.Equal(["first.quiesce", "failed.quiesce", "failed.stop", "first.stop"], trace);
+    }
+
+    [Fact]
     public async Task ShutdownAsync_OpenAdmission_QuiescesMutatesAndStopsInOrder()
     {
         List<string> trace = [];
@@ -449,6 +526,8 @@ public sealed class RuntimeLifecycleCoordinatorTests
 
         public Exception? QuiesceException { get; init; }
 
+        public Exception? StopException { get; init; }
+
         public Task StartAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -483,7 +562,7 @@ public sealed class RuntimeLifecycleCoordinatorTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             trace.Add($"{name}.stop");
-            return Task.CompletedTask;
+            return StopException is null ? Task.CompletedTask : Task.FromException(StopException);
         }
     }
 

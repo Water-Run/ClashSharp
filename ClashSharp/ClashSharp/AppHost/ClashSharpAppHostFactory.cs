@@ -253,14 +253,14 @@ internal static class ClashSharpAppHostFactory
             {
                 LegacyNetworkIntentSource intents =
                     provider.GetRequiredService<LegacyNetworkIntentSource>();
-                Func<NetworkIntent> shutdownIntentFactory = isStartupRestoreFallback
-                    ? intents.CreateStartupRestoreFallbackShutdown
-                    : intents.CreateShutdown;
                 return new RuntimeLifecycleCoordinator(
                     provider.GetRequiredService<MutationAdmissionBarrier>(),
                     provider.GetRequiredService<IRuntimeShutdownNetworkCoordinator>(),
-                    shutdownIntentFactory,
-                    provider.GetServices<IRuntimeParticipant>());
+                    intents.CreateShutdown,
+                    provider.GetServices<IRuntimeParticipant>(),
+                    networkPolicy: isStartupRestoreFallback
+                        ? RuntimeShutdownNetworkPolicy.PreserveCurrentState
+                        : RuntimeShutdownNetworkPolicy.ApplyConfiguredIntent);
             });
             services.AddSingleton<IApplicationShutdownCoordinator>(provider =>
                 provider.GetRequiredService<RuntimeLifecycleCoordinator>());

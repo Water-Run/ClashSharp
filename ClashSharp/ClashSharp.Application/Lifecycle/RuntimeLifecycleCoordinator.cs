@@ -6,6 +6,16 @@ using ClashSharp.ApplicationModel.Network;
 
 namespace ClashSharp.ApplicationModel.Lifecycle;
 
+/// <summary>Chooses whether host shutdown should change the observed network state.</summary>
+public enum RuntimeShutdownNetworkPolicy
+{
+    /// <summary>Apply the normal application's configured exit behavior.</summary>
+    ApplyConfiguredIntent,
+
+    /// <summary>A recovery-only host has already completed its work and must not apply a normal exit transition.</summary>
+    PreserveCurrentState,
+}
+
 /// <summary>Classifies whether the host may be disposed after a shutdown attempt.</summary>
 public enum RuntimeShutdownOutcome
 {
@@ -64,6 +74,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
     private readonly Func<NetworkIntent> _shutdownIntentFactory;
     private readonly IReadOnlyList<IRuntimeParticipant> _participants;
     private readonly TimeSpan _quiescenceTimeout;
+    private readonly RuntimeShutdownNetworkPolicy _networkPolicy;
     private Task<RuntimeShutdownResult>? _shutdownTask;
     private long _shutdownAttemptVersion;
 
@@ -73,11 +84,18 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         IRuntimeShutdownNetworkCoordinator network,
         Func<NetworkIntent> shutdownIntentFactory,
         IEnumerable<IRuntimeParticipant> participants,
-        TimeSpan? quiescenceTimeout = null)
+        TimeSpan? quiescenceTimeout = null,
+        RuntimeShutdownNetworkPolicy networkPolicy = RuntimeShutdownNetworkPolicy.ApplyConfiguredIntent)
     {
         _admissionBarrier = admissionBarrier ?? throw new ArgumentNullException(nameof(admissionBarrier));
         _network = network ?? throw new ArgumentNullException(nameof(network));
         _shutdownIntentFactory = shutdownIntentFactory ?? throw new ArgumentNullException(nameof(shutdownIntentFactory));
+        if (!Enum.IsDefined(networkPolicy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(networkPolicy));
+        }
+
+        _networkPolicy = networkPolicy;
         ArgumentNullException.ThrowIfNull(participants);
         _participants = participants.ToArray();
         if (_participants.Any(static participant => participant is null))
@@ -260,6 +278,16 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                 return await RestoreAfterAbortAsync(session, quiescenceError).ConfigureAwait(false);
             }
 
+            if (_networkPolicy == RuntimeShutdownNetworkPolicy.PreserveCurrentState)
+            {
+                if (callerToken.IsCancellationRequested)
+                {
+                    return await RestoreAfterAbortAsync(session, "shutdown-cancelled").ConfigureAwait(false);
+                }
+
+                return await CommitShutdownAndStopAsync(admissionLease, true, null).ConfigureAwait(false);
+            }
+
             MutationResult<NetworkTransitionResult> networkResult;
             try
             {
@@ -292,16 +320,26 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                     networkResult.ErrorCode ?? "shutdown-network-failed").ConfigureAwait(false);
             }
 
-            admissionLease.CommitShutdown();
-            IReadOnlyList<string> stopFailures = await StopWithRecoveryDeadlineAsync().ConfigureAwait(false);
-            bool cleanCommit = networkResult.Outcome == MutationOutcome.Succeeded && stopFailures.Count == 0;
-            return cleanCommit
-                ? CreateResult(RuntimeShutdownOutcome.PreparedForHostDisposal, null)
-                : CreateResult(
-                    RuntimeShutdownOutcome.PreparedForHostDisposal,
-                    networkResult.ErrorCode ?? "runtime-stop-degraded",
-                    stopFailures);
+            return await CommitShutdownAndStopAsync(
+                admissionLease,
+                networkResult.Outcome == MutationOutcome.Succeeded,
+                networkResult.ErrorCode).ConfigureAwait(false);
         }
+    }
+
+    private async Task<RuntimeShutdownResult> CommitShutdownAndStopAsync(
+        MutationAdmissionLease admissionLease,
+        bool cleanNetworkCommit,
+        string? errorCode)
+    {
+        admissionLease.CommitShutdown();
+        IReadOnlyList<string> stopFailures = await StopWithRecoveryDeadlineAsync().ConfigureAwait(false);
+        return cleanNetworkCommit && stopFailures.Count == 0
+            ? CreateResult(RuntimeShutdownOutcome.PreparedForHostDisposal, null)
+            : CreateResult(
+                RuntimeShutdownOutcome.PreparedForHostDisposal,
+                errorCode ?? "runtime-stop-degraded",
+                stopFailures);
     }
 
     private async Task<RuntimeShutdownResult> ShutdownRecoveryStateAsync(CancellationToken cancellationToken)

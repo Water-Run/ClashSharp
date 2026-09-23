@@ -1279,7 +1279,7 @@ public sealed class AppResourcePackagingTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>Guards the restore helper's forced-disabled final network shutdown policy.</summary>
+    /// <summary>Guards the restore helper's preservation of the completed recovery result.</summary>
     [Fact]
     public void StartupRestoreFallback_UsesDedicatedFinalShutdownPolicy()
     {
@@ -1292,7 +1292,7 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("ClashSharpAppHostFactory.Build(launchRequest", app, StringComparison.Ordinal);
         Assert.Contains("StartupRestoreFallbackService.HelperArgument", hostFactory, StringComparison.Ordinal);
-        Assert.Contains("CreateStartupRestoreFallbackShutdown", hostFactory, StringComparison.Ordinal);
+        Assert.Contains("RuntimeShutdownNetworkPolicy.PreserveCurrentState", hostFactory, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies startup launch synchronization composes Windows startup task and logging through injected boundaries.</summary>
