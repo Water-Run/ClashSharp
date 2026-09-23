@@ -7,6 +7,38 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Tests startup conflict detection and repair routing.</summary>
 public sealed class StartupConflictDetectionServiceTests
 {
+    [Fact]
+    public async Task PortRecheck_AfterExternalOwnerReleasesPort_ReportsFreshStateWithoutTerminatingProcesses()
+    {
+        FakeStartupConflictEnvironment environment = new() { IsPortInUse = true };
+        StartupConflictDetectionService service = new(environment);
+        StartupConflictIssue issue = Assert.Single(service.CheckConflicts(10000));
+
+        StartupConflictRepairResult occupied = await issue.RepairAsync(CancellationToken.None);
+        Assert.False(occupied.Succeeded);
+        Assert.Equal("StartupConflict.Port.RepairFailed", occupied.Message);
+
+        environment.IsPortInUse = false;
+        StartupConflictRepairResult available = await issue.RepairAsync(CancellationToken.None);
+        Assert.True(available.Succeeded);
+        Assert.Equal("StartupConflict.Port.Available", available.Message);
+        Assert.Equal(3, environment.PortProbeCount);
+        Assert.Empty(environment.TerminatedProcessIds);
+        Assert.False(environment.ProxyDisabled);
+    }
+
+    [Fact]
+    public async Task PortRecheck_PreCanceled_DoesNotProbeAgain()
+    {
+        FakeStartupConflictEnvironment environment = new() { IsPortInUse = true };
+        StartupConflictIssue issue = Assert.Single(new StartupConflictDetectionService(environment).CheckConflicts(10000));
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => issue.RepairAsync(cancellation.Token));
+        Assert.Equal(1, environment.PortProbeCount);
+    }
+
     /// <summary>Verifies startup checks report external cores, occupied ports, and wrong manual proxy ports.</summary>
     [Fact]
     public void CheckConflicts_ReportsEveryDetectedProblem()
@@ -336,7 +368,9 @@ public sealed class StartupConflictDetectionServiceTests
 
         public IReadOnlyList<string> TunInterfaces { get; init; } = [];
 
-        public bool IsPortInUse { get; init; }
+        public bool IsPortInUse { get; set; }
+
+        public int PortProbeCount { get; private set; }
 
         public WindowsProxyState ProxyState { get; init; } = new(false, string.Empty);
 
@@ -361,6 +395,7 @@ public sealed class StartupConflictDetectionServiceTests
 
         public bool IsTcpPortInUse(int port)
         {
+            PortProbeCount++;
             return IsPortInUse;
         }
 

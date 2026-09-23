@@ -837,9 +837,10 @@ internal static partial class LocalizationResources
 
             ["StartupConflict.Port.Description"] = "Local port {0} is already occupied.",
 
-            ["StartupConflict.Port.Repair"] = "Check status",
+            ["StartupConflict.Port.Repair"] = "Check again",
 
-            ["StartupConflict.Port.RepairFailed"] = "Cannot safely release a port occupied by an unknown process.",
+            ["StartupConflict.Port.RepairFailed"] = "The port is still in use. Close the application using it or change the proxy port, then check again.",
+            ["StartupConflict.Port.Available"] = "The port is now available.",
 
             ["StartupConflict.Proxy.Title"] = "Windows manual proxy is enabled",
 

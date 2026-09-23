@@ -837,9 +837,10 @@ internal static partial class LocalizationResources
 
             ["StartupConflict.Port.Description"] = "Lokaler Port {0} ist bereits belegt.",
 
-            ["StartupConflict.Port.Repair"] = "Status anzeigen",
+            ["StartupConflict.Port.Repair"] = "Erneut prüfen",
 
-            ["StartupConflict.Port.RepairFailed"] = "Der von einem unbekannten Prozess belegte Port konnte nicht sicher freigegeben werden.",
+            ["StartupConflict.Port.RepairFailed"] = "Der Port ist weiterhin belegt. Schließen Sie die Anwendung, die ihn verwendet, oder ändern Sie den Proxy-Port und prüfen Sie erneut.",
+            ["StartupConflict.Port.Available"] = "Der Port ist jetzt verfügbar.",
 
             ["StartupConflict.Proxy.Title"] = "Manueller Windows-Proxy ist aktiviert",
 

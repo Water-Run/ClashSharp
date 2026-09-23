@@ -837,9 +837,10 @@ internal static partial class LocalizationResources
 
             ["StartupConflict.Port.Description"] = "Локальный порт {0} уже занят.",
 
-            ["StartupConflict.Port.Repair"] = "Показать состояние",
+            ["StartupConflict.Port.Repair"] = "Проверить снова",
 
-            ["StartupConflict.Port.RepairFailed"] = "Не удалось безопасно освободить порт, занятый неизвестным процессом.",
+            ["StartupConflict.Port.RepairFailed"] = "Порт всё ещё занят. Закройте использующее его приложение или измените порт прокси, затем повторите проверку.",
+            ["StartupConflict.Port.Available"] = "Порт теперь доступен.",
 
             ["StartupConflict.Proxy.Title"] = "Ручной прокси Windows включен",
 

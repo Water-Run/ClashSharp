@@ -837,9 +837,10 @@ internal static partial class LocalizationResources
 
             ["StartupConflict.Port.Description"] = "本機連接埠 {0} 已被占用。",
 
-            ["StartupConflict.Port.Repair"] = "顯示狀態",
+            ["StartupConflict.Port.Repair"] = "重新檢查",
 
-            ["StartupConflict.Port.RepairFailed"] = "無法安全釋放未知程序占用的連接埠。",
+            ["StartupConflict.Port.RepairFailed"] = "連接埠仍被占用。請關閉占用程式或變更代理連接埠，然後重新檢查。",
+            ["StartupConflict.Port.Available"] = "連接埠現已可用。",
 
             ["StartupConflict.Proxy.Title"] = "Windows 手動代理已啟用",
 

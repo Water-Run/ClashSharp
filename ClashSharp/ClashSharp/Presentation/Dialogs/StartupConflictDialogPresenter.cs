@@ -197,22 +197,29 @@ internal static class StartupConflictDialogPresenter
             VerticalAlignment = VerticalAlignment.Center,
         };
         actionPanel.Children.Add(repairButton);
+        bool repairRunning = false;
+        bool repairSucceeded = false;
         repairButton.Click += async (_, _) =>
         {
+            if (repairRunning || repairSucceeded)
+            {
+                return;
+            }
+
+            repairRunning = true;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                repairButton.IsEnabled = false;
                 progressRing.Visibility = Visibility.Visible;
                 progressRing.IsActive = true;
                 statusText.Text = getString("StartupConflict.Status.Fixing");
 
                 StartupConflictRepairResult result = await issue.RepairAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                statusText.Text = result.Succeeded
-                    ? getString("StartupConflict.Status.Succeeded")
-                    : getString("StartupConflict.Status.Failed");
-                ToolTipService.SetToolTip(statusText, result.Message);
+                repairSucceeded = result.Succeeded;
+                statusText.Text = string.IsNullOrWhiteSpace(result.Message)
+                    ? getString(result.Succeeded ? "StartupConflict.Status.Succeeded" : "StartupConflict.Status.Failed")
+                    : result.Message;
             }
             catch (OperationCanceledException exception) when (
                 ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
@@ -232,10 +239,12 @@ internal static class StartupConflictDialogPresenter
             }
             finally
             {
+                repairRunning = false;
                 if (!cancellationToken.IsCancellationRequested)
                 {
                     progressRing.IsActive = false;
                     progressRing.Visibility = Visibility.Collapsed;
+                    repairButton.IsEnabled = !repairSucceeded;
                 }
             }
         };

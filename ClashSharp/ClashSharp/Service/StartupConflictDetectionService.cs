@@ -102,13 +102,7 @@ internal sealed class StartupConflictDetectionService
                 _getString("StartupConflict.Port.Title"),
                 string.Format(CultureInfo.CurrentCulture, _getString("StartupConflict.Port.Description"), mixedPort),
                 _getString("StartupConflict.Port.Repair"),
-                token =>
-                {
-                    token.ThrowIfCancellationRequested();
-                    return Task.FromResult(new StartupConflictRepairResult(
-                        false,
-                        _getString("StartupConflict.Port.RepairFailed")));
-                })
+                token => RecheckPortAsync(mixedPort, token))
             {
                 DiagnosticCode = RuntimeFailureDiagnostics.MixedPortOccupied,
             });
@@ -131,6 +125,17 @@ internal sealed class StartupConflictDetectionService
         }
 
         return issues;
+    }
+
+    private async Task<StartupConflictRepairResult> RecheckPortAsync(int port, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        bool occupied = await Task.Run(() => _environment.IsTcpPortInUse(port), cancellationToken)
+            .WaitAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new StartupConflictRepairResult(
+            !occupied,
+            _getString(occupied ? "StartupConflict.Port.RepairFailed" : "StartupConflict.Port.Available"));
     }
 
     /// <summary>Runs host process, socket, and registry probes away from the UI startup context.</summary>
