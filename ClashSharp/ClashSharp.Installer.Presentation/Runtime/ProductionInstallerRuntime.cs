@@ -85,7 +85,9 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return _backend.ExecuteAsync(operation, progress, cancellationToken);
+        // Platform inspection and lock acquisition can block before the first asynchronous await.
+        // Keep the caller's dispatcher available for progress, cancellation, and window messages.
+        return Task.Run(() => _backend.ExecuteAsync(operation, progress, cancellationToken), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -105,7 +107,7 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         {
             throw new InstallerProtocolException("installer.retired_uninstall.unavailable");
         }
-        return retired.UninstallRetiredAccountAsync(progress, cancellationToken);
+        return Task.Run(() => retired.UninstallRetiredAccountAsync(progress, cancellationToken), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -121,11 +123,11 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         {
             throw new InstallerProtocolException("installer.owner_transfer.unavailable");
         }
-        return transfer.TransferAndExecuteAsync((offer, token) =>
+        return Task.Run(() => transfer.TransferAndExecuteAsync((offer, token) =>
         {
             offer.Validate();
             return confirm(new(offer.IsRecovery), token);
-        }, progress, cancellationToken);
+        }, progress, cancellationToken), cancellationToken);
     }
 
     /// <summary>Stops future calls and releases the trusted backend composition.</summary>

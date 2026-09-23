@@ -160,6 +160,57 @@ public sealed class ProductionInstallerRuntimeTests
             invalid.DiagnosticCode);
     }
 
+    [Theory]
+    [InlineData(InstallerOperation.Install)]
+    [InlineData(InstallerOperation.Repair)]
+    [InlineData(InstallerOperation.Uninstall)]
+    public async Task SynchronousPlatformWorkDoesNotBlockCallerAndStillObservesCancellation(InstallerOperation operation)
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var cancellation = new CancellationTokenSource();
+        var returned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backend = new RecordingBackend(Inspection(true, null, false))
+        {
+            BeforeExecute = token =>
+            {
+                Assert.Null(SynchronizationContext.Current);
+                entered.Set();
+                Assert.True(release.Wait(TimeSpan.FromSeconds(10), CancellationToken.None));
+                token.ThrowIfCancellationRequested();
+            },
+        };
+        using var runtime = new ProductionInstallerRuntime(backend);
+        Task operationTask = Task.Factory.StartNew(async () =>
+        {
+            SynchronizationContext.SetSynchronizationContext(new SynchronizationContext());
+            try
+            {
+                Task<InstallerExecutionResult> pending = runtime.ExecuteAsync(
+                    operation, new Progress<InstallerProgress>(), cancellation.Token);
+                returned.SetResult();
+                await pending.ConfigureAwait(false);
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(null);
+            }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
+        try
+        {
+            await returned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            Assert.False(operationTask.IsCompleted);
+            cancellation.Cancel();
+        }
+        finally
+        {
+            release.Set();
+        }
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operationTask);
+        Assert.Empty(backend.Operations);
+    }
+
     [Fact]
     public async Task CancellationAndDisposeStopBeforeBackendWork()
     {
@@ -227,6 +278,8 @@ public sealed class ProductionInstallerRuntimeTests
 
         internal int DisposeCount { get; private set; }
 
+        internal Action<CancellationToken>? BeforeExecute { get; init; }
+
         public Task<InstallerRuntimeInspection> InspectAsync(
             CancellationToken cancellationToken)
         {
@@ -241,6 +294,7 @@ public sealed class ProductionInstallerRuntimeTests
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            BeforeExecute?.Invoke(cancellationToken);
             Operations.Add(operation);
             Progress = progress;
             return Task.FromResult(ExecuteResult);
