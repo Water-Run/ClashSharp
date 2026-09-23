@@ -9,6 +9,12 @@ namespace ClashSharp.ViewModel;
 internal sealed class TriggerTaskItemViewModel : ObservableObject
 {
     private readonly Func<string, string> _getString;
+    private bool _canMoveUp;
+    private bool _canMoveDown;
+
+    public bool CanMoveUp { get => _canMoveUp; internal set => SetProperty(ref _canMoveUp, value); }
+
+    public bool CanMoveDown { get => _canMoveDown; internal set => SetProperty(ref _canMoveDown, value); }
 
     public TriggerTaskItemViewModel(
         TriggerTaskDefinition definition,

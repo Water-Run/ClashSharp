@@ -185,17 +185,27 @@ public sealed class TriggerEditorViewModelTests
     {
         TriggerEditorViewModel editor = NewEditor();
         TriggerConditionEditorViewModel first = editor.Conditions[0];
+        Assert.False(first.CanMoveUp);
+        Assert.False(first.CanMoveDown);
         TriggerConditionEditorViewModel traffic = editor.AddCondition(TriggerConditionTemplate.RollingTraffic);
         TriggerConditionEditorViewModel time = editor.AddCondition(TriggerConditionTemplate.SystemTime);
         time.TargetTimeText = "23:15";
         Assert.True(editor.MoveCondition(time, -1));
         Assert.True(editor.RemoveCondition(first));
+        Assert.False(time.CanMoveUp);
+        Assert.True(time.CanMoveDown);
+        Assert.True(traffic.CanMoveUp);
+        Assert.False(traffic.CanMoveDown);
 
         editor.Actions.Clear();
         TriggerActionEditorViewModel close = editor.AddAction(TriggerActionKind.CloseConnections);
         TriggerActionEditorViewModel notification = editor.AddAction(TriggerActionKind.SendNotification);
         notification.NotificationMessage = "finished";
         Assert.True(editor.MoveAction(notification, -1));
+        Assert.False(notification.CanMoveUp);
+        Assert.True(notification.CanMoveDown);
+        Assert.True(close.CanMoveUp);
+        Assert.False(close.CanMoveDown);
 
         Assert.True(editor.TryBuildDefinition(out TriggerTaskDefinition? definition));
         Assert.Equal([time.Id, traffic.Id], definition!.Conditions.Select(static condition => condition.Id));
@@ -406,6 +416,10 @@ public sealed class TriggerEditorViewModelTests
         notification.NotificationMessage = "before exit";
 
         Assert.Equal([notification, exit], editor.Actions);
+        Assert.False(notification.CanMoveUp);
+        Assert.False(notification.CanMoveDown);
+        Assert.False(exit.CanMoveUp);
+        Assert.False(exit.CanMoveDown);
         Assert.False(editor.MoveAction(exit, -1));
         Assert.Equal("trigger.action.exit.must_be_final", editor.ErrorCode);
         Assert.True(editor.TryBuildDefinition(out TriggerTaskDefinition? definition));
@@ -449,9 +463,15 @@ public sealed class TriggerEditorViewModelTests
         Assert.True(await list.MoveTaskAsync("beta", -1, CancellationToken.None));
         Assert.Same(beta, list.TriggerTasks[0]);
         Assert.Same(alpha, list.TriggerTasks[1]);
+        Assert.False(beta.CanMoveUp);
+        Assert.True(beta.CanMoveDown);
+        Assert.True(alpha.CanMoveUp);
+        Assert.False(alpha.CanMoveDown);
         Assert.Equal(System.Collections.Specialized.NotifyCollectionChangedAction.Move, Assert.Single(changes));
         Assert.True(await list.DeleteTaskAsync("beta", CancellationToken.None));
         Assert.Same(alpha, Assert.Single(list.TriggerTasks));
+        Assert.False(alpha.CanMoveUp);
+        Assert.False(alpha.CanMoveDown);
         Assert.DoesNotContain(System.Collections.Specialized.NotifyCollectionChangedAction.Reset, changes);
     }
 

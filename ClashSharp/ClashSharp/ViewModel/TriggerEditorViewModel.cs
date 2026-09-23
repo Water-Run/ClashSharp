@@ -89,6 +89,28 @@ internal sealed class TriggerEditorViewModel : ObservableObject
         ProxyModeOptions = CreateProxyModeOptions();
         SelectedCondition = Conditions.FirstOrDefault();
         SelectedAction = Actions.FirstOrDefault();
+        Conditions.CollectionChanged += (_, _) => RefreshMoveAvailability();
+        Actions.CollectionChanged += (_, _) => RefreshMoveAvailability();
+        RefreshMoveAvailability();
+    }
+
+    private void RefreshMoveAvailability()
+    {
+        for (int index = 0; index < Conditions.Count; index++)
+        {
+            Conditions[index].CanMoveUp = index > 0;
+            Conditions[index].CanMoveDown = index < Conditions.Count - 1;
+        }
+
+        for (int index = 0; index < Actions.Count; index++)
+        {
+            TriggerActionEditorViewModel action = Actions[index];
+            bool isMovable = action.Kind != TriggerActionKind.ExitApplication;
+            action.CanMoveUp = isMovable && index > 0
+                && Actions[index - 1].Kind != TriggerActionKind.ExitApplication;
+            action.CanMoveDown = isMovable && index < Actions.Count - 1
+                && Actions[index + 1].Kind != TriggerActionKind.ExitApplication;
+        }
     }
 
     public string Id { get; }

@@ -16,6 +16,12 @@ internal sealed class TriggerConditionEditorViewModel : ObservableObject
     private string _runtimeSecondsText;
     private string _targetTimeText;
     private string? _errorCode;
+    private bool _canMoveUp;
+    private bool _canMoveDown;
+
+    public bool CanMoveUp { get => _canMoveUp; internal set => SetProperty(ref _canMoveUp, value); }
+
+    public bool CanMoveDown { get => _canMoveDown; internal set => SetProperty(ref _canMoveDown, value); }
 
     /// <summary>Initializes a draft that preserves every typed parameter from an existing condition.</summary>
     public TriggerConditionEditorViewModel(

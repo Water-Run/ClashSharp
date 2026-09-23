@@ -122,8 +122,8 @@
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
                                         <Button Tag="{Binding}" Click="EditTriggerButton_Click" AutomationProperties.Name="{Binding EditText}" ToolTipService.ToolTip="{Binding EditText}"><FontIcon Glyph="&#xE70F;" FontSize="14" /></Button>
-                                        <Button Tag="{Binding Id}" Click="MoveTriggerUpButton_Click" AutomationProperties.Name="{Binding MoveUpText}" ToolTipService.ToolTip="{Binding MoveUpText}"><FontIcon Glyph="&#xE70E;" FontSize="14" /></Button>
-                                        <Button Tag="{Binding Id}" Click="MoveTriggerDownButton_Click" AutomationProperties.Name="{Binding MoveDownText}" ToolTipService.ToolTip="{Binding MoveDownText}"><FontIcon Glyph="&#xE70D;" FontSize="14" /></Button>
+                                        <Button Tag="{Binding Id}" Click="MoveTriggerUpButton_Click" IsEnabled="{Binding CanMoveUp}" AutomationProperties.Name="{Binding MoveUpText}" ToolTipService.ToolTip="{Binding MoveUpText}"><FontIcon Glyph="&#xE70E;" FontSize="14" /></Button>
+                                        <Button Tag="{Binding Id}" Click="MoveTriggerDownButton_Click" IsEnabled="{Binding CanMoveDown}" AutomationProperties.Name="{Binding MoveDownText}" ToolTipService.ToolTip="{Binding MoveDownText}"><FontIcon Glyph="&#xE70D;" FontSize="14" /></Button>
                                         <Button Tag="{Binding Id}" Click="DeleteTriggerButton_Click" AutomationProperties.Name="{Binding DeleteText}" ToolTipService.ToolTip="{Binding DeleteText}"><FontIcon Glyph="&#xE74D;" FontSize="14" /></Button>
                                     </StackPanel>
                                 </Grid>
@@ -223,8 +223,8 @@
                                             <TextBlock Text="{Binding Description}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                                            <Button Tag="{Binding}" Click="MoveConditionUpButton_Click" AutomationProperties.Name="{Binding MoveUpText}" ToolTipService.ToolTip="{Binding MoveUpText}"><FontIcon Glyph="&#xE70E;" FontSize="12" /></Button>
-                                            <Button Tag="{Binding}" Click="MoveConditionDownButton_Click" AutomationProperties.Name="{Binding MoveDownText}" ToolTipService.ToolTip="{Binding MoveDownText}"><FontIcon Glyph="&#xE70D;" FontSize="12" /></Button>
+                                            <Button Tag="{Binding}" Click="MoveConditionUpButton_Click" IsEnabled="{Binding CanMoveUp}" AutomationProperties.Name="{Binding MoveUpText}" ToolTipService.ToolTip="{Binding MoveUpText}"><FontIcon Glyph="&#xE70E;" FontSize="12" /></Button>
+                                            <Button Tag="{Binding}" Click="MoveConditionDownButton_Click" IsEnabled="{Binding CanMoveDown}" AutomationProperties.Name="{Binding MoveDownText}" ToolTipService.ToolTip="{Binding MoveDownText}"><FontIcon Glyph="&#xE70D;" FontSize="12" /></Button>
                                             <Button Tag="{Binding}" Click="RemoveConditionButton_Click" AutomationProperties.Name="{Binding RemoveText}" ToolTipService.ToolTip="{Binding RemoveText}"><FontIcon Glyph="&#xE74D;" FontSize="12" /></Button>
                                         </StackPanel>
                                     </Grid>
@@ -318,8 +318,8 @@
                                             <TextBlock Text="{Binding Description}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                                            <Button Tag="{Binding}" Click="MoveActionUpButton_Click" AutomationProperties.Name="{Binding MoveUpText}" ToolTipService.ToolTip="{Binding MoveUpText}"><FontIcon Glyph="&#xE70E;" FontSize="12" /></Button>
-                                            <Button Tag="{Binding}" Click="MoveActionDownButton_Click" AutomationProperties.Name="{Binding MoveDownText}" ToolTipService.ToolTip="{Binding MoveDownText}"><FontIcon Glyph="&#xE70D;" FontSize="12" /></Button>
+                                            <Button Tag="{Binding}" Click="MoveActionUpButton_Click" IsEnabled="{Binding CanMoveUp}" AutomationProperties.Name="{Binding MoveUpText}" ToolTipService.ToolTip="{Binding MoveUpText}"><FontIcon Glyph="&#xE70E;" FontSize="12" /></Button>
+                                            <Button Tag="{Binding}" Click="MoveActionDownButton_Click" IsEnabled="{Binding CanMoveDown}" AutomationProperties.Name="{Binding MoveDownText}" ToolTipService.ToolTip="{Binding MoveDownText}"><FontIcon Glyph="&#xE70D;" FontSize="12" /></Button>
                                             <Button Tag="{Binding}" Click="RemoveActionButton_Click" AutomationProperties.Name="{Binding RemoveText}" ToolTipService.ToolTip="{Binding RemoveText}"><FontIcon Glyph="&#xE74D;" FontSize="12" /></Button>
                                         </StackPanel>
                                     </Grid>

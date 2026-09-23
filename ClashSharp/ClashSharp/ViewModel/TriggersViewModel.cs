@@ -506,6 +506,12 @@ internal sealed class TriggersViewModel : ObservableObject
             targetIndex++;
         }
 
+        for (int index = 0; index < TriggerTasks.Count; index++)
+        {
+            TriggerTasks[index].CanMoveUp = index > 0;
+            TriggerTasks[index].CanMoveDown = index < TriggerTasks.Count - 1;
+        }
+
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(CanEnableAllTriggers));
         OnPropertyChanged(nameof(CanDisableAllTriggers));

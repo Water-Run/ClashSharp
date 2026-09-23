@@ -14,6 +14,12 @@ internal sealed class TriggerActionEditorViewModel : ObservableObject
     private ClashSharpMode _proxyMode;
     private string _notificationMessage;
     private string? _errorCode;
+    private bool _canMoveUp;
+    private bool _canMoveDown;
+
+    public bool CanMoveUp { get => _canMoveUp; internal set => SetProperty(ref _canMoveUp, value); }
+
+    public bool CanMoveDown { get => _canMoveDown; internal set => SetProperty(ref _canMoveDown, value); }
 
     /// <summary>Initializes a draft that preserves an existing action's typed parameters.</summary>
     public TriggerActionEditorViewModel(
