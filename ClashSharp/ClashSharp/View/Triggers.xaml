@@ -231,7 +231,8 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
-                        <StackPanel Grid.Row="2" Spacing="8">
+                        <StackPanel Grid.Row="2" Spacing="8"
+                            Visibility="{Binding CurrentEditor.HasSelectedCondition, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <Grid
                                 ColumnSpacing="8"
                                 Visibility="{Binding CurrentEditor.SelectedCondition.IsThresholdVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -325,7 +326,8 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
-                        <StackPanel Grid.Row="2" Spacing="8">
+                        <StackPanel Grid.Row="2" Spacing="8"
+                            Visibility="{Binding CurrentEditor.HasSelectedAction, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <ToggleSwitch
                                 Header="{Binding BooleanValueHeaderText}"
                                 IsOn="{Binding CurrentEditor.SelectedAction.BooleanValue, Mode=TwoWay}"

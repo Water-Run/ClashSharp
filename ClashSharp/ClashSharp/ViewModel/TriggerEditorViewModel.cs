@@ -146,6 +146,7 @@ internal sealed class TriggerEditorViewModel : ObservableObject
             }
 
             NotifyConditionSelection();
+            OnPropertyChanged(nameof(HasSelectedCondition));
         }
     }
 
@@ -171,8 +172,15 @@ internal sealed class TriggerEditorViewModel : ObservableObject
             }
 
             OnPropertyChanged(nameof(SelectedProxyModeOption));
+            OnPropertyChanged(nameof(HasSelectedAction));
         }
     }
+
+    /// <summary>Hides condition parameters when the editable list has no selection.</summary>
+    public bool HasSelectedCondition => SelectedCondition is not null;
+
+    /// <summary>Hides action parameters when the editable list has no selection.</summary>
+    public bool HasSelectedAction => SelectedAction is not null;
 
     // Bind the actual option object so the collapsed selector and its popup share one selection.
     public TriggerEditorOption<TriggerTrafficScope>? SelectedTrafficScopeOption
