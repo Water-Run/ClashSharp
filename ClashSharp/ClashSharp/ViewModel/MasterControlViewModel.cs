@@ -878,7 +878,10 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 tile.TypeText,
                 tile.IsToggleVisible,
                 tile.IsToggleOn,
-                tile.Command);
+                tile.Command)
+            {
+                ReorderHint = _localization.GetString("Master.Tile.ReorderHint"),
+            };
             viewModel.PropertyChanged += OnInfoTilePropertyChanged;
             _infoTiles.Add(viewModel);
         }
@@ -1381,9 +1384,10 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
     private string GetCoreTileStatusText()
     {
-        return _isCoreAvailable
-            ? _localization.GetString("Master.BasicStatus.Ready")
-            : _localization.GetString("Master.Status.CoreUnavailable");
+        if (!_isCoreAvailable) { return _localization.GetString("Master.Status.CoreUnavailable"); }
+        if (!_runtimeSnapshot.RuntimeOwnershipKnown) { return _localization.GetString("Master.Status.Unavailable"); }
+        return _localization.GetString(_runtimeSnapshot.EffectiveOwner == MihomoCoreOwner.None
+            ? "Master.Status.NotRunning" : "Master.Status.Running");
     }
 
     private string GetStartupRestoreFallbackStatusText()

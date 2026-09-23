@@ -86,7 +86,7 @@
             Background="{ThemeResource ControlFillColorSecondaryBrush}"
             Opacity="0" />
 
-        <Grid ColumnSpacing="8">
+        <Grid ColumnSpacing="8" Margin="0,0,28,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -143,6 +143,7 @@
                 TextTrimming="CharacterEllipsis" />
             <TextBlock
                 Text="{Binding Detail, ElementName=Root}"
+                MaxLines="1"
                 Style="{ThemeResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 TextWrapping="NoWrap"
@@ -182,6 +183,18 @@
                 </ControlTemplate>
             </Button.Template>
         </Button>
+        <!-- This non-button surface lets GridView receive the drag gesture. -->
+        <Border
+            Grid.Row="0"
+            Width="28"
+            Height="28"
+            Margin="0,-4,-8,0"
+            HorizontalAlignment="Right"
+            Background="Transparent"
+            ToolTipService.ToolTip="{Binding ReorderHint, ElementName=Root}"
+            AutomationProperties.Name="{Binding ReorderHint, ElementName=Root}">
+            <FontIcon Glyph="&#xE784;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsHitTestVisible="False" />
+        </Border>
         <ProgressRing
             x:Name="ExecutionProgress"
             Grid.Row="1"

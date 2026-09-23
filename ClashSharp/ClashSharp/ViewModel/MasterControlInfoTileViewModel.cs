@@ -47,6 +47,8 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
 
     public string TypeText { get; }
 
+    public string ReorderHint { get; init; } = string.Empty;
+
     public bool IsToggleVisible { get; }
 
     public ICommand? TileCommand { get; }

@@ -40,6 +40,7 @@ internal static partial class LocalizationResources
             ["Master.Diagnostics.Failed"] = "Check failed; click to retry",
             ["Master.Diagnostics.Passed.Format"] = "{0}/{1} reachable",
             ["Master.Diagnostics.CurrentRoute"] = "Uses the current Windows proxy and TUN routing.",
+            ["Master.Tile.ReorderHint"] = "Drag this handle to reorder tiles.",
             ["Master.Tile.RestoreRecommended"] = "Restore recommended layout",
             ["Rules.Column.Source"] = "Source",
             ["Rules.Column.Type"] = "Type",

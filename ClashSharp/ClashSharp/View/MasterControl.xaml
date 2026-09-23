@@ -183,6 +183,7 @@
                     SelectionMode="None"
                     CanReorderItems="True"
                     CanDragItems="True"
+                    TabFocusNavigation="Local"
                     AllowDrop="True"
                     DragItemsCompleted="InfoTileGrid_DragItemsCompleted"
                     IsItemClickEnabled="False"
@@ -204,6 +205,8 @@
                             <Setter Property="VerticalContentAlignment" Value="Stretch" />
                             <Setter Property="Margin" Value="5,0,5,10" />
                             <Setter Property="MinWidth" Value="220" />
+                            <Setter Property="IsTabStop" Value="False" />
+                            <Setter Property="TabFocusNavigation" Value="Local" />
                         </Style>
                     </GridView.ItemContainerStyle>
                     <GridView.ItemTemplate>
@@ -212,6 +215,7 @@
                                 Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                                 Title="{Binding Title}"
                                 Description="{Binding Description}"
+                                ReorderHint="{Binding ReorderHint}"
                                 Value="{Binding Value}"
                                 Detail="{Binding Detail}"
                                 History="{Binding History}"

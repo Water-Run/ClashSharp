@@ -90,6 +90,30 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal("v1.19.11", viewModel.InfoTiles.Single(tile => tile.Id == "mihomo-version").Value);
     }
 
+    [Theory]
+    [InlineData(false, MihomoCoreOwner.None, "Unavailable")]
+    [InlineData(true, MihomoCoreOwner.None, "Not running")]
+    [InlineData(true, MihomoCoreOwner.App, "Running")]
+    [InlineData(true, MihomoCoreOwner.Service, "Running")]
+    public async Task CoreTileReportsObservedRuntimeRatherThanExecutableAvailability(
+        bool ownershipKnown, MihomoCoreOwner owner, string expected)
+    {
+        FakeMasterRuntime runtime = new()
+        {
+            Snapshot = MasterControlRuntimeSnapshot.Unavailable with
+            {
+                RuntimeOwnershipKnown = ownershipKnown,
+                EffectiveOwner = owner,
+            },
+        };
+        MasterControlViewModel viewModel = CreateViewModel(runtime: runtime);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(expected, viewModel.InfoTiles.Single(tile => tile.Id == "core").Value);
+        Assert.Equal(expected, viewModel.HeroStatusItems.Single(item => item.Kind == MasterHeroStatusItemKind.CoreStatus).Value);
+    }
+
     [Fact]
     public async Task LoadAsync_WhenCatalogResolvesActiveProfile_ShowsNameAcrossDashboard()
     {

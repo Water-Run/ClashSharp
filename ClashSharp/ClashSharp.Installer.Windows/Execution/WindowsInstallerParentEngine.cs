@@ -545,10 +545,10 @@ internal sealed class WindowsInstallerExecutionSessionFactory
                 _embeddedManifestBytes,
                 _installerExecutablePath);
             var certificatePostcondition = new WindowsInstallerCertificatePostcondition();
-            var packageMutation = new VerifiedInstallerPackageMutation(
-                new WindowsCurrentUserPackageStoreAdapter());
             transactionReader = WindowsInstallerProtectedTransactionReader.CreateDefault(
                 _targetSid);
+            var packageMutation = new VerifiedInstallerPackageMutation(
+                new WindowsCurrentUserPackageStoreAdapter(), transactionReader);
             broker ??= WindowsMachineHelperBroker.CreateDefault(
                 _installerExecutablePath,
                 _manifest);

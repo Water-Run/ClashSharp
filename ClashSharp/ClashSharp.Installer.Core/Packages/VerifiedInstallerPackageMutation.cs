@@ -1,4 +1,5 @@
 using ClashSharp.Installer.Contracts;
+using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Packages;
 
@@ -8,12 +9,18 @@ namespace ClashSharp.Installer.Packages;
 public sealed class VerifiedInstallerPackageMutation : IInstallerPackageMutation
 {
     private readonly IInstallerPackageStoreAdapter _packageStore;
+    private readonly IInstallerTransactionReader? _transactionReader;
 
     /// <summary>Initializes package mutation over an explicit platform store adapter.</summary>
-    public VerifiedInstallerPackageMutation(IInstallerPackageStoreAdapter packageStore)
+    /// <param name="packageStore">Current-user package deployment adapter.</param>
+    /// <param name="transactionReader">Protected recovery state; absent readers cannot authorize missing-package repair.</param>
+    public VerifiedInstallerPackageMutation(
+        IInstallerPackageStoreAdapter packageStore,
+        IInstallerTransactionReader? transactionReader = null)
     {
         ArgumentNullException.ThrowIfNull(packageStore);
         _packageStore = packageStore;
+        _transactionReader = transactionReader;
     }
 
     /// <inheritdoc />
@@ -65,8 +72,17 @@ public sealed class VerifiedInstallerPackageMutation : IInstallerPackageMutation
         }
         else if (request.Operation == InstallerOperation.Repair)
         {
-            throw new InstallerProtocolException(
-                "installer.package.repair_requires_installation");
+            InstallerTransactionSnapshot? recovery = _transactionReader is null ? null
+                : await _transactionReader.LoadAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            recovery?.Validate();
+            if (recovery is null
+                || recovery.Journal.Phase != InstallerTransactionPhase.MachineReserved
+                || !recovery.Journal.Matches(request))
+            {
+                throw new InstallerProtocolException(
+                    "installer.package.repair_requires_installation");
+            }
         }
 
         if (!release.Release.PackagePayloadAvailable)

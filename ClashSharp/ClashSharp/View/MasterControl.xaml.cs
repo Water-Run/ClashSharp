@@ -42,8 +42,9 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorMinWidth = 420;
     private const double InfoTileEditorPreferredWidth = 620;
     private const double InfoTileEditorHorizontalChrome = 96;
-    private const double InfoTileEditorMinListHeight = 260;
-    private const double InfoTileEditorVerticalChrome = 260;
+    private const double InfoTileEditorMinListHeight = 80;
+    private const double InfoTileEditorMaxListHeight = 420;
+    private const double InfoTileEditorVerticalChrome = 360;
 
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
@@ -728,7 +729,7 @@ public sealed partial class MasterControl : Page
         double availableHeight = dialogRoot.Size.Height > 0
             ? dialogRoot.Size.Height - InfoTileEditorVerticalChrome
             : InfoTileEditorMinListHeight;
-        return Math.Max(InfoTileEditorMinListHeight, availableHeight);
+        return Math.Clamp(availableHeight, InfoTileEditorMinListHeight, InfoTileEditorMaxListHeight);
     }
 
     private static double CalculateHeroStatusFlyoutListHeight(XamlRoot dialogRoot)

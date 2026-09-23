@@ -1,6 +1,8 @@
 using ClashSharp.Installer.Contracts;
+using ClashSharp.Installer.Execution;
 using ClashSharp.Installer.Packages;
 using ClashSharp.Installer.Payloads;
+using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Tests;
 
@@ -100,6 +102,65 @@ public sealed class VerifiedInstallerPackageMutationTests
                 InstallerTestData.Request(InstallerOperation.Repair),
                 lease,
                 CancellationToken.None),
+            "installer.package.repair_requires_installation");
+
+        Assert.Equal(0, store.DeployCalls);
+    }
+
+    [Fact]
+    public async Task CoordinatorRecoveryRedeploysMissingPackageThroughRealPackageMutation()
+    {
+        InstallerRequest request = InstallerTestData.Request(InstallerOperation.Repair);
+        var reserved = InstallerTransactionJournal.Create(request)
+            .TransitionTo(InstallerTransactionPhase.MachineReserved);
+        var scenario = new InstallerScenario(reserved);
+        var store = new ScriptedPackageStore();
+        store.Inspections.Enqueue(null);
+        store.Inspections.Enqueue(Installed());
+        var mutation = new VerifiedInstallerPackageMutation(store, scenario.Store);
+        using var coordinator = new InstallerCoordinator(
+            scenario, scenario, scenario, mutation, scenario, scenario, scenario.Store);
+
+        InstallerExecutionResult result = await coordinator.ExecuteAsync(request, null, CancellationToken.None);
+
+        Assert.Equal(InstallerExecutionOutcome.Succeeded, result.Outcome);
+        Assert.Equal(1, store.DeployCalls);
+        Assert.Equal(2, store.InspectCalls);
+        Assert.Null(scenario.Store.Current);
+        Assert.DoesNotContain("machine.prepare:Repair", scenario.Events);
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("prepared")]
+    [InlineData("committed")]
+    [InlineData("operation")]
+    [InlineData("sid")]
+    [InlineData("version")]
+    [InlineData("hash")]
+    [InlineData("reassociation")]
+    public async Task MissingPackageRepairRequiresExactReservedRecovery(string mismatch)
+    {
+        InstallerRequest request = InstallerTestData.Request(InstallerOperation.Repair);
+        InstallerRequest durableRequest = mismatch switch
+        {
+            "operation" => request with { Operation = InstallerOperation.Install },
+            "sid" => request with { TargetSid = "S-1-5-21-100-200-300-1002" },
+            "version" => request with { ExpectedPackageVersion = "1.2.3.5" },
+            "hash" => request with { InstallerPayloadSha256 = InstallerTestData.OtherHash },
+            "reassociation" => request with { AllowReassociation = true },
+            _ => request,
+        };
+        var journal = InstallerTransactionJournal.Create(durableRequest);
+        if (mismatch != "prepared") { journal = journal.TransitionTo(InstallerTransactionPhase.MachineReserved); }
+        if (mismatch == "committed") { journal = journal.TransitionTo(InstallerTransactionPhase.PackageCommitted); }
+        var reader = new MemoryInstallerTransactionStore([], mismatch == "missing" ? null : journal);
+        var store = new ScriptedPackageStore();
+        store.Inspections.Enqueue(null);
+        var mutation = new VerifiedInstallerPackageMutation(store, reader);
+        await using TestInstallerReleaseLease lease = InstallerTestData.Lease();
+
+        await AssertDiagnosticAsync(() => mutation.ApplyAsync(request, lease, CancellationToken.None),
             "installer.package.repair_requires_installation");
 
         Assert.Equal(0, store.DeployCalls);

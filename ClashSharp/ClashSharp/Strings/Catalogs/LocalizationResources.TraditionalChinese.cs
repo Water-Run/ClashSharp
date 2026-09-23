@@ -40,6 +40,7 @@ internal static partial class LocalizationResources
             ["Master.Diagnostics.Failed"] = "檢測失敗，點擊重試",
             ["Master.Diagnostics.Passed.Format"] = "{0}/{1} 可存取",
             ["Master.Diagnostics.CurrentRoute"] = "使用目前 Windows 代理與 TUN 路由。",
+            ["Master.Tile.ReorderHint"] = "拖曳此把手調整磁貼順序。",
             ["Master.Tile.RestoreRecommended"] = "還原建議版面配置",
             ["Rules.Column.Source"] = "來源",
             ["Rules.Column.Type"] = "類型",

@@ -23,6 +23,17 @@ public sealed partial class MasterInfoTile : UserControl
 
     private bool _isLoaded;
 
+    /// <summary>Identifies the localized hint for the separate drag handle.</summary>
+    public static readonly DependencyProperty ReorderHintProperty = DependencyProperty.Register(
+        nameof(ReorderHint), typeof(string), typeof(MasterInfoTile), new PropertyMetadata(string.Empty));
+
+    /// <summary>Gets or sets the drag handle's accessible description.</summary>
+    public string ReorderHint
+    {
+        get => (string)GetValue(ReorderHintProperty);
+        set => SetValue(ReorderHintProperty, value);
+    }
+
     /// <summary>Identifies the recent rate samples shown as a compact trend.</summary>
     public static readonly DependencyProperty HistoryProperty = DependencyProperty.Register(
         nameof(History), typeof(double[]), typeof(MasterInfoTile),
