@@ -322,7 +322,9 @@ public sealed partial class MasterInfoTile : UserControl
         bool available = _isLoaded && (TileCommand is null || TileCommand.CanExecute(null));
         bool running = _isLoaded && TileCommand is IAsyncCommandState { IsRunning: true };
         TileButton.Visibility = Visibility.Visible;
-        TileButton.IsEnabled = available;
+        // Disabling the focused button moves focus into the next tile. Keep the active
+        // command's button focusable; TileButton_Click still rejects duplicate execution.
+        TileButton.IsEnabled = available || running;
         ExecutionProgress.IsActive = running;
         ExecutionProgress.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         ProtectedCursor = available ? InputSystemCursor.Create(InputSystemCursorShape.Hand) : null;

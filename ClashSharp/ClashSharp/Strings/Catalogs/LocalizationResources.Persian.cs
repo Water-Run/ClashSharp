@@ -451,7 +451,7 @@ internal static partial class LocalizationResources
             ["Master.Tile.ConnectionTest"] = "آزمایش اتصال",
             ["Master.Tile.ConnectionTestProxyUrl1"] = "URL آزمایش ۱",
             ["Master.Tile.ConnectionTestProxyUrl2"] = "URL آزمایش ۲",
-            ["Master.Tile.ConnectionTestDirectUrl"] = "URL مستقیم",
+            ["Master.Tile.ConnectionTestDirectUrl"] = "URL آزمایش ۳",
             ["Master.Tile.StartupPrompt"] = "راهنمای راه‌اندازی",
             ["Master.Tile.StartupConflicts"] = "تداخل‌های راه‌اندازی",
             ["Master.Tile.ExportConfig"] = "صدور پیکربندی",

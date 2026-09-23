@@ -451,7 +451,7 @@ internal static partial class LocalizationResources
             ["Master.Tile.ConnectionTest"] = "Connection test",
             ["Master.Tile.ConnectionTestProxyUrl1"] = "Test URL 1",
             ["Master.Tile.ConnectionTestProxyUrl2"] = "Test URL 2",
-            ["Master.Tile.ConnectionTestDirectUrl"] = "Direct URL",
+            ["Master.Tile.ConnectionTestDirectUrl"] = "Test URL 3",
             ["Master.Tile.StartupPrompt"] = "Startup prompt",
             ["Master.Tile.StartupConflicts"] = "Startup conflicts",
             ["Master.Tile.ExportConfig"] = "Export config",
