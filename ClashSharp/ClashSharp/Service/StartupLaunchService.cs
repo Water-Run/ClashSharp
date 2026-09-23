@@ -92,14 +92,19 @@ internal sealed partial class StartupLaunchService
 
     private readonly Func<string, string> _getString;
 
+    private readonly string _taskId;
+
     internal StartupLaunchService(
         IStartupLaunchTaskProvider taskProvider,
         IStartupLaunchLog log,
-        Func<string, string> getString)
+        Func<string, string> getString,
+        string taskId = TaskId)
     {
         _taskProvider = taskProvider ?? throw new ArgumentNullException(nameof(taskProvider));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        _taskId = taskId;
     }
 
     /// <summary>Reads the actual packaged startup-task state for durable action reconciliation.</summary>
@@ -109,7 +114,7 @@ internal sealed partial class StartupLaunchService
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            IStartupLaunchTask startupTask = await _taskProvider.GetAsync(TaskId).ConfigureAwait(false);
+            IStartupLaunchTask startupTask = await _taskProvider.GetAsync(_taskId).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             return startupTask.State;
         }
@@ -126,7 +131,7 @@ internal sealed partial class StartupLaunchService
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            IStartupLaunchTask startupTask = await _taskProvider.GetAsync(TaskId).ConfigureAwait(false);
+            IStartupLaunchTask startupTask = await _taskProvider.GetAsync(_taskId).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (startupTask.State == StartupLaunchTaskState.Other)
             {
@@ -161,7 +166,7 @@ internal sealed partial class StartupLaunchService
                     }
 
                     IStartupLaunchTask verifiedTask = await _taskProvider
-                        .GetAsync(TaskId)
+                        .GetAsync(_taskId)
                         .ConfigureAwait(false);
                     cancellationToken.ThrowIfCancellationRequested();
                     if (verifiedTask.State != StartupLaunchTaskState.Enabled)
@@ -181,7 +186,7 @@ internal sealed partial class StartupLaunchService
                 startupTask.Disable();
                 cancellationToken.ThrowIfCancellationRequested();
                 IStartupLaunchTask verifiedTask = await _taskProvider
-                    .GetAsync(TaskId)
+                    .GetAsync(_taskId)
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (verifiedTask.State != StartupLaunchTaskState.Disabled)

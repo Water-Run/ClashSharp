@@ -135,6 +135,7 @@ public sealed partial class Settings : Page
             }
 
             await _viewModel.RefreshMihomoServiceStatusCommand.ExecuteObservedAsync(null, token);
+            await _viewModel.RefreshStartupRestoreFallbackStatusAsync(token);
         });
     }
 
@@ -796,21 +797,21 @@ public sealed partial class Settings : Page
     }
 
     /// <summary>Registers the startup restore fallback helper.</summary>
-    private void RegisterStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
+    private async void RegisterStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
     {
-        _viewModel.RegisterStartupRestoreFallback();
+        await RunPageOperationAsync(_viewModel.RegisterStartupRestoreFallbackAsync);
     }
 
     /// <summary>Refreshes startup restore fallback registration status.</summary>
-    private void DetectStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
+    private async void DetectStartupRestoreFallbackButton_Click(object sender, RoutedEventArgs e)
     {
-        _viewModel.RefreshStartupRestoreFallbackStatus();
+        await RunPageOperationAsync(_viewModel.RefreshStartupRestoreFallbackStatusAsync);
     }
 
     /// <summary>Removes the startup restore fallback registration.</summary>
-    private void RemoveStartupRestoreFallbackRegistrationButton_Click(object sender, RoutedEventArgs e)
+    private async void RemoveStartupRestoreFallbackRegistrationButton_Click(object sender, RoutedEventArgs e)
     {
-        _viewModel.RemoveStartupRestoreFallbackRegistration();
+        await RunPageOperationAsync(_viewModel.RemoveStartupRestoreFallbackRegistrationAsync);
     }
 
     /// <summary>Exports settings through the shared, page-owned backup workflow.</summary>
@@ -828,6 +829,7 @@ public sealed partial class Settings : Page
             {
                 token.ThrowIfCancellationRequested();
                 _viewModel.ReloadAfterDataImport();
+                await _viewModel.RefreshStartupRestoreFallbackStatusAsync(token);
             }
         });
     }

@@ -3123,9 +3123,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>", projectXml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the package manifest has one product application and its desktop startup task.</summary>
+    /// <summary>Verifies the single application has separate normal-launch and proxy-restore startup tasks.</summary>
     [Fact]
-    public void PackageManifest_DeclaresExactlyOneProductApplicationAndStartupTask()
+    public void PackageManifest_DeclaresOneProductApplicationAndIndependentStartupTasks()
     {
         string manifestPath = FindSourceFile("ClashSharp", "ClashSharp", "Package.appxmanifest");
 
@@ -3141,6 +3141,18 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("TaskId=\"ClashSharpStartup\"", manifestXml, StringComparison.Ordinal);
         Assert.Contains("EntryPoint=\"Windows.FullTrustApplication\"", manifestXml, StringComparison.Ordinal);
         Assert.DoesNotContain("updater", manifestXml, StringComparison.OrdinalIgnoreCase);
+
+        XNamespace uap5 = "http://schemas.microsoft.com/appx/manifest/uap/windows10/5";
+        XNamespace uap10 = "http://schemas.microsoft.com/appx/manifest/uap/windows10/10";
+        XElement[] tasks = application.Descendants(uap5 + "StartupTask").ToArray();
+        Assert.Equal(2, tasks.Length);
+        XElement normal = Assert.Single(tasks, task => (string?)task.Attribute("TaskId") == "ClashSharpStartup");
+        XElement restore = Assert.Single(tasks, task => (string?)task.Attribute("TaskId") == "ClashSharpProxyRestoreFallback");
+        Assert.Equal("false", (string?)restore.Attribute("Enabled"));
+        Assert.Equal("false", (string?)normal.Attribute("Enabled"));
+        Assert.Null(normal.Parent!.Attribute(uap10 + "Parameters"));
+        Assert.Equal("--restore-proxy-on-startup", (string?)restore.Parent!.Attribute(uap10 + "Parameters"));
+        Assert.Equal("ClashSharp.exe", (string?)restore.Parent.Attribute("Executable"));
     }
 
     /// <summary>Keeps the lifetime lock visible to the Installer without disabling all AppData virtualization.</summary>

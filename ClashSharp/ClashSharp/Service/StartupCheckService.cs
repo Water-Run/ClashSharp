@@ -43,7 +43,7 @@ public sealed class StartupCheckService
         StartupCheckText text = CaptureLocalizedText();
 
         CheckEvaluation[] evaluations = await Task.Run(
-            () => EvaluateChecks(text, cancellationToken),
+            () => EvaluateChecksAsync(text, cancellationToken),
             cancellationToken).ConfigureAwait(false);
 
         foreach (CheckEvaluation evaluation in evaluations)
@@ -97,7 +97,7 @@ public sealed class StartupCheckService
             description);
     }
 
-    private CheckEvaluation[] EvaluateChecks(
+    private async Task<CheckEvaluation[]> EvaluateChecksAsync(
         StartupCheckText text,
         CancellationToken cancellationToken)
     {
@@ -105,7 +105,7 @@ public sealed class StartupCheckService
         [
             EvaluateSubscriptionCheck(text, cancellationToken),
             EvaluateTransparentProxyCheck(text, cancellationToken),
-            EvaluateFallbackCheck(text, cancellationToken),
+            await EvaluateFallbackCheckAsync(text, cancellationToken).ConfigureAwait(false),
             EvaluateStaleProxyCheck(text, cancellationToken),
         ];
     }
@@ -170,7 +170,7 @@ public sealed class StartupCheckService
         }
     }
 
-    private CheckEvaluation EvaluateFallbackCheck(
+    private async Task<CheckEvaluation> EvaluateFallbackCheckAsync(
         StartupCheckText text,
         CancellationToken cancellationToken)
     {
@@ -178,7 +178,7 @@ public sealed class StartupCheckService
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            bool isRegistered = _probe.IsFallbackRegistered(cancellationToken);
+            bool isRegistered = await _probe.IsFallbackRegisteredAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             return CheckEvaluation.Succeeded(
                 new StartupCheckItem(

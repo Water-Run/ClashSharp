@@ -298,11 +298,11 @@ public sealed class StartupCheckServiceTests
             return new MihomoServiceStatus(true, true, "Running");
         }
 
-        public bool IsFallbackRegistered(CancellationToken cancellationToken)
+        public Task<bool> IsFallbackRegisteredAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             FallbackRegisteredCalls++;
-            return true;
+            return Task.FromResult(true);
         }
 
         public WindowsProxyState GetWindowsProxyState(CancellationToken cancellationToken)

@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Dialogs;
@@ -69,10 +70,10 @@ internal sealed class StartupGuideComposition(
             return mihomoServiceManager.GetLatestStatus();
         }
 
-        public bool IsFallbackRegistered(CancellationToken cancellationToken)
+        public async Task<bool> IsFallbackRegisteredAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return startupRestoreFallback.IsRegistered();
+            return (await startupRestoreFallback.GetStatusAsync(cancellationToken).ConfigureAwait(false)).IsRegistered;
         }
 
         public WindowsProxyState GetWindowsProxyState(CancellationToken cancellationToken)

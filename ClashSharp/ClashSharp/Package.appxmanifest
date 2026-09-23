@@ -63,6 +63,9 @@
         <uap5:Extension Category="windows.startupTask" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication">
           <uap5:StartupTask TaskId="ClashSharpStartup" Enabled="false" DisplayName="Clash#" />
         </uap5:Extension>
+        <uap5:Extension Category="windows.startupTask" Executable="ClashSharp.exe" EntryPoint="Windows.FullTrustApplication" uap10:Parameters="--restore-proxy-on-startup">
+          <uap5:StartupTask TaskId="ClashSharpProxyRestoreFallback" Enabled="false" DisplayName="Clash# Proxy Restore" />
+        </uap5:Extension>
       </Extensions>
     </Application>
   </Applications>

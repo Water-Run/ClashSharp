@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Service;
@@ -22,7 +24,7 @@ internal sealed class MasterControlRuntimeSnapshotSource : IMasterControlRuntime
     private readonly LogStorageService _logStorage;
     private readonly Func<string, string> _getString;
     private readonly Func<MihomoServiceStatus> _getMihomoServiceStatus;
-    private readonly Func<StartupRestoreFallbackStatus> _getStartupRestoreFallbackStatus;
+    private readonly Func<CancellationToken, Task<StartupRestoreFallbackStatus>> _getStartupRestoreFallbackStatus;
     private readonly Func<RuntimeTrafficRateSnapshot> _getRuntimeTrafficRate;
     private readonly Func<TriggerPresentationSummary> _getTriggerSummary;
     private readonly Func<long> _getWorkingSetBytes;
@@ -38,7 +40,7 @@ internal sealed class MasterControlRuntimeSnapshotSource : IMasterControlRuntime
         LogStorageService logStorage,
         Func<string, string> getString,
         Func<MihomoServiceStatus> getMihomoServiceStatus,
-        Func<StartupRestoreFallbackStatus> getStartupRestoreFallbackStatus,
+        Func<CancellationToken, Task<StartupRestoreFallbackStatus>> getStartupRestoreFallbackStatus,
         Func<RuntimeTrafficRateSnapshot> getRuntimeTrafficRate,
         Func<TriggerPresentationSummary> getTriggerSummary,
         Func<long> getWorkingSetBytes,

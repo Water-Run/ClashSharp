@@ -1,9 +1,10 @@
 using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
-/// <summary>Provides the blocking system probes needed by <see cref="StartupCheckService"/>.</summary>
+/// <summary>Provides system probes needed by <see cref="StartupCheckService"/>.</summary>
 /// <remarks>
 /// Implementations must not access XAML state. Each method is invoked at most once for one
 /// <see cref="StartupCheckService.GetChecksAsync"/> operation.
@@ -20,7 +21,7 @@ internal interface IStartupCheckProbe
     MihomoServiceStatus GetMihomoStatus(CancellationToken cancellationToken);
 
     /// <summary>Returns whether the startup restore fallback is registered.</summary>
-    bool IsFallbackRegistered(CancellationToken cancellationToken);
+    Task<bool> IsFallbackRegisteredAsync(CancellationToken cancellationToken);
 
     /// <summary>Reads the current Windows manual-proxy state.</summary>
     WindowsProxyState GetWindowsProxyState(CancellationToken cancellationToken);

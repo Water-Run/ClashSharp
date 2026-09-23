@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
@@ -18,14 +19,14 @@ internal sealed record MasterControlRuntimeSnapshotWork(
     int EnabledTriggerTaskCount,
     MihomoServiceStatus MihomoServiceStatus,
     RuntimeTrafficRateSnapshot RuntimeTraffic,
-    Func<StartupRestoreFallbackStatus> GetStartupRestoreFallbackStatus,
+    Func<CancellationToken, Task<StartupRestoreFallbackStatus>> GetStartupRestoreFallbackStatus,
     Func<long> GetWorkingSetBytes,
     bool AppCoreRunning = false,
     bool TunRequested = false,
     Func<RuntimeConfigurationIntegrityObservation>? ObserveRuntimeConfigurationIntegrity = null)
     : IMasterControlRuntimeSnapshotWork
 {
-    public MasterControlRuntimeSnapshot Execute(CancellationToken cancellationToken)
+    public async Task<MasterControlRuntimeSnapshot> ExecuteAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -42,7 +43,8 @@ internal sealed record MasterControlRuntimeSnapshotWork(
         TrafficStatisticsSummary trafficSummary = LogStorage.GetTrafficStatisticsSummary();
 
         cancellationToken.ThrowIfCancellationRequested();
-        StartupRestoreFallbackStatus startupRestoreFallbackStatus = GetStartupRestoreFallbackStatus();
+        StartupRestoreFallbackStatus startupRestoreFallbackStatus =
+            await GetStartupRestoreFallbackStatus(cancellationToken).ConfigureAwait(false);
         long workingSetBytes = GetWorkingSetBytes();
         RuntimeOwnershipObservation ownership = ObserveRuntimeOwnership(coreConfiguration);
 

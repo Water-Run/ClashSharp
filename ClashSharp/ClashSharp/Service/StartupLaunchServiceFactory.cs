@@ -8,12 +8,13 @@ namespace ClashSharp.Service;
 internal static class StartupLaunchServiceFactory
 {
     /// <summary>Creates the default startup launch service used by settings.</summary>
-    public static StartupLaunchService CreateDefault()
+    public static StartupLaunchService CreateDefault(string taskId = StartupLaunchService.TaskId)
     {
         return new StartupLaunchService(
             new StartupLaunchTaskProvider(),
             new StartupLaunchLogAdapter(LogStorageService.Instance),
-            LocalizationService.Instance.GetString);
+            LocalizationService.Instance.GetString,
+            taskId);
     }
 }
 

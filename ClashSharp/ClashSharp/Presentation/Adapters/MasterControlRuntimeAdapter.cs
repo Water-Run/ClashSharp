@@ -23,7 +23,7 @@ internal sealed class MasterControlRuntimeAdapter : IMasterControlRuntime
         try
         {
             return await Task.Run(
-                    () => work.Execute(cancellationToken),
+                    () => work.ExecuteAsync(cancellationToken),
                     cancellationToken)
                 .ConfigureAwait(false);
         }

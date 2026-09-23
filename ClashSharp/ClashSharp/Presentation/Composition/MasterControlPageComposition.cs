@@ -68,7 +68,7 @@ internal static class MasterControlPageComposition
             logStorage,
             localization.GetString,
             mihomoServiceManager.GetLatestStatus,
-            startupRestoreFallback.GetStatus,
+            startupRestoreFallback.GetStatusAsync,
             runtimeTrafficRate.GetLatestSnapshot,
             context.TriggerPresentation.GetSummary,
             GetWorkingSetBytes,

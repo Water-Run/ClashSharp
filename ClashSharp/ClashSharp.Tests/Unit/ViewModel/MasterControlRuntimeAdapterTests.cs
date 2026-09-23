@@ -99,7 +99,7 @@ public sealed class MasterControlRuntimeAdapterTests
                     return key;
                 },
                 static () => MihomoServiceStatus.Unknown(string.Empty),
-                static () => new StartupRestoreFallbackStatus(false, string.Empty),
+                static _ => Task.FromResult(new StartupRestoreFallbackStatus(false, string.Empty)),
                 static () => new RuntimeTrafficRateSnapshot(0, 0, 0, 0, 0),
                 static () => new TriggerPresentationSummary(0, 0),
                 static () => 0);
@@ -167,7 +167,7 @@ public sealed class MasterControlRuntimeAdapterTests
     }
 
     [Fact]
-    public void Capture_DefersFileRegistryAndWorkingSetDelegatesUntilWorkExecutes()
+    public async Task Capture_DefersFileRegistryAndWorkingSetDelegatesUntilWorkExecutes()
     {
         string testDirectory = Path.Combine(
             Path.GetTempPath(),
@@ -206,10 +206,10 @@ public sealed class MasterControlRuntimeAdapterTests
                 logStorage,
                 static key => key,
                 static () => MihomoServiceStatus.Unknown(string.Empty),
-                () =>
+                _ =>
                 {
                     registryCallCount++;
-                    return new StartupRestoreFallbackStatus(false, string.Empty);
+                    return Task.FromResult(new StartupRestoreFallbackStatus(false, string.Empty));
                 },
                 static () => new RuntimeTrafficRateSnapshot(0, 0, 0, 0, 0),
                 static () => new TriggerPresentationSummary(0, 0),
@@ -225,7 +225,7 @@ public sealed class MasterControlRuntimeAdapterTests
             Assert.Equal(0, registryCallCount);
             Assert.Equal(0, workingSetCallCount);
 
-            work.Execute(CancellationToken.None);
+            await work.ExecuteAsync(CancellationToken.None);
 
             Assert.Equal(2, fileCallCount);
             Assert.Equal(1, registryCallCount);
@@ -247,7 +247,7 @@ public sealed class MasterControlRuntimeAdapterTests
     [InlineData(true, false, true, false, (int)MihomoCoreOwner.None, true)]
     [InlineData(false, true, false, false, (int)MihomoCoreOwner.None, true)]
     [InlineData(true, false, false, false, (int)MihomoCoreOwner.None, false)]
-    public void Execute_ClassifiesOnlyOneOwnerThatMatchesSemanticTunPlan(
+    public async Task Execute_ClassifiesOnlyOneOwnerThatMatchesSemanticTunPlan(
         bool appCoreRunning,
         bool serviceCoreRunning,
         bool configurationTunEnabled,
@@ -288,7 +288,7 @@ public sealed class MasterControlRuntimeAdapterTests
                 logStorage,
                 static key => key,
                 () => new MihomoServiceStatus(true, serviceCoreRunning, string.Empty),
-                static () => new StartupRestoreFallbackStatus(false, string.Empty),
+                static _ => Task.FromResult(new StartupRestoreFallbackStatus(false, string.Empty)),
                 static () => new RuntimeTrafficRateSnapshot(0, 0, 0, 0, 0),
                 static () => new TriggerPresentationSummary(0, 0),
                 static () => 0,
@@ -304,7 +304,7 @@ public sealed class MasterControlRuntimeAdapterTests
                             "built-in-direct"))
                     : RuntimeConfigurationIntegrityObservation.Unknown);
 
-            RuntimeSnapshot snapshot = source.Capture().Execute(CancellationToken.None);
+            RuntimeSnapshot snapshot = await source.Capture().ExecuteAsync(CancellationToken.None);
 
             Assert.Equal(expectedKnown, snapshot.RuntimeOwnershipKnown);
             Assert.Equal((MihomoCoreOwner)expectedOwnerValue, snapshot.EffectiveOwner);
@@ -335,11 +335,11 @@ public sealed class MasterControlRuntimeAdapterTests
     {
         public int ExecuteThreadId { get; private set; }
 
-        public RuntimeSnapshot Execute(CancellationToken cancellationToken)
+        public Task<RuntimeSnapshot> ExecuteAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ExecuteThreadId = Environment.CurrentManagedThreadId;
-            return RuntimeSnapshot.Unavailable;
+            return Task.FromResult(RuntimeSnapshot.Unavailable);
         }
     }
 
@@ -360,7 +360,7 @@ public sealed class MasterControlRuntimeAdapterTests
 
         public CancellationToken ObservedToken { get; private set; }
 
-        public RuntimeSnapshot Execute(CancellationToken cancellationToken)
+        public Task<RuntimeSnapshot> ExecuteAsync(CancellationToken cancellationToken)
         {
             ObservedToken = cancellationToken;
             Started.TrySetResult();
@@ -380,7 +380,7 @@ public sealed class MasterControlRuntimeAdapterTests
 
     private sealed class ThrowingRuntimeSnapshotWork(Exception exception) : RuntimeSnapshotWork
     {
-        public RuntimeSnapshot Execute(CancellationToken cancellationToken)
+        public Task<RuntimeSnapshot> ExecuteAsync(CancellationToken cancellationToken)
         {
             throw exception;
         }

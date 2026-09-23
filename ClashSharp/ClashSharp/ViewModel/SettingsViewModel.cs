@@ -146,11 +146,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Requests the mandatory process restart used after reset compensation cannot converge.</summary>
     private readonly Func<bool> _requestResetRecoveryRestart;
 
-    private readonly Func<bool> _isStartupRestoreFallbackRegistered;
+    private readonly Func<CancellationToken, Task<bool>> _isStartupRestoreFallbackRegistered;
 
-    private readonly Action _registerStartupRestoreFallback;
+    private readonly Func<CancellationToken, Task> _registerStartupRestoreFallback;
 
-    private readonly Action _removeStartupRestoreFallbackRegistration;
+    private readonly Func<CancellationToken, Task> _removeStartupRestoreFallbackRegistration;
 
     /// <summary>Startup conflict checker.</summary>
     private readonly Func<int, CancellationToken, Task<IReadOnlyList<StartupConflictIssue>>> _checkStartupConflictsAsync;
@@ -205,9 +205,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             TestOnlyApplicationErrorSink.Shared,
             NoOpLifecycleAction,
             NoOpLifecycleAction,
-            static () => false,
-            NoOpLifecycleAction,
-            NoOpLifecycleAction,
+            static _ => Task.FromResult(false),
+            static _ => Task.CompletedTask,
+            static _ => Task.CompletedTask,
             SuccessfulConnectionTestAsync)
     {
     }
@@ -229,9 +229,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             TestOnlyApplicationErrorSink.Shared,
             NoOpLifecycleAction,
             NoOpLifecycleAction,
-            static () => false,
-            NoOpLifecycleAction,
-            NoOpLifecycleAction,
+            static _ => Task.FromResult(false),
+            static _ => Task.CompletedTask,
+            static _ => Task.CompletedTask,
             SuccessfulConnectionTestAsync)
     {
     }
@@ -253,9 +253,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             TestOnlyApplicationErrorSink.Shared,
             NoOpLifecycleAction,
             NoOpLifecycleAction,
-            static () => false,
-            NoOpLifecycleAction,
-            NoOpLifecycleAction,
+            static _ => Task.FromResult(false),
+            static _ => Task.CompletedTask,
+            static _ => Task.CompletedTask,
             SuccessfulConnectionTestAsync,
             mihomoServiceController: mihomoServiceController)
     {
@@ -278,9 +278,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             TestOnlyApplicationErrorSink.Shared,
             NoOpLifecycleAction,
             NoOpLifecycleAction,
-            static () => false,
-            NoOpLifecycleAction,
-            NoOpLifecycleAction,
+            static _ => Task.FromResult(false),
+            static _ => Task.CompletedTask,
+            static _ => Task.CompletedTask,
             SuccessfulConnectionTestAsync)
     {
     }
@@ -303,9 +303,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             TestOnlyApplicationErrorSink.Shared,
             NoOpLifecycleAction,
             NoOpLifecycleAction,
-            static () => false,
-            NoOpLifecycleAction,
-            NoOpLifecycleAction,
+            static _ => Task.FromResult(false),
+            static _ => Task.CompletedTask,
+            static _ => Task.CompletedTask,
             SuccessfulConnectionTestAsync)
     {
     }
@@ -329,9 +329,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             TestOnlyApplicationErrorSink.Shared,
             NoOpLifecycleAction,
             NoOpLifecycleAction,
-            static () => false,
-            NoOpLifecycleAction,
-            NoOpLifecycleAction,
+            static _ => Task.FromResult(false),
+            static _ => Task.CompletedTask,
+            static _ => Task.CompletedTask,
             SuccessfulConnectionTestAsync,
             diagnosticsViewModel)
     {
@@ -350,9 +350,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
         IApplicationErrorSink errorSink,
         Action exitApplication,
         Action restartApplication,
-        Func<bool> isStartupRestoreFallbackRegistered,
-        Action registerStartupRestoreFallback,
-        Action removeStartupRestoreFallbackRegistration,
+        Func<CancellationToken, Task<bool>> isStartupRestoreFallbackRegistered,
+        Func<CancellationToken, Task> registerStartupRestoreFallback,
+        Func<CancellationToken, Task> removeStartupRestoreFallbackRegistration,
         Func<Uri, CancellationToken, Task<int>> testConnectionAsync,
         SettingsDiagnosticsViewModel? diagnosticsViewModel = null,
         IMihomoServiceController? mihomoServiceController = null,
@@ -432,9 +432,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<CancellationToken, Task>? clearAllDataAsync,
         Action? exitApplication,
         Action? restartApplication,
-        Func<bool>? isStartupRestoreFallbackRegistered,
-        Action? registerStartupRestoreFallback,
-        Action? removeStartupRestoreFallbackRegistration,
+        Func<CancellationToken, Task<bool>>? isStartupRestoreFallbackRegistered,
+        Func<CancellationToken, Task>? registerStartupRestoreFallback,
+        Func<CancellationToken, Task>? removeStartupRestoreFallbackRegistration,
         IReadOnlyList<(AppLanguage Language, string DisplayName)>? supportedLanguages,
         Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync,
         Func<bool>? requestResetRecoveryRestart,
@@ -1512,7 +1512,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
         SetProperty(ref _trayUseMonochromeInactiveIcon, _settings.TrayUseMonochromeInactiveIcon, nameof(TrayUseMonochromeInactiveIcon));
         TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
         RaiseTriggerRestartStateChanged();
-        RefreshStartupRestoreFallbackStatus();
         SetProperty(ref _checkStaleProxyOnStartup, _settings.CheckStaleProxyOnStartup, nameof(CheckStaleProxyOnStartup));
         SetProperty(ref _restoreProxyOnExit, _settings.RestoreProxyOnExit, nameof(RestoreProxyOnExit));
         _loadedMainlandChinaFeatureMode = _settings.MainlandChinaFeatureMode;
@@ -2575,25 +2574,27 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>Refreshes the startup restore fallback registration status text.</summary>
-    public void RefreshStartupRestoreFallbackStatus()
+    public async Task RefreshStartupRestoreFallbackStatusAsync(CancellationToken cancellationToken)
     {
-        StartupRestoreFallbackStatusText = _getString(_isStartupRestoreFallbackRegistered()
+        bool registered = await _isStartupRestoreFallbackRegistered(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        StartupRestoreFallbackStatusText = _getString(registered
             ? "Settings.StartupRestoreFallback.Status.Registered"
             : "Settings.StartupRestoreFallback.Status.NotRegistered");
     }
 
     /// <summary>Registers the startup restore fallback helper and refreshes status.</summary>
-    public void RegisterStartupRestoreFallback()
+    public async Task RegisterStartupRestoreFallbackAsync(CancellationToken cancellationToken)
     {
-        _registerStartupRestoreFallback();
-        RefreshStartupRestoreFallbackStatus();
+        await _registerStartupRestoreFallback(cancellationToken);
+        await RefreshStartupRestoreFallbackStatusAsync(cancellationToken);
     }
 
     /// <summary>Removes the startup restore fallback registration and refreshes status.</summary>
-    public void RemoveStartupRestoreFallbackRegistration()
+    public async Task RemoveStartupRestoreFallbackRegistrationAsync(CancellationToken cancellationToken)
     {
-        _removeStartupRestoreFallbackRegistration();
-        RefreshStartupRestoreFallbackStatus();
+        await _removeStartupRestoreFallbackRegistration(cancellationToken);
+        await RefreshStartupRestoreFallbackStatusAsync(cancellationToken);
     }
 
     /// <summary>Persists the stale proxy startup check switch.</summary>

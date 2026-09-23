@@ -110,11 +110,11 @@ public sealed class InstallerOwnershipArchitectureTests
         Assert.DoesNotContain("params string[] arguments", manager, StringComparison.Ordinal);
 
         string fallback = ReadApplicationSource("Service/StartupRestoreFallbackService.cs");
-        Assert.Contains("RemoveRegistration()", fallback, StringComparison.Ordinal);
+        Assert.Contains("RemoveRegistrationAsync(", fallback, StringComparison.Ordinal);
         Assert.DoesNotContain("void Uninstall()", fallback, StringComparison.Ordinal);
 
         string settingsViewModel = ReadApplicationSource("ViewModel/SettingsViewModel.cs");
-        Assert.Contains("RemoveStartupRestoreFallbackRegistration()", settingsViewModel, StringComparison.Ordinal);
+        Assert.Contains("RemoveStartupRestoreFallbackRegistrationAsync(", settingsViewModel, StringComparison.Ordinal);
         Assert.Contains("Command.RemoveRegistration", settingsViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("UninstallStartupRestoreFallback", settingsViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("Command.Uninstall", settingsViewModel, StringComparison.Ordinal);

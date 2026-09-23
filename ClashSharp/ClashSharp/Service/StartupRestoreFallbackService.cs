@@ -1,89 +1,45 @@
 using System;
-using System.Diagnostics;
-using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
-using Microsoft.Win32;
 
 namespace ClashSharp.Service;
 
-/// <summary>Registers a lightweight current-user login helper for stale proxy cleanup.</summary>
-/// <remarks>
-/// Invariants: Registration is stored only under HKCU Run.
-/// Thread safety: Public registry reads and writes are serialized.
-/// Side effects: Writes or removes one HKCU Run value.
-/// </remarks>
-public sealed class StartupRestoreFallbackService
+/// <summary>Manages the packaged current-user login task for stale proxy cleanup.</summary>
+/// <remarks>Windows owns the registration and removes it with the package. UI callers must use the asynchronous methods.</remarks>
+public sealed partial class StartupRestoreFallbackService
 {
     /// <summary>Command-line switch that selects the one-shot proxy restoration path.</summary>
     public const string HelperArgument = "--restore-proxy-on-startup";
 
-    /// <summary>Gets the process-wide current-user registration service.</summary>
-    public static StartupRestoreFallbackService Instance { get; } = new();
+    /// <summary>Independent restore task declared in the package manifest.</summary>
+    public const string TaskId = "ClashSharpProxyRestoreFallback";
 
-    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunValueName = "ClashSharp.ProxyRestoreFallback";
+    private readonly StartupLaunchService _startup;
 
-    private readonly object _syncLock = new();
-
-    private StartupRestoreFallbackService()
+    internal StartupRestoreFallbackService(StartupLaunchService startup)
     {
+        _startup = startup ?? throw new ArgumentNullException(nameof(startup));
     }
 
-    /// <summary>Gets whether the helper is currently registered.</summary>
-    public bool IsRegistered() => GetStatus().IsRegistered;
-
-    /// <summary>Gets the current helper registration status.</summary>
-    public StartupRestoreFallbackStatus GetStatus()
+    /// <summary>Reads the actual Windows startup-task state without blocking the UI.</summary>
+    public async Task<StartupRestoreFallbackStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
-        lock (_syncLock)
+        StartupLaunchTaskState? state = await _startup.TryGetStateAsync(cancellationToken).ConfigureAwait(false);
+        if (state is null)
         {
-            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
-            string commandLine = key?.GetValue(RunValueName) as string ?? string.Empty;
-            bool isRegistered = commandLine.Contains(HelperArgument, StringComparison.OrdinalIgnoreCase)
-                && Path.GetFileName(commandLine).Contains("ClashSharp", StringComparison.OrdinalIgnoreCase);
-            return new StartupRestoreFallbackStatus(isRegistered, commandLine);
-        }
-    }
-
-    /// <summary>Registers the current executable as the login helper.</summary>
-    public void Register()
-    {
-        string executablePath = ResolveExecutablePath();
-        string commandLine = Quote(executablePath) + " " + HelperArgument;
-
-        lock (_syncLock)
-        {
-            using RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true)
-                ?? throw new InvalidOperationException("Could not open HKCU Run registry key.");
-            key.SetValue(RunValueName, commandLine, RegistryValueKind.String);
-        }
-    }
-
-    /// <summary>Removes the current-user login-helper registration.</summary>
-    public void RemoveRegistration()
-    {
-        lock (_syncLock)
-        {
-            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
-            key?.DeleteValue(RunValueName, throwOnMissingValue: false);
-        }
-    }
-
-    private static string ResolveExecutablePath()
-    {
-        string? processPath = Environment.ProcessPath;
-        if (!string.IsNullOrWhiteSpace(processPath))
-        {
-            return processPath;
+            throw new InvalidOperationException("The startup restore task state could not be read.");
         }
 
-        using Process process = Process.GetCurrentProcess();
-        return process.MainModule?.FileName
-            ?? throw new InvalidOperationException("Could not resolve current executable path.");
+        bool enabled = state == StartupLaunchTaskState.Enabled;
+        return new StartupRestoreFallbackStatus(enabled, enabled ? "ClashSharp.exe " + HelperArgument : string.Empty);
     }
 
-    private static string Quote(string value)
-    {
-        return "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
-    }
+    /// <summary>Enables and verifies the independent login restore task.</summary>
+    public Task RegisterAsync(CancellationToken cancellationToken) =>
+        _startup.SetEnabledAsync(true, cancellationToken);
+
+    /// <summary>Disables and verifies the independent login restore task.</summary>
+    public Task RemoveRegistrationAsync(CancellationToken cancellationToken) =>
+        _startup.SetEnabledAsync(false, cancellationToken);
 }
