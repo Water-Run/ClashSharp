@@ -37,6 +37,10 @@ public sealed partial class CoreConfigurationService
     /// <summary>Serializes legacy writes and complete validate/promote/apply runtime transactions.</summary>
     private readonly SemaphoreSlim _runtimeConfigurationGate = new(1, 1);
 
+    // Observers may run concurrently from the dashboard and tray refresh. One observer
+    // holding the transaction gate must not make another observer look like a write.
+    private readonly object _runtimeIntegrityObservationLock = new();
+
     /// <summary>Returns the durable desired and last readiness-verified runtime generations.</summary>
     internal async Task<RuntimeConfigurationGenerationState> GetRuntimeGenerationStateAsync(
         CancellationToken cancellationToken)
@@ -58,6 +62,14 @@ public sealed partial class CoreConfigurationService
     /// progress and any crash residue are deliberately reported as unknown.
     /// </summary>
     internal RuntimeConfigurationIntegrityObservation ObserveRuntimeConfigurationIntegrity()
+    {
+        lock (_runtimeIntegrityObservationLock)
+        {
+            return ObserveRuntimeConfigurationIntegrityCore();
+        }
+    }
+
+    private RuntimeConfigurationIntegrityObservation ObserveRuntimeConfigurationIntegrityCore()
     {
         if (!_runtimeConfigurationGate.Wait(0))
         {

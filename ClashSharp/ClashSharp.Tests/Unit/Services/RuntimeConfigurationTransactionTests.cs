@@ -7,6 +7,60 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class RuntimeConfigurationTransactionTests
 {
     [Fact]
+    public async Task ObserveRuntimeConfigurationIntegrity_ConcurrentReaders_PreserveVerifiedGeneration()
+    {
+        using TempDirectory tempDirectory = new();
+        CoreConfigurationService service = CreateService(tempDirectory.Path, new RecordingValidator());
+        await service.ApplyRuntimeConfigurationAsync(
+            ClashSharpMode.RuleTakeover, false, 17890, new RecordingRuntime(), CancellationToken.None);
+        RuntimeConfigurationIntegrityObservation expected = service.ObserveRuntimeConfigurationIntegrity();
+        Assert.True(expected.IsKnown);
+        using Barrier readers = new(4);
+        Task<RuntimeConfigurationIntegrityObservation[]>[] observations = Enumerable.Range(0, 4)
+            .Select(_ => Task.Factory.StartNew(
+                () =>
+                {
+                    RuntimeConfigurationIntegrityObservation[] results = new RuntimeConfigurationIntegrityObservation[12];
+                    for (int i = 0; i < results.Length; i++)
+                    {
+                        if (!readers.SignalAndWait(TimeSpan.FromSeconds(10)))
+                        {
+                            throw new TimeoutException("Concurrent integrity readers did not reach the barrier.");
+                        }
+
+                        results[i] = service.ObserveRuntimeConfigurationIntegrity();
+                    }
+
+                    return results;
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default))
+            .ToArray();
+
+        RuntimeConfigurationIntegrityObservation[][] results = await Task.WhenAll(observations);
+
+        Assert.All(results.SelectMany(result => result), result => Assert.Equal(expected, result));
+    }
+
+    [Fact]
+    public async Task ObserveRuntimeConfigurationIntegrity_ActiveTransaction_RemainsUnknown()
+    {
+        using TempDirectory tempDirectory = new();
+        CoreConfigurationService service = CreateService(tempDirectory.Path, new RecordingValidator());
+        await service.ApplyRuntimeConfigurationAsync(
+            ClashSharpMode.RuleTakeover, false, 17890, new RecordingRuntime(), CancellationToken.None);
+        RuntimeConfigurationIntegrityObservation? duringApply = null;
+        RecordingRuntime runtime = new()
+        {
+            Applying = (_, _, _) => duringApply = service.ObserveRuntimeConfigurationIntegrity()
+        };
+
+        await service.ApplyRuntimeConfigurationAsync(
+            ClashSharpMode.FullTakeover, false, 17890, runtime, CancellationToken.None);
+
+        Assert.Equal(RuntimeConfigurationIntegrityObservation.Unknown, duringApply);
+        Assert.True(service.ObserveRuntimeConfigurationIntegrity().IsKnown);
+    }
+
+    [Fact]
     public async Task ApplyRuntimeConfigurationAsync_ReadyCandidate_PublishesDesiredAsApplied()
     {
         using TempDirectory tempDirectory = new();
