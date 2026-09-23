@@ -14,6 +14,8 @@ namespace ClashSharp.Components;
 /// </remarks>
 public sealed partial class StartupGuideDialog : ContentDialog
 {
+    private XamlRoot? _layoutRoot;
+
     /// <summary>Initializes the startup guide from a pre-collected health snapshot.</summary>
     /// <param name="checks">Health rows collected before the visual component is created.</param>
     /// <param name="getString">Localization dependency for dialog-only display text.</param>
@@ -28,6 +30,37 @@ public sealed partial class StartupGuideDialog : ContentDialog
         CloseButtonText = getString("Command.Close");
         GuideDescriptionText.Text = getString("Settings.StartupGuide.Description");
         ChecksList.ItemsSource = checks;
+        Opened += OnOpened;
+        Closed += OnClosed;
+    }
+
+    private void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
+    {
+        _layoutRoot = XamlRoot;
+        if (_layoutRoot is not null)
+        {
+            _layoutRoot.Changed += OnRootChanged;
+            UpdateChecksHeight();
+        }
+    }
+
+    private void OnClosed(ContentDialog sender, ContentDialogClosedEventArgs args)
+    {
+        if (_layoutRoot is not null)
+        {
+            _layoutRoot.Changed -= OnRootChanged;
+            _layoutRoot = null;
+        }
+    }
+
+    private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateChecksHeight();
+
+    private void UpdateChecksHeight()
+    {
+        if (_layoutRoot is not null)
+        {
+            ChecksScroll.MaxHeight = Math.Max(120, _layoutRoot.Size.Height - 260);
+        }
     }
 
     private void StatusIcon_Loaded(object sender, RoutedEventArgs e)

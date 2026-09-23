@@ -1831,7 +1831,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("MaxWidth=\"480\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMinWidth", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMaxWidth", dialogXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxHeight=\"260\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ChecksScroll\"", dialogXaml, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies the bundled mihomo binary is accompanied by redistributable license and source metadata.</summary>
@@ -2938,7 +2938,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("XamlRoot = GetDialogXamlRoot()", settingsCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxHeight=\"260\"", guideXaml, StringComparison.Ordinal);
+        Assert.Contains("ChecksScroll.MaxHeight = Math.Max(120, _layoutRoot.Size.Height - 260)", guideCode, StringComparison.Ordinal);
+        Assert.Contains("_layoutRoot.Changed += OnRootChanged", guideCode, StringComparison.Ordinal);
+        Assert.Contains("_layoutRoot.Changed -= OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"520\"", guideXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxWidth=\"520\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">520</x:Double>", guideXaml, StringComparison.Ordinal);
