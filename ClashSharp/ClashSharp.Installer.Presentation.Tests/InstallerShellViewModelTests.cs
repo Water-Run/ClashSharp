@@ -6,6 +6,39 @@ namespace ClashSharp.Installer.Presentation.Tests;
 
 public sealed class InstallerShellViewModelTests
 {
+    [Theory]
+    [InlineData("installer.machine_helper.session_unavailable", "无法建立安装会话", false)]
+    [InlineData("installer.machine_helper.session_unavailable", "无法建立安装会话", true)]
+    [InlineData("installer.concurrent_action_rejected", "已有安装操作正在执行", false)]
+    [InlineData("installer.concurrent_action_rejected", "已有安装操作正在执行", true)]
+    public async Task SessionFailureExplainsOtherOperationsAndRequiresFreshInspection(
+        string diagnosticCode, string title, bool throwFailure)
+    {
+        var runtime = new ScriptedInstallerRuntime
+        {
+            Execute = (_, _, _) => throwFailure
+                ? throw new InstallerProtocolException(diagnosticCode, new IOException("private pipe details"))
+                : Task.FromResult(new InstallerExecutionResult(
+                    diagnosticCode == "installer.concurrent_action_rejected"
+                        ? InstallerExecutionOutcome.Blocked : InstallerExecutionOutcome.Failed,
+                    diagnosticCode,
+                    LastDurablePhase: null,
+                    RecoveryPending: false)),
+        };
+        using var viewModel = new InstallerShellViewModel(runtime);
+        await viewModel.InitializeAsync();
+
+        await viewModel.PrimaryActionCommand.ExecuteAsync();
+
+        Assert.Equal(title, viewModel.StatusTitle);
+        Assert.Equal(diagnosticCode, viewModel.DiagnosticCode);
+        Assert.Contains("原安装器重新检查", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.DoesNotContain("private", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.False(viewModel.CanExecuteMutations);
+        Assert.False(viewModel.PrimaryActionCommand.CanExecute(null));
+        Assert.False(viewModel.SecondaryActionCommand.CanExecute(null));
+    }
+
     [Fact]
     public async Task ContentConflictExplainsRequiredRecoveryWithoutEnablingBlindRetry()
     {

@@ -7,6 +7,30 @@ namespace ClashSharp.Installer.Windows.Tests;
 
 public sealed class WindowsMachineHelperBrokerTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnavailableSessionPipeIsReportedBeforeTrustOrElevation(bool accessDenied)
+    {
+        Exception cause = accessDenied
+            ? new UnauthorizedAccessException("private pipe details")
+            : new IOException("private pipe details");
+        var trust = new RecordingTrustVerifier();
+        var launcher = new RecordingLauncher(new FakeElevatedProcess(processId: 4243));
+        await using var broker = CreateBroker(trust, new FailingServerFactory(cause), launcher);
+        InstallerMachineHelperCommand command = Command(
+            InstallerMachineHelperVerb.Prepare,
+            Snapshot(Request(), InstallerTransactionPhase.Prepared));
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => broker.ExecuteAsync(command));
+
+        Assert.Equal("installer.machine_helper.session_unavailable", failure.DiagnosticCode);
+        Assert.Same(cause, failure.InnerException);
+        Assert.Equal(0, trust.CallCount);
+        Assert.Equal(0, launcher.CallCount);
+    }
+
     [Fact]
     public async Task OneVerifiedSelfHelperSessionCarriesMultipleTransactionCommands()
     {
@@ -323,6 +347,11 @@ public sealed class WindowsMachineHelperBrokerTests
         internal bool Disposed { get; private set; }
 
         public void Dispose() => Disposed = true;
+    }
+
+    private sealed class FailingServerFactory(Exception failure) : IWindowsMachineHelperServerFactory
+    {
+        public IWindowsMachineHelperServer Create(InstallerMachineHelperBootstrap bootstrap) => throw failure;
     }
 
     private sealed class RecordingServerFactory : IWindowsMachineHelperServerFactory

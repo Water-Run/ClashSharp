@@ -643,6 +643,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         StatusDetail = "请使用本次操作所用的安装器重新检查，或保留诊断代码以便排查。";
         DiagnosticCode = diagnosticCode;
         ProgressStatus = "需要恢复或诊断。";
+        ApplySessionFailureGuidance(diagnosticCode);
     }
 
     private void ApplyExecutionResult(InstallerExecutionResult result)
@@ -676,6 +677,11 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 + "当前未完成的操作仍需使用此安装器恢复，不能直接换用另一个安装包。";
         }
 
+        if (result.Outcome is InstallerExecutionOutcome.Failed or InstallerExecutionOutcome.Blocked)
+        {
+            ApplySessionFailureGuidance(result.DiagnosticCode);
+        }
+
         if (result.Outcome == InstallerExecutionOutcome.Succeeded)
         {
             ProgressValue = 100;
@@ -683,6 +689,21 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             {
                 ApplyDirectoryCleanupReport(cleanup);
             }
+        }
+    }
+
+    private void ApplySessionFailureGuidance(string diagnosticCode)
+    {
+        if (diagnosticCode == "installer.concurrent_action_rejected")
+        {
+            StatusTitle = "已有安装操作正在执行";
+            StatusDetail = "请等待另一项安装、修复或卸载操作完成，再使用原安装器重新检查。";
+        }
+        else if (diagnosticCode == "installer.machine_helper.session_unavailable")
+        {
+            StatusTitle = "无法建立安装会话";
+            StatusDetail = "请确认没有其他安装器正在执行操作；如有，请等待其完成，再使用原安装器重新检查。"
+                + "如果仍然失败，请保留诊断代码以便排查。";
         }
     }
 

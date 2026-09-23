@@ -248,7 +248,19 @@ internal sealed class WindowsMachineHelperBroker :
         InstallerMachineHelperBootstrap bootstrap = InstallerMachineHelperBootstrap.Create(
             firstCommand.ToInvocation(),
             parentProcessId);
-        IWindowsMachineHelperServer server = _serverFactory.Create(bootstrap);
+        IWindowsMachineHelperServer server;
+        try
+        {
+            server = _serverFactory.Create(bootstrap);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A second parent resuming the same transaction cannot create the first-instance
+            // pipe while its existing helper session is alive. No elevation has started here.
+            throw new InstallerProtocolException(
+                "installer.machine_helper.session_unavailable",
+                exception);
+        }
         IWindowsInstallerExecutableTrustLease? trustLease = null;
         IWindowsElevatedHelperProcess? process = null;
         try
