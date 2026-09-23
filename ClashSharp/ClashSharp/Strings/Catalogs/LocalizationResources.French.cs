@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Rules.Column.Source"] = "Source",
+            ["Rules.Column.Type"] = "Type",
+            ["Rules.Column.Payload"] = "Cible",
+            ["Rules.Column.Policy"] = "Politique",
+            ["Rules.Column.Hits"] = "Correspondances",
+            ["Profiles.Validation.Name"] = "Saisissez un nom de profil.",
             ["Profiles.Status.Imported"] = "Profil importé.",
             ["Profiles.Status.ImportFailed"] = "Impossible d’importer le profil. Vérifiez le fichier et réessayez.",
             ["Profiles.Status.Validated"] = "Validation du profil réussie.",

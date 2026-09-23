@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Rules.Column.Source"] = "منبع",
+            ["Rules.Column.Type"] = "نوع",
+            ["Rules.Column.Payload"] = "هدف تطبیق",
+            ["Rules.Column.Policy"] = "سیاست",
+            ["Rules.Column.Hits"] = "تعداد تطبیق",
+            ["Profiles.Validation.Name"] = "نام نمایه را وارد کنید.",
             ["Profiles.Status.Imported"] = "پروفایل وارد شد.",
             ["Profiles.Status.ImportFailed"] = "وارد کردن پروفایل ممکن نشد. فایل را بررسی و دوباره تلاش کنید.",
             ["Profiles.Status.Validated"] = "اعتبارسنجی پروفایل موفق بود.",

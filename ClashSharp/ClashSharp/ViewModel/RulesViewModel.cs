@@ -56,6 +56,21 @@ internal sealed class RulesViewModel : ObservableObject
     /// <value>Localized page description.</value>
     public string DescriptionText => _localization.GetString("Page.Rules.Description");
 
+    /// <summary>Gets the localized rule source heading.</summary>
+    public string SourceColumnText => _localization.GetString("Rules.Column.Source");
+
+    /// <summary>Gets the localized rule type heading.</summary>
+    public string TypeColumnText => _localization.GetString("Rules.Column.Type");
+
+    /// <summary>Gets the localized match target heading.</summary>
+    public string PayloadColumnText => _localization.GetString("Rules.Column.Payload");
+
+    /// <summary>Gets the localized routing policy heading.</summary>
+    public string PolicyColumnText => _localization.GetString("Rules.Column.Policy");
+
+    /// <summary>Gets the localized hit count heading.</summary>
+    public string HitsColumnText => _localization.GetString("Rules.Column.Hits");
+
     /// <summary>Gets rule preview rows.</summary>
     /// <value>Rule preview rows; never null.</value>
     public IReadOnlyList<RulePreviewDisplay> Rules

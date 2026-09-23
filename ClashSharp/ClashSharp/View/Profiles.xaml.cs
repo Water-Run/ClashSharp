@@ -124,13 +124,24 @@ public sealed partial class Profiles : Page
                 Header = _getString("Profiles.Dialog.Name"),
                 Text = selectedProfile.Model.Name,
             };
+            InfoBar error = new() { IsClosable = false, Severity = InfoBarSeverity.Error };
+            StackPanel content = new() { Spacing = 12 };
+            content.Children.Add(nameBox);
+            content.Children.Add(error);
             ThemedContentDialog dialog = new()
             {
                 Title = _getString("Profiles.Dialog.RenameTitle"),
-                Content = nameBox,
+                Content = content,
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
                 XamlRoot = XamlRoot,
+            };
+            dialog.PrimaryButtonClick += (_, args) =>
+            {
+                bool isInvalid = string.IsNullOrWhiteSpace(nameBox.Text);
+                args.Cancel = isInvalid;
+                error.IsOpen = isInvalid;
+                error.Message = isInvalid ? _getString("Profiles.Validation.Name") : string.Empty;
             };
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();

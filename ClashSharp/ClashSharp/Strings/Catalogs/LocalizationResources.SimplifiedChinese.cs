@@ -10,6 +10,12 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["Rules.Column.Source"] = "来源",
+            ["Rules.Column.Type"] = "类型",
+            ["Rules.Column.Payload"] = "匹配目标",
+            ["Rules.Column.Policy"] = "策略",
+            ["Rules.Column.Hits"] = "命中次数",
+            ["Profiles.Validation.Name"] = "请输入配置名称。",
             ["Profiles.Status.Imported"] = "配置已导入。",
             ["Profiles.Status.ImportFailed"] = "无法导入配置，请检查文件后重试。",
             ["Profiles.Status.Validated"] = "配置验证通过。",

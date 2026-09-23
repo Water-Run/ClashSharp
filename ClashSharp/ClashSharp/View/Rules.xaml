@@ -20,22 +20,38 @@
         </StackPanel>
 
         <ListView x:Name="RulesList" Grid.Row="1" ItemsSource="{Binding Rules}">
+            <ListView.Header>
+                <Grid Padding="20,8" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.2*" />
+                        <ColumnDefinition Width="1.4*" />
+                        <ColumnDefinition Width="2.4*" />
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="0.7*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding SourceColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="1" Text="{Binding TypeColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="2" Text="{Binding PayloadColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="3" Text="{Binding PolicyColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="4" Text="{Binding HitsColumnText}" TextWrapping="Wrap" TextAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </ListView.Header>
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Grid Padding="4,10" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="130" />
-                            <ColumnDefinition Width="150" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="100" />
-                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="1.2*" />
+                            <ColumnDefinition Width="1.4*" />
+                            <ColumnDefinition Width="2.4*" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="0.7*" />
                         </Grid.ColumnDefinitions>
 
                         <TextBlock Text="{Binding ProviderNameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Grid.Column="1" Text="{Binding RuleType}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding RuleType}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="2" Text="{Binding PayloadDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding PayloadDisplay}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Grid.Column="3" Text="{Binding Action}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Action}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <TextBlock Grid.Column="4" Text="{Binding HitCount}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="4" Text="{Binding HitCount}" TextAlignment="Right" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
