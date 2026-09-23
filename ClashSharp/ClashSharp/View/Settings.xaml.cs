@@ -17,6 +17,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 
@@ -840,6 +841,8 @@ public sealed partial class Settings : Page
             ? Task.CompletedTask
             : _pageOperations.RunAsync(async token =>
             {
+                Control? focusedControl = GetPageFocusedControl();
+                FocusState focusState = focusedControl?.FocusState ?? FocusState.Programmatic;
                 IsEnabled = false;
                 try
                 {
@@ -848,8 +851,28 @@ public sealed partial class Settings : Page
                 finally
                 {
                     IsEnabled = true;
+                    if (_isLoaded && !token.IsCancellationRequested
+                        && focusedControl is { IsEnabled: true, Visibility: Visibility.Visible }
+                        && focusedControl.XamlRoot == XamlRoot)
+                    {
+                        focusedControl.Focus(focusState);
+                    }
                 }
             });
+    }
+
+    private Control? GetPageFocusedControl()
+    {
+        Control? focusedControl = XamlRoot is null ? null : FocusManager.GetFocusedElement(XamlRoot) as Control;
+        for (DependencyObject? element = focusedControl; element is not null; element = VisualTreeHelper.GetParent(element))
+        {
+            if (ReferenceEquals(element, this))
+            {
+                return focusedControl;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Builds the network repair dialog content.</summary>
