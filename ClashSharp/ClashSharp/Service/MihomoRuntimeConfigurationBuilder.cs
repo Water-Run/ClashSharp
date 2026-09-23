@@ -105,6 +105,7 @@ internal static class MihomoRuntimeConfigurationBuilder
             }
         }
 
+        EnsureSelectionPersistence(managedRoot);
         if (transparentProxyEnabled)
         {
             EnsureTunDnsConfiguration(managedRoot);
@@ -177,6 +178,24 @@ internal static class MihomoRuntimeConfigurationBuilder
         {
             root.Add(PlainScalar("tun"), BuildTunConfiguration());
         }
+    }
+
+    private static void EnsureSelectionPersistence(YamlMappingNode root)
+    {
+        if (!TryGetScalarKeyValue(root, "profile", out YamlNode? profileNode))
+        {
+            profileNode = new YamlMappingNode();
+            root.Add(PlainScalar("profile"), profileNode);
+        }
+
+        if (profileNode is not YamlMappingNode profile)
+        {
+            throw new ArgumentException("The profile cache configuration must be a mapping.");
+        }
+
+        // Each owner keeps its own cache for child-crash recovery. Cross-owner and cross-profile
+        // choices are restored from the application's profile-scoped store before mode commit.
+        profile.Children[PlainScalar("store-selected")] = PlainScalar("true");
     }
 
     private static YamlMappingNode BuildTunConfiguration()

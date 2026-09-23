@@ -10,9 +10,11 @@ namespace ClashSharp.Service;
 
 public sealed partial class NetworkTakeoverService
 {
-    /// <summary>Shared singleton instance created once at type initialization.</summary>
+    private static readonly Lazy<NetworkTakeoverService> DefaultInstance = new(NetworkTakeoverServiceFactory.CreateDefault);
+
+    /// <summary>Shared singleton instance created on first access.</summary>
     /// <value>A non-null <see cref="NetworkTakeoverService"/> instance.</value>
-    public static NetworkTakeoverService Instance { get; } = NetworkTakeoverServiceFactory.CreateDefault();
+    public static NetworkTakeoverService Instance => DefaultInstance.Value;
 }
 
 /// <summary>Creates network takeover service instances with production dependencies.</summary>
@@ -34,7 +36,8 @@ internal static class NetworkTakeoverServiceFactory
             new NetworkTakeoverMihomoServiceAdapter(MihomoServiceManager.Instance),
             new NetworkTakeoverProxyRecoveryAdapter(ProxyRecoveryService.Instance),
             new NetworkTakeoverReadinessAdapter(MihomoControllerClient.Instance),
-            LocalizationService.Instance.GetString);
+            LocalizationService.Instance.GetString,
+            ProxySelectionService.Instance);
     }
 
     /// <summary>Immediately releases owned WinINet state if the App listener disappears.</summary>

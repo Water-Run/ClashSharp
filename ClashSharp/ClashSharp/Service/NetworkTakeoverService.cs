@@ -114,6 +114,8 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
 
     private readonly INetworkTakeoverReadiness _readiness;
 
+    private readonly INetworkTakeoverProxySelections? _proxySelections;
+
     private readonly Func<string, string> _getString;
 
     /// <summary>Initializes a new network takeover service instance.</summary>
@@ -124,7 +126,8 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         INetworkTakeoverMihomoService mihomoService,
         INetworkTakeoverProxyRecovery proxyRecovery,
         INetworkTakeoverReadiness readiness,
-        Func<string, string> getString)
+        Func<string, string> getString,
+        INetworkTakeoverProxySelections? proxySelections = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -133,6 +136,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         _proxyRecovery = proxyRecovery ?? throw new ArgumentNullException(nameof(proxyRecovery));
         _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        _proxySelections = proxySelections;
     }
 
     /// <summary>Applies one immutable planned mode without rereading mutable TUN or port settings.</summary>
@@ -680,13 +684,20 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    Task ICoreConfigurationRuntime.CommitAsync(
+    async Task ICoreConfigurationRuntime.CommitAsync(
         long generation,
         RuntimeConfigurationActivationPlan plan,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(generation, 1);
         cancellationToken.ThrowIfCancellationRequested();
+        if (_proxySelections is not null)
+        {
+            // This runs within the existing configuration rollback boundary after readiness,
+            // before reporting mode success or exposing the App listener through WinINet.
+            await _proxySelections.RestoreAsync(plan, cancellationToken).ConfigureAwait(false);
+        }
+
         if (plan.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
             && !plan.TunEnabled)
         {
@@ -696,8 +707,6 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         {
             _windowsProxy.DisableProxy();
         }
-
-        return Task.CompletedTask;
     }
 
     async Task ICoreConfigurationRuntime.DeactivateAsync(CancellationToken cancellationToken)

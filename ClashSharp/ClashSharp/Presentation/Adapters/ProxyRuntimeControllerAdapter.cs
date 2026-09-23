@@ -14,12 +14,16 @@ internal sealed class ProxyRuntimeControllerAdapter : IProxyRuntimeController
     /// <summary>Wrapped controller client.</summary>
     private readonly MihomoControllerClient _controller;
 
+    private readonly ProxySelectionService _selections;
+
     /// <summary>Initializes a runtime controller adapter.</summary>
     /// <param name="controller">Controller client. Must not be null.</param>
+    /// <param name="selections">Admitted durable proxy selection operations.</param>
     /// <exception cref="ArgumentNullException"><paramref name="controller"/> is null.</exception>
-    public ProxyRuntimeControllerAdapter(MihomoControllerClient controller)
+    public ProxyRuntimeControllerAdapter(MihomoControllerClient controller, ProxySelectionService selections)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
+        _selections = selections ?? throw new ArgumentNullException(nameof(selections));
     }
 
     /// <summary>Gets runtime strategy groups from mihomo.</summary>
@@ -45,7 +49,7 @@ internal sealed class ProxyRuntimeControllerAdapter : IProxyRuntimeController
     /// <returns>A task that completes after mihomo applies the selection.</returns>
     public Task SelectProxyAsync(string groupName, string proxyName, CancellationToken cancellationToken)
     {
-        return _controller.SelectProxyAsync(groupName, proxyName, cancellationToken);
+        return _selections.SelectAsync(groupName, proxyName, cancellationToken);
     }
 
     /// <summary>Updates one runtime provider resource.</summary>

@@ -553,13 +553,67 @@ public sealed class NetworkTakeoverServiceTests
         Assert.Equal(configurationHash, request.ObservedServiceStatus.ActiveConfigurationHash);
     }
 
+    /// <summary>Verifies selections are restored after owner readiness and before WinINet publication.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ApplyModeAsync_RestoresProfileSelectionBeforeCommit(bool tun)
+    {
+        List<string> operations = [];
+        RecordingSelections selections = new(operations);
+        NetworkTakeoverService service = CreateService(
+            configuration: new FakeNetworkTakeoverCoreConfiguration(operations),
+            core: new FakeNetworkTakeoverCore(operations),
+            windowsProxy: new FakeNetworkTakeoverWindowsProxy(operations),
+            serviceStatus: new FakeNetworkTakeoverMihomoService(new(true, false, "Installed"), operations),
+            readiness: new FakeNetworkTakeoverReadiness(operations),
+            selections: selections);
+
+        await service.ApplyModeAsync(ClashSharpMode.FullTakeover, tun, 19090, CancellationToken.None);
+
+        Assert.Equal("profile-a", Assert.Single(selections.Plans).ProfileId);
+        int ready = operations.IndexOf("controller.ready");
+        int restored = operations.IndexOf("selection.restore");
+        Assert.True(ready >= 0 && restored > ready);
+        Assert.Equal(tun ? "proxy.disable" : "proxy.enable", operations[restored + 1]);
+    }
+
+    /// <summary>Verifies restoration failure never publishes a system proxy that uses the wrong node.</summary>
+    [Fact]
+    public async Task CommitAsync_SelectionRestoreFailureDoesNotEnableProxy()
+    {
+        FakeNetworkTakeoverWindowsProxy proxy = new();
+        NetworkTakeoverService service = CreateService(windowsProxy: proxy,
+            selections: new RecordingSelections([]) { Fail = true });
+
+        await Assert.ThrowsAsync<IOException>(() => ((ICoreConfigurationRuntime)service).CommitAsync(
+            1, new(ClashSharpMode.FullTakeover, false, 19090, "profile-a"), CancellationToken.None));
+
+        Assert.Empty(proxy.EnabledServers);
+    }
+
+    private sealed class RecordingSelections(List<string> operations) : INetworkTakeoverProxySelections
+    {
+        public bool Fail { get; init; }
+        public List<RuntimeConfigurationActivationPlan> Plans { get; } = [];
+
+        public Task RestoreAsync(RuntimeConfigurationActivationPlan plan, CancellationToken cancellationToken)
+        {
+            operations.Add("selection.restore");
+            Plans.Add(plan);
+            if (Fail) { throw new IOException("Selection unavailable."); }
+            return Task.CompletedTask;
+        }
+    }
+
     private static NetworkTakeoverService CreateService(
         FakeNetworkTakeoverCoreConfiguration? configuration = null,
         FakeNetworkTakeoverCore? core = null,
         FakeNetworkTakeoverWindowsProxy? windowsProxy = null,
         INetworkTakeoverMihomoService? serviceStatus = null,
         FakeNetworkTakeoverProxyRecovery? proxyRecovery = null,
-        INetworkTakeoverReadiness? readiness = null)
+        INetworkTakeoverReadiness? readiness = null,
+        INetworkTakeoverProxySelections? selections = null)
     {
         return new NetworkTakeoverService(
             configuration ?? new FakeNetworkTakeoverCoreConfiguration(),
@@ -580,7 +634,7 @@ public sealed class NetworkTakeoverServiceTests
                 "NetworkTakeover.TransparentProxyServiceMissing.Full" => "missing full",
                 "NetworkTakeover.TransparentProxyServiceMissing.Rule" => "missing rule",
                 _ => key,
-            });
+            }, selections);
     }
 
     private sealed class FakeNetworkTakeoverCoreConfiguration(List<string>? operations = null)

@@ -305,6 +305,8 @@ internal sealed class ProxiesViewModel : ObservableObject
             exception is OperationCanceledException
                 or InvalidOperationException
                 or ArgumentException
+                or System.IO.IOException
+                or UnauthorizedAccessException
                 or System.Net.Http.HttpRequestException
                 or System.Text.Json.JsonException
             && !ExceptionGraphClassifier.IsProcessFatal(exception)

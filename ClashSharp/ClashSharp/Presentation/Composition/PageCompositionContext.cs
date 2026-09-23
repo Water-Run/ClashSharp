@@ -17,6 +17,7 @@ internal sealed record PageCompositionContext(
     MihomoConnectionService MihomoConnections,
     MainlandChinaTextDisplayService MainlandChinaTextDisplay,
     MihomoControllerClient MihomoController,
+    ProxySelectionService ProxySelections,
     MihomoCoreService MihomoCore,
     CoreConfigurationService CoreConfiguration,
     MihomoServiceManager MihomoService,

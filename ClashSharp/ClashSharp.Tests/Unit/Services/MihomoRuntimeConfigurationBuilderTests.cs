@@ -112,6 +112,26 @@ public sealed class MihomoRuntimeConfigurationBuilderTests
         Assert.Contains("- MATCH,GLOBAL", configuration, StringComparison.Ordinal);
     }
 
+    /// <summary>Verifies imported profiles retain cache options while enabling acknowledged selection recovery.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("profile:\n  store-selected: false\n  store-fake-ip: false\n")]
+    public void OverrideRuntimeKeys_EnablesSelectionCacheForChildRecovery(string cacheConfiguration)
+    {
+        string generated = MihomoRuntimeConfigurationBuilder.OverrideRuntimeKeys(
+            cacheConfiguration + "proxies: []\nrules:\n  - MATCH,DIRECT\n",
+            7890, ClashSharpMode.RuleTakeover, false, ControllerSecret);
+        YamlStream yaml = new();
+        yaml.Load(new StringReader(generated));
+        YamlMappingNode root = (YamlMappingNode)yaml.Documents[0].RootNode;
+        YamlMappingNode profile = (YamlMappingNode)root.Children[new YamlScalarNode("profile")];
+        Assert.Equal("true", ((YamlScalarNode)profile.Children[new YamlScalarNode("store-selected")]).Value);
+        if (cacheConfiguration.Length > 0)
+        {
+            Assert.Equal("false", ((YamlScalarNode)profile.Children[new YamlScalarNode("store-fake-ip")]).Value);
+        }
+    }
+
     /// <summary>Verifies missing controlled keys are inserted deterministically.</summary>
     [Fact]
     public void OverrideRuntimeKeys_MissingKeys_InsertsModeAndPort()

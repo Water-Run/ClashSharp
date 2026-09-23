@@ -16,7 +16,7 @@ internal static class ProxiesPageComposition
             new ProxiesLocalizationAdapter(context.Localization),
             new ProxyNodeCatalogAdapter(context.ProxyNodes),
             new ProxyLatencyTesterAdapter(context.ProxyLatency),
-            new ProxyRuntimeControllerAdapter(context.MihomoController),
+            new ProxyRuntimeControllerAdapter(context.MihomoController, context.ProxySelections),
             new ProxiesLogAdapter(context.LogStorage),
             context.ErrorSink,
             new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));

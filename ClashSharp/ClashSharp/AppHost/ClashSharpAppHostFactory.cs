@@ -78,6 +78,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(_ => StartupLaunchServiceFactory.CreateDefault());
             services.AddSingleton(_ => MihomoConnectionService.Instance);
             services.AddSingleton(_ => MihomoControllerClient.Instance);
+            services.AddSingleton(_ => ProxySelectionService.Instance);
             services.AddSingleton(_ => NetworkTakeoverService.Instance);
             services.AddSingleton(_ => WindowsProxyService.Instance);
             services.AddSingleton(_ => WindowsNetworkDiagnosticService.Instance);
