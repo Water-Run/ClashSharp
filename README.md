@@ -1,145 +1,169 @@
 <div align="center">
 
-<img src="./ClashSharp/ClashSharp/Assets/Logo.svg" alt="Clash# logo" width="128" />
+<img src="./ClashSharp/ClashSharp/Assets/Logo.svg" alt="Clash# logo" width="112" />
 
-# `Clash#`
+# Clash#
 
-**A modern, Windows-native proxy client built on the [mihomo](https://github.com/MetaCubeX/mihomo) core.**
+**A proxy client made for Windows, powered by the [mihomo](https://github.com/MetaCubeX/mihomo) core.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Water-Run/ClashSharp/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&style=flat-square)](https://github.com/Water-Run/ClashSharp/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-2ea043?style=flat-square)](./LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)](#installation)
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)](./global.json)
-[![Package](https://img.shields.io/badge/Package-MSIX-4c1?style=flat-square)](#installation)
-[![Status](https://img.shields.io/badge/1.0.0-development-orange?style=flat-square)](./docs/reviews/2026-09-22-development-status.md)
+[![Windows 11](https://img.shields.io/badge/Windows%2011-x64-0078D4?style=flat-square&logo=windows11&logoColor=white)](#install)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet&logoColor=white)](./global.json)
 
-**English** · [简体中文](./README-zh.md) · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
+**English** · [简体中文](./README-zh.md) · [繁體中文](./README-zh-Hant.md) · [한국어](./README-ko.md) · [Русский](./README-ru.md) · [فارسی](./README-fa.md)
 
 </div>
 
----
-
 > [!IMPORTANT]
-> **1.0.0 development resumed on 2026-09-22, with accumulated work consolidated into `main`.**
-> Settings generation cutover remains in progress. Automatic empty-directory cleanup is now connected to ordinary uninstall; acceptance of the new installer package remains pending ([integration record](./docs/reviews/2026-09-22-installer-cleanup-integration.md)). The historical checkpoint below is [`065a5d5`](https://github.com/Water-Run/ClashSharp/commit/065a5d5), tagged [`v1.0.0-checkpoint.20260912`](https://github.com/Water-Run/ClashSharp/releases/tag/v1.0.0-checkpoint.20260912).
-> No formal release exists yet — CI packages are validation artifacts, not releases.
+> Clash# 1.0.0 is still being built, and there is no official release yet.
+> The packages CI produces are unsigned test builds, not something to depend on every day.
 
-| Area | State at the checkpoint |
-| :--- | :--- |
-| **Tests** | 4800 local tests pass — zero failures, zero skips |
-| **Build** | 18-project Release x64 build — zero warnings, zero errors |
-| **Installer** | Real install, repair, uninstall, eight interruption/file-lock recoveries, held-service-handle recovery, and recovery across a Windows restart |
-| **Runtime** | Real core reload, bounded crash recovery, session isolation after a restarted service host, and active-core uninstall |
-| **Networking** | 32/32 isolated node probes and HTTPS forwarding against an existing Clash configuration |
-| **Pending** | WPF page interaction, graceful shutdown, automatic empty-directory cleanup, complete release matrix |
+Most proxy clients are made to run everywhere. Clash# is made to run on one system, and to run there well.
 
-<sub>Exact candidates, evidence boundaries, remaining work, and later documentation: **[current development status](./docs/reviews/2026-09-22-development-status.md)** · **[1.0.0 execution ledger](./docs/reviews/1.0.0-execution-ledger.md)** · [pause checkpoint](./docs/reviews/2026-09-12-pause-checkpoint.md) · [server acceptance](./docs/reviews/2026-09-12-server-acceptance.md)</sub>
+It is written in C# and WinUI 3, and it feels like part of Windows 11 rather than a guest in it. It also knows the things a Windows user sooner or later trips over: apps that ignore the system proxy, WSL living on its own network, Store apps that cannot reach `localhost`, and the proxy setting still switched on after a client has crashed.
 
-## Windows-Native by Design
+Bring a Clash subscription. Clash# takes care of the rest.
 
-Clash# is native beyond the toolchain — `C#` + WinUI 3, Fluent page design, and `.msix` packaging are the foundation, not the feature set. The application is built around Windows networking behavior rather than generic cross-platform proxy terminology.
+## Highlights
 
-| Area | What Clash# provides |
-| :--- | :--- |
-| **Shell** | Native WinUI 3 controls, Fluent icons, and Windows 11 acrylic surfaces |
-| **Master control** | A tile-based surface for status and common actions, modeled on Windows Quick Settings |
-| **Lifecycle** | A dedicated installer/uninstaller, and proxy conflict detection and repair at startup |
-| **Recovery** | On abnormal exit, a one-shot Recovery Watchdog immediately restores the system proxy still owned by Clash#; a logon helper is only the next-logon fallback |
-| **Repair tools** | Quick network repair for WSL, terminals, and the Microsoft Store; proxy residue cleanup; system proxy restoration on exit |
-| **Takeover** | Fail-closed transparent proxy activation through TUN |
-| **Languages** | Interface catalogs for Simplified Chinese, Traditional Chinese, English, Russian, French, German, and Persian (RTL) |
+- **At home on Windows 11.** Native controls, Fluent icons, translucent materials, light and dark themes, your own accent color. The home page is a grid of tiles in the spirit of Quick Settings: keep the ones you care about and drag them into place.
+- **Leaves your network as it found it.** Before it starts, Clash# looks for anything in the way: another mihomo, a busy port, a leftover manual proxy, a VPN adapter. If it ever exits unexpectedly, a small watchdog switches off the system proxy it left behind.
+- **Closes the usual Windows gaps.** A click lets WSL, terminals, and Microsoft Store apps use the proxy too.
+- **Works on its own when you want it to.** Triggers are small "when this, then that" rules. *When this session passes 5 GB, switch to Standby and let me know.*
+- **Remembers.** Traffic, connections, and node health are kept locally in SQLite, so Statistics can show you more than the present moment.
+- **Speaks your language.** Simplified Chinese, Traditional Chinese, English, Korean, Russian, French, German, and Persian, laid out right to left.
 
-## Installation
+## Modes
 
-> [!NOTE]
-> Once a formal version is published, packages appear on [GitHub Releases](https://github.com/Water-Run/ClashSharp/releases).
+Clash# names its modes after what they do to your network. If you are coming from another Clash client, here is the translation:
 
-1. Download and extract the release package. It contains `ClashSharp-Installer.exe` and its sibling `payload` directory — **keep them together**.
-2. Run the Authenticode-signed `ClashSharp-Installer.exe` **from your normal user session**. The installer is a self-contained WPF executable and needs no preinstalled .NET.
-3. Accept the UAC prompt for the machine service and any required machine certificate trust — **check the verified publisher first**. The application package itself belongs to the user who ran the installer.
+| In Clash# | Usually called | What happens |
+| :--- | :--- | :--- |
+| **Disabled** | Off | The core stops and the system proxy is put back. |
+| **Standby** | Direct | The core runs, but traffic goes straight out. |
+| **Rule takeover** | Rule | Traffic follows the rules in your profile. |
+| **Full takeover** | Global | Everything goes through the proxy you selected. |
 
-The installer verifies Windows 11 x64 compatibility, installs the package certificate when needed, and deploys the MSIX package. Verified certificate and MSIX files — and their directory chain — stay read-only locked through every consumer, with identity and SHA-256 rechecked immediately before and after use. After deployment, every package-authored file is verified against the signed block-map payload, and the MSIX enables Windows package-integrity enforcement.
+**Transparent proxy** (TUN mode) is a separate switch in *Settings › Proxy*. It catches traffic from every app, including the ones that pay no attention to the system proxy. Should it fail to start, Clash# can fall back to the system proxy on its own.
 
-If Clash# is already installed, the installer enters **maintenance mode** for check, in-place update/repair, or uninstall.
+> [!CAUTION]
+> Transparent proxy takes over routing and DNS for the entire machine. Clash# is designed for one signed-in user per computer and does not keep different users' traffic apart.
+
+Turn on the tray color indicator in Settings, and the icon tells you the state at a glance:
+
+| <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.Inactive.svg" width="24" alt="Gray tray icon" /> | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.SystemProxy.svg" width="24" alt="Green tray icon" /> | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.Tun.svg" width="24" alt="Purple tray icon" /> |
+| :---: | :---: | :---: |
+| Disabled or Standby | System proxy | Transparent proxy |
+
+## Install
+
+**You need** Windows 11 x64, or Windows Server 2025 with the Desktop Experience.
+
+Once 1.0.0 is out, packages will be waiting on the [Releases](https://github.com/Water-Run/ClashSharp/releases) page.
+
+1. Download and extract the package. Keep `ClashSharp-Installer.exe` and the `payload` folder side by side.
+2. Double-click `ClashSharp-Installer.exe` from your own account. Clash# is installed for whoever runs it, so there is no need for *Run as administrator*, and no need to install .NET first.
+3. Windows will ask for permission once, to set up the background service behind transparent proxy. Check that the publisher is who you expect, then allow it.
+
+Later on, running the same installer again lets you repair, update, or uninstall.
 
 > [!WARNING]
-> Always uninstall through `ClashSharp-Installer.exe`. Removing only the MSIX from Windows Settings can leave machine-level service resources behind.
+> Uninstall with `ClashSharp-Installer.exe`, not from *Settings › Apps*. Removing the app through Windows alone leaves its background service behind.
+
+## Getting started
+
+1. In **Proxies › Links**, add your subscription link. Clash# fetches the profile behind it.
+2. In **Proxies › Profiles**, make sure that profile is the one selected.
+3. On **Master Control**, choose **Rule takeover**. You are now online through the proxy.
+4. In **Proxies › Nodes**, pick a node, or run a latency test to find a quick one.
+
+Each time it starts, Clash# shows a short checklist to confirm everything is in order. Once you no longer need it, it can be turned off under *Settings › Startup*.
+
+Apps that ignore the system proxy can be pointed at `127.0.0.1:10000`, where HTTP and SOCKS share the same port. The port can be changed in *Settings › Proxy*.
+
+### Around the app
+
+| Page | What it is for |
+| :--- | :--- |
+| **Master Control** | Switching modes, plus tiles for speed, traffic, latency, subscription usage, public IP, and more. |
+| **Proxies** | Nodes, profiles (each with its own version history), subscription links, and rules. |
+| **Triggers** | Your automations, checked from top to bottom. |
+| **Connections** | Every live connection, with its process, the rule it matched, and the route it took. |
+| **Statistics** | Long-term totals by profile, by node, and over time. |
+| **Settings** | Language and theme, startup, transparent proxy, Windows fixes, notifications, tray, and backups. |
+
+## Good to know
 
 <details>
-<summary><b>Release build and signing guarantees</b></summary>
-
+<summary><b>The browser works, but WSL, a terminal, or a Store app does not</b></summary>
 <br />
 
-Release dependency resolution and payload assembly are **fully offline**: every .NET project uses the prior locked restore.
+These apps don't read the Windows system proxy. Open *Settings › Native Windows*: Clash# checks WSL, terminals, and the Microsoft Store one at a time, and can apply a fix to each, or take it back.
+</details>
 
-- The build **fails closed** unless a checked-in Mihomo version/length/SHA-256 manifest matches the bundled ordinary binary, and all four pinned GeoData assets have been prepared with `Tools\Prepare-GeoData.ps1`.
-- `Tools\Update-Mihomo.ps1` is an explicit maintainer utility — **never** an implicit release-build download.
-- Every run uses a new random staging root and admits only the single manifest-declared x64 Windows App Runtime dependency, requiring its approved signer thumbprint in `CLASHSHARP_WINDOWS_APP_RUNTIME_SIGNER_THUMBPRINT`.
-- Official packaging additionally requires controlled MSIX signing material, a trusted timestamped Authenticode certificate, and an explicit `CLASHSHARP_WINDOWS_SDK_VERSION`. SignTool is accepted only from that Microsoft-signed Windows Kits x64 directory, and signing contacts only the explicitly configured HTTPS timestamp endpoint.
-- The WPF installer is published as one self-contained executable in disposable staging, and is promoted to `artifacts\installer\release` only after its exact file set, length, and SHA-256 contract is rechecked.
-- `build.ps1 -Development` produces an explicitly named, non-publishable unsigned artifact.
+<details>
+<summary><b>Clash# reports a conflict at startup</b></summary>
+<br />
+
+Something else is already doing what Clash# is about to do: another mihomo core, a program holding port 10000, a manual proxy, or a VPN adapter. The dialog explains each one and offers a fix wherever that is safe. VPN adapters are only pointed out; Clash# will never disable them for you. You can run the check again at any time from *Settings › Startup*.
+</details>
+
+<details>
+<summary><b>The proxy stayed on after Clash# crashed</b></summary>
+<br />
+
+It shouldn't: the watchdog restores the system proxy the moment Clash# exits abnormally. If the computer went down before it had the chance, Clash# tidies up the next time it starts. You can also register a small helper under *Settings › Startup* that does the same at sign-in, even before Clash# opens.
+</details>
+
+<details>
+<summary><b>Some region names and flags differ from my profile</b></summary>
+<br />
+
+The *Mainland China features* setting is on by default. It renames and re-flags certain regions in the interface according to mainland China conventions. Only what you see is affected; your profiles, logs, searches, copied text, and exports stay exactly as they were. Switch it off in Settings if you prefer.
+</details>
+
+<details>
+<summary><b>Backups and updates</b></summary>
+<br />
+
+*Settings › Data* exports your settings to a single file, with profiles and subscriptions included if you like, ready to be imported later. Logs can be exported on their own as an SQLite database.
+
+The *About* page checks GitHub Releases for new versions. Updates themselves are installed with the installer.
+</details>
+
+## Building from source
+
+You will need Windows x64, PowerShell 7, and the .NET SDK version pinned in [`global.json`](./global.json).
+
+```powershell
+dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
+dotnet build   ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restore
+dotnet test    ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Platform=x64 --no-build
+```
+
+Building the installer package takes a few more steps, covered in [Installer/README.md](./ClashSharp/Installer/README.md) (in Chinese).
+
+<details>
+<summary><b>Repository layout</b></summary>
+<br />
+
+| Path | Contents |
+| :--- | :--- |
+| `ClashSharp/ClashSharp` | The WinUI 3 desktop app |
+| `ClashSharp/ClashSharp.Core` · `.Application` · `.Infrastructure` | Domain model, application logic, and Windows and storage adapters |
+| `ClashSharp/ClashSharp.MihomoService` | The Windows service that runs the core for transparent proxy |
+| `ClashSharp/ClashSharp.RecoveryWatchdog` | Puts the system proxy back after an abnormal exit |
+| `ClashSharp/ClashSharp.Installer*` | The WPF installer and its transaction logic |
+| `ClashSharp/SandboxTest` | Package smoke tests in Windows Sandbox |
+| `docs/` | Design notes and development records (in Chinese) |
 
 </details>
 
-## Modes and Concepts
+Contributions are welcome. Please have a look at [CodingStyle.md](./CodingStyle.md) first.
 
-Clash# names its modes after what they do to Windows, which maps onto mainstream terminology as follows:
+## Credits and license
 
-```mermaid
-flowchart LR
-    A["Disabled<br/><i>proxy off</i>"] --> B["Standby<br/><i>direct</i>"]
-    B --> C["Rule Takeover<br/><i>rule-based routing</i>"]
-    C --> D["Full Takeover<br/><i>global</i>"]
-    D -.->|opt in| E["Transparent Proxy<br/><i>TUN, machine-wide</i>"]
-    C -.->|opt in| E
-```
+The proxy core is [mihomo](https://github.com/MetaCubeX/mihomo) by MetaCubeX, distributed under GPL-3.0. GeoIP and GeoSite data come from [meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat).
 
-| Concept in `Clash#` | Mainstream equivalent | Meaning |
-| :--- | :--- | :--- |
-| Master Control | Overview / Home | The core control page |
-| Disabled | Off | Proxy is not enabled |
-| Standby | Direct | Proxy enabled, direct mode |
-| Rule Takeover | Rule | Proxy enabled, rule mode |
-| Full Takeover | Global | Proxy enabled, global mode |
-| Transparent Proxy | TUN mode | Proxy enabled through TUN |
-
-The default listening port is **`10000`**.
-
-> [!CAUTION]
-> Transparent proxy must be enabled in settings, and TUN takeover is **machine-wide**. Clash# is designed for one interactive user and one Core owner per machine; it does **not** provide multi-session traffic isolation. Once installer execution is released, ownership reassociation must be started by the target user and explicitly confirmed in Repair — ordinary Repair never changes ownership implicitly.
-
-## Usage
-
-You need a Clash subscription to use Clash#.
-
-| Page | Use it for |
-| :--- | :--- |
-| **Master Control** | Switching between disabled, standby, rule takeover, and full takeover |
-| **Proxies** | Nodes, profiles, subscription links, and rules |
-| **Statistics** | Persistent SQLite-backed traffic records and rule hits |
-| **Logs** | Bounded, persisted log storage |
-
-### Advanced
-
-Advanced users can configure transparent proxy mode, background connection sampling, profile import and validation, node latency testing, Windows-native repair actions, SQLite log cleanup, and mainland China display behavior.
-
-> [!TIP]
-> Mainland China display is **enabled by default**. It changes regional display text and flag presentation at the UI layer only — profiles, logs, search, copy, and exported data are never modified.
-
-The interface language can follow Windows or be set explicitly. Persian uses a right-to-left layout.
-
-## Documentation
-
-| Document | Contents |
-| :--- | :--- |
-| [Current development status](./docs/reviews/2026-09-22-development-status.md) | Where 1.0.0 stands, main consolidation and PR handling, and remaining work |
-| [1.0.0 execution ledger](./docs/reviews/1.0.0-execution-ledger.md) | Milestones, candidates, evidence, and remaining work |
-| [Pause checkpoint](./docs/reviews/2026-09-12-pause-checkpoint.md) | Exact boundary and resumption entry points for the current pause |
-| [Server acceptance](./docs/reviews/2026-09-12-server-acceptance.md) | Real package install, startup, repair, and uninstall evidence |
-| [Design notes](./docs/design) | Per-feature design records |
-| [Architecture ledger](./docs/architecture/stabilization-ledger.md) | Architecture stabilization history |
-| [Coding style](./CodingStyle.md) | Repository coding conventions |
-
-## License
-
-`Clash#` is open-source under the [`AGPL-3.0`](./LICENSE) license.
+Clash# itself is released under the [AGPL-3.0](./LICENSE) license.
