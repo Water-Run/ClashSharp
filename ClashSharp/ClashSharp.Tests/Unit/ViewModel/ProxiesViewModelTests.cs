@@ -206,6 +206,51 @@ public sealed class ProxiesViewModelTests
         Assert.Equal("Provider updated", viewModel.RuntimeStatusText);
     }
 
+    [Theory]
+    [InlineData(MihomoProviderKind.Proxy)]
+    [InlineData(MihomoProviderKind.Rule)]
+    public async Task UpdateProviderAsync_EmptyResultWarnsAndRetryCanRecover(MihomoProviderKind kind)
+    {
+        MihomoProviderResource requested = new("shared", kind, "HTTP", "classical", 2, DateTimeOffset.UnixEpoch);
+        MihomoProviderResource unrelated = requested with
+        {
+            Kind = kind == MihomoProviderKind.Proxy ? MihomoProviderKind.Rule : MihomoProviderKind.Proxy,
+        };
+        FakeProxyRuntimeController runtime = new() { ProviderResources = [unrelated, requested] };
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(),
+            new FakeProxyLatency(), runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        runtime.ProviderResources = [unrelated, requested with { ItemCount = 0 }];
+
+        await viewModel.UpdateProviderAsync(requested, CancellationToken.None);
+
+        Assert.Equal("Provider updated with no entries", viewModel.RuntimeStatusText);
+        Assert.Equal(0, viewModel.ProviderResources.Single(row => row.Model.Kind == kind).Model.ItemCount);
+        Assert.Equal("Warning", Assert.Single(log.Entries).Level);
+        runtime.ProviderResources = [unrelated, requested with { ItemCount = 1 }];
+        await viewModel.UpdateProviderAsync(requested, CancellationToken.None);
+        Assert.Equal("Provider updated", viewModel.RuntimeStatusText);
+        Assert.Equal("Info", log.Entries[1].Level);
+    }
+
+    [Fact]
+    public async Task UpdateProviderAsync_MissingResultDoesNotReportSuccess()
+    {
+        FakeProxyRuntimeController runtime = new();
+        MihomoProviderResource requested = runtime.ProviderResources[0];
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(),
+            new FakeProxyLatency(), runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        runtime.ProviderResources = [];
+
+        await viewModel.UpdateProviderAsync(requested, CancellationToken.None);
+
+        Assert.Contains("[provider.update_failed]", viewModel.RuntimeStatusText, StringComparison.Ordinal);
+        Assert.Equal("Warning", Assert.Single(log.Entries).Level);
+    }
+
     /// <summary>Fake localization provider for proxies tests.</summary>
     private sealed class FakeProxiesLocalization : IProxiesLocalization
     {
@@ -227,6 +272,7 @@ public sealed class ProxiesViewModelTests
                 "ProxyNodes.Status.RuntimeRefreshed" => "Runtime refreshed",
                 "ProxyNodes.Status.SelectionApplied" => "Selection applied",
                 "ProxyNodes.Status.ProviderUpdated" => "Provider updated",
+                "ProxyNodes.Status.ProviderUpdatedEmpty" => "Provider updated with no entries",
                 "ProxyNodes.Status.RuntimeUnavailable" => "Runtime unavailable",
                 _ => key,
             };
@@ -289,7 +335,7 @@ public sealed class ProxiesViewModelTests
 
         /// <summary>Gets fake provider resources.</summary>
         /// <value>Configured fake provider resources.</value>
-        public IReadOnlyList<MihomoProviderResource> ProviderResources { get; } =
+        public IReadOnlyList<MihomoProviderResource> ProviderResources { get; set; } =
         [
             new("sub", MihomoProviderKind.Proxy, "HTTP", string.Empty, 2, DateTimeOffset.UnixEpoch),
             new("reject", MihomoProviderKind.Rule, string.Empty, "domain", 123, DateTimeOffset.UnixEpoch),

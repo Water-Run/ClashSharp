@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
@@ -328,8 +329,19 @@ internal sealed class ProxiesViewModel : ObservableObject
         {
             await _runtimeController.UpdateProviderAsync(provider, cancellationToken);
             await LoadRuntimeAsync(cancellationToken);
-            RuntimeStatusText = _localization.GetString("ProxyNodes.Status.ProviderUpdated");
-            _log.Append("Info", "ProxyNodes", RuntimeStatusText, provider.Name);
+            MihomoProviderResourceDisplay? updated = ProviderResources.FirstOrDefault(row =>
+                row.Model.Kind == provider.Kind && StringComparer.Ordinal.Equals(row.Model.Name, provider.Name));
+            if (updated is null)
+            {
+                throw new StableRuntimeDiagnosticException(RuntimeFailureDiagnostics.ProviderUpdateFailed,
+                    "The updated provider is absent from the runtime snapshot.");
+            }
+
+            bool empty = updated.Model.ItemCount == 0;
+            RuntimeStatusText = _localization.GetString(empty
+                ? "ProxyNodes.Status.ProviderUpdatedEmpty"
+                : "ProxyNodes.Status.ProviderUpdated");
+            _log.Append(empty ? "Warning" : "Info", "ProxyNodes", RuntimeStatusText, provider.Name);
         }
         catch (Exception exception) when (
             exception is OperationCanceledException
@@ -410,7 +422,8 @@ internal sealed class ProxiesViewModel : ObservableObject
         List<MihomoProviderResourceDisplay> rows = new(providers.Count);
         foreach (MihomoProviderResource provider in providers)
         {
-            rows.Add(_displayMapper.Map(provider));
+            MihomoProviderResourceDisplay row = _displayMapper.Map(provider);
+            rows.Add(row with { UpdateActionText = $"{_localization.GetString("Command.Update")} · {row.NameDisplay}" });
         }
 
         return rows;

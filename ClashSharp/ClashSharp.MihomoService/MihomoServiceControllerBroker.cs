@@ -238,7 +238,8 @@ internal sealed class MihomoServiceControllerBroker
                 null,
                 maximumResponseBytes: 8 * 1024,
                 HttpStatusCode.NoContent,
-                cancellationToken)
+                cancellationToken,
+                unexpectedStatusDiagnosticCode: "service.controller.provider_update_failed")
             .ConfigureAwait(false);
         return new MihomoServiceControllerBrokerPayload();
     }
@@ -630,7 +631,8 @@ internal sealed class MihomoServiceControllerBroker
         ReadOnlyMemory<byte>? body,
         int maximumResponseBytes,
         HttpStatusCode expectedStatus,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string unexpectedStatusDiagnosticCode = "service.controller.upstream_status")
     {
         MihomoControllerHttpResponse response = await transport.SendAsync(
                 method,
@@ -642,7 +644,7 @@ internal sealed class MihomoServiceControllerBroker
         if (response.StatusCode != expectedStatus)
         {
             throw new MihomoControllerUpstreamException(
-                "service.controller.upstream_status");
+                unexpectedStatusDiagnosticCode);
         }
 
         return response;

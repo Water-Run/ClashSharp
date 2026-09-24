@@ -9,6 +9,8 @@ internal sealed record MihomoProviderResourceDisplay(
     MihomoProviderResource Model,
     string NameDisplay)
 {
+    public string UpdateActionText { get; init; } = string.Empty;
+
     public string TypeDisplay =>
         Model.Kind == MihomoProviderKind.Proxy ? "Proxy Provider" : "Rule Provider";
 

@@ -262,6 +262,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Status.RuntimeRefreshed"] = "Среда выполнения обновлена.",
             ["ProxyNodes.Status.SelectionApplied"] = "Выбор применен.",
             ["ProxyNodes.Status.ProviderUpdated"] = "Provider обновлен.",
+            ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "Провайдер обновлён, но доступных записей нет. Проверьте содержимое и формат источника, затем повторите обновление.",
             ["ProxyNodes.Status.RuntimeUnavailable"] = "Не удалось прочитать среду выполнения mihomo.",
             ["CoreConfiguration.Imported"] = "Конфигурация загружена, проверена и импортирована.",
             ["CoreConfiguration.Validated"] = "Проверка конфигурации пройдена.",

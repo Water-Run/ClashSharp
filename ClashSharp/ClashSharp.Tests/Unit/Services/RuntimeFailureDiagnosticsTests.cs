@@ -18,6 +18,7 @@ public sealed class RuntimeFailureDiagnosticsTests
         { RuntimeFailureDiagnostics.DnsConflict, RuntimeFailureArea.Dns },
         { "service.child.configuration_untrusted", RuntimeFailureArea.Configuration },
         { "service.controller.provider_update_invalid", RuntimeFailureArea.Provider },
+        { "service.controller.provider_update_failed", RuntimeFailureArea.Provider },
     };
 
     [Theory]

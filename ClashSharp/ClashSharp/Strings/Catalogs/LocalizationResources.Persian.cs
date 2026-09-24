@@ -262,6 +262,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Status.RuntimeRefreshed"] = "زمان اجرا تازه‌سازی شد.",
             ["ProxyNodes.Status.SelectionApplied"] = "انتخاب اعمال شد.",
             ["ProxyNodes.Status.ProviderUpdated"] = "ارائه‌دهنده به‌روزرسانی شد.",
+            ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "ارائه‌دهنده به‌روزرسانی شد، اما هیچ ورودی در دسترس نیست. محتوا و قالب منبع را بررسی کنید، سپس به‌روزرسانی را دوباره انجام دهید.",
             ["ProxyNodes.Status.RuntimeUnavailable"] = "خواندن زمان اجرای mihomo ممکن نیست.",
             ["CoreConfiguration.Imported"] = "پیکربندی بارگیری، اعتبارسنجی و وارد شد.",
             ["CoreConfiguration.Validated"] = "اعتبارسنجی پیکربندی موفق بود.",

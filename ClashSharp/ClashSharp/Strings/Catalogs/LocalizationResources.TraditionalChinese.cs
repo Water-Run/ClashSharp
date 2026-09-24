@@ -262,6 +262,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Status.RuntimeRefreshed"] = "執行狀態已重新整理。",
             ["ProxyNodes.Status.SelectionApplied"] = "已切換策略組。",
             ["ProxyNodes.Status.ProviderUpdated"] = "Provider 已更新。",
+            ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "Provider 已更新，但沒有可用項目。請檢查來源內容和格式，再重試更新。",
             ["ProxyNodes.Status.RuntimeUnavailable"] = "無法讀取 mihomo 執行狀態。",
             ["CoreConfiguration.Imported"] = "設定檔已下載、校驗並匯入。",
             ["CoreConfiguration.Validated"] = "設定檔校驗通過。",

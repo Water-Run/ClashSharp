@@ -276,6 +276,46 @@ public sealed class MihomoServiceControllerBrokerTests
         Assert.Equal([(HttpMethod.Put, expectedPath)], transport.RequestShapes);
     }
 
+    [Theory]
+    [InlineData(MihomoServiceIpcCommand.UpdateProvider, MihomoServiceIpcProviderKind.Proxy, HttpStatusCode.ServiceUnavailable)]
+    [InlineData(MihomoServiceIpcCommand.UpdateProvider, MihomoServiceIpcProviderKind.Rule, HttpStatusCode.BadRequest)]
+    [InlineData(MihomoServiceIpcCommand.UpdateProvider, MihomoServiceIpcProviderKind.Rule, HttpStatusCode.InternalServerError)]
+    [InlineData(MihomoServiceIpcCommand.GetConnections, MihomoServiceIpcProviderKind.Proxy, HttpStatusCode.ServiceUnavailable)]
+    public async Task UpstreamRejection_DistinguishesProviderUpdateFromControllerRead(
+        MihomoServiceIpcCommand command,
+        MihomoServiceIpcProviderKind kind,
+        HttpStatusCode status)
+    {
+        FakeMihomoChildProcess process = new("broker", 507);
+        await using MihomoChildSupervisorTestContext context = new([process]);
+        string hash = context.WriteConfiguration("mixed-port: 7890\n");
+        Assert.True((await context.Supervisor.StartAsync(75, hash, CancellationToken.None)).Succeeded);
+        bool update = command == MihomoServiceIpcCommand.UpdateProvider;
+        string path = update
+            ? kind == MihomoServiceIpcProviderKind.Proxy ? "/providers/proxies/subscription" : "/providers/rules/subscription"
+            : "/connections";
+        RecordingTransportFactory transport = new(
+        [
+            new Step(update ? HttpMethod.Put : HttpMethod.Get, path,
+                new MihomoControllerHttpResponse(status, Encoding.UTF8.GetBytes("private upstream response"))),
+        ]);
+        MihomoServiceIpcRequest request = BrokerRequest(context.Supervisor.GetSnapshot(), command) with
+        {
+            ProviderUpdate = update ? new MihomoServiceIpcProviderUpdate { Kind = kind, Name = "subscription" } : null,
+        };
+
+        MihomoServiceControllerBrokerResult result = await CreateBroker(context, transport)
+            .ExecuteAsync(request, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(update ? "service.controller.provider_update_failed" : "service.controller.upstream_status", result.ErrorCode);
+        Assert.Null(result.Payload);
+        Assert.Equal(MihomoServiceChildState.Running, result.Snapshot.ChildState);
+        Assert.Equal(75, result.Snapshot.ActiveGeneration);
+        Assert.Equal(hash, result.Snapshot.ActiveConfigurationHash);
+        Assert.Single(transport.Requests);
+    }
+
     [Fact]
     public async Task CommandProcessor_ProjectsReadyStateAndOnlyChildRuntimeLogs()
     {

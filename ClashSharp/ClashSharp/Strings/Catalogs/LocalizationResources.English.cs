@@ -262,6 +262,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Status.RuntimeRefreshed"] = "Runtime refreshed.",
             ["ProxyNodes.Status.SelectionApplied"] = "Selection applied.",
             ["ProxyNodes.Status.ProviderUpdated"] = "Provider updated.",
+            ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "Provider updated, but no entries are available. Check the source content and format, then retry the update.",
             ["ProxyNodes.Status.RuntimeUnavailable"] = "Unable to read mihomo runtime.",
             ["CoreConfiguration.Imported"] = "Configuration was downloaded, validated, and imported.",
             ["CoreConfiguration.Validated"] = "Configuration validation passed.",
