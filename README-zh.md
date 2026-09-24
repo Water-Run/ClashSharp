@@ -4,7 +4,7 @@
 
 # Clash#
 
-**为 Windows 而生的代理客户端，基于 [mihomo](https://github.com/MetaCubeX/mihomo) 内核。**
+**基于 mihomo 内核的 Windows 原生代理客户端**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Water-Run/ClashSharp/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white&style=flat-square)](https://github.com/Water-Run/ClashSharp/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-2ea043?style=flat-square)](./LICENSE)
@@ -16,41 +16,41 @@
 </div>
 
 > [!IMPORTANT]
-> Clash# 1.0.0 仍在开发中，暂无正式版本。
-> CI 产出的安装包是未签名的测试构建，不适合日常使用。
+> Clash# 1.0.0 尚在开发中，目前没有正式发布版本。CI 生成的安装包为未签名的测试构建，不适用于日常使用。
 
-大多数代理客户端追求处处能跑；Clash# 只打算在一个系统上跑，并且跑好。
+Clash# 是基于 [mihomo](https://github.com/MetaCubeX/mihomo) 内核的 Windows 原生代理客户端。主程序采用 C#、.NET 10 与 WinUI 3 开发，以 MSIX 包分发，由独立的 WPF 安装器负责安装、修复与卸载。适用于 Windows 11 x64，以及带桌面体验的 Windows Server 2025。
 
-它用 C# 和 WinUI 3 写成，看上去就是 Windows 11 的一部分，而不像一位借住的客人。它也熟悉 Windows 用户迟早会遇到的那些麻烦：不理会系统代理的程序、自成一片网络的 WSL、连不上 `localhost` 的商店应用，还有客户端崩溃之后依然开着的系统代理。
+除订阅、配置、节点与规则的管理外，Clash# 还处理 Windows 平台上的几类具体问题：系统代理的接管与还原，整机透明代理（TUN），WSL、终端与 Microsoft Store 应用的代理访问，以及程序异常退出后遗留的代理设置。
 
-你只需要一个 Clash 订阅，剩下的交给 Clash#。
+## 功能
 
-## 亮点
-
-- **像 Windows 自己的应用。** 原生控件、Fluent 图标、半透明材质，浅色深色随你，主题色也跟着你走。首页是一面仿照「快速设置」的磁贴墙：留下你在意的，拖到你顺手的位置。
-- **来时怎样，走时还怎样。** 启动之前，Clash# 会先看看有没有挡路的：另一个 mihomo、被占用的端口、残留的手动代理、别的 VPN 网卡。万一它意外退出，一个小小的看门狗会立刻关掉它留下的系统代理。
-- **补上 Windows 的老缺口。** 点一下，WSL、终端和 Microsoft Store 应用也能走代理。
-- **该自动的时候自动。** 触发器就是一条条「当……就……」的小规则。比如：*本次运行流量超过 5 GB，就切到待命，再通知我一声。*
-- **记得住。** 流量、连接和节点健康状况都保存在本地的 SQLite 里，统计页看到的不只是此时此刻。
-- **说你的语言。** 简体中文、繁體中文、English、한국어、Русский、Français、Deutsch，以及从右向左排版的 فارسی。
+| 方面 | 说明 |
+| :--- | :--- |
+| **界面** | WinUI 3 原生控件、Fluent 图标与 Windows 11 材质，支持浅色、深色与系统主题色。主控页采用磁贴布局，磁贴可显示、隐藏与排序。 |
+| **启动检查** | 启动代理前检查外部 mihomo 进程、端口占用、Windows 手动代理及其他 TUN/VPN 网卡，并对可安全处理的项目提供修复。 |
+| **代理还原** | 退出时还原系统代理；异常退出时由恢复进程立即还原；启动时检查并清理残留的代理设置。 |
+| **Windows 网络修正** | 分别诊断 WSL、终端与 Microsoft Store 的代理访问，逐项应用或撤销修正。 |
+| **触发器** | 条件全部满足时，按顺序执行预设操作。条件包括流量、速率、连接数、运行时间与系统时间；操作包括切换模式、断开连接、发送通知与退出程序。 |
+| **统计与日志** | 流量、连接、节点健康与规则命中记录保存于本地 SQLite 数据库。 |
+| **界面语言** | 简体中文、繁體中文、English、한국어、Русский、Français、Deutsch、فارسی（从右到左布局）。 |
 
 ## 模式
 
-Clash# 按「对网络做了什么」来给模式起名。如果你用过别的 Clash 客户端，可以这样对照：
+Clash# 以模式对网络的作用为其命名。与常见客户端的对应关系如下：
 
-| Clash# 里叫 | 通常叫 | 会发生什么 |
+| Clash# | 常见名称 | 行为 |
 | :--- | :--- | :--- |
-| **未启用** | 关闭 | 内核停止，系统代理还原。 |
-| **待命** | 直连 | 内核在运行，但流量直接出门。 |
-| **按规则接管** | 规则 | 流量按配置里的规则分流。 |
-| **接管所有** | 全局 | 所有流量都经由你选中的代理。 |
+| **未启用** | 关闭 | 停止内核，还原系统代理。 |
+| **待命** | 直连 | 内核运行，流量默认直连。 |
+| **按规则接管** | 规则 | 按配置中的规则分流。 |
+| **接管所有** | 全局 | 全部流量经由所选代理。 |
 
-**透明代理**（即 TUN 模式）是 *设置 › 代理* 里的一个独立开关。它能接住每个程序的流量，连那些对系统代理视而不见的也不例外。万一它没能启动，Clash# 可以自动退回到系统代理。
+透明代理（TUN）由 **设置 › 代理** 中的「透明代理」控制，默认开启。开启且 Mihomo 服务可用时，接管通过 TUN 完成，不读取系统代理的程序同样受其覆盖；Mihomo 服务未部署时，接管改由 Windows 系统代理完成。
 
 > [!CAUTION]
-> 透明代理会接管整台电脑的路由与 DNS。Clash# 按「一台电脑、一位登录用户」设计，不会把不同用户的流量彼此隔开。
+> 透明代理接管整台计算机的路由与 DNS。Clash# 按「一台计算机、一个交互用户」设计，不提供多用户会话之间的流量隔离。
 
-在设置里打开「托盘色彩状态指示」，托盘图标一眼就能告诉你现在的状态：
+启用 **设置 › 任务栏托盘** 中的「启用托盘色彩状态指示」后，托盘图标以颜色区分当前状态：
 
 | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.Inactive.svg" width="24" alt="灰色托盘图标" /> | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.SystemProxy.svg" width="24" alt="绿色托盘图标" /> | <img src="./ClashSharp/ClashSharp/Assets/Tray/Logo.Tun.svg" width="24" alt="紫色托盘图标" /> |
 | :---: | :---: | :---: |
@@ -58,83 +58,85 @@ Clash# 按「对网络做了什么」来给模式起名。如果你用过别的 
 
 ## 安装
 
-**系统要求：** Windows 11 x64，或带桌面体验的 Windows Server 2025。
+**系统要求**：Windows 11 x64，或带桌面体验的 Windows Server 2025。
 
-1.0.0 正式发布后，安装包会出现在 [Releases](https://github.com/Water-Run/ClashSharp/releases) 页面。
+正式版本发布后，安装包提供于 [Releases](https://github.com/Water-Run/ClashSharp/releases) 页面。
 
-1. 下载并解压。`ClashSharp-Installer.exe` 和 `payload` 文件夹要放在一起。
-2. 用你自己的账户双击 `ClashSharp-Installer.exe`。Clash# 装给运行安装器的那个人，所以不必「以管理员身份运行」，也不必事先装 .NET。
-3. Windows 会请求一次权限，用来安装透明代理所需的后台服务。确认发布者是你认得的那一位，再点允许。
+1. 下载并解压发布包。`ClashSharp-Installer.exe` 须与同目录的 `payload` 文件夹保持在一起。
+2. 在当前用户会话中运行 `ClashSharp-Installer.exe`。应用安装于运行安装器的用户名下，无需以管理员身份运行，也无需预装 .NET。
+3. 部署 Mihomo 服务及必要的证书信任时，安装器请求管理员授权。授权前应核对所显示的发布者。
 
-以后想修复、升级或卸载，再运行一次同一个安装器即可。
+修复、升级与卸载均通过再次运行同一安装器完成。
 
 > [!WARNING]
-> 请用 `ClashSharp-Installer.exe` 卸载，而不是在 *设置 › 应用* 里移除。只从 Windows 里删掉应用，后台服务会被落下。
+> 卸载应通过 `ClashSharp-Installer.exe` 进行。仅在 Windows 的「设置 › 应用」中移除时，Mihomo 服务等机器级资源不会同步清理。
 
-## 上手
+## 快速上手
 
-1. 在 **代理 › 链接** 里添加订阅链接，Clash# 会取回它背后的配置。
-2. 在 **代理 › 配置** 里确认选中的正是这份配置。
-3. 回到 **主控**，选 **按规则接管**。现在你已经通过代理上网了。
-4. 在 **代理 › 节点** 里挑一个节点，或者测一测延迟，找个快的。
+1. 在 **代理 › 链接** 中添加订阅链接。Clash# 下载并校验对应配置。
+2. 在 **代理 › 配置** 中确认该配置为当前配置。
+3. 在 **主控** 中选择 **按规则接管**。
+4. 在 **代理 › 节点** 中选择节点，可先进行延迟测试。
 
-每次启动，Clash# 都会弹出一张简短的检查清单，确认一切就绪。等你不再需要它，可以在 *设置 › 启动时* 关掉。
+Clash# 每次启动时显示启动提示，汇总订阅、透明代理服务、启动还原与代理残留的检查结果。该提示可在 **设置 › 启动时** 中关闭。
 
-不理会系统代理的程序，可以直接指向 `127.0.0.1:10000`——HTTP 和 SOCKS 共用这一个端口。端口号可在 *设置 › 代理* 里修改。
+本地混合端口默认为 `10000`，HTTP 与 SOCKS 共用。不读取系统代理的程序可直接使用 `127.0.0.1:10000`。端口可在 **设置 › 代理** 中修改。
 
-### 各个页面
+关闭主窗口时，Clash# 默认最小化到托盘并继续运行。退出应使用托盘菜单中的「安全退出」；退出时默认停止内核并还原系统代理。
 
-| 页面 | 用来做什么 |
+### 页面
+
+| 页面 | 用途 |
 | :--- | :--- |
-| **主控** | 切换模式；磁贴显示网速、流量、延迟、订阅用量、公网 IP 等等。 |
-| **代理** | 节点、配置（每份都有历史版本）、订阅链接和规则。 |
-| **触发器** | 你的自动化规则，自上而下依次判断。 |
-| **连接** | 每一条活动连接，连同它的进程、命中的规则和走过的代理路径。 |
-| **统计数据** | 按配置、按节点、按时间累积的长期统计。 |
-| **设置** | 语言与外观、启动、透明代理、Windows 修正、通知、托盘和备份。 |
+| **主控** | 切换模式；以磁贴显示内核状态、速率、流量、延迟、订阅用量、公网 IP 等信息。 |
+| **代理** | 节点、配置（含历史版本）、订阅链接与规则。 |
+| **触发器** | 自动化任务，自上而下依次评估。 |
+| **连接** | 活动连接及其所属进程、命中规则与代理路径。 |
+| **统计数据** | 按配置、节点与时间汇总的长期统计；系统日志亦由此进入。 |
+| **设置** | 语言与外观、启动、代理、Windows 原生修正、通知、托盘与数据备份。 |
 
-## 你可能想知道
+## 常见问题
 
 <details>
-<summary><b>浏览器能上，WSL、终端或商店应用却不行</b></summary>
+<summary><b>WSL、终端或 Microsoft Store 应用无法通过代理访问网络</b></summary>
 <br />
 
-这些程序不读取 Windows 的系统代理。打开 *设置 › Windows 原生*，Clash# 会逐项检查 WSL、终端和 Microsoft Store，每一项都可以单独修正，也可以撤回。
+上述程序不读取 Windows 系统代理。**设置 › Windows 原生** 可对相应项目执行诊断，并按结果应用修正；修正可随时撤销。开启透明代理后，此类程序的流量同样会被接管。
 </details>
 
 <details>
-<summary><b>启动时提示有冲突</b></summary>
+<summary><b>启动时提示冲突</b></summary>
 <br />
 
-说明有别的东西正在做 Clash# 打算做的事：另一个 mihomo 内核、占着 10000 端口的程序、开着的手动代理，或者一块 VPN 网卡。对话框会逐条说明，能安全修复的就给出修复按钮。VPN 网卡只会被指出来，Clash# 绝不会替你禁用。随时可以在 *设置 › 启动时* 重新检查。
+冲突检查涵盖四类情况：外部 mihomo 进程、代理端口被占用、Windows 手动代理已开启、存在其他 TUN 或 VPN 网卡。对话框逐项说明，并对可安全处理的项目提供修复操作。TUN 与 VPN 网卡仅作提示，Clash# 不会自动禁用。检查可在 **设置 › 启动时** 中随时重新执行。
 </details>
 
 <details>
-<summary><b>Clash# 崩溃后，系统代理还开着</b></summary>
+<summary><b>异常退出后，系统代理仍处于开启状态</b></summary>
 <br />
 
-照理不会：Clash# 一旦异常退出，看门狗会立刻还原系统代理。如果电脑在那之前就断了电，Clash# 下次启动时会把残留收拾干净。你也可以在 *设置 › 启动时* 注册一个小助手，在登录 Windows 时就先做这件事，不必等 Clash# 打开。
+Clash# 异常退出时，恢复进程会立即还原仍归 Clash# 所有的系统代理。若计算机在此之前已关闭，Clash# 将在下次启动时检查并清理残留。另可在 **设置 › 启动时** 中注册「启动还原辅助服务」，使清理在登录 Windows 时即执行，而不必等待 Clash# 启动。
 </details>
 
 <details>
-<summary><b>有些地区的名称和旗帜跟配置里不一样</b></summary>
+<summary><b>地区名称或旗帜与配置不一致</b></summary>
 <br />
 
-这是默认开启的「中国大陆特色功能」：它按中国大陆的习惯，调整界面上部分地区的名称与旗帜。改的只是显示——配置、日志、搜索、复制的文本和导出的数据都原样不动。不需要的话，在设置里关掉即可。
+**设置 › 中国大陆特色功能** 默认启用旗帜替换与文本补全，按中国大陆的规范调整界面中部分地区的名称与旗帜。该功能仅作用于界面显示，不修改配置、日志、搜索、复制内容与导出数据，可在同一位置关闭。
 </details>
 
 <details>
 <summary><b>备份与更新</b></summary>
 <br />
 
-*设置 › 数据* 可以把设置导出成一个文件，愿意的话连同配置和订阅一起，日后再导入还原。日志可以单独导出为 SQLite 数据库。
+**设置 › 数据** 可将 Clash# 设置导出为单个文件，并可选择一并包含代理配置与订阅，供日后导入还原。日志可单独导出为 SQLite 数据库，不支持导入。
 
-*关于* 页面会到 GitHub Releases 检查新版本，更新本身仍由安装器完成。
+**关于** 页面检查 GitHub Releases 上的新版本。更新由安装器完成。
 </details>
 
 ## 从源码构建
 
-需要 Windows x64、PowerShell 7，以及 [`global.json`](./global.json) 中固定版本的 .NET SDK。
+需要 Windows x64、PowerShell 7，以及 [`global.json`](./global.json) 中指定版本的 .NET SDK。
 
 ```powershell
 dotnet restore ClashSharp/ClashSharp.slnx --locked-mode
@@ -142,7 +144,7 @@ dotnet build   ClashSharp/ClashSharp.slnx -c Release -p:Platform=x64 --no-restor
 dotnet test    ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p:Platform=x64 --no-build
 ```
 
-制作安装包还要多几步，见 [Installer/README.md](./ClashSharp/Installer/README.md)。
+安装包的构建步骤见 [Installer/README.md](./ClashSharp/Installer/README.md)。
 
 <details>
 <summary><b>仓库结构</b></summary>
@@ -150,20 +152,20 @@ dotnet test    ClashSharp/ClashSharp.Tests/ClashSharp.Tests.csproj -c Release -p
 
 | 路径 | 内容 |
 | :--- | :--- |
-| `ClashSharp/ClashSharp` | WinUI 3 桌面应用 |
+| `ClashSharp/ClashSharp` | WinUI 3 主程序 |
 | `ClashSharp/ClashSharp.Core` · `.Application` · `.Infrastructure` | 领域模型、应用逻辑，以及 Windows 与存储适配 |
 | `ClashSharp/ClashSharp.MihomoService` | 为透明代理运行内核的 Windows 服务 |
-| `ClashSharp/ClashSharp.RecoveryWatchdog` | 异常退出后负责还原系统代理 |
+| `ClashSharp/ClashSharp.RecoveryWatchdog` | 异常退出后还原系统代理的恢复进程 |
 | `ClashSharp/ClashSharp.Installer*` | WPF 安装器及其事务逻辑 |
-| `ClashSharp/SandboxTest` | 在 Windows 沙盒里做的安装包冒烟测试 |
+| `ClashSharp/SandboxTest` | 基于 Windows 沙盒的安装包冒烟测试 |
 | `docs/` | 设计记录与开发记录 |
 
 </details>
 
-欢迎参与贡献，动手之前请先读一读 [CodingStyle.md](./CodingStyle.md)。
+编码约定见 [CodingStyle.md](./CodingStyle.md)。
 
-## 致谢与许可
+## 许可
 
-代理内核是 MetaCubeX 的 [mihomo](https://github.com/MetaCubeX/mihomo)，以 GPL-3.0 发布；GeoIP 与 GeoSite 数据来自 [meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)。
+代理内核为 MetaCubeX 的 [mihomo](https://github.com/MetaCubeX/mihomo)，以 GPL-3.0 许可发布；GeoIP 与 GeoSite 数据来自 [meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)。
 
-Clash# 本身以 [AGPL-3.0](./LICENSE) 协议开源。
+Clash# 以 [AGPL-3.0](./LICENSE) 许可开源。
