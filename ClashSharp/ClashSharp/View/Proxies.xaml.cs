@@ -26,6 +26,8 @@ public sealed partial class Proxies : Page
 
     private int _visit;
 
+    private bool _updatingProvider;
+
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Proxies(ProxiesPageComposition.Dependencies dependencies)
     {
@@ -71,5 +73,27 @@ public sealed partial class Proxies : Page
 
         await _selectionSession.RunAsync(
             cancellationToken => _viewModel.SelectProxyAsync(group.Model, proxyName, cancellationToken));
+    }
+
+    /// <summary>Keeps the update control focused while admitting only one page-owned update.</summary>
+    private async void UpdateProvider_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_isLoaded || _updatingProvider
+            || sender is not Button { DataContext: MihomoProviderResourceDisplay provider }
+            || !_viewModel.UpdateProviderCommand.CanExecute(provider))
+        {
+            return;
+        }
+
+        _updatingProvider = true;
+        try
+        {
+            await _selectionSession.RunAsync(
+                token => _viewModel.UpdateProviderCommand.ExecuteAsync(provider, token));
+        }
+        finally
+        {
+            _updatingProvider = false;
+        }
     }
 }

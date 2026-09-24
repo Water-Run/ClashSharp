@@ -114,8 +114,7 @@
                                     Padding="8,4"
                                     ToolTipService.ToolTip="{Binding UpdateActionText}"
                                     AutomationProperties.Name="{Binding UpdateActionText}"
-                                    Command="{Binding DataContext.UpdateProviderCommand, ElementName=ProviderResourcesList}"
-                                    CommandParameter="{Binding}">
+                                    Click="UpdateProvider_Click">
                                     <FontIcon Glyph="&#xE895;" FontSize="14" />
                                 </Button>
                             </Grid>

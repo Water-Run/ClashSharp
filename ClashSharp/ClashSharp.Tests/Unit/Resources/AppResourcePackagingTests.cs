@@ -420,9 +420,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Func<string, string>", serviceCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies provider update actions use the view model command instead of page code-behind.</summary>
+    /// <summary>Verifies provider updates retain the view model command and page cancellation without disabling focus.</summary>
     [Fact]
-    public void ProxiesXaml_BindsProviderUpdateCommand()
+    public void ProxiesXaml_DelegatesProviderUpdateToPageOwnedCommand()
     {
         string proxiesXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Proxies.xaml");
         string proxiesCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Proxies.xaml.cs");
@@ -430,10 +430,11 @@ public sealed class AppResourcePackagingTests
         string proxiesXaml = File.ReadAllText(proxiesXamlPath);
         string proxiesCode = File.ReadAllText(proxiesCodePath);
 
-        Assert.DoesNotContain("Click=\"UpdateProviderButton_Click\"", proxiesXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("UpdateProviderButton_Click", proxiesCode, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{Binding DataContext.UpdateProviderCommand, ElementName=ProviderResourcesList}\"", proxiesXaml, StringComparison.Ordinal);
-        Assert.Contains("CommandParameter=\"{Binding}\"", proxiesXaml, StringComparison.Ordinal);
+        Assert.Contains("Click=\"UpdateProvider_Click\"", proxiesXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{Binding DataContext.UpdateProviderCommand", proxiesXaml, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.UpdateProviderCommand.ExecuteAsync(provider, token)", proxiesCode, StringComparison.Ordinal);
+        Assert.Contains("_selectionSession.Cancel()", proxiesCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_runtimeController", proxiesCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies transparent proxy cannot be toggled before the service is available.</summary>

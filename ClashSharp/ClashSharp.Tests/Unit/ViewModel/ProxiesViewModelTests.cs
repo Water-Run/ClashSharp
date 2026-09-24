@@ -251,6 +251,64 @@ public sealed class ProxiesViewModelTests
         Assert.Equal("Warning", Assert.Single(log.Entries).Level);
     }
 
+    [Fact]
+    public async Task UpdateProviderAsync_PreservesCollectionAndRowWhilePublishingNewValues()
+    {
+        FakeProxyRuntimeController runtime = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(),
+            new FakeProxyLatency(), runtime, new FakeProxiesLog(), new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        IReadOnlyList<MihomoProviderResourceDisplay> collection = viewModel.ProviderResources;
+        MihomoProviderResourceDisplay row = collection[1];
+        List<string?> changes = [];
+        int collectionChanges = 0;
+        row.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        ((System.Collections.Specialized.INotifyCollectionChanged)collection).CollectionChanged += (_, _) => collectionChanges++;
+        MihomoProviderResource updated = row.Model with { ItemCount = 7, UpdatedAt = DateTimeOffset.UnixEpoch.AddDays(1) };
+        runtime.ProviderResources = [runtime.ProviderResources[0], updated];
+
+        await viewModel.UpdateProviderAsync(row.Model, CancellationToken.None);
+
+        Assert.Same(collection, viewModel.ProviderResources);
+        Assert.Same(row, viewModel.ProviderResources[1]);
+        Assert.Equal(updated, row.Model);
+        Assert.Equal("7", row.ItemCountDisplay);
+        Assert.Contains(nameof(row.ItemCountDisplay), changes);
+        Assert.Contains(nameof(row.UpdatedAtDisplay), changes);
+        Assert.Equal(0, collectionChanges);
+    }
+
+    [Fact]
+    public async Task RefreshRuntimeAsync_ReconcilesOrderAndRemovalWithoutConfusingProviderIdentities()
+    {
+        MihomoProviderResource proxy = new("shared", MihomoProviderKind.Proxy, "HTTP", "", 2, null);
+        MihomoProviderResource rule = proxy with { Kind = MihomoProviderKind.Rule };
+        MihomoProviderResource upperCase = proxy with { Name = "Shared" };
+        FakeProxyRuntimeController runtime = new() { ProviderResources = [proxy, rule, upperCase] };
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(),
+            new FakeProxyLatency(), runtime, new FakeProxiesLog(), new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        MihomoProviderResourceDisplay[] original = [.. viewModel.ProviderResources];
+        runtime.ProviderResources = [upperCase, rule with { ItemCount = 8 }, proxy];
+
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+
+        Assert.Same(original[2], viewModel.ProviderResources[0]);
+        Assert.Same(original[1], viewModel.ProviderResources[1]);
+        Assert.Same(original[0], viewModel.ProviderResources[2]);
+        Assert.Equal(8, original[1].Model.ItemCount);
+        Assert.Equal(2, original[0].Model.ItemCount);
+        runtime.ProviderResources = [rule, proxy with { Name = "new" }];
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        Assert.Equal(2, viewModel.ProviderResources.Count);
+        Assert.Same(original[1], viewModel.ProviderResources[0]);
+        Assert.Equal("new", viewModel.ProviderResources[1].Model.Name);
+        Assert.DoesNotContain(original[0], viewModel.ProviderResources);
+        Assert.DoesNotContain(original[2], viewModel.ProviderResources);
+    }
+
     /// <summary>Fake localization provider for proxies tests.</summary>
     private sealed class FakeProxiesLocalization : IProxiesLocalization
     {

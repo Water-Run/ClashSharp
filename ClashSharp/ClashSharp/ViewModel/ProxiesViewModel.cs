@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -49,7 +50,7 @@ internal sealed class ProxiesViewModel : ObservableObject
     private IReadOnlyList<MihomoProxyGroupDisplay> _proxyGroups = [];
 
     /// <summary>Backing field for <see cref="ProviderResources"/>.</summary>
-    private IReadOnlyList<MihomoProviderResourceDisplay> _providerResources = [];
+    private readonly ObservableCollection<MihomoProviderResourceDisplay> _providerResources = [];
 
     /// <summary>Backing field for <see cref="RuntimeStatusText"/>.</summary>
     private string _runtimeStatusText = string.Empty;
@@ -175,11 +176,7 @@ internal sealed class ProxiesViewModel : ObservableObject
 
     /// <summary>Gets runtime provider resources.</summary>
     /// <value>Runtime provider resources; never null.</value>
-    public IReadOnlyList<MihomoProviderResourceDisplay> ProviderResources
-    {
-        get => _providerResources;
-        private set => SetProperty(ref _providerResources, value);
-    }
+    public IReadOnlyList<MihomoProviderResourceDisplay> ProviderResources => _providerResources;
 
     /// <summary>Gets runtime operation status text.</summary>
     /// <value>Status text; never null.</value>
@@ -277,7 +274,7 @@ internal sealed class ProxiesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             ProxyGroups = [];
-            ProviderResources = [];
+            _providerResources.Clear();
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeUnavailable");
             _log.Append("Warning", "ProxyNodes", RuntimeStatusText, exception.Message);
         }
@@ -370,7 +367,7 @@ internal sealed class ProxiesViewModel : ObservableObject
         IReadOnlyList<MihomoProviderResource> providers =
             await _runtimeController.GetProviderResourcesAsync(cancellationToken);
         ProxyGroups = MapProxyGroups(groups);
-        ProviderResources = MapProviderResources(providers);
+        ApplyProviderResources(MapProviderResources(providers));
     }
 
     /// <summary>Selects a proxy from a command parameter tuple.</summary>
@@ -423,9 +420,44 @@ internal sealed class ProxiesViewModel : ObservableObject
         foreach (MihomoProviderResource provider in providers)
         {
             MihomoProviderResourceDisplay row = _displayMapper.Map(provider);
-            rows.Add(row with { UpdateActionText = $"{_localization.GetString("Command.Update")} · {row.NameDisplay}" });
+            row.UpdateActionText = $"{_localization.GetString("Command.Update")} · {row.NameDisplay}";
+            rows.Add(row);
         }
 
         return rows;
+    }
+
+    /// <summary>Retains matching rows so a resource refresh preserves list position and keyboard focus.</summary>
+    private void ApplyProviderResources(IReadOnlyList<MihomoProviderResourceDisplay> rows)
+    {
+        for (int index = 0; index < rows.Count; index++)
+        {
+            MihomoProviderResourceDisplay updated = rows[index];
+            int existingIndex = index;
+            while (existingIndex < _providerResources.Count
+                && (_providerResources[existingIndex].Model.Kind != updated.Model.Kind
+                    || !StringComparer.Ordinal.Equals(_providerResources[existingIndex].Model.Name, updated.Model.Name)))
+            {
+                existingIndex++;
+            }
+
+            if (existingIndex == _providerResources.Count)
+            {
+                _providerResources.Insert(index, updated);
+                continue;
+            }
+
+            if (existingIndex != index)
+            {
+                _providerResources.Move(existingIndex, index);
+            }
+
+            _providerResources[index].UpdateFrom(updated);
+        }
+
+        while (_providerResources.Count > rows.Count)
+        {
+            _providerResources.RemoveAt(_providerResources.Count - 1);
+        }
     }
 }
