@@ -96,6 +96,7 @@ public sealed class LocalizationService
             (AppLanguage.French, "Français"),
             (AppLanguage.German, "Deutsch"),
             (AppLanguage.Persian, "فارسی"),
+            (AppLanguage.Korean, "한국어"),
         ];
     }
 
@@ -141,6 +142,7 @@ public sealed class LocalizationService
             "fr" => AppLanguage.French,
             "de" => AppLanguage.German,
             "fa" => AppLanguage.Persian,
+            "ko" => AppLanguage.Korean,
             _ => AppLanguage.SimplifiedChinese,
         };
     }

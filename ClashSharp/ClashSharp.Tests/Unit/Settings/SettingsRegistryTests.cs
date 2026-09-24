@@ -276,6 +276,7 @@ public sealed class SettingsRegistryTests
                 "French",
                 "German",
                 "Persian",
+                "Korean",
             ],
             ["AppThemeMode"] = ["FollowSystem", "Light", "Dark"],
             ["AppAccentColorMode"] = ["FollowSystem", "Custom"],
@@ -463,7 +464,7 @@ public sealed class SettingsRegistryTests
         Assert.Equal(coreAssembly, typeof(NotificationLevel).Assembly);
         Assert.Equal(coreAssembly, typeof(ClashDataPackageScope).Assembly);
 
-        Assert.Equal([-1, 0, 1, 2, 3, 4, 5, 6], NumericValues<AppLanguage>());
+        Assert.Equal([-1, 0, 1, 2, 3, 4, 5, 6, 7], NumericValues<AppLanguage>());
         Assert.Equal([0, 1, 2], NumericValues<AppThemeMode>());
         Assert.Equal([0, 1], NumericValues<AppAccentColorMode>());
         Assert.Equal([0, 1, 2], NumericValues<StartupBehaviorMode>());

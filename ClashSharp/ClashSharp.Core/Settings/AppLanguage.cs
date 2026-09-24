@@ -26,4 +26,7 @@ public enum AppLanguage
 
     /// <summary>Persian (fa-IR).</summary>
     Persian = 6,
+
+    /// <summary>Korean (ko-KR).</summary>
+    Korean = 7,
 }

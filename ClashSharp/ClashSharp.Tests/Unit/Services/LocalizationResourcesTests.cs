@@ -39,7 +39,7 @@ public sealed class LocalizationResourcesTests
                     pair => (IReadOnlyDictionary<string, string>)pair.Value);
         IReadOnlySet<string> englishKeys = explicitTranslations[AppLanguage.English].Keys.ToHashSet(StringComparer.Ordinal);
 
-        Assert.Equal(7, explicitTranslations.Count);
+        Assert.Equal(8, explicitTranslations.Count);
         Assert.True(englishKeys.Count >= 704);
         Assert.DoesNotContain(AppLanguage.AutoDetect, explicitTranslations.Keys);
 
@@ -98,6 +98,7 @@ public sealed class LocalizationResourcesTests
             AppLanguage.French,
             AppLanguage.German,
             AppLanguage.Persian,
+            AppLanguage.Korean,
         ];
 
         foreach (AppLanguage language in languages)
@@ -143,6 +144,9 @@ public sealed class LocalizationResourcesTests
     [InlineData(AppLanguage.Persian, "About.ProxyInformation.Title", "این پروکسی")]
     [InlineData(AppLanguage.Persian, "Settings.ConnectionTest.Succeeded.Format", "آزمایش اتصال موفق بود. وضعیت HTTP: {0}.")]
     [InlineData(AppLanguage.Persian, "StartupConflict.Proxy.Repair", "غیرفعال کردن پروکسی")]
+    [InlineData(AppLanguage.Korean, "About.ProxyInformation.Title", "이 프록시")]
+    [InlineData(AppLanguage.Korean, "Settings.ConnectionTest.Succeeded.Format", "연결 테스트에 성공했습니다. HTTP 상태: {0}.")]
+    [InlineData(AppLanguage.Korean, "StartupConflict.Proxy.Repair", "프록시 끄기")]
     public void Translations_PreviouslyMixedValues_AreCorrectLanguage(AppLanguage language, string key, string expected)
     {
         Assert.Equal(expected, LocalizationResources.Translations[language][key]);
@@ -484,6 +488,18 @@ public sealed class LocalizationResourcesTests
         Assert.True(arabicValues.Length >= 600, $"Persian catalog has too few Arabic-script values: {arabicValues.Length}.");
     }
 
+    /// <summary>Verifies the Korean catalog uses Hangul text rather than leftover Latin copies.</summary>
+    [Fact]
+    public void Translations_KoreanCatalog_ContainsHangulValues()
+    {
+        string[] hangulValues = LocalizationResources.Translations[AppLanguage.Korean]
+            .Where(pair => pair.Value.Any(IsHangul))
+            .Select(pair => pair.Key)
+            .ToArray();
+
+        Assert.True(hangulValues.Length >= 600, $"Korean catalog has too few Hangul values: {hangulValues.Length}.");
+    }
+
     private static bool IsCjk(char value)
     {
         return value is >= '\u4E00' and <= '\u9FFF';
@@ -493,6 +509,13 @@ public sealed class LocalizationResourcesTests
     {
         return value is >= '\u0400' and <= '\u04FF'
             or >= '\u0500' and <= '\u052F';
+    }
+
+    private static bool IsHangul(char value)
+    {
+        return value is >= '\uAC00' and <= '\uD7AF'
+            or >= '\u1100' and <= '\u11FF'
+            or >= '\u3130' and <= '\u318F';
     }
 
     private static bool IsArabicScript(char value)

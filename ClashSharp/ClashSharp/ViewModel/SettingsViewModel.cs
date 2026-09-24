@@ -176,6 +176,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             (AppLanguage.French, "Français"),
             (AppLanguage.German, "Deutsch"),
             (AppLanguage.Persian, "فارسی"),
+            (AppLanguage.Korean, "한국어"),
         ]);
 
     private static void NoOpLifecycleAction()

@@ -1612,6 +1612,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             AppLanguage.French => "Français",
             AppLanguage.German => "Deutsch",
             AppLanguage.Persian => "فارسی",
+            AppLanguage.Korean => "한국어",
             _ => _localization.GetString("Settings.Language.AutoDetect"),
         };
     }

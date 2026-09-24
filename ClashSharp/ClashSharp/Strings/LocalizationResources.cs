@@ -47,6 +47,7 @@ internal static partial class LocalizationResources
             [AppLanguage.French] = BuildFrenchCatalog(),
             [AppLanguage.German] = BuildGermanCatalog(),
             [AppLanguage.Persian] = BuildPersianCatalog(),
+            [AppLanguage.Korean] = BuildKoreanCatalog(),
         };
 
         return new ReadOnlyDictionary<AppLanguage, ReadOnlyDictionary<string, string>>(table);

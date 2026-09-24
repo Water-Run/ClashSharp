@@ -8,22 +8,24 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Tests language catalog membership, auto-detect mapping, and RTL classification.</summary>
 public sealed class LocalizationServiceTests
 {
-    /// <summary>Verifies the settings picker exposes Russian and Persian with native names.</summary>
+    /// <summary>Verifies the settings picker exposes Russian, Persian, and Korean with native names.</summary>
     [Fact]
-    public void GetSupportedLanguages_IncludesRussianAndPersianNativeNames()
+    public void GetSupportedLanguages_IncludesRussianPersianAndKoreanNativeNames()
     {
         (AppLanguage Language, string DisplayName)[] languages =
             LocalizationService.GetSupportedLanguages().ToArray();
 
         Assert.Contains(languages, item => item.Language == AppLanguage.Russian && item.DisplayName == "Русский");
         Assert.Contains(languages, item => item.Language == AppLanguage.Persian && item.DisplayName == "فارسی");
-        Assert.Equal(8, languages.Length);
+        Assert.Contains(languages, item => item.Language == AppLanguage.Korean && item.DisplayName == "한국어");
+        Assert.Equal(9, languages.Length);
     }
 
     /// <summary>Verifies explicit language values resolve to themselves.</summary>
     [Theory]
     [InlineData(AppLanguage.Russian)]
     [InlineData(AppLanguage.Persian)]
+    [InlineData(AppLanguage.Korean)]
     [InlineData(AppLanguage.English)]
     public void ResolveEffectiveLanguage_ExplicitValue_ReturnsSameLanguage(AppLanguage language)
     {
@@ -35,6 +37,8 @@ public sealed class LocalizationServiceTests
     [InlineData("ru-RU", AppLanguage.Russian)]
     [InlineData("fa-IR", AppLanguage.Persian)]
     [InlineData("fa", AppLanguage.Persian)]
+    [InlineData("ko-KR", AppLanguage.Korean)]
+    [InlineData("ko", AppLanguage.Korean)]
     [InlineData("en-US", AppLanguage.English)]
     [InlineData("de-DE", AppLanguage.German)]
     [InlineData("zh-CN", AppLanguage.SimplifiedChinese)]
@@ -50,6 +54,7 @@ public sealed class LocalizationServiceTests
     [Theory]
     [InlineData(AppLanguage.Persian, true)]
     [InlineData(AppLanguage.Russian, false)]
+    [InlineData(AppLanguage.Korean, false)]
     [InlineData(AppLanguage.English, false)]
     [InlineData(AppLanguage.SimplifiedChinese, false)]
     public void IsRightToLeft_ClassifiesPersianOnly(AppLanguage language, bool expected)
