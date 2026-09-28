@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace ClashSharp.Components;
@@ -39,7 +41,8 @@ public sealed partial class SearchableOptionList : UserControl
         new PropertyMetadata(360d));
 
     private readonly List<SearchableOptionItem> _allOptions = [];
-    private readonly string _selectionGroupName = $"DialogOptions-{Guid.NewGuid():N}";
+    private bool _allowMultiple;
+    private bool _synchronizingSelection;
 
     /// <summary>Initializes an empty searchable option list.</summary>
     public SearchableOptionList()
@@ -54,7 +57,17 @@ public sealed partial class SearchableOptionList : UserControl
     public ObservableCollection<SearchableOptionItem> FilteredOptions { get; } = [];
 
     /// <summary>Gets or sets whether more than one option may be selected.</summary>
-    public bool AllowMultiple { get; set; }
+    public bool AllowMultiple
+    {
+        get => _allowMultiple;
+        set
+        {
+            _allowMultiple = value;
+            MultipleOptionsControl.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            SingleOptionsScroller.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            SynchronizeSelection();
+        }
+    }
 
     /// <summary>Gets or sets an optional selection instruction above the search field.</summary>
     public string? SearchHeader
@@ -95,8 +108,18 @@ public sealed partial class SearchableOptionList : UserControl
     public void SetOptions(IEnumerable<SearchableOptionItem> options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        foreach (SearchableOptionItem option in _allOptions)
+        {
+            option.PropertyChanged -= Option_PropertyChanged;
+        }
+
         _allOptions.Clear();
         _allOptions.AddRange(options);
+        foreach (SearchableOptionItem option in _allOptions)
+        {
+            option.PropertyChanged += Option_PropertyChanged;
+        }
+
         RefreshFilteredOptions();
     }
 
@@ -105,27 +128,68 @@ public sealed partial class SearchableOptionList : UserControl
         RefreshFilteredOptions();
     }
 
-    private void DialogOptionRow_Loaded(object sender, RoutedEventArgs e)
+    private void Option_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is DialogOptionRow row)
+        if (e.PropertyName is nameof(SearchableOptionItem.IsChecked))
         {
-            row.ConfigureSelection(AllowMultiple, _selectionGroupName);
+            SynchronizeSelection();
         }
     }
 
-    private void DialogOptionRow_SelectionInvoked(object sender, EventArgs e)
+    private void MultipleOptionsControl_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs e)
     {
-        if (sender is not DialogOptionRow { Tag: SearchableOptionItem selected })
+        SearchableOptionItem? option = e.InRecycleQueue ? null : e.Item as SearchableOptionItem;
+        AutomationProperties.SetName(e.ItemContainer, option?.Title ?? string.Empty);
+        AutomationProperties.SetHelpText(e.ItemContainer, option?.Description ?? string.Empty);
+    }
+
+    private void MultipleOptionsControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_synchronizingSelection || !AllowMultiple)
         {
             return;
         }
 
-        if (!AllowMultiple)
+        _synchronizingSelection = true;
+        try
+        {
+            foreach (SearchableOptionItem option in e.RemovedItems.OfType<SearchableOptionItem>())
+            {
+                option.IsChecked = false;
+            }
+
+            foreach (SearchableOptionItem option in e.AddedItems.OfType<SearchableOptionItem>())
+            {
+                option.IsChecked = true;
+            }
+        }
+        finally
+        {
+            _synchronizingSelection = false;
+        }
+
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void SingleOptionsControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_synchronizingSelection || AllowMultiple
+            || SingleOptionsControl.SelectedItem is not SearchableOptionItem selected)
+        {
+            return;
+        }
+
+        _synchronizingSelection = true;
+        try
         {
             foreach (SearchableOptionItem option in _allOptions)
             {
                 option.IsChecked = ReferenceEquals(option, selected);
             }
+        }
+        finally
+        {
+            _synchronizingSelection = false;
         }
 
         SelectionChanged?.Invoke(this, EventArgs.Empty);
@@ -134,18 +198,65 @@ public sealed partial class SearchableOptionList : UserControl
     private void RefreshFilteredOptions()
     {
         string query = SearchBox?.Text?.Trim() ?? string.Empty;
-        FilteredOptions.Clear();
-        foreach (SearchableOptionItem option in _allOptions)
+        // Filtering recreates native containers, but must never edit the selected option set.
+        _synchronizingSelection = true;
+        try
         {
-            if (Matches(option, query))
+            FilteredOptions.Clear();
+            foreach (SearchableOptionItem option in _allOptions)
             {
-                FilteredOptions.Add(option);
+                if (Matches(option, query))
+                {
+                    FilteredOptions.Add(option);
+                }
             }
         }
+        finally
+        {
+            _synchronizingSelection = false;
+        }
+
+        SynchronizeSelection();
 
         if (EmptyStateText is not null)
         {
             EmptyStateText.Visibility = FilteredOptions.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void SynchronizeSelection()
+    {
+        if (_synchronizingSelection || MultipleOptionsControl is null || SingleOptionsControl is null)
+        {
+            return;
+        }
+
+        _synchronizingSelection = true;
+        try
+        {
+            if (AllowMultiple)
+            {
+                foreach (SearchableOptionItem option in FilteredOptions)
+                {
+                    bool selected = MultipleOptionsControl.SelectedItems.Contains(option);
+                    if (option.IsChecked && !selected)
+                    {
+                        MultipleOptionsControl.SelectedItems.Add(option);
+                    }
+                    else if (!option.IsChecked && selected)
+                    {
+                        MultipleOptionsControl.SelectedItems.Remove(option);
+                    }
+                }
+            }
+            else
+            {
+                SingleOptionsControl.SelectedItem = FilteredOptions.FirstOrDefault(static option => option.IsChecked);
+            }
+        }
+        finally
+        {
+            _synchronizingSelection = false;
         }
     }
 

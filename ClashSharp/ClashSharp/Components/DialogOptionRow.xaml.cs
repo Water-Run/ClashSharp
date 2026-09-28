@@ -1,4 +1,3 @@
-using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -7,8 +6,6 @@ namespace ClashSharp.Components;
 /// <summary>Reusable option row for dialog choice lists.</summary>
 public sealed partial class DialogOptionRow : UserControl
 {
-    private bool _allowMultiple;
-
     /// <summary>Identifies the <see cref="Title"/> dependency property.</summary>
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title),
@@ -37,21 +34,11 @@ public sealed partial class DialogOptionRow : UserControl
         typeof(DialogOptionRow),
         new PropertyMetadata(string.Empty));
 
-    /// <summary>Identifies the <see cref="IsChecked"/> dependency property.</summary>
-    public static readonly DependencyProperty IsCheckedProperty = DependencyProperty.Register(
-        nameof(IsChecked),
-        typeof(bool),
-        typeof(DialogOptionRow),
-        new PropertyMetadata(false));
-
     /// <summary>Initializes a dialog option row and its generated visual tree.</summary>
     public DialogOptionRow()
     {
         InitializeComponent();
     }
-
-    /// <summary>Occurs after the user toggles this row's selection state.</summary>
-    public event EventHandler? SelectionInvoked;
 
     /// <summary>Gets or sets the option's primary display label.</summary>
     public string Title
@@ -81,39 +68,4 @@ public sealed partial class DialogOptionRow : UserControl
         set => SetValue(GlyphProperty, value);
     }
 
-    /// <summary>Gets or sets whether this option is currently selected.</summary>
-    public bool IsChecked
-    {
-        get => (bool)GetValue(IsCheckedProperty);
-        set => SetValue(IsCheckedProperty, value);
-    }
-
-    internal void ConfigureSelection(bool allowMultiple, string groupName)
-    {
-        _allowMultiple = allowMultiple;
-        SelectionCheckBox.Visibility = allowMultiple ? Visibility.Visible : Visibility.Collapsed;
-        SelectionRadioButton.Visibility = allowMultiple ? Visibility.Collapsed : Visibility.Visible;
-        if (!allowMultiple)
-        {
-            SelectionRadioButton.GroupName = groupName;
-        }
-    }
-
-    private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
-    {
-        IsChecked = SelectionCheckBox.IsChecked == true;
-        SelectionInvoked?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void SelectionRadioButton_Checked(object sender, RoutedEventArgs e)
-    {
-        // A binding refresh (including filtered/recycled rows) must not select another option.
-        if (_allowMultiple || IsChecked)
-        {
-            return;
-        }
-
-        IsChecked = true;
-        SelectionInvoked?.Invoke(this, EventArgs.Empty);
-    }
 }

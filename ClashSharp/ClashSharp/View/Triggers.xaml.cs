@@ -170,7 +170,7 @@ public sealed partial class Triggers : Page
         options.SetOptions(editor.ConditionOptions.Select(option => new SearchableOptionItem(
             option.Value.ToString(),
             option.Title,
-            _viewModel.ConditionsText,
+            string.Empty,
             option.Description,
             GetConditionGlyph(option.Value),
             option.Value)));
@@ -199,7 +199,7 @@ public sealed partial class Triggers : Page
         options.SetOptions(editor.ActionOptions.Select(option => new SearchableOptionItem(
             option.Value.ToString(),
             option.Title,
-            _viewModel.ActionsText,
+            string.Empty,
             option.Description,
             GetActionGlyph(option.Value),
             option.Value)));

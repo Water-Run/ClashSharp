@@ -6,6 +6,29 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:components="using:ClashSharp.Components">
 
+    <UserControl.Resources>
+        <DataTemplate x:Key="OptionContentTemplate">
+            <components:DialogOptionRow
+                Title="{Binding Title}"
+                Metadata="{Binding Metadata}"
+                Description="{Binding Description}"
+                Glyph="{Binding Glyph}"
+                HorizontalAlignment="Stretch" />
+        </DataTemplate>
+        <DataTemplate x:Key="RadioOptionTemplate">
+            <RadioButton
+                Content="{Binding}"
+                ContentTemplate="{StaticResource OptionContentTemplate}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Center"
+                MinHeight="64"
+                Padding="12,8,0,8"
+                AutomationProperties.Name="{Binding Title}"
+                AutomationProperties.HelpText="{Binding Description}" />
+        </DataTemplate>
+    </UserControl.Resources>
+
     <StackPanel Spacing="10">
         <TextBox
             x:Name="SearchBox"
@@ -16,13 +39,15 @@
 
         <Grid Height="{Binding MaxListHeight, ElementName=Root}">
             <ListView
-                x:Name="OptionsControl"
+                x:Name="MultipleOptionsControl"
                 ItemsSource="{Binding FilteredOptions, ElementName=Root}"
+                ItemTemplate="{StaticResource OptionContentTemplate}"
+                Visibility="Collapsed"
                 MaxHeight="{Binding MaxListHeight, ElementName=Root}"
-                SelectionMode="None"
-                IsTabStop="False"
-                TabNavigation="Local"
-                TabFocusNavigation="Local"
+                SelectionMode="Multiple"
+                IsMultiSelectCheckBoxEnabled="True"
+                ContainerContentChanging="MultipleOptionsControl_ContainerContentChanging"
+                SelectionChanged="MultipleOptionsControl_SelectionChanged"
                 HorizontalAlignment="Stretch"
                 Padding="0,0,14,0"
                 ScrollViewer.VerticalScrollBarVisibility="Visible"
@@ -30,28 +55,25 @@
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Padding" Value="10,8" />
+                        <Setter Property="MinHeight" Value="72" />
                         <Setter Property="Margin" Value="0,0,0,8" />
-                        <Setter Property="IsTabStop" Value="False" />
-                        <Setter Property="TabNavigation" Value="Local" />
-                        <Setter Property="TabFocusNavigation" Value="Local" />
                     </Style>
                 </ListView.ItemContainerStyle>
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <components:DialogOptionRow
-                            Title="{Binding Title}"
-                            Metadata="{Binding Metadata}"
-                            Description="{Binding Description}"
-                            Glyph="{Binding Glyph}"
-                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                            Tag="{Binding}"
-                            HorizontalAlignment="Stretch"
-                            Loaded="DialogOptionRow_Loaded"
-                            SelectionInvoked="DialogOptionRow_SelectionInvoked" />
-                    </DataTemplate>
-                </ListView.ItemTemplate>
             </ListView>
+            <ScrollViewer
+                x:Name="SingleOptionsScroller"
+                VerticalScrollBarVisibility="Visible"
+                HorizontalScrollBarVisibility="Disabled"
+                Padding="0,0,14,0">
+                <RadioButtons
+                    x:Name="SingleOptionsControl"
+                    MaxColumns="1"
+                    ItemsSource="{Binding FilteredOptions, ElementName=Root}"
+                    ItemTemplate="{StaticResource RadioOptionTemplate}"
+                    HorizontalAlignment="Stretch"
+                    SelectionChanged="SingleOptionsControl_SelectionChanged" />
+            </ScrollViewer>
             <TextBlock
                 x:Name="EmptyStateText"
                 Text="{Binding EmptyText, ElementName=Root}"

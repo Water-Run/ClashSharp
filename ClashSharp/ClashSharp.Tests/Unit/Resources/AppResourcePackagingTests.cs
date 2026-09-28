@@ -2809,13 +2809,12 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("Title", componentXaml, StringComparison.Ordinal);
         Assert.Contains("Description", componentXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<ToggleButton", componentXaml, StringComparison.Ordinal);
-        Assert.Contains("<CheckBox", componentXaml, StringComparison.Ordinal);
-        Assert.Contains("<RadioButton", componentXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"SelectionCheckBox\"", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionMode=\"Multiple\"", searchableComponentXaml, StringComparison.Ordinal);
+        Assert.Contains("<RadioButtons", searchableComponentXaml, StringComparison.Ordinal);
         Assert.Contains("MinWidth=\"0\"", componentXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsHitTestVisible=\"False\"", componentXaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.Name", componentXaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.HelpText", componentXaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name", searchableComponentXaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.HelpText", searchableComponentXaml, StringComparison.Ordinal);
         Assert.Contains("Grid.Column=\"1\"", componentXaml, StringComparison.Ordinal);
         Assert.Contains("HorizontalContentAlignment=\"Stretch\"", componentXaml, StringComparison.Ordinal);
         Assert.Contains("<ColumnDefinition Width=\"*\" />", componentXaml, StringComparison.Ordinal);
