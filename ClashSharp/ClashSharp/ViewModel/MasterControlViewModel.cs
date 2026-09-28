@@ -1026,7 +1026,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         SetTile("app-name", ApplicationDisplayName, _localization.GetString("About.App.Description"));
         SetTile("app-version", string.Format(CultureInfo.CurrentCulture, _localization.GetString("About.Version.Value.Format"), ApplicationVersionText), string.Empty);
         SetTile("app-runtime", _localization.GetString("About.Runtime.Value"), string.Empty);
-        SetTile("current-mode", GetModeTitle(SelectedMode), BasicStatusText);
+        SetTile("current-mode", GetModeTitle(SelectedMode), BasicStatusText,
+            description: GetModeDescription(SelectedMode));
         SetTile("current-node", CurrentNodeText, LatencySummaryText);
         SetTile("notification-enabled", FormatSwitch(_settings.NotificationEnabled), GetNotificationLevelText(_settings.NotificationLevel), _settings.NotificationEnabled);
         SetTile("notification-level", GetNotificationLevelText(_settings.NotificationLevel), FormatSwitch(_settings.NotificationEnabled));
@@ -1243,7 +1244,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         return _localization.GetString($"Master.Tile.Description.{key}");
     }
 
-    private void SetTile(string id, string value, string detail, bool? toggleOn = null)
+    private void SetTile(string id, string value, string detail, bool? toggleOn = null, string? description = null)
     {
         foreach (MasterControlInfoTileViewModel tile in _infoTiles)
         {
@@ -1254,6 +1255,10 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
             tile.Value = value;
             tile.Detail = detail;
+            if (description is not null)
+            {
+                tile.Description = description;
+            }
             if (toggleOn is bool isToggleOn)
             {
                 tile.IsToggleOn = isToggleOn;
@@ -1556,6 +1561,18 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         };
     }
 
+    private string GetModeDescription(ClashSharpMode mode)
+    {
+        return mode switch
+        {
+            ClashSharpMode.Disabled => DisabledModeDescriptionText,
+            ClashSharpMode.Standby => StandbyModeDescriptionText,
+            ClashSharpMode.RuleTakeover => RuleTakeoverModeDescriptionText,
+            ClashSharpMode.FullTakeover => FullTakeoverModeDescriptionText,
+            _ => _localization.GetString("Master.Status.Unavailable"),
+        };
+    }
+
     private string GetNotificationLevelText(NotificationLevel level)
     {
         return level switch
@@ -1693,7 +1710,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 owner.CreateTile("app-name", "AppName", "\uE946", infoType),
                 owner.CreateTileFromKeys("app-version", "About.Version.Title", "\uE946", "Master.Tile.Description.AppVersion", infoType),
                 owner.CreateTileFromKeys("app-runtime", "About.Runtime.Title", "\uE7F8", "Master.Tile.Description.AppRuntime", infoType),
-                owner.CreateTileFromKeys("current-mode", "Tray.Menu.Mode", "\uE8AB", "Master.Mode.RuleTakeover.Description", infoType),
+                owner.CreateTileFromKeys("current-mode", "Tray.Menu.Mode", "\uE8AB", "Master.StatusControl.Description", infoType),
                 owner.CreateTileFromKeys("current-node", "Tray.Status.Node.Format", "\uE8A5", "Settings.Tray.Feature.Status.Description", infoType),
                 owner.CreateTileFromKeys("notification-enabled", "Settings.Notification.Enabled.Title", "\uE7F4", "Settings.Notification.Enabled.Description", infoType),
                 owner.CreateTileFromKeys("notification-level", "Settings.Notification.Title", "\uE7F4", "Settings.Notification.Description", infoType),

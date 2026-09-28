@@ -84,20 +84,19 @@ public sealed class InstallerExecutableContractTests
     }
 
     [Fact]
-    public void ShellKeepsOneProductCardAndStateDerivedMaintenanceActions()
+    public void ShellKeepsStateDerivedMaintenanceActionsOutsideTheScrollableContent()
     {
         XDocument shell = XDocument.Load(SourcePath("ClashSharp.Installer", "MainWindow.xaml"));
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
 
-        XElement productCard = Assert.Single(
-            shell.Descendants(presentation + "Border"),
+        XElement status = Assert.Single(
+            shell.Descendants(presentation + "StackPanel"),
             static element =>
                 (string?)element.Attribute("AutomationProperties.Name") ==
-                    "ClashSharp 产品实例");
-        Assert.Equal("{StaticResource InstallerCardStyle}", (string?)productCard.Attribute("Style"));
+                    "ClashSharp 安装状态");
         XElement confirmation = Assert.Single(shell.Descendants(presentation + "Border"),
             static element => (string?)element.Attribute("AutomationProperties.Name") == "切换账户确认");
-        Assert.DoesNotContain(confirmation, productCard.Descendants());
+        Assert.DoesNotContain(confirmation, status.Descendants());
         XElement[] decisions = confirmation.Descendants(presentation + "Button").ToArray();
         Assert.Equal(2, decisions.Length);
         Assert.All(decisions, static button => Assert.NotEqual("True", (string?)button.Attribute("IsDefault")));
@@ -113,16 +112,18 @@ public sealed class InstallerExecutableContractTests
             static element =>
                 (string?)element.Attribute("AutomationProperties.HeadingLevel") ==
                     "Level1");
-        Assert.DoesNotContain(pageHeading, productCard.Descendants());
-        Assert.Single(productCard.Descendants(presentation + "TextBlock"),
-            static element => (string?)element.Attribute("AutomationProperties.HeadingLevel") == "Level2");
+        Assert.Contains(pageHeading, status.Descendants());
+        Assert.Equal("{Binding StatusTitle, Mode=OneWay}", (string?)pageHeading.Attribute("Text"));
         Assert.DoesNotContain(
             shell.Descendants(),
             static element =>
                 element.Attributes().Any(attribute =>
                     attribute.Value.Contains("ProductGroupTitle", StringComparison.Ordinal)));
-        XElement[] buttons = productCard.Descendants(presentation + "Button").ToArray();
-        Assert.Equal(3, buttons.Length);
+        XElement actions = Assert.Single(shell.Descendants(presentation + "WrapPanel"),
+            static element => (string?)element.Attribute("AutomationProperties.Name") == "安装操作");
+        Assert.DoesNotContain(actions.Ancestors(), element => element.Name == presentation + "ScrollViewer");
+        XElement[] buttons = actions.Descendants(presentation + "Button").ToArray();
+        Assert.Equal(4, buttons.Length);
 
         XElement secondary = Assert.Single(
             buttons,
@@ -221,7 +222,7 @@ public sealed class InstallerExecutableContractTests
     }
 
     [Fact]
-    public void ShellUsesBrandGreenAsItsAccessibleInstallerAccent()
+    public void ShellUsesSystemColorsAndNativeButtonRendering()
     {
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -231,16 +232,19 @@ public sealed class InstallerExecutableContractTests
             "InstallerTheme.xaml"));
         XDocument shell = XDocument.Load(SourcePath("ClashSharp.Installer", "MainWindow.xaml"));
 
-        XElement accent = Assert.Single(
-            theme.Descendants(presentation + "Color"),
-            color => (string?)color.Attribute(x + "Key") == "InstallerAccentColor");
-        Assert.Equal("#0C7428", accent.Value.Trim());
-        Assert.Contains(
-            theme.Descendants(presentation + "DataTrigger"),
-            trigger => (string?)trigger.Attribute("Value") == "True"
-                && ((string?)trigger.Attribute("Binding"))?.Contains(
-                    "SystemParameters.HighContrast",
-                    StringComparison.Ordinal) == true);
+        XElement windowStyle = Assert.Single(theme.Descendants(presentation + "Style"),
+            style => (string?)style.Attribute(x + "Key") == "InstallerWindowStyle");
+        Assert.Contains(windowStyle.Elements(presentation + "Setter"),
+            setter => (string?)setter.Attribute("Property") == "Background"
+                && (string?)setter.Attribute("Value") == "{DynamicResource {x:Static SystemColors.WindowBrushKey}}");
+        Assert.Contains(windowStyle.Elements(presentation + "Setter"),
+            setter => (string?)setter.Attribute("Property") == "Foreground"
+                && (string?)setter.Attribute("Value") == "{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}");
+        XElement[] buttonStyles = theme.Descendants(presentation + "Style")
+            .Where(style => (string?)style.Attribute("TargetType") == "Button").ToArray();
+        Assert.NotEmpty(buttonStyles);
+        Assert.All(buttonStyles, style => Assert.DoesNotContain(style.Descendants(presentation + "Setter"),
+            setter => (string?)setter.Attribute("Property") is "Template" or "FocusVisualStyle" or "Background" or "Foreground"));
 
         XElement window = Assert.IsType<XElement>(shell.Root);
         Assert.Equal("{StaticResource InstallerWindowStyle}", (string?)window.Attribute("Style"));

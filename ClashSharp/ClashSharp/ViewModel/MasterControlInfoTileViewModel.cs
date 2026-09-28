@@ -8,6 +8,7 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
 {
     private string _value;
     private string _detail;
+    private string _description;
     private bool _isVisible = true;
     private bool _isToggleOn;
 
@@ -30,7 +31,7 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
         _value = value ?? throw new ArgumentNullException(nameof(value));
         _detail = detail ?? throw new ArgumentNullException(nameof(detail));
         Glyph = glyph ?? throw new ArgumentNullException(nameof(glyph));
-        Description = description ?? throw new ArgumentNullException(nameof(description));
+        _description = description ?? throw new ArgumentNullException(nameof(description));
         TypeText = typeText ?? throw new ArgumentNullException(nameof(typeText));
         IsToggleVisible = isToggleVisible;
         _isToggleOn = isToggleOn;
@@ -43,7 +44,11 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
 
     public string Glyph { get; }
 
-    public string Description { get; }
+    public string Description
+    {
+        get => _description;
+        set => SetProperty(ref _description, value);
+    }
 
     public string TypeText { get; }
 

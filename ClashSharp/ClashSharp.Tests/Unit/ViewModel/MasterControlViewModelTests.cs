@@ -665,6 +665,33 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal("Search tiles", viewModel.SearchInfoTilesPlaceholderText);
     }
 
+    [Theory]
+    [InlineData(ClashSharpMode.Disabled, "Disabled description")]
+    [InlineData(ClashSharpMode.Standby, "Standby description")]
+    [InlineData(ClashSharpMode.RuleTakeover, "Rule description")]
+    [InlineData(ClashSharpMode.FullTakeover, "Full description")]
+    [InlineData(ClashSharpMode.Faulted, "Unavailable")]
+    public async Task CurrentModeTileDescriptionFollowsTheAppliedMode(
+        ClashSharpMode mode, string expectedDescription)
+    {
+        FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.RuleTakeover };
+        MasterControlViewModel viewModel = CreateViewModel(settings: settings);
+        await viewModel.LoadAsync(CancellationToken.None);
+        MasterControlInfoTileViewModel tile = viewModel.InfoTiles.Single(item => item.Id == "current-mode");
+        Assert.Equal("Rule description", tile.Description);
+        List<string?> changes = [];
+        tile.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+
+        await viewModel.ApplyModeAsync(mode, CancellationToken.None);
+
+        Assert.Same(tile, viewModel.InfoTiles.Single(item => item.Id == "current-mode"));
+        Assert.Equal(expectedDescription, tile.Description);
+        if (mode != ClashSharpMode.RuleTakeover)
+        {
+            Assert.Contains(nameof(MasterControlInfoTileViewModel.Description), changes);
+        }
+    }
+
     [Fact]
     public async Task LoadAsync_UnavailableRuntimeDoesNotClaimMihomoServiceIsMissing()
     {
