@@ -74,6 +74,8 @@ public sealed partial class Settings : Page
         _subscribeToRuntimeSettingsChanges = dependencies.SubscribeToRuntimeSettingsChanges
             ?? throw new ArgumentException("A runtime settings subscription is required.", nameof(dependencies));
         InitializeComponent();
+        // Bind persisted choices on the first frame, before the asynchronous page queue runs.
+        _viewModel.Load();
         DataContext = _viewModel;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
