@@ -396,6 +396,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Description.ByCount"] = "Limiter seulement le nombre de journaux ; connexions, trafic et statistiques de règles sont conservés.",
             ["Logs.Cleanup.Description.All"] = "Supprimer tous les journaux, connexions, trafics, états de nœuds et règles atteintes.",
             ["Logs.Cleanup.Preview.Loading"] = "Calcul du nettoyage…",
+            ["Logs.Cleanup.Parameter.Required"] = "Entrez un nombre compris entre {0:N0} et {1:N0}.",
             ["Logs.Cleanup.Preview.Failed"] = "Impossible de calculer le nettoyage. Fermez cette boîte de dialogue et réessayez.",
             ["Logs.Cleanup.Preview.Count"] = "{0:N0} entrées seront supprimées.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "Taille actuelle : {0}. Objectif : {1}. Le nombre d’entrées supprimées dépend du résultat de la compression.",

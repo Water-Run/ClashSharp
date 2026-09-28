@@ -396,6 +396,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Description.ByCount"] = "僅限制日誌表筆數；連線、流量和規則統計保持不變。",
             ["Logs.Cleanup.Description.All"] = "刪除全部日誌、連線、流量、節點健康和規則命中記錄。",
             ["Logs.Cleanup.Preview.Loading"] = "正在計算清理範圍…",
+            ["Logs.Cleanup.Parameter.Required"] = "請輸入 {0:N0} 到 {1:N0} 之間的數字。",
             ["Logs.Cleanup.Preview.Failed"] = "無法計算清理範圍。請重新開啟此對話方塊後重試。",
             ["Logs.Cleanup.Preview.Count"] = "將清理 {0:N0} 個項目。",
             ["Logs.Cleanup.Preview.SizeTarget"] = "目前佔用 {0}，目標 {1}。實際清理數量取決於壓縮結果。",

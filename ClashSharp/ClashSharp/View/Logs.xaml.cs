@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
@@ -11,6 +12,7 @@ using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Windows.Globalization.NumberFormatting;
 
 namespace ClashSharp.View;
 
@@ -253,6 +255,16 @@ public sealed partial class Logs : Page
             Maximum = 3650,
             Value = 30,
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            NumberFormatter = new DecimalFormatter
+            {
+                IntegerDigits = 1,
+                FractionDigits = 0,
+                NumberRounder = new IncrementNumberRounder
+                {
+                    Increment = 1,
+                    RoundingAlgorithm = RoundingAlgorithm.RoundHalfToEven,
+                },
+            },
         };
         TextBlock descriptionText = new()
         {
@@ -305,6 +317,17 @@ public sealed partial class Logs : Page
         // Size the dialog surface without constraining the full-window popup host.
         dialog.Resources["ContentDialogMaxWidth"] = 720d;
 
+        void RequireCleanupParameter()
+        {
+            previewSession.Cancel();
+            dialog.IsPrimaryButtonEnabled = false;
+            previewText.Text = string.Format(
+                CultureInfo.CurrentCulture,
+                _getString("Logs.Cleanup.Parameter.Required"),
+                parameterBox.Minimum,
+                parameterBox.Maximum);
+        }
+
         async Task UpdatePreviewAsync(Action? updateEditor = null)
         {
             if (!dialogOpen || pageToken.IsCancellationRequested)
@@ -320,6 +343,11 @@ public sealed partial class Logs : Page
                 string? categoryFilter = categoryBox.SelectedItem as string;
                 previewText.Text = _viewModel.CleanupPreviewPlaceholderText;
                 dialog.IsPrimaryButtonEnabled = false;
+                if (selectedIndex is >= 0 and <= 2 && !double.IsFinite(parameterValue))
+                {
+                    RequireCleanupParameter();
+                    return;
+                }
 
                 await previewSession.RunAsync(
                     async previewToken =>
@@ -365,10 +393,20 @@ public sealed partial class Logs : Page
             await UpdatePreviewAsync();
         async void OnFilterChanged(object sender, SelectionChangedEventArgs e) =>
             await UpdatePreviewAsync();
+        void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs e)
+        {
+            if (cleanupModeBox.SelectedIndex is >= 0 and <= 2 &&
+                (!double.IsFinite(parameterBox.Value) || string.IsNullOrWhiteSpace(parameterBox.Text)))
+            {
+                e.Cancel = true;
+                RequireCleanupParameter();
+            }
+        }
         cleanupModeBox.SelectionChanged += OnModeChanged;
         parameterBox.ValueChanged += OnParameterChanged;
         levelBox.SelectionChanged += OnFilterChanged;
         categoryBox.SelectionChanged += OnFilterChanged;
+        dialog.PrimaryButtonClick += OnPrimaryButtonClick;
 
         ContentDialogResult result;
         Task initialPreview = UpdatePreviewAsync();
@@ -383,6 +421,7 @@ public sealed partial class Logs : Page
             parameterBox.ValueChanged -= OnParameterChanged;
             levelBox.SelectionChanged -= OnFilterChanged;
             categoryBox.SelectionChanged -= OnFilterChanged;
+            dialog.PrimaryButtonClick -= OnPrimaryButtonClick;
             previewSession.Cancel();
             await Task.WhenAll(initialPreview, previewSession.DrainAsync());
         }
