@@ -44,6 +44,11 @@
             CompactPaneLength="48"
             OpenPaneLength="260"
             SelectionChanged="OnNavigationSelectionChanged">
+            <NavigationView.Resources>
+                <!-- Pages provide their own cards over the window's Mica base layer. -->
+                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent" />
+            </NavigationView.Resources>
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="NavMasterControlItem" Content="{Binding MasterControlText}" Tag="MasterControl">
                     <NavigationViewItem.Icon>
