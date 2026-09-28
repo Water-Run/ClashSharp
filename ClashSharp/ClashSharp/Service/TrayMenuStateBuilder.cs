@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using ClashSharp.Model;
 
 namespace ClashSharp.Service;
@@ -56,7 +57,7 @@ public enum TrayIconVisualState
 /// <param name="TunEffective">True only when the service-owned TUN runtime is conclusively ready.</param>
 /// <param name="SettingsLabel">Settings command label.</param>
 /// <param name="SafeExitLabel">Safe exit command label.</param>
-/// <param name="VisibleFeatureIds">Case-insensitive identifiers for menu sections that may be shown.</param>
+/// <param name="VisibleFeatureIds">Canonical menu section identifiers in display order.</param>
 public readonly record struct TrayMenuState(
     string StatusMenuLabel,
     IReadOnlyList<TrayStatusMenuItem> StatusItems,
@@ -70,7 +71,7 @@ public readonly record struct TrayMenuState(
     bool TunEffective,
     string SettingsLabel,
     string SafeExitLabel,
-    IReadOnlySet<string> VisibleFeatureIds)
+    IReadOnlyList<string> VisibleFeatureIds)
 {
     /// <summary>Gets whether the runtime-status section is visible.</summary>
     public bool ShowStatus => VisibleFeatureIds.Contains("status");
@@ -89,6 +90,15 @@ public readonly record struct TrayMenuState(
 
     /// <summary>Gets whether the safe-exit command is visible.</summary>
     public bool ShowSafeExit => VisibleFeatureIds.Contains("safe-exit");
+
+    /// <summary>Gets whether a visible section starts a new group, without leading or trailing separators.</summary>
+    public bool HasSeparatorBeforeFeature(int index)
+    {
+        return index > 0 && index < VisibleFeatureIds.Count
+            && !(IsSettingsCommand(VisibleFeatureIds[index - 1]) && IsSettingsCommand(VisibleFeatureIds[index]));
+    }
+
+    private static bool IsSettingsCommand(string id) => id is "settings" or "transparent-proxy";
 }
 
 /// <summary>Resolves a deterministic tray-icon visual state from current runtime state.</summary>
@@ -135,6 +145,8 @@ public static class TrayIconVisualStateResolver
 /// <summary>Builds deterministic tray menu state from runtime settings.</summary>
 public static class TrayMenuStateBuilder
 {
+    private static readonly string[] DefaultFeatureIds = ["status", "mode", "pages", "transparent-proxy", "settings", "safe-exit"];
+
     /// <summary>Builds tray menu state with localized labels.</summary>
     /// <param name="currentMode">Currently active Clash# mode.</param>
     /// <param name="transparentProxyEnabled">True when transparent proxy preference is enabled.</param>
@@ -237,7 +249,7 @@ public static class TrayMenuStateBuilder
             tunEffective,
             getString("Tray.Settings"),
             getString("Tray.SafeExit"),
-            BuildVisibleFeatureSet(visibleFeatureIds));
+            BuildVisibleFeatureIds(visibleFeatureIds));
     }
 
     private static IReadOnlyList<TrayStatusMenuItem> BuildStatusItems(
@@ -289,19 +301,24 @@ public static class TrayMenuStateBuilder
         ];
     }
 
-    private static IReadOnlySet<string> BuildVisibleFeatureSet(IEnumerable<string>? visibleFeatureIds)
+    private static IReadOnlyList<string> BuildVisibleFeatureIds(IEnumerable<string>? visibleFeatureIds)
     {
-        HashSet<string> features = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string featureId in visibleFeatureIds ?? ["status", "mode", "pages", "transparent-proxy", "settings", "safe-exit"])
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        List<string> features = [];
+        foreach (string featureId in visibleFeatureIds ?? DefaultFeatureIds)
         {
-            if (!string.IsNullOrWhiteSpace(featureId))
+            if (string.IsNullOrWhiteSpace(featureId))
             {
-                features.Add(featureId.Trim());
+                continue;
+            }
+
+            string normalized = featureId.Trim().ToLowerInvariant();
+            if (DefaultFeatureIds.Contains(normalized) && seen.Add(normalized))
+            {
+                features.Add(normalized);
             }
         }
 
-        return features.Count == 0
-            ? new HashSet<string>(["status", "mode", "pages", "transparent-proxy", "settings", "safe-exit"], StringComparer.OrdinalIgnoreCase)
-            : features;
+        return features.Count == 0 ? [.. DefaultFeatureIds] : features;
     }
 }

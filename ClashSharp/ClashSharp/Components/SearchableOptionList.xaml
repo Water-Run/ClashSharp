@@ -39,6 +39,12 @@
             HorizontalAlignment="Stretch"
             TextChanged="SearchBox_TextChanged" />
 
+        <TextBlock
+            x:Name="ReorderHintText"
+            Visibility="Collapsed"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            TextWrapping="Wrap" />
+
         <Grid Height="{Binding MaxListHeight, ElementName=Root}">
             <ListView
                 x:Name="MultipleOptionsControl"

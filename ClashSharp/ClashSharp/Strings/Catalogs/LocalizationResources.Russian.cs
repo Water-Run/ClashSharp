@@ -732,6 +732,7 @@ internal static partial class LocalizationResources
             ["Settings.Tray.VisibleFeatures.Description"] = "Выберите пункты функций, которые будут отображаться в меню трея.",
             ["Settings.Tray.VisibleFeatures.Summary.Format"] = "Включено функций: {0}",
             ["Settings.Tray.VisibleFeatures.SelectionRequired"] = "Выберите хотя бы одну функцию.",
+            ["Settings.Tray.VisibleFeatures.ReorderHint"] = "Щёлкните вариант правой кнопкой мыши или нажмите Shift+F10, чтобы изменить порядок.",
             ["Settings.Tray.VisibleFeatures.SearchPlaceholder"] = "Поиск функций трея",
             ["Settings.Tray.Feature.Status"] = "Статус",
             ["Settings.Tray.Feature.Status.Description"] = "Показывает текущий режим, узел и задержку.",

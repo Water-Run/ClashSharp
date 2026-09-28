@@ -213,73 +213,57 @@ public sealed class SystemTrayService : IDisposable
     {
         TrayMenuState state = _getState();
         nint menu = CreatePopupMenu();
-        if (state.ShowStatus)
+        for (int index = 0; index < state.VisibleFeatureIds.Count; index++)
         {
-            nint statusMenu = CreatePopupMenu();
-            foreach (TrayStatusMenuItem statusItem in state.StatusItems)
-            {
-                uint statusFlags = MfString | (statusItem.IsEnabled ? 0 : MfGrayed);
-                AppendMenu(statusMenu, statusFlags, nint.Zero, statusItem.Label);
-            }
-
-            AppendMenu(menu, MfPopup, statusMenu, state.StatusMenuLabel);
-            if (state.ShowMode || state.ShowPages || state.ShowTransparentProxy || state.ShowSettings)
+            if (state.HasSeparatorBeforeFeature(index))
             {
                 AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
             }
-        }
 
-        if (state.ShowMode)
-        {
-            nint modeMenu = CreatePopupMenu();
-            foreach (TrayModeMenuItem modeItem in state.ModeItems)
+            switch (state.VisibleFeatureIds[index])
             {
-                AppendMenu(modeMenu, MfString | (modeItem.IsChecked ? MfChecked : 0), new nint(MapModeCommand(modeItem.Mode)), modeItem.Label);
+                case "status":
+                    nint statusMenu = CreatePopupMenu();
+                    foreach (TrayStatusMenuItem statusItem in state.StatusItems)
+                    {
+                        uint statusFlags = MfString | (statusItem.IsEnabled ? 0 : MfGrayed);
+                        AppendMenu(statusMenu, statusFlags, nint.Zero, statusItem.Label);
+                    }
+
+                    AppendMenu(menu, MfPopup, statusMenu, state.StatusMenuLabel);
+                    break;
+                case "mode":
+                    nint modeMenu = CreatePopupMenu();
+                    foreach (TrayModeMenuItem modeItem in state.ModeItems)
+                    {
+                        AppendMenu(modeMenu, MfString | (modeItem.IsChecked ? MfChecked : 0), new nint(MapModeCommand(modeItem.Mode)), modeItem.Label);
+                    }
+
+                    AppendMenu(menu, MfPopup, modeMenu, state.ModeMenuLabel);
+                    break;
+                case "pages":
+                    nint pageMenu = CreatePopupMenu();
+                    for (int pageIndex = 0; pageIndex < state.PageItems.Count; pageIndex++)
+                    {
+                        TrayPageMenuItem pageItem = state.PageItems[pageIndex];
+                        AppendMenu(pageMenu, MfString, new nint(PageCommandBaseId + (uint)pageIndex), pageItem.Label);
+                    }
+
+                    AppendMenu(menu, MfPopup, pageMenu, state.PagesMenuLabel);
+                    break;
+                case "transparent-proxy":
+                    uint transparentFlags = MfString
+                        | (state.TransparentProxyItem.IsChecked ? MfChecked : 0)
+                        | (state.TransparentProxyItem.IsEnabled ? 0 : MfGrayed);
+                    AppendMenu(menu, transparentFlags, new nint(TransparentProxyCommandId), state.TransparentProxyItem.Label);
+                    break;
+                case "settings":
+                    AppendMenu(menu, MfString, new nint(SettingsCommandId), state.SettingsLabel);
+                    break;
+                case "safe-exit":
+                    AppendMenu(menu, MfString, new nint(SafeExitCommandId), state.SafeExitLabel);
+                    break;
             }
-
-            AppendMenu(menu, MfPopup, modeMenu, state.ModeMenuLabel);
-            if (state.ShowPages || state.ShowTransparentProxy || state.ShowSettings)
-            {
-                AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
-            }
-        }
-
-        if (state.ShowPages)
-        {
-            nint pageMenu = CreatePopupMenu();
-            for (int index = 0; index < state.PageItems.Count; index++)
-            {
-                TrayPageMenuItem pageItem = state.PageItems[index];
-                AppendMenu(pageMenu, MfString, new nint(PageCommandBaseId + (uint)index), pageItem.Label);
-            }
-
-            AppendMenu(menu, MfPopup, pageMenu, state.PagesMenuLabel);
-            if (state.ShowTransparentProxy || state.ShowSettings)
-            {
-                AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
-            }
-        }
-
-        if (state.ShowTransparentProxy)
-        {
-            uint transparentFlags = MfString
-                | (state.TransparentProxyItem.IsChecked ? MfChecked : 0)
-                | (state.TransparentProxyItem.IsEnabled ? 0 : MfGrayed);
-            AppendMenu(menu, transparentFlags, new nint(TransparentProxyCommandId), state.TransparentProxyItem.Label);
-        }
-
-        if (state.ShowSettings)
-        {
-            AppendMenu(menu, MfString, new nint(SettingsCommandId), state.SettingsLabel);
-        }
-
-        if (state.ShowSafeExit)
-        {
-            if (state.ShowStatus || state.ShowMode || state.ShowPages || state.ShowTransparentProxy || state.ShowSettings)
-            {
-                AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
-            }
-            AppendMenu(menu, MfString, new nint(SafeExitCommandId), state.SafeExitLabel);
         }
 
         GetCursorPos(out POINT point);

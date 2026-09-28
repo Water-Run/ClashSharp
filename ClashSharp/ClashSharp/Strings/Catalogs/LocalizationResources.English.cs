@@ -732,6 +732,7 @@ internal static partial class LocalizationResources
             ["Settings.Tray.VisibleFeatures.Description"] = "Choose which feature entries appear in the tray menu.",
             ["Settings.Tray.VisibleFeatures.Summary.Format"] = "Enabled features: {0}",
             ["Settings.Tray.VisibleFeatures.SelectionRequired"] = "Select at least one feature.",
+            ["Settings.Tray.VisibleFeatures.ReorderHint"] = "Right-click an option or press Shift+F10 to change its order.",
             ["Settings.Tray.VisibleFeatures.SearchPlaceholder"] = "Search tray features",
             ["Settings.Tray.Feature.Status"] = "Status",
             ["Settings.Tray.Feature.Status.Description"] = "Shows current mode, node, and latency summary.",

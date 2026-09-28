@@ -136,3 +136,24 @@ c1b7794 中仍复现两个问题：德文深色下最后一项已取消、保存
 | `desktop-evidence-native-radio-scroll-20260928T211448Z.tar.gz`，63 张截图及对应操作 | `1D843DB1F6386CD46E7BE60CD852F72050C6F8C724E03E77C0C444B0081B1DCC` |
 
 `Verify-6fc3b27-Native.py` 校验通过，保留 `Accepted: false`。后续依据 [Microsoft FocusVisualMargin](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.frameworkelement.focusvisualmargin?view=windows-app-sdk-1.8) 的负边距语义，将原生焦点框伸出的范围纳入 `BringIntoViewOptions.TargetRect`，保留默认控件模板和键盘行为。修正通过全部 18 项目 Release x64 构建（33.90 秒，零警告、零错误）、x64 格式检查及 463 项相关回归，待新版服务器复验。完整矩阵仍为 **84 通过、38 部分、19 待测**。
+
+## 7de6598 原生选择交互复验通过
+
+7de6598 于 21:25 UTC 在蓝色服务器构建完成，21:26 UTC 通过原生安装器安装。安装器使用蓝色“重新检查”链接与简短状态说明。此前正常卸载 6fc3b27，包、服务及六处自有目录均为空；卸载过程中尝试取消时操作已经完成，因此不计作取消及重试用例通过。安装后程序集与包内载荷 SHA-256 均为 `20912AD926E5328E50B3948AC96CD2FC45E8142D888375D4609EBD903789B44D`，仅验收账户注册，三项签名有效，仍为验收证书。[CI 36485145427](https://github.com/Water-Run/ClashSharp/actions/runs/36485145427) 两项作业成功，四份 TRX 核对为 **5,661 通过、零失败、零跳过**。
+
+| 服务器实机场景 | 结果 |
+| --- | --- |
+| 中文浅色正反向滚动 | Tab、Space 选择第一项，↓ 五次到第六项完整显示；↑ 五次回首项后，21:28:47 焦点框四边完整。再向下选择第 11 项，圆点、文字及焦点框完整 |
+| 单选过滤恢复 | 无结果搜索后清空，Tab 返回原选中的末项，圆点与焦点恢复；取消选项及整个触发器草稿后列表为空 |
+| 主题切换 | 首帧出现切换中的白字浅底；21:31:17 稳定画面正确显示深色，不将首帧作为持续性主题故障。重启后德语及深色保持 |
+| 德语深色最小窗口 | 外框 800×600；第五项说明末行 `erreicht.` 完整，第六项自动滚入视野；21:35:51 返回首项后焦点框完整，Tab 进入添加按钮；取消所有触发器草稿 |
+| 磁贴多选回归 | 初始 20 项，Space 取消首项为 19；End 到第 68 项、Space 选择后为 20。无结果搜索再清空，首项仍为空框、末项仍选中；取消并重新打开恢复原 20 项和首项选择。空框无残留勾形，末项两行德语说明及焦点框完整 |
+
+21:40 UTC 从原生托盘菜单正常退出。应用、内核、看门狗与 TUN 均为空，系统代理关闭；两个数据库完整，65 条日志无警告或错误，触发器为零。闭合备份 17 文件、293,593 字节。所有产品运行及设置变更均在服务器验收账户中进行。
+
+| 7de6598 证据 | SHA-256 |
+| --- | --- |
+| `evidence-7de6598-native-choice-accepted.zip`，9 份 JSON | `E5077F264D33E14DC5998A9859592081E1E6DC8F28AF47244A918912877E90DD` |
+| `desktop-evidence-native-choice-accepted-20260928T214216Z.tar.gz`，74 张截图及对应操作 | `F60204DFBA305B16CFF2BB584FF28D9C039DDE474B09FE86589EC790FB37C9DD` |
+
+`Verify-7de6598-Native.py` 与 `Verify-7de6598-CI.py` 校验通过。结论为 `NativeChoiceScopeAccepted: true`、`GlobalProductionAccepted: false`；关闭已复现的原生焦点框裁切问题，保留整体 **84 通过、38 部分、19 待测**。68 项磁贴的完整功能、其他语言与 DPI、故障恢复及正式发行签名仍未完成验收；托盘重排仍未实现。

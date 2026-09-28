@@ -184,6 +184,62 @@ public sealed class TrayMenuStateBuilderTests
         Assert.NotEmpty(state.PageItems);
     }
 
+    /// <summary>Imported choices retain their order while duplicates and unknown commands are discarded.</summary>
+    [Fact]
+    public void Build_WithReorderedFeatureIds_PreservesCanonicalOrder()
+    {
+        TrayMenuState state = BuildFeatureState([" SAFE-EXIT ", "Settings", "safe-exit", "unknown", "", "mode"]);
+
+        Assert.Equal(["safe-exit", "settings", "mode"], state.VisibleFeatureIds);
+        Assert.True(state.ShowSafeExit);
+        Assert.True(state.ShowSettings);
+        Assert.True(state.ShowMode);
+        Assert.False(state.ShowPages);
+    }
+
+    /// <summary>Empty or unsupported imported settings cannot leave the tray with an empty menu.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("unknown")]
+    public void Build_WithoutKnownFeatures_RestoresDefaultMenu(string feature)
+    {
+        TrayMenuState state = BuildFeatureState([feature]);
+
+        Assert.Equal(["status", "mode", "pages", "transparent-proxy", "settings", "safe-exit"], state.VisibleFeatureIds);
+    }
+
+    /// <summary>A solitary command never has a separator, including a safe-exit-only menu.</summary>
+    [Theory]
+    [InlineData("safe-exit")]
+    [InlineData("status")]
+    [InlineData("settings")]
+    public void Build_WithOneFeature_HasNoSeparators(string feature)
+    {
+        TrayMenuState state = BuildFeatureState([feature]);
+
+        Assert.Single(state.VisibleFeatureIds);
+        Assert.False(state.HasSeparatorBeforeFeature(0));
+        Assert.False(state.HasSeparatorBeforeFeature(1));
+    }
+
+    /// <summary>Adjacent settings commands stay together after reordering, with other sections separated.</summary>
+    [Theory]
+    [InlineData("safe-exit,settings,transparent-proxy,status,mode,pages", "1,3,4,5")]
+    [InlineData("transparent-proxy,settings", "")]
+    [InlineData("settings,transparent-proxy,safe-exit", "2")]
+    [InlineData("status,mode,pages,transparent-proxy,settings,safe-exit", "1,2,3,5")]
+    public void Build_WithReorderedSections_PreservesMenuGrouping(string order, string expectedSeparators)
+    {
+        TrayMenuState state = BuildFeatureState(order.Split(','));
+
+        Assert.Equal(order.Split(','), state.VisibleFeatureIds);
+        Assert.Equal(expectedSeparators, string.Join(',', Enumerable.Range(0, state.VisibleFeatureIds.Count)
+            .Where(state.HasSeparatorBeforeFeature)));
+    }
+
+    private static TrayMenuState BuildFeatureState(IEnumerable<string> features) => TrayMenuStateBuilder.Build(
+        ClashSharpMode.Disabled, false, false, TrayStatusSnapshot.Unavailable, features, key => key);
+
     /// <summary>Verifies a disabled color indicator preserves the fixed green brand icon.</summary>
     [Fact]
     public void ResolveIconState_WhenColorIndicatorDisabled_ReturnsDefault()

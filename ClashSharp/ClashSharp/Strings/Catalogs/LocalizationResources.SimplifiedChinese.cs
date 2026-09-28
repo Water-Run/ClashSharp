@@ -732,6 +732,7 @@ internal static partial class LocalizationResources
             ["Settings.Tray.VisibleFeatures.Description"] = "选择托盘菜单中显示的功能项。",
             ["Settings.Tray.VisibleFeatures.Summary.Format"] = "已启用 {0} 项",
             ["Settings.Tray.VisibleFeatures.SelectionRequired"] = "至少选择一项功能。",
+            ["Settings.Tray.VisibleFeatures.ReorderHint"] = "右键单击选项或按 Shift+F10 调整顺序。",
             ["Settings.Tray.VisibleFeatures.SearchPlaceholder"] = "搜索托盘功能",
             ["Settings.Tray.Feature.Status"] = "状态",
             ["Settings.Tray.Feature.Status.Description"] = "显示当前模式、节点和延迟摘要。",

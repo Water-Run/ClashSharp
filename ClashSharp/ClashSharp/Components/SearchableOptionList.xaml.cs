@@ -73,6 +73,37 @@ public sealed partial class SearchableOptionList : UserControl
         }
     }
 
+    /// <summary>Gets or sets whether multiple-choice rows expose native ordering commands.</summary>
+    public bool AllowReorder { get; set; }
+
+    /// <summary>Gets or sets the localized move-up command label.</summary>
+    public string MoveUpText { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the localized move-down command label.</summary>
+    public string MoveDownText { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the optional instruction for accessing ordering commands.</summary>
+    public string ReorderHint
+    {
+        get => ReorderHintText.Text;
+        set
+        {
+            ReorderHintText.Text = value;
+            ReorderHintText.Visibility = string.IsNullOrWhiteSpace(value) ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
+    internal double MeasureReorderHintHeight(double width)
+    {
+        if (ReorderHintText.Visibility is Visibility.Collapsed)
+        {
+            return 0;
+        }
+
+        ReorderHintText.Measure(new Size(width, double.PositiveInfinity));
+        return ReorderHintText.DesiredSize.Height + 10;
+    }
+
     /// <summary>Gets or sets an optional selection instruction above the search field.</summary>
     public string? SearchHeader
     {
@@ -145,6 +176,75 @@ public sealed partial class SearchableOptionList : UserControl
         SearchableOptionItem? option = e.InRecycleQueue ? null : e.Item as SearchableOptionItem;
         AutomationProperties.SetName(e.ItemContainer, option?.Title ?? string.Empty);
         AutomationProperties.SetHelpText(e.ItemContainer, option?.Description ?? string.Empty);
+        e.ItemContainer.ContextFlyout = option is not null && AllowReorder
+            ? CreateReorderMenu(option)
+            : null;
+    }
+
+    private MenuFlyout CreateReorderMenu(SearchableOptionItem option)
+    {
+        MenuFlyout menu = new();
+        MenuFlyoutItem up = new() { Text = MoveUpText, Icon = new FontIcon { Glyph = "\uE70E" } };
+        MenuFlyoutItem down = new() { Text = MoveDownText, Icon = new FontIcon { Glyph = "\uE70D" } };
+        menu.Items.Add(up);
+        menu.Items.Add(down);
+        menu.Opening += (_, _) =>
+        {
+            int index = FilteredOptions.IndexOf(option);
+            up.IsEnabled = AllowMultiple && AllowReorder && index > 0;
+            down.IsEnabled = AllowMultiple && AllowReorder && index >= 0 && index < FilteredOptions.Count - 1;
+        };
+        bool moved = false;
+        up.Click += (_, _) => moved = MoveOption(option, -1);
+        down.Click += (_, _) => moved = MoveOption(option, 1);
+        menu.Closed += (_, _) =>
+        {
+            if (moved)
+            {
+                moved = false;
+                // Let the flyout finish returning focus before focusing the row in its new position.
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (IsLoaded && FilteredOptions.Contains(option))
+                    {
+                        MultipleOptionsControl.ScrollIntoView(option);
+                        MultipleOptionsControl.UpdateLayout();
+                        if (MultipleOptionsControl.ContainerFromItem(option) is ListViewItem container)
+                        {
+                            container.Focus(FocusState.Keyboard);
+                        }
+                    }
+                });
+            }
+        };
+        return menu;
+    }
+
+    private bool MoveOption(SearchableOptionItem option, int direction)
+    {
+        int index = FilteredOptions.IndexOf(option);
+        int destination = index + direction;
+        if (!AllowMultiple || !AllowReorder || index < 0 || destination < 0 || destination >= FilteredOptions.Count)
+        {
+            return false;
+        }
+
+        // Swap adjacent search results without moving hidden rows or changing their checked state.
+        int sourceIndex = _allOptions.IndexOf(option);
+        int destinationIndex = _allOptions.IndexOf(FilteredOptions[destination]);
+        (_allOptions[sourceIndex], _allOptions[destinationIndex]) = (_allOptions[destinationIndex], _allOptions[sourceIndex]);
+        _synchronizingSelection = true;
+        try
+        {
+            FilteredOptions.Move(index, destination);
+        }
+        finally
+        {
+            _synchronizingSelection = false;
+        }
+
+        SynchronizeSelection();
+        return true;
     }
 
     private void MultipleOptionsControl_SelectionChanged(object sender, SelectionChangedEventArgs e)

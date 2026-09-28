@@ -732,6 +732,7 @@ internal static partial class LocalizationResources
             ["Settings.Tray.VisibleFeatures.Description"] = "Choisir les entrées visibles dans le menu de la zone de notification.",
             ["Settings.Tray.VisibleFeatures.Summary.Format"] = "Fonctions activées : {0}",
             ["Settings.Tray.VisibleFeatures.SelectionRequired"] = "Sélectionnez au moins une fonction.",
+            ["Settings.Tray.VisibleFeatures.ReorderHint"] = "Faites un clic droit sur une option ou appuyez sur Maj+F10 pour changer son ordre.",
             ["Settings.Tray.VisibleFeatures.SearchPlaceholder"] = "Rechercher des fonctions",
             ["Settings.Tray.Feature.Status"] = "État",
             ["Settings.Tray.Feature.Status.Description"] = "Affiche le mode actuel, le nœud et la latence.",

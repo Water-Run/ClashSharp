@@ -719,9 +719,16 @@ public sealed partial class Settings : Page
                 SearchPlaceholder = _viewModel.TrayVisibleFeatureSearchPlaceholderText,
                 EmptyText = _getString("Common.NoMatchingOptions"),
                 AllowMultiple = true,
+                AllowReorder = true,
+                MoveUpText = _getString("Command.MoveUp"),
+                MoveDownText = _getString("Command.MoveDown"),
+                ReorderHint = _getString("Settings.Tray.VisibleFeatures.ReorderHint"),
                 MaxListHeight = 360,
             };
-            optionList.SetOptions(SettingsViewModel.TrayFeatureDefinitions.Select(feature => new SearchableOptionItem(
+            IEnumerable<SettingsTrayFeatureDefinition> orderedFeatures = _viewModel.GetTrayVisibleFeatureDefinitions()
+                .Concat(SettingsViewModel.TrayFeatureDefinitions)
+                .DistinctBy(static feature => feature.Id, StringComparer.OrdinalIgnoreCase);
+            optionList.SetOptions(orderedFeatures.Select(feature => new SearchableOptionItem(
                 feature.Id,
                 _getString(feature.TitleKey),
                 string.Empty,

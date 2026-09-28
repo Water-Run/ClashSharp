@@ -732,6 +732,7 @@ internal static partial class LocalizationResources
             ["Settings.Tray.VisibleFeatures.Description"] = "Wählen, welche Funktionseinträge im Infobereichmenü erscheinen.",
             ["Settings.Tray.VisibleFeatures.Summary.Format"] = "Aktivierte Funktionen: {0}",
             ["Settings.Tray.VisibleFeatures.SelectionRequired"] = "Mindestens eine Funktion auswählen.",
+            ["Settings.Tray.VisibleFeatures.ReorderHint"] = "Zum Umordnen mit der rechten Maustaste auf eine Option klicken oder Umschalt+F10 drücken.",
             ["Settings.Tray.VisibleFeatures.SearchPlaceholder"] = "Infobereichfunktionen suchen",
             ["Settings.Tray.Feature.Status"] = "Status",
             ["Settings.Tray.Feature.Status.Description"] = "Zeigt aktuellen Modus, Knoten und Latenz.",
