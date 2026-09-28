@@ -283,6 +283,7 @@ public sealed partial class Profiles : Page
 
         return _operations.RunAsync(async cancellationToken =>
         {
+            int visit = _visit;
             SetOperationBusy(isBusy: true);
             try
             {
@@ -291,6 +292,15 @@ public sealed partial class Profiles : Page
             finally
             {
                 SetOperationBusy(isBusy: false);
+            }
+
+            if (_isLoaded && visit == _visit && !cancellationToken.IsCancellationRequested
+                && _viewModel.SelectedProfile is ConfigurationProfileDisplay selected)
+            {
+                // Feedback can reduce the viewport after a command. Reveal the retained row
+                // using native minimal scrolling without taking focus from the command bar.
+                ProfilesList.UpdateLayout();
+                ProfilesList.ScrollIntoView(selected, ScrollIntoViewAlignment.Default);
             }
         });
     }

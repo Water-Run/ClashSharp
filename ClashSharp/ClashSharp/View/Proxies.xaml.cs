@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -110,9 +111,23 @@ public sealed partial class Proxies : Page
     private void List_GotFocus(object sender, RoutedEventArgs e)
     {
         if (sender is ListView list
-            && FocusManager.GetFocusedElement(XamlRoot) is Control { FocusState: FocusState.Keyboard })
+            && FocusManager.GetFocusedElement(XamlRoot) is Control { FocusState: FocusState.Keyboard } focused)
         {
-            list.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+            int visit = _visit;
+            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            {
+                if (!_isLoaded || visit != _visit
+                    || !ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), focused)
+                    || focused.FocusState != FocusState.Keyboard)
+                {
+                    return;
+                }
+
+                // Virtualized rows can grow after a resize or language change. Bring the actual
+                // focused control into view after measuring it, including both nested scrollers.
+                list.UpdateLayout();
+                focused.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+            });
         }
     }
 
