@@ -174,6 +174,15 @@ public sealed partial class SearchableOptionList : UserControl
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    private void SingleOption_GotFocus(object sender, RoutedEventArgs e)
+    {
+        // RadioButtons moves arrow-key focus programmatically; keep the complete row in view.
+        if (sender is RadioButton { FocusState: FocusState.Keyboard or FocusState.Programmatic } option)
+        {
+            option.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+        }
+    }
+
     private void SingleOptionsControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_synchronizingSelection || AllowMultiple

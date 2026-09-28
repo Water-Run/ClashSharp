@@ -20,6 +20,7 @@
                 Content="{Binding}"
                 ContentTemplate="{StaticResource OptionContentTemplate}"
                 IsChecked="{Binding IsChecked, Mode=OneWay}"
+                GotFocus="SingleOption_GotFocus"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
                 VerticalContentAlignment="Top"
