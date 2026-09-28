@@ -523,9 +523,9 @@ public sealed partial class Settings : Page
     {
         await RunPageOperationAsync(async cancellationToken =>
         {
-            TextBox proxyUrl1Box = new() { Text = _viewModel.ConnectionTestProxyUrl1, Width = 360 };
-            TextBox proxyUrl2Box = new() { Text = _viewModel.ConnectionTestProxyUrl2, Width = 360 };
-            TextBox directUrlBox = new() { Text = _viewModel.ConnectionTestDirectUrl, Width = 360 };
+            TextBox proxyUrl1Box = new() { Text = _viewModel.ConnectionTestProxyUrl1, MinWidth = 360 };
+            TextBox proxyUrl2Box = new() { Text = _viewModel.ConnectionTestProxyUrl2, MinWidth = 360 };
+            TextBox directUrlBox = new() { Text = _viewModel.ConnectionTestDirectUrl, MinWidth = 360 };
             InfoBar validationError = new()
             {
                 Severity = InfoBarSeverity.Error,
@@ -597,7 +597,7 @@ public sealed partial class Settings : Page
         AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestDirectUrlTitleText, directUrlBox);
         panel.Children.Add(validationError);
 
-        Button restoreButton = new()
+        HyperlinkButton restoreButton = new()
         {
             Name = "RestoreConnectionTestUrlsButton",
             Content = _viewModel.ResetText,
@@ -621,6 +621,7 @@ public sealed partial class Settings : Page
         {
             Text = label,
             Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            TextWrapping = TextWrapping.WrapWholeWords,
         });
         panel.Children.Add(textBox);
     }

@@ -653,7 +653,11 @@ public sealed partial class MasterControl : Page
         RefreshSelectionCount();
 
         bool recommendedOrder = false;
-        Button restoreLayout = new() { Content = _getString("Master.Tile.RestoreRecommended") };
+        HyperlinkButton restoreLayout = new()
+        {
+            Content = _getString("Master.Tile.RestoreRecommended"),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
         restoreLayout.Click += (_, _) =>
         {
             HashSet<string> recommended = _viewModel.RecommendedInfoTileIds.ToHashSet(StringComparer.Ordinal);
