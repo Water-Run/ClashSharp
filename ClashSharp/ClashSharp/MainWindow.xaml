@@ -44,10 +44,6 @@
             CompactPaneLength="48"
             OpenPaneLength="260"
             SelectionChanged="OnNavigationSelectionChanged">
-            <NavigationView.Resources>
-                <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0</CornerRadius>
-            </NavigationView.Resources>
-
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="NavMasterControlItem" Content="{Binding MasterControlText}" Tag="MasterControl">
                     <NavigationViewItem.Icon>
@@ -150,8 +146,7 @@
                 <TextBlock
                     x:Name="StartupStatusText"
                     HorizontalAlignment="Center"
-                    FontSize="20"
-                    FontWeight="SemiBold" />
+                    Style="{ThemeResource SubtitleTextBlockStyle}" />
                 <TextBlock
                     x:Name="StartupDiagnosticText"
                     HorizontalAlignment="Center"

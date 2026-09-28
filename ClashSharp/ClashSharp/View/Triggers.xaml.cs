@@ -266,6 +266,7 @@ public sealed partial class Triggers : Page
             IsPrimaryButtonEnabled = content.SelectedOptions.Count == 1,
             XamlRoot = XamlRoot,
         };
+        using SearchableOptionDialogLayout layout = new(dialog, content);
         EventHandler selectionChanged = (_, _) =>
             dialog.IsPrimaryButtonEnabled = content.SelectedOptions.Count == 1;
         content.SelectionChanged += selectionChanged;

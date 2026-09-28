@@ -766,6 +766,7 @@ public sealed partial class Settings : Page
                 XamlRoot = GetDialogXamlRoot(),
             };
 
+            using SearchableOptionDialogLayout layout = new(dialog, optionList);
             if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
             {
                 cancellationToken.ThrowIfCancellationRequested();

@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ClashSharp.Components;
 
-/// <summary>A reusable settings row with text content on the left and an action control on the right.</summary>
+/// <summary>A settings row that moves its actions below the text when horizontal space is limited.</summary>
 /// <remarks>
 /// Invariants: Title and description default to empty strings.
 /// Thread safety: Must be created and accessed from the UI thread only.
@@ -11,6 +11,9 @@ namespace ClashSharp.Components;
 /// </remarks>
 public sealed partial class SettingRow : UserControl
 {
+    private const double MinimumTextColumnWidth = 280;
+    private bool _actionsBelow;
+
     /// <summary>Dependency property backing <see cref="Title"/>.</summary>
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title),
@@ -38,6 +41,34 @@ public sealed partial class SettingRow : UserControl
         InitializeComponent();
     }
 
+    private void Layout_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (LayoutRoot is null || ActionContentPresenter is null || LayoutRoot.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        // Use the row's available space and the actual localized controls, not a window breakpoint.
+        double contentWidth = LayoutRoot.ActualWidth
+            - LayoutRoot.Padding.Left - LayoutRoot.Padding.Right
+            - LayoutRoot.BorderThickness.Left - LayoutRoot.BorderThickness.Right;
+        double actionWidth = ActionContentPresenter.DesiredSize.Width;
+        bool actionsBelow = actionWidth > 0
+            && contentWidth - actionWidth - LayoutRoot.ColumnSpacing < MinimumTextColumnWidth;
+        if (_actionsBelow == actionsBelow)
+        {
+            return;
+        }
+
+        _actionsBelow = actionsBelow;
+        Grid.SetColumnSpan(TextPanel, actionsBelow ? 2 : 1);
+        Grid.SetRow(ActionContentPresenter, actionsBelow ? 1 : 0);
+        Grid.SetColumn(ActionContentPresenter, actionsBelow ? 0 : 1);
+        Grid.SetColumnSpan(ActionContentPresenter, actionsBelow ? 2 : 1);
+        ActionContentPresenter.HorizontalAlignment = actionsBelow ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        ActionContentPresenter.Margin = actionsBelow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
+    }
+
     /// <summary>Gets or sets the primary row title.</summary>
     public string Title
     {
@@ -52,7 +83,7 @@ public sealed partial class SettingRow : UserControl
         set => SetValue(DescriptionProperty, value);
     }
 
-    /// <summary>Gets or sets the action control displayed at the right edge of the row.</summary>
+    /// <summary>Gets or sets the action control displayed beside or below the row text.</summary>
     public object? ActionContent
     {
         get => GetValue(ActionContentProperty);
