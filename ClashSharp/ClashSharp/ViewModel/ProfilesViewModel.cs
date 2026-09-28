@@ -47,6 +47,7 @@ internal sealed class ProfilesViewModel : ObservableObject
     private string _activeProfileText = string.Empty;
 
     private string _statusText = string.Empty;
+    private PageStatusSeverity _statusSeverity;
 
     /// <summary>Initializes a profiles view model.</summary>
     /// <param name="getString">Localization resolver. Must not be null.</param>
@@ -137,6 +138,33 @@ internal sealed class ProfilesViewModel : ObservableObject
         {
             if (SetProperty(ref _statusText, value)) { OnPropertyChanged(nameof(HasStatusText)); }
         }
+    }
+
+    /// <summary>Gets the semantic type of the current page feedback.</summary>
+    public PageStatusSeverity StatusSeverity
+    {
+        get => _statusSeverity;
+        private set => SetProperty(ref _statusSeverity, value);
+    }
+
+    private void ClearStatus()
+    {
+        StatusText = string.Empty;
+        StatusSeverity = PageStatusSeverity.Informational;
+    }
+
+    private void SetStatus(string key, PageStatusSeverity severity)
+    {
+        StatusSeverity = severity;
+        StatusText = _getString(key);
+    }
+
+    private void SetFailure(string key, Exception exception)
+    {
+        StatusSeverity = PageStatusSeverity.Error;
+        StatusText = exception is ProfileValidationException validation
+            ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.Validation.MissingSections"), validation.GetMissingSectionNames())
+            : _getString(key);
     }
 
     /// <summary>Formats a retained version with explicit node and rule labels.</summary>
@@ -250,14 +278,14 @@ internal sealed class ProfilesViewModel : ObservableObject
     public async Task ImportLocalProfileAsync(string filePath, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(filePath);
-        StatusText = string.Empty;
+        ClearStatus();
         try
         {
             ProfileImportResult result = await _profiles.ImportLocalProfileAsync(filePath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Profiles", $"Local profile imported: {result.ProfileName}.", result.ConfigPath);
             await LoadAsync(cancellationToken);
-            StatusText = _getString("Profiles.Status.Imported");
+            SetStatus("Profiles.Status.Imported", PageStatusSeverity.Success);
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -271,7 +299,7 @@ internal sealed class ProfilesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Profiles", "Local profile import failed.", exception.Message);
-            StatusText = _getString("Profiles.Status.ImportFailed");
+            SetFailure("Profiles.Status.ImportFailed", exception);
         }
     }
 
@@ -291,13 +319,13 @@ internal sealed class ProfilesViewModel : ObservableObject
         }
 
         ConfigurationProfile profile = selectedProfile.Model;
-        StatusText = string.Empty;
+        ClearStatus();
         try
         {
             ProfileImportResult result = await _profiles.ValidateProfileAsync(profile, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Profiles", $"Profile validation completed: {profile.Name}.", result.ConfigPath);
-            StatusText = _getString("Profiles.Status.Validated");
+            SetStatus("Profiles.Status.Validated", PageStatusSeverity.Success);
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -311,7 +339,7 @@ internal sealed class ProfilesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Profiles", "Profile validation failed.", exception.Message);
-            StatusText = _getString("Profiles.Status.ValidateFailed");
+            SetFailure("Profiles.Status.ValidateFailed", exception);
         }
 
         await LoadAsync(cancellationToken);
@@ -329,7 +357,7 @@ internal sealed class ProfilesViewModel : ObservableObject
         }
 
         ConfigurationProfile profile = selectedProfile.Model;
-        StatusText = string.Empty;
+        ClearStatus();
         try
         {
             bool activated = await _profiles.TrySetActiveProfileAsync(
@@ -338,13 +366,13 @@ internal sealed class ProfilesViewModel : ObservableObject
             cancellationToken.ThrowIfCancellationRequested();
             if (!activated)
             {
-                StatusText = _getString("Profiles.Status.ActivateFailed");
+                SetStatus("Profiles.Status.ActivateFailed", PageStatusSeverity.Error);
                 return;
             }
 
             _log.Append("Info", "Profiles", $"Active profile changed to {profile.Name}.", profile.Id);
             await LoadAsync(cancellationToken);
-            StatusText = _getString("Profiles.Status.Activated");
+            SetStatus("Profiles.Status.Activated", PageStatusSeverity.Success);
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -357,14 +385,14 @@ internal sealed class ProfilesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Profiles", "Active profile could not be changed.", exception.Message);
-            StatusText = _getString("Profiles.Status.ActivateFailed");
+            SetStatus("Profiles.Status.ActivateFailed", PageStatusSeverity.Error);
         }
     }
 
     /// <summary>Returns retained versions for one profile, or an empty snapshot when history cannot be read.</summary>
     public IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId)
     {
-        StatusText = string.Empty;
+        ClearStatus();
         try
         {
             return _profiles.GetProfileHistory(profileId);
@@ -378,7 +406,7 @@ internal sealed class ProfilesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
             _log.Append("Warning", "Profiles", "Profile history could not be loaded.", exception.Message);
-            StatusText = _getString("Profiles.Status.HistoryFailed");
+            SetStatus("Profiles.Status.HistoryFailed", PageStatusSeverity.Error);
             return [];
         }
     }
@@ -389,7 +417,7 @@ internal sealed class ProfilesViewModel : ObservableObject
         string name,
         CancellationToken cancellationToken)
     {
-        StatusText = string.Empty;
+        ClearStatus();
         try
         {
             bool renamed = await _profiles
@@ -399,9 +427,9 @@ internal sealed class ProfilesViewModel : ObservableObject
             {
                 _log.Append("Info", "Profiles", "Profile renamed.", profileId);
                 await LoadAsync(cancellationToken);
-                StatusText = _getString("Profiles.Status.Renamed");
+                SetStatus("Profiles.Status.Renamed", PageStatusSeverity.Success);
             }
-            else { StatusText = _getString("Profiles.Status.RenameFailed"); }
+            else { SetStatus("Profiles.Status.RenameFailed", PageStatusSeverity.Error); }
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -414,14 +442,14 @@ internal sealed class ProfilesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Profiles", "Profile could not be renamed.", exception.Message);
-            StatusText = _getString("Profiles.Status.RenameFailed");
+            SetStatus("Profiles.Status.RenameFailed", PageStatusSeverity.Error);
         }
     }
 
     /// <summary>Deletes one user profile and refreshes visible rows.</summary>
     public async Task DeleteProfileAsync(string profileId, CancellationToken cancellationToken)
     {
-        StatusText = string.Empty;
+        ClearStatus();
         try
         {
             bool deleted = await _profiles.TryDeleteProfileAsync(profileId, cancellationToken);
@@ -431,9 +459,9 @@ internal sealed class ProfilesViewModel : ObservableObject
                 SelectedProfile = null;
                 _log.Append("Info", "Profiles", "Profile deleted.", profileId);
                 await LoadAsync(cancellationToken);
-                StatusText = _getString("Profiles.Status.Deleted");
+                SetStatus("Profiles.Status.Deleted", PageStatusSeverity.Success);
             }
-            else { StatusText = _getString("Profiles.Status.DeleteFailed"); }
+            else { SetStatus("Profiles.Status.DeleteFailed", PageStatusSeverity.Error); }
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -447,7 +475,7 @@ internal sealed class ProfilesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Profiles", "Profile could not be deleted.", exception.Message);
-            StatusText = _getString("Profiles.Status.DeleteFailed");
+            SetStatus("Profiles.Status.DeleteFailed", PageStatusSeverity.Error);
         }
     }
 
@@ -456,7 +484,7 @@ internal sealed class ProfilesViewModel : ObservableObject
         ProfileHistoryEntry historyEntry,
         CancellationToken cancellationToken)
     {
-        StatusText = string.Empty;
+        ClearStatus();
         try
         {
             ProfileImportResult result = await _profiles
@@ -464,7 +492,7 @@ internal sealed class ProfilesViewModel : ObservableObject
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Profiles", "Profile history version restored.", result.ConfigPath);
             await LoadAsync(cancellationToken);
-            StatusText = _getString("Profiles.Status.Restored");
+            SetStatus("Profiles.Status.Restored", PageStatusSeverity.Success);
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -478,7 +506,7 @@ internal sealed class ProfilesViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             _log.Append("Warning", "Profiles", "Profile history version could not be restored.", exception.Message);
-            StatusText = _getString("Profiles.Status.RestoreFailed");
+            SetFailure("Profiles.Status.RestoreFailed", exception);
         }
     }
 

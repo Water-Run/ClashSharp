@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.Model;
 using ClashSharp.Service;
 
 namespace ClashSharp.Tests.Unit.Services;
@@ -63,7 +64,9 @@ public sealed class MihomoProfileShapeValidatorTests
                   - DIRECT
             """;
 
-        Assert.Throws<ArgumentException>(() => MihomoProfileShapeValidator.Validate(Configuration));
+        ProfileValidationException error = Assert.Throws<ProfileValidationException>(() => MihomoProfileShapeValidator.Validate(Configuration));
+        Assert.Equal(MissingProfileSections.Rules, error.MissingSections);
+        Assert.Equal("rules", error.GetMissingSectionNames());
     }
 
     /// <summary>Verifies indented pseudo sections are not accepted as top-level sections.</summary>
@@ -77,6 +80,27 @@ public sealed class MihomoProfileShapeValidatorTests
               rules: []
             """;
 
-        Assert.Throws<ArgumentException>(() => MihomoProfileShapeValidator.Validate(Configuration));
+        ProfileValidationException error = Assert.Throws<ProfileValidationException>(() => MihomoProfileShapeValidator.Validate(Configuration));
+        Assert.Equal(MissingProfileSections.ProxySource | MissingProfileSections.ProxyGroups | MissingProfileSections.Rules, error.MissingSections);
+        Assert.Equal("proxies / proxy-providers, proxy-groups, rules", error.GetMissingSectionNames());
+    }
+
+    [Fact]
+    public void Validate_ProfileWithoutGroups_ReportsOnlyMissingGroups()
+    {
+        ProfileValidationException error = Assert.Throws<ProfileValidationException>(() =>
+            MihomoProfileShapeValidator.Validate("proxies: []\nrules:\n  - MATCH,DIRECT\n# private configuration content"));
+        Assert.Equal(MissingProfileSections.ProxyGroups, error.MissingSections);
+        Assert.Equal("proxy-groups", error.GetMissingSectionNames());
+        Assert.DoesNotContain("private", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_ProfileWithoutSource_DescribesAlternativeKeys()
+    {
+        ProfileValidationException error = Assert.Throws<ProfileValidationException>(() =>
+            MihomoProfileShapeValidator.Validate("proxy-groups: []\nrules: []"));
+        Assert.Equal(MissingProfileSections.ProxySource, error.MissingSections);
+        Assert.Equal("proxies / proxy-providers", error.GetMissingSectionNames());
     }
 }

@@ -40,6 +40,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         });
 
         Assert.True(viewModel.HasStatusText);
+        Assert.Equal(PageStatusSeverity.Error, viewModel.StatusSeverity);
         Assert.Equal($"Profiles.Status.{char.ToUpperInvariant(operation[0])}{operation[1..]}Failed", viewModel.StatusText);
         Assert.Equal("retained", Assert.Single(viewModel.Profiles).Id);
         Assert.Same(viewModel.Profiles[0], viewModel.SelectedProfile);
@@ -60,12 +61,14 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         viewModel.SelectedProfile = Assert.Single(viewModel.Profiles);
         await viewModel.RollbackProfileAsync(entry, CancellationToken.None);
         Assert.Equal("Profiles.Status.Restored", viewModel.StatusText);
+        Assert.Equal(PageStatusSeverity.Success, viewModel.StatusSeverity);
         Assert.Equal(2, catalog.GetProfilesCallCount);
         Assert.Same(viewModel.Profiles[0], viewModel.SelectedProfile);
 
         catalog.RollbackProfile = (_, _) => Task.FromException<ProfileImportResult>(new IOException("private file path"));
         await viewModel.RollbackProfileAsync(entry, CancellationToken.None);
         Assert.Equal("Profiles.Status.RestoreFailed", viewModel.StatusText);
+        Assert.Equal(PageStatusSeverity.Error, viewModel.StatusSeverity);
         Assert.Equal(2, catalog.GetProfilesCallCount);
 
         using CancellationTokenSource lifetime = new();
@@ -76,6 +79,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         };
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => viewModel.RollbackProfileAsync(entry, lifetime.Token));
         Assert.False(viewModel.HasStatusText);
+        Assert.Equal(PageStatusSeverity.Informational, viewModel.StatusSeverity);
         Assert.Equal(2, catalog.GetProfilesCallCount);
     }
 
@@ -100,10 +104,47 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         ConfigurationProfileDisplay row = Assert.Single(viewModel.Profiles);
         Assert.Equal("after", row.Id);
         Assert.Equal("Profiles.Status.Imported", viewModel.StatusText);
+        Assert.Equal(PageStatusSeverity.Success, viewModel.StatusSeverity);
         Assert.Equal(2, catalog.GetProfilesCallCount);
         Assert.Contains(
             log.Entries,
             entry => entry.Message.Contains("Local profile imported", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ImportLocalProfileAsync_FailureThenRetry_UsesMatchingFeedback(bool missingSections)
+    {
+        FakeProfileManagementCatalog catalog = new()
+        {
+            Profiles = [CreateProfile("retained", isActive: true)],
+            ImportLocalProfile = (_, _) => Task.FromException<ProfileImportResult>(missingSections
+                ? new ProfileValidationException(MissingProfileSections.ProxyGroups | MissingProfileSections.Rules)
+                : new IOException("private file path")),
+        };
+        ProfilesViewModel viewModel = new(
+            key => key == "Profiles.Validation.MissingSections" ? "Missing: {0}" : key,
+            catalog, new RecordingPageLog(), () => "retained", new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
+        await viewModel.LoadAsync(CancellationToken.None);
+        List<string?> changed = [];
+        viewModel.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        await viewModel.ImportLocalProfileAsync("profile.yaml", CancellationToken.None);
+
+        Assert.Equal(PageStatusSeverity.Error, viewModel.StatusSeverity);
+        Assert.Equal(missingSections ? "Missing: proxy-groups, rules" : "Profiles.Status.ImportFailed", viewModel.StatusText);
+        Assert.DoesNotContain("private", viewModel.StatusText, StringComparison.Ordinal);
+        Assert.Equal(1, catalog.GetProfilesCallCount);
+        Assert.Contains(nameof(ProfilesViewModel.StatusSeverity), changed);
+
+        catalog.ImportLocalProfile = (_, _) => Task.FromResult(CreateImportResult("retained"));
+        await viewModel.ImportLocalProfileAsync("profile.yaml", CancellationToken.None);
+
+        Assert.Equal(PageStatusSeverity.Success, viewModel.StatusSeverity);
+        Assert.Equal("Profiles.Status.Imported", viewModel.StatusText);
+        Assert.Equal(2, catalog.GetProfilesCallCount);
     }
 
     [Fact]

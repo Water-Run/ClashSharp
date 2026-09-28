@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.Model;
 
 namespace ClashSharp.Service;
 
@@ -23,9 +24,13 @@ internal static class MihomoProfileShapeValidator
         bool hasProxyGroups = ContainsTopLevelKey(configurationText, "proxy-groups");
         bool hasRules = ContainsTopLevelKey(configurationText, "rules");
 
-        if (!hasProxySource || !hasProxyGroups || !hasRules)
+        MissingProfileSections missing = MissingProfileSections.None;
+        if (!hasProxySource) { missing |= MissingProfileSections.ProxySource; }
+        if (!hasProxyGroups) { missing |= MissingProfileSections.ProxyGroups; }
+        if (!hasRules) { missing |= MissingProfileSections.Rules; }
+        if (missing != MissingProfileSections.None)
         {
-            throw new ArgumentException("Downloaded configuration must contain proxies or proxy-providers, proxy-groups, and rules sections.", nameof(configurationText));
+            throw new ProfileValidationException(missing);
         }
     }
 

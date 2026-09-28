@@ -66,6 +66,7 @@ internal static partial class LocalizationResources
             ["Rules.Column.Hits"] = "تعداد تطبیق",
             ["Profiles.Validation.Name"] = "نام نمایه را وارد کنید.",
             ["Profiles.Status.Imported"] = "پروفایل وارد شد.",
+            ["Profiles.Validation.MissingSections"] = "بخش‌های الزامی در پیکربندی وجود ندارند: {0}. آن‌ها را اضافه کنید و دوباره تلاش کنید.",
             ["Profiles.Status.ImportFailed"] = "وارد کردن پروفایل ممکن نشد. فایل را بررسی و دوباره تلاش کنید.",
             ["Profiles.Status.Validated"] = "اعتبارسنجی پروفایل موفق بود.",
             ["Profiles.Status.ValidateFailed"] = "اعتبارسنجی پروفایل ناموفق بود. پیکربندی را بررسی و دوباره تلاش کنید.",

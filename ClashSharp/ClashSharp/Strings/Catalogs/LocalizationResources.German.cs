@@ -66,6 +66,7 @@ internal static partial class LocalizationResources
             ["Rules.Column.Hits"] = "Treffer",
             ["Profiles.Validation.Name"] = "Geben Sie einen Profilnamen ein.",
             ["Profiles.Status.Imported"] = "Profil importiert.",
+            ["Profiles.Validation.MissingSections"] = "In der Konfiguration fehlen erforderliche Abschnitte: {0}. Ergänzen Sie diese und versuchen Sie es erneut.",
             ["Profiles.Status.ImportFailed"] = "Profil konnte nicht importiert werden. Datei prüfen und erneut versuchen.",
             ["Profiles.Status.Validated"] = "Profil erfolgreich geprüft.",
             ["Profiles.Status.ValidateFailed"] = "Profilprüfung fehlgeschlagen. Konfiguration prüfen und erneut versuchen.",

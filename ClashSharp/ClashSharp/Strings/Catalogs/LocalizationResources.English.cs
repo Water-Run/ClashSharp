@@ -66,6 +66,7 @@ internal static partial class LocalizationResources
             ["Rules.Column.Hits"] = "Hits",
             ["Profiles.Validation.Name"] = "Enter a profile name.",
             ["Profiles.Status.Imported"] = "Profile imported.",
+            ["Profiles.Validation.MissingSections"] = "The configuration is missing required sections: {0}. Add them and try again.",
             ["Profiles.Status.ImportFailed"] = "Could not import the profile. Check the file and try again.",
             ["Profiles.Status.Validated"] = "Profile validation succeeded.",
             ["Profiles.Status.ValidateFailed"] = "Profile validation failed. Check the configuration and try again.",

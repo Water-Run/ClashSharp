@@ -56,6 +56,7 @@
     <Compile Include="..\ClashSharp\Model\ConfigurationProfile.cs" Link="Model\ConfigurationProfile.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileIdentifiers.cs" Link="Model\ProfileIdentifiers.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileImportResult.cs" Link="Model\ProfileImportResult.cs" />
+    <Compile Include="..\ClashSharp\Model\ProfileValidationException.cs" Link="Model\ProfileValidationException.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileSubscriptionLink.cs" Link="Model\ProfileSubscriptionLink.cs" />
     <Compile Include="..\ClashSharp\Model\SubscriptionUsage.cs" Link="Model\SubscriptionUsage.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileHistoryEntry.cs" Link="Model\ProfileHistoryEntry.cs" />

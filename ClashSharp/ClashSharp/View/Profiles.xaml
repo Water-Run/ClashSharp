@@ -12,6 +12,7 @@
 
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:PageStatusSeverityConverter x:Key="PageStatusSeverityConverter" />
     </Page.Resources>
     <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
         <Grid.RowDefinitions>
@@ -61,7 +62,7 @@
         </CommandBar>
 
         <InfoBar Grid.Row="2" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
-                 Severity="Informational" Message="{Binding StatusText}"
+                 Severity="{Binding StatusSeverity, Converter={StaticResource PageStatusSeverityConverter}}" Message="{Binding StatusText}"
                  Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}" />
         <Grid Grid.Row="3" Style="{StaticResource ClashCardGridStyle}">
             <StackPanel Spacing="4">

@@ -66,6 +66,7 @@ internal static partial class LocalizationResources
             ["Rules.Column.Hits"] = "일치 횟수",
             ["Profiles.Validation.Name"] = "프로필 이름을 입력하세요.",
             ["Profiles.Status.Imported"] = "프로필을 가져왔습니다.",
+            ["Profiles.Validation.MissingSections"] = "설정에 필수 섹션이 없습니다: {0}. 추가한 후 다시 시도하세요.",
             ["Profiles.Status.ImportFailed"] = "프로필을 가져오지 못했습니다. 파일을 확인한 뒤 다시 시도하세요.",
             ["Profiles.Status.Validated"] = "프로필 검증을 통과했습니다.",
             ["Profiles.Status.ValidateFailed"] = "프로필 검증에 실패했습니다. 구성을 확인한 뒤 다시 시도하세요.",

@@ -66,6 +66,7 @@ internal static partial class LocalizationResources
             ["Rules.Column.Hits"] = "命中次数",
             ["Profiles.Validation.Name"] = "请输入配置名称。",
             ["Profiles.Status.Imported"] = "配置已导入。",
+            ["Profiles.Validation.MissingSections"] = "配置缺少必要段落：{0}。请补齐后重试。",
             ["Profiles.Status.ImportFailed"] = "无法导入配置，请检查文件后重试。",
             ["Profiles.Status.Validated"] = "配置验证通过。",
             ["Profiles.Status.ValidateFailed"] = "配置验证失败，请检查配置后重试。",

@@ -66,6 +66,7 @@ internal static partial class LocalizationResources
             ["Rules.Column.Hits"] = "Совпадения",
             ["Profiles.Validation.Name"] = "Введите имя профиля.",
             ["Profiles.Status.Imported"] = "Профиль импортирован.",
+            ["Profiles.Validation.MissingSections"] = "В конфигурации отсутствуют обязательные разделы: {0}. Добавьте их и повторите попытку.",
             ["Profiles.Status.ImportFailed"] = "Не удалось импортировать профиль. Проверьте файл и повторите попытку.",
             ["Profiles.Status.Validated"] = "Проверка профиля выполнена успешно.",
             ["Profiles.Status.ValidateFailed"] = "Проверка профиля не пройдена. Проверьте конфигурацию и повторите попытку.",
