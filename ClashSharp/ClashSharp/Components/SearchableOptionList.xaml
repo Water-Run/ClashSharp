@@ -13,43 +13,45 @@
             HorizontalAlignment="Stretch"
             TextChanged="SearchBox_TextChanged" />
 
-        <TextBlock
-            x:Name="EmptyStateText"
-            Text="{Binding EmptyText, ElementName=Root}"
-            Visibility="Collapsed"
-            Margin="0,12"
-            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            TextWrapping="Wrap" />
-
-        <ListView
-            x:Name="OptionsControl"
-            ItemsSource="{Binding FilteredOptions, ElementName=Root}"
-            MaxHeight="{Binding MaxListHeight, ElementName=Root}"
-            SelectionMode="None"
-            HorizontalAlignment="Stretch"
-            Padding="0,0,14,0"
-            ScrollViewer.VerticalScrollBarVisibility="Visible"
-            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                    <Setter Property="Padding" Value="0" />
-                    <Setter Property="Margin" Value="0,0,0,8" />
-                </Style>
-            </ListView.ItemContainerStyle>
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <components:DialogOptionRow
-                        Title="{Binding Title}"
-                        Metadata="{Binding Metadata}"
-                        Description="{Binding Description}"
-                        Glyph="{Binding Glyph}"
-                        IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                        Tag="{Binding}"
-                        HorizontalAlignment="Stretch"
-                        SelectionInvoked="DialogOptionRow_SelectionInvoked" />
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+        <Grid Height="{Binding MaxListHeight, ElementName=Root}">
+            <ListView
+                x:Name="OptionsControl"
+                ItemsSource="{Binding FilteredOptions, ElementName=Root}"
+                MaxHeight="{Binding MaxListHeight, ElementName=Root}"
+                SelectionMode="None"
+                HorizontalAlignment="Stretch"
+                Padding="0,0,14,0"
+                ScrollViewer.VerticalScrollBarVisibility="Visible"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0,0,0,8" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <components:DialogOptionRow
+                            Title="{Binding Title}"
+                            Metadata="{Binding Metadata}"
+                            Description="{Binding Description}"
+                            Glyph="{Binding Glyph}"
+                            IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                            Tag="{Binding}"
+                            HorizontalAlignment="Stretch"
+                            SelectionInvoked="DialogOptionRow_SelectionInvoked" />
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <TextBlock
+                x:Name="EmptyStateText"
+                Text="{Binding EmptyText, ElementName=Root}"
+                Visibility="Collapsed"
+                VerticalAlignment="Top"
+                Margin="0,12,16,0"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
+        </Grid>
     </StackPanel>
 </UserControl>

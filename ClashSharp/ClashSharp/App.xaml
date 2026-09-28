@@ -10,7 +10,7 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
 
-            <Thickness x:Key="ClashPagePadding">32</Thickness>
+            <Thickness x:Key="ClashPagePadding">24</Thickness>
 
             <Style x:Key="ClashSecondaryCaptionTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />

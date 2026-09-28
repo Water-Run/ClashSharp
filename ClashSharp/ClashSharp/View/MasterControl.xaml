@@ -20,7 +20,7 @@
 
     <ScrollViewer
         x:Name="RootScrollViewer"
-        Padding="24,18,24,24"
+        Padding="{StaticResource ClashPagePadding}"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled"
         HorizontalContentAlignment="Stretch">

@@ -17,10 +17,12 @@
     <ScrollViewer
         x:Name="SettingsScrollViewer"
         IsEnabled="{Binding IsPreferenceInputEnabled}"
-        Padding="24,18,18,24"
+        Padding="{StaticResource ClashPagePadding}"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="SettingsContentPanel" Spacing="6" HorizontalAlignment="Stretch">
+            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}"
+                       Style="{ThemeResource TitleTextBlockStyle}" Margin="0,0,0,18" />
             <InfoBar
                 Message="{Binding OperationErrorText}"
                 Severity="Error"

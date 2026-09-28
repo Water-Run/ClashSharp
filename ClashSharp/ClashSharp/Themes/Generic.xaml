@@ -7,7 +7,7 @@
         <controls:XamlControlsResources />
     </ResourceDictionary.MergedDictionaries>
 
-    <Thickness x:Key="ClashPagePadding">32</Thickness>
+    <Thickness x:Key="ClashPagePadding">24</Thickness>
 
     <Style x:Key="ClashCardGridStyle" TargetType="Grid">
         <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />

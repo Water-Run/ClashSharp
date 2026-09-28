@@ -347,7 +347,7 @@ public sealed class AppResourcePackagingTests
         Assert.True(runtimeIndex > versionIndex, "Runtime summary must be below the version.");
         Assert.True(descriptionIndex > runtimeIndex, "App description must be below version and runtime.");
         Assert.Contains("Text=\"{Binding VersionSummaryText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
     }
@@ -1873,7 +1873,7 @@ public sealed class AppResourcePackagingTests
         Assert.Equal(root.GetProperty("sha256").GetString(), actualHash);
     }
 
-    /// <summary>Verifies settings page uses the compact RunOnce-style scrolling and row spacing.</summary>
+    /// <summary>Verifies settings retain compact rows beneath the shared page heading and gutters.</summary>
     [Fact]
     public void SettingsXaml_UsesCompactScrollLayout()
     {
@@ -1881,9 +1881,9 @@ public sealed class AppResourcePackagingTests
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
 
-        Assert.Contains("Padding=\"24,18,18,24\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"{StaticResource ClashPagePadding}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("<StackPanel x:Name=\"SettingsContentPanel\" Spacing=\"6\" HorizontalAlignment=\"Stretch\">", settingsXaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("x:Name=\"PageTitleText\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"PageTitleText\" Text=\"{Binding PageTitleText}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DescriptionText\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Padding=\"32,32,20,32\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("StackPanel Spacing=\"18\"", settingsXaml, StringComparison.Ordinal);
@@ -2165,21 +2165,20 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("x:Name=\"ResetProxySettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies the about page uses a centered, bounded layout with complete app identity fields.</summary>
+    /// <summary>Verifies the about page keeps complete app identity within a bounded reading width.</summary>
     [Fact]
-    public void AboutXaml_UsesCenteredCompleteIdentityLayout()
+    public void AboutXaml_UsesBoundedCompleteIdentityLayout()
     {
         string aboutXamlPath = FindSourceFile("ClashSharp", "ClashSharp", "View", "About.xaml");
 
         string aboutXaml = File.ReadAllText(aboutXamlPath);
 
-        Assert.Contains("HorizontalAlignment=\"Center\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth=\"720\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment=\"Left\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth=\"900\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding VersionSummaryText}\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding RuntimeValueText}\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding VersionSummaryText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding AppDescriptionText}\" Style=\"{ThemeResource BodyTextBlockStyle}\" Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"VersionLabelText\"", aboutXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"RuntimeTitleText\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LicenseTitleText\"", aboutXaml, StringComparison.Ordinal);
@@ -3253,7 +3252,6 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", xaml, StringComparison.Ordinal);
         Assert.Contains("HorizontalScrollBarVisibility=\"Disabled\"", xaml, StringComparison.Ordinal);
-        string expectedPadding = fileName == "MasterControl.xaml" ? "Padding=\"24,18,24,24\"" : "Padding=\"24,18,18,24\"";
-        Assert.Contains(expectedPadding, xaml, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"{StaticResource ClashPagePadding}\"", xaml, StringComparison.Ordinal);
     }
 }

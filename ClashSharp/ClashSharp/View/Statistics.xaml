@@ -10,7 +10,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer
-        Padding="24,18,18,24"
+        Padding="{StaticResource ClashPagePadding}"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="18">
