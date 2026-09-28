@@ -6,7 +6,9 @@ using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 
 namespace ClashSharp.View;
 
@@ -41,6 +43,10 @@ public sealed partial class Proxies : Page
         _selectionSession = new PageOperationSession(dependencies.ErrorSink, "proxies-page-selection");
         InitializeComponent();
         DataContext = _viewModel;
+        foreach (ListView list in new[] { ProxyGroupsList, ProxyNodesList, ProviderResourcesList })
+        {
+            list.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(List_PointerWheelChanged), true);
+        }
     }
 
     /// <summary>Loads catalog and mihomo runtime state while the page is active.</summary>
@@ -108,6 +114,60 @@ public sealed partial class Proxies : Page
         {
             list.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
         }
+    }
+
+    /// <summary>Lets the native outer scroller consume a wheel tick when a bounded list reaches its edge.</summary>
+    private void List_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not ListView list || !e.Handled)
+        {
+            return;
+        }
+
+        // Nested pickers and scrollbars own their input; only chain the list's own vertical wheel input.
+        for (DependencyObject? source = e.OriginalSource as DependencyObject;
+            source is not null && source != list; source = VisualTreeHelper.GetParent(source))
+        {
+            if (source is ComboBox or ScrollBar)
+            {
+                return;
+            }
+        }
+
+        var properties = e.GetCurrentPoint(list).Properties;
+        if (properties.IsHorizontalMouseWheel || properties.MouseWheelDelta == 0
+            || FindScrollViewer(list) is not ScrollViewer scroll)
+        {
+            return;
+        }
+
+        bool atEdge = properties.MouseWheelDelta > 0
+            ? scroll.VerticalOffset <= 0.5
+            : scroll.VerticalOffset >= scroll.ScrollableHeight - 0.5;
+        if (atEdge)
+        {
+            // ScrollViewer's built-in chaining excludes mouse wheels. Resume bubbling instead of
+            // inventing a pixel step, so Windows keeps its configured wheel speed and animation.
+            e.Handled = false;
+        }
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is ScrollViewer scroll)
+        {
+            return scroll;
+        }
+
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            if (FindScrollViewer(VisualTreeHelper.GetChild(root, index)) is ScrollViewer child)
+            {
+                return child;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Handles runtime strategy group selection changes.</summary>

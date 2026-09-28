@@ -285,6 +285,7 @@ internal static partial class LocalizationResources
             ["ProfileCatalog.BuiltInDirect.Name"] = "Local direct default configuration",
             ["ProfilePreview.CurrentConfiguration"] = "Current configuration",
             ["RuleCatalog.BuiltInDirect.Name"] = "Built-in direct",
+            ["Region.Unknown"] = "Unknown region",
             ["Region.CN"] = "China",
             ["Region.MainlandChina.CN"] = "Mainland China",
             ["Region.HK"] = "Hong Kong",

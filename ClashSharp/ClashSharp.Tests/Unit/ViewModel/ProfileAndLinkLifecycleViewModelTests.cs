@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
@@ -7,6 +8,50 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Verifies profile and subscription mutations respect their owning page lifetime.</summary>
 public sealed class ProfileAndLinkLifecycleViewModelTests
 {
+    [Fact]
+    public async Task LoadAsync_RefreshesAndReordersProfilesWithoutResettingRetainedRows()
+    {
+        ConfigurationProfile first = CreateProfile("first", false);
+        ConfigurationProfile second = CreateProfile("second", true);
+        FakeProfileManagementCatalog catalog = new() { Profiles = [first, second] };
+        ProfilesViewModel viewModel = CreateProfilesViewModel(catalog, new RecordingPageLog());
+        await viewModel.LoadAsync(CancellationToken.None);
+        var collection = viewModel.Profiles;
+        ConfigurationProfileDisplay selected = collection[1];
+        viewModel.SelectedProfile = selected;
+        List<NotifyCollectionChangedAction> changes = [];
+        ((INotifyCollectionChanged)collection).CollectionChanged += (_, args) => changes.Add(args.Action);
+        List<string?> rowChanges = [];
+        selected.PropertyChanged += (_, args) => rowChanges.Add(args.PropertyName);
+
+        catalog.Profiles = [first, second with { Name = "Renamed", Status = "Validated", NodeCount = 4 }];
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Same(collection, viewModel.Profiles);
+        Assert.Same(selected, viewModel.SelectedProfile);
+        Assert.Empty(changes);
+        Assert.Equal("Renamed", selected.NameDisplay);
+        Assert.Equal("Validated", selected.StatusDisplay);
+        Assert.Equal(4, selected.NodeCount);
+        Assert.Contains(nameof(ConfigurationProfileDisplay.NameDisplay), rowChanges);
+        Assert.Contains(nameof(ConfigurationProfileDisplay.StatusDisplay), rowChanges);
+        Assert.Contains(nameof(ConfigurationProfileDisplay.NodeCount), rowChanges);
+        Assert.Equal("Renamed - Validated", viewModel.ActiveProfileText);
+
+        catalog.Profiles = [catalog.Profiles[1], first, CreateProfile("new", false)];
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Same(selected, viewModel.Profiles[0]);
+        Assert.Same(selected, viewModel.SelectedProfile);
+        Assert.Equal(["second", "first", "new"], viewModel.Profiles.Select(row => row.Id));
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, changes);
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Replace, changes);
+
+        catalog.Profiles = [first];
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Null(viewModel.SelectedProfile);
+        Assert.Equal("first", Assert.Single(viewModel.Profiles).Id);
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, changes);
+    }
+
     /// <summary>Rejected mutations and operational failures never leave a misleading success result.</summary>
     [Theory]
     [InlineData("activate", false)]
@@ -184,7 +229,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
     }
 
     [Fact]
-    public async Task ValidateSelectedProfileAsync_WhenListResetsSelection_CanActivateValidatedProfile()
+    public async Task ValidateSelectedProfileAsync_RetainsRowsAndSelectionBeforeActivation()
     {
         FakeProfileManagementCatalog catalog = new()
         {
@@ -213,7 +258,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         await viewModel.ValidateSelectedProfileAsync(CancellationToken.None);
 
         Assert.Same(Assert.Single(viewModel.Profiles), viewModel.SelectedProfile);
-        Assert.NotSame(originalRow, viewModel.SelectedProfile);
+        Assert.Same(originalRow, viewModel.SelectedProfile);
         Assert.Equal("Profiles.Status.Validated", viewModel.StatusText);
         await viewModel.SetSelectedProfileActiveAsync(CancellationToken.None);
         Assert.Equal("candidate", activatedProfileId);

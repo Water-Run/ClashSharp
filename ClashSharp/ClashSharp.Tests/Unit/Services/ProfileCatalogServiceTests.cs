@@ -1,15 +1,72 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.Strings;
 
 namespace ClashSharp.Tests.Unit.Services;
 
 /// <summary>Unit tests for profile catalog composition.</summary>
 public sealed class ProfileCatalogServiceTests
 {
+    [Theory]
+    [InlineData(AppLanguage.SimplifiedChinese)]
+    [InlineData(AppLanguage.TraditionalChinese)]
+    [InlineData(AppLanguage.English)]
+    [InlineData(AppLanguage.Russian)]
+    [InlineData(AppLanguage.French)]
+    [InlineData(AppLanguage.German)]
+    [InlineData(AppLanguage.Persian)]
+    [InlineData(AppLanguage.Korean)]
+    public async Task LegacyProfileStatuses_FollowCurrentLanguageAndPersistStableKeys(AppLanguage legacyLanguage)
+    {
+        using TempFile file = new();
+        string[] keys = [ProfileStatusText.Available, ProfileStatusText.Canceled, ProfileStatusText.Validated, ProfileStatusText.Invalid];
+        List<ConfigurationProfile> legacy = keys.Select((key, index) => new ConfigurationProfile(
+            "profile-" + index, "User name " + index, "source", LocalizationResources.Translations[legacyLanguage][key],
+            DateTimeOffset.UnixEpoch, 1, 1, false)).ToList();
+        legacy.Add(new("unknown-status", "Custom", "source", "Custom diagnostic", DateTimeOffset.UnixEpoch, 1, 1, false));
+        legacy.Add(new(ProfileIdentifiers.BuiltInDirect, "Old built-in name", "Clash#", "Available", DateTimeOffset.UnixEpoch, 0, 1, false));
+        string originalJson = JsonSerializer.Serialize(new { Profiles = legacy });
+        File.WriteAllText(file.Path, originalJson);
+        AppLanguage language = AppLanguage.SimplifiedChinese;
+        await using ProfileCatalogService service = CreateService(file.Path, new FakeProfileCatalogSettings(),
+            getString: key => LocalizationResources.Translations[language][key]);
+
+        foreach (AppLanguage current in new[] { AppLanguage.SimplifiedChinese, AppLanguage.English })
+        {
+            language = current;
+            IReadOnlyList<ConfigurationProfile> rows = service.GetProfiles();
+            for (int index = 0; index < keys.Length; index++)
+            {
+                Assert.Equal(LocalizationResources.Translations[current][keys[index]], rows[index].Status);
+                Assert.Equal(legacy[index].Name, rows[index].Name);
+                Assert.Equal(legacy[index].UpdatedAt, rows[index].UpdatedAt);
+            }
+
+            Assert.Equal("Custom diagnostic", rows[4].Status);
+            Assert.Equal(LocalizationResources.Translations[current]["ProfileCatalog.BuiltInDirect.Name"], rows[5].Name);
+            Assert.Equal(originalJson, File.ReadAllText(file.Path));
+        }
+
+        Assert.True(await service.TryRenameProfileAsync("profile-0", "Renamed", CancellationToken.None));
+        using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(file.Path));
+        JsonElement storedRows = saved.RootElement.GetProperty("Profiles");
+        for (int index = 0; index < keys.Length; index++)
+        {
+            Assert.Equal(keys[index], storedRows[index].GetProperty("Status").GetString());
+        }
+
+        Assert.Equal("Custom diagnostic", storedRows[4].GetProperty("Status").GetString());
+        await using ProfileCatalogService reopened = CreateService(file.Path, new FakeProfileCatalogSettings(),
+            getString: key => LocalizationResources.Translations[AppLanguage.SimplifiedChinese][key]);
+        Assert.Equal("可用", reopened.GetProfiles()[0].Status);
+        Assert.Equal("Renamed", reopened.GetProfiles()[0].Name);
+    }
+
     /// <summary>Bounds stalled response content, preserves committed data, and releases the update gate.</summary>
     [Theory]
     [InlineData(false)]
@@ -781,7 +838,8 @@ public sealed class ProfileCatalogServiceTests
         FakeProfileCatalogCoreConfiguration? core = null,
         FakeProfileCatalogRuntime? runtime = null,
         IProfileCatalogMutationCoordinator? coordinator = null,
-        TimeSpan? downloadTimeout = null)
+        TimeSpan? downloadTimeout = null,
+        Func<string, string>? getString = null)
     {
         return new ProfileCatalogService(
             catalogPath,
@@ -790,12 +848,12 @@ public sealed class ProfileCatalogServiceTests
             core ?? new FakeProfileCatalogCoreConfiguration(),
             runtime ?? new FakeProfileCatalogRuntime(),
             new FakeProfileCatalogLog(),
-            key => key switch
+            getString ?? (key => key switch
             {
                 "ProfileCatalog.BuiltInDirect.Name" => "localized direct",
                 "ProfileCatalog.Status.Available" => "localized available",
                 _ => key,
-            },
+            }),
             coordinator ?? UncoordinatedProfileCatalogMutationCoordinator.Instance,
             downloadTimeout);
     }

@@ -285,6 +285,7 @@ internal static partial class LocalizationResources
             ["ProfileCatalog.BuiltInDirect.Name"] = "پیکربندی پیش‌فرض مستقیم محلی",
             ["ProfilePreview.CurrentConfiguration"] = "پیکربندی فعلی",
             ["RuleCatalog.BuiltInDirect.Name"] = "مستقیم داخلی",
+            ["Region.Unknown"] = "منطقهٔ نامشخص",
             ["Region.CN"] = "چین",
             ["Region.MainlandChina.CN"] = "چین قاره‌ای",
             ["Region.HK"] = "هنگ‌کنگ",

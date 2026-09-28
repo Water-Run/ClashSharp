@@ -285,6 +285,7 @@ internal static partial class LocalizationResources
             ["ProfileCatalog.BuiltInDirect.Name"] = "本机直连默认配置",
             ["ProfilePreview.CurrentConfiguration"] = "当前配置",
             ["RuleCatalog.BuiltInDirect.Name"] = "内置直连",
+            ["Region.Unknown"] = "未知地区",
             ["Region.CN"] = "中国",
             ["Region.MainlandChina.CN"] = "中国大陆",
             ["Region.HK"] = "香港",

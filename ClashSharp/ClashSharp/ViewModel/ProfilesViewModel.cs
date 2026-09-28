@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,7 +40,7 @@ internal sealed class ProfilesViewModel : ObservableObject
     private readonly IModelDisplayMapper _displayMapper;
 
     /// <summary>Backing field for <see cref="Profiles"/>.</summary>
-    private IReadOnlyList<ConfigurationProfileDisplay> _profilesRows = [];
+    private readonly ObservableCollection<ConfigurationProfileDisplay> _profilesRows = [];
 
     /// <summary>Backing field for <see cref="SelectedProfile"/>.</summary>
     private ConfigurationProfileDisplay? _selectedProfile;
@@ -195,11 +197,7 @@ internal sealed class ProfilesViewModel : ObservableObject
 
     /// <summary>Gets profile rows.</summary>
     /// <value>Profile rows; never null.</value>
-    public IReadOnlyList<ConfigurationProfileDisplay> Profiles
-    {
-        get => _profilesRows;
-        private set => SetProperty(ref _profilesRows, value);
-    }
+    public IReadOnlyList<ConfigurationProfileDisplay> Profiles => _profilesRows;
 
     /// <summary>Gets or sets the selected profile.</summary>
     /// <value>Selected profile, or null when no profile is selected.</value>
@@ -553,12 +551,40 @@ internal sealed class ProfilesViewModel : ObservableObject
         }
 
         string? selectedProfileId = SelectedProfile?.Model.Id;
-        Profiles = rows;
-        SelectedProfile = rows.Find(row => string.Equals(
+        for (int index = 0; index < rows.Count; index++)
+        {
+            ConfigurationProfileDisplay updated = rows[index];
+            int existingIndex = index;
+            while (existingIndex < _profilesRows.Count
+                && !StringComparer.Ordinal.Equals(_profilesRows[existingIndex].Id, updated.Id))
+            {
+                existingIndex++;
+            }
+
+            if (existingIndex == _profilesRows.Count)
+            {
+                _profilesRows.Insert(index, updated);
+                continue;
+            }
+
+            if (existingIndex != index)
+            {
+                _profilesRows.Move(existingIndex, index);
+            }
+
+            _profilesRows[index].UpdateFrom(updated);
+        }
+
+        while (_profilesRows.Count > rows.Count)
+        {
+            _profilesRows.RemoveAt(_profilesRows.Count - 1);
+        }
+
+        SelectedProfile = _profilesRows.FirstOrDefault(row => string.Equals(
             row.Model.Id,
             selectedProfileId,
             StringComparison.Ordinal));
-        ActiveProfileText = ResolveActiveProfileDisplayText(rows, fallbackProfileId);
+        ActiveProfileText = ResolveActiveProfileDisplayText(_profilesRows, fallbackProfileId);
     }
 
     private Task ImportLocalProfileFromCommandAsync(

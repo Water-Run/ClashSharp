@@ -217,7 +217,13 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
 
             foreach (ConfigurationProfile profile in document.Profiles)
             {
-                profiles.Add(profile with { IsActive = StringComparer.Ordinal.Equals(profile.Id, activeProfileId) });
+                profiles.Add(profile with
+                {
+                    IsActive = StringComparer.Ordinal.Equals(profile.Id, activeProfileId),
+                    Name = StringComparer.Ordinal.Equals(profile.Id, ProfileCatalogIds.BuiltInDirect)
+                        ? GetString("ProfileCatalog.BuiltInDirect.Name") : profile.Name,
+                    Status = ProfileStatusText.Localize(profile.Status, GetString),
+                });
             }
 
             return profiles;
@@ -1364,7 +1370,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
         {
             CoreConfigurationState state = _coreConfiguration.EnsureDefaultConfiguration();
             ProfileImportResult result = new(profile.Id, profile.Name, state.ConfigPath, 0, 1, GetString("ProfileCatalog.Profile.BuiltInDirectAvailable"));
-            TryUpdateProfileStatus(profile.Id, GetString("ProfileCatalog.Status.Available"), result.NodeCount, result.RuleCount);
+            TryUpdateProfileStatus(profile.Id, ProfileStatusText.Available, result.NodeCount, result.RuleCount);
             return result;
         }
 
@@ -1374,7 +1380,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
                 .ValidateImportedProfileAsync(profile.Id, cancellationToken)
                 .ConfigureAwait(false);
 
-            TryUpdateProfileStatus(profile.Id, GetString("ProfileCatalog.Profile.ValidationSucceeded"), result.NodeCount, result.RuleCount);
+            TryUpdateProfileStatus(profile.Id, ProfileStatusText.Validated, result.NodeCount, result.RuleCount);
             return result with { ProfileName = profile.Name };
         }
         catch
@@ -1382,8 +1388,8 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             TryUpdateProfileStatus(
                 profile.Id,
                 cancellationToken.IsCancellationRequested
-                    ? GetString("ProfileCatalog.Status.Canceled")
-                    : GetString("ProfileCatalog.Profile.ValidationFailed"),
+                    ? ProfileStatusText.Canceled
+                    : ProfileStatusText.Invalid,
                 profile.NodeCount,
                 profile.RuleCount);
             throw;
@@ -2098,7 +2104,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             importResult.ProfileId,
             importResult.ProfileName,
             sourceName,
-            GetString("ProfileCatalog.Status.Available"),
+            ProfileStatusText.Available,
             DateTimeOffset.Now,
             importResult.NodeCount,
             importResult.RuleCount,
@@ -2250,6 +2256,12 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(document);
 
         EnsureCatalogDirectoryExists();
+        for (int index = 0; index < document.Profiles.Count; index++)
+        {
+            ConfigurationProfile profile = document.Profiles[index];
+            document.Profiles[index] = profile with { Status = ProfileStatusText.Normalize(profile.Status) };
+        }
+
         string json = JsonSerializer.Serialize(document, JsonOptions);
         DurableAtomicFile.WriteText(_catalogPath, json);
         _cachedDocument = document;
@@ -2351,7 +2363,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
             ProfileCatalogIds.BuiltInDirect,
             getString("ProfileCatalog.BuiltInDirect.Name"),
             "Clash#",
-            getString("ProfileCatalog.Status.Available"),
+            ProfileStatusText.Available,
             DateTimeOffset.Now,
             0,
             1,

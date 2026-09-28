@@ -7,6 +7,23 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Tests localized region metadata resolution.</summary>
 public sealed class RegionDisplayServiceTests
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("UN")]
+    [InlineData(" un ")]
+    public void Resolve_UnknownRegion_UsesLocalizedLabelAndRetainsNeutralFlag(string code)
+    {
+        string label = "未知地区";
+        RegionDisplayService service = CreateService(
+            () => MainlandChinaFeatureMode.FlagReplacementAndTextCompletion,
+            key => key == "Region.Unknown" ? label : key);
+        Assert.Equal(new RegionMetadata("UN", label, "UN"), service.Resolve(code));
+        label = "Unknown region";
+        Assert.Equal(label, service.Resolve(code).DisplayName);
+        Assert.Equal("ZZ", service.Resolve("ZZ").DisplayName);
+    }
+
     /// <summary>Verifies region resolution can be tested without mutating global application settings.</summary>
     [Fact]
     public void Resolve_InjectedDependencies_UsesInjectedDisplayPolicyAndLocalizer()

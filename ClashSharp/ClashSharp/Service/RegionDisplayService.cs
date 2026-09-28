@@ -24,6 +24,7 @@ public sealed class RegionDisplayService
     /// <summary>Immutable default region resource-key map keyed by uppercase region code.</summary>
     private static readonly FrozenDictionary<string, string> DefaultRegionKeys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
+        ["UN"] = "Region.Unknown",
         ["CN"] = "Region.CN",
         ["HK"] = "Region.HK",
         ["MO"] = "Region.MO",
