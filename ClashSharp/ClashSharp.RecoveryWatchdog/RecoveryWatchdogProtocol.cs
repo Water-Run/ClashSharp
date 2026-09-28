@@ -205,16 +205,33 @@ internal sealed class RecoveryWatchdogLeaseFileStore
 
 internal static class RecoveryWatchdogFileLock
 {
-    internal static async Task<FileStream?> TryAcquireAsync(
+    internal static Task<FileStream?> TryAcquireAsync(
         string path,
         TimeSpan timeout,
+        CancellationToken cancellationToken)
+        => TryAcquireCoreAsync(path, timeout, createIfMissing: true, cancellationToken);
+
+    /// <summary>Acquires a parent's existing lock without recreating data removed during shutdown.</summary>
+    internal static Task<FileStream?> TryAcquireExistingAsync(
+        string path,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+        => TryAcquireCoreAsync(path, timeout, createIfMissing: false, cancellationToken);
+
+    private static async Task<FileStream?> TryAcquireCoreAsync(
+        string path,
+        TimeSpan timeout,
+        bool createIfMissing,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentOutOfRangeException.ThrowIfLessThan(timeout, TimeSpan.Zero);
         string fullPath = Path.GetFullPath(path);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)
-            ?? throw new InvalidOperationException("The recovery lock directory could not be resolved."));
+        if (createIfMissing)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)
+                ?? throw new InvalidOperationException("The recovery lock directory could not be resolved."));
+        }
         long deadline = Stopwatch.GetTimestamp() + (long)(timeout.TotalSeconds * Stopwatch.Frequency);
 
         while (true)
@@ -224,11 +241,19 @@ internal static class RecoveryWatchdogFileLock
             {
                 return new FileStream(
                     fullPath,
-                    FileMode.OpenOrCreate,
+                    createIfMissing ? FileMode.OpenOrCreate : FileMode.Open,
                     FileAccess.ReadWrite,
                     FileShare.None,
                     bufferSize: 1,
                     FileOptions.None);
+            }
+            catch (FileNotFoundException) when (!createIfMissing)
+            {
+                return null;
+            }
+            catch (DirectoryNotFoundException) when (!createIfMissing)
+            {
+                return null;
             }
             catch (IOException) when (Stopwatch.GetTimestamp() < deadline)
             {

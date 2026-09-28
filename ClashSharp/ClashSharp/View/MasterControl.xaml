@@ -18,216 +18,221 @@
         </DataTemplate>
     </Page.Resources>
 
-    <ScrollViewer
-        x:Name="RootScrollViewer"
-        Background="Transparent"
-        Padding="{StaticResource ClashPagePadding}"
-        VerticalScrollBarVisibility="Auto"
-        HorizontalScrollBarVisibility="Disabled"
-        HorizontalContentAlignment="Stretch">
-        <StackPanel
-            x:Name="ContentHost"
-            Spacing="14"
-            SizeChanged="ContentHost_SizeChanged">
-            <ProgressBar
-                IsIndeterminate="{Binding IsApplyingMode}"
-                Visibility="{Binding IsApplyingMode, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            <InfoBar
-                Message="{Binding OperationErrorText}"
-                Severity="Error"
-                IsClosable="False"
-                IsOpen="{Binding HasOperationError, Mode=OneWay}"
-                Visibility="{Binding HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+    <Grid>
+        <ScrollViewer
+            x:Name="RootScrollViewer"
+            Background="Transparent"
+            Padding="{StaticResource ClashPagePadding}"
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalContentAlignment="Stretch">
+            <StackPanel
+                x:Name="ContentHost"
+                Spacing="14"
+                SizeChanged="ContentHost_SizeChanged">
+                <InfoBar
+                    Message="{Binding OperationErrorText}"
+                    Severity="Error"
+                    IsClosable="False"
+                    IsOpen="{Binding HasOperationError, Mode=OneWay}"
+                    Visibility="{Binding HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-            <Grid x:Name="HeroAndModeGrid" ColumnSpacing="12" RowSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="HeroColumn" Width="*" />
-                    <ColumnDefinition x:Name="ModeColumn" Width="360" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <Grid x:Name="HeroStatusCard" Style="{StaticResource ClashCardGridStyle}" Padding="18" RowSpacing="16">
+                <Grid x:Name="HeroAndModeGrid" ColumnSpacing="12" RowSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="HeroColumn" Width="*" />
+                        <ColumnDefinition x:Name="ModeColumn" Width="360" />
+                    </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <Grid x:Name="HeroStatusCard" Style="{StaticResource ClashCardGridStyle}" Padding="18" RowSpacing="16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                        <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                            <TextBlock Text="Clash#" TextWrapping="NoWrap" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <HyperlinkButton
-                                x:Name="SetHeroStatusDisplayButton"
-                                Content="{Binding SetHeroStatusDisplayText}"
-                                Padding="0"
-                                HorizontalAlignment="Left"
-                                Click="SetHeroStatusDisplayButton_Click" />
-                        </StackPanel>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Image x:Name="HeaderLogo" Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="72" Height="72" Stretch="Uniform" HorizontalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                <TextBlock Text="Clash#" TextWrapping="NoWrap" Style="{ThemeResource TitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <HyperlinkButton
+                                    x:Name="SetHeroStatusDisplayButton"
+                                    Content="{Binding SetHeroStatusDisplayText}"
+                                    Padding="0"
+                                    HorizontalAlignment="Left"
+                                    Click="SetHeroStatusDisplayButton_Click" />
+                            </StackPanel>
+                        </Grid>
+
+                        <GridView
+                            x:Name="HeroStatusItemGrid"
+                            Grid.Row="1"
+                            ItemsSource="{Binding HeroStatusItems}"
+                            SelectionMode="None"
+                            IsItemClickEnabled="False"
+                            SizeChanged="HeroStatusItemGrid_SizeChanged"
+                            ContainerContentChanging="HeroStatusItemGrid_ContainerContentChanging">
+                            <GridView.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="2" />
+                                </ItemsPanelTemplate>
+                            </GridView.ItemsPanel>
+                            <GridView.ItemContainerStyle>
+                                <Style TargetType="GridViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Margin" Value="0,0,10,10" />
+                                </Style>
+                            </GridView.ItemContainerStyle>
+                            <GridView.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel x:Name="HeroStatusItemContent" Spacing="4">
+                                        <TextBlock Text="{Binding Title}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Value}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
                     </Grid>
 
-                    <GridView
-                        x:Name="HeroStatusItemGrid"
-                        Grid.Row="1"
-                        ItemsSource="{Binding HeroStatusItems}"
+                    <Grid
+                        x:Name="ModeButtonGrid"
+                        Grid.Column="1"
+                        ColumnSpacing="10"
+                        RowSpacing="10"
+                        VerticalAlignment="Top">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <components:MasterModeButton
+                            x:Name="DisabledModeButton"
+                            IsBusy="{Binding IsApplyingMode}"
+                            Grid.ColumnSpan="2"
+                            Title="{Binding DisabledModeTitleText}"
+                            Description="{Binding DisabledModeDescriptionText}"
+                            Glyph="&#xE711;"
+                            IsChecked="{Binding IsDisabledModeSelected, Mode=OneWay}"
+                            Command="{Binding DisabledModeCommand}" />
+
+                        <components:MasterModeButton
+                            x:Name="StandbyModeButton"
+                            IsBusy="{Binding IsApplyingMode}"
+                            Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            Title="{Binding StandbyModeTitleText}"
+                            Description="{Binding StandbyModeDescriptionText}"
+                            Glyph="&#xE774;"
+                            IsChecked="{Binding IsStandbyModeSelected, Mode=OneWay}"
+                            Command="{Binding StandbyModeCommand}" />
+
+                        <components:MasterModeButton
+                            x:Name="RuleTakeoverModeButton"
+                            IsBusy="{Binding IsApplyingMode}"
+                            Grid.Row="2"
+                            Grid.ColumnSpan="2"
+                            Title="{Binding RuleTakeoverModeTitleText}"
+                            Description="{Binding RuleTakeoverModeDescriptionText}"
+                            Glyph="&#xE9D9;"
+                            IsChecked="{Binding IsRuleTakeoverModeSelected, Mode=OneWay}"
+                            Command="{Binding RuleTakeoverModeCommand}" />
+
+                        <components:MasterModeButton
+                            x:Name="FullTakeoverModeButton"
+                            IsBusy="{Binding IsApplyingMode}"
+                            Grid.Row="3"
+                            Grid.ColumnSpan="2"
+                            Title="{Binding FullTakeoverModeTitleText}"
+                            Description="{Binding FullTakeoverModeDescriptionText}"
+                            Glyph="&#xE968;"
+                            IsChecked="{Binding IsFullTakeoverModeSelected, Mode=OneWay}"
+                            Command="{Binding FullTakeoverModeCommand}" />
+                    </Grid>
+                </Grid>
+
+                <HyperlinkButton
+                    x:Name="EditInfoTilesLink"
+                    Content="{Binding EditInfoTilesText}"
+                    HorizontalAlignment="Left"
+                    Padding="0"
+                    Margin="8,0,0,0"
+                    Click="EditInfoTilesButton_Click" />
+
+                <GridView
+                        x:Name="InfoTileGrid"
+                        Margin="0"
+                        ItemsSource="{Binding VisibleInfoTiles}"
                         SelectionMode="None"
+                        CanReorderItems="True"
+                        CanDragItems="True"
+                        TabFocusNavigation="Local"
+                        TabNavigation="Local"
+                        IsTabStop="False"
+                        AllowDrop="True"
+                        DragItemsCompleted="InfoTileGrid_DragItemsCompleted"
                         IsItemClickEnabled="False"
-                        SizeChanged="HeroStatusItemGrid_SizeChanged"
-                        ContainerContentChanging="HeroStatusItemGrid_ContainerContentChanging">
+                        SizeChanged="InfoTileGrid_SizeChanged"
+                        ContainerContentChanging="InfoTileGrid_ContainerContentChanging">
+                        <GridView.Transitions>
+                            <TransitionCollection>
+                                <ReorderThemeTransition />
+                            </TransitionCollection>
+                        </GridView.Transitions>
                         <GridView.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="2" />
+                                <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" />
                             </ItemsPanelTemplate>
                         </GridView.ItemsPanel>
                         <GridView.ItemContainerStyle>
                             <Style TargetType="GridViewItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                 <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                                <Setter Property="Margin" Value="0,0,10,10" />
+                                <Setter Property="Margin" Value="5,0,5,10" />
+                                <Setter Property="MinWidth" Value="220" />
+                                <Setter Property="IsTabStop" Value="False" />
+                                <Setter Property="TabFocusNavigation" Value="Local" />
+                                <Setter Property="TabNavigation" Value="Local" />
                             </Style>
                         </GridView.ItemContainerStyle>
                         <GridView.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel x:Name="HeroStatusItemContent" Spacing="4">
-                                    <TextBlock Text="{Binding Title}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding Value}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
+                                <components:MasterInfoTile
+                                    Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    Title="{Binding Title}"
+                                    Description="{Binding Description}"
+                                    ReorderHint="{Binding ReorderHint}"
+                                    Value="{Binding Value}"
+                                    Detail="{Binding Detail}"
+                                    History="{Binding History}"
+                                    Glyph="{Binding Glyph}"
+                                    IsToggleVisible="{Binding IsToggleVisible}"
+                                    IsToggleOn="{Binding IsToggleOn, Mode=TwoWay}"
+                                    TileCommand="{Binding TileCommand}" />
                             </DataTemplate>
                         </GridView.ItemTemplate>
-                    </GridView>
-                </Grid>
-
-                <Grid
-                    x:Name="ModeButtonGrid"
-                    Grid.Column="1"
-                    ColumnSpacing="10"
-                    RowSpacing="10"
-                    VerticalAlignment="Top">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <components:MasterModeButton
-                        x:Name="DisabledModeButton"
-                        IsBusy="{Binding IsApplyingMode}"
-                        Grid.ColumnSpan="2"
-                        Title="{Binding DisabledModeTitleText}"
-                        Description="{Binding DisabledModeDescriptionText}"
-                        Glyph="&#xE711;"
-                        IsChecked="{Binding IsDisabledModeSelected, Mode=OneWay}"
-                        Command="{Binding DisabledModeCommand}" />
-
-                    <components:MasterModeButton
-                        x:Name="StandbyModeButton"
-                        IsBusy="{Binding IsApplyingMode}"
-                        Grid.Row="1"
-                        Grid.ColumnSpan="2"
-                        Title="{Binding StandbyModeTitleText}"
-                        Description="{Binding StandbyModeDescriptionText}"
-                        Glyph="&#xE774;"
-                        IsChecked="{Binding IsStandbyModeSelected, Mode=OneWay}"
-                        Command="{Binding StandbyModeCommand}" />
-
-                    <components:MasterModeButton
-                        x:Name="RuleTakeoverModeButton"
-                        IsBusy="{Binding IsApplyingMode}"
-                        Grid.Row="2"
-                        Grid.ColumnSpan="2"
-                        Title="{Binding RuleTakeoverModeTitleText}"
-                        Description="{Binding RuleTakeoverModeDescriptionText}"
-                        Glyph="&#xE9D9;"
-                        IsChecked="{Binding IsRuleTakeoverModeSelected, Mode=OneWay}"
-                        Command="{Binding RuleTakeoverModeCommand}" />
-
-                    <components:MasterModeButton
-                        x:Name="FullTakeoverModeButton"
-                        IsBusy="{Binding IsApplyingMode}"
-                        Grid.Row="3"
-                        Grid.ColumnSpan="2"
-                        Title="{Binding FullTakeoverModeTitleText}"
-                        Description="{Binding FullTakeoverModeDescriptionText}"
-                        Glyph="&#xE968;"
-                        IsChecked="{Binding IsFullTakeoverModeSelected, Mode=OneWay}"
-                        Command="{Binding FullTakeoverModeCommand}" />
-                </Grid>
-            </Grid>
-
-            <HyperlinkButton
-                x:Name="EditInfoTilesLink"
-                Content="{Binding EditInfoTilesText}"
-                HorizontalAlignment="Left"
-                Padding="0"
-                Margin="8,0,0,0"
-                Click="EditInfoTilesButton_Click" />
-
-            <GridView
-                    x:Name="InfoTileGrid"
-                    Margin="0"
-                    ItemsSource="{Binding VisibleInfoTiles}"
-                    SelectionMode="None"
-                    CanReorderItems="True"
-                    CanDragItems="True"
-                    TabFocusNavigation="Local"
-                    TabNavigation="Local"
-                    IsTabStop="False"
-                    AllowDrop="True"
-                    DragItemsCompleted="InfoTileGrid_DragItemsCompleted"
-                    IsItemClickEnabled="False"
-                    SizeChanged="InfoTileGrid_SizeChanged"
-                    ContainerContentChanging="InfoTileGrid_ContainerContentChanging">
-                    <GridView.Transitions>
-                        <TransitionCollection>
-                            <ReorderThemeTransition />
-                        </TransitionCollection>
-                    </GridView.Transitions>
-                    <GridView.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" />
-                        </ItemsPanelTemplate>
-                    </GridView.ItemsPanel>
-                    <GridView.ItemContainerStyle>
-                        <Style TargetType="GridViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                            <Setter Property="Margin" Value="5,0,5,10" />
-                            <Setter Property="MinWidth" Value="220" />
-                            <Setter Property="IsTabStop" Value="False" />
-                            <Setter Property="TabFocusNavigation" Value="Local" />
-                            <Setter Property="TabNavigation" Value="Local" />
-                        </Style>
-                    </GridView.ItemContainerStyle>
-                    <GridView.ItemTemplate>
-                        <DataTemplate>
-                            <components:MasterInfoTile
-                                Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                Title="{Binding Title}"
-                                Description="{Binding Description}"
-                                ReorderHint="{Binding ReorderHint}"
-                                Value="{Binding Value}"
-                                Detail="{Binding Detail}"
-                                History="{Binding History}"
-                                Glyph="{Binding Glyph}"
-                                IsToggleVisible="{Binding IsToggleVisible}"
-                                IsToggleOn="{Binding IsToggleOn, Mode=TwoWay}"
-                                TileCommand="{Binding TileCommand}" />
-                        </DataTemplate>
-                    </GridView.ItemTemplate>
-            </GridView>
-        </StackPanel>
-    </ScrollViewer>
+                </GridView>
+            </StackPanel>
+        </ScrollViewer>
+        <ProgressBar
+            Margin="24,8,24,0"
+            VerticalAlignment="Top"
+            IsHitTestVisible="False"
+            IsIndeterminate="{Binding IsApplyingMode}"
+            Visibility="{Binding IsApplyingMode, Converter={StaticResource BooleanToVisibilityConverter}}" />
+    </Grid>
 </Page>

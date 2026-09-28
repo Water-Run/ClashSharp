@@ -19,7 +19,7 @@ internal static class RecoveryWatchdogProgram
                 RecoveryWatchdogRunner.NotifyProxySettingsChanged);
             RecoveryWatchdogRunner runner = new(
                 RecoveryWatchdogRunner.WaitForParentExitAsync,
-                async cancellationToken => await RecoveryWatchdogFileLock.TryAcquireAsync(
+                async cancellationToken => await RecoveryWatchdogFileLock.TryAcquireExistingAsync(
                     Path.Combine(localData, RecoveryWatchdogPaths.LockFileName),
                     TimeSpan.FromSeconds(10),
                     cancellationToken).ConfigureAwait(false),

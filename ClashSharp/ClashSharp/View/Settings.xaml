@@ -164,7 +164,7 @@
             <components:SettingRow x:Name="TransparentProxyServiceRow" Title="{Binding TransparentProxyServiceTitleText}" Description="{Binding TransparentProxyServiceDescriptionText}">
                 <components:SettingRow.ActionContent>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock x:Name="MihomoServiceStatusText" Text="{Binding MihomoServiceStatusText}" ToolTipService.ToolTip="{Binding MihomoServiceDiagnosticText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <TextBlock x:Name="MihomoServiceStatusText" Text="{Binding MihomoServiceStatusText}" ToolTipService.ToolTip="{Binding MihomoServiceDiagnosticText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" MaxWidth="280" TextWrapping="WrapWholeWords" VerticalAlignment="Center" />
                     </StackPanel>
                 </components:SettingRow.ActionContent>
             </components:SettingRow>

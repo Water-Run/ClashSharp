@@ -23,6 +23,11 @@ internal sealed class RecoveryWatchdogRunner(
         }
 
         await waitForParentExit(invocation, cancellationToken).ConfigureAwait(false);
+        if (readLease() != expected)
+        {
+            return 0;
+        }
+
         using IDisposable? recoveryLock = await acquireRecoveryLock(cancellationToken).ConfigureAwait(false);
         if (recoveryLock is null || readLease() != expected)
         {

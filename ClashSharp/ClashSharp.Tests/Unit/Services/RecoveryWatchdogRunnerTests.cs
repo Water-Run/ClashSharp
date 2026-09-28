@@ -57,7 +57,7 @@ public sealed class RecoveryWatchdogRunnerTests
                 lease = null;
                 return Task.CompletedTask;
             },
-            _ => Task.FromResult<IDisposable?>(new TestLock()),
+            _ => throw new Xunit.Sdk.XunitException("A disarmed helper must not acquire or recreate a lock."),
             () => lease,
             _ => throw new Xunit.Sdk.XunitException("A disarmed lease must not be cleared again."),
             () =>
@@ -83,7 +83,7 @@ public sealed class RecoveryWatchdogRunnerTests
                 lease = CreateInvocation().ToLease();
                 return Task.CompletedTask;
             },
-            _ => Task.FromResult<IDisposable?>(new TestLock()),
+            _ => throw new Xunit.Sdk.XunitException("A stale helper must not acquire a new instance's lock."),
             () => lease,
             _ => throw new Xunit.Sdk.XunitException("A replacement lease must be preserved."),
             () => throw new Xunit.Sdk.XunitException("A stale helper must not restore."));
@@ -92,6 +92,27 @@ public sealed class RecoveryWatchdogRunnerTests
 
         Assert.Equal(0, result);
         Assert.NotEqual(invocation.ToLease(), lease);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenLeaseChangesWhileAcquiringLock_DoesNotRestore()
+    {
+        RecoveryWatchdogInvocation invocation = CreateInvocation();
+        RecoveryWatchdogLease lease = invocation.ToLease();
+        RecoveryWatchdogLease replacement = CreateInvocation().ToLease();
+        RecoveryWatchdogRunner runner = new(
+            (_, _) => Task.CompletedTask,
+            _ =>
+            {
+                lease = replacement;
+                return Task.FromResult<IDisposable?>(new TestLock());
+            },
+            () => lease,
+            _ => throw new Xunit.Sdk.XunitException("A replacement lease must be preserved."),
+            () => throw new Xunit.Sdk.XunitException("The lease must be rechecked under the lock."));
+
+        Assert.Equal(0, await runner.RunAsync(invocation, CancellationToken.None));
+        Assert.Equal(replacement, lease);
     }
 
     [Fact]
