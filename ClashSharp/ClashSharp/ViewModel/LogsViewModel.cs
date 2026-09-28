@@ -115,9 +115,11 @@ internal sealed class LogsViewModel : ObservableObject
     /// <value>Localized command label.</value>
     public string CleanupText => _getString("Command.Cleanup");
 
-    /// <summary>Gets the stable text displayed before an asynchronous cleanup preview is available.</summary>
-    /// <value>Localized zero-impact preview text.</value>
-    public string CleanupPreviewPlaceholderText => FormatCleanupPreview(default);
+    /// <summary>Gets the text displayed while a cleanup preview is being calculated.</summary>
+    public string CleanupPreviewPlaceholderText => _getString("Logs.Cleanup.Preview.Loading");
+
+    /// <summary>Gets the text displayed when the cleanup impact cannot be read.</summary>
+    public string CleanupPreviewFailedText => _getString("Logs.Cleanup.Preview.Failed");
 
     public string RefreshText => _getString("Command.Refresh");
 
@@ -505,8 +507,7 @@ internal sealed class LogsViewModel : ObservableObject
     /// <param name="categoryFilter">Selected localized category filter, or null.</param>
     /// <param name="cancellationToken">Cancels queued work and prevents stale text application.</param>
     /// <returns>
-    /// Localized preview text, or null when a non-fatal storage failure was reported and existing UI
-    /// text should remain unchanged.
+    /// Localized preview text, or null when a non-fatal storage failure was reported.
     /// </returns>
     public async Task<string?> GetCleanupPreviewTextAsync(
         int selectedIndex,
@@ -516,14 +517,9 @@ internal sealed class LogsViewModel : ObservableObject
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (selectedIndex is not (3 or 4))
-        {
-            return CleanupPreviewPlaceholderText;
-        }
-
         string? resolvedLevelFilter = ResolveLevelFilter(levelFilter);
         string? resolvedCategoryFilter = ResolveCategoryFilter(categoryFilter);
-        LogCleanupEstimate? preview = null;
+        string? preview = null;
         await ViewModelLoadExecutor.ExecuteAsync(
             () => ReadCleanupPreview(
                 selectedIndex,
@@ -535,9 +531,7 @@ internal sealed class LogsViewModel : ObservableObject
             "logs-cleanup-preview",
             cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        return preview is LogCleanupEstimate estimate
-            ? FormatCleanupPreview(estimate)
-            : null;
+        return preview;
     }
 
     private void ApplyCleanupModeCore(
@@ -549,15 +543,15 @@ internal sealed class LogsViewModel : ObservableObject
         switch (selectedIndex)
         {
             case 0:
-                int keepDays = CoercePositiveInteger(parameterValue, 30);
+                int keepDays = CoercePositiveInteger(parameterValue, 30, 3650);
                 _logStorage.CleanupBefore(DateTimeOffset.UtcNow.AddDays(-keepDays));
                 break;
             case 1:
-                long targetSizeBytes = CoercePositiveInteger(parameterValue, 10) * 1024L * 1024L;
+                long targetSizeBytes = CoercePositiveInteger(parameterValue, 10, 102400) * 1024L * 1024L;
                 _logStorage.CleanupToSize(targetSizeBytes);
                 break;
             case 2:
-                _logStorage.CleanupToLogCount(CoercePositiveInteger(parameterValue, 1000));
+                _logStorage.CleanupToLogCount(CoercePositiveInteger(parameterValue, 1000, 10000000));
                 break;
             case 3:
                 _logStorage.ClearAll();
@@ -568,56 +562,53 @@ internal sealed class LogsViewModel : ObservableObject
         }
     }
 
-    private LogCleanupEstimate ReadCleanupPreview(
+    private string ReadCleanupPreview(
         int selectedIndex,
         double parameterValue,
         string? levelFilter,
         string? categoryFilter)
     {
-        _ = parameterValue;
-        return selectedIndex switch
+        if (selectedIndex == 1)
         {
-            3 => ReadClearAllPreview(),
-            4 => _logStorage.PreviewLogCleanup(levelFilter, categoryFilter),
-            _ => default,
+            long targetSize = CoercePositiveInteger(parameterValue, 10, 102400) * 1024L * 1024L;
+            long currentSize = _logStorage.GetStorageSummary().DatabaseSizeBytes;
+            return string.Format(
+                CultureInfo.CurrentCulture,
+                _getString(currentSize > targetSize
+                    ? "Logs.Cleanup.Preview.SizeTarget"
+                    : "Logs.Cleanup.Preview.SizeSatisfied"),
+                FormatByteCount(currentSize),
+                FormatByteCount(targetSize));
+        }
+
+        long count = selectedIndex switch
+        {
+            0 => _logStorage.PreviewCleanupBefore(
+                DateTimeOffset.UtcNow.AddDays(-CoercePositiveInteger(parameterValue, 30, 3650))),
+            2 => _logStorage.PreviewCleanupToLogCount(CoercePositiveInteger(parameterValue, 1000, 10000000)),
+            3 => _logStorage.PreviewClearAll(),
+            4 => _logStorage.PreviewLogCleanup(levelFilter, categoryFilter).EntryCount,
+            _ => throw new ArgumentOutOfRangeException(nameof(selectedIndex)),
         };
-    }
-
-    private LogCleanupEstimate ReadClearAllPreview()
-    {
-        LogStorageSnapshot summary = _logStorage.GetStorageSummary();
-        return new LogCleanupEstimate(
-            summary.LogCount + summary.ConnectionCount,
-            summary.DatabaseSizeBytes);
-    }
-
-    private string FormatCleanupPreview(LogCleanupEstimate preview)
-    {
         return string.Format(
             CultureInfo.CurrentCulture,
-            MatchLocalized(
-                "将清理 {0:N0} 个条目 / 约 {1}",
-                "將清理 {0:N0} 個項目 / 約 {1}",
-                "Will clean {0:N0} entries / about {1}",
-                "Будет очищено {0:N0} записей / около {1}",
-                "Nettoiera {0:N0} entrees / environ {1}",
-                "Bereinigt {0:N0} Eintraege / ca. {1}"),
-            preview.EntryCount,
-            FormatByteCount(preview.EstimatedSizeBytes));
+            _getString("Logs.Cleanup.Preview.Count"),
+            count);
     }
 
     /// <summary>Converts a number-box value to a positive integer with fallback.</summary>
     /// <param name="value">Number-box value.</param>
     /// <param name="fallback">Fallback value used for invalid input.</param>
+    /// <param name="maximum">Maximum supported value in the cleanup editor.</param>
     /// <returns>Positive integer value.</returns>
-    private static int CoercePositiveInteger(double value, int fallback)
+    private static int CoercePositiveInteger(double value, int fallback, int maximum)
     {
         if (double.IsNaN(value) || value <= 0)
         {
             return fallback;
         }
 
-        return Math.Max(1, (int)Math.Round(value));
+        return (int)Math.Clamp(Math.Round(value), 1, maximum);
     }
 
     /// <summary>Formats a byte count for compact storage display.</summary>

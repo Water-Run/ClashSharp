@@ -10,6 +10,7 @@ using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace ClashSharp.View;
 
@@ -207,7 +208,8 @@ public sealed partial class Logs : Page
             return;
         }
         _cleanupPending = true;
-        Button? button = sender as Button;
+        ButtonBase? button = sender as ButtonBase;
+        FocusState focusState = button?.FocusState ?? FocusState.Programmatic;
         if (button is not null)
         {
             button.IsEnabled = false;
@@ -222,6 +224,10 @@ public sealed partial class Logs : Page
             if (button is not null)
             {
                 button.IsEnabled = true;
+                if (_isLoaded && button.IsLoaded)
+                {
+                    button.Focus(focusState == FocusState.Unfocused ? FocusState.Programmatic : focusState);
+                }
             }
         }
     }
@@ -258,14 +264,14 @@ public sealed partial class Logs : Page
             Header = _viewModel.LevelFilterLabelText,
             ItemsSource = _viewModel.LevelFilterOptions,
             SelectedItem = _viewModel.SelectedLevelFilter,
-            IsEnabled = false,
+            Visibility = Visibility.Collapsed,
         };
         ComboBox categoryBox = new()
         {
             Header = _viewModel.CategoryFilterLabelText,
             ItemsSource = _viewModel.CategoryFilterOptions,
             SelectedItem = _viewModel.SelectedCategoryFilter,
-            IsEnabled = false,
+            Visibility = Visibility.Collapsed,
         };
         TextBlock previewText = new()
         {
@@ -286,6 +292,19 @@ public sealed partial class Logs : Page
         content.Children.Add(descriptionText);
         content.Children.Add(previewText);
 
+        ThemedContentDialog dialog = new()
+        {
+            Title = _getString("Logs.Cleanup.Title"),
+            Content = content,
+            PrimaryButtonText = _getString("Command.Cleanup"),
+            CloseButtonText = _getString("Command.Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+            IsPrimaryButtonEnabled = false,
+            XamlRoot = XamlRoot,
+        };
+        // Size the dialog surface without constraining the full-window popup host.
+        dialog.Resources["ContentDialogMaxWidth"] = 720d;
+
         async Task UpdatePreviewAsync(Action? updateEditor = null)
         {
             if (!dialogOpen || pageToken.IsCancellationRequested)
@@ -300,6 +319,7 @@ public sealed partial class Logs : Page
                 string? levelFilter = levelBox.SelectedItem as string;
                 string? categoryFilter = categoryBox.SelectedItem as string;
                 previewText.Text = _viewModel.CleanupPreviewPlaceholderText;
+                dialog.IsPrimaryButtonEnabled = false;
 
                 await previewSession.RunAsync(
                     async previewToken =>
@@ -311,10 +331,8 @@ public sealed partial class Logs : Page
                             categoryFilter,
                             previewToken);
                         previewToken.ThrowIfCancellationRequested();
-                        if (text is not null)
-                        {
-                            previewText.Text = text;
-                        }
+                        previewText.Text = text ?? _viewModel.CleanupPreviewFailedText;
+                        dialog.IsPrimaryButtonEnabled = text is not null;
                     },
                     CleanupPreviewDebounceDelay,
                     pageToken);
@@ -351,17 +369,6 @@ public sealed partial class Logs : Page
         parameterBox.ValueChanged += OnParameterChanged;
         levelBox.SelectionChanged += OnFilterChanged;
         categoryBox.SelectionChanged += OnFilterChanged;
-
-        ThemedContentDialog dialog = new()
-        {
-            Title = _getString("Logs.Cleanup.Title"),
-            Content = content,
-            PrimaryButtonText = _getString("Command.Cleanup"),
-            CloseButtonText = _getString("Command.Cancel"),
-            XamlRoot = XamlRoot,
-        };
-        // Size the dialog surface without constraining the full-window popup host.
-        dialog.Resources["ContentDialogMaxWidth"] = 720d;
 
         ContentDialogResult result;
         Task initialPreview = UpdatePreviewAsync();
@@ -426,8 +433,9 @@ public sealed partial class Logs : Page
         ArgumentNullException.ThrowIfNull(levelBox);
         ArgumentNullException.ThrowIfNull(categoryBox);
 
-        levelBox.IsEnabled = selectedIndex == 4;
-        categoryBox.IsEnabled = selectedIndex == 4;
+        levelBox.Visibility = selectedIndex == 4 ? Visibility.Visible : Visibility.Collapsed;
+        categoryBox.Visibility = levelBox.Visibility;
+        parameterBox.Visibility = selectedIndex is >= 0 and <= 2 ? Visibility.Visible : Visibility.Collapsed;
 
         switch (selectedIndex)
         {

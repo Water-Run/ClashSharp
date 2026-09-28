@@ -69,4 +69,10 @@ internal sealed class LogManagementStoreAdapter : ILogManagementStore
         LogCleanupPreview preview = _logStorage.PreviewLogCleanup(level, source);
         return new LogCleanupEstimate(preview.EntryCount, preview.EstimatedSizeBytes);
     }
+
+    public long PreviewCleanupBefore(DateTimeOffset cutoff) => _logStorage.PreviewCleanupBefore(cutoff);
+
+    public long PreviewCleanupToLogCount(int maxLogCount) => _logStorage.PreviewCleanupToLogCount(maxLogCount);
+
+    public long PreviewClearAll() => _logStorage.PreviewClearAll();
 }

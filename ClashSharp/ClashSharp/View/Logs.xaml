@@ -29,7 +29,7 @@
                 </Button>
                 <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" VerticalAlignment="Center" />
             </StackPanel>
-            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
         </StackPanel>
 
         <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" Margin="0,18,0,18">
@@ -39,7 +39,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Spacing="4">
                 <TextBlock x:Name="StorageTitleText" Text="{Binding StorageTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                <TextBlock x:Name="StorageUsageText" Text="{Binding StorageUsageText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="StorageUsageText" Text="{Binding StorageUsageText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
             </StackPanel>
             <HyperlinkButton x:Name="CleanupButton" Grid.Column="1" Content="{Binding CleanupText}" Click="CleanupButton_Click" />
         </Grid>
@@ -83,7 +83,7 @@
 
         <ListView x:Name="RecentLogsList" ItemsSource="{Binding RecentLogs}" Grid.Row="3">
             <ListView.Header>
-                <Grid Padding="4,0,4,8" ColumnSpacing="12">
+                <Grid Padding="20,0,20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="150" />
                         <ColumnDefinition Width="84" />

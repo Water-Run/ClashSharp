@@ -261,23 +261,123 @@ public sealed class LogsViewModelTests
         Assert.IsType<InvalidOperationException>(error.Exception);
     }
 
-    /// <summary>Verifies modes with no implemented estimate preserve existing text without touching SQLite.</summary>
-    [Fact]
-    public async Task GetCleanupPreviewTextAsync_ForNonStorageModes_DoesNotReadStorage()
+    [Theory]
+    [InlineData(0, "12 entries will be deleted.")]
+    [InlineData(2, "34 entries will be deleted.")]
+    [InlineData(3, "56 entries will be deleted.")]
+    public async Task GetCleanupPreviewTextAsync_UsesTheSelectedCleanupScope(int mode, string expected)
     {
-        FakeLogManagementStore store = new();
+        FakeLogManagementStore store = new()
+        {
+            PreviewBeforeHandler = static _ => 12,
+            PreviewCountHandler = static _ => 34,
+            PreviewAllHandler = static () => 56,
+        };
         LogsViewModel viewModel = CreateViewModel(store, new TestApplicationErrorSink());
 
         string? preview = await viewModel.GetCleanupPreviewTextAsync(
-            0,
+            mode,
             30,
             null,
             null,
             CancellationToken.None);
 
-        Assert.Equal(viewModel.CleanupPreviewPlaceholderText, preview);
+        Assert.Equal(expected, preview);
         Assert.Equal(0, store.StorageSummaryReadCount);
         Assert.Equal(0, store.PreviewReadCount);
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 30)]
+    [InlineData(-1, 30)]
+    [InlineData(0, 30)]
+    [InlineData(1, 1)]
+    [InlineData(1.8, 2)]
+    [InlineData(double.PositiveInfinity, 3650)]
+    [InlineData(double.MaxValue, 3650)]
+    public async Task DateCleanup_PreviewAndMutationUseTheSameBoundedDays(double input, int days)
+    {
+        DateTimeOffset previewCutoff = default;
+        FakeLogManagementStore store = new()
+        {
+            PreviewBeforeHandler = cutoff => { previewCutoff = cutoff; return 5; },
+        };
+        TestApplicationErrorSink errorSink = new();
+        LogsViewModel viewModel = CreateViewModel(store, errorSink);
+        DateTimeOffset earliest = DateTimeOffset.UtcNow.AddDays(-days);
+
+        await viewModel.GetCleanupPreviewTextAsync(0, input, null, null, CancellationToken.None);
+        await viewModel.ApplyCleanupModeAsync(0, input, null, null, CancellationToken.None);
+
+        DateTimeOffset latest = DateTimeOffset.UtcNow.AddDays(-days);
+        Assert.InRange(previewCutoff, earliest, latest);
+        Assert.InRange(store.LastCleanupCutoff, earliest, latest);
+        Assert.Empty(errorSink.Errors);
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 1000)]
+    [InlineData(-1, 1000)]
+    [InlineData(0, 1000)]
+    [InlineData(1, 1)]
+    [InlineData(1.8, 2)]
+    [InlineData(double.PositiveInfinity, 10000000)]
+    [InlineData(double.MaxValue, 10000000)]
+    public async Task CountCleanup_PreviewAndMutationUseTheSameBoundedCount(double input, int count)
+    {
+        int? previewCount = null;
+        FakeLogManagementStore store = new()
+        {
+            PreviewCountHandler = value => { previewCount = value; return 5; },
+        };
+        TestApplicationErrorSink errorSink = new();
+        LogsViewModel viewModel = CreateViewModel(store, errorSink);
+
+        await viewModel.GetCleanupPreviewTextAsync(2, input, null, null, CancellationToken.None);
+        await viewModel.ApplyCleanupModeAsync(2, input, null, null, CancellationToken.None);
+
+        Assert.Equal(count, previewCount);
+        Assert.Equal(count, store.LastCleanupCount);
+        Assert.Empty(errorSink.Errors);
+    }
+
+    [Theory]
+    [InlineData(1, "Over target:")]
+    [InlineData(2, "Within target:")]
+    [InlineData(3, "Within target:")]
+    public async Task SizeCleanup_PreviewsActualFootprintWithoutInventingAnEntryCount(int targetMb, string prefix)
+    {
+        FakeLogManagementStore store = new()
+        {
+            GetStorageSummaryHandler = static () => new LogStorageSnapshot(2 * 1024 * 1024, 20, 0),
+        };
+        LogsViewModel viewModel = CreateViewModel(store, new TestApplicationErrorSink());
+
+        string? preview = await viewModel.GetCleanupPreviewTextAsync(1, targetMb, null, null, CancellationToken.None);
+
+        Assert.NotNull(preview);
+        Assert.StartsWith(prefix, preview, StringComparison.Ordinal);
+        Assert.Contains($"{2:N2} MB", preview, StringComparison.Ordinal);
+        Assert.Contains($"{targetMb:N2} MB", preview, StringComparison.Ordinal);
+        Assert.DoesNotContain("entries", preview, StringComparison.Ordinal);
+        Assert.Equal(1, store.StorageSummaryReadCount);
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 10)]
+    [InlineData(0, 10)]
+    [InlineData(double.PositiveInfinity, 102400)]
+    [InlineData(double.MaxValue, 102400)]
+    public async Task SizeCleanup_BoundsInvalidTargetsBeforeConvertingToBytes(double input, int targetMb)
+    {
+        FakeLogManagementStore store = new();
+        TestApplicationErrorSink errorSink = new();
+        LogsViewModel viewModel = CreateViewModel(store, errorSink);
+
+        await viewModel.ApplyCleanupModeAsync(1, input, null, null, CancellationToken.None);
+
+        Assert.Equal(targetMb * 1024L * 1024L, store.LastCleanupSize);
+        Assert.Empty(errorSink.Errors);
     }
 
     /// <summary>Verifies filtered cleanup preview reads run away from the calling thread.</summary>
@@ -323,7 +423,7 @@ public sealed class LogsViewModelTests
 
         Assert.NotNull(preview);
         Assert.Contains("7", preview, StringComparison.Ordinal);
-        Assert.Contains("KB", preview, StringComparison.Ordinal);
+        Assert.DoesNotContain("KB", preview, StringComparison.Ordinal);
         Assert.Empty(errorSink.Errors);
     }
 
@@ -491,6 +591,11 @@ public sealed class LogsViewModelTests
             "Logs.StorageUsage.Format" => "{0} | {1} | {2}",
             "Logs.Filter.AllLevels" => "All levels",
             "Logs.Filter.AllCategories" => "All categories",
+            "Logs.Cleanup.Preview.Loading" => "Calculating cleanup…",
+            "Logs.Cleanup.Preview.Failed" => "Couldn't calculate cleanup.",
+            "Logs.Cleanup.Preview.Count" => "{0:N0} entries will be deleted.",
+            "Logs.Cleanup.Preview.SizeTarget" => "Over target: {0}, {1}",
+            "Logs.Cleanup.Preview.SizeSatisfied" => "Within target: {0}, {1}",
             _ => key,
         };
     }
@@ -507,6 +612,18 @@ public sealed class LogsViewModelTests
 
         public Func<string?, string?, LogCleanupEstimate> PreviewHandler { get; init; } =
             static (_, _) => default;
+
+        public Func<DateTimeOffset, long> PreviewBeforeHandler { get; init; } = static _ => 0;
+
+        public Func<int, long> PreviewCountHandler { get; init; } = static _ => 0;
+
+        public Func<long> PreviewAllHandler { get; init; } = static () => 0;
+
+        public DateTimeOffset LastCleanupCutoff { get; private set; }
+
+        public int? LastCleanupCount { get; private set; }
+
+        public long? LastCleanupSize { get; private set; }
 
         public IReadOnlyList<LogRecord> Logs { get; init; } = [];
 
@@ -541,14 +658,17 @@ public sealed class LogsViewModelTests
 
         public void CleanupBefore(DateTimeOffset cutoff)
         {
+            LastCleanupCutoff = cutoff;
         }
 
         public void CleanupToSize(long targetSizeBytes)
         {
+            LastCleanupSize = targetSizeBytes;
         }
 
         public void CleanupToLogCount(int maxLogCount)
         {
+            LastCleanupCount = maxLogCount;
         }
 
         public void ClearAll()
@@ -566,5 +686,11 @@ public sealed class LogsViewModelTests
             Interlocked.Increment(ref _previewReadCount);
             return PreviewHandler(level, source);
         }
+
+        public long PreviewCleanupBefore(DateTimeOffset cutoff) => PreviewBeforeHandler(cutoff);
+
+        public long PreviewCleanupToLogCount(int maxLogCount) => PreviewCountHandler(maxLogCount);
+
+        public long PreviewClearAll() => PreviewAllHandler();
     }
 }

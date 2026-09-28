@@ -28,4 +28,10 @@ internal interface ILogManagementStore
     long CleanupLogs(string? level, string? source);
 
     LogCleanupEstimate PreviewLogCleanup(string? level, string? source);
+
+    long PreviewCleanupBefore(DateTimeOffset cutoff);
+
+    long PreviewCleanupToLogCount(int maxLogCount);
+
+    long PreviewClearAll();
 }
