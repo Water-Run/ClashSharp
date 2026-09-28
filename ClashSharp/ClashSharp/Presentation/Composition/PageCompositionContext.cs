@@ -1,4 +1,5 @@
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Service;
 
@@ -37,4 +38,5 @@ internal sealed record PageCompositionContext(
     SettingsRuntimeMutationAdapter SettingsRuntimeMutations,
     TriggerPresentationFactory TriggerPresentation,
     StartupGuideComposition StartupGuide,
-    IApplicationErrorSink ErrorSink);
+    IApplicationErrorSink ErrorSink,
+    SettingsExportCoordinator SettingsExports);

@@ -6,7 +6,7 @@ using Microsoft.Data.Sqlite;
 namespace ClashSharp.Tests.Unit.Services;
 
 /// <summary>Unit tests for SQLite log storage behavior.</summary>
-public sealed class LogStorageServiceTests
+public sealed partial class LogStorageServiceTests
 {
     [Fact]
     public async Task TrafficSnapshot_ClosedAndShortConnectionsRemainInTotalsAndDailyAndProfileRows()

@@ -130,6 +130,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<StartupSettingsCoordinator>();
             services.AddSingleton<IConnectionSamplingSettingsOperation, ConnectionSamplingSettingsOperationAdapter>();
             services.AddSingleton<ConnectionSamplingSettingsCoordinator>();
+            services.AddSingleton<SettingsExportCoordinator>();
             services.AddSingleton(provider => new ApplicationActionService(
                 provider.GetRequiredService<AppSettingsService>(),
                 provider.GetRequiredService<MutationAdmissionBarrier>(),

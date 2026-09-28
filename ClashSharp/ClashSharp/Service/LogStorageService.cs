@@ -24,6 +24,7 @@ public readonly record struct LogCleanupPreview(long EntryCount, long EstimatedS
 /// </remarks>
 public sealed partial class LogStorageService : IAsyncDisposable
 {
+    private static readonly string[] DatabaseFileSuffixes = ["", "-wal", "-shm", "-journal"];
     private readonly RepositoryOperationLifetime _operations;
     private readonly object _disposalLock = new();
     private readonly string _connectionString;
@@ -703,9 +704,10 @@ public sealed partial class LogStorageService : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
 
         string fullDestinationPath = Path.GetFullPath(destinationPath);
-        if (StringComparer.OrdinalIgnoreCase.Equals(fullDestinationPath, _databasePath))
+        if (DatabaseFileSuffixes.Any(suffix =>
+            StringComparer.OrdinalIgnoreCase.Equals(fullDestinationPath, _databasePath + suffix)))
         {
-            throw new ArgumentException("Export destination must be different from the live database path.", nameof(destinationPath));
+            throw new ArgumentException("Export destination must be different from the live database and its recovery files.", nameof(destinationPath));
         }
 
         string? destinationDirectory = Path.GetDirectoryName(fullDestinationPath);
@@ -717,18 +719,46 @@ public sealed partial class LogStorageService : IAsyncDisposable
         lock (_syncLock)
         {
             EnsureInitialized();
-            DeleteExistingDatabaseFiles(fullDestinationPath);
-
-            using SqliteConnection sourceConnection = OpenConnection();
-            SqliteConnectionStringBuilder destinationBuilder = new()
+            EnsureExportDestinationHasNoRecoveryFiles(fullDestinationPath);
+            string stagingPath = fullDestinationPath + ".staging." + Guid.NewGuid().ToString("N");
+            try
             {
-                DataSource = fullDestinationPath,
-                Mode = SqliteOpenMode.ReadWriteCreate,
-                Pooling = false,
-            };
-            using SqliteConnection destinationConnection = new(destinationBuilder.ToString());
-            destinationConnection.Open();
-            sourceConnection.BackupDatabase(destinationConnection);
+                using (FileStream reservation = new(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
+                using (SqliteConnection sourceConnection = OpenConnection())
+                using (SqliteConnection destinationConnection = new(new SqliteConnectionStringBuilder
+                {
+                    DataSource = stagingPath,
+                    Mode = SqliteOpenMode.ReadWrite,
+                    Pooling = false,
+                }.ToString()))
+                {
+                    destinationConnection.Open();
+                    sourceConnection.BackupDatabase(destinationConnection);
+                    using SqliteCommand verify = destinationConnection.CreateCommand();
+                    verify.CommandText = "PRAGMA journal_mode=DELETE;";
+                    if (!string.Equals(verify.ExecuteScalar() as string, "delete", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new IOException("The exported database could not be made self-contained.");
+                    }
+                    verify.CommandText = "PRAGMA quick_check;";
+                    if (!string.Equals(verify.ExecuteScalar() as string, "ok", StringComparison.Ordinal))
+                    {
+                        throw new InvalidDataException("The exported database failed its integrity check.");
+                    }
+                }
+
+                // Keep the prior backup intact until a complete, closed snapshot can be published.
+                bool replaceExisting = File.Exists(fullDestinationPath);
+                EnsureExportDestinationHasNoRecoveryFiles(fullDestinationPath);
+                File.Move(stagingPath, fullDestinationPath, overwrite: replaceExisting);
+            }
+            finally
+            {
+                File.Delete(stagingPath);
+                File.Delete(stagingPath + "-wal");
+                File.Delete(stagingPath + "-shm");
+                File.Delete(stagingPath + "-journal");
+            }
         }
     }
 
@@ -819,11 +849,13 @@ public sealed partial class LogStorageService : IAsyncDisposable
             .Replace("_", @"\_", StringComparison.Ordinal);
     }
 
-    private static void DeleteExistingDatabaseFiles(string databasePath)
+    private static void EnsureExportDestinationHasNoRecoveryFiles(string databasePath)
     {
-        File.Delete(databasePath);
-        File.Delete(databasePath + "-wal");
-        File.Delete(databasePath + "-shm");
+        if (File.Exists(databasePath + "-wal") || File.Exists(databasePath + "-shm")
+            || File.Exists(databasePath + "-journal"))
+        {
+            throw new IOException("The export destination has SQLite recovery files and cannot be replaced.");
+        }
     }
 
     /// <summary>Deletes records older than <paramref name="cutoff"/> and compacts the database.</summary>

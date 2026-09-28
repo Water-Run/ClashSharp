@@ -173,7 +173,8 @@ internal static class SettingsPageComposition
             context.SettingsRuntimeMutations,
             context.ApplicationLifecycle,
             context.Profiles,
-            context.ErrorSink);
+            context.ErrorSink,
+            context.SettingsExports);
     }
 }
 
@@ -186,7 +187,8 @@ internal sealed class SettingsPageOperations(
     SettingsRuntimeMutationAdapter runtimeMutations,
     ApplicationLifecycleService applicationLifecycle,
     ProfileCatalogService profiles,
-    IApplicationErrorSink errorSink) : ISettingsPageOperations
+    IApplicationErrorSink errorSink,
+    SettingsExportCoordinator exports) : ISettingsPageOperations
 {
     /// <inheritdoc />
     public ClashDataPackageScope? ReadPackageScope(string packagePath)
@@ -230,21 +232,21 @@ internal sealed class SettingsPageOperations(
         DataPackageExportScope scope,
         CancellationToken cancellationToken)
     {
-        return scope switch
+        return exports.ExecuteAsync(token => scope switch
         {
             DataPackageExportScope.Settings => dataPackages.ExportAsync(
                 destinationPath,
                 ClashDataPackageScope.Settings,
-                cancellationToken),
+                token),
             DataPackageExportScope.SettingsAndProxyConfiguration => dataPackages.ExportAsync(
                 destinationPath,
                 ClashDataPackageScope.SettingsAndProxyConfiguration,
-                cancellationToken),
+                token),
             DataPackageExportScope.SystemLogSqlite => ExportLogDatabaseAsync(
                 destinationPath,
-                cancellationToken),
+                token),
             _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unsupported export scope."),
-        };
+        }, cancellationToken);
     }
 
     /// <inheritdoc />
