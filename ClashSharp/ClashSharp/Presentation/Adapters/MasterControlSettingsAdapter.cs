@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
@@ -9,7 +13,7 @@ namespace ClashSharp.Presentation.Adapters;
 /// <remarks>
 /// Invariants: Wraps a non-null settings service for the adapter lifetime.
 /// Thread safety: Matches the wrapped service.
-/// Side effects: Setters persist values through the wrapped service.
+/// Side effects: Awaitable change sets persist values through the wrapped service.
 /// </remarks>
 internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
 {
@@ -24,39 +28,22 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
-    /// <summary>Gets or sets the current master takeover mode.</summary>
+    public Task ApplyChangesAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken) =>
+        _settings.ApplyChangesAsync(changes, cancellationToken);
+
+    /// <summary>Gets the current master takeover mode.</summary>
     /// <value>Current persisted mode.</value>
-    public ClashSharpMode CurrentMode
-    {
-        get => _settings.CurrentMode;
-        set => _settings.CurrentMode = value;
-    }
+    public ClashSharpMode CurrentMode => _settings.CurrentMode;
 
-    /// <summary>Gets or sets whether transparent proxy is enabled in settings.</summary>
+    /// <summary>Gets whether transparent proxy is enabled in settings.</summary>
     /// <value>True when transparent proxy is enabled; otherwise false.</value>
-    public bool TransparentProxyEnabled
-    {
-        get => _settings.TransparentProxyEnabled;
-        set => _settings.TransparentProxyEnabled = value;
-    }
+    public bool TransparentProxyEnabled => _settings.TransparentProxyEnabled;
 
-    public bool LaunchAtStartupEnabled
-    {
-        get => _settings.LaunchAtStartupEnabled;
-        set => _settings.LaunchAtStartupEnabled = value;
-    }
+    public bool LaunchAtStartupEnabled => _settings.LaunchAtStartupEnabled;
 
-    public bool ConnectionSamplingEnabled
-    {
-        get => _settings.ConnectionSamplingEnabled;
-        set => _settings.ConnectionSamplingEnabled = value;
-    }
+    public bool ConnectionSamplingEnabled => _settings.ConnectionSamplingEnabled;
 
-    public bool MainlandChinaUrlBlockingEnabled
-    {
-        get => _settings.MainlandChinaUrlBlockingEnabled;
-        set => _settings.MainlandChinaUrlBlockingEnabled = value;
-    }
+    public bool MainlandChinaUrlBlockingEnabled => _settings.MainlandChinaUrlBlockingEnabled;
 
     public string ActiveProfileId => _settings.ActiveProfileId;
 
@@ -90,29 +77,13 @@ internal sealed class MasterControlSettingsAdapter : IMasterControlSettings
 
     public NotificationLevel NotificationLevel => _settings.NotificationLevel;
 
-    public bool RestoreProxyOnExit
-    {
-        get => _settings.RestoreProxyOnExit;
-        set => _settings.RestoreProxyOnExit = value;
-    }
+    public bool RestoreProxyOnExit => _settings.RestoreProxyOnExit;
 
-    public bool CheckStaleProxyOnStartup
-    {
-        get => _settings.CheckStaleProxyOnStartup;
-        set => _settings.CheckStaleProxyOnStartup = value;
-    }
+    public bool CheckStaleProxyOnStartup => _settings.CheckStaleProxyOnStartup;
 
-    public bool StartupConflictCheckEnabled
-    {
-        get => _settings.StartupConflictCheckEnabled;
-        set => _settings.StartupConflictCheckEnabled = value;
-    }
+    public bool StartupConflictCheckEnabled => _settings.StartupConflictCheckEnabled;
 
-    public bool ShowStartupGuideOnStartup
-    {
-        get => _settings.ShowStartupGuideOnStartup;
-        set => _settings.ShowStartupGuideOnStartup = value;
-    }
+    public bool ShowStartupGuideOnStartup => _settings.ShowStartupGuideOnStartup;
 
     public MainlandChinaFeatureMode MainlandChinaFeatureMode => _settings.MainlandChinaFeatureMode;
 

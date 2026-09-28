@@ -14,6 +14,7 @@ using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Infrastructure.Networking;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 
 namespace ClashSharp.ViewModel;
 
@@ -59,6 +60,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     private readonly AsyncRelayCommand _toggleStartupLaunchCommand;
 
     private readonly AsyncRelayCommand _toggleConnectionSamplingCommand;
+
+    private readonly IReadOnlyDictionary<SettingKey, AsyncRelayCommand> _togglePreferenceCommands;
 
     private readonly IMasterHeroStatusLayoutService _heroStatusLayout;
 
@@ -167,6 +170,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     /// <param name="heroStatusLayout">Persistent hero-status slot layout service. Must not be null.</param>
     /// <param name="errorSink">Boundary sink for unexpected command failures. Must not be null.</param>
     /// <param name="presentTileActionAsync">Awaitable page interaction port. Must not be null.</param>
+    /// <param name="runTileOperationAsync">Orders mutations with page interactions and owns their lifetime. Must not be null.</param>
     /// <param name="trayStatus">Optional effective tray-state reader; unavailable state is used when omitted.</param>
     /// <param name="runtime">Optional runtime status provider; unavailable state is used when omitted.</param>
     /// <param name="actions">Optional application action dispatcher; no-op actions are used when omitted.</param>
@@ -188,6 +192,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         IMasterHeroStatusLayoutService heroStatusLayout,
         IApplicationErrorSink errorSink,
         Func<MasterControlTileAction, CancellationToken, Task> presentTileActionAsync,
+        Func<Func<CancellationToken, Task>, CancellationToken, Task> runTileOperationAsync,
         IMasterControlTrayStatus? trayStatus = null,
         IMasterControlRuntime? runtime = null,
         IMasterControlActions? actions = null,
@@ -208,6 +213,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         _heroStatusLayout = heroStatusLayout ?? throw new ArgumentNullException(nameof(heroStatusLayout));
         ArgumentNullException.ThrowIfNull(errorSink);
         ArgumentNullException.ThrowIfNull(presentTileActionAsync);
+        ArgumentNullException.ThrowIfNull(runTileOperationAsync);
         _tileActionCommands = Enum.GetValues<MasterControlTileAction>().ToDictionary(
             static action => action,
             action => new AsyncRelayCommand(
@@ -243,18 +249,31 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             LoadAsync,
             errorSink,
             operationName: "master-load");
-        _toggleTransparentProxyCommand = new AsyncRelayCommand(
+        _toggleTransparentProxyCommand = CreateSettingCommand(
             ToggleTransparentProxyAsync,
-            errorSink,
-            operationName: "master-transparent-proxy-setting");
-        _toggleStartupLaunchCommand = new AsyncRelayCommand(
+            "master-transparent-proxy-setting");
+        _toggleStartupLaunchCommand = CreateSettingCommand(
             ToggleStartupLaunchAsync,
-            errorSink,
-            operationName: "master-startup-launch-setting");
-        _toggleConnectionSamplingCommand = new AsyncRelayCommand(
+            "master-startup-launch-setting");
+        _toggleConnectionSamplingCommand = CreateSettingCommand(
             ToggleConnectionSamplingAsync,
-            errorSink,
-            operationName: "master-connection-sampling-setting");
+            "master-connection-sampling-setting");
+        SettingKey[] preferences =
+        [
+            SettingsRegistry.Keys.MainlandChinaUrlBlockingEnabled,
+            SettingsRegistry.Keys.RestoreProxyOnExit,
+            SettingsRegistry.Keys.CheckStaleProxyOnStartup,
+            SettingsRegistry.Keys.StartupConflictCheckEnabled,
+            SettingsRegistry.Keys.ShowStartupGuideOnStartup,
+        ];
+        _togglePreferenceCommands = preferences.ToDictionary(
+            key => key,
+            key => CreateSettingCommand(
+                token => TogglePreferenceAsync(key, token),
+                $"master-preference-{key.Value}"));
+
+        AsyncRelayCommand CreateSettingCommand(Func<CancellationToken, Task> apply, string operationName) =>
+            new(token => runTileOperationAsync(apply, token), errorSink, operationName: operationName);
 
         CoreStatusText = string.Empty;
         SystemProxyStatusText = string.Empty;
@@ -1384,34 +1403,48 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         }
     }
 
-    private void ToggleUrlBlocking()
+    private async Task TogglePreferenceAsync(
+        SettingKey key,
+        CancellationToken cancellationToken)
     {
-        bool nextValue = !_settings.MainlandChinaUrlBlockingEnabled;
-        _settings.MainlandChinaUrlBlockingEnabled = nextValue;
-        RefreshTileValues();
-    }
-
-    private void ToggleRestoreProxyOnExit()
-    {
-        _settings.RestoreProxyOnExit = !_settings.RestoreProxyOnExit;
-        RefreshTileValues();
-    }
-
-    private void ToggleCheckStaleProxyOnStartup()
-    {
-        _settings.CheckStaleProxyOnStartup = !_settings.CheckStaleProxyOnStartup;
-        RefreshTileValues();
-    }
-
-    private void ToggleStartupConflictCheck()
-    {
-        _settings.StartupConflictCheckEnabled = !_settings.StartupConflictCheckEnabled;
-        RefreshTileValues();
-    }
-
-    private void ToggleStartupGuide()
-    {
-        _settings.ShowStartupGuideOnStartup = !_settings.ShowStartupGuideOnStartup;
+        cancellationToken.ThrowIfCancellationRequested();
+        OperationErrorText = string.Empty;
+        try
+        {
+            // Read only after the page queue admits this action; an earlier import may
+            // have changed the setting while this tile was waiting.
+            bool current = key.Value switch
+            {
+                nameof(IMasterControlSettings.MainlandChinaUrlBlockingEnabled) => _settings.MainlandChinaUrlBlockingEnabled,
+                nameof(IMasterControlSettings.RestoreProxyOnExit) => _settings.RestoreProxyOnExit,
+                nameof(IMasterControlSettings.CheckStaleProxyOnStartup) => _settings.CheckStaleProxyOnStartup,
+                nameof(IMasterControlSettings.StartupConflictCheckEnabled) => _settings.StartupConflictCheckEnabled,
+                nameof(IMasterControlSettings.ShowStartupGuideOnStartup) => _settings.ShowStartupGuideOnStartup,
+                _ => throw new ArgumentOutOfRangeException(nameof(key)),
+            };
+            SettingNormalizationResult normalized = SettingsRegistry.Default.Get(key.Value).NormalizeValue(!current);
+            if (!normalized.IsSuccess) { throw new InvalidOperationException(normalized.Error!.Code); }
+            await _settings.ApplyChangesAsync([new(key, normalized.Value!)], cancellationToken);
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            if (!ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+            {
+                OperationErrorText = _localization.GetString("Application.UnexpectedError");
+            }
+            try
+            {
+                // Notification can fail after a durable commit. Reflect the stored value,
+                // retain the failure, and never compensate by blindly toggling it again.
+                RefreshTileValues();
+            }
+            catch (Exception readFailure) when (!ExceptionGraphClassifier.IsProcessFatal(readFailure))
+            {
+                OperationErrorText = _localization.GetString("Application.UnexpectedError");
+                throw new AggregateException(exception, readFailure);
+            }
+            throw;
+        }
         RefreshTileValues();
     }
 
@@ -1696,7 +1729,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 owner.CreateTile("latency", "Latency", "\uEC4A", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.RunLatencyTest]),
                 owner.CreateTile("startup-launch", "StartupLaunch", "\uE7C3", controllableType, true, owner._settings.LaunchAtStartupEnabled, trackedCommand: owner._toggleStartupLaunchCommand),
                 owner.CreateTile("connection-sampling", "ConnectionSampling", "\uE81C", controllableType, true, owner._settings.ConnectionSamplingEnabled, trackedCommand: owner._toggleConnectionSamplingCommand),
-                owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, command: owner.ToggleUrlBlocking),
+                owner.CreateTile("blocked-url", "BlockedUrl", "\uE8A7", controllableType, true, owner._settings.MainlandChinaUrlBlockingEnabled, trackedCommand: owner._togglePreferenceCommands[SettingsRegistry.Keys.MainlandChinaUrlBlockingEnabled]),
                 owner.CreateTile("active-profile", "ActiveProfile", "\uE8A5", infoType),
                 owner.CreateTile("port", "Port", "\uE839", infoType),
                 owner.CreateTile("connection-test", "ConnectionTest", "\uE9D9", actionType, trackedCommand: owner._tileActionCommands[MasterControlTileAction.OpenConnectionTest]),
@@ -1724,10 +1757,10 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 owner.CreateTileFromKeys("display-language", "Settings.Language.Title", "\uE774", "Settings.Language.Description", infoType),
                 owner.CreateTileFromKeys("sampling-interval", "Settings.SamplingInterval.Title", "\uE916", "Settings.SamplingInterval.Description", infoType),
                 owner.CreateTileFromKeys("app-accent", "Settings.AppAccentColor.Title", "\uE790", "Settings.AppAccentColor.Description", infoType),
-                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, command: owner.ToggleRestoreProxyOnExit),
-                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, command: owner.ToggleCheckStaleProxyOnStartup),
-                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, command: owner.ToggleStartupConflictCheck),
-                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, command: owner.ToggleStartupGuide),
+                owner.CreateTileFromKeys("restore-proxy-on-exit", "Settings.RestoreProxyOnExit.Title", "\uE8BB", "Settings.RestoreProxyOnExit.Description", controllableType, true, owner._settings.RestoreProxyOnExit, trackedCommand: owner._togglePreferenceCommands[SettingsRegistry.Keys.RestoreProxyOnExit]),
+                owner.CreateTileFromKeys("stale-proxy-check", "Settings.CheckStaleProxy.Title", "\uE9D9", "Settings.CheckStaleProxy.Description", controllableType, true, owner._settings.CheckStaleProxyOnStartup, trackedCommand: owner._togglePreferenceCommands[SettingsRegistry.Keys.CheckStaleProxyOnStartup]),
+                owner.CreateTileFromKeys("startup-conflict-check", "Settings.StartupConflictCheck.Title", "\uE9D9", "Settings.StartupConflictCheck.Description", controllableType, true, owner._settings.StartupConflictCheckEnabled, trackedCommand: owner._togglePreferenceCommands[SettingsRegistry.Keys.StartupConflictCheckEnabled]),
+                owner.CreateTileFromKeys("startup-guide", "Settings.StartupGuide.Title", "\uE946", "Settings.StartupGuide.Description", controllableType, true, owner._settings.ShowStartupGuideOnStartup, trackedCommand: owner._togglePreferenceCommands[SettingsRegistry.Keys.ShowStartupGuideOnStartup]),
                 owner.CreateTileFromKeys("mainland-feature-mode", "Settings.MainlandChinaDisplay.Title", "\uE7B5", "Settings.MainlandChinaDisplay.Description", infoType),
                 owner.CreateTileFromKeys("startup-restore-fallback", "Settings.StartupRestoreFallback.Title", "\uE7C3", "Settings.StartupRestoreFallback.Description", infoType),
                 owner.CreateTileFromKeys("mihomo-service", "Settings.TransparentProxy.Service.Title", "\uE95A", "Settings.TransparentProxy.Service.Description", infoType),
@@ -1753,7 +1786,6 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         string typeText,
         bool isToggleVisible = false,
         bool isToggleOn = false,
-        Action? command = null,
         ICommand? trackedCommand = null)
     {
         return new MasterTileDefinition(
@@ -1764,7 +1796,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             typeText,
             isToggleVisible,
             isToggleOn,
-            trackedCommand ?? (command is null ? null : new RelayCommand(command)));
+            trackedCommand);
     }
 
     private MasterTileDefinition CreateTileFromKeys(
@@ -1775,7 +1807,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         string typeText,
         bool isToggleVisible = false,
         bool isToggleOn = false,
-        Action? command = null)
+        ICommand? trackedCommand = null)
     {
         return new MasterTileDefinition(
             id,
@@ -1785,7 +1817,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             typeText,
             isToggleVisible,
             isToggleOn,
-            command is null ? null : new RelayCommand(command));
+            trackedCommand);
     }
 
     private static string CleanTileTitle(string title)

@@ -99,6 +99,7 @@ internal static class MasterControlPageComposition
             new MasterHeroStatusLayoutService(settings),
             errorSink,
             tileActions.ExecuteAsync,
+            tileActions.RunAsync,
             new MasterControlTrayStatusAdapter(context.TrayStatus),
             new MasterControlRuntimeAdapter(runtimeSnapshotSource),
             new MasterControlActionsAdapter(applicationActions),

@@ -1,15 +1,21 @@
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 
 namespace ClashSharp.ViewModel;
 
 /// <summary>Settings contract required by <see cref="MasterControlViewModel"/>.</summary>
 internal interface IMasterControlSettings
 {
-    ClashSharpMode CurrentMode { get; set; }
-    bool TransparentProxyEnabled { get; set; }
-    bool LaunchAtStartupEnabled { get; set; }
-    bool ConnectionSamplingEnabled { get; set; }
-    bool MainlandChinaUrlBlockingEnabled { get; set; }
+    Task ApplyChangesAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken);
+
+    ClashSharpMode CurrentMode { get; }
+    bool TransparentProxyEnabled { get; }
+    bool LaunchAtStartupEnabled { get; }
+    bool ConnectionSamplingEnabled { get; }
+    bool MainlandChinaUrlBlockingEnabled { get; }
     string ActiveProfileId { get; }
     int MixedPort { get; }
     string ConnectionTestProxyUrl1 { get; }
@@ -26,10 +32,10 @@ internal interface IMasterControlSettings
     string TrayVisibleFeatureIds { get; }
     bool NotificationEnabled { get; }
     NotificationLevel NotificationLevel { get; }
-    bool RestoreProxyOnExit { get; set; }
-    bool CheckStaleProxyOnStartup { get; set; }
-    bool StartupConflictCheckEnabled { get; set; }
-    bool ShowStartupGuideOnStartup { get; set; }
+    bool RestoreProxyOnExit { get; }
+    bool CheckStaleProxyOnStartup { get; }
+    bool StartupConflictCheckEnabled { get; }
+    bool ShowStartupGuideOnStartup { get; }
     MainlandChinaFeatureMode MainlandChinaFeatureMode { get; }
     AppAccentColorMode AppAccentColorMode { get; }
     string AppAccentColorValue { get; }

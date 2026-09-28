@@ -468,6 +468,7 @@ public sealed partial class MasterControlViewModelTests
             new FakeMasterHeroStatusLayoutService(),
             new FakeApplicationErrorSink(),
             (_, _) => Task.CompletedTask,
+            (operation, token) => operation(token),
             new FakeMasterTrayStatus(),
             modeApplied: mode =>
             {
@@ -501,6 +502,7 @@ public sealed partial class MasterControlViewModelTests
             new FakeMasterHeroStatusLayoutService(),
             new FakeApplicationErrorSink(),
             (_, _) => Task.CompletedTask,
+            (operation, token) => operation(token),
             new FakeMasterTrayStatus(),
             modeApplied: _ =>
             {
@@ -1124,7 +1126,8 @@ public sealed partial class MasterControlViewModelTests
         Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? getRuntimeTrafficAsync = null,
         Func<string, CancellationToken, Task<WebsiteProbeResult>>? probeWebsiteAsync = null,
         Func<CancellationToken, Task<PublicIpInformation>>? probePublicIpAsync = null,
-        IApplicationUpdateChecker? updateChecker = null)
+        IApplicationUpdateChecker? updateChecker = null,
+        Func<Func<CancellationToken, Task>, CancellationToken, Task>? runTileOperationAsync = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -1137,6 +1140,7 @@ public sealed partial class MasterControlViewModelTests
             heroStatusLayout ?? new FakeMasterHeroStatusLayoutService(),
             errorSink ?? new FakeApplicationErrorSink(),
             presentTileActionAsync ?? ((_, _) => Task.CompletedTask),
+            runTileOperationAsync ?? ((operation, token) => operation(token)),
             trayStatus ?? new FakeMasterTrayStatus(),
             runtime ?? new FakeMasterRuntime(),
             actions: actions,
@@ -1448,6 +1452,36 @@ public sealed partial class MasterControlViewModelTests
     /// <summary>Fake settings store for master-control tests.</summary>
     private sealed class FakeMasterSettings : IMasterControlSettings
     {
+        public List<IReadOnlyList<SettingValueChange>> PreferenceWrites { get; } = [];
+
+        public Func<IReadOnlyList<SettingValueChange>, CancellationToken, Task>? ApplyChangesAsyncHandler { get; set; }
+
+        public Task ApplyChangesAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PreferenceWrites.Add(changes.ToArray());
+            if (ApplyChangesAsyncHandler is not null) { return ApplyChangesAsyncHandler(changes, cancellationToken); }
+            CommitPreferenceChanges(changes);
+            return Task.CompletedTask;
+        }
+
+        public void CommitPreferenceChanges(IReadOnlyList<SettingValueChange> changes)
+        {
+            foreach (SettingValueChange change in changes)
+            {
+                bool value = change.Value.Get<bool>();
+                switch (change.Key.Value)
+                {
+                    case nameof(MainlandChinaUrlBlockingEnabled): MainlandChinaUrlBlockingEnabled = value; break;
+                    case nameof(RestoreProxyOnExit): RestoreProxyOnExit = value; break;
+                    case nameof(CheckStaleProxyOnStartup): CheckStaleProxyOnStartup = value; break;
+                    case nameof(StartupConflictCheckEnabled): StartupConflictCheckEnabled = value; break;
+                    case nameof(ShowStartupGuideOnStartup): ShowStartupGuideOnStartup = value; break;
+                    default: throw new ArgumentException("Unexpected preference", nameof(changes));
+                }
+            }
+        }
+
         /// <summary>Gets or sets the current master mode.</summary>
         /// <value>Current fake mode.</value>
         public ClashSharpMode CurrentMode { get; set; } = ClashSharpMode.Disabled;
@@ -1494,7 +1528,19 @@ public sealed partial class MasterControlViewModelTests
 
         public NotificationLevel NotificationLevel { get; set; } = NotificationLevel.Default;
 
-        public bool RestoreProxyOnExit { get; set; } = true;
+        private bool _restoreProxyOnExit = true;
+
+        public Exception? PreferenceWriteFailure { get; set; }
+
+        public bool RestoreProxyOnExit
+        {
+            get => _restoreProxyOnExit;
+            set
+            {
+                if (PreferenceWriteFailure is not null) { throw PreferenceWriteFailure; }
+                _restoreProxyOnExit = value;
+            }
+        }
 
         public bool CheckStaleProxyOnStartup { get; set; } = true;
 
