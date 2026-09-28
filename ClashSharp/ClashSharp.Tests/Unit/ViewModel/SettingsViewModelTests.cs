@@ -2121,9 +2121,9 @@ public sealed partial class SettingsViewModelTests
         Assert.True(viewModel.HasRestartRequiredSettings);
     }
 
-    /// <summary>Verifies clear-all data delegates maintenance work and reloads the current settings snapshot.</summary>
+    /// <summary>Verifies a clear request does not reread settings while the outer lifetime retires repositories.</summary>
     [Fact]
-    public async Task ClearAllDataAsync_RunsInjectedMaintenanceAndReloadsSettings()
+    public async Task ClearAllDataAsync_RunsInjectedMaintenanceWithoutReloadingSettings()
     {
         FakeSettingsStore store = new()
         {
@@ -2147,8 +2147,8 @@ public sealed partial class SettingsViewModelTests
 
         Assert.True(clearCalled);
         Assert.Null(appliedLanguage);
-        Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
-        Assert.Equal("https://example.com/cleared", viewModel.ConnectionTestUrl);
+        Assert.Equal(AppLanguage.French, viewModel.DisplayLanguage);
+        Assert.Equal("https://example.com/old", viewModel.ConnectionTestUrl);
     }
 
     /// <summary>Verifies settings can be reset by visible settings group without touching unrelated groups.</summary>

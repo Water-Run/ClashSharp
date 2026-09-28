@@ -577,6 +577,7 @@ internal static partial class LocalizationResources
             ["Maintenance.RuntimeCleanupFailed"] = "Не удалось очистить состояние среды выполнения перед обслуживанием данных.",
             ["Maintenance.FileDeleteFailed"] = "Не удалось удалить файл локальных данных.",
             ["Maintenance.DirectoryDeleteFailed"] = "Не удалось удалить каталог локальных данных.",
+            ["Maintenance.ClearIncomplete"] = "Не удалось удалить часть локальных данных. Приложение закроется, а оставшиеся данные будут сохранены. Откройте приложение снова и повторите попытку.",
             ["ConnectionSampling.Failed"] = "Фоновая выборка соединений не удалась.",
             ["ConnectionSampling.Recovered"] = "Фоновая выборка соединений восстановлена.",
             ["ConnectionSampling.RecoveredDetail.Format"] = "Записано строк: {0:N0}.",

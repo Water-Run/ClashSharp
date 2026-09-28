@@ -3360,11 +3360,10 @@ internal sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Clears all local application data through the injected maintenance action and reloads the view model.</summary>
+    /// <summary>Requests process-owned data removal without reading repositories that are about to be disposed.</summary>
     public async Task ClearAllDataAsync(CancellationToken cancellationToken)
     {
         await _clearAllDataAsync(cancellationToken);
-        ReloadAfterMaintenance();
     }
 
     public void ExitApplication()

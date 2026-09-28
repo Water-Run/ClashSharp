@@ -577,6 +577,7 @@ internal static partial class LocalizationResources
             ["Maintenance.RuntimeCleanupFailed"] = "Le nettoyage de l’état d’exécution avant la maintenance des données a échoué.",
             ["Maintenance.FileDeleteFailed"] = "Impossible de supprimer le fichier de données local.",
             ["Maintenance.DirectoryDeleteFailed"] = "Impossible de supprimer le dossier de données local.",
+            ["Maintenance.ClearIncomplete"] = "Certaines données locales n’ont pas pu être effacées. L’application va se fermer et les données restantes seront conservées. Rouvrez l’application pour réessayer.",
             ["ConnectionSampling.Failed"] = "L'échantillonnage des connexions en arrière-plan a échoué.",
             ["ConnectionSampling.Recovered"] = "L'échantillonnage des connexions en arrière-plan a récupéré.",
             ["ConnectionSampling.RecoveredDetail.Format"] = "{0:N0} lignes écrites.",

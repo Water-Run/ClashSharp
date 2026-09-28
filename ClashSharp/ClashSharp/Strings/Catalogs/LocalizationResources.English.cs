@@ -577,6 +577,7 @@ internal static partial class LocalizationResources
             ["Maintenance.RuntimeCleanupFailed"] = "Runtime state cleanup failed before data maintenance.",
             ["Maintenance.FileDeleteFailed"] = "Local data file could not be deleted.",
             ["Maintenance.DirectoryDeleteFailed"] = "Local data directory could not be deleted.",
+            ["Maintenance.ClearIncomplete"] = "Some local data could not be cleared. The app will close, and any remaining data will be kept. Open the app again to retry.",
             ["ConnectionSampling.Failed"] = "Background connection sampling failed.",
             ["ConnectionSampling.Recovered"] = "Background connection sampling recovered.",
             ["ConnectionSampling.RecoveredDetail.Format"] = "{0:N0} rows.",

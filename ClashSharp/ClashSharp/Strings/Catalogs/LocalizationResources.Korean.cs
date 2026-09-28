@@ -577,6 +577,7 @@ internal static partial class LocalizationResources
             ["Maintenance.RuntimeCleanupFailed"] = "런타임 상태를 정리하지 못했습니다.",
             ["Maintenance.FileDeleteFailed"] = "로컬 데이터 파일을 삭제할 수 없습니다.",
             ["Maintenance.DirectoryDeleteFailed"] = "로컬 데이터 폴더를 삭제할 수 없습니다.",
+            ["Maintenance.ClearIncomplete"] = "일부 로컬 데이터를 삭제하지 못했습니다. 앱이 종료되며 남은 데이터는 유지됩니다. 앱을 다시 열어 재시도하세요.",
             ["ConnectionSampling.Failed"] = "백그라운드 연결 샘플링에 실패했습니다.",
             ["ConnectionSampling.Recovered"] = "백그라운드 연결 샘플링이 복구되었습니다.",
             ["ConnectionSampling.RecoveredDetail.Format"] = "{0:N0}행을 기록했습니다.",

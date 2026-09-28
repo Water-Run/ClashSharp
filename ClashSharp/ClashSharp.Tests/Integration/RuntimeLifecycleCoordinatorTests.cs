@@ -9,6 +9,55 @@ namespace ClashSharp.Tests.Integration;
 public sealed class RuntimeLifecycleCoordinatorTests
 {
     [Fact]
+    public async Task DataRemoval_OverridesPreservedProxyAndDrainsAcceptedWriters()
+    {
+        List<string> trace = [];
+        MutationAdmissionBarrier barrier = new();
+        await using MutationAdmissionLease writer = await barrier.AcquireOrdinaryAsync(CancellationToken.None);
+        FakeNetworkShutdown network = new(trace);
+        RuntimeLifecycleCoordinator coordinator = new(barrier, network,
+            () => NetworkIntent.Shutdown(ClashSharpMode.FullTakeover, true, 10000),
+            [new FakeParticipant("sampling", trace, true)]);
+
+        Task<RuntimeShutdownResult> clear = coordinator.PrepareDataRemovalAsync(CancellationToken.None);
+        await WaitUntilAsync(() => barrier.State == MutationAdmissionState.Closing);
+        Assert.False(clear.IsCompleted);
+        Assert.Empty(trace);
+        await writer.DisposeAsync();
+        RuntimeShutdownResult result = await clear;
+
+        Assert.Equal(RuntimeShutdownOutcome.PreparedForHostDisposal, result.Outcome);
+        Assert.Null(result.ErrorCode);
+        Assert.Equal(NetworkIntent.Shutdown(ClashSharpMode.Disabled, false, 10000), network.LastIntent);
+        Assert.Same(result, await coordinator.ShutdownAsync(CancellationToken.None));
+        Assert.Equal(1, network.CallCount);
+    }
+
+    [Fact]
+    public async Task DataRemoval_DoesNotReuseAnOrdinaryShutdown()
+    {
+        RuntimeLifecycleCoordinator coordinator = CreateCoordinator(new MutationAdmissionBarrier(), new FakeNetworkShutdown([]));
+        await coordinator.ShutdownAsync(CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.PrepareDataRemovalAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DataRemoval_AlreadyClosedAdmissionDoesNotClaimVerifiedNetworkCleanup()
+    {
+        MutationAdmissionBarrier barrier = new();
+        await using (MutationAdmissionLease shutdown = await barrier.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None))
+        {
+            shutdown.CommitShutdown();
+        }
+
+        FakeNetworkShutdown network = new([]);
+        RuntimeShutdownResult result = await CreateCoordinator(barrier, network).PrepareDataRemovalAsync(CancellationToken.None);
+        Assert.Equal(RuntimeShutdownOutcome.PreparedForHostDisposal, result.Outcome);
+        Assert.Equal("data-removal-network-unverified", result.ErrorCode);
+        Assert.Equal(0, network.CallCount);
+    }
+
+    [Fact]
     public async Task ShutdownAsync_PreserveCurrentState_DrainsAndStopsWithoutReadingExitIntent()
     {
         List<string> trace = [];
@@ -447,6 +496,8 @@ public sealed class RuntimeLifecycleCoordinatorTests
     {
         public int CallCount { get; private set; }
 
+        public NetworkIntent? LastIntent { get; private set; }
+
         public MutationOutcome Outcome { get; init; } = MutationOutcome.Succeeded;
 
         public string? ErrorCode { get; init; }
@@ -460,6 +511,7 @@ public sealed class RuntimeLifecycleCoordinatorTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             CallCount++;
+            LastIntent = intent;
             trace.Add("network.shutdown");
             if (ExceptionToThrow is not null)
             {

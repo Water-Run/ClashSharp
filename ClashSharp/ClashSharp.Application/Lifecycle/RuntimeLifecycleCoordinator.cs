@@ -3,6 +3,7 @@ using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
+using ClashSharp.Model;
 
 namespace ClashSharp.ApplicationModel.Lifecycle;
 
@@ -76,6 +77,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
     private readonly TimeSpan _quiescenceTimeout;
     private readonly RuntimeShutdownNetworkPolicy _networkPolicy;
     private Task<RuntimeShutdownResult>? _shutdownTask;
+    private bool _shutdownDisablesNetwork;
     private long _shutdownAttemptVersion;
 
     /// <summary>Initializes the sole host-owned runtime shutdown coordinator.</summary>
@@ -124,12 +126,29 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
     /// </summary>
     public Task<RuntimeShutdownResult> ShutdownAsync(CancellationToken cancellationToken)
     {
+        return GetShutdownTask(disableNetwork: false, cancellationToken);
+    }
+
+    /// <summary>Stops the core and restores the proxy regardless of normal exit preferences before data removal.</summary>
+    public Task<RuntimeShutdownResult> PrepareDataRemovalAsync(CancellationToken cancellationToken)
+    {
+        return GetShutdownTask(disableNetwork: true, cancellationToken);
+    }
+
+    private Task<RuntimeShutdownResult> GetShutdownTask(bool disableNetwork, CancellationToken cancellationToken)
+    {
         lock (_syncLock)
         {
             if (_shutdownTask is null)
             {
+                _shutdownDisablesNetwork = disableNetwork;
                 long attemptVersion = ++_shutdownAttemptVersion;
-                _shutdownTask = RunShutdownAttemptAsync(attemptVersion, cancellationToken);
+                _shutdownTask = RunShutdownAttemptAsync(attemptVersion, disableNetwork, cancellationToken);
+            }
+            else if (disableNetwork && !_shutdownDisablesNetwork)
+            {
+                return Task.FromException<RuntimeShutdownResult>(new InvalidOperationException(
+                    "Data removal cannot reuse a shutdown that may preserve the running core."));
             }
 
             return _shutdownTask;
@@ -148,13 +167,14 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
 
     private async Task<RuntimeShutdownResult> RunShutdownAttemptAsync(
         long attemptVersion,
+        bool disableNetwork,
         CancellationToken cancellationToken)
     {
         await Task.Yield();
         RuntimeShutdownResult result;
         try
         {
-            result = await ShutdownCoreAsync(cancellationToken).ConfigureAwait(false);
+            result = await ShutdownCoreAsync(disableNetwork, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -181,7 +201,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         }
     }
 
-    private async Task<RuntimeShutdownResult> ShutdownCoreAsync(CancellationToken cancellationToken)
+    private async Task<RuntimeShutdownResult> ShutdownCoreAsync(bool disableNetwork, CancellationToken cancellationToken)
     {
         using CancellationTokenSource transitionDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         transitionDeadline.CancelAfter(_quiescenceTimeout);
@@ -190,7 +210,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             switch (_admissionBarrier.State)
             {
                 case MutationAdmissionState.Open:
-                    RuntimeShutdownResult result = await ShutdownOpenStateAsync(cancellationToken).ConfigureAwait(false);
+                    RuntimeShutdownResult result = await ShutdownOpenStateAsync(disableNetwork, cancellationToken).ConfigureAwait(false);
                     if (!string.Equals(result.ErrorCode, "mutation-admission-busy", StringComparison.Ordinal))
                     {
                         return result;
@@ -201,9 +221,15 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                     break;
                 case MutationAdmissionState.RecoveryOnly:
                 case MutationAdmissionState.RecoveryClosing:
-                    return await ShutdownRecoveryStateAsync(cancellationToken).ConfigureAwait(false);
+                    RuntimeShutdownResult recovery = await ShutdownRecoveryStateAsync(cancellationToken).ConfigureAwait(false);
+                    return disableNetwork
+                        ? recovery with { ErrorCode = recovery.ErrorCode ?? "data-removal-network-unverified" }
+                        : recovery;
                 case MutationAdmissionState.ClosedForShutdown:
-                    return await ShutdownClosedStateAsync().ConfigureAwait(false);
+                    RuntimeShutdownResult closed = await ShutdownClosedStateAsync().ConfigureAwait(false);
+                    return disableNetwork
+                        ? closed with { ErrorCode = closed.ErrorCode ?? "data-removal-network-unverified" }
+                        : closed;
                 default:
                     throw new InvalidOperationException("The mutation admission state is unsupported.");
             }
@@ -224,7 +250,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         }
     }
 
-    private async Task<RuntimeShutdownResult> ShutdownOpenStateAsync(CancellationToken callerToken)
+    private async Task<RuntimeShutdownResult> ShutdownOpenStateAsync(bool disableNetwork, CancellationToken callerToken)
     {
         using CancellationTokenSource quiescenceDeadline = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
         quiescenceDeadline.CancelAfter(_quiescenceTimeout);
@@ -278,7 +304,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                 return await RestoreAfterAbortAsync(session, quiescenceError).ConfigureAwait(false);
             }
 
-            if (_networkPolicy == RuntimeShutdownNetworkPolicy.PreserveCurrentState)
+            if (_networkPolicy == RuntimeShutdownNetworkPolicy.PreserveCurrentState && !disableNetwork)
             {
                 if (callerToken.IsCancellationRequested)
                 {
@@ -292,6 +318,10 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             try
             {
                 NetworkIntent intent = _shutdownIntentFactory();
+                if (disableNetwork)
+                {
+                    intent = NetworkIntent.Shutdown(ClashSharpMode.Disabled, false, intent.MixedPort);
+                }
                 networkResult = await _network
                     .ApplyShutdownAsync(intent, admissionLease, callerToken)
                     .ConfigureAwait(false);

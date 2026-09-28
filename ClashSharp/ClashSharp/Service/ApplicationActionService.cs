@@ -1,9 +1,8 @@
 using System;
 using System.Globalization;
-using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
-using ClashSharp.ApplicationModel.Hosting;
+using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Security;
@@ -34,7 +33,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly Func<string, string> _getString;
     private readonly ApplicationLifecycleService _lifecycle;
 
-    private readonly IApplicationShutdownCoordinator _shutdown;
+    private readonly RuntimeLifecycleCoordinator _shutdown;
     private readonly StartupLaunchService _startupLaunch;
     private readonly StartupSettingsCoordinator _startupSettings;
     private readonly ConnectionSamplingSettingsCoordinator _samplingSettings;
@@ -50,7 +49,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         Action<string, string, string, string?> appendLog,
         Func<string, string> getString,
         ApplicationLifecycleService lifecycle,
-        IApplicationShutdownCoordinator shutdown,
+        RuntimeLifecycleCoordinator shutdown,
         StartupLaunchService startupLaunch,
         StartupSettingsCoordinator startupSettings,
         ConnectionSamplingSettingsCoordinator samplingSettings,
@@ -293,53 +292,21 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     }
 
     /// <summary>
-    /// Drains all runtime producers and mutation admission before deleting LocalData, then requests
-    /// a process restart so repositories and generation-bound services are never reused after deletion.
+    /// Hands data removal to the outer lifetime before any destructive work starts.
     /// </summary>
-    internal async Task ClearAllDataAndRestartAsync(CancellationToken cancellationToken)
+    internal Task ClearAllDataAndRestartAsync(CancellationToken cancellationToken)
     {
-        await _shutdown.StopAsync(cancellationToken).ConfigureAwait(false);
-        Exception? clearFailure = null;
-        try
+        cancellationToken.ThrowIfCancellationRequested();
+        ApplicationDataClearOperation maintenance = new(
+            _shutdown.PrepareDataRemovalAsync,
+            () => AppDataMaintenanceService.Instance.ClearHostDataAfterRuntimeShutdown(CancellationToken.None),
+            AppDataPathService.ResolveLocalDataDirectory());
+        if (!_lifecycle.TryRequest(ApplicationLifetimeRequest.Restart("clear-all-data", maintenance)))
         {
-            // Shutdown has crossed its terminal commit point. Finish the destructive operation
-            // without caller cancellation so the current process cannot continue half-cleared.
-            AppDataMaintenanceService.Instance.ClearDataAfterRuntimeShutdown(
-                CancellationToken.None,
-                useTerminalSettingsAdmission: true);
-        }
-        catch (Exception exception)
-        {
-            clearFailure = exception;
-        }
-        Exception? restartFailure = null;
-        try
-        {
-            if (!_lifecycle.RequestRestart("clear-all-data"))
-            {
-                restartFailure = new InvalidOperationException(
-                    "Application restart could not be requested after clearing local data.");
-            }
-        }
-        catch (Exception exception)
-        {
-            restartFailure = exception;
+            throw new InvalidOperationException("Another application exit or restart is already in progress.");
         }
 
-        if (clearFailure is not null && restartFailure is not null)
-        {
-            throw new AggregateException(clearFailure, restartFailure);
-        }
-
-        if (restartFailure is not null)
-        {
-            ExceptionDispatchInfo.Capture(restartFailure).Throw();
-        }
-
-        if (clearFailure is not null)
-        {
-            ExceptionDispatchInfo.Capture(clearFailure).Throw();
-        }
+        return Task.CompletedTask;
     }
 
     private static bool ParseBoolean(string value)

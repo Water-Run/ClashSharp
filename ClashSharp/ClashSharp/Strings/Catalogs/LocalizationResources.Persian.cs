@@ -577,6 +577,7 @@ internal static partial class LocalizationResources
             ["Maintenance.RuntimeCleanupFailed"] = "پاک‌سازی وضعیت زمان اجرا پیش از نگهداری داده ناموفق بود.",
             ["Maintenance.FileDeleteFailed"] = "پرونده داده محلی حذف نشد.",
             ["Maintenance.DirectoryDeleteFailed"] = "پوشه داده محلی حذف نشد.",
+            ["Maintenance.ClearIncomplete"] = "برخی داده‌های محلی پاک نشدند. برنامه بسته می‌شود و داده‌های باقی‌مانده حفظ می‌شوند. برای تلاش دوباره، برنامه را مجدداً باز کنید.",
             ["ConnectionSampling.Failed"] = "نمونه‌برداری پس‌زمینه اتصال ناموفق بود.",
             ["ConnectionSampling.Recovered"] = "نمونه‌برداری پس‌زمینه اتصال بازیابی شد.",
             ["ConnectionSampling.RecoveredDetail.Format"] = "{0:N0} ردیف.",

@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Lifecycle;
 
 namespace ClashSharp.ApplicationModel.Hosting;
@@ -109,10 +110,10 @@ public sealed class ProcessLifetimeRunner
 
             if (_host is null)
             {
-                return request.Handoff is null
+                return request.Handoff is null && request.Maintenance is null
                     ? Task.CompletedTask
                     : Task.FromException(new InvalidOperationException(
-                        "A durable lifetime handoff cannot be processed without an attached host."));
+                        "A durable lifetime handoff or data maintenance cannot be processed without an attached host."));
             }
 
             IApplicationHost host = _host;
@@ -195,10 +196,42 @@ public sealed class ProcessLifetimeRunner
         IApplicationLifetimeHandoff? handoff = request.Handoff;
         if (handoff is null)
         {
+            if (request.Maintenance is not null)
+            {
+                await request.Maintenance.PrepareShutdownAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             await host.StopAsync(cancellationToken).ConfigureAwait(false);
             MarkAttachedHostStopped(host);
             attempt.BeginDisposal();
-            await DisposeAndReleaseOwnershipAsync(host, attempt).ConfigureAwait(false);
+            Exception? maintenanceFailure = null;
+            try
+            {
+                if (request.Maintenance is not null)
+                {
+                    await request.Maintenance.ClearHostDataAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                maintenanceFailure = exception;
+            }
+
+            try
+            {
+                await DisposeAndReleaseOwnershipAsync(host, attempt).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (maintenanceFailure is not null
+                && !ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                throw new AggregateException(maintenanceFailure, exception);
+            }
+
+            if (maintenanceFailure is not null)
+            {
+                ExceptionDispatchInfo.Capture(maintenanceFailure).Throw();
+            }
+
             return;
         }
 

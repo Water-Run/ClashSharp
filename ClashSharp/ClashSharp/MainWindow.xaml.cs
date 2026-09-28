@@ -94,6 +94,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     /// <summary>True while a window or tray exit request is owned by the App lifetime.</summary>
     private bool _exitRequested;
+    private bool _dataMaintenanceActive;
 
     /// <summary>Allows the outer lifetime owner to close the window after shutdown completes.</summary>
     private bool _applicationExitApproved;
@@ -339,7 +340,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private async void OnNavigationRequested(ShellNavigationRequest request)
     {
         MainWindowComposition.Runtime? runtime = _runtime;
-        if (runtime is null)
+        if (runtime is null || _dataMaintenanceActive)
         {
             return;
         }
@@ -519,7 +520,10 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         {
             try
             {
-                await Runtime.RefreshMihomoStatusAsync(cancellationToken);
+                if (!_dataMaintenanceActive)
+                {
+                    await Runtime.RefreshMihomoStatusAsync(cancellationToken);
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -748,6 +752,11 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     private void RecoverTrayAfterShellRestart()
     {
+        if (_dataMaintenanceActive)
+        {
+            return;
+        }
+
         _ = SystemTrayAvailabilityPolicy.TryRefreshAndPreserveReachability(
             () => _trayService?.TryEnsureAvailable() == true,
             _hiddenToTray,
@@ -756,6 +765,11 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     private void RefreshTrayMenuPreservingReachability()
     {
+        if (_dataMaintenanceActive)
+        {
+            return;
+        }
+
         _ = SystemTrayAvailabilityPolicy.TryRefreshAndPreserveReachability(
             () => _trayService?.RefreshMenu() == true,
             _hiddenToTray,
@@ -787,6 +801,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     {
         MainWindowComposition.Runtime? runtime = _runtime;
         if (!_runtimeReady
+            || _dataMaintenanceActive
             || runtime is null
             || _windowLifetime.IsCancellationRequested)
         {
@@ -830,6 +845,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     {
         MainWindowComposition.Runtime? runtime = _runtime;
         if (!_runtimeReady
+            || _dataMaintenanceActive
             || runtime is null
             || _windowLifetime.IsCancellationRequested)
         {
@@ -903,13 +919,48 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     private void RequestApplicationExit(string source)
     {
+        if (_dataMaintenanceActive)
+        {
+            return;
+        }
+
         Runtime.ViewModel.IsExitFailureVisible = false;
         _exitRequested = _applicationLifecycle.RequestExit(source);
+    }
+
+    /// <summary>Keeps the process-owned clearing operation visible and prevents new page or tray work.</summary>
+    internal void BeginDataMaintenance(string title)
+    {
+        _dataMaintenanceActive = true;
+        _exitRequested = true;
+        NavView.IsEnabled = false;
+        NavView.Visibility = Visibility.Collapsed;
+        StartupStatusText.Text = title;
+        StartupDiagnosticText.Visibility = Visibility.Collapsed;
+        StartupProgressRing.Visibility = Visibility.Visible;
+        StartupProgressRing.IsActive = true;
+        StartupOverlay.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Stops the busy indicator while the final maintenance failure dialog is shown.</summary>
+    internal void StopDataMaintenanceProgress()
+    {
+        StartupProgressRing.IsActive = false;
+        StartupProgressRing.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>Re-enables window and tray exit commands after outer shutdown could not prepare disposal.</summary>
     internal void NotifyExitRequestFailed()
     {
+        if (_dataMaintenanceActive)
+        {
+            _dataMaintenanceActive = false;
+            StartupOverlay.Visibility = Visibility.Collapsed;
+            StartupProgressRing.IsActive = false;
+            NavView.Visibility = Visibility.Visible;
+            NavView.IsEnabled = _runtimeReady;
+        }
+
         _exitRequested = false;
         RefreshTrayMenuPreservingReachability();
         if (_runtime is not null)

@@ -121,6 +121,18 @@ internal sealed partial class AppDataMaintenanceService
         CancellationToken cancellationToken,
         bool useTerminalSettingsAdmission = false)
     {
+        ClearHostDataAfterRuntimeShutdown(cancellationToken, useTerminalSettingsAdmission);
+        TryClearLogStorage();
+        _localData.ClearAll();
+        _logStorage.ResetAfterDataDeletion();
+        _profiles.ResetAfterDataDeletion();
+    }
+
+    /// <summary>Deletes only preferences and private credentials while their stopped host still owns them.</summary>
+    internal void ClearHostDataAfterRuntimeShutdown(
+        CancellationToken cancellationToken,
+        bool useTerminalSettingsAdmission = true)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         if (useTerminalSettingsAdmission && _settings is ITerminalShutdownSettingsMaintenance terminalSettings)
         {
@@ -134,10 +146,6 @@ internal sealed partial class AppDataMaintenanceService
         // Preference deletion has started. Finish the owned cleanup even if the page
         // cancels while observing the reset; the runtime is already stopped.
         _credentials.ClearAll(useTerminalSettingsAdmission, CancellationToken.None);
-        TryClearLogStorage();
-        _localData.ClearAll();
-        _logStorage.ResetAfterDataDeletion();
-        _profiles.ResetAfterDataDeletion();
     }
 
     /// <summary>Clears log storage when the database can be opened before file deletion.</summary>

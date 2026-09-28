@@ -142,7 +142,7 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<LogStorageService>().AppendLog,
                 provider.GetRequiredService<LocalizationService>().GetString,
                 provider.GetRequiredService<ApplicationLifecycleService>(),
-                provider.GetRequiredService<IApplicationShutdownCoordinator>(),
+                provider.GetRequiredService<RuntimeLifecycleCoordinator>(),
                 provider.GetRequiredService<StartupLaunchService>(),
                 provider.GetRequiredService<StartupSettingsCoordinator>(),
                 provider.GetRequiredService<ConnectionSamplingSettingsCoordinator>(),

@@ -577,6 +577,7 @@ internal static partial class LocalizationResources
             ["Maintenance.RuntimeCleanupFailed"] = "Der Laufzeitzustand konnte vor der Datenwartung nicht bereinigt werden.",
             ["Maintenance.FileDeleteFailed"] = "Die lokale Datendatei konnte nicht gelöscht werden.",
             ["Maintenance.DirectoryDeleteFailed"] = "Das lokale Datenverzeichnis konnte nicht gelöscht werden.",
+            ["Maintenance.ClearIncomplete"] = "Einige lokale Daten konnten nicht gelöscht werden. Die App wird geschlossen; verbleibende Daten werden beibehalten. Öffnen Sie die App erneut, um es noch einmal zu versuchen.",
             ["ConnectionSampling.Failed"] = "Die Verbindungsabtastung im Hintergrund ist fehlgeschlagen.",
             ["ConnectionSampling.Recovered"] = "Die Verbindungsabtastung im Hintergrund wurde wiederhergestellt.",
             ["ConnectionSampling.RecoveredDetail.Format"] = "{0:N0} Zeilen geschrieben.",

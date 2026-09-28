@@ -577,6 +577,7 @@ internal static partial class LocalizationResources
             ["Maintenance.RuntimeCleanupFailed"] = "清理執行階段狀態失敗。",
             ["Maintenance.FileDeleteFailed"] = "本機資料檔案無法刪除。",
             ["Maintenance.DirectoryDeleteFailed"] = "本機資料目錄無法刪除。",
+            ["Maintenance.ClearIncomplete"] = "未能清除全部本機資料。應用程式將關閉，未刪除的資料會保留。請重新開啟應用程式後再試。",
             ["ConnectionSampling.Failed"] = "背景連線採樣失敗。",
             ["ConnectionSampling.Recovered"] = "背景連線採樣已復原。",
             ["ConnectionSampling.RecoveredDetail.Format"] = "已寫入 {0:N0} 筆。",

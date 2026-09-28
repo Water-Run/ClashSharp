@@ -554,6 +554,97 @@ public sealed class ApplicationLifetimeRequestTests
         Assert.Throws<ArgumentException>(() => ApplicationLifetimeRequest.Exit("trigger", handoff));
     }
 
+    [Fact]
+    public async Task Maintenance_DeletesPreferencesAfterStopAndDefersFilesUntilProcessResourcesClose()
+    {
+        List<string> trace = [];
+        ProcessLifetimeRunner lifetime = new();
+        lifetime.AttachHost(new FakeHost(trace));
+        RecordingMaintenance maintenance = new(trace);
+        ApplicationLifetimeRequest request = ApplicationLifetimeRequest.Restart("clear", maintenance);
+
+        await lifetime.ProcessAsync(request, CancellationToken.None);
+        await lifetime.ProcessAsync(request, CancellationToken.None);
+
+        Assert.Equal(["maintenance.prepare", "host-stop-enter", "host-stop-unwound", "maintenance.preferences", "host-dispose"], trace);
+        Assert.False(lifetime.HasAttachedHost);
+        Assert.DoesNotContain("maintenance.files", trace);
+    }
+
+    [Fact]
+    public async Task Maintenance_PreparationFailurePreservesHostAndAllData()
+    {
+        List<string> trace = [];
+        ProcessLifetimeRunner lifetime = new();
+        lifetime.AttachHost(new FakeHost(trace));
+        RecordingMaintenance maintenance = new(trace) { FailPreparation = true };
+        await Assert.ThrowsAsync<IOException>(() => lifetime.ProcessAsync(ApplicationLifetimeRequest.Restart("clear", maintenance), CancellationToken.None));
+        Assert.Equal(["maintenance.prepare"], trace);
+        Assert.True(lifetime.CanResumeAttachedHost);
+    }
+
+    [Fact]
+    public async Task Maintenance_CredentialFailureStillDisposesTheStoppedHostAndCannotResume()
+    {
+        List<string> trace = [];
+        ProcessLifetimeRunner lifetime = new();
+        lifetime.AttachHost(new FakeHost(trace));
+        RecordingMaintenance maintenance = new(trace) { FailPreferences = true };
+        ApplicationLifetimeRequest request = ApplicationLifetimeRequest.Restart("clear", maintenance);
+        await Assert.ThrowsAsync<IOException>(() => lifetime.ProcessAsync(request, CancellationToken.None));
+        await Assert.ThrowsAsync<IOException>(() => lifetime.ProcessAsync(request, CancellationToken.None));
+        Assert.False(lifetime.HasAttachedHost);
+        Assert.False(lifetime.CanResumeAttachedHost);
+        Assert.Equal(1, trace.Count(row => row == "host-dispose"));
+        Assert.Equal(1, trace.Count(row => row == "maintenance.preferences"));
+        Assert.DoesNotContain("maintenance.files", trace);
+    }
+
+    [Fact]
+    public async Task Maintenance_RejectedRequestDoesNotPrepareOrDeleteData()
+    {
+        List<string> trace = [];
+        ApplicationLifetimeRequestChannel channel = new();
+        Assert.True(channel.TryRequest(ApplicationLifetimeRequest.Exit("already-exiting")));
+        Assert.False(channel.TryRequest(ApplicationLifetimeRequest.Restart("clear", new RecordingMaintenance(trace))));
+        Assert.Empty(trace);
+        Assert.Equal("already-exiting", (await channel.ReadAsync(CancellationToken.None)).Source);
+    }
+
+    [Fact]
+    public async Task Maintenance_WithoutAnAttachedHostCannotRun()
+    {
+        List<string> trace = [];
+        ProcessLifetimeRunner lifetime = new();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => lifetime.ProcessAsync(
+            ApplicationLifetimeRequest.Restart("clear", new RecordingMaintenance(trace)), CancellationToken.None));
+        Assert.Empty(trace);
+    }
+
+    private sealed class RecordingMaintenance(List<string> trace) : IApplicationLifetimeMaintenance
+    {
+        public bool FailPreparation { get; init; }
+        public bool FailPreferences { get; init; }
+
+        public Task PrepareShutdownAsync(CancellationToken cancellationToken)
+        {
+            trace.Add("maintenance.prepare");
+            return FailPreparation ? Task.FromException(new IOException("runtime not stopped")) : Task.CompletedTask;
+        }
+
+        public Task ClearHostDataAsync(CancellationToken cancellationToken)
+        {
+            trace.Add("maintenance.preferences");
+            return FailPreferences ? Task.FromException(new IOException("credential deletion failed")) : Task.CompletedTask;
+        }
+
+        public Task ClearLocalFilesAsync(CancellationToken cancellationToken)
+        {
+            trace.Add("maintenance.files");
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class FakeHost(List<string> trace) : IApplicationHost
     {
         public Task<StartupStepResult> StartAsync(AppLaunchRequest request, CancellationToken cancellationToken)

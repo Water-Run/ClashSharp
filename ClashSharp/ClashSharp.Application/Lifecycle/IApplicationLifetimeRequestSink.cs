@@ -64,10 +64,12 @@ public sealed class ApplicationLifetimeRequest
     /// <param name="kind">Requested process-level action.</param>
     /// <param name="source">Stable diagnostic source of the request.</param>
     /// <param name="handoff">Optional durable producer handoff that must release before shutdown.</param>
+    /// <param name="maintenance">Optional destructive maintenance owned by a restart request.</param>
     public ApplicationLifetimeRequest(
         ApplicationLifetimeRequestKind kind,
         string source,
-        IApplicationLifetimeHandoff? handoff = null)
+        IApplicationLifetimeHandoff? handoff = null,
+        IApplicationLifetimeMaintenance? maintenance = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -80,6 +82,11 @@ public sealed class ApplicationLifetimeRequest
             throw new ArgumentException("Only exit requests can carry a durable handoff.", nameof(handoff));
         }
 
+        if (maintenance is not null && kind != ApplicationLifetimeRequestKind.Restart)
+        {
+            throw new ArgumentException("Only restart requests can carry data maintenance.", nameof(maintenance));
+        }
+
         if (handoff is not null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(handoff.IdempotencyKey, nameof(handoff));
@@ -88,6 +95,7 @@ public sealed class ApplicationLifetimeRequest
         Kind = kind;
         Source = source;
         Handoff = handoff;
+        Maintenance = maintenance;
         _terminalStatePersistence = (int)(handoff is null
             ? ApplicationLifetimeTerminalStatePersistence.NotApplicable
             : ApplicationLifetimeTerminalStatePersistence.Unconfirmed);
@@ -101,6 +109,9 @@ public sealed class ApplicationLifetimeRequest
 
     /// <summary>Gets the optional durable producer handoff.</summary>
     public IApplicationLifetimeHandoff? Handoff { get; }
+
+    /// <summary>Gets data maintenance that must complete before a replacement process may start.</summary>
+    public IApplicationLifetimeMaintenance? Maintenance { get; }
 
     /// <summary>Gets whether the durable handoff has confirmed a terminal persistence outcome.</summary>
     public ApplicationLifetimeTerminalStatePersistence TerminalStatePersistence =>
@@ -122,6 +133,15 @@ public sealed class ApplicationLifetimeRequest
     /// <summary>Creates a restart request.</summary>
     public static ApplicationLifetimeRequest Restart(string source) =>
         Create(ApplicationLifetimeRequestKind.Restart, source, null);
+
+    /// <summary>Creates a restart that first removes user data under process-lifetime ownership.</summary>
+    public static ApplicationLifetimeRequest Restart(
+        string source,
+        IApplicationLifetimeMaintenance maintenance)
+    {
+        ArgumentNullException.ThrowIfNull(maintenance);
+        return new ApplicationLifetimeRequest(ApplicationLifetimeRequestKind.Restart, source, maintenance: maintenance);
+    }
 
     private static ApplicationLifetimeRequest Create(
         ApplicationLifetimeRequestKind kind,

@@ -1,16 +1,20 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Hosting;
 using ClashSharp.Hosting.Startup;
 using ClashSharp.Presentation.Composition;
+using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Service;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace ClashSharp;
 
@@ -423,15 +427,25 @@ public partial class App : Microsoft.UI.Xaml.Application
         {
             TryLogForcedShutdown(request.Source);
         }
-        else
+        else if (request.Maintenance is null)
         {
             CompleteRecoveryWatchdogNormalExit();
         }
 
         _startupCompletion.Abandon();
-        await CompleteStartupDiagnosticsAsync().ConfigureAwait(false);
+        Exception? maintenanceFailure = null;
+        if (hostReleased && request.Maintenance is not null)
+        {
+            maintenanceFailure = await CompleteDataMaintenanceAsync(request.Maintenance, null)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await CompleteStartupDiagnosticsAsync().ConfigureAwait(false);
+        }
+
         ReleasePrimaryInstanceOwnership();
-        if (hostReleased && executablePath is not null)
+        if (hostReleased && maintenanceFailure is null && executablePath is not null)
         {
             TryStartRestartProcess(executablePath);
         }
@@ -458,6 +472,10 @@ public partial class App : Microsoft.UI.Xaml.Application
             StartupCompletionFailurePolicy.IsRecoverable(exception))
         {
             TryLogTerminalHostDisposalFailure(exception, request);
+            if (request.Maintenance is not null)
+            {
+                throw;
+            }
         }
 
         return !_lifetimeRunner.HasAttachedHost;
@@ -585,6 +603,16 @@ public partial class App : Microsoft.UI.Xaml.Application
         ApplicationLifetimeRequest? lifetimeRequest)
     {
         string? executablePath = restart ? ResolveExecutablePath() : null;
+        IApplicationLifetimeMaintenance? maintenance = lifetimeRequest?.Maintenance;
+        string? maintenanceTitle = maintenance is null ? null : LocalizationService.Instance.GetString("Settings.ClearAllData.Title");
+        string? maintenanceMessage = maintenance is null ? null : LocalizationService.Instance.GetString("Maintenance.ClearIncomplete");
+        string? maintenanceClose = maintenance is null ? null : LocalizationService.Instance.GetString("Command.Close");
+        Exception? maintenanceFailure = null;
+        if (maintenance is not null && _mainWindow is MainWindow maintenanceWindow)
+        {
+            maintenanceWindow.BeginDataMaintenance(maintenanceTitle!);
+        }
+
         try
         {
             if (lifetimeRequest is null)
@@ -601,6 +629,16 @@ public partial class App : Microsoft.UI.Xaml.Application
         {
             Debug.WriteLine(StartupExceptionDiagnostics.FormatDebugMessage(exception));
             TryLogTerminalHostDisposalFailure(exception, lifetimeRequest);
+            if (maintenance is not null)
+            {
+                maintenanceFailure = exception;
+            }
+        }
+        catch (Exception exception) when (maintenance is not null
+            && !_lifetimeRunner.HasAttachedHost
+            && !ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            maintenanceFailure = exception;
         }
         catch (Exception exception) when (
             StartupCompletionFailurePolicy.IsRecoverable(exception))
@@ -616,11 +654,37 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
 
         _startupCompletion.Abandon();
-        CompleteRecoveryWatchdogNormalExit();
-        await CompleteStartupDiagnosticsAsync();
+        if (maintenance is null)
+        {
+            CompleteRecoveryWatchdogNormalExit();
+            await CompleteStartupDiagnosticsAsync();
+        }
+        else
+        {
+            maintenanceFailure = await CompleteDataMaintenanceAsync(maintenance, maintenanceFailure);
+            if (maintenanceFailure is not null
+                && _mainWindow?.Content is FrameworkElement { XamlRoot: not null } root)
+            {
+                if (_mainWindow is MainWindow failedWindow)
+                {
+                    failedWindow.StopDataMaintenanceProgress();
+                }
+
+                ThemedContentDialog dialog = new()
+                {
+                    Title = maintenanceTitle,
+                    Content = maintenanceMessage,
+                    CloseButtonText = maintenanceClose,
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = root.XamlRoot,
+                };
+                await dialog.ShowManagedAsync();
+            }
+        }
+
         ReleasePrimaryInstanceOwnership();
 
-        if (executablePath is not null)
+        if (executablePath is not null && maintenanceFailure is null)
         {
             TryStartRestartProcess(executablePath);
         }
@@ -643,11 +707,58 @@ public partial class App : Microsoft.UI.Xaml.Application
         Exit();
     }
 
-    private async Task CompleteStartupDiagnosticsAsync()
+    private async Task<Exception?> CompleteDataMaintenanceAsync(
+        IApplicationLifetimeMaintenance maintenance,
+        Exception? priorFailure)
+    {
+        Exception? failure = priorFailure;
+        try
+        {
+            CompleteRecoveryWatchdogNormalExit();
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            failure ??= exception;
+        }
+
+        try
+        {
+            if (!await CompleteStartupDiagnosticsAsync())
+            {
+                failure ??= new IOException("The startup diagnostic writer did not finish before data removal.");
+            }
+        }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            failure ??= exception;
+        }
+
+        if (failure is null)
+        {
+            try
+            {
+                await maintenance.ClearLocalFilesAsync(CancellationToken.None);
+            }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                failure = exception;
+            }
+        }
+
+        if (failure is not null)
+        {
+            Debug.WriteLine(StartupExceptionDiagnostics.FormatDebugMessage(failure));
+        }
+
+        return failure;
+    }
+
+    private async Task<bool> CompleteStartupDiagnosticsAsync()
     {
         try
         {
             await _startupDiagnostics.DisposeAsync().ConfigureAwait(false);
+            return true;
         }
         catch (Exception exception) when (
             StartupCompletionFailurePolicy.IsRecoverable(exception))
@@ -657,6 +768,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                 : "could not be persisted";
             Debug.WriteLine(
                 $"ClashSharp startup diagnostics {outcome} ({exception.GetType().FullName}).");
+            return false;
         }
     }
 

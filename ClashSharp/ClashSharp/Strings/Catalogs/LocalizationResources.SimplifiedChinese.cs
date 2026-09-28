@@ -577,6 +577,7 @@ internal static partial class LocalizationResources
             ["Maintenance.RuntimeCleanupFailed"] = "清理运行时状态失败。",
             ["Maintenance.FileDeleteFailed"] = "本地数据文件无法删除。",
             ["Maintenance.DirectoryDeleteFailed"] = "本地数据目录无法删除。",
+            ["Maintenance.ClearIncomplete"] = "未能清除全部本地数据。应用将关闭，未删除的数据会保留。请重新打开应用后重试。",
             ["ConnectionSampling.Failed"] = "后台连接采样失败。",
             ["ConnectionSampling.Recovered"] = "后台连接采样已恢复。",
             ["ConnectionSampling.RecoveredDetail.Format"] = "已写入 {0:N0} 行。",
