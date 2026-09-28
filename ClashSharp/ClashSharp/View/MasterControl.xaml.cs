@@ -602,7 +602,7 @@ public sealed partial class MasterControl : Page
         StackPanel panel = new()
         {
             Spacing = 10,
-            MaxWidth = editorWidth,
+            Width = editorWidth,
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         panel.Children.Add(new TextBlock
@@ -677,7 +677,30 @@ public sealed partial class MasterControl : Page
         };
         dialog.Resources["ContentDialogMaxWidth"] = editorWidth + 48d;
 
-        if (await dialog.ShowManagedAsync(cancellationToken) is not ContentDialogResult.Primary)
+        void ResizeEditor(XamlRoot sender, XamlRootChangedEventArgs args)
+        {
+            // Virtualized rows and filtered results must not move the dialog or its controls.
+            double width = CalculateInfoTilesEditorWidth(dialogRoot);
+            if (panel.Width != width)
+            {
+                panel.Width = width;
+                dialog.Resources["ContentDialogMaxWidth"] = width + 48d;
+            }
+            optionList.MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot);
+        }
+
+        ContentDialogResult result;
+        dialogRoot.Changed += ResizeEditor;
+        try
+        {
+            result = await dialog.ShowManagedAsync(cancellationToken);
+        }
+        finally
+        {
+            dialogRoot.Changed -= ResizeEditor;
+        }
+
+        if (result is not ContentDialogResult.Primary)
         {
             return;
         }
