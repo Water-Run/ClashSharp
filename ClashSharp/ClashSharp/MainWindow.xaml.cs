@@ -15,9 +15,13 @@ using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Navigation;
 using ClashSharp.Service;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
+using Windows.UI.Core;
 using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
 
 namespace ClashSharp;
@@ -198,6 +202,17 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         StartupDiagnosticText.Text = diagnostic;
         StartupDiagnosticText.Visibility = Visibility.Visible;
         PrimaryWindowActivation.BringToFront(this);
+    }
+
+    private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        if (args.Key == VirtualKey.Space &&
+            InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu)
+                .HasFlag(CoreVirtualKeyStates.Down))
+        {
+            // Alt+Space belongs to the native window menu, not the focused control.
+            args.Handled = true;
+        }
     }
 
     private void InitializeStartupStatus()
