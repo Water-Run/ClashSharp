@@ -411,6 +411,10 @@ public sealed class MihomoCoreServiceTests
                     EnvironmentVariables: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
                         ["SystemRoot"] = Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                        // The probe is framework-dependent, including on hosts with a private .NET installation.
+                        ["DOTNET_ROOT"] = Path.GetFullPath(Path.Combine(
+                            System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+                            "..", "..", "..")),
                     }));
         }
         finally
@@ -422,14 +426,18 @@ public sealed class MihomoCoreServiceTests
         Assert.NotNull(launched);
         using (launched)
         {
-            string output = await launched.StandardOutput!.ReadToEndAsync();
+            Task<string> outputTask = launched.StandardOutput!.ReadToEndAsync();
+            Task<string> errorTask = launched.StandardError!.ReadToEndAsync();
             await launched.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            string output = await outputTask;
+            string error = await errorTask;
+            Assert.True(launched.Process.ExitCode == 0, $"Probe failed ({launched.Process.ExitCode}): {error}");
+            Assert.Empty(error);
 
             string[] values = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
                 .Select(line => Encoding.UTF8.GetString(Convert.FromBase64String(line[4..])))
                 .ToArray();
             Assert.Equal(["<missing>", "<missing>"], values);
-            Assert.Equal(0, launched.Process.ExitCode);
         }
 
     }

@@ -34,13 +34,13 @@
           </TextBlock>
         </StackPanel>
         <TextBlock Grid.Column="2" Margin="16,0,0,0" VerticalAlignment="Center">
-          <Hyperlink Command="{Binding RefreshCommand}"
+          <Hyperlink Click="OnRefreshClicked"
                      AutomationProperties.Name="重新检查安装状态"
                      AutomationProperties.HelpText="重新读取此电脑上的安装状态。">重新检查</Hyperlink>
         </TextBlock>
       </Grid>
     </Border>
-    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+    <ScrollViewer x:Name="MainContent" Grid.Row="1" VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled" Focusable="False">
       <StackPanel Margin="24,24,24,20">
         <StackPanel AutomationProperties.Name="ClashSharp 安装状态">

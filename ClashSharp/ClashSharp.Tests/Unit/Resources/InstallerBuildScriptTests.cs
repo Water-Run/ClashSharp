@@ -434,8 +434,8 @@ public sealed class InstallerBuildScriptTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            string gitPath = Path.Combine(directory.FullName, ".git");
-            if (Directory.Exists(gitPath) || File.Exists(gitPath))
+            if (File.Exists(Path.Combine(directory.FullName, "global.json"))
+                && File.Exists(Path.Combine(directory.FullName, "ClashSharp", "ClashSharp.slnx")))
             {
                 return directory.FullName;
             }

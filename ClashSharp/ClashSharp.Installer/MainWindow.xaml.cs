@@ -20,6 +20,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -48,7 +49,6 @@ public partial class MainWindow : Window
         }
 
         _closeRequested = true;
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _viewModel.RequestCancellation();
     }
 
@@ -56,6 +56,11 @@ public partial class MainWindow : Window
         object? sender,
         PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(InstallerShellViewModel.IsBusy) && IsLoaded)
+        {
+            MainContent.ScrollToTop();
+        }
+
         if (!_closeRequested
             || e.PropertyName != nameof(InstallerShellViewModel.IsBusy)
             || _viewModel.IsBusy)
@@ -79,6 +84,15 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e) => DisposeViewModel();
 
     private void OnCloseClicked(object sender, RoutedEventArgs e) => Close();
+
+    private async void OnRefreshClicked(object sender, RoutedEventArgs e)
+    {
+        if (IsLoaded && !_viewModelDisposed)
+        {
+            // Keep the link focused while the command owns its single-flight gate.
+            await _viewModel.RefreshCommand.ExecuteAsync();
+        }
+    }
 
     private void OnOwnerTransferConfirmationVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
     {

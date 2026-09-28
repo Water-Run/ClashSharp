@@ -63,6 +63,10 @@
       <Trigger Property="IsEnabled" Value="False">
         <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
       </Trigger>
+      <DataTrigger Binding="{Binding IsBusy}" Value="True">
+        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </DataTrigger>
     </Style.Triggers>
   </Style>
 
