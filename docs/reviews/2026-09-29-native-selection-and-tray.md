@@ -119,3 +119,20 @@ c1b7794 中仍复现两个问题：德文深色下最后一项已取消、保存
 `Verify-24e9bd4-Native.py` 校验通过，结论为 `Accepted: false`；单选搜索恢复和原生圆点语义通过，方向键滚动单独登记为未通过。后续在原生 RadioButton 获得键盘或程序化焦点时调用 `StartBringIntoView`，请求完整显示该行且不播放滚动动画；鼠标点击不触发额外滚动，选择和按键仍由原生控件管理。参考 [Microsoft StartBringIntoView](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.startbringintoview?view=windows-app-sdk-1.8) 与 [RadioButtons 源码](https://github.com/microsoft/microsoft-ui-xaml/blob/main/controls/dev/RadioButtons/RadioButtons.cpp)。
 
 该滚动修正通过 18 项目 Release x64 构建（36.07 秒，零警告、零错误）、格式检查及 463 项相关回归，待新候选实机复验。完整矩阵保持 **84 通过、38 部分、19 待测**，不宣称全项目生产验收完成。
+
+## 6fc3b27 方向键滚动通过与焦点框边界修正
+
+6fc3b27 于 20:58 UTC 在服务器构建完成，21:01 UTC 通过原生安装器安装。此前正常卸载 24e9bd4，包、服务及六处自有目录均为空；安装后程序集与包内载荷 SHA-256 均为 `6B3785F49E588856BC31E1901C747ACBF7D78B0E39FF77550C81FEFA9A5FD205`，仅验收账户注册，三项签名有效，仍为验收证书。[CI 36482045762](https://github.com/Water-Run/ClashSharp/actions/runs/36482045762) 成功，四份 TRX 独立核对为 **5,661 通过、零失败、零跳过**。本地格式检查以 `Platform=x64` 加载全部 18 项目，1,596 文件无需修改，没有加载警告。
+
+中文浅色下，Tab、Space 和方向键正常选择；↓ 到第六项自动滚动并完整显示该行。继续向下选择第七、第八及最后的系统时间条件均可见，End 只滚动列表而不改选；无匹配搜索、清空、Tab 返回末项后圆点与焦点恢复。取消选择器及整个草稿后业务列表为空。德语深色最小窗口下，第五项说明中的末行 `erreicht.` 已完整显示，第六项随方向键自动滚入视野，原有视野外选择问题通过。
+
+反向滚动仍暴露一个视觉问题：从第六项 ↑ 返回首项后，内容完整，但原生焦点框上边缘被裁切。中文 21:03:21、21:03:39 和德语深色 21:11:19、21:12:42 的稳定截图均复现，因此本轮不记录为全部选择控件验收通过。
+
+21:13 UTC 正常退出，应用、内核、看门狗和 TUN 均为空，系统代理关闭；两个数据库完整，65 条日志无警告或错误，触发器为零。闭合备份 17 文件、293,593 字节。未启动内核，也未恢复业务夹具。
+
+| 6fc3b27 证据 | SHA-256 |
+| --- | --- |
+| `evidence-6fc3b27-native-radio-scroll.zip`，9 份 JSON | `8869BE088982693A5A60C0C4C0A86F5515E374ABBF7DD91113454F721EBFA0C3` |
+| `desktop-evidence-native-radio-scroll-20260928T211448Z.tar.gz`，63 张截图及对应操作 | `1D843DB1F6386CD46E7BE60CD852F72050C6F8C724E03E77C0C444B0081B1DCC` |
+
+`Verify-6fc3b27-Native.py` 校验通过，保留 `Accepted: false`。后续依据 [Microsoft FocusVisualMargin](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.frameworkelement.focusvisualmargin?view=windows-app-sdk-1.8) 的负边距语义，将原生焦点框伸出的范围纳入 `BringIntoViewOptions.TargetRect`，保留默认控件模板和键盘行为。修正通过全部 18 项目 Release x64 构建（33.90 秒，零警告、零错误）、x64 格式检查及 463 项相关回归，待新版服务器复验。完整矩阵仍为 **84 通过、38 部分、19 待测**。

@@ -6,6 +6,7 @@ using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Foundation;
 
 namespace ClashSharp.Components;
 
@@ -179,7 +180,19 @@ public sealed partial class SearchableOptionList : UserControl
         // RadioButtons moves arrow-key focus programmatically; keep the complete row in view.
         if (sender is RadioButton { FocusState: FocusState.Keyboard or FocusState.Programmatic } option)
         {
-            option.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+            // Native focus visuals extend outside the control's bounds.
+            Thickness margin = option.FocusVisualMargin;
+            double left = Math.Min(0, margin.Left);
+            double top = Math.Min(0, margin.Top);
+            option.StartBringIntoView(new BringIntoViewOptions
+            {
+                AnimationDesired = false,
+                TargetRect = new Rect(
+                    left,
+                    top,
+                    option.ActualWidth - left - Math.Min(0, margin.Right),
+                    option.ActualHeight - top - Math.Min(0, margin.Bottom)),
+            });
         }
     }
 
