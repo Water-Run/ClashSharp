@@ -964,7 +964,7 @@ public sealed partial class Settings : Page
         panel.Children.Add(button);
     }
 
-    /// <summary>Shows a two-step confirmation and restores all settings to defaults.</summary>
+    /// <summary>Confirms the effect of restoring all settings before changing them.</summary>
     private async void ResetAllSettingsButton_Click(object sender, RoutedEventArgs e)
     {
         await RunPageOperationAsync(async cancellationToken =>
@@ -972,10 +972,6 @@ public sealed partial class Settings : Page
             if (!await ConfirmAsync(
                     _getString("Settings.ResetAllSettings.Title"),
                     _getString("Settings.ResetAllSettings.Confirm"),
-                    _viewModel.ResetText, cancellationToken)
-                || !await ConfirmAsync(
-                    _getString("Settings.ResetAllSettings.SecondConfirm.Title"),
-                    _getString("Settings.ResetAllSettings.SecondConfirm"),
                     _viewModel.ResetText, cancellationToken))
             {
                 return;
@@ -986,7 +982,7 @@ public sealed partial class Settings : Page
         });
     }
 
-    /// <summary>Shows a three-step confirmation and clears all local application data.</summary>
+    /// <summary>Confirms permanent data removal and the ensuing application restart.</summary>
     private async void ClearAllDataButton_Click(object sender, RoutedEventArgs e)
     {
         await RunPageOperationAsync(async cancellationToken =>
@@ -994,15 +990,7 @@ public sealed partial class Settings : Page
             if (!await ConfirmAsync(
                     _getString("Settings.ClearAllData.Title"),
                     _getString("Settings.ClearAllData.Confirm"),
-                    _viewModel.CleanupText, cancellationToken)
-                || !await ConfirmAsync(
-                    _getString("Settings.ClearAllData.SecondConfirm.Title"),
-                    _getString("Settings.ClearAllData.SecondConfirm"),
-                    _viewModel.CleanupText, cancellationToken)
-                || !await ConfirmAsync(
-                    _getString("Settings.ClearAllData.FinalConfirm.Title"),
-                    _getString("Settings.ClearAllData.FinalConfirm"),
-                    _viewModel.CleanupText, cancellationToken))
+                    _getString("Settings.ClearAllData.Action"), cancellationToken))
             {
                 return;
             }
