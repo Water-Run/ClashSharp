@@ -244,16 +244,7 @@ public sealed partial class Settings : Page
         };
         if (apply is not null)
         {
-            await ApplyPagePreferenceAsync(async token =>
-            {
-                await apply(token);
-                token.ThrowIfCancellationRequested();
-                if (combo.Name == "LanguageBox" && _viewModel.IsDisplayLanguageRestartPending
-                    || combo.Name == "AppAccentColorModeBox" && _viewModel.IsAppAccentColorRestartPending)
-                {
-                    await ShowRestartRequiredDialogAsync(token);
-                }
-            });
+            await ApplyPagePreferenceAsync(apply);
         }
     }
 
@@ -524,11 +515,6 @@ public sealed partial class Settings : Page
 
             cancellationToken.ThrowIfCancellationRequested();
             await _viewModel.ApplyCustomAccentColorAsync(_formatAccentColor(picker.Color), cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (_viewModel.IsAppAccentColorRestartPending)
-            {
-                await ShowRestartRequiredDialogAsync(cancellationToken);
-            }
         });
     }
 
@@ -637,20 +623,6 @@ public sealed partial class Settings : Page
             Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
         });
         panel.Children.Add(textBox);
-    }
-
-    /// <summary>Shows a short prompt explaining that the edited setting applies after restart.</summary>
-    private async Task ShowRestartRequiredDialogAsync(CancellationToken cancellationToken)
-    {
-        ThemedContentDialog dialog = new()
-        {
-            Title = _getString("Settings.RestartRequired.Title"),
-            Content = _getString("Settings.RestartRequired.Message"),
-            CloseButtonText = _getString("Command.Close"),
-            XamlRoot = GetDialogXamlRoot(),
-        };
-
-        await dialog.ShowManagedAsync(cancellationToken);
     }
 
     private async void ResetBasicSettingsButton_Click(object sender, RoutedEventArgs e)

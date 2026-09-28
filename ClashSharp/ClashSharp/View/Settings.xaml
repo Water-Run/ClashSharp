@@ -38,7 +38,13 @@
                 Severity="Warning"
                 IsClosable="False"
                 IsOpen="{Binding HasRestartRequiredSettings, Mode=OneWay}"
-                Visibility="{Binding HasRestartRequiredSettings, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                Visibility="{Binding HasRestartRequiredSettings, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <InfoBar.ActionButton>
+                    <Button x:Name="ApplyRestartRequiredButton"
+                            Content="{Binding RestartApplicationText}"
+                            Command="{Binding RestartApplicationCommand}" />
+                </InfoBar.ActionButton>
+            </InfoBar>
 
             <TextBlock x:Name="LanguageSectionTitleText" Text="{Binding LanguageSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             <components:SettingRow x:Name="LanguageRow" Title="{Binding LanguageTitleText}" Description="{Binding LanguageDescriptionText}">

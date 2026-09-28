@@ -1577,9 +1577,9 @@ public sealed class AppResourcePackagingTests
         }
     }
 
-    /// <summary>Verifies accent color picker uses centered dialog content and shows a restart-required prompt after changes.</summary>
+    /// <summary>Verifies the accent color picker is centered without a redundant restart dialog after saving.</summary>
     [Fact]
-    public void SettingsCodeBehind_CentersAccentColorPickerAndShowsRestartPrompt()
+    public void SettingsCodeBehind_CentersAccentColorPickerWithoutRedundantRestartDialog()
     {
         string settingsCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "Settings.xaml.cs");
 
@@ -1588,7 +1588,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("AppAccentColorSwatchButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment = HorizontalAlignment.Center", settingsCode, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment = VerticalAlignment.Center", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("ShowRestartRequiredDialogAsync", settingsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowRestartRequiredDialogAsync", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ScrollViewer pickerScrollViewer", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxHeight = 180", settingsCode, StringComparison.Ordinal);
     }
@@ -2160,6 +2160,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("IsClosable=\"False\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("IsOpen=\"{Binding HasRestartRequiredSettings, Mode=OneWay}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{Binding HasRestartRequiredSettings, Converter={StaticResource BooleanToVisibilityConverter}}\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("<InfoBar.ActionButton>", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ApplyRestartRequiredButton\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding RestartApplicationCommand}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ResetBasicSettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ResetStartupSettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ResetProxySettingsLink\" Content=\"{Binding ResetGroupToDefaultsText}\" HorizontalAlignment=\"Right\" Margin=\"0,0,8,0\"", settingsXaml, StringComparison.Ordinal);
