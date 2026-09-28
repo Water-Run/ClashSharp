@@ -9,6 +9,8 @@ using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -284,6 +286,8 @@ public sealed partial class Profiles : Page
         return _operations.RunAsync(async cancellationToken =>
         {
             int visit = _visit;
+            Control? focusedControl = GetPageFocusedControl();
+            FocusState focusState = focusedControl?.FocusState ?? FocusState.Programmatic;
             SetOperationBusy(isBusy: true);
             try
             {
@@ -292,6 +296,12 @@ public sealed partial class Profiles : Page
             finally
             {
                 SetOperationBusy(isBusy: false);
+                if (_isLoaded && visit == _visit && !cancellationToken.IsCancellationRequested
+                    && focusedControl is { IsEnabled: true, Visibility: Visibility.Visible }
+                    && focusedControl.XamlRoot == XamlRoot)
+                {
+                    focusedControl.Focus(focusState);
+                }
             }
 
             if (_isLoaded && visit == _visit && !cancellationToken.IsCancellationRequested
@@ -303,6 +313,20 @@ public sealed partial class Profiles : Page
                 ProfilesList.ScrollIntoView(selected, ScrollIntoViewAlignment.Default);
             }
         });
+    }
+
+    private Control? GetPageFocusedControl()
+    {
+        Control? focusedControl = XamlRoot is null ? null : FocusManager.GetFocusedElement(XamlRoot) as Control;
+        for (DependencyObject? element = focusedControl; element is not null; element = VisualTreeHelper.GetParent(element))
+        {
+            if (ReferenceEquals(element, this))
+            {
+                return focusedControl;
+            }
+        }
+
+        return null;
     }
 
     private void SetOperationBusy(bool isBusy)
