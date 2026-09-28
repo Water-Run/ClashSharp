@@ -14,6 +14,12 @@ internal sealed class EmptyProxyRuntimeController : IProxyRuntimeController
     {
     }
 
+    public Task<bool> IsRuntimeActiveAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(false);
+    }
+
     public Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken)
     {
         return Task.FromResult<IReadOnlyList<MihomoProxyGroup>>([]);

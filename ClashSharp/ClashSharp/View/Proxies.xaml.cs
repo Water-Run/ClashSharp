@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
@@ -22,6 +24,8 @@ public sealed partial class Proxies : Page
     private readonly PageLoadSession _loadSession = new();
 
     private readonly PageOperationSession _selectionSession;
+
+    private readonly HashSet<AsyncRelayCommand> _pendingCommands = [];
 
     private bool _isLoaded;
 
@@ -50,7 +54,8 @@ public sealed partial class Proxies : Page
             return;
         }
 
-        await _loadSession.RunAsync(_viewModel.LoadAsync);
+        await _selectionSession.RunAsync(token =>
+            _loadSession.RunAsync(_viewModel.LoadAsync, cancellationToken: token));
     }
 
     /// <summary>Cancels page-owned requests before the visual tree is released.</summary>
@@ -60,6 +65,39 @@ public sealed partial class Proxies : Page
         ++_visit;
         _loadSession.Cancel();
         _selectionSession.Cancel();
+    }
+
+    private async void RefreshNodes_Click(object sender, RoutedEventArgs e)
+    {
+        await RunPageCommandAsync(_viewModel.RefreshNodesCommand);
+    }
+
+    private async void TestLatency_Click(object sender, RoutedEventArgs e)
+    {
+        await RunPageCommandAsync(_viewModel.TestLatencyCommand);
+    }
+
+    private async void RefreshRuntime_Click(object sender, RoutedEventArgs e)
+    {
+        await RunPageCommandAsync(_viewModel.RefreshRuntimeCommand);
+    }
+
+    /// <summary>Owns toolbar work until completion and coalesces repeated clicks without moving focus.</summary>
+    private async Task RunPageCommandAsync(AsyncRelayCommand command)
+    {
+        if (!_isLoaded || !command.CanExecute(null) || !_pendingCommands.Add(command))
+        {
+            return;
+        }
+
+        try
+        {
+            await _selectionSession.RunAsync(token => command.ExecuteAsync(null, token));
+        }
+        finally
+        {
+            _pendingCommands.Remove(command);
+        }
     }
 
     /// <summary>Keeps a bounded list visible in the outer page while its items receive keyboard focus.</summary>

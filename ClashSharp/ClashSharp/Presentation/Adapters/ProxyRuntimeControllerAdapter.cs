@@ -26,6 +26,12 @@ internal sealed class ProxyRuntimeControllerAdapter : IProxyRuntimeController
         _selections = selections ?? throw new ArgumentNullException(nameof(selections));
     }
 
+    /// <summary>Checks runtime ownership using the same trusted observation as controller requests.</summary>
+    public Task<bool> IsRuntimeActiveAsync(CancellationToken cancellationToken)
+    {
+        return _controller.IsRuntimeActiveAsync(cancellationToken);
+    }
+
     /// <summary>Gets runtime strategy groups from mihomo.</summary>
     /// <param name="cancellationToken">Cancels the local API request.</param>
     /// <returns>Runtime strategy groups.</returns>

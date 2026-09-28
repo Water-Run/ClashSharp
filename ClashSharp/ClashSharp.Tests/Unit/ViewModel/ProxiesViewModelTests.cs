@@ -129,6 +129,148 @@ public sealed class ProxiesViewModelTests
         Assert.Equal("Runtime refreshed", viewModel.RuntimeStatusText);
     }
 
+    [Fact]
+    public async Task LoadAsync_ConfirmedInactiveRetainsOfflineNodesWithoutControllerRequestsOrWarnings()
+    {
+        FakeProxyCatalog catalog = new();
+        FakeProxyRuntimeController runtime = new() { IsActive = false };
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), catalog,
+            new FakeProxyLatency(), runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(catalog.Nodes, viewModel.ProxyNodes.Select(row => row.Model));
+        Assert.Empty(viewModel.ProxyGroups);
+        Assert.Empty(viewModel.ProviderResources);
+        Assert.Equal("Core is not running", viewModel.RuntimeStatusText);
+        Assert.Equal(0, runtime.RefreshCount);
+        Assert.Empty(log.Entries);
+    }
+
+    [Fact]
+    public async Task RefreshRuntimeAsync_StopAndRestartClearsStaleRuntimeRowsAndCanRecover()
+    {
+        FakeProxyCatalog catalog = new();
+        FakeProxyRuntimeController runtime = new();
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), catalog,
+            new FakeProxyLatency(), runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await viewModel.LoadAsync(CancellationToken.None);
+        IReadOnlyList<ProxyNodeDisplay> nodes = viewModel.ProxyNodes;
+
+        runtime.IsActive = false;
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+
+        Assert.Same(nodes, viewModel.ProxyNodes);
+        Assert.Empty(viewModel.ProxyGroups);
+        Assert.Empty(viewModel.ProviderResources);
+        Assert.Equal("Core is not running", viewModel.RuntimeStatusText);
+        Assert.Equal(1, runtime.RefreshCount);
+        runtime.IsActive = true;
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        Assert.Equal(runtime.ProxyGroups, viewModel.ProxyGroups.Select(row => row.Model));
+        Assert.Equal(runtime.ProviderResources, viewModel.ProviderResources.Select(row => row.Model));
+        Assert.Equal("Runtime refreshed", viewModel.RuntimeStatusText);
+        Assert.Equal(2, runtime.RefreshCount);
+        Assert.Empty(log.Entries);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RefreshRuntimeAsync_ObservationAndRequestFailuresRemainWarningsAndRetryRecovers(bool duringObservation)
+    {
+        FakeProxyRuntimeController runtime = new();
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(),
+            new FakeProxyLatency(), runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await viewModel.LoadAsync(CancellationToken.None);
+        IReadOnlyList<ProxyNodeDisplay> nodes = viewModel.ProxyNodes;
+        if (duringObservation)
+        {
+            runtime.ObserveRuntime = _ => Task.FromException<bool>(new InvalidOperationException("controller.owner_unavailable"));
+        }
+        else
+        {
+            runtime.RefreshFailure = new System.Net.Http.HttpRequestException("Controller stopped during refresh");
+        }
+
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+
+        Assert.Same(nodes, viewModel.ProxyNodes);
+        Assert.Empty(viewModel.ProxyGroups);
+        Assert.Empty(viewModel.ProviderResources);
+        Assert.Equal("Runtime unavailable", viewModel.RuntimeStatusText);
+        Assert.Equal("Warning", Assert.Single(log.Entries).Level);
+        runtime.ObserveRuntime = null;
+        runtime.RefreshFailure = null;
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        Assert.Equal("Runtime refreshed", viewModel.RuntimeStatusText);
+        Assert.Equal(runtime.ProxyGroups, viewModel.ProxyGroups.Select(row => row.Model));
+        Assert.Equal(runtime.ProviderResources, viewModel.ProviderResources.Select(row => row.Model));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RefreshRuntimeAsync_CanceledObservationDoesNotPublishStateOrLogWarnings(bool observedActive)
+    {
+        FakeProxyRuntimeController runtime = new();
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(),
+            new FakeProxyLatency(), runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await viewModel.RefreshRuntimeAsync(CancellationToken.None);
+        IReadOnlyList<MihomoProxyGroupDisplay> groups = viewModel.ProxyGroups;
+        MihomoProviderResourceDisplay[] providers = viewModel.ProviderResources.ToArray();
+        TaskCompletionSource<bool> observation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        runtime.ObserveRuntime = _ => observation.Task;
+        using CancellationTokenSource cancellation = new();
+        Task refresh = viewModel.RefreshRuntimeAsync(cancellation.Token);
+
+        cancellation.Cancel();
+        observation.SetResult(observedActive);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
+
+        Assert.Same(groups, viewModel.ProxyGroups);
+        Assert.Equal(providers, viewModel.ProviderResources);
+        Assert.Equal("Runtime refreshed", viewModel.RuntimeStatusText);
+        Assert.Equal(1, runtime.RefreshCount);
+        Assert.Empty(log.Entries);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CanceledRead_IgnoresLateLatencyOrRuntimeResults(bool testLatency)
+    {
+        FakeProxyRuntimeController runtime = new();
+        FakeProxyLatency latency = new();
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(),
+            latency, runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await viewModel.LoadAsync(CancellationToken.None);
+        IReadOnlyList<ProxyNodeDisplay> nodes = viewModel.ProxyNodes;
+        IReadOnlyList<MihomoProxyGroupDisplay> groups = viewModel.ProxyGroups;
+        MihomoProviderResourceDisplay[] providers = viewModel.ProviderResources.ToArray();
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        latency.ReadNodes = async (_, _) => { await release.Task; return []; };
+        runtime.ReadProviders = async _ => { await release.Task; return []; };
+        using CancellationTokenSource cancellation = new();
+        Task read = testLatency ? viewModel.TestLatencyAsync(cancellation.Token)
+            : viewModel.RefreshRuntimeAsync(cancellation.Token);
+
+        cancellation.Cancel();
+        release.SetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => read);
+
+        Assert.Same(nodes, viewModel.ProxyNodes);
+        Assert.Same(groups, viewModel.ProxyGroups);
+        Assert.Equal(providers, viewModel.ProviderResources);
+        Assert.Equal("Runtime refreshed", viewModel.RuntimeStatusText);
+        Assert.Empty(log.Entries);
+    }
+
     /// <summary>Verifies selecting a strategy group node writes through the runtime controller and refreshes groups.</summary>
     [Fact]
     public async Task SelectProxyAsync_UpdatesRuntimeSelectionAndRefreshes()
@@ -328,6 +470,7 @@ public sealed class ProxiesViewModelTests
                 "ProxyNodes.Section.Resources" => "Resources",
                 "ProxyNodes.Status.RuntimeNotRefreshed" => "Runtime not refreshed",
                 "ProxyNodes.Status.RuntimeRefreshed" => "Runtime refreshed",
+                "ProxyNodes.Status.RuntimeStopped" => "Core is not running",
                 "ProxyNodes.Status.SelectionApplied" => "Selection applied",
                 "ProxyNodes.Status.ProviderUpdated" => "Provider updated",
                 "ProxyNodes.Status.ProviderUpdatedEmpty" => "Provider updated with no entries",
@@ -369,12 +512,19 @@ public sealed class ProxiesViewModelTests
         /// <value>Exception thrown when non-null.</value>
         public Exception? ExceptionToThrow { get; set; }
 
+        public Func<IReadOnlyList<ProxyNode>, CancellationToken, Task<IReadOnlyList<ProxyNode>>>? ReadNodes { get; set; }
+
         /// <summary>Tests fake proxy nodes.</summary>
         /// <param name="nodes">Input nodes. Must not be null.</param>
         /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
         /// <returns>Configured tested nodes or the input nodes.</returns>
         public Task<IReadOnlyList<ProxyNode>> TestNodesAsync(IReadOnlyList<ProxyNode> nodes, CancellationToken cancellationToken)
         {
+            if (ReadNodes is not null)
+            {
+                return ReadNodes(nodes, cancellationToken);
+            }
+
             return ExceptionToThrow is null
                 ? Task.FromResult(TestedNodes ?? nodes)
                 : Task.FromException<IReadOnlyList<ProxyNode>>(ExceptionToThrow);
@@ -413,6 +563,18 @@ public sealed class ProxiesViewModelTests
 
         public Exception? RefreshFailure { get; set; }
 
+        public bool IsActive { get; set; } = true;
+
+        public Func<CancellationToken, Task<bool>>? ObserveRuntime { get; set; }
+
+        public Func<CancellationToken, Task<IReadOnlyList<MihomoProviderResource>>>? ReadProviders { get; set; }
+
+        public Task<bool> IsRuntimeActiveAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ObserveRuntime?.Invoke(cancellationToken) ?? Task.FromResult(IsActive);
+        }
+
         /// <summary>Gets fake strategy groups.</summary>
         /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
         /// <returns>Configured groups.</returns>
@@ -427,6 +589,11 @@ public sealed class ProxiesViewModelTests
         /// <returns>Configured resources.</returns>
         public Task<IReadOnlyList<MihomoProviderResource>> GetProviderResourcesAsync(CancellationToken cancellationToken)
         {
+            if (ReadProviders is not null)
+            {
+                return ReadProviders(cancellationToken);
+            }
+
             return RefreshFailure is null ? Task.FromResult(ProviderResources)
                 : Task.FromException<IReadOnlyList<MihomoProviderResource>>(RefreshFailure);
         }

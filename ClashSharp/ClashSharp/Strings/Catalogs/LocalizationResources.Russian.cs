@@ -260,6 +260,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Command.RefreshRuntime"] = "Обновить среду",
             ["ProxyNodes.Status.RuntimeNotRefreshed"] = "Среда выполнения еще не обновлялась.",
             ["ProxyNodes.Status.RuntimeRefreshed"] = "Среда выполнения обновлена.",
+            ["ProxyNodes.Status.RuntimeStopped"] = "Ядро не запущено. Запустите его, чтобы просмотреть группы стратегий и ресурсы.",
             ["ProxyNodes.Status.SelectionApplied"] = "Выбор применен.",
             ["ProxyNodes.Status.ProviderUpdated"] = "Provider обновлен.",
             ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "Провайдер обновлён, но доступных записей нет. Проверьте содержимое и формат источника, затем повторите обновление.",

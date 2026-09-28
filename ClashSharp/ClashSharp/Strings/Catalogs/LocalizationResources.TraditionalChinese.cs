@@ -260,6 +260,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Command.RefreshRuntime"] = "重新整理執行狀態",
             ["ProxyNodes.Status.RuntimeNotRefreshed"] = "尚未重新整理執行狀態。",
             ["ProxyNodes.Status.RuntimeRefreshed"] = "執行狀態已重新整理。",
+            ["ProxyNodes.Status.RuntimeStopped"] = "核心未執行。啟動後可查看策略群組和資源。",
             ["ProxyNodes.Status.SelectionApplied"] = "已切換策略組。",
             ["ProxyNodes.Status.ProviderUpdated"] = "Provider 已更新。",
             ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "Provider 已更新，但沒有可用項目。請檢查來源內容和格式，再重試更新。",

@@ -18,6 +18,74 @@ public sealed class MihomoControllerClientTests
 
     [Theory]
     [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task IsRuntimeActiveAsync_SeparatesConfirmedIdleAndAppOwnership(bool appOwned, bool keepHostRunning)
+    {
+        RecordingHttpHandler handler = new("{}");
+        using HttpClient http = new(handler);
+        FakeControllerServiceBroker broker = new(new MihomoServiceStatus(true, false, "idle")
+        {
+            IsScmRunning = keepHostRunning,
+            ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
+            ServiceSessionId = Guid.NewGuid(),
+            ChildState = MihomoServiceChildState.Stopped,
+        });
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"),
+            () => ControllerSecret, () => appOwned, broker);
+
+        Assert.Equal(appOwned, await client.IsRuntimeActiveAsync(CancellationToken.None));
+        Assert.Empty(handler.Requests);
+        Assert.Empty(broker.Commands);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.IsRuntimeActiveAsync(cancellation.Token));
+    }
+
+    [Fact]
+    public async Task IsRuntimeActiveAsync_RefreshesScmOnlyCacheBeforeReportingServiceOwnership()
+    {
+        RecordingHttpHandler handler = new("{}");
+        using HttpClient http = new(handler);
+        FakeControllerServiceBroker broker = FakeControllerServiceBroker.Running();
+        broker.CachedStatus = new MihomoServiceStatus(true, false, "SCM running") { IsScmRunning = true };
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"),
+            () => ControllerSecret, () => false, broker);
+
+        Assert.True(await client.IsRuntimeActiveAsync(CancellationToken.None));
+        Assert.Equal(1, broker.StatusQueryCount);
+        Assert.Empty(handler.Requests);
+        Assert.Empty(broker.Commands);
+    }
+
+    [Theory]
+    [InlineData("unknown", "controller.owner_unavailable")]
+    [InlineData("ipc-failed", "controller.owner_unavailable")]
+    [InlineData("ambiguous", "controller.owner_ambiguous")]
+    [InlineData("changed", "controller.owner_changed_during_observation")]
+    public async Task IsRuntimeActiveAsync_UncertainOwnershipIsNotIdle(string scenario, string expectedCode)
+    {
+        RecordingHttpHandler handler = new("{}");
+        using HttpClient http = new(handler);
+        FakeControllerServiceBroker broker = scenario == "ambiguous" ? FakeControllerServiceBroker.Running()
+            : new(scenario == "ipc-failed"
+                ? new MihomoServiceStatus(true, false, "IPC failed") { IsScmRunning = true, IpcFailureCode = "service.ipc.timeout" }
+                : MihomoServiceStatus.Unknown("unobserved"));
+        int observations = 0;
+        MihomoControllerClient client = new(http, new Uri("http://127.0.0.1:9090"),
+            () => ControllerSecret, () => scenario == "ambiguous" || (scenario == "changed" && ++observations > 1), broker);
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.IsRuntimeActiveAsync(CancellationToken.None));
+
+        Assert.Equal(expectedCode, error.Message);
+        Assert.Empty(handler.Requests);
+        Assert.Empty(broker.Commands);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]

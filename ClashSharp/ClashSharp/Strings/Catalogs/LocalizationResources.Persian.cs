@@ -260,6 +260,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Command.RefreshRuntime"] = "تازه‌سازی زمان اجرا",
             ["ProxyNodes.Status.RuntimeNotRefreshed"] = "زمان اجرا هنوز تازه‌سازی نشده است.",
             ["ProxyNodes.Status.RuntimeRefreshed"] = "زمان اجرا تازه‌سازی شد.",
+            ["ProxyNodes.Status.RuntimeStopped"] = "هسته اجرا نمی‌شود. برای مشاهدهٔ گروه‌های راهبرد و منابع، آن را راه‌اندازی کنید.",
             ["ProxyNodes.Status.SelectionApplied"] = "انتخاب اعمال شد.",
             ["ProxyNodes.Status.ProviderUpdated"] = "ارائه‌دهنده به‌روزرسانی شد.",
             ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "ارائه‌دهنده به‌روزرسانی شد، اما هیچ ورودی در دسترس نیست. محتوا و قالب منبع را بررسی کنید، سپس به‌روزرسانی را دوباره انجام دهید.",

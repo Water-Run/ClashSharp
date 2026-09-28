@@ -893,6 +893,16 @@ public sealed class MihomoControllerClient
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Reports a confirmed active owner or confirmed idle state without contacting a controller.</summary>
+    /// <remarks>Unknown ownership, failed service observation and conflicting owners remain failures.</remarks>
+    internal async Task<bool> IsRuntimeActiveAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ControllerRoute route = await ResolveRouteAsync(cancellationToken, allowInactive: true).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return !route.IsInactive;
+    }
+
     /// <summary>Resolves exactly one controller owner and fails closed on ambiguity.</summary>
     private async Task<ControllerRoute> ResolveRouteAsync(CancellationToken cancellationToken, bool allowInactive = false)
     {

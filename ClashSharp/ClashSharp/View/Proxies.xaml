@@ -22,17 +22,17 @@
                 </StackPanel>
 
                 <CommandBar DefaultLabelPosition="Right" Background="Transparent">
-                    <AppBarButton x:Name="RefreshNodesButton" Label="{Binding RefreshNodesText}" Command="{Binding RefreshNodesCommand}">
+                    <AppBarButton x:Name="RefreshNodesButton" Label="{Binding RefreshNodesText}" Click="RefreshNodes_Click">
                         <AppBarButton.Icon>
                             <FontIcon Glyph="&#xE72C;" />
                         </AppBarButton.Icon>
                     </AppBarButton>
-                    <AppBarButton x:Name="TestLatencyButton" Label="{Binding TestLatencyText}" Command="{Binding TestLatencyCommand}">
+                    <AppBarButton x:Name="TestLatencyButton" Label="{Binding TestLatencyText}" Click="TestLatency_Click">
                         <AppBarButton.Icon>
                             <FontIcon Glyph="&#xE9D9;" />
                         </AppBarButton.Icon>
                     </AppBarButton>
-                    <AppBarButton x:Name="RefreshRuntimeButton" Label="{Binding RefreshRuntimeText}" Command="{Binding RefreshRuntimeCommand}">
+                    <AppBarButton x:Name="RefreshRuntimeButton" Label="{Binding RefreshRuntimeText}" Click="RefreshRuntime_Click">
                         <AppBarButton.Icon>
                             <FontIcon Glyph="&#xE895;" />
                         </AppBarButton.Icon>

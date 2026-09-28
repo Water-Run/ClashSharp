@@ -243,6 +243,7 @@ internal sealed class ProxiesViewModel : ObservableObject
             IReadOnlyList<ProxyNode> testedNodes = await _latencyTester.TestNodesAsync(
                 _proxyNodeModels,
                 cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             ApplyProxyNodes(testedNodes);
             _log.Append("Info", "ProxyNodes", string.Format(CultureInfo.CurrentCulture, _localization.GetString("Master.LatencyDialog.Completed.Format"), testedNodes.Count), null);
         }
@@ -262,6 +263,16 @@ internal sealed class ProxiesViewModel : ObservableObject
     {
         try
         {
+            bool isActive = await _runtimeController.IsRuntimeActiveAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!isActive)
+            {
+                ProxyGroups = [];
+                _providerResources.Clear();
+                RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeStopped");
+                return;
+            }
+
             await LoadRuntimeAsync(cancellationToken);
             RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeRefreshed");
         }
@@ -366,6 +377,7 @@ internal sealed class ProxiesViewModel : ObservableObject
             await _runtimeController.GetProxyGroupsAsync(cancellationToken);
         IReadOnlyList<MihomoProviderResource> providers =
             await _runtimeController.GetProviderResourcesAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         ProxyGroups = MapProxyGroups(groups);
         ApplyProviderResources(MapProviderResources(providers));
     }

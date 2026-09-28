@@ -8,6 +8,9 @@ namespace ClashSharp.ViewModel;
 /// <summary>Runtime proxy controller contract required by <see cref="ProxiesViewModel"/>.</summary>
 internal interface IProxyRuntimeController
 {
+    /// <summary>Returns false only when both runtime owners are confirmed inactive.</summary>
+    Task<bool> IsRuntimeActiveAsync(CancellationToken cancellationToken);
+
     Task<IReadOnlyList<MihomoProxyGroup>> GetProxyGroupsAsync(CancellationToken cancellationToken);
 
     Task<IReadOnlyList<MihomoProviderResource>> GetProviderResourcesAsync(CancellationToken cancellationToken);

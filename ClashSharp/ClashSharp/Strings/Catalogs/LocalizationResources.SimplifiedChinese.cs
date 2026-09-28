@@ -260,6 +260,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Command.RefreshRuntime"] = "刷新运行时",
             ["ProxyNodes.Status.RuntimeNotRefreshed"] = "尚未刷新运行时。",
             ["ProxyNodes.Status.RuntimeRefreshed"] = "运行时已刷新。",
+            ["ProxyNodes.Status.RuntimeStopped"] = "内核未运行。启动后可查看策略组和资源。",
             ["ProxyNodes.Status.SelectionApplied"] = "已切换策略组。",
             ["ProxyNodes.Status.ProviderUpdated"] = "Provider 已更新。",
             ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "Provider 已更新，但没有可用条目。请检查源内容和格式，再重试更新。",

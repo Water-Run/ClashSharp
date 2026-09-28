@@ -260,6 +260,7 @@ internal static partial class LocalizationResources
             ["ProxyNodes.Command.RefreshRuntime"] = "Actualiser l'exécution",
             ["ProxyNodes.Status.RuntimeNotRefreshed"] = "L'état d'exécution n'a pas encore été actualisé.",
             ["ProxyNodes.Status.RuntimeRefreshed"] = "État d'exécution actualisé.",
+            ["ProxyNodes.Status.RuntimeStopped"] = "Le noyau est arrêté. Démarrez-le pour afficher les groupes de stratégies et les ressources.",
             ["ProxyNodes.Status.SelectionApplied"] = "Sélection appliquée.",
             ["ProxyNodes.Status.ProviderUpdated"] = "Provider mis à jour.",
             ["ProxyNodes.Status.ProviderUpdatedEmpty"] = "Fournisseur mis à jour, mais aucune entrée n’est disponible. Vérifiez le contenu et le format de la source, puis réessayez.",
