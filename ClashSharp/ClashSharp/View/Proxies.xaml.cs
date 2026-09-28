@@ -4,6 +4,7 @@ using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace ClashSharp.View;
 
@@ -59,6 +60,16 @@ public sealed partial class Proxies : Page
         ++_visit;
         _loadSession.Cancel();
         _selectionSession.Cancel();
+    }
+
+    /// <summary>Keeps a bounded list visible in the outer page while its items receive keyboard focus.</summary>
+    private void List_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is ListView list
+            && FocusManager.GetFocusedElement(XamlRoot) is Control { FocusState: FocusState.Keyboard })
+        {
+            list.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+        }
     }
 
     /// <summary>Handles runtime strategy group selection changes.</summary>

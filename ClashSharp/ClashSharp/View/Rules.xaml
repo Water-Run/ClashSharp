@@ -27,7 +27,7 @@
                         <ColumnDefinition Width="1.4*" />
                         <ColumnDefinition Width="2.4*" />
                         <ColumnDefinition Width="2*" />
-                        <ColumnDefinition Width="0.7*" />
+                        <ColumnDefinition Width="0.7*" MinWidth="64" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{Binding SourceColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock Grid.Column="1" Text="{Binding TypeColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -44,7 +44,7 @@
                             <ColumnDefinition Width="1.4*" />
                             <ColumnDefinition Width="2.4*" />
                             <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="0.7*" />
+                            <ColumnDefinition Width="0.7*" MinWidth="64" />
                         </Grid.ColumnDefinitions>
 
                         <TextBlock Text="{Binding ProviderNameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />

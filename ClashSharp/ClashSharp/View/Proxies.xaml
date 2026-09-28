@@ -14,7 +14,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <ScrollViewer Padding="{StaticResource ClashPagePadding}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch">
+        <ScrollViewer Background="Transparent" Padding="{StaticResource ClashPagePadding}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch">
             <StackPanel Spacing="18">
                 <StackPanel Spacing="4">
                     <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
@@ -40,7 +40,7 @@
                 </CommandBar>
 
                 <TextBlock x:Name="ProxyGroupsSectionTitleText" Text="{Binding ProxyGroupsSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                <ListView x:Name="ProxyGroupsList" ItemsSource="{Binding ProxyGroups}" MaxHeight="220">
+                <ListView x:Name="ProxyGroupsList" ItemsSource="{Binding ProxyGroups}" MaxHeight="220" GotFocus="List_GotFocus">
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Grid Padding="4,8" ColumnSpacing="12">
@@ -63,7 +63,7 @@
                     </ListView.ItemTemplate>
                 </ListView>
 
-                <ListView x:Name="ProxyNodesList" ItemsSource="{Binding ProxyNodes}" MaxHeight="360">
+                <ListView x:Name="ProxyNodesList" ItemsSource="{Binding ProxyNodes}" MaxHeight="360" GotFocus="List_GotFocus">
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Grid Padding="4,8" ColumnSpacing="12">
@@ -92,7 +92,7 @@
                 </ListView>
 
                 <TextBlock x:Name="ProviderResourcesSectionTitleText" Text="{Binding ProviderResourcesSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                <ListView x:Name="ProviderResourcesList" ItemsSource="{Binding ProviderResources}" MaxHeight="220">
+                <ListView x:Name="ProviderResourcesList" ItemsSource="{Binding ProviderResources}" MaxHeight="220" GotFocus="List_GotFocus">
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Grid Padding="4,8" ColumnSpacing="12">

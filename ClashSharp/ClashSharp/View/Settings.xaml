@@ -16,6 +16,7 @@
 
     <ScrollViewer
         x:Name="SettingsScrollViewer"
+        Background="Transparent"
         IsEnabled="{Binding IsPreferenceInputEnabled}"
         Padding="{StaticResource ClashPagePadding}"
         VerticalScrollBarVisibility="Auto"

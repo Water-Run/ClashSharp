@@ -10,6 +10,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer
+        Background="Transparent"
         Padding="{StaticResource ClashPagePadding}"
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled">

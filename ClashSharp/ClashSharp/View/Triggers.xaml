@@ -71,7 +71,7 @@
                 </Button>
             </Grid>
 
-            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer Grid.Row="2" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="10">
                     <ProgressRing
                         IsActive="{Binding IsBusy}"
@@ -175,7 +175,7 @@
                 </StackPanel>
             </Grid>
 
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsEnabled="{Binding CurrentEditor.CanEdit}">
+            <ScrollViewer Grid.Row="1" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsEnabled="{Binding CurrentEditor.CanEdit}">
                 <StackPanel Spacing="14">
                     <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
                         <Grid.RowDefinitions>
