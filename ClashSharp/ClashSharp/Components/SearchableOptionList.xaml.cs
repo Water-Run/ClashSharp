@@ -48,6 +48,9 @@ public sealed partial class SearchableOptionList : UserControl
     public SearchableOptionList()
     {
         InitializeComponent();
+        // Callers set initial selections before the dialog loads; assign the source before synchronizing them.
+        MultipleOptionsControl.ItemsSource = FilteredOptions;
+        SingleOptionsControl.ItemsSource = FilteredOptions;
     }
 
     /// <summary>Occurs after the selected option set changes.</summary>

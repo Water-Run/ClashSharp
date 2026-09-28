@@ -21,9 +21,9 @@
                 ContentTemplate="{StaticResource OptionContentTemplate}"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Center"
+                VerticalContentAlignment="Top"
                 MinHeight="64"
-                Padding="12,8,0,8"
+                Padding="12,6,0,6"
                 AutomationProperties.Name="{Binding Title}"
                 AutomationProperties.HelpText="{Binding Description}" />
         </DataTemplate>
@@ -40,7 +40,6 @@
         <Grid Height="{Binding MaxListHeight, ElementName=Root}">
             <ListView
                 x:Name="MultipleOptionsControl"
-                ItemsSource="{Binding FilteredOptions, ElementName=Root}"
                 ItemTemplate="{StaticResource OptionContentTemplate}"
                 Visibility="Collapsed"
                 MaxHeight="{Binding MaxListHeight, ElementName=Root}"
@@ -53,7 +52,7 @@
                 ScrollViewer.VerticalScrollBarVisibility="Visible"
                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
+                    <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         <Setter Property="Padding" Value="10,8" />
                         <Setter Property="MinHeight" Value="72" />
@@ -69,7 +68,6 @@
                 <RadioButtons
                     x:Name="SingleOptionsControl"
                     MaxColumns="1"
-                    ItemsSource="{Binding FilteredOptions, ElementName=Root}"
                     ItemTemplate="{StaticResource RadioOptionTemplate}"
                     HorizontalAlignment="Stretch"
                     SelectionChanged="SingleOptionsControl_SelectionChanged" />
