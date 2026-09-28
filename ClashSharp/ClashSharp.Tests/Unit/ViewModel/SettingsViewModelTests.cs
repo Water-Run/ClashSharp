@@ -13,6 +13,38 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for settings state loading and persistence behavior.</summary>
 public sealed partial class SettingsViewModelTests
 {
+    [Theory]
+    [InlineData(AppLanguage.SimplifiedChinese, AppLanguage.English)]
+    [InlineData(AppLanguage.AutoDetect, AppLanguage.French)]
+    public void LanguageRestartPending_TracksAppliedLanguageAcrossPageRecreation(
+        AppLanguage originalLanguage,
+        AppLanguage requestedLanguage)
+    {
+        FakeSettingsStore store = new() { DisplayLanguage = originalLanguage };
+        AppLanguage appliedLanguage = originalLanguage;
+        SettingsViewModel firstPage = CreateAccentRestartViewModel(
+            store, (_, _) => false, language => language != appliedLanguage);
+
+        firstPage.SetDisplayLanguageIndex((int)requestedLanguage + 1);
+        Assert.True(firstPage.IsDisplayLanguageRestartPending);
+
+        SettingsViewModel returnedPage = CreateAccentRestartViewModel(
+            store, (_, _) => false, language => language != appliedLanguage);
+        Assert.Equal(requestedLanguage, returnedPage.DisplayLanguage);
+        Assert.True(returnedPage.HasRestartRequiredSettings);
+        returnedPage.Load();
+        Assert.True(returnedPage.IsDisplayLanguageRestartPending);
+
+        returnedPage.SetDisplayLanguageIndex((int)originalLanguage + 1);
+        Assert.False(returnedPage.HasRestartRequiredSettings);
+        returnedPage.SetDisplayLanguageIndex((int)requestedLanguage + 1);
+        Assert.True(returnedPage.HasRestartRequiredSettings);
+
+        appliedLanguage = requestedLanguage;
+        returnedPage.Load();
+        Assert.False(returnedPage.HasRestartRequiredSettings);
+    }
+
     [Fact]
     public void ExternalRuntimeChange_RefreshesCommittedControlsWithoutResettingRestartBaseline()
     {
@@ -2796,7 +2828,8 @@ public sealed partial class SettingsViewModelTests
 
     private static SettingsViewModel CreateAccentRestartViewModel(
         FakeSettingsStore store,
-        Func<AppAccentColorMode, string, bool> isAccentColorRestartPending)
+        Func<AppAccentColorMode, string, bool> isAccentColorRestartPending,
+        Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null)
     {
         SettingsViewModel viewModel = new(
             store,
@@ -2818,7 +2851,8 @@ public sealed partial class SettingsViewModelTests
             checkStartupConflictsAsync: NoStartupConflictsAsync,
             isAccentColorRestartPending: isAccentColorRestartPending,
             notifyConnectionTestTimeout: _ => { },
-            appendLog: (_, _, _, _) => { });
+            appendLog: (_, _, _, _) => { },
+            isDisplayLanguageRestartPending: isDisplayLanguageRestartPending);
         viewModel.Load();
         return viewModel;
     }

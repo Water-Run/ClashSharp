@@ -158,6 +158,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Compares desired accent color settings against the currently applied app accent state.</summary>
     private readonly Func<AppAccentColorMode, string, bool> _isAccentColorRestartPending;
 
+    /// <summary>Compares the persisted language choice against the language used by the running app.</summary>
+    private readonly Func<AppLanguage, bool> _isDisplayLanguageRestartPending;
+
     /// <summary>Diagnostics command router used by Windows-native diagnostic buttons.</summary>
     private readonly SettingsDiagnosticsViewModel? _diagnosticsViewModel;
 
@@ -372,7 +375,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<bool>? requestResetRecoveryRestart = null,
         Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
             beginDestructiveRuntimeMutationAsync = null,
-        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null)
+        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null,
+        Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null)
         : this(
             settings,
             applyLanguage,
@@ -404,7 +408,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
             applyNetworkSettingsAsync,
             requestResetRecoveryRestart,
             beginDestructiveRuntimeMutationAsync,
-            beginResetSettings)
+            beginResetSettings,
+            isDisplayLanguageRestartPending)
     {
     }
 
@@ -441,7 +446,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<bool>? requestResetRecoveryRestart,
         Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
             beginDestructiveRuntimeMutationAsync = null,
-        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null)
+        Func<ISettingsResetTransactionReceipt>? beginResetSettings = null,
+        Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
@@ -551,6 +557,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 return Task.FromResult<IReadOnlyList<StartupConflictIssue>>([]);
             });
         _isAccentColorRestartPending = isAccentColorRestartPending ?? IsAccentColorChangedSinceLoad;
+        _isDisplayLanguageRestartPending = isDisplayLanguageRestartPending
+            ?? (language => language != _loadedDisplayLanguage);
         _diagnosticsViewModel = diagnosticsViewModel;
         _mihomoServiceController = mihomoServiceController ?? AlwaysAvailableMihomoServiceController.Instance;
         RefreshSelectorOptions();
@@ -1212,7 +1220,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     public bool IsAppAccentColorRestartPending => _isAccentColorRestartPending(AppAccentColorMode, AppAccentColorValue);
 
-    public bool IsDisplayLanguageRestartPending => DisplayLanguage != _loadedDisplayLanguage;
+    public bool IsDisplayLanguageRestartPending => _isDisplayLanguageRestartPending(DisplayLanguage);
 
     public bool IsMainlandChinaDisplayRestartPending =>
         MainlandChinaFeatureMode != _loadedMainlandChinaFeatureMode

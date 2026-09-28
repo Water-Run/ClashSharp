@@ -110,7 +110,8 @@ internal static class SettingsPageComposition
             requestResetRecoveryRestart: () =>
                 applicationLifecycle.RequestRestart("settings-reset-recovery"),
             beginDestructiveRuntimeMutationAsync:
-                runtimeMutations.BeginDestructiveMutationAsync);
+                runtimeMutations.BeginDestructiveMutationAsync,
+            isDisplayLanguageRestartPending: language => language != localization.CurrentLanguage);
 
         SettingsPageOperations operations = CreateOperations(context);
 
