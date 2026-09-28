@@ -19,6 +19,7 @@
             <RadioButton
                 Content="{Binding}"
                 ContentTemplate="{StaticResource OptionContentTemplate}"
+                IsChecked="{Binding IsChecked, Mode=OneWay}"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
                 VerticalContentAlignment="Top"
