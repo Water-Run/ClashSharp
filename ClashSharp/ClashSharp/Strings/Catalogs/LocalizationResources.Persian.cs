@@ -731,6 +731,7 @@ internal static partial class LocalizationResources
             ["Settings.Tray.VisibleFeatures.Title"] = "قابلیت‌های نمایان",
             ["Settings.Tray.VisibleFeatures.Description"] = "انتخاب کنید کدام ورودی قابلیت در منوی سینی ظاهر شود.",
             ["Settings.Tray.VisibleFeatures.Summary.Format"] = "{0} قابلیت فعال",
+            ["Settings.Tray.VisibleFeatures.SelectionRequired"] = "دست‌کم یک قابلیت را انتخاب کنید.",
             ["Settings.Tray.VisibleFeatures.SearchPlaceholder"] = "جستجوی قابلیت‌های سینی",
             ["Settings.Tray.Feature.Status"] = "وضعیت",
             ["Settings.Tray.Feature.Status.Description"] = "خلاصه حالت، گره و تأخیر فعلی را نشان می‌دهد.",

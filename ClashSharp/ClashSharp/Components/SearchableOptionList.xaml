@@ -9,6 +9,7 @@
     <StackPanel Spacing="10">
         <TextBox
             x:Name="SearchBox"
+            Header="{Binding SearchHeader, ElementName=Root}"
             PlaceholderText="{Binding SearchPlaceholder, ElementName=Root}"
             HorizontalAlignment="Stretch"
             TextChanged="SearchBox_TextChanged" />
@@ -19,6 +20,9 @@
                 ItemsSource="{Binding FilteredOptions, ElementName=Root}"
                 MaxHeight="{Binding MaxListHeight, ElementName=Root}"
                 SelectionMode="None"
+                IsTabStop="False"
+                TabNavigation="Local"
+                TabFocusNavigation="Local"
                 HorizontalAlignment="Stretch"
                 Padding="0,0,14,0"
                 ScrollViewer.VerticalScrollBarVisibility="Visible"
@@ -28,6 +32,9 @@
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="Margin" Value="0,0,0,8" />
+                        <Setter Property="IsTabStop" Value="False" />
+                        <Setter Property="TabNavigation" Value="Local" />
+                        <Setter Property="TabFocusNavigation" Value="Local" />
                     </Style>
                 </ListView.ItemContainerStyle>
                 <ListView.ItemTemplate>

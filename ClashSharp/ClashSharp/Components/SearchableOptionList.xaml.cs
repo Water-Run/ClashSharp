@@ -10,6 +10,13 @@ namespace ClashSharp.Components;
 /// <summary>Reusable searchable dialog list for selectable option rows.</summary>
 public sealed partial class SearchableOptionList : UserControl
 {
+    /// <summary>Identifies the optional <see cref="SearchHeader"/> dependency property.</summary>
+    public static readonly DependencyProperty SearchHeaderProperty = DependencyProperty.Register(
+        nameof(SearchHeader),
+        typeof(string),
+        typeof(SearchableOptionList),
+        new PropertyMetadata(null));
+
     /// <summary>Identifies the <see cref="SearchPlaceholder"/> dependency property.</summary>
     public static readonly DependencyProperty SearchPlaceholderProperty = DependencyProperty.Register(
         nameof(SearchPlaceholder),
@@ -47,6 +54,13 @@ public sealed partial class SearchableOptionList : UserControl
 
     /// <summary>Gets or sets whether more than one option may be selected.</summary>
     public bool AllowMultiple { get; set; }
+
+    /// <summary>Gets or sets an optional selection instruction above the search field.</summary>
+    public string? SearchHeader
+    {
+        get => (string?)GetValue(SearchHeaderProperty);
+        set => SetValue(SearchHeaderProperty, value);
+    }
 
     /// <summary>Gets or sets the localized message shown when the filter has no matches.</summary>
     public string EmptyText

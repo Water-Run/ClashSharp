@@ -715,6 +715,7 @@ public sealed partial class Settings : Page
                 StringComparer.OrdinalIgnoreCase);
             SearchableOptionList optionList = new()
             {
+                SearchHeader = _getString("Settings.Tray.VisibleFeatures.SelectionRequired"),
                 SearchPlaceholder = _viewModel.TrayVisibleFeatureSearchPlaceholderText,
                 EmptyText = _getString("Common.NoMatchingOptions"),
                 AllowMultiple = true,
@@ -723,7 +724,7 @@ public sealed partial class Settings : Page
             optionList.SetOptions(SettingsViewModel.TrayFeatureDefinitions.Select(feature => new SearchableOptionItem(
                 feature.Id,
                 _getString(feature.TitleKey),
-                _viewModel.TraySectionTitleText,
+                string.Empty,
                 _getString(feature.DescriptionKey),
                 feature.Glyph,
                 feature.Id,
@@ -733,12 +734,14 @@ public sealed partial class Settings : Page
             {
                 Title = _viewModel.TrayVisibleFeaturesTitleText,
                 Content = optionList,
+                IsPrimaryButtonEnabled = optionList.SelectedOptions.Count > 0,
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = GetDialogXamlRoot(),
             };
 
+            optionList.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = optionList.SelectedOptions.Count > 0;
             using SearchableOptionDialogLayout layout = new(dialog, optionList);
             if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
             {

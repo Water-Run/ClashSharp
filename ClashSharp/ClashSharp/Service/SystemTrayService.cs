@@ -223,7 +223,10 @@ public sealed class SystemTrayService : IDisposable
             }
 
             AppendMenu(menu, MfPopup, statusMenu, state.StatusMenuLabel);
-            AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
+            if (state.ShowMode || state.ShowPages || state.ShowTransparentProxy || state.ShowSettings)
+            {
+                AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
+            }
         }
 
         if (state.ShowMode)
@@ -235,7 +238,10 @@ public sealed class SystemTrayService : IDisposable
             }
 
             AppendMenu(menu, MfPopup, modeMenu, state.ModeMenuLabel);
-            AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
+            if (state.ShowPages || state.ShowTransparentProxy || state.ShowSettings)
+            {
+                AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
+            }
         }
 
         if (state.ShowPages)
@@ -248,7 +254,10 @@ public sealed class SystemTrayService : IDisposable
             }
 
             AppendMenu(menu, MfPopup, pageMenu, state.PagesMenuLabel);
-            AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
+            if (state.ShowTransparentProxy || state.ShowSettings)
+            {
+                AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
+            }
         }
 
         if (state.ShowTransparentProxy)
@@ -266,7 +275,10 @@ public sealed class SystemTrayService : IDisposable
 
         if (state.ShowSafeExit)
         {
-            AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
+            if (state.ShowStatus || state.ShowMode || state.ShowPages || state.ShowTransparentProxy || state.ShowSettings)
+            {
+                AppendMenu(menu, MfSeparator, nint.Zero, string.Empty);
+            }
             AppendMenu(menu, MfString, new nint(SafeExitCommandId), state.SafeExitLabel);
         }
 

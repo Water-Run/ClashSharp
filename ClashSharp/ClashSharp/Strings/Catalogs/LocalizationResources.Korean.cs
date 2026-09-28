@@ -731,6 +731,7 @@ internal static partial class LocalizationResources
             ["Settings.Tray.VisibleFeatures.Title"] = "표시할 기능",
             ["Settings.Tray.VisibleFeatures.Description"] = "트레이 메뉴에 표시할 기능 항목을 고릅니다.",
             ["Settings.Tray.VisibleFeatures.Summary.Format"] = "기능 {0}개 사용 중",
+            ["Settings.Tray.VisibleFeatures.SelectionRequired"] = "기능을 하나 이상 선택하세요.",
             ["Settings.Tray.VisibleFeatures.SearchPlaceholder"] = "트레이 기능 검색",
             ["Settings.Tray.Feature.Status"] = "상태",
             ["Settings.Tray.Feature.Status.Description"] = "현재 모드, 노드, 지연 시간 요약을 표시합니다.",

@@ -33,6 +33,7 @@ internal sealed class SearchableOptionDialogLayout : IDisposable
             _content.Width = width;
             _dialog.Resources["ContentDialogMaxWidth"] = width + 48d;
         }
-        _content.MaxListHeight = Math.Clamp(_root.Size.Height - 240, 80, 360);
+        double headerHeight = string.IsNullOrWhiteSpace(_content.SearchHeader) ? 0 : 32;
+        _content.MaxListHeight = Math.Clamp(_root.Size.Height - 240 - headerHeight, 80, 360);
     }
 }

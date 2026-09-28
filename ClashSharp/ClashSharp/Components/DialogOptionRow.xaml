@@ -33,6 +33,7 @@
                 Padding="0"
                 IsChecked="{Binding IsChecked, ElementName=Root, Mode=TwoWay}"
                 IsHitTestVisible="False"
+                IsTabStop="False"
                 VerticalAlignment="Center" />
 
             <FontIcon
