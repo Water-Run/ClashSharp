@@ -39,6 +39,7 @@ public sealed partial class SearchableOptionList : UserControl
         new PropertyMetadata(360d));
 
     private readonly List<SearchableOptionItem> _allOptions = [];
+    private readonly string _selectionGroupName = $"DialogOptions-{Guid.NewGuid():N}";
 
     /// <summary>Initializes an empty searchable option list.</summary>
     public SearchableOptionList()
@@ -102,6 +103,14 @@ public sealed partial class SearchableOptionList : UserControl
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         RefreshFilteredOptions();
+    }
+
+    private void DialogOptionRow_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is DialogOptionRow row)
+        {
+            row.ConfigureSelection(AllowMultiple, _selectionGroupName);
+        }
     }
 
     private void DialogOptionRow_SelectionInvoked(object sender, EventArgs e)

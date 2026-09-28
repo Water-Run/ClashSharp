@@ -47,6 +47,7 @@
                             IsChecked="{Binding IsChecked, Mode=TwoWay}"
                             Tag="{Binding}"
                             HorizontalAlignment="Stretch"
+                            Loaded="DialogOptionRow_Loaded"
                             SelectionInvoked="DialogOptionRow_SelectionInvoked" />
                     </DataTemplate>
                 </ListView.ItemTemplate>

@@ -7,6 +7,8 @@ namespace ClashSharp.Components;
 /// <summary>Reusable option row for dialog choice lists.</summary>
 public sealed partial class DialogOptionRow : UserControl
 {
+    private bool _allowMultiple;
+
     /// <summary>Identifies the <see cref="Title"/> dependency property.</summary>
     public static readonly DependencyProperty TitleProperty = DependencyProperty.Register(
         nameof(Title),
@@ -86,9 +88,32 @@ public sealed partial class DialogOptionRow : UserControl
         set => SetValue(IsCheckedProperty, value);
     }
 
-    private void OptionButton_Click(object sender, RoutedEventArgs e)
+    internal void ConfigureSelection(bool allowMultiple, string groupName)
     {
-        IsChecked = !IsChecked;
+        _allowMultiple = allowMultiple;
+        SelectionCheckBox.Visibility = allowMultiple ? Visibility.Visible : Visibility.Collapsed;
+        SelectionRadioButton.Visibility = allowMultiple ? Visibility.Collapsed : Visibility.Visible;
+        if (!allowMultiple)
+        {
+            SelectionRadioButton.GroupName = groupName;
+        }
+    }
+
+    private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        IsChecked = SelectionCheckBox.IsChecked == true;
+        SelectionInvoked?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void SelectionRadioButton_Checked(object sender, RoutedEventArgs e)
+    {
+        // A binding refresh (including filtered/recycled rows) must not select another option.
+        if (_allowMultiple || IsChecked)
+        {
+            return;
+        }
+
+        IsChecked = true;
         SelectionInvoked?.Invoke(this, EventArgs.Empty);
     }
 }

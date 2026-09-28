@@ -5,81 +5,101 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Button
-        x:Name="OptionButton"
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
-        Padding="0"
-        Background="Transparent"
-        BorderThickness="0"
-        Click="OptionButton_Click">
-        <Grid
-            Style="{StaticResource ClashCardGridStyle}"
-            MinHeight="72"
-            Padding="10,8"
-            ColumnSpacing="10"
-            HorizontalAlignment="Stretch">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+    <UserControl.Resources>
+        <DataTemplate x:Key="OptionContentTemplate">
+            <Grid ColumnSpacing="10" MinWidth="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <CheckBox
-                x:Name="SelectionCheckBox"
-                Grid.Column="0"
-                Width="32"
-                MinWidth="0"
-                Padding="0"
-                IsChecked="{Binding IsChecked, ElementName=Root, Mode=TwoWay}"
-                IsHitTestVisible="False"
-                IsTabStop="False"
-                VerticalAlignment="Center" />
+                <FontIcon
+                    Glyph="{Binding Glyph}"
+                    FontSize="18"
+                    Width="24"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-            <FontIcon
-                Grid.Column="1"
-                Glyph="{Binding Glyph, ElementName=Root}"
-                FontSize="18"
-                Width="24"
-                VerticalAlignment="Center"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid Grid.Column="1" RowSpacing="3" MinWidth="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-            <Grid Grid.Column="2" RowSpacing="3" MinWidth="0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+                    <Grid ColumnSpacing="8" MinWidth="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Text="{Binding Title}"
+                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                            MinWidth="0"
+                            TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                            Grid.Column="1"
+                            Text="{Binding Metadata}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            VerticalAlignment="Center"
+                            MaxWidth="160"
+                            TextTrimming="CharacterEllipsis" />
+                    </Grid>
 
-                <Grid ColumnSpacing="8" MinWidth="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
                     <TextBlock
-                        Text="{Binding Title, ElementName=Root}"
-                        Style="{ThemeResource BodyStrongTextBlockStyle}"
-                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                        MinWidth="0"
-                        TextTrimming="CharacterEllipsis" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Text="{Binding Metadata, ElementName=Root}"
+                        Grid.Row="1"
+                        Text="{Binding Description}"
                         Style="{ThemeResource CaptionTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        VerticalAlignment="Center"
-                        MaxWidth="160"
+                        TextWrapping="WrapWholeWords"
+                        MaxLines="2"
                         TextTrimming="CharacterEllipsis" />
                 </Grid>
-
-                <TextBlock
-                    Grid.Row="1"
-                    Text="{Binding Description, ElementName=Root}"
-                    Style="{ThemeResource CaptionTextBlockStyle}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextWrapping="WrapWholeWords"
-                    MaxLines="2"
-                    TextTrimming="CharacterEllipsis" />
             </Grid>
-        </Grid>
-    </Button>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid
+        Style="{StaticResource ClashCardGridStyle}"
+        MinHeight="72"
+        Padding="10,8"
+        HorizontalAlignment="Stretch">
+        <CheckBox
+            x:Name="SelectionCheckBox"
+            Visibility="Collapsed"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            VerticalContentAlignment="Center"
+            MinHeight="56"
+            Padding="22,0,0,0"
+            Content="{Binding Tag, ElementName=Root}"
+            ContentTemplate="{StaticResource OptionContentTemplate}"
+            AutomationProperties.Name="{Binding Title, ElementName=Root}"
+            AutomationProperties.HelpText="{Binding Description, ElementName=Root}"
+            IsChecked="{Binding IsChecked, ElementName=Root}"
+            Click="SelectionCheckBox_Click">
+            <CheckBox.Resources>
+                <!-- Keep an unchecked box empty even if the animated glyph retains its last frame. -->
+                <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundUnchecked" Color="Transparent" />
+                <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundUncheckedPointerOver" Color="Transparent" />
+                <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundUncheckedPressed" Color="Transparent" />
+                <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundUncheckedDisabled" Color="Transparent" />
+            </CheckBox.Resources>
+        </CheckBox>
+        <RadioButton
+            x:Name="SelectionRadioButton"
+            Visibility="Collapsed"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            VerticalContentAlignment="Center"
+            MinHeight="56"
+            Padding="22,0,0,0"
+            Content="{Binding Tag, ElementName=Root}"
+            ContentTemplate="{StaticResource OptionContentTemplate}"
+            AutomationProperties.Name="{Binding Title, ElementName=Root}"
+            AutomationProperties.HelpText="{Binding Description, ElementName=Root}"
+            IsChecked="{Binding IsChecked, ElementName=Root}"
+            Checked="SelectionRadioButton_Checked" />
+    </Grid>
 </UserControl>
