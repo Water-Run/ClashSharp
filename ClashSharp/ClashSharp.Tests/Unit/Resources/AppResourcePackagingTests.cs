@@ -2791,7 +2791,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("requires a UI picker", actionService, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies dialog option rows are componentized for repeated title/description choice UI.</summary>
+    /// <summary>Verifies multi-select dialogs share option rows and export uses native single selection.</summary>
     [Fact]
     public void DialogOptionRowComponent_IsUsedBySettingsAndSearchableDialogs()
     {
@@ -2828,8 +2828,8 @@ public sealed class AppResourcePackagingTests
         string packagePresenter = File.ReadAllText(FindSourceFile(
             "ClashSharp", "ClashSharp", "Presentation", "Dialogs", "DataPackageDialogPresenter.cs"));
         Assert.Contains("_dataPackages.ExportAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("DialogOptionRow", packagePresenter, StringComparison.Ordinal);
-        Assert.Contains("SelectionInvoked += (_, _) => SelectDataPackageScopeRow", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("RadioButtons scopeSelector", packagePresenter, StringComparison.Ordinal);
+        Assert.DoesNotContain("DialogOptionRow", packagePresenter, StringComparison.Ordinal);
         Assert.Contains("DialogOptionRow", searchableComponentXaml, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", masterControlCode, StringComparison.Ordinal);
     }

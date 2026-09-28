@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
@@ -9,6 +7,7 @@ using ClashSharp.Components;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -183,29 +182,41 @@ internal sealed class DataPackageDialogPresenter
             Text = _getString("Settings.DataExport.Description"),
             TextWrapping = TextWrapping.WrapWholeWords,
         });
-        List<DialogOptionRow> rows = [];
-        (DataPackageExportScope Scope, string Key, string Glyph)[] options =
+        RadioButtons scopeSelector = new() { MaxColumns = 1 };
+        (DataPackageExportScope Scope, string Key)[] options =
         [
-            (DataPackageExportScope.Settings, "Settings", "\uE713"),
-            (DataPackageExportScope.SettingsAndProxyConfiguration, "SettingsAndProxyConfiguration", "\uE968"),
-            (DataPackageExportScope.SystemLogSqlite, "SystemLogSqlite", "\uE777"),
+            (DataPackageExportScope.Settings, "Settings"),
+            (DataPackageExportScope.SettingsAndProxyConfiguration, "SettingsAndProxyConfiguration"),
+            (DataPackageExportScope.SystemLogSqlite, "SystemLogSqlite"),
         ];
         foreach (var option in options)
         {
-            DialogOptionRow row = new()
+            string title = _getString($"Settings.DataPackage.Scope.{option.Key}");
+            string description = _getString($"Settings.DataPackage.Scope.{option.Key}.Description");
+            StackPanel content = new() { Spacing = 4, Margin = new Thickness(0, 4, 0, 4) };
+            content.Children.Add(new TextBlock
             {
-                Title = _getString($"Settings.DataPackage.Scope.{option.Key}"),
-                Metadata = _getString("Settings.DataExport.Title"),
-                Description = _getString($"Settings.DataPackage.Scope.{option.Key}.Description"),
-                Glyph = option.Glyph,
-                IsChecked = option.Scope == DataPackageExportScope.Settings,
-                Tag = option.Scope,
+                Text = title,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = description,
+                Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["CaptionTextBlockStyle"],
+                TextWrapping = TextWrapping.Wrap,
+            });
+            RadioButton choice = new()
+            {
+                Content = content,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
             };
-            row.SelectionInvoked += (_, _) => SelectDataPackageScopeRow(row, rows);
-            rows.Add(row);
-            panel.Children.Add(row);
+            AutomationProperties.SetName(choice, title);
+            AutomationProperties.SetHelpText(choice, description);
+            scopeSelector.Items.Add(choice);
         }
+        scopeSelector.SelectedIndex = 0;
+        panel.Children.Add(scopeSelector);
 
         ThemedContentDialog dialog = new()
         {
@@ -221,15 +232,9 @@ internal sealed class DataPackageDialogPresenter
             return null;
         }
 
-        return (DataPackageExportScope)rows.Single(static row => row.IsChecked).Tag;
-    }
-
-    private static void SelectDataPackageScopeRow(DialogOptionRow selectedRow, IReadOnlyList<DialogOptionRow> rows)
-    {
-        foreach (DialogOptionRow row in rows)
-        {
-            row.IsChecked = ReferenceEquals(row, selectedRow);
-        }
+        return scopeSelector.SelectedIndex >= 0
+            ? options[scopeSelector.SelectedIndex].Scope
+            : null;
     }
 
     private static bool IsImportableDataPackageScope(ClashDataPackageScope? scope) =>

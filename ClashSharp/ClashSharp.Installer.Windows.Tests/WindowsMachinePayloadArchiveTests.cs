@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
+using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Windows.Files;
 using ClashSharp.Installer.Windows.Machines;
 
@@ -114,11 +115,30 @@ public sealed class WindowsMachinePayloadArchiveTests
     [Fact]
     public async Task CompleteEmbeddedManifestIdentityIsRecheckedBeforeArchiveUse()
     {
-        using var lockedFixture = Fixture();
-        using var otherFixture = Fixture();
-        InstallerRequest request = lockedFixture.Request(targetSid: TargetSid);
-        WindowsMachineDeploymentPlan plan = Plan(otherFixture, request);
-        await using WindowsInstallerReleaseLease release = lockedFixture.Lock(request);
+        using var fixture = Fixture();
+        InstallerRequest request = fixture.Request(targetSid: TargetSid);
+        InstallerReleaseManifest manifest = fixture.Manifest;
+        // Keep the request-bound payload identical while changing another trust anchor.
+        // Independently generated ZIPs can differ when their entry timestamps cross a boundary.
+        var changedManifest = new InstallerReleaseManifest(
+            manifest.Schema,
+            manifest.ExpectedPackageVersion,
+            manifest.InstallerPayloadSha256,
+            "0123456789ABCDEF0123456789ABCDEF01234567",
+            manifest.PackageCertificateThumbprint,
+            manifest.CertificateSha256,
+            manifest.PackageIdentity,
+            manifest.Dependencies,
+            manifest.MachineFiles,
+            manifest.Files);
+        WindowsMachineDeploymentPlan plan = WindowsMachineDeploymentPlan.Create(
+            request,
+            changedManifest,
+            InstallerMachineAssociation.Create(TargetSid, Token),
+            Path.Combine(fixture.RootDirectory, "Program Files"),
+            Path.Combine(fixture.RootDirectory, "ProgramData"),
+            Path.Combine(fixture.RootDirectory, "Users", "owner"));
+        await using WindowsInstallerReleaseLease release = fixture.Lock(request);
 
         InstallerProtocolException exception = Assert.Throws<InstallerProtocolException>(() =>
             WindowsMachinePayloadArchive.Open(
