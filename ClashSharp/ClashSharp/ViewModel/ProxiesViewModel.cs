@@ -115,6 +115,18 @@ internal sealed class ProxiesViewModel : ObservableObject
             TestLatencyAsync,
             _errorSink,
             operationName: "proxies-test-latency");
+        TestLatencyCommand.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(AsyncRelayCommand.IsRunning))
+            {
+                OnPropertyChanged(nameof(PageStatusText));
+            }
+        };
+        _providerResources.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasProviderResources));
+            OnPropertyChanged(nameof(HasNoProviderResources));
+        };
         RefreshRuntimeCommand = new AsyncRelayCommand(
             RefreshRuntimeAsync,
             _errorSink,
@@ -158,12 +170,51 @@ internal sealed class ProxiesViewModel : ObservableObject
     /// <value>Localized section title.</value>
     public string ProviderResourcesSectionTitleText => _localization.GetString("ProxyNodes.Section.Resources");
 
+    /// <summary>Gets the localized empty-state explanations for each list.</summary>
+    public string EmptyNodesText => _localization.GetString("ProxyNodes.Empty.Nodes");
+
+    /// <summary>Gets the explanation shown when no strategy groups are available.</summary>
+    public string EmptyGroupsText => _localization.GetString("ProxyNodes.Empty.Groups");
+
+    /// <summary>Gets the explanation shown when no resources are available.</summary>
+    public string EmptyResourcesText => _localization.GetString("ProxyNodes.Empty.Resources");
+
+    /// <summary>Gets whether the node list contains any rows.</summary>
+    public bool HasProxyNodes => ProxyNodes.Count > 0;
+
+    /// <summary>Gets whether the node empty state is visible.</summary>
+    public bool HasNoProxyNodes => !HasProxyNodes;
+
+    /// <summary>Gets whether the strategy group list contains any rows.</summary>
+    public bool HasProxyGroups => ProxyGroups.Count > 0;
+
+    /// <summary>Gets whether the strategy group empty state is visible.</summary>
+    public bool HasNoProxyGroups => !HasProxyGroups;
+
+    /// <summary>Gets whether the resource list contains any rows.</summary>
+    public bool HasProviderResources => ProviderResources.Count > 0;
+
+    /// <summary>Gets whether the resource empty state is visible.</summary>
+    public bool HasNoProviderResources => !HasProviderResources;
+
+    /// <summary>Shows ongoing latency work without replacing the last runtime observation.</summary>
+    public string PageStatusText => TestLatencyCommand.IsRunning
+        ? _localization.GetString("Master.LatencyDialog.Running")
+        : RuntimeStatusText;
+
     /// <summary>Gets the visible proxy nodes.</summary>
     /// <value>Read-only node list; never null.</value>
     public IReadOnlyList<ProxyNodeDisplay> ProxyNodes
     {
         get => _proxyNodes;
-        private set => SetProperty(ref _proxyNodes, value);
+        private set
+        {
+            if (SetProperty(ref _proxyNodes, value))
+            {
+                OnPropertyChanged(nameof(HasProxyNodes));
+                OnPropertyChanged(nameof(HasNoProxyNodes));
+            }
+        }
     }
 
     /// <summary>Gets runtime strategy groups.</summary>
@@ -171,7 +222,14 @@ internal sealed class ProxiesViewModel : ObservableObject
     public IReadOnlyList<MihomoProxyGroupDisplay> ProxyGroups
     {
         get => _proxyGroups;
-        private set => SetProperty(ref _proxyGroups, value);
+        private set
+        {
+            if (SetProperty(ref _proxyGroups, value))
+            {
+                OnPropertyChanged(nameof(HasProxyGroups));
+                OnPropertyChanged(nameof(HasNoProxyGroups));
+            }
+        }
     }
 
     /// <summary>Gets runtime provider resources.</summary>
@@ -183,7 +241,13 @@ internal sealed class ProxiesViewModel : ObservableObject
     public string RuntimeStatusText
     {
         get => _runtimeStatusText;
-        private set => SetProperty(ref _runtimeStatusText, value);
+        private set
+        {
+            if (SetProperty(ref _runtimeStatusText, value))
+            {
+                OnPropertyChanged(nameof(PageStatusText));
+            }
+        }
     }
 
     /// <summary>Gets the command that refreshes nodes from the catalog.</summary>

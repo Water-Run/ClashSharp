@@ -158,6 +158,11 @@ public sealed class ProxiesViewModelTests
             new FakeProxyLatency(), runtime, log, new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
         await viewModel.LoadAsync(CancellationToken.None);
         IReadOnlyList<ProxyNodeDisplay> nodes = viewModel.ProxyNodes;
+        List<string?> changes = [];
+        viewModel.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+        Assert.True(viewModel.HasProxyNodes);
+        Assert.True(viewModel.HasProxyGroups);
+        Assert.True(viewModel.HasProviderResources);
 
         runtime.IsActive = false;
         await viewModel.RefreshRuntimeAsync(CancellationToken.None);
@@ -166,14 +171,68 @@ public sealed class ProxiesViewModelTests
         Assert.Empty(viewModel.ProxyGroups);
         Assert.Empty(viewModel.ProviderResources);
         Assert.Equal("Core is not running", viewModel.RuntimeStatusText);
+        Assert.True(viewModel.HasProxyNodes);
+        Assert.False(viewModel.HasNoProxyNodes);
+        Assert.True(viewModel.HasNoProxyGroups);
+        Assert.True(viewModel.HasNoProviderResources);
+        Assert.Contains(nameof(viewModel.HasNoProxyGroups), changes);
+        Assert.Contains(nameof(viewModel.HasNoProviderResources), changes);
         Assert.Equal(1, runtime.RefreshCount);
         runtime.IsActive = true;
         await viewModel.RefreshRuntimeAsync(CancellationToken.None);
         Assert.Equal(runtime.ProxyGroups, viewModel.ProxyGroups.Select(row => row.Model));
         Assert.Equal(runtime.ProviderResources, viewModel.ProviderResources.Select(row => row.Model));
         Assert.Equal("Runtime refreshed", viewModel.RuntimeStatusText);
+        Assert.False(viewModel.HasNoProxyGroups);
+        Assert.False(viewModel.HasNoProviderResources);
         Assert.Equal(2, runtime.RefreshCount);
         Assert.Empty(log.Entries);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TestLatencyCommand_RestoresRuntimeStatusAfterCompletionOrCancellation(bool cancel)
+    {
+        TaskCompletionSource<IReadOnlyList<ProxyNode>> result = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeProxyLatency latency = new() { ReadNodes = (_, token) => result.Task.WaitAsync(token) };
+        FakeProxiesLog log = new();
+        ProxiesViewModel viewModel = new(new FakeProxiesLocalization(), new FakeProxyCatalog(), latency,
+            new FakeProxyRuntimeController { IsActive = false }, log, new TestApplicationErrorSink(),
+            new ModelDisplayMapper(static text => text));
+        await viewModel.LoadAsync(CancellationToken.None);
+        List<string> visibleStatuses = [];
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(viewModel.PageStatusText))
+            {
+                visibleStatuses.Add(viewModel.PageStatusText);
+            }
+        };
+        using CancellationTokenSource cancellation = new();
+
+        Task execution = viewModel.TestLatencyCommand.ExecuteAsync(null, cancellation.Token);
+
+        Assert.True(viewModel.TestLatencyCommand.IsRunning);
+        Assert.Equal("Testing node latency", viewModel.PageStatusText);
+        Assert.Equal("Core is not running", viewModel.RuntimeStatusText);
+        if (cancel)
+        {
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+            Assert.Empty(log.Entries);
+        }
+        else
+        {
+            result.SetResult([]);
+            await execution;
+            Assert.True(viewModel.HasNoProxyNodes);
+            Assert.False(viewModel.HasProxyNodes);
+        }
+
+        Assert.False(viewModel.TestLatencyCommand.IsRunning);
+        Assert.Equal("Core is not running", viewModel.PageStatusText);
+        Assert.Equal(["Testing node latency", "Core is not running"], visibleStatuses);
     }
 
     [Theory]
@@ -475,6 +534,7 @@ public sealed class ProxiesViewModelTests
                 "ProxyNodes.Status.ProviderUpdated" => "Provider updated",
                 "ProxyNodes.Status.ProviderUpdatedEmpty" => "Provider updated with no entries",
                 "ProxyNodes.Status.RuntimeUnavailable" => "Runtime unavailable",
+                "Master.LatencyDialog.Running" => "Testing node latency",
                 _ => key,
             };
         }
