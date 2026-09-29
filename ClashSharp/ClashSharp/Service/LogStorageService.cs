@@ -897,20 +897,44 @@ public sealed partial class LogStorageService : IAsyncDisposable
             EnsureInitialized();
 
             using SqliteConnection connection = OpenConnection();
-
-            while (LogStorageFootprint.CalculateBytes(_databasePath) > targetSizeBytes)
+            long currentSize = LogStorageFootprint.CalculateBytes(_databasePath);
+            if (currentSize <= targetSizeBytes)
             {
-                long deleted = LogStorageMaintenance.DeleteOldestBatch(connection, "Logs", "CreatedAtUnixTime")
-                    + LogStorageMaintenance.DeleteOldestBatch(connection, "Connections", "CreatedAtUnixTime")
-                    + LogStorageMaintenance.DeleteOldestBatch(connection, "TrafficSnapshots", "CreatedAtUnixTime");
+                return;
+            }
 
-                if (deleted == 0)
+            // Free pages and WAL content may account for the entire excess; reclaim them before deleting history.
+            CompactForSizeCleanup(connection);
+            currentSize = LogStorageFootprint.CalculateBytes(_databasePath);
+            while (currentSize > targetSizeBytes)
+            {
+                long rowCount = ExecuteScalarLong(connection,
+                    "SELECT (SELECT COUNT(*) FROM Logs) + (SELECT COUNT(*) FROM Connections) + (SELECT COUNT(*) FROM TrafficSnapshots);");
+                if (rowCount == 0)
                 {
                     break;
                 }
 
-                LogStorageMaintenance.Vacuum(connection);
+                // Estimate from the current excess, limiting each pass to 10% of remaining history and 5,000 rows.
+                // Recheck actual compacted bytes after every batch because record sizes need not be uniform.
+                double estimatedRows = Math.Ceiling(rowCount * ((double)(currentSize - targetSizeBytes) / currentSize));
+                int batchSize = (int)Math.Clamp(Math.Min(estimatedRows, Math.Ceiling(rowCount / 10d)), 1, 5000);
+                if (LogStorageMaintenance.DeleteOldestHistoryBatch(connection, batchSize) == 0)
+                {
+                    break;
+                }
+
+                CompactForSizeCleanup(connection);
+                currentSize = LogStorageFootprint.CalculateBytes(_databasePath);
             }
+        }
+    }
+
+    private static void CompactForSizeCleanup(SqliteConnection connection)
+    {
+        if (!LogStorageMaintenance.TryVacuumForSizeCleanup(connection))
+        {
+            throw new IOException("Log storage is in use and cannot be compacted. Close other database readers and retry.");
         }
     }
 

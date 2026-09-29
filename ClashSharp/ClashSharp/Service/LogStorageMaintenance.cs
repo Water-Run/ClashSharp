@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Data.Sqlite;
 
 namespace ClashSharp.Service;
@@ -11,6 +12,77 @@ namespace ClashSharp.Service;
 /// </remarks>
 internal static class LogStorageMaintenance
 {
+    private static readonly string[] HistoryTables = ["Logs", "Connections", "TrafficSnapshots"];
+
+    /// <summary>Deletes one bounded batch in chronological order across the three history tables.</summary>
+    public static int DeleteOldestHistoryBatch(SqliteConnection connection, int batchSize)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
+
+        using SqliteTransaction transaction = connection.BeginTransaction();
+        List<(int Table, long Id)> rows = [];
+        using (SqliteCommand select = connection.CreateCommand())
+        {
+            select.Transaction = transaction;
+            select.CommandText = """
+                SELECT TableNumber, Id FROM (
+                    SELECT 0 AS TableNumber, Id, CreatedAtUnixTime FROM Logs
+                    UNION ALL SELECT 1, Id, CreatedAtUnixTime FROM Connections
+                    UNION ALL SELECT 2, Id, CreatedAtUnixTime FROM TrafficSnapshots
+                ) ORDER BY CreatedAtUnixTime, TableNumber, Id LIMIT $limit;
+                """;
+            select.Parameters.AddWithValue("$limit", batchSize);
+            using SqliteDataReader reader = select.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add((reader.GetInt32(0), reader.GetInt64(1)));
+            }
+        }
+
+        int deleted = 0;
+        for (int table = 0; table < HistoryTables.Length; table++)
+        {
+            using SqliteCommand delete = connection.CreateCommand();
+            delete.Transaction = transaction;
+            delete.CommandText = $"DELETE FROM {HistoryTables[table]} WHERE Id = $id;";
+            SqliteParameter id = delete.Parameters.Add("$id", SqliteType.Integer);
+            foreach ((int rowTable, long rowId) in rows)
+            {
+                if (rowTable == table)
+                {
+                    id.Value = rowId;
+                    deleted += delete.ExecuteNonQuery();
+                }
+            }
+        }
+
+        transaction.Commit();
+        return deleted;
+    }
+
+    /// <summary>Compacts storage only after all WAL pages can be checkpointed.</summary>
+    /// <returns>False when another reader prevents reclaiming WAL space.</returns>
+    public static bool TryVacuumForSizeCleanup(SqliteConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        if (!TryTruncateWal(connection))
+        {
+            return false;
+        }
+
+        ExecuteNonQuery(connection, "VACUUM;");
+        return TryTruncateWal(connection);
+    }
+
+    private static bool TryTruncateWal(SqliteConnection connection)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+        using SqliteDataReader reader = command.ExecuteReader();
+        return reader.Read() && reader.GetInt32(0) == 0;
+    }
+
     /// <summary>Deletes a bounded batch of oldest records from <paramref name="tableName"/>.</summary>
     /// <param name="connection">Open SQLite connection. Must not be null.</param>
     /// <param name="tableName">Trusted internal table name. Must not be null.</param>
