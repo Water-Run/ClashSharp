@@ -396,7 +396,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Description.ByCount"] = "Only limit the Logs table count; connections, traffic, and rule statistics are preserved.",
             ["Logs.Cleanup.Description.All"] = "Delete all logs, connections, traffic, node health, and rule-hit records.",
             ["Logs.Cleanup.Preview.Loading"] = "Calculating cleanup…",
-            ["Logs.Cleanup.Parameter.Required"] = "Enter a number from {0:N0} to {1:N0}.",
+            ["Logs.Cleanup.Parameter.Required"] = "Enter a whole number from {0:N0} to {1:N0}.",
             ["Logs.Cleanup.Preview.Failed"] = "Couldn't calculate cleanup. Close this dialog and try again.",
             ["Logs.Cleanup.Preview.Count"] = "{0:N0} entries will be deleted.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "Current size: {0}. Target: {1}. The number of entries deleted depends on compaction results.",

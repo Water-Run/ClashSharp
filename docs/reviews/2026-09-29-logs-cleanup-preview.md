@@ -29,3 +29,11 @@
 14edbbc 于 23:53 UTC 正常退出：无应用、内核、TUN，代理关闭；两份数据库完整性为 `ok`，1,627 条日志无警告或错误。闭合备份 18 文件、1,866,928 字节。`evidence-14edbbc-logs-preview.zip` 包含 15 份限定范围 JSON，SHA-256 为 `A19D7BE352CDB0193E90FFBABFB31FE6B31B9A6F4D7B0BA10F654BEC4CAB4E8B`。
 
 `desktop-evidence-logs-preview-14edbbc-20260928T235430Z.tar.gz` 保存 41 张截图和相应操作记录，SHA-256 `A333927A80D04800D98F55DE598B26C098576B3648364FF697FA078857DB4BD5`。`Verify-14edbbc-Logs.py` 已核对安装身份、退出状态、数据库散列、备份和归档；截图用于人工判读，不以文件存在性代替视觉验收。
+
+候选 **01b3cba** 的 [CI 36500564276](https://github.com/Water-Run/ClashSharp/actions/runs/36500564276) 两项任务成功，四份 TRX 独立核对仍为 **5,703 通过、零失败、零跳过**。00:04 UTC 在服务器实际安装，已安装 DLL 与载荷一致（`82EC125F31A85C72A615B3534E85357D1A9D33F7E83A763A48395D3ABDA94A0A`），三项文件签名有效。恢复的是 14edbbc 的闭合测试数据备份，不作为产品自动迁移证据。
+
+00:08 UTC 实机复验发现上一修复仍不完整：在数字框清空后直接点击清理，公开的 `NumberBox.Text` 和 `Value` 仍保留上次提交的 30 天，实际删除了 504 条测试历史。随后重新打开对话框，清空并用 Tab 离开字段，范围提示和禁用状态正常。因此保留失败状态，不能把键盘路径通过当作鼠标提交也通过。
+
+后续修复读取原生模板 `InputBox` 正在编辑的文本，使用同一数字格式器解析；同步响应 `TextChanging` 取消旧预览并禁用提交。只有范围内的整数且最新预览完成才可清理，执行参数保存自该预览，避免对话框关闭时编辑值才提交的时序问题。保留原生外观、增减按钮和离焦归一化行为，八语提示明确要求整数。依据 [Microsoft NumberBox 实现](https://github.com/microsoft/microsoft-ui-xaml/blob/main/controls/dev/NumberBox/NumberBox.cpp)核对编辑与提交的边界。18 项目构建通过（32.72 秒，零警告、零错误），188 项相关测试通过，格式检查通过（36.40 秒）；新候选仍需原生复验。
+
+01b3cba 已于 00:13 UTC 正常退出，无应用、内核、TUN，代理关闭；两份数据库完整性为 `ok`，剩余 1,127 条日志无警告或错误。18 文件、1,350,832 字节的闭合备份保留失败现场。`evidence-01b3cba-logs-draft.zip` 含 13 份限定 JSON，SHA-256 `CEA31A0A4738210FBDF8984BD3481352B86EA4F8A25BEDB2DCEC1F0978146660`；`desktop-evidence-logs-draft-01b3cba-20260929T001541Z.tar.gz` 含 30 张截图和操作记录，SHA-256 `C266D17495DC6435946A66E2885B85932BFC962E54132683E811962110E0EC6F`。`Verify-01b3cba-Logs.py` 已核对，整体生产验收仍未完成。

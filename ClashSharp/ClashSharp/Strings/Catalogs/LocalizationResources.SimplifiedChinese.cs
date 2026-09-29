@@ -396,7 +396,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Description.ByCount"] = "仅限制日志表条数；连接、流量和规则统计保持不变。",
             ["Logs.Cleanup.Description.All"] = "删除全部日志、连接、流量、节点健康和规则命中记录。",
             ["Logs.Cleanup.Preview.Loading"] = "正在计算清理范围…",
-            ["Logs.Cleanup.Parameter.Required"] = "请输入 {0:N0} 到 {1:N0} 之间的数字。",
+            ["Logs.Cleanup.Parameter.Required"] = "请输入 {0:N0} 到 {1:N0} 之间的整数。",
             ["Logs.Cleanup.Preview.Failed"] = "无法计算清理范围。请重新打开此对话框后重试。",
             ["Logs.Cleanup.Preview.Count"] = "将清理 {0:N0} 个条目。",
             ["Logs.Cleanup.Preview.SizeTarget"] = "当前占用 {0}，目标 {1}。实际清理数量取决于压缩结果。",

@@ -396,7 +396,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Description.ByCount"] = "فقط تعداد جدول گزارش‌ها را محدود می‌کند؛ اتصالات، ترافیک و آمار قوانین حفظ می‌شوند.",
             ["Logs.Cleanup.Description.All"] = "همه گزارش‌ها، اتصالات، ترافیک، سلامت گره و سوابق برخورد قانون را حذف کنید.",
             ["Logs.Cleanup.Preview.Loading"] = "در حال محاسبه پاک‌سازی…",
-            ["Logs.Cleanup.Parameter.Required"] = "عددی بین {0:N0} و {1:N0} وارد کنید.",
+            ["Logs.Cleanup.Parameter.Required"] = "یک عدد صحیح بین {0:N0} و {1:N0} وارد کنید.",
             ["Logs.Cleanup.Preview.Failed"] = "محاسبه پاک‌سازی ممکن نشد. این پنجره را ببندید و دوباره تلاش کنید.",
             ["Logs.Cleanup.Preview.Count"] = "{0:N0} مورد حذف خواهد شد.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "اندازه فعلی: {0}. هدف: {1}. تعداد موارد حذف‌شده به نتیجه فشرده‌سازی بستگی دارد.",

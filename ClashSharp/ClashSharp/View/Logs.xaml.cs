@@ -12,6 +12,7 @@ using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 using Windows.Globalization.NumberFormatting;
 
 namespace ClashSharp.View;
@@ -316,6 +317,23 @@ public sealed partial class Logs : Page
         };
         // Size the dialog surface without constraining the full-window popup host.
         dialog.Resources["ContentDialogMaxWidth"] = 720d;
+        TextBox? parameterInput = null;
+        double previewParameter = double.NaN;
+        double acceptedParameter = double.NaN;
+
+        bool TryReadParameter(out double value)
+        {
+            // NumberBox.Text and Value still contain the last committed value while
+            // InputBox is being edited. Read the visible draft for destructive actions.
+            string? text = parameterInput?.Text;
+            double? parsed = string.IsNullOrWhiteSpace(text)
+                ? null
+                : ((INumberParser)parameterBox.NumberFormatter).ParseDouble(text.Trim());
+            value = parsed ?? double.NaN;
+            return double.IsFinite(value) &&
+                value >= parameterBox.Minimum && value <= parameterBox.Maximum &&
+                value == Math.Round(value);
+        }
 
         void RequireCleanupParameter()
         {
@@ -338,15 +356,24 @@ public sealed partial class Logs : Page
             {
                 updateEditor?.Invoke();
                 int selectedIndex = cleanupModeBox.SelectedIndex;
-                double parameterValue = parameterBox.Value;
+                double parameterValue = double.NaN;
                 string? levelFilter = levelBox.SelectedItem as string;
                 string? categoryFilter = categoryBox.SelectedItem as string;
                 previewText.Text = _viewModel.CleanupPreviewPlaceholderText;
                 dialog.IsPrimaryButtonEnabled = false;
-                if (selectedIndex is >= 0 and <= 2 && !double.IsFinite(parameterValue))
+                previewParameter = double.NaN;
+                if (selectedIndex is >= 0 and <= 2)
                 {
-                    RequireCleanupParameter();
-                    return;
+                    if (parameterInput is null)
+                    {
+                        previewSession.Cancel();
+                        return;
+                    }
+                    if (!TryReadParameter(out parameterValue))
+                    {
+                        RequireCleanupParameter();
+                        return;
+                    }
                 }
 
                 await previewSession.RunAsync(
@@ -360,6 +387,7 @@ public sealed partial class Logs : Page
                             previewToken);
                         previewToken.ThrowIfCancellationRequested();
                         previewText.Text = text ?? _viewModel.CleanupPreviewFailedText;
+                        previewParameter = parameterValue;
                         dialog.IsPrimaryButtonEnabled = text is not null;
                     },
                     CleanupPreviewDebounceDelay,
@@ -389,21 +417,48 @@ public sealed partial class Logs : Page
                     levelBox,
                     categoryBox));
         }
-        async void OnParameterChanged(NumberBox sender, NumberBoxValueChangedEventArgs e) =>
+        async void OnParameterTextChanging(TextBox sender, TextBoxTextChangingEventArgs e) =>
             await UpdatePreviewAsync();
+        async void OnParameterLoaded(object sender, RoutedEventArgs e)
+        {
+            if (parameterInput is not null)
+            {
+                return;
+            }
+            parameterInput = FindNumberBoxInput(parameterBox);
+            if (parameterInput is null)
+            {
+                previewSession.Cancel();
+                previewText.Text = _viewModel.CleanupPreviewFailedText;
+                dialog.IsPrimaryButtonEnabled = false;
+                return;
+            }
+            parameterInput.TextChanging += OnParameterTextChanging;
+            await UpdatePreviewAsync();
+        }
         async void OnFilterChanged(object sender, SelectionChangedEventArgs e) =>
             await UpdatePreviewAsync();
-        void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs e)
+        async void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs e)
         {
-            if (cleanupModeBox.SelectedIndex is >= 0 and <= 2 &&
-                (!double.IsFinite(parameterBox.Value) || string.IsNullOrWhiteSpace(parameterBox.Text)))
+            if (cleanupModeBox.SelectedIndex is >= 0 and <= 2)
             {
-                e.Cancel = true;
-                RequireCleanupParameter();
+                if (!TryReadParameter(out double value))
+                {
+                    e.Cancel = true;
+                    RequireCleanupParameter();
+                    return;
+                }
+                if (value != previewParameter || !dialog.IsPrimaryButtonEnabled)
+                {
+                    e.Cancel = true;
+                    await UpdatePreviewAsync();
+                    return;
+                }
+                acceptedParameter = value;
             }
         }
         cleanupModeBox.SelectionChanged += OnModeChanged;
-        parameterBox.ValueChanged += OnParameterChanged;
+        parameterBox.Loaded += OnParameterLoaded;
         levelBox.SelectionChanged += OnFilterChanged;
         categoryBox.SelectionChanged += OnFilterChanged;
         dialog.PrimaryButtonClick += OnPrimaryButtonClick;
@@ -418,7 +473,11 @@ public sealed partial class Logs : Page
         {
             dialogOpen = false;
             cleanupModeBox.SelectionChanged -= OnModeChanged;
-            parameterBox.ValueChanged -= OnParameterChanged;
+            parameterBox.Loaded -= OnParameterLoaded;
+            if (parameterInput is not null)
+            {
+                parameterInput.TextChanging -= OnParameterTextChanging;
+            }
             levelBox.SelectionChanged -= OnFilterChanged;
             categoryBox.SelectionChanged -= OnFilterChanged;
             dialog.PrimaryButtonClick -= OnPrimaryButtonClick;
@@ -432,7 +491,7 @@ public sealed partial class Logs : Page
         }
 
         int selectedCleanupMode = cleanupModeBox.SelectedIndex;
-        double cleanupParameter = parameterBox.Value;
+        double cleanupParameter = acceptedParameter;
         string? selectedLevelFilter = levelBox.SelectedItem as string;
         string? selectedCategoryFilter = categoryBox.SelectedItem as string;
         IsEnabled = false;
@@ -452,6 +511,22 @@ public sealed partial class Logs : Page
         {
             IsEnabled = true;
         }
+    }
+
+    private static TextBox? FindNumberBoxInput(DependencyObject root)
+    {
+        if (root is TextBox { Name: "InputBox" } input)
+        {
+            return input;
+        }
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            if (FindNumberBoxInput(VisualTreeHelper.GetChild(root, index)) is TextBox child)
+            {
+                return child;
+            }
+        }
+        return null;
     }
 
     /// <summary>Updates the parameter editor to match the selected cleanup mode.</summary>

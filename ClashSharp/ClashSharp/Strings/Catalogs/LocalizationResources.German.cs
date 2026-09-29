@@ -396,7 +396,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Description.ByCount"] = "Nur die Anzahl der Protokolle begrenzen; Verbindungen, Traffic und Regelstatistiken bleiben erhalten.",
             ["Logs.Cleanup.Description.All"] = "Alle Protokolle, Verbindungen, Traffic-, Knotenzustands- und Regel-Treffer-Datensätze löschen.",
             ["Logs.Cleanup.Preview.Loading"] = "Bereinigung wird berechnet…",
-            ["Logs.Cleanup.Parameter.Required"] = "Geben Sie eine Zahl von {0:N0} bis {1:N0} ein.",
+            ["Logs.Cleanup.Parameter.Required"] = "Geben Sie eine ganze Zahl von {0:N0} bis {1:N0} ein.",
             ["Logs.Cleanup.Preview.Failed"] = "Die Bereinigung konnte nicht berechnet werden. Schließen Sie dieses Dialogfeld und versuchen Sie es erneut.",
             ["Logs.Cleanup.Preview.Count"] = "{0:N0} Einträge werden gelöscht.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "Aktuelle Größe: {0}. Ziel: {1}. Die Anzahl der gelöschten Einträge hängt vom Ergebnis der Komprimierung ab.",

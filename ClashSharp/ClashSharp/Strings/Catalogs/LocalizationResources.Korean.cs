@@ -396,7 +396,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Description.ByCount"] = "로그 테이블의 개수만 제한합니다. 연결, 트래픽, 규칙 통계는 그대로 둡니다.",
             ["Logs.Cleanup.Description.All"] = "모든 로그, 연결, 트래픽, 노드 상태, 규칙 일치 기록을 삭제합니다.",
             ["Logs.Cleanup.Preview.Loading"] = "정리 범위 계산 중…",
-            ["Logs.Cleanup.Parameter.Required"] = "{0:N0}에서 {1:N0} 사이의 숫자를 입력하세요.",
+            ["Logs.Cleanup.Parameter.Required"] = "{0:N0}에서 {1:N0} 사이의 정수를 입력하세요.",
             ["Logs.Cleanup.Preview.Failed"] = "정리 범위를 계산하지 못했습니다. 이 대화 상자를 닫고 다시 시도하세요.",
             ["Logs.Cleanup.Preview.Count"] = "{0:N0}개 항목이 삭제됩니다.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "현재 크기: {0}. 목표: {1}. 삭제되는 항목 수는 압축 결과에 따라 달라집니다.",

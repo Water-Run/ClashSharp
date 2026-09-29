@@ -396,7 +396,7 @@ internal static partial class LocalizationResources
             ["Logs.Cleanup.Description.ByCount"] = "Ограничить только таблицу журналов; соединения, трафик и статистика правил сохраняются.",
             ["Logs.Cleanup.Description.All"] = "Удалить все журналы, соединения, трафик, состояние узлов и записи срабатывания правил.",
             ["Logs.Cleanup.Preview.Loading"] = "Расчёт очистки…",
-            ["Logs.Cleanup.Parameter.Required"] = "Введите число от {0:N0} до {1:N0}.",
+            ["Logs.Cleanup.Parameter.Required"] = "Введите целое число от {0:N0} до {1:N0}.",
             ["Logs.Cleanup.Preview.Failed"] = "Не удалось рассчитать очистку. Закройте это диалоговое окно и повторите попытку.",
             ["Logs.Cleanup.Preview.Count"] = "Будет удалено записей: {0:N0}.",
             ["Logs.Cleanup.Preview.SizeTarget"] = "Текущий размер: {0}. Цель: {1}. Количество удаляемых записей зависит от результата сжатия.",
