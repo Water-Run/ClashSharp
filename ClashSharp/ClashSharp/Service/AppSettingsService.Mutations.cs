@@ -417,17 +417,19 @@ public sealed partial class AppSettingsService
         internal IReadOnlyList<AppSettingChangedEventArgs> Commit()
         {
             EnsureActive();
-            List<(string Key, object? Previous)> applied = [];
+            List<(string Key, object? Previous)> attempted = [];
             List<AppSettingChangedEventArgs> changes = [];
             try
             {
                 foreach ((string key, object? value) in _pending)
                 {
                     object? previous = _owner.GetValue(key);
+                    // A storage call can change the value before reporting a failure. Retain
+                    // its baseline before issuing the call, including the faulting key.
+                    attempted.Add((key, previous));
                     AppSettingChangedEventArgs? change = value is null
                         ? _owner.RemoveValue(key)
                         : _owner.SetValue(key, value);
-                    applied.Add((key, previous));
                     if (change is not null)
                     {
                         changes.Add(change);
@@ -438,28 +440,29 @@ public sealed partial class AppSettingsService
             }
             catch (Exception applyFailure)
             {
-                Exception? rollbackFailure = null;
-                try
+                List<Exception>? failures = null;
+                for (int index = attempted.Count - 1; index >= 0; index--)
                 {
-                    for (int index = applied.Count - 1; index >= 0; index--)
+                    try
                     {
-                        (string key, object? previous) = applied[index];
+                        (string key, object? previous) = attempted[index];
                         _ = previous is null
                             ? _owner.RemoveValue(key)
                             : _owner.SetValue(key, previous);
                     }
-                }
-                catch (Exception exception)
-                {
-                    rollbackFailure = exception;
+                    catch (Exception rollbackFailure)
+                    {
+                        // One unavailable key must not prevent recovery of the others.
+                        failures ??= [applyFailure];
+                        failures.Add(rollbackFailure);
+                    }
                 }
 
-                if (rollbackFailure is not null)
+                if (failures is not null)
                 {
                     throw new AggregateException(
                         "A settings batch failed and its in-process rollback was incomplete.",
-                        applyFailure,
-                        rollbackFailure);
+                        failures);
                 }
 
                 ExceptionDispatchInfo.Capture(applyFailure).Throw();

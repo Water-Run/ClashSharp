@@ -24,9 +24,11 @@ public sealed partial class AppSettingsService :
     private static readonly SettingDefinition MasterInfoTileLayoutDefinition =
         SettingsRegistry.Default.Get(SettingsRegistry.Keys.MasterInfoTileLayout.Value);
 
-    /// <summary>Shared singleton instance created once at type initialization.</summary>
+    private static readonly Lazy<AppSettingsService> SharedSettings = new(static () => new AppSettingsService());
+
+    /// <summary>Shared singleton instance opened when production first requests it.</summary>
     /// <value>A non-null <see cref="AppSettingsService"/> instance.</value>
-    public static AppSettingsService Instance { get; } = new();
+    public static AppSettingsService Instance => SharedSettings.Value;
 
     /// <summary>Synchronization object guarding settings access for this service lifetime.</summary>
     private readonly object _syncLock = new();
@@ -34,8 +36,8 @@ public sealed partial class AppSettingsService :
     /// <summary>Process-wide write admission; replaced with the AppHost-owned instance during composition.</summary>
     private MutationAdmissionBarrier _mutationAdmission = new();
 
-    /// <summary>Fallback settings map used when Windows application local settings are unavailable.</summary>
-    private readonly Dictionary<string, object> _fallbackValues = [];
+    /// <summary>The sole settings map owned by this service, either Windows storage or an isolated fallback.</summary>
+    private readonly IDictionary<string, object> _values;
 
     /// <summary>Windows local settings container cached for this service lifetime when available.</summary>
     private readonly ApplicationDataContainer? _localSettings;
@@ -184,6 +186,13 @@ public sealed partial class AppSettingsService :
     private AppSettingsService()
     {
         _localSettings = TryResolveLocalSettings();
+        _values = _localSettings is null ? new Dictionary<string, object>(StringComparer.Ordinal) : _localSettings.Values;
+    }
+
+    /// <summary>Creates an isolated settings service without opening Windows application storage.</summary>
+    internal AppSettingsService(IDictionary<string, object> values)
+    {
+        _values = values ?? throw new ArgumentNullException(nameof(values));
     }
 
     /// <summary>Binds settings writes to the process-wide mutation admission authority.</summary>
@@ -672,12 +681,7 @@ public sealed partial class AppSettingsService :
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        if (_localSettings is not null && _localSettings.Values.TryGetValue(key, out object? localValue))
-        {
-            return localValue;
-        }
-
-        return _fallbackValues.TryGetValue(key, out object? fallbackValue) ? fallbackValue : null;
+        return _values.TryGetValue(key, out object? value) ? value : null;
     }
 
     /// <summary>Writes a raw setting value to the preferred backing store.</summary>
@@ -694,17 +698,7 @@ public sealed partial class AppSettingsService :
             return null;
         }
 
-        if (_localSettings is not null)
-        {
-            _localSettings.Values[key] = value;
-            return new AppSettingChangedEventArgs(
-                key,
-                previousValue,
-                value,
-                wasRemoved: false);
-        }
-
-        _fallbackValues[key] = value;
+        _values[key] = value;
         return new AppSettingChangedEventArgs(
             key,
             previousValue,
@@ -724,12 +718,7 @@ public sealed partial class AppSettingsService :
             return null;
         }
 
-        if (_localSettings is not null)
-        {
-            _localSettings.Values.Remove(key);
-        }
-
-        _fallbackValues.Remove(key);
+        _values.Remove(key);
         return new AppSettingChangedEventArgs(
             key,
             previousValue,
