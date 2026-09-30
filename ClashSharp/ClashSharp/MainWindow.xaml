@@ -43,7 +43,8 @@
             ExpandedModeThresholdWidth="1008"
             CompactPaneLength="48"
             OpenPaneLength="260"
-            SelectionChanged="OnNavigationSelectionChanged">
+            SelectionChanged="OnNavigationSelectionChanged"
+            ItemInvoked="OnNavigationItemInvoked">
             <NavigationView.Resources>
                 <!-- Pages provide their own cards over the window's Mica base layer. -->
                 <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />

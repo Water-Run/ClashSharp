@@ -338,6 +338,21 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         }
     }
 
+    /// <summary>Returns to a selected navigation item's page when a child page is currently open.</summary>
+    private void OnNavigationItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    {
+        if (!_runtimeReady || !ReferenceEquals(args.InvokedItemContainer, sender.SelectedItem))
+        {
+            return;
+        }
+
+        if (args.InvokedItemContainer is NavigationViewItem { Tag: string tag }
+            && ShellRouteCatalog.TryParse(tag, out ShellRoute route))
+        {
+            Runtime.Navigation.Navigate(route);
+        }
+    }
+
     /// <summary>Toggles the navigation pane when the shell title bar pane button is requested.</summary>
     /// <param name="sender">Title bar that raised the request. Not null.</param>
     /// <param name="args">Event payload supplied by WinUI. Not null.</param>
