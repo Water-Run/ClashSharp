@@ -1999,9 +1999,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("xmlns:components=\"using:ClashSharp.Components\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Equal(4, CountOccurrences(masterControlXaml, "components:MasterModeButton"));
         Assert.Contains("x:Name=\"InfoTileGrid\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("CanReorderItems=\"True\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("CanDragItems=\"True\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("AllowDrop=\"True\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("CanReorderItems=\"{Binding CanEditTileLayout}\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("CanDragItems=\"{Binding CanEditTileLayout}\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("AllowDrop=\"{Binding CanEditTileLayout}\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ReorderThemeTransition", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"HeroStatusItemGrid\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding HeroStatusItems}\"", masterControlXaml, StringComparison.Ordinal);
@@ -2020,9 +2020,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("CalculateHeroStatusFlyoutListHeight", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("VerticalScrollBarVisibility = ScrollBarVisibility.Auto", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("_heroStatusSelection.TryApplySelection(", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("_heroStatusSelection.TryApplySelectionAsync(", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("_heroStatusSelection.RunProgrammaticUpdate(() =>", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("_viewModel.ResetHeroStatusLayout();", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("_tileActions.RunAsync(_viewModel.ResetHeroStatusLayoutAsync)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"EditInfoTilesLink\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"{Binding EditInfoTilesText}\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"EditInfoTilesButton_Click\"", masterControlXaml, StringComparison.Ordinal);
@@ -2061,9 +2061,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("SearchableOptionItem", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("tile.IsVisible)));", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("Text = _viewModel.InfoTileSelectionDescriptionText", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("_viewModel.SetVisibleInfoTileIds(", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("await _viewModel.SetVisibleInfoTileIdsAsync(", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("DragItemsCompleted=\"InfoTileGrid_DragItemsCompleted\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("_viewModel.PersistInfoTileOrder();", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.RestoreCommittedInfoTileOrder();", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.ShowStartupPrompt", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.CheckStartupConflicts", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("MasterControlTileAction.RunLatencyTest", masterControlCode, StringComparison.Ordinal);

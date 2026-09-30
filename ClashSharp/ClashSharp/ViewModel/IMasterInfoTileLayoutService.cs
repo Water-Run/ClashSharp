@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ClashSharp.ViewModel;
 
@@ -9,7 +11,8 @@ internal interface IMasterInfoTileLayoutService
 
     IReadOnlyList<string> GetRecommendedLayout(IReadOnlyCollection<string> availableTileIds);
 
-    IReadOnlyList<string> SaveLayout(
+    Task<IReadOnlyList<string>> SaveLayoutAsync(
         IEnumerable<string> tileIds,
-        IReadOnlyCollection<string> availableTileIds);
+        IReadOnlyCollection<string> availableTileIds,
+        CancellationToken cancellationToken);
 }

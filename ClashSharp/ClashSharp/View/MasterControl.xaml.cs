@@ -182,17 +182,43 @@ public sealed partial class MasterControl : Page
         flyout.ShowAt(anchor);
     }
 
-    private void HeroStatusSlotComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void HeroStatusSlotComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is not ComboBox { Tag: int slotIndex, SelectedItem: MasterHeroStatusOptionViewModel option })
+        if (sender is not ComboBox { Tag: int slotIndex, SelectedItem: MasterHeroStatusOptionViewModel option } comboBox)
         {
             return;
         }
 
-        _heroStatusSelection.TryApplySelection(
+        bool applied = await _heroStatusSelection.TryApplySelectionAsync(
             slotIndex,
             option.Kind,
-            _viewModel.SetHeroStatusSlot);
+            (index, kind) => _tileActions.RunAsync(token => _viewModel.SetHeroStatusSlotAsync(index, kind, token)));
+        if (applied && slotIndex < _viewModel.HeroStatusSlots.Count)
+        {
+            // Native selection can move before a write succeeds; restore the committed one-way binding.
+            _heroStatusSelection.RunProgrammaticUpdate(() => BindHeroStatusSelection(comboBox, _viewModel.HeroStatusSlots[slotIndex]));
+        }
+    }
+
+    private static void BindHeroStatusSelection(ComboBox comboBox, MasterHeroStatusSlotViewModel slot)
+    {
+        comboBox.ClearValue(Selector.SelectedIndexProperty);
+        comboBox.SetBinding(Selector.SelectedIndexProperty, new Binding
+        {
+            Source = slot,
+            Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.SelectedOptionIndex)),
+            Mode = BindingMode.OneWay,
+        });
+    }
+
+    private void BindLayoutEditing(Control control)
+    {
+        control.SetBinding(Control.IsEnabledProperty, new Binding
+        {
+            Source = _viewModel,
+            Path = new PropertyPath(nameof(MasterControlViewModel.CanEditTileLayout)),
+            Mode = BindingMode.OneWay,
+        });
     }
 
     private StackPanel BuildHeroStatusFlyoutContent(Flyout flyout)
@@ -232,12 +258,8 @@ public sealed partial class MasterControl : Page
                 ItemTemplate = (DataTemplate)Resources["MasterHeroStatusOptionTemplate"],
                 Tag = slot.Index,
             };
-            comboBox.SetBinding(Selector.SelectedIndexProperty, new Binding
-            {
-                Source = slot,
-                Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.SelectedOptionIndex)),
-                Mode = BindingMode.OneWay,
-            });
+            BindLayoutEditing(comboBox);
+            BindHeroStatusSelection(comboBox, slot);
             comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged;
             Grid.SetColumn(comboBox, 1);
             row.Children.Add(comboBox);
@@ -259,12 +281,17 @@ public sealed partial class MasterControl : Page
             Padding = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        restoreDefaultLink.Click += (_, _) =>
+        BindLayoutEditing(restoreDefaultLink);
+        restoreDefaultLink.Click += async (_, _) =>
         {
-            _heroStatusSelection.RunProgrammaticUpdate(() =>
+            CancellationTokenSource? lifetime = _pageLifetime;
+            await _heroStatusSelection.RunProgrammaticUpdateAsync(async () =>
             {
-                _viewModel.ResetHeroStatusLayout();
-                flyout.Content = BuildHeroStatusFlyoutContent(flyout);
+                await _tileActions.RunAsync(_viewModel.ResetHeroStatusLayoutAsync);
+                if (lifetime is not null && ReferenceEquals(lifetime, _pageLifetime))
+                {
+                    flyout.Content = BuildHeroStatusFlyoutContent(flyout);
+                }
             });
         };
         root.Children.Add(restoreDefaultLink);
@@ -727,7 +754,7 @@ public sealed partial class MasterControl : Page
             }
         }
 
-        _viewModel.SetVisibleInfoTileIds(orderedSelectedIds);
+        await _viewModel.SetVisibleInfoTileIdsAsync(orderedSelectedIds, cancellationToken);
     }
 
     private void HeroStatusItemGrid_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -782,11 +809,21 @@ public sealed partial class MasterControl : Page
         ApplyInfoTileContainerWidth(args.ItemContainer);
     }
 
-    private void InfoTileGrid_DragItemsCompleted(
+    private async void InfoTileGrid_DragItemsCompleted(
         ListViewBase sender,
         DragItemsCompletedEventArgs args)
     {
-        _viewModel.PersistInfoTileOrder();
+        // Capture before queueing: another drag must not mutate this request while it waits.
+        string[] requestedOrder = _viewModel.VisibleInfoTiles.Select(static tile => tile.Id).ToArray();
+        try
+        {
+            await _tileActions.RunAsync(token => _viewModel.SetVisibleInfoTileIdsAsync(requestedOrder, token));
+        }
+        finally
+        {
+            // The page queue may cancel before invoking the write, leaving the native list reordered.
+            _viewModel.RestoreCommittedInfoTileOrder();
+        }
     }
 
     private void UpdateInfoTileWidths(double availableWidth)

@@ -14,6 +14,19 @@ namespace ClashSharp.Service;
 
 public sealed partial class AppSettingsService
 {
+    Task IMasterInfoTileLayoutSettings.SaveInfoTileLayoutAsync(string layout, CancellationToken cancellationToken) =>
+        ApplyLayoutChangeAsync(MasterInfoTileLayoutDefinition, layout, cancellationToken);
+
+    Task IMasterHeroStatusLayoutSettings.SaveHeroStatusLayoutAsync(string layout, CancellationToken cancellationToken) =>
+        ApplyLayoutChangeAsync(MasterHeroStatusLayoutDefinition, layout, cancellationToken);
+
+    private Task ApplyLayoutChangeAsync(SettingDefinition definition, string layout, CancellationToken cancellationToken)
+    {
+        SettingNormalizationResult normalized = definition.Normalize(layout);
+        if (!normalized.IsSuccess) { throw new ArgumentException("The layout must contain valid identifiers.", nameof(layout)); }
+        return ApplyChangesAsync([new(definition.Key, normalized.Value!)], cancellationToken);
+    }
+
     /// <summary>Reads the requested page preferences under the batch publication lock.</summary>
     internal IReadOnlyList<SettingValueChange> ReadPreferenceChanges(IReadOnlyList<SettingKey> keys)
     {

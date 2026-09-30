@@ -132,7 +132,7 @@ public sealed partial class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime);
 
         await viewModel.LoadAsync(CancellationToken.None);
-        viewModel.SetHeroStatusSlot(0, MasterHeroStatusItemKind.ActiveProfile);
+        await viewModel.SetHeroStatusSlotAsync(0, MasterHeroStatusItemKind.ActiveProfile, CancellationToken.None);
 
         Assert.Equal("Office profile", viewModel.InfoTiles.Single(tile => tile.Id == "active-profile").Value);
         Assert.Equal("Office profile", viewModel.InfoTiles.Single(tile => tile.Id == "profile-count").Detail);
@@ -195,7 +195,7 @@ public sealed partial class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(heroStatusLayout: layoutService);
         await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.SetHeroStatusSlot(4, MasterHeroStatusItemKind.ActiveConnections);
+        await viewModel.SetHeroStatusSlotAsync(4, MasterHeroStatusItemKind.ActiveConnections, CancellationToken.None);
 
         Assert.Equal(MasterHeroStatusItemKind.ActiveConnections, viewModel.HeroStatusItems[4].Kind);
         Assert.Equal(MasterHeroStatusItemKind.ActiveConnections, layoutService.SavedLayout[4]);
@@ -208,7 +208,7 @@ public sealed partial class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(heroStatusLayout: layoutService);
         await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.SetHeroStatusSlot(0, MasterHeroStatusItemKind.CurrentNode);
+        await viewModel.SetHeroStatusSlotAsync(0, MasterHeroStatusItemKind.CurrentNode, CancellationToken.None);
 
         Assert.Equal(
             [
@@ -231,7 +231,7 @@ public sealed partial class MasterControlViewModelTests
         Assert.All(viewModel.HeroStatusSlots, slot =>
             Assert.Equal(slot.SelectedKind, slot.Options[slot.SelectedOptionIndex].Kind));
 
-        viewModel.ResetHeroStatusLayout();
+        await viewModel.ResetHeroStatusLayoutAsync(CancellationToken.None);
         Assert.All(viewModel.HeroStatusSlots, slot =>
             Assert.Equal(slot.SelectedKind, slot.Options[slot.SelectedOptionIndex].Kind));
     }
@@ -751,7 +751,7 @@ public sealed partial class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(infoTileLayout: infoTileLayout);
         await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.SetVisibleInfoTileIds(["latency", "core", "memory-usage", "unknown"]);
+        await viewModel.SetVisibleInfoTileIdsAsync(["latency", "core", "memory-usage", "unknown"], CancellationToken.None);
 
         Assert.Equal(1, infoTileLayout.SaveCount);
         Assert.Equal(["latency", "core", "memory-usage"], infoTileLayout.SavedLayout);
@@ -1678,6 +1678,9 @@ public sealed partial class MasterControlViewModelTests
     private sealed class FakeMasterHeroStatusLayoutService : IMasterHeroStatusLayoutService
     {
         public IReadOnlyList<MasterHeroStatusItemKind> SavedLayout { get; private set; } = MasterHeroStatusLayoutService.DefaultLayout;
+        public Func<CancellationToken, Task>? BeforeSaveAsync { get; set; }
+        public Func<CancellationToken, Task>? AfterSaveAsync { get; set; }
+        public int SaveCount { get; private set; }
 
         public int GetLayoutCount { get; private set; }
 
@@ -1700,17 +1703,20 @@ public sealed partial class MasterControlViewModelTests
             return MasterHeroStatusLayoutService.Candidates;
         }
 
-        public IReadOnlyList<MasterHeroStatusItemKind> SaveLayout(IEnumerable<MasterHeroStatusItemKind> layout)
+        public async Task<IReadOnlyList<MasterHeroStatusItemKind>> SaveLayoutAsync(
+            IEnumerable<MasterHeroStatusItemKind> layout, CancellationToken cancellationToken)
         {
-            SavedLayout = layout.ToArray();
+            MasterHeroStatusItemKind[] requested = layout.ToArray();
+            SaveCount++;
+            await (BeforeSaveAsync?.Invoke(cancellationToken) ?? Task.CompletedTask);
+            cancellationToken.ThrowIfCancellationRequested();
+            SavedLayout = requested;
+            await (AfterSaveAsync?.Invoke(cancellationToken) ?? Task.CompletedTask);
             return SavedLayout;
         }
 
-        public IReadOnlyList<MasterHeroStatusItemKind> ResetLayout()
-        {
-            SavedLayout = MasterHeroStatusLayoutService.DefaultLayout;
-            return SavedLayout;
-        }
+        public Task<IReadOnlyList<MasterHeroStatusItemKind>> ResetLayoutAsync(CancellationToken cancellationToken) =>
+            SaveLayoutAsync(MasterHeroStatusLayoutService.DefaultLayout, cancellationToken);
     }
 
     private sealed class FakeMasterInfoTileLayoutService : IMasterInfoTileLayoutService
@@ -1720,6 +1726,9 @@ public sealed partial class MasterControlViewModelTests
 
         public IReadOnlyList<string> SavedLayout { get; set; } =
             MasterInfoTileLayoutService.DefaultLayout;
+        public Func<CancellationToken, Task>? BeforeSaveAsync { get; set; }
+        public Func<CancellationToken, Task>? AfterSaveAsync { get; set; }
+        public Exception? ReadFailure { get; set; }
 
         public int SaveCount { get; private set; }
 
@@ -1728,20 +1737,26 @@ public sealed partial class MasterControlViewModelTests
         public IReadOnlyList<string> GetLayout(IReadOnlyCollection<string> availableTileIds)
         {
             GetLayoutCount++;
+            if (ReadFailure is not null) { throw ReadFailure; }
             return SavedLayout
                 .Where(availableTileIds.Contains)
                 .ToArray();
         }
 
-        public IReadOnlyList<string> SaveLayout(
+        public async Task<IReadOnlyList<string>> SaveLayoutAsync(
             IEnumerable<string> tileIds,
-            IReadOnlyCollection<string> availableTileIds)
+            IReadOnlyCollection<string> availableTileIds,
+            CancellationToken cancellationToken)
         {
             SaveCount++;
-            SavedLayout = tileIds
+            string[] requested = tileIds
                 .Where(availableTileIds.Contains)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
+            await (BeforeSaveAsync?.Invoke(cancellationToken) ?? Task.CompletedTask);
+            cancellationToken.ThrowIfCancellationRequested();
+            SavedLayout = requested;
+            await (AfterSaveAsync?.Invoke(cancellationToken) ?? Task.CompletedTask);
             return SavedLayout;
         }
     }

@@ -65,6 +65,7 @@
                                 <TextBlock Text="{Binding BasicStatusText}" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                                 <HyperlinkButton
                                     x:Name="SetHeroStatusDisplayButton"
+                                    IsEnabled="{Binding CanEditTileLayout}"
                                     Content="{Binding SetHeroStatusDisplayText}"
                                     Padding="0"
                                     HorizontalAlignment="Left"
@@ -167,6 +168,7 @@
 
                 <HyperlinkButton
                     x:Name="EditInfoTilesLink"
+                    IsEnabled="{Binding CanEditTileLayout}"
                     Content="{Binding EditInfoTilesText}"
                     HorizontalAlignment="Left"
                     Padding="0"
@@ -178,12 +180,12 @@
                         Margin="0"
                         ItemsSource="{Binding VisibleInfoTiles}"
                         SelectionMode="None"
-                        CanReorderItems="True"
-                        CanDragItems="True"
+                        CanReorderItems="{Binding CanEditTileLayout}"
+                        CanDragItems="{Binding CanEditTileLayout}"
                         TabFocusNavigation="Local"
                         TabNavigation="Local"
                         IsTabStop="False"
-                        AllowDrop="True"
+                        AllowDrop="{Binding CanEditTileLayout}"
                         DragItemsCompleted="InfoTileGrid_DragItemsCompleted"
                         IsItemClickEnabled="False"
                         SizeChanged="InfoTileGrid_SizeChanged"

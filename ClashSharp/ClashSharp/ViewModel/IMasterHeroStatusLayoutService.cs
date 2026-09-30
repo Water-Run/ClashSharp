@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -12,7 +14,7 @@ internal interface IMasterHeroStatusLayoutService
 
     IReadOnlyList<MasterHeroStatusItemKind> GetCandidates();
 
-    IReadOnlyList<MasterHeroStatusItemKind> SaveLayout(IEnumerable<MasterHeroStatusItemKind> layout);
+    Task<IReadOnlyList<MasterHeroStatusItemKind>> SaveLayoutAsync(IEnumerable<MasterHeroStatusItemKind> layout, CancellationToken cancellationToken);
 
-    IReadOnlyList<MasterHeroStatusItemKind> ResetLayout();
+    Task<IReadOnlyList<MasterHeroStatusItemKind>> ResetLayoutAsync(CancellationToken cancellationToken);
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
 
@@ -8,7 +10,9 @@ namespace ClashSharp.Service;
 
 internal interface IMasterHeroStatusLayoutSettings
 {
-    string MasterHeroStatusLayout { get; set; }
+    string MasterHeroStatusLayout { get; }
+
+    Task SaveHeroStatusLayoutAsync(string layout, CancellationToken cancellationToken);
 }
 
 internal sealed class MasterHeroStatusLayoutService : IMasterHeroStatusLayoutService
@@ -67,24 +71,25 @@ internal sealed class MasterHeroStatusLayoutService : IMasterHeroStatusLayoutSer
         return Candidates;
     }
 
-    public IReadOnlyList<MasterHeroStatusItemKind> SaveLayout(IEnumerable<MasterHeroStatusItemKind> layout)
+    public async Task<IReadOnlyList<MasterHeroStatusItemKind>> SaveLayoutAsync(
+        IEnumerable<MasterHeroStatusItemKind> layout, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(layout);
 
         IReadOnlyList<MasterHeroStatusItemKind> normalized = Normalize(layout);
-        _settings.MasterHeroStatusLayout = Serialize(normalized);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _settings.SaveHeroStatusLayoutAsync(Serialize(normalized), cancellationToken).ConfigureAwait(false);
         return normalized;
     }
 
-    public IReadOnlyList<MasterHeroStatusItemKind> SaveSerializedLayout(string value)
+    public Task<IReadOnlyList<MasterHeroStatusItemKind>> SaveSerializedLayoutAsync(string value, CancellationToken cancellationToken)
     {
-        return SaveLayout(Parse(value));
+        return SaveLayoutAsync(Parse(value), cancellationToken);
     }
 
-    public IReadOnlyList<MasterHeroStatusItemKind> ResetLayout()
+    public Task<IReadOnlyList<MasterHeroStatusItemKind>> ResetLayoutAsync(CancellationToken cancellationToken)
     {
-        _settings.MasterHeroStatusLayout = Serialize(DefaultLayout);
-        return DefaultLayout;
+        return SaveLayoutAsync(DefaultLayout, cancellationToken);
     }
 
     private static IReadOnlyList<MasterHeroStatusItemKind> Parse(string value)

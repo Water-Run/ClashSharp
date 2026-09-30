@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Settings;
 using ClashSharp.ViewModel;
 
@@ -8,7 +10,9 @@ namespace ClashSharp.Service;
 
 internal interface IMasterInfoTileLayoutSettings
 {
-    string MasterInfoTileLayout { get; set; }
+    string MasterInfoTileLayout { get; }
+
+    Task SaveInfoTileLayoutAsync(string layout, CancellationToken cancellationToken);
 }
 
 internal sealed class MasterInfoTileLayoutService : IMasterInfoTileLayoutService
@@ -40,15 +44,17 @@ internal sealed class MasterInfoTileLayoutService : IMasterInfoTileLayoutService
         return Normalize(DefaultLayout, availableTileIds);
     }
 
-    public IReadOnlyList<string> SaveLayout(
+    public async Task<IReadOnlyList<string>> SaveLayoutAsync(
         IEnumerable<string> tileIds,
-        IReadOnlyCollection<string> availableTileIds)
+        IReadOnlyCollection<string> availableTileIds,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tileIds);
         ArgumentNullException.ThrowIfNull(availableTileIds);
 
         IReadOnlyList<string> normalized = Normalize(tileIds, availableTileIds);
-        _settings.MasterInfoTileLayout = string.Join(",", normalized);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _settings.SaveInfoTileLayoutAsync(string.Join(",", normalized), cancellationToken).ConfigureAwait(false);
         return normalized;
     }
 

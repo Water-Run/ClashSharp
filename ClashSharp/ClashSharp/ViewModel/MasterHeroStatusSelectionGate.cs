@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -7,6 +8,31 @@ namespace ClashSharp.ViewModel;
 internal sealed class MasterHeroStatusSelectionGate
 {
     private int _updateDepth;
+
+    public async Task<bool> TryApplySelectionAsync(
+        int slotIndex,
+        MasterHeroStatusItemKind kind,
+        Func<int, MasterHeroStatusItemKind, Task> apply)
+    {
+        ArgumentNullException.ThrowIfNull(apply);
+        if (_updateDepth > 0) { return false; }
+        await RunProgrammaticUpdateAsync(() => apply(slotIndex, kind));
+        return true;
+    }
+
+    public async Task RunProgrammaticUpdateAsync(Func<Task> update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        try
+        {
+            _updateDepth++;
+            await update();
+        }
+        finally
+        {
+            _updateDepth--;
+        }
+    }
 
     public bool TryApplySelection(
         int slotIndex,

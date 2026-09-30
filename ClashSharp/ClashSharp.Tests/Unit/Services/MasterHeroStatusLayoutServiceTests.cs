@@ -42,13 +42,13 @@ public sealed class MasterHeroStatusLayoutServiceTests
     }
 
     [Fact]
-    public void SaveLayout_WhenLayoutContainsDuplicatesAndInvalidNames_NormalizesToEightUniqueKnownSlots()
+    public async Task SaveLayout_WhenLayoutContainsDuplicatesAndInvalidNames_NormalizesToEightUniqueKnownSlots()
     {
         FakeHeroLayoutSettings settings = new();
         MasterHeroStatusLayoutService service = new(settings);
 
-        IReadOnlyList<MasterHeroStatusItemKind> layout = service.SaveSerializedLayout(
-            "UploadRate,UploadRate,Unknown,DownloadRate,CoreStatus");
+        IReadOnlyList<MasterHeroStatusItemKind> layout = await service.SaveSerializedLayoutAsync(
+            "UploadRate,UploadRate,Unknown,DownloadRate,CoreStatus", CancellationToken.None);
 
         Assert.Equal(8, layout.Count);
         Assert.Equal(layout.Count, layout.Distinct().Count());
@@ -58,12 +58,12 @@ public sealed class MasterHeroStatusLayoutServiceTests
     }
 
     [Fact]
-    public void ResetLayout_RestoresDefaultAndPersistsIt()
+    public async Task ResetLayout_RestoresDefaultAndPersistsIt()
     {
         FakeHeroLayoutSettings settings = new() { MasterHeroStatusLayout = "UploadRate,DownloadRate,Latency" };
         MasterHeroStatusLayoutService service = new(settings);
 
-        IReadOnlyList<MasterHeroStatusItemKind> layout = service.ResetLayout();
+        IReadOnlyList<MasterHeroStatusItemKind> layout = await service.ResetLayoutAsync(CancellationToken.None);
 
         Assert.Equal(MasterHeroStatusLayoutService.DefaultLayout, layout);
         Assert.Equal(
@@ -74,5 +74,12 @@ public sealed class MasterHeroStatusLayoutServiceTests
     private sealed class FakeHeroLayoutSettings : IMasterHeroStatusLayoutSettings
     {
         public string MasterHeroStatusLayout { get; set; } = string.Empty;
+
+        public Task SaveHeroStatusLayoutAsync(string layout, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MasterHeroStatusLayout = layout;
+            return Task.CompletedTask;
+        }
     }
 }

@@ -115,7 +115,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     /// <summary>Currently visible information tiles displayed in the lower grid.</summary>
     private readonly ObservableCollection<MasterControlInfoTileViewModel> _visibleInfoTiles = [];
 
-    private bool _isApplyingInfoTileLayout;
+    private readonly SemaphoreSlim _layoutSaveGate = new(1, 1);
+    private IReadOnlyList<string> _committedInfoTileIds = [];
+    private bool _isSavingTileLayout;
 
     private readonly ObservableCollection<MasterHeroStatusItemViewModel> _heroStatusItems = [];
 
@@ -747,48 +749,89 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         _isCoreAvailable = isCoreAvailable;
     }
 
-    public void SetHeroStatusSlot(int slotIndex, MasterHeroStatusItemKind kind)
+    public bool IsSavingTileLayout
     {
-        if (slotIndex < 0 || slotIndex >= _heroStatusItems.Count)
+        get => _isSavingTileLayout;
+        private set
         {
-            return;
+            if (SetProperty(ref _isSavingTileLayout, value)) { OnPropertyChanged(nameof(CanEditTileLayout)); }
         }
-
-        MasterHeroStatusItemKind[] layout = _heroStatusItems.Select(static item => item.Kind).ToArray();
-        int existingIndex = Array.IndexOf(layout, kind);
-        if (existingIndex >= 0 && existingIndex != slotIndex)
-        {
-            layout[existingIndex] = layout[slotIndex];
-        }
-
-        layout[slotIndex] = kind;
-        IReadOnlyList<MasterHeroStatusItemKind> normalized = _heroStatusLayout.SaveLayout(layout);
-        ApplyHeroStatusLayout(normalized);
     }
 
-    public void ResetHeroStatusLayout()
+    public bool CanEditTileLayout => !IsSavingTileLayout;
+
+    public Task SetHeroStatusSlotAsync(int slotIndex, MasterHeroStatusItemKind kind, CancellationToken cancellationToken)
     {
-        ApplyHeroStatusLayout(_heroStatusLayout.ResetLayout());
+        return SaveTileLayoutAsync(async () =>
+        {
+            if (slotIndex < 0 || slotIndex >= _heroStatusItems.Count) { return; }
+            MasterHeroStatusItemKind[] layout = _heroStatusItems.Select(static item => item.Kind).ToArray();
+            int existingIndex = Array.IndexOf(layout, kind);
+            if (existingIndex >= 0 && existingIndex != slotIndex) { layout[existingIndex] = layout[slotIndex]; }
+            layout[slotIndex] = kind;
+            ApplyHeroStatusLayout(await _heroStatusLayout.SaveLayoutAsync(layout, cancellationToken));
+        }, () => ApplyHeroStatusLayout(_heroStatusLayout.GetLayout()), cancellationToken);
     }
 
-    /// <summary>Applies and persists the ordered set of information tiles shown on the master page.</summary>
-    /// <param name="tileIds">Ordered tile identifiers selected by the user.</param>
-    public void SetVisibleInfoTileIds(IEnumerable<string> tileIds)
+    public Task ResetHeroStatusLayoutAsync(CancellationToken cancellationToken)
+    {
+        return SaveTileLayoutAsync(async () =>
+            ApplyHeroStatusLayout(await _heroStatusLayout.ResetLayoutAsync(cancellationToken)),
+            () => ApplyHeroStatusLayout(_heroStatusLayout.GetLayout()), cancellationToken);
+    }
+
+    /// <summary>Awaits persistence before publishing the selected tile layout.</summary>
+    public Task SetVisibleInfoTileIdsAsync(IEnumerable<string> tileIds, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tileIds);
-
-        string[] availableTileIds = _infoTiles.Select(static tile => tile.Id).ToArray();
-        IReadOnlyList<string> layout = _infoTileLayout.SaveLayout(tileIds, availableTileIds);
-        ApplyInfoTileLayout(layout);
+        string[] requested = tileIds.ToArray();
+        string[] available = _infoTiles.Select(static tile => tile.Id).ToArray();
+        return SaveTileLayoutAsync(async () =>
+            ApplyInfoTileLayout(await _infoTileLayout.SaveLayoutAsync(requested, available, cancellationToken)),
+            () => ApplyInfoTileLayout(_infoTileLayout.GetLayout(available)), cancellationToken);
     }
 
-    /// <summary>Persists the current visible tile order after a drag-and-drop reorder.</summary>
-    public void PersistInfoTileOrder()
+    /// <summary>Restores only uncommitted native drag order after an accepted page action finishes or is cancelled.</summary>
+    public void RestoreCommittedInfoTileOrder()
     {
-        string[] availableTileIds = _infoTiles.Select(static tile => tile.Id).ToArray();
-        _infoTileLayout.SaveLayout(
-            _visibleInfoTiles.Select(static tile => tile.Id),
-            availableTileIds);
+        ApplyInfoTileLayout(_committedInfoTileIds);
+    }
+
+    private async Task SaveTileLayoutAsync(Func<Task> save, Action reconcile, CancellationToken cancellationToken)
+    {
+        await _layoutSaveGate.WaitAsync(cancellationToken);
+        try
+        {
+            IsSavingTileLayout = true;
+            OperationErrorText = string.Empty;
+            try
+            {
+                await save();
+            }
+            catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+            {
+                if (!ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
+                {
+                    OperationErrorText = _localization.GetString("Application.UnexpectedError");
+                }
+                try
+                {
+                    // A notification may fail after persistence. Re-read; never blindly restore old settings.
+                    reconcile();
+                }
+                catch (Exception readFailure) when (!ExceptionGraphClassifier.IsProcessFatal(readFailure))
+                {
+                    OperationErrorText = _localization.GetString("Application.UnexpectedError");
+                    throw new AggregateException(exception, readFailure);
+                }
+                throw;
+            }
+        }
+        finally
+        {
+            try { IsSavingTileLayout = false; }
+            finally { _layoutSaveGate.Release(); }
+        }
     }
 
     /// <summary>Refreshes visible proxy and transparent-proxy status from current service state.</summary>
@@ -924,7 +967,6 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             {
                 ReorderHint = _localization.GetString("Master.Tile.ReorderHint"),
             };
-            viewModel.PropertyChanged += OnInfoTilePropertyChanged;
             _infoTiles.Add(viewModel);
         }
 
@@ -938,14 +980,13 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             .ToDictionary(static tile => tile.Id, StringComparer.Ordinal);
         HashSet<string> visibleIds = tileIds.ToHashSet(StringComparer.Ordinal);
 
-        _isApplyingInfoTileLayout = true;
-        try
+        _committedInfoTileIds = tileIds.ToArray();
+        foreach (MasterControlInfoTileViewModel tile in _infoTiles)
         {
-            foreach (MasterControlInfoTileViewModel tile in _infoTiles)
-            {
-                tile.IsVisible = visibleIds.Contains(tile.Id);
-            }
-
+            tile.IsVisible = visibleIds.Contains(tile.Id);
+        }
+        if (!_visibleInfoTiles.Select(static tile => tile.Id).SequenceEqual(tileIds))
+        {
             _visibleInfoTiles.Clear();
             foreach (string tileId in tileIds)
             {
@@ -955,11 +996,6 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 }
             }
         }
-        finally
-        {
-            _isApplyingInfoTileLayout = false;
-        }
-
         OnPropertyChanged(nameof(VisibleInfoTiles));
     }
 
@@ -1322,40 +1358,6 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
             return;
         }
-    }
-
-    private void OnInfoTilePropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(MasterControlInfoTileViewModel.IsVisible)
-            || sender is not MasterControlInfoTileViewModel tile)
-        {
-            return;
-        }
-
-        if (_isApplyingInfoTileLayout)
-        {
-            return;
-        }
-
-        if (tile.IsVisible)
-        {
-            int sourceIndex = _infoTiles.IndexOf(tile);
-            int visibleIndex = _visibleInfoTiles
-                .Select(item => _infoTiles.IndexOf(item))
-                .TakeWhile(index => index < sourceIndex)
-                .Count();
-            if (!_visibleInfoTiles.Contains(tile))
-            {
-                _visibleInfoTiles.Insert(visibleIndex, tile);
-            }
-        }
-        else
-        {
-            _visibleInfoTiles.Remove(tile);
-        }
-
-        OnPropertyChanged(nameof(VisibleInfoTiles));
-        PersistInfoTileOrder();
     }
 
     private async Task ToggleTransparentProxyAsync(CancellationToken cancellationToken)

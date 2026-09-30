@@ -79,7 +79,7 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
     public bool IsVisible
     {
         get => _isVisible;
-        set => SetProperty(ref _isVisible, value);
+        internal set => SetProperty(ref _isVisible, value);
     }
 
     public bool IsToggleOn

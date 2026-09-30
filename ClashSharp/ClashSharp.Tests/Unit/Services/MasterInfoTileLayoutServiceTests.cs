@@ -57,26 +57,26 @@ public sealed class MasterInfoTileLayoutServiceTests
     }
 
     [Fact]
-    public void SaveLayout_AllowsAnExplicitEmptySelection()
+    public async Task SaveLayout_AllowsAnExplicitEmptySelection()
     {
         FakeInfoTileLayoutSettings settings = new();
         MasterInfoTileLayoutService service = new(settings);
 
-        IReadOnlyList<string> layout = service.SaveLayout([], AvailableTileIds);
+        IReadOnlyList<string> layout = await service.SaveLayoutAsync([], AvailableTileIds, CancellationToken.None);
 
         Assert.Empty(layout);
         Assert.Equal(string.Empty, settings.MasterInfoTileLayout);
     }
 
     [Fact]
-    public void SaveLayout_FiltersUnknownIdsAndPersistsCanonicalIdsInRequestedOrder()
+    public async Task SaveLayout_FiltersUnknownIdsAndPersistsCanonicalIdsInRequestedOrder()
     {
         FakeInfoTileLayoutSettings settings = new();
         MasterInfoTileLayoutService service = new(settings);
 
-        IReadOnlyList<string> layout = service.SaveLayout(
+        IReadOnlyList<string> layout = await service.SaveLayoutAsync(
             ["memory-usage", "core", "CORE", "unknown"],
-            AvailableTileIds);
+            AvailableTileIds, CancellationToken.None);
 
         Assert.Equal(["memory-usage", "core"], layout);
         Assert.Equal("memory-usage,core", settings.MasterInfoTileLayout);
@@ -86,5 +86,12 @@ public sealed class MasterInfoTileLayoutServiceTests
     {
         public string MasterInfoTileLayout { get; set; } =
             string.Join(",", MasterInfoTileLayoutService.DefaultLayout);
+
+        public Task SaveInfoTileLayoutAsync(string layout, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            MasterInfoTileLayout = layout;
+            return Task.CompletedTask;
+        }
     }
 }

@@ -40,7 +40,7 @@ public sealed partial class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime);
 
         await viewModel.LoadAsync(CancellationToken.None);
-        viewModel.SetHeroStatusSlot(0, MasterHeroStatusItemKind.TotalTraffic);
+        await viewModel.SetHeroStatusSlotAsync(0, MasterHeroStatusItemKind.TotalTraffic, CancellationToken.None);
 
         AssertSummaryTilesUnavailable(viewModel);
         Assert.Equal("Unavailable", Tile(viewModel, "core").Value);
@@ -64,7 +64,7 @@ public sealed partial class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime);
 
         await viewModel.LoadAsync(CancellationToken.None);
-        viewModel.SetHeroStatusSlot(0, MasterHeroStatusItemKind.TotalTraffic);
+        await viewModel.SetHeroStatusSlotAsync(0, MasterHeroStatusItemKind.TotalTraffic, CancellationToken.None);
 
         Assert.True(empty.IsAvailable);
         Assert.False(MasterControlRuntimeSnapshot.Unavailable.IsAvailable);
@@ -96,7 +96,7 @@ public sealed partial class MasterControlViewModelTests
         MasterControlViewModel viewModel = CreateViewModel(settings: settings, runtime: runtime,
             getRuntimeTrafficAsync: _ => Task.FromResult(new RuntimeTrafficRateSnapshot(1024, 2048, 3, 4096, 8192)));
         await viewModel.LoadAsync(CancellationToken.None);
-        viewModel.SetHeroStatusSlot(0, MasterHeroStatusItemKind.TotalTraffic);
+        await viewModel.SetHeroStatusSlotAsync(0, MasterHeroStatusItemKind.TotalTraffic, CancellationToken.None);
         Assert.Equal("4", Tile(viewModel, "profile-count").Value);
         Assert.Equal("3 KB", viewModel.HeroStatusItems[0].Value);
 
