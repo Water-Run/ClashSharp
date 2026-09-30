@@ -137,6 +137,10 @@ internal static class ClashSharpAppHostFactory
                 lifetimeRequests,
                 installAsPrimaryInstance: true));
             services.AddSingleton<SettingsExportCoordinator>();
+            services.AddSingleton<IApplicationDataClearOperationFactory>(provider => new GenerationDataClearOperationFactory(
+                provider.GetRequiredService<DataGenerationManager>(), mutationAdmission,
+                provider.GetRequiredService<ControllerCredentialService>(), provider.GetRequiredService<AppSettingsService>(),
+                provider.GetRequiredService<RuntimeLifecycleCoordinator>(), dataRoot.Value));
             services.AddSingleton(provider => new ApplicationActionService(
                 provider.GetRequiredService<IRuntimeSettingsAuthority>(),
                 provider.GetRequiredService<MutationAdmissionBarrier>(),
@@ -151,7 +155,8 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<ApplicationLifecycleService>(),
                 provider.GetRequiredService<RuntimeLifecycleCoordinator>(),
                 provider.GetRequiredService<StartupLaunchService>(),
-                provider.GetRequiredService<IControllerCredentialProvider>()));
+                provider.GetRequiredService<IControllerCredentialProvider>(),
+                dataClearOperations: provider.GetRequiredService<IApplicationDataClearOperationFactory>()));
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton<SettingsRuntimeMutationAdapter>();

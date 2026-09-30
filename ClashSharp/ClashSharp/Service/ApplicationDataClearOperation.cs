@@ -13,16 +13,19 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
     private readonly Func<CancellationToken, Task<RuntimeShutdownResult>> _prepareShutdown;
     private readonly Action _clearHostData;
     private readonly string _dataDirectory;
+    private readonly Func<bool> _repositoriesReleased;
     private RuntimeShutdownResult? _shutdownResult;
     private bool _hostDataCleared;
 
     internal ApplicationDataClearOperation(
         Func<CancellationToken, Task<RuntimeShutdownResult>> prepareShutdown,
         Action clearHostData,
-        string dataDirectory)
+        string dataDirectory,
+        Func<bool>? repositoriesReleased = null)
     {
         _prepareShutdown = prepareShutdown ?? throw new ArgumentNullException(nameof(prepareShutdown));
         _clearHostData = clearHostData ?? throw new ArgumentNullException(nameof(clearHostData));
+        _repositoriesReleased = repositoriesReleased ?? (() => true);
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         _dataDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataDirectory));
         if (string.Equals(_dataDirectory, Path.GetPathRoot(_dataDirectory), StringComparison.OrdinalIgnoreCase))
@@ -60,6 +63,10 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
         {
             return Task.FromException(new InvalidOperationException("Host-owned data must be cleared before local files."));
         }
+        if (!_repositoriesReleased())
+        {
+            return Task.FromException(new InvalidOperationException("Data repositories must be released before file deletion."));
+        }
 
         return Task.Run(ClearLocalFiles, cancellationToken);
     }
@@ -68,7 +75,7 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
     {
         try
         {
-            RejectReparsePoint(_dataDirectory);
+            RejectReparsePath(_dataDirectory);
         }
         catch (DirectoryNotFoundException)
         {
@@ -107,7 +114,7 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
                 throw new IOException("A data entry escaped the application data directory.");
             }
 
-            FileAttributes attributes = RejectReparsePoint(resolvedPath);
+            FileAttributes attributes = RejectReparsePath(resolvedPath);
             if ((attributes & FileAttributes.Directory) != 0)
             {
                 foreach (string entry in Directory.EnumerateFileSystemEntries(resolvedPath))
@@ -136,6 +143,16 @@ internal sealed class ApplicationDataClearOperation : IApplicationLifetimeMainte
             throw new IOException("Data cleanup cannot traverse a reparse point.");
         }
 
+        return attributes;
+    }
+
+    private static FileAttributes RejectReparsePath(string path)
+    {
+        FileAttributes attributes = RejectReparsePoint(path);
+        for (DirectoryInfo? parent = Directory.GetParent(path); parent is not null; parent = parent.Parent)
+        {
+            RejectReparsePoint(parent.FullName);
+        }
         return attributes;
     }
 }

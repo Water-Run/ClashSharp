@@ -39,6 +39,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
 
     private readonly RuntimeLifecycleCoordinator _shutdown;
     private readonly StartupLaunchService _startupLaunch;
+    private readonly IApplicationDataClearOperationFactory? _dataClearOperations;
 
     internal ApplicationActionService(
         IRuntimeSettingsAuthority settings,
@@ -55,7 +56,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         RuntimeLifecycleCoordinator shutdown,
         StartupLaunchService startupLaunch,
         IControllerCredentialProvider controllerCredentials,
-        bool installAsPrimaryInstance = true)
+        bool installAsPrimaryInstance = true,
+        IApplicationDataClearOperationFactory? dataClearOperations = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _controllerCredentials = controllerCredentials ?? throw new ArgumentNullException(nameof(controllerCredentials));
@@ -71,6 +73,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
         _shutdown = shutdown ?? throw new ArgumentNullException(nameof(shutdown));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
+        _dataClearOperations = dataClearOperations;
+        if (installAsPrimaryInstance && dataClearOperations is null) { throw new ArgumentNullException(nameof(dataClearOperations)); }
         if (installAsPrimaryInstance && Interlocked.CompareExchange(ref _instance, this, null) is not null)
         {
             throw new InvalidOperationException("The primary application action service is already configured.");
@@ -293,10 +297,9 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     internal Task ClearAllDataAndRestartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ApplicationDataClearOperation maintenance = new(
-            _shutdown.PrepareDataRemovalAsync,
-            () => AppDataMaintenanceService.Instance.ClearHostDataAfterRuntimeShutdown(CancellationToken.None),
-            AppDataPathService.ResolveLocalDataDirectory());
+        cancellationToken.ThrowIfCancellationRequested();
+        IApplicationLifetimeMaintenance maintenance = (_dataClearOperations
+            ?? throw new InvalidOperationException("Data removal is unavailable without a host-owned operation factory.")).Create();
         if (!_lifecycle.TryRequest(ApplicationLifetimeRequest.Restart("clear-all-data", maintenance)))
         {
             throw new InvalidOperationException("Another application exit or restart is already in progress.");

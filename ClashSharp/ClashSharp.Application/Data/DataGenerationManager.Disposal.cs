@@ -2,6 +2,18 @@ namespace ClashSharp.ApplicationModel.Data;
 
 public sealed partial class DataGenerationManager
 {
+    /// <summary>Gets whether all owned repositories and producers were successfully released.</summary>
+    public bool IsDisposalComplete
+    {
+        get
+        {
+            lock (_syncLock)
+            {
+                return _state == ManagerState.Disposed && _disposalCompletion?.Task.IsCompletedSuccessfully == true;
+            }
+        }
+    }
+
     /// <summary>Disposes every owned scope after existing leases have left.</summary>
     public async ValueTask DisposeAsync()
     {

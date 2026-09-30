@@ -87,6 +87,7 @@
     <Compile Include="..\ClashSharp\Service\AppSettingsService.cs" Link="Service\AppSettingsService.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.Mutations.cs" Link="Service\AppSettingsService.Mutations.cs" />
     <Compile Include="..\ClashSharp\Service\AppSettingsService.Authority.cs" Link="Service\AppSettingsService.Authority.cs" />
+    <Compile Include="..\ClashSharp\Service\AppSettingsService.Removal.cs" Link="Service\AppSettingsService.Removal.cs" />
     <Compile Include="..\ClashSharp\Service\SettingsActionFailedException.cs" Link="Service\SettingsActionFailedException.cs" />
     <Compile Include="..\ClashSharp\Service\ApplicationLifecycleService.cs" Link="Service\ApplicationLifecycleService.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageService.cs" Link="Service\ClashDataPackageService.cs" />

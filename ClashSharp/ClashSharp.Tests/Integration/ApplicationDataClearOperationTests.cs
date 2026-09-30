@@ -116,6 +116,34 @@ public sealed class ApplicationDataClearOperationTests
         Assert.Throws<ArgumentException>(() => Create(Path.GetPathRoot(Path.GetTempPath())!));
     }
 
+    [Fact]
+    public async Task GenerationRemoval_ClearFilesRejectsAReparseAncestorWithoutTouchingItsTarget()
+    {
+        string parent = Path.Combine(Path.GetTempPath(), "clashsharp-clear-ancestor-" + Guid.NewGuid().ToString("N"));
+        string outside = Path.Combine(parent, "outside");
+        string root = Path.Combine(outside, "LocalState");
+        string redirect = Path.Combine(parent, "redirect");
+        Directory.CreateDirectory(root);
+        string keep = Path.Combine(root, "keep.txt");
+        await File.WriteAllTextAsync(keep, "outside requested lexical root");
+        Directory.CreateSymbolicLink(redirect, outside);
+        try
+        {
+            ApplicationDataClearOperation operation = Create(Path.Combine(redirect, "LocalState"));
+            await operation.PrepareShutdownAsync(CancellationToken.None);
+            await operation.ClearHostDataAsync(CancellationToken.None);
+
+            await Assert.ThrowsAsync<IOException>(() => operation.ClearLocalFilesAsync(CancellationToken.None));
+
+            Assert.Equal("outside requested lexical root", await File.ReadAllTextAsync(keep));
+        }
+        finally
+        {
+            Directory.Delete(redirect, recursive: false);
+            Directory.Delete(parent, recursive: true);
+        }
+    }
+
     private static ApplicationDataClearOperation Create(string root, Action? clear = null) => new(
         _ => Task.FromResult(new RuntimeShutdownResult(RuntimeShutdownOutcome.PreparedForHostDisposal, null, [])),
         clear ?? (() => { }), root);

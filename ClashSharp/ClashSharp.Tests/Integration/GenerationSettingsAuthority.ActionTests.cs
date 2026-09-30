@@ -222,12 +222,13 @@ public sealed partial class GenerationSettingsAuthorityTests
         Assert.Equal("RuleTakeover", fixture.Session.Snapshot.Applied[SettingsRegistry.Keys.CurrentMode].Value!.CanonicalText);
     }
 
-    private static Actions CreateActions(Fixture fixture, INetworkStateObserver observer, NotificationSink? notifications = null) =>
+    private static Actions CreateActions(Fixture fixture, INetworkStateObserver observer, NotificationSink? notifications = null,
+        IApplicationDataClearOperationFactory? removal = null, Lifecycle? lifecycle = null) =>
         new(fixture.Authority, fixture.Admission, Unused<NetworkStateCoordinator>(), observer,
             Unused<Sampling>(), Unused<Connections>(), notifications ?? new RecordedNotifications(), new Events(),
             (_, _, _, _) => throw new InvalidOperationException("Unexpected logging in this action."),
-            key => key, Unused<Lifecycle>(), Unused<RuntimeLifecycleCoordinator>(), Unused<Startup>(),
-            new ActionCredential(), installAsPrimaryInstance: false);
+            key => key, lifecycle ?? Unused<Lifecycle>(), Unused<RuntimeLifecycleCoordinator>(), Unused<Startup>(),
+            new ActionCredential(), installAsPrimaryInstance: false, dataClearOperations: removal);
 
     private static TriggerRuntime CreateTriggerRuntime(Fixture fixture) =>
         new(fixture.Authority, Unused<Startup>(), Unused<Sampling>(), Unused<Connections>(),
