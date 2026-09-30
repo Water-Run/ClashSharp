@@ -5,7 +5,7 @@ using ClashSharp.Settings;
 namespace ClashSharp.ApplicationModel.Settings;
 
 /// <summary>Owns admission and one generation pin across complete consumer commands, including every affected runtime batch.</summary>
-public sealed class GenerationSettingsAuthority : ISettingsAuthority
+public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthority
 {
     private readonly DataGenerationManager _generations;
     private readonly MutationAdmissionBarrier _admission;

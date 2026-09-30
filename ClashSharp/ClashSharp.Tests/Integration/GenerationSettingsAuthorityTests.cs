@@ -279,11 +279,15 @@ public sealed partial class GenerationSettingsAuthorityTests
         public int Probes { get; private set; }
         public bool IgnoreEffects { get; set; }
         public Func<Task>? BeforeApply { get; set; }
-        public Task<SettingsApplicationObservation> ProbeAsync(SettingsApplicationRequest request, MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+        public Func<Task>? BeforeProbe { get; set; }
+        public void SetObserved(SettingKey key, SettingValue value) => _values[key] = value;
+        public SettingValue GetObserved(SettingKey key) => _values[key];
+        public async Task<SettingsApplicationObservation> ProbeAsync(SettingsApplicationRequest request, MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
         {
             ++Probes;
-            return Task.FromResult(new SettingsApplicationObservation(request.Generation, request.Batch.BatchId, request.Batch.AttemptId,
-                request.Values.Keys.Select(key => new SettingValueChange(key, _values[key]))));
+            if (BeforeProbe is not null) { await BeforeProbe(); }
+            return new SettingsApplicationObservation(request.Generation, request.Batch.BatchId, request.Batch.AttemptId,
+                request.Values.Keys.Select(key => new SettingValueChange(key, _values[key])));
         }
 
         public async Task ApplyAsync(SettingsApplicationRequest request, MutationAdmissionLease admissionLease, CancellationToken cancellationToken)

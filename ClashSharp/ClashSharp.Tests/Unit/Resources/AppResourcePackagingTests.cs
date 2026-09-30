@@ -1331,9 +1331,9 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("StartupLaunchService Instance", factoryCode, StringComparison.Ordinal);
     }
 
-    /// <summary>Guards startup launch updates as verified platform-first transactions in every action path.</summary>
+    /// <summary>Guards startup actions as authority-owned commands that report applied only after platform verification.</summary>
     [Fact]
-    public void StartupLaunchUpdates_VerifyPlatformBeforePersistingPreference()
+    public void StartupLaunchUpdates_VerifyPlatformBeforeReportingApplied()
     {
         string serviceCode = File.ReadAllText(
             FindSourceFile("ClashSharp", "ClashSharp", "Service", "StartupLaunchService.cs"));
@@ -1361,28 +1361,27 @@ public sealed class AppResourcePackagingTests
             serviceCode,
             StringComparison.Ordinal);
 
-        string coordinator = File.ReadAllText(
-            FindSourceFile("ClashSharp", "ClashSharp.Application", "Settings", "StartupSettingsCoordinator.cs"));
-        string operation = File.ReadAllText(
-            FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Compatibility", "StartupSettingsOperationAdapter.cs"));
-        Assert.Contains("_startupSettings.ApplyAsync(isEnabled, cancellationToken)", actionService, StringComparison.Ordinal);
-        Assert.Contains("_admission.AcquireOrdinaryAsync(cancellationToken)", coordinator, StringComparison.Ordinal);
-        Assert.Contains("_admission.EnsureActiveLease(admissionLease)", coordinator, StringComparison.Ordinal);
-        int platformUpdate = coordinator.IndexOf("await ApplyAndVerifyRegistrationAsync(enabled);", StringComparison.Ordinal);
-        Assert.True(platformUpdate >= 0, "The shared coordinator must verify Windows before committing settings.");
-        Assert.True(coordinator.IndexOf("WriteAndVerifyPreference(enabled, admissionLease);", StringComparison.Ordinal) > platformUpdate);
-        Assert.Contains("_settings.WriteAdmitted(admissionLease, editor => editor.LaunchAtStartupEnabled = enabled)", operation, StringComparison.Ordinal);
-        Assert.Contains("baselinePreference, baselineRegistration, admissionLease", coordinator, StringComparison.Ordinal);
+        string participant = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Settings", "StartupTaskSettingsParticipant.cs"));
+        string session = File.ReadAllText(
+            FindSourceFile("ClashSharp", "ClashSharp.Application", "Settings", "SettingsAuthoritySession.Application.cs"));
+        Assert.Contains("_settings.ApplyRuntimeChangesAsync", actionService, StringComparison.Ordinal);
+        Assert.Contains("_startup.TryGetStateAsync", participant, StringComparison.Ordinal);
+        Assert.Contains("_startup.SetEnabledAsync", participant, StringComparison.Ordinal);
+        int platformUpdate = session.IndexOf("await participant.ApplyAsync", StringComparison.Ordinal);
+        int platformVerification = session.IndexOf("await TryProbeAsync", platformUpdate, StringComparison.Ordinal);
+        Assert.True(platformUpdate >= 0 && platformVerification > platformUpdate);
+        Assert.True(session.IndexOf("_batches.CompleteAttempt", platformVerification, StringComparison.Ordinal) > platformVerification);
         Assert.DoesNotMatch(@"_settings\.LaunchAtStartupEnabled\s*=(?!=)", actionService);
         Assert.Contains("StartupLaunchService startupLaunch", actionService, StringComparison.Ordinal);
         Assert.DoesNotContain("StartupLaunchService.Instance", actionService, StringComparison.Ordinal);
 
         Assert.Contains(
-            ".ApplyAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)",
+            "_settings.ApplyRuntimeChangesAdmittedAsync",
             triggerAdapter,
             StringComparison.Ordinal);
         Assert.DoesNotMatch(@"_settings\.LaunchAtStartupEnabled\s*=(?!=)", triggerAdapter);
-        Assert.Contains("AddSingleton<StartupSettingsCoordinator>()", hostFactory, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<IRuntimeSettingsAuthority>", hostFactory, StringComparison.Ordinal);
 
         Assert.Contains(
             "StartupLaunchServiceFactory.CreateDefault()",

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Lifecycle;
@@ -9,6 +11,7 @@ using ClashSharp.ApplicationModel.Security;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Diagnostics;
 using ClashSharp.Model;
+using ClashSharp.Settings;
 using TriggerEventKind = global::ClashSharp.Model.Triggers.TriggerEventKind;
 
 namespace ClashSharp.Service;
@@ -21,10 +24,11 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     public static ApplicationActionService Instance => Volatile.Read(ref _instance)
         ?? throw new InvalidOperationException("Application actions are unavailable before primary host startup.");
 
-    private readonly AppSettingsService _settings;
+    private readonly IRuntimeSettingsAuthority _settings;
     private readonly IControllerCredentialProvider _controllerCredentials;
     private readonly MutationAdmissionBarrier _admissionBarrier;
     private readonly NetworkStateCoordinator _network;
+    private readonly INetworkStateObserver _networkObserver;
     private readonly ConnectionSamplingService _sampling;
     private readonly MihomoConnectionService _connections;
     private readonly IApplicationNotificationSink _notifications;
@@ -35,13 +39,12 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
 
     private readonly RuntimeLifecycleCoordinator _shutdown;
     private readonly StartupLaunchService _startupLaunch;
-    private readonly StartupSettingsCoordinator _startupSettings;
-    private readonly ConnectionSamplingSettingsCoordinator _samplingSettings;
 
     internal ApplicationActionService(
-        AppSettingsService settings,
+        IRuntimeSettingsAuthority settings,
         MutationAdmissionBarrier admissionBarrier,
         NetworkStateCoordinator network,
+        INetworkStateObserver networkObserver,
         ConnectionSamplingService sampling,
         MihomoConnectionService connections,
         IApplicationNotificationSink notifications,
@@ -51,14 +54,14 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         ApplicationLifecycleService lifecycle,
         RuntimeLifecycleCoordinator shutdown,
         StartupLaunchService startupLaunch,
-        StartupSettingsCoordinator startupSettings,
-        ConnectionSamplingSettingsCoordinator samplingSettings,
-        IControllerCredentialProvider controllerCredentials)
+        IControllerCredentialProvider controllerCredentials,
+        bool installAsPrimaryInstance = true)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _controllerCredentials = controllerCredentials ?? throw new ArgumentNullException(nameof(controllerCredentials));
         _admissionBarrier = admissionBarrier ?? throw new ArgumentNullException(nameof(admissionBarrier));
         _network = network ?? throw new ArgumentNullException(nameof(network));
+        _networkObserver = networkObserver ?? throw new ArgumentNullException(nameof(networkObserver));
         _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
@@ -68,9 +71,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
         _shutdown = shutdown ?? throw new ArgumentNullException(nameof(shutdown));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
-        _startupSettings = startupSettings ?? throw new ArgumentNullException(nameof(startupSettings));
-        _samplingSettings = samplingSettings ?? throw new ArgumentNullException(nameof(samplingSettings));
-        if (Interlocked.CompareExchange(ref _instance, this, null) is not null)
+        if (installAsPrimaryInstance && Interlocked.CompareExchange(ref _instance, this, null) is not null)
         {
             throw new InvalidOperationException("The primary application action service is already configured.");
         }
@@ -102,7 +103,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
                         ? parsedMode
                         : GetSupportedCurrentMode();
                 NetworkTakeoverResult result = await ApplyNetworkModeAsync(mode, cancellationToken).ConfigureAwait(false);
-                await PublishProxyModeAppliedAsync(result.Mode, cancellationToken).ConfigureAwait(false);
+                await PublishProxyModeAppliedAsync(result.Mode, CancellationToken.None).ConfigureAwait(false);
                 break;
             case ApplicationActionKind.CloseConnections:
                 await _connections.CloseAllConnectionsAsync(cancellationToken).ConfigureAwait(false);
@@ -126,18 +127,12 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         }
     }
 
-    /// <summary>Applies and verifies a mode through the sole durable network mutation coordinator.</summary>
+    /// <summary>Applies and independently observes a mode through the settings authority.</summary>
     public async Task<NetworkTakeoverResult> ApplyNetworkModeAsync(
         ClashSharpMode mode,
         CancellationToken cancellationToken)
     {
-        return await ApplyNetworkIntentAsync(
-                () => NetworkIntent.ChangeMode(
-                    mode,
-                    _settings.TransparentProxyEnabled,
-                    _settings.MixedPort),
-                cancellationToken)
-            .ConfigureAwait(false);
+        return await ApplyNetworkChangesAsync([Change(SettingsRegistry.Keys.CurrentMode, mode)], cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -148,13 +143,9 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         int mixedPort,
         CancellationToken cancellationToken)
     {
-        return await ApplyNetworkIntentAsync(
-                () => NetworkIntent.ChangeMode(
-                    GetSupportedCurrentMode(),
-                    transparentProxyEnabled,
-                    mixedPort),
-                cancellationToken)
-            .ConfigureAwait(false);
+        return await ApplyNetworkChangesAsync(
+            [Change(SettingsRegistry.Keys.TransparentProxyEnabled, transparentProxyEnabled), Change(SettingsRegistry.Keys.MixedPort, mixedPort)],
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Closes ordinary mutation admission and returns the sole settings-destructive lease.</summary>
@@ -190,43 +181,43 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         bool transparentProxyEnabled,
         CancellationToken cancellationToken)
     {
-        return ApplyNetworkIntentAsync(
-            () => NetworkIntent.ChangeMode(
-                GetSupportedCurrentMode(),
-                transparentProxyEnabled,
-                _settings.MixedPort),
-            cancellationToken);
+        return ApplyNetworkChangesAsync([Change(SettingsRegistry.Keys.TransparentProxyEnabled, transparentProxyEnabled)], cancellationToken);
     }
 
-    private async Task<NetworkTakeoverResult> ApplyNetworkIntentAsync(
-        Func<NetworkIntent> intentFactory,
+    private async Task<NetworkTakeoverResult> ApplyNetworkChangesAsync(
+        IReadOnlyList<SettingValueChange> changes,
         CancellationToken cancellationToken)
     {
-        NetworkIntent? appliedIntent = null;
-        MutationResult<NetworkTransitionResult> mutation = await _network
-            .ApplyAsync(
-                () => appliedIntent = intentFactory(),
-                cancellationToken)
-            .ConfigureAwait(false);
-        return CreateNetworkTakeoverResult(
-            mutation,
-            appliedIntent
-                ?? throw new InvalidOperationException("The network mutation did not compose an intent."));
-    }
-
-    private NetworkTakeoverResult CreateNetworkTakeoverResult(
-        MutationResult<NetworkTransitionResult> mutation,
-        NetworkIntent intent)
-    {
-        if (mutation.Outcome != MutationOutcome.Succeeded || mutation.Value is null)
+        using MutationAdmissionLease lease = await _admissionBarrier.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
+        SettingsAuthorityResult command = await _settings.ApplyRuntimeChangesAdmittedAsync(
+            changes, Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
+        SettingsEnvelope committed = RequireApplied(command);
+        // Keep mutation admission until the final independent read, including after a page cancels.
+        // A directory transition must drain this complete operation before retiring its runtime.
+        NetworkStateSnapshot state = await _networkObserver.ObserveAsync(CancellationToken.None).ConfigureAwait(false);
+        SettingsEnvelope current = _settings.CaptureSnapshot().Envelope;
+        SettingKey[] networkKeys = [SettingsRegistry.Keys.CurrentMode, SettingsRegistry.Keys.ActiveProfileId,
+            SettingsRegistry.Keys.TransparentProxyEnabled, SettingsRegistry.Keys.MixedPort];
+        if (networkKeys.Any(key => committed.Applied[key].Kind != SettingAppliedStateKind.Verified
+            || current.Applied[key].Kind != SettingAppliedStateKind.Verified
+            || !current.Applied[key].Value!.Equals(committed.Applied[key].Value))
+            || changes.Any(change => !committed.Applied[change.Key].Value!.Equals(change.Value)
+                || !current.Desired[change.Key].Value.Equals(change.Value)))
         {
-            throw new NetworkTransitionFailedException(mutation.Outcome, mutation.ErrorCode);
+            throw new SettingsActionFailedException(SettingsAuthorityStatus.ApplicationFailed, "settings.network_result_superseded");
         }
-
-        NetworkTransitionResult state = mutation.Value;
-        bool tunRequested = intent.TransparentProxyEnabled
-            && intent.Mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
-        MihomoCoreOwner requestedOwner = intent.Mode == ClashSharpMode.Disabled
+        ClashSharpMode mode = committed.Applied[SettingsRegistry.Keys.CurrentMode].Value!.Get<ClashSharpMode>();
+        bool tunRequested = committed.Applied[SettingsRegistry.Keys.TransparentProxyEnabled].Value!.Get<bool>()
+            && mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
+        int port = committed.Applied[SettingsRegistry.Keys.MixedPort].Value!.Get<int>();
+        bool systemProxyRequired = !tunRequested && mode is ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
+        if (!state.IsKnown || state.Mode != mode || state.MixedPort != port
+            || state.CoreRunning != (mode != ClashSharpMode.Disabled) || state.TransparentProxyEnabled != tunRequested
+            || systemProxyRequired && !state.SystemProxyEnabled)
+        {
+            throw new SettingsActionFailedException(SettingsAuthorityStatus.ApplicationFailed, "settings.network_result_unverified");
+        }
+        MihomoCoreOwner requestedOwner = mode == ClashSharpMode.Disabled
             ? MihomoCoreOwner.None
             : tunRequested
                 ? MihomoCoreOwner.Service
@@ -236,7 +227,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
             state.CoreRunning,
             state.SystemProxyEnabled,
             state.TransparentProxyEnabled,
-            GetNetworkResultMessage(state, tunRequested),
+            GetNetworkResultMessage(state.Mode, state.TransparentProxyEnabled, tunRequested),
             requestedOwner,
             tunRequested);
     }
@@ -245,7 +236,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         bool isEnabled,
         CancellationToken cancellationToken)
     {
-        return _startupSettings.ApplyAsync(isEnabled, cancellationToken);
+        return ApplySettingsAsync([Change(SettingsRegistry.Keys.LaunchAtStartupEnabled, isEnabled)], cancellationToken);
     }
 
     /// <summary>Applies the settings page's complete sampling choice through the shared coordinator.</summary>
@@ -253,13 +244,14 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         bool isEnabled,
         int intervalSeconds,
         CancellationToken cancellationToken) =>
-        _samplingSettings.ApplyAsync(new ConnectionSamplingSettings(isEnabled, intervalSeconds), cancellationToken);
+        ApplySettingsAsync([Change(SettingsRegistry.Keys.ConnectionSamplingEnabled, isEnabled),
+            Change(SettingsRegistry.Keys.ConnectionSamplingIntervalSeconds, intervalSeconds)], cancellationToken);
 
     private Task ApplyConnectionSamplingAsync(
         bool isEnabled,
         CancellationToken cancellationToken)
     {
-        return _samplingSettings.SetEnabledAsync(isEnabled, cancellationToken);
+        return ApplySettingsAsync([Change(SettingsRegistry.Keys.ConnectionSamplingEnabled, isEnabled)], cancellationToken);
     }
 
     /// <summary>Disables an explicitly confirmed conflicting Windows proxy through durable mutation.</summary>
@@ -267,10 +259,14 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     {
         MutationResult<NetworkTransitionResult> mutation = await _network
             .ApplyAsync(
-                () => NetworkIntent.DisableConflictingProxy(
-                    GetSupportedCurrentMode(),
-                    _settings.TransparentProxyEnabled,
-                    _settings.MixedPort),
+                () =>
+                {
+                    SettingsEnvelope preferences = _settings.CaptureSnapshot().Envelope;
+                    return NetworkIntent.DisableConflictingProxy(
+                        preferences.Desired[SettingsRegistry.Keys.CurrentMode].Value.Get<ClashSharpMode>(),
+                        preferences.Desired[SettingsRegistry.Keys.TransparentProxyEnabled].Value.Get<bool>(),
+                        preferences.Desired[SettingsRegistry.Keys.MixedPort].Value.Get<int>());
+                },
                 cancellationToken)
             .ConfigureAwait(false);
         if (mutation.Outcome != MutationOutcome.Succeeded)
@@ -314,14 +310,14 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         return bool.TryParse(value, out bool parsed) && parsed;
     }
 
-    private string GetNetworkResultMessage(NetworkTransitionResult state, bool tunRequested)
+    private string GetNetworkResultMessage(ClashSharpMode mode, bool tunEffective, bool tunRequested)
     {
-        string key = state.Mode switch
+        string key = mode switch
         {
             ClashSharpMode.Disabled => "NetworkTakeover.Disabled",
             ClashSharpMode.Standby => "NetworkTakeover.Standby",
-            ClashSharpMode.FullTakeover when state.TransparentProxyEnabled => "NetworkTakeover.TransparentProxy.Full",
-            ClashSharpMode.RuleTakeover when state.TransparentProxyEnabled => "NetworkTakeover.TransparentProxy.Rule",
+            ClashSharpMode.FullTakeover when tunEffective => "NetworkTakeover.TransparentProxy.Full",
+            ClashSharpMode.RuleTakeover when tunEffective => "NetworkTakeover.TransparentProxy.Rule",
             ClashSharpMode.FullTakeover when tunRequested => "NetworkTakeover.TransparentProxyServiceMissing.Full",
             ClashSharpMode.RuleTakeover when tunRequested => "NetworkTakeover.TransparentProxyServiceMissing.Rule",
             ClashSharpMode.FullTakeover => "NetworkTakeover.SystemProxy.Full",
@@ -333,10 +329,24 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
 
     private ClashSharpMode GetSupportedCurrentMode()
     {
-        ClashSharpMode mode = _settings.CurrentMode;
+        ClashSharpMode mode = _settings.CaptureSnapshot().Envelope.Desired[SettingsRegistry.Keys.CurrentMode].Value.Get<ClashSharpMode>();
         return Enum.IsDefined(mode) && mode != ClashSharpMode.Faulted
             ? mode
             : ClashSharpMode.Disabled;
+    }
+
+    private async Task ApplySettingsAsync(IReadOnlyList<SettingValueChange> changes, CancellationToken cancellationToken)
+    {
+        _ = RequireApplied(await _settings.ApplyRuntimeChangesAsync(changes, Guid.NewGuid(), cancellationToken).ConfigureAwait(false));
+    }
+
+    private static SettingsEnvelope RequireApplied(SettingsAuthorityResult result) => result.IsSucceeded && result.Envelope is not null
+        ? result.Envelope : throw new SettingsActionFailedException(result.Status, result.Code ?? "settings.action.failed");
+
+    private static SettingValueChange Change<T>(SettingKey key, T value) where T : notnull
+    {
+        SettingNormalizationResult normalized = SettingsRegistry.Default.Get(key.Value).NormalizeValue(value);
+        return normalized.IsSuccess ? new(key, normalized.Value!) : throw new ArgumentException(normalized.Error!.Code, nameof(value));
     }
 }
 

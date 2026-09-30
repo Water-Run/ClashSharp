@@ -9,7 +9,6 @@ using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Model.Triggers;
 using ClashSharp.ServiceProtocol;
-using AppSettingsService = ClashSharpUi::ClashSharp.Service.AppSettingsService;
 using ConnectionSamplingService = ClashSharpUi::ClashSharp.Service.ConnectionSamplingService;
 using IIdempotentTriggerNotificationSink =
     ClashSharpUi::ClashSharp.Service.IIdempotentTriggerNotificationSink;
@@ -164,16 +163,13 @@ public sealed class TriggerActionRuntimeAdapterTests
         MihomoConnectionService connections = (MihomoConnectionService)connectionConstructor.Invoke([controller]);
 
         return new TriggerActionRuntimeAdapter(
-            Uninitialized<AppSettingsService>(),
+            Uninitialized<GenerationSettingsAuthority>(),
             Uninitialized<StartupLaunchService>(),
             Uninitialized<ConnectionSamplingService>(),
             connections,
-            Uninitialized<NetworkStateCoordinator>(),
             new UnusedNetworkStateObserver(),
             new UnusedNotificationSink(),
-            new UnusedLifecycleHandoff(),
-            Uninitialized<StartupSettingsCoordinator>(),
-            Uninitialized<ConnectionSamplingSettingsCoordinator>());
+            new UnusedLifecycleHandoff());
     }
 
     private static T Uninitialized<T>() where T : class

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -11,6 +12,7 @@ using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Model;
 using ClashSharp.Model.Triggers;
+using ClashSharp.Settings;
 using TriggerActionKind = ClashSharp.Model.Triggers.TriggerActionKind;
 
 namespace ClashSharp.Service;
@@ -18,38 +20,29 @@ namespace ClashSharp.Service;
 /// <summary>Adapts current application services to idempotent durable trigger-action semantics.</summary>
 internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
 {
-    private readonly AppSettingsService _settings;
+    private readonly IRuntimeSettingsAuthority _settings;
     private readonly StartupLaunchService _startupLaunch;
-    private readonly StartupSettingsCoordinator _startupSettings;
     private readonly ConnectionSamplingService _sampling;
-    private readonly ConnectionSamplingSettingsCoordinator _samplingSettings;
     private readonly MihomoConnectionService _connections;
-    private readonly NetworkStateCoordinator _network;
     private readonly INetworkStateObserver _networkObserver;
     private readonly MihomoServiceManager? _mihomoService;
     private readonly IIdempotentTriggerNotificationSink _notifications;
     private readonly ITriggerLifecycleHandoff _exitHandoff;
 
     public TriggerActionRuntimeAdapter(
-        AppSettingsService settings,
+        IRuntimeSettingsAuthority settings,
         StartupLaunchService startupLaunch,
         ConnectionSamplingService sampling,
         MihomoConnectionService connections,
-        NetworkStateCoordinator network,
         INetworkStateObserver networkObserver,
         IIdempotentTriggerNotificationSink notifications,
         ITriggerLifecycleHandoff exitHandoff,
-        StartupSettingsCoordinator startupSettings,
-        ConnectionSamplingSettingsCoordinator samplingSettings,
         MihomoServiceManager? mihomoService = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _startupLaunch = startupLaunch ?? throw new ArgumentNullException(nameof(startupLaunch));
-        _startupSettings = startupSettings ?? throw new ArgumentNullException(nameof(startupSettings));
         _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
-        _samplingSettings = samplingSettings ?? throw new ArgumentNullException(nameof(samplingSettings));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
-        _network = network ?? throw new ArgumentNullException(nameof(network));
         _networkObserver = networkObserver ?? throw new ArgumentNullException(nameof(networkObserver));
         _mihomoService = mihomoService;
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
@@ -116,25 +109,17 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
                 await _connections.CloseAllConnectionsAsync(cancellationToken).ConfigureAwait(false);
                 return TriggerActionApplyResult.Applied();
             case TriggerActionKind.SetLaunchAtStartup:
-                await _startupSettings
-                    .ApplyAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)
-                    .ConfigureAwait(false);
-                return TriggerActionApplyResult.Applied();
+                return await ApplySettingAsync(SettingsRegistry.Keys.LaunchAtStartupEnabled,
+                    RequireBoolean(action), admissionLease, cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.SetTransparentProxy:
-                return await ApplyTransparentProxyAsync(
-                    RequireBoolean(action),
-                    admissionLease,
-                    cancellationToken).ConfigureAwait(false);
+                return await ApplySettingAsync(SettingsRegistry.Keys.TransparentProxyEnabled,
+                    RequireBoolean(action), admissionLease, cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.SetConnectionSampling:
-                await _samplingSettings
-                    .SetEnabledAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)
-                    .ConfigureAwait(false);
-                return TriggerActionApplyResult.Applied();
+                return await ApplySettingAsync(SettingsRegistry.Keys.ConnectionSamplingEnabled,
+                    RequireBoolean(action), admissionLease, cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.SwitchProxyMode:
-                return await ApplyNetworkModeAsync(
-                    RequireMode(action),
-                    admissionLease,
-                    cancellationToken).ConfigureAwait(false);
+                return await ApplySettingAsync(SettingsRegistry.Keys.CurrentMode,
+                    RequireMode(action), admissionLease, cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.ExitApplication:
                 return await _exitHandoff.HandOffAsync(action, cancellationToken).ConfigureAwait(false);
             case TriggerActionKind.SendNotification:
@@ -159,19 +144,20 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
         }
 
         bool enabled = state == StartupLaunchTaskState.Enabled;
-        return _settings.LaunchAtStartupEnabled == desired && enabled == desired;
+        return ReadDesired<bool>(SettingsRegistry.Keys.LaunchAtStartupEnabled) == desired && enabled == desired;
     }
 
     private bool ProbeConnectionSampling(bool desired)
     {
-        return _settings.ConnectionSamplingEnabled == desired && _sampling.IsRunning == desired;
+        return ReadDesired<bool>(SettingsRegistry.Keys.ConnectionSamplingEnabled) == desired && _sampling.IsRunning == desired;
     }
 
     private async Task<bool?> ProbeTransparentProxyAsync(
         bool desired,
         CancellationToken cancellationToken)
     {
-        if (_settings.TransparentProxyEnabled != desired)
+        SettingsEnvelope preferences = _settings.CaptureSnapshot().Envelope;
+        if (preferences.Desired[SettingsRegistry.Keys.TransparentProxyEnabled].Value.Get<bool>() != desired)
         {
             return false;
         }
@@ -184,7 +170,8 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
             return null;
         }
 
-        bool takeoverMode = _settings.CurrentMode is
+        ClashSharpMode mode = preferences.Desired[SettingsRegistry.Keys.CurrentMode].Value.Get<ClashSharpMode>();
+        bool takeoverMode = mode is
             ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover;
         bool expectedTransparentProxy = false;
         if (desired && takeoverMode)
@@ -202,28 +189,14 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
                 return null;
             }
 
-            expectedTransparentProxy = serviceStatus.IsInstalled;
+            if (!serviceStatus.IsInstalled) { return false; }
+            expectedTransparentProxy = true;
         }
 
-        return observed.Mode == _settings.CurrentMode
-            && observed.MixedPort == _settings.MixedPort
+        return observed.Mode == mode
+            && observed.MixedPort == preferences.Desired[SettingsRegistry.Keys.MixedPort].Value.Get<int>()
             && observed.TransparentProxyEnabled == expectedTransparentProxy
             && IsEffectiveModeState(observed);
-    }
-
-    private async Task<TriggerActionApplyResult> ApplyTransparentProxyAsync(
-        bool transparentProxyEnabled,
-        MutationAdmissionLease admissionLease,
-        CancellationToken cancellationToken)
-    {
-        MutationResult<NetworkTransitionResult> result = await _network.ApplyAdmittedAsync(
-            () => NetworkIntent.ChangeMode(
-                _settings.CurrentMode,
-                transparentProxyEnabled,
-                _settings.MixedPort),
-            admissionLease,
-            cancellationToken).ConfigureAwait(false);
-        return ClassifyNetworkMutationResult(result, cancellationToken);
     }
 
     private async Task<bool?> ProbeNetworkModeAsync(
@@ -238,46 +211,38 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
             return null;
         }
 
-        return _settings.CurrentMode == desiredMode
+        SettingsEnvelope preferences = _settings.CaptureSnapshot().Envelope;
+        return preferences.Desired[SettingsRegistry.Keys.CurrentMode].Value.Get<ClashSharpMode>() == desiredMode
             && observed.Mode == desiredMode
-            && observed.MixedPort == _settings.MixedPort
+            && observed.MixedPort == preferences.Desired[SettingsRegistry.Keys.MixedPort].Value.Get<int>()
             && IsEffectiveModeState(observed);
     }
 
-    private async Task<TriggerActionApplyResult> ApplyNetworkModeAsync(
-        ClashSharpMode mode,
-        MutationAdmissionLease admissionLease,
-        CancellationToken cancellationToken)
+    private async Task<TriggerActionApplyResult> ApplySettingAsync<T>(
+        SettingKey key, T value, MutationAdmissionLease admissionLease, CancellationToken cancellationToken) where T : notnull
     {
-        MutationResult<NetworkTransitionResult> result = await _network.ApplyAdmittedAsync(
-            () => NetworkIntent.ChangeMode(
-                mode,
-                _settings.TransparentProxyEnabled,
-                _settings.MixedPort),
-            admissionLease,
-            cancellationToken).ConfigureAwait(false);
-        return ClassifyNetworkMutationResult(result, cancellationToken);
+        SettingDefinition definition = SettingsRegistry.Default.Get(key.Value);
+        SettingNormalizationResult normalized = definition.NormalizeValue(value);
+        if (!normalized.IsSuccess) { throw new InvalidDataException("The trigger setting is invalid."); }
+        SettingsAuthorityResult result = await _settings.ApplyRuntimeChangesAdmittedAsync(
+            [new(key, normalized.Value!)], Guid.NewGuid(), admissionLease, cancellationToken).ConfigureAwait(false);
+        return ClassifySettingsCommandResult(result, definition.ApplicationKind);
     }
 
-    private static TriggerActionApplyResult ClassifyNetworkMutationResult(
-        MutationResult<NetworkTransitionResult> result,
-        CancellationToken cancellationToken)
+    private static TriggerActionApplyResult ClassifySettingsCommandResult(SettingsAuthorityResult result, SettingApplicationKind kind)
     {
-        if (result.Outcome == MutationOutcome.Succeeded)
-        {
-            return TriggerActionApplyResult.Applied();
-        }
-
-        if (result.Outcome == MutationOutcome.Cancelled && cancellationToken.IsCancellationRequested)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-
-        string diagnosticCode = result.ErrorCode ?? "trigger.action.network_transition_failed";
-        return result.Outcome is MutationOutcome.RecoveryRequired or MutationOutcome.CommittedRecoveryRequired
+        if (result.IsSucceeded) { return TriggerActionApplyResult.Applied(); }
+        string diagnosticCode = result.Code ?? "trigger.action.settings_failed";
+        bool unresolved = result.Status is SettingsAuthorityStatus.ApplicationFailed or SettingsAuthorityStatus.PersistenceFailed
+            || result.Envelope?.PendingApplications.Any(batch => batch.ApplicationKind == kind
+                && batch.State is SettingsApplicationBatchState.Running or SettingsApplicationBatchState.Failed) == true;
+        return unresolved
             ? TriggerActionApplyResult.Uncertain(diagnosticCode)
             : TriggerActionApplyResult.Failed(diagnosticCode);
     }
+
+    private T ReadDesired<T>(SettingKey key) where T : notnull =>
+        _settings.CaptureSnapshot().Envelope.Desired[key].Value.Get<T>();
 
     private static bool IsEffectiveModeState(NetworkStateSnapshot state)
     {

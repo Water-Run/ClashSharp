@@ -157,15 +157,19 @@ public sealed class SettingsAuthorityArchitectureTests
     }
 
     [Fact]
-    public void StartupChanges_ShareTheApplicationCoordinatorWithoutPagePersistence()
+    public void StartupChanges_ShareTheSettingsAuthorityWithoutPagePersistence()
     {
         string host = ReadApplicationSource("AppHost/ClashSharpAppHostFactory.cs");
-        Assert.Contains("AddSingleton<StartupSettingsCoordinator>()", host, StringComparison.Ordinal);
-        Assert.Contains("AddSingleton<IStartupSettingsOperation, StartupSettingsOperationAdapter>()", host, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<GenerationSettingsAuthority>()", host, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<IRuntimeSettingsAuthority>", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddSingleton<StartupSettingsCoordinator>", host, StringComparison.Ordinal);
         string actions = ReadApplicationSource("Service/ApplicationActionService.cs");
-        Assert.Contains("_startupSettings.ApplyAsync(isEnabled, cancellationToken)", actions, StringComparison.Ordinal);
+        Assert.Contains("_settings.ApplyRuntimeChangesAsync", actions, StringComparison.Ordinal);
+        Assert.Contains("SettingsRegistry.Keys.LaunchAtStartupEnabled", actions, StringComparison.Ordinal);
         string triggers = ReadApplicationSource("Service/TriggerActionRuntimeAdapter.cs");
-        Assert.Contains(".ApplyAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)", triggers, StringComparison.Ordinal);
+        Assert.Contains("_settings.ApplyRuntimeChangesAdmittedAsync", triggers, StringComparison.Ordinal);
+        Assert.Contains("SettingsRegistry.Keys.LaunchAtStartupEnabled", triggers, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartupSettingsCoordinator", actions + triggers, StringComparison.Ordinal);
         string viewModel = ReadApplicationSource("ViewModel/SettingsViewModel.cs");
         int start = viewModel.IndexOf("public void SetLaunchAtStartupEnabled", StringComparison.Ordinal);
         int end = viewModel.IndexOf("public bool SetMixedPort", start, StringComparison.Ordinal);
@@ -192,24 +196,27 @@ public sealed class SettingsAuthorityArchitectureTests
         string applicationActions = ReadApplicationSource("Service/ApplicationActionService.cs");
         string profileCatalog = ReadApplicationSource("Service/ProfileCatalogService.cs");
         Assert.Contains("settings.WriteAdmitted", networkCommitter, StringComparison.Ordinal);
-        Assert.Contains("_samplingSettings", triggerRuntime, StringComparison.Ordinal);
-        Assert.Contains("_samplingSettings", applicationActions, StringComparison.Ordinal);
+        Assert.Contains("_settings.ApplyRuntimeChangesAdmittedAsync", triggerRuntime, StringComparison.Ordinal);
+        Assert.Contains("_settings.ApplyRuntimeChangesAsync", applicationActions, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppSettingsService", triggerRuntime + applicationActions, StringComparison.Ordinal);
         Assert.Contains("_settings.WriteAdmitted", ReadApplicationSource("AppHost/Compatibility/ConnectionSamplingSettingsOperationAdapter.cs"), StringComparison.Ordinal);
         Assert.Contains("SetActiveProfileAdmitted", profileCatalog, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void SamplingChanges_ShareCoordinatorAndKeepPageChoicesUnpersisted()
+    public void SamplingChanges_ShareAuthorityAndKeepPageChoicesUnpersisted()
     {
         string host = ReadApplicationSource("AppHost/ClashSharpAppHostFactory.cs");
-        Assert.Contains("AddSingleton<ConnectionSamplingSettingsCoordinator>()", host, StringComparison.Ordinal);
-        Assert.Contains("AddSingleton<IConnectionSamplingSettingsOperation, ConnectionSamplingSettingsOperationAdapter>()", host, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<IRuntimeSettingsAuthority>", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddSingleton<ConnectionSamplingSettingsCoordinator>", host, StringComparison.Ordinal);
         string page = ReadApplicationSource("ViewModel/SettingsViewModel.cs");
         Assert.DoesNotContain("_settings.ConnectionSamplingEnabled =", page, StringComparison.Ordinal);
         Assert.DoesNotContain("_settings.ConnectionSamplingIntervalSeconds =", page, StringComparison.Ordinal);
         Assert.Contains("_applyConnectionSamplingAsync(desired.Enabled, desired.IntervalSeconds, cancellationToken)", page, StringComparison.Ordinal);
         string trigger = ReadApplicationSource("Service/TriggerActionRuntimeAdapter.cs");
-        Assert.Contains(".SetEnabledAdmittedAsync(RequireBoolean(action), admissionLease, cancellationToken)", trigger, StringComparison.Ordinal);
+        Assert.Contains("SettingsRegistry.Keys.ConnectionSamplingEnabled", trigger, StringComparison.Ordinal);
+        Assert.Contains("_settings.ApplyRuntimeChangesAdmittedAsync", trigger, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConnectionSamplingSettingsCoordinator", trigger, StringComparison.Ordinal);
         Assert.DoesNotContain("editor.ConnectionSamplingEnabled =", trigger, StringComparison.Ordinal);
         string adapter = ReadApplicationSource("AppHost/Compatibility/ConnectionSamplingSettingsOperationAdapter.cs");
         Assert.DoesNotContain(".StopAsync(", adapter, StringComparison.Ordinal);
