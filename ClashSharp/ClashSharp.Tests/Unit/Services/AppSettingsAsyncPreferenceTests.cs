@@ -9,7 +9,7 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class AppSettingsAsyncPreferenceTests : IDisposable
 {
     private readonly MutationAdmissionBarrier _barrier = new();
-    private readonly AppSettingsService _settings = AppSettingsService.Instance;
+    private readonly AppSettingsService _settings = new(new Dictionary<string, object>());
 
     public AppSettingsAsyncPreferenceTests()
     {
@@ -25,9 +25,10 @@ public sealed class AppSettingsAsyncPreferenceTests : IDisposable
         _settings.SettingChanged += OnChanged;
         try
         {
-            Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => _settings.ApplyChangesAsync(
+            AggregateException notifications = await Assert.ThrowsAsync<AggregateException>(() => _settings.ApplyChangesAsync(
                 [Change(SettingsRegistry.Keys.AppAccentColorMode, AppAccentColorMode.Custom),
-                 Change(SettingsRegistry.Keys.AppAccentColorValue, "#2d7d9a")], CancellationToken.None)));
+                 Change(SettingsRegistry.Keys.AppAccentColorValue, "#2d7d9a")], CancellationToken.None));
+            Assert.Equal([failure, failure], notifications.InnerExceptions);
 
             IReadOnlyList<SettingValueChange> committed = _settings.ReadPreferenceChanges(
                 [SettingsRegistry.Keys.AppAccentColorMode, SettingsRegistry.Keys.AppAccentColorValue]);

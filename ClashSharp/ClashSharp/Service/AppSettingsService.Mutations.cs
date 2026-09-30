@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Model;
@@ -150,9 +151,38 @@ public sealed partial class AppSettingsService
             }
         }
 
+        NotifySettingChanges(changes);
+    }
+
+    /// <summary>Delivers every committed change before reporting ordinary observer failures.</summary>
+    private void NotifySettingChanges(IReadOnlyList<AppSettingChangedEventArgs> changes)
+    {
+        List<Exception>? failures = null;
         foreach (AppSettingChangedEventArgs change in changes)
         {
-            NotifySettingChanged(change);
+            EventHandler<AppSettingChangedEventArgs>? handlers = SettingChanged;
+            if (handlers is null) { continue; }
+            foreach (EventHandler<AppSettingChangedEventArgs> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, change);
+                }
+                catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+                {
+                    failures ??= [];
+                    failures.Add(exception);
+                }
+            }
+        }
+
+        if (failures is { Count: 1 })
+        {
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
+        if (failures is not null)
+        {
+            throw new AggregateException("The settings were saved, but change notifications failed.", failures);
         }
     }
 

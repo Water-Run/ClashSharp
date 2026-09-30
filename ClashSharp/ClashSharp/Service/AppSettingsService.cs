@@ -726,15 +726,6 @@ public sealed partial class AppSettingsService :
             wasRemoved: true);
     }
 
-    /// <summary>Raises the setting change event for audit subscribers.</summary>
-    private void NotifySettingChanged(AppSettingChangedEventArgs? change)
-    {
-        if (change is not null)
-        {
-            SettingChanged?.Invoke(this, change);
-        }
-    }
-
     /// <summary>Normalizes a user-entered HTTP/HTTPS connection test URL.</summary>
     /// <param name="value">User-entered URL. Must not be null.</param>
     /// <returns>Normalized absolute URL.</returns>
