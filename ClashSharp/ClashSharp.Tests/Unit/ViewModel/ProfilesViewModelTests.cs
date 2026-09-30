@@ -166,6 +166,12 @@ public sealed class ProfilesViewModelTests
     private sealed class FakeProfileCatalogSettings : IProfileCatalogSettings
     {
         public string ActiveProfileId { get; set; } = string.Empty;
+
+        public Task SetActiveProfileAsync(string profileId, CancellationToken cancellationToken)
+        {
+            ActiveProfileId = profileId;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeProfileCatalogCoreConfiguration : IProfileCatalogCoreConfiguration

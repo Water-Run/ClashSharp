@@ -115,13 +115,23 @@ internal sealed class ProfileCatalogSettingsAdapter(AppSettingsService settings)
         set => settings.ActiveProfileId = value;
     }
 
-    public void SetActiveProfileAdmitted(
-        MutationAdmissionLease admissionLease,
-        string profileId)
+    public Task SetActiveProfileAsync(string profileId, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        settings.ActiveProfileId = profileId;
+        return Task.CompletedTask;
+    }
+
+    public Task SetActiveProfileAdmittedAsync(
+        MutationAdmissionLease admissionLease,
+        string profileId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         settings.WriteAdmitted(
             admissionLease,
             editor => editor.ActiveProfileId = profileId);
+        return Task.CompletedTask;
     }
 }
 

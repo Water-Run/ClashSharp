@@ -864,6 +864,12 @@ public sealed class ProfileCatalogServiceTests
 
         public string? FailNextValue { get; set; }
 
+        public Task SetActiveProfileAsync(string profileId, CancellationToken cancellationToken)
+        {
+            ActiveProfileId = profileId;
+            return Task.CompletedTask;
+        }
+
         public string ActiveProfileId
         {
             get => _activeProfileId;

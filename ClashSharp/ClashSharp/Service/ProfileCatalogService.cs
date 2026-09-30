@@ -21,15 +21,19 @@ namespace ClashSharp.Service;
 /// <summary>Provides active profile settings for profile catalog rows.</summary>
 internal interface IProfileCatalogSettings
 {
-    /// <summary>Gets or sets the active profile identifier.</summary>
-    string ActiveProfileId { get; set; }
+    /// <summary>Gets the active profile identifier from the last verified settings snapshot.</summary>
+    string ActiveProfileId { get; }
+
+    /// <summary>Awaits durable publication of an active profile identifier.</summary>
+    Task SetActiveProfileAsync(string profileId, CancellationToken cancellationToken);
 }
 
 internal interface IProfileCatalogAdmittedSettings
 {
-    void SetActiveProfileAdmitted(
+    Task SetActiveProfileAdmittedAsync(
         MutationAdmissionLease admissionLease,
-        string profileId);
+        string profileId,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>Imports, validates, and ensures profile configuration files.</summary>
@@ -203,6 +207,34 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
 
     /// <summary>Rejects new catalog work and waits for accepted imports, commits, and compensation to finish.</summary>
     public ValueTask DisposeAsync() => _operations.DisposeAsync();
+
+    /// <summary>Verifies generation-owned catalog storage without replacing a missing or corrupt published catalog with defaults.</summary>
+    internal void OpenGenerationStorage(bool allowCreate)
+    {
+        using IDisposable operation = _operations.Enter();
+        lock (_syncLock)
+        {
+            ProfileCatalogDocument document;
+            try
+            {
+                using FileStream stream = new(_catalogPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                document = JsonSerializer.Deserialize<ProfileCatalogDocument>(stream)
+                    ?? throw new InvalidDataException("The generation profile catalog contains no document.");
+            }
+            catch (FileNotFoundException) when (allowCreate)
+            {
+                SaveDocument(BuildDefaultDocument(GetString));
+                return;
+            }
+            catch (DirectoryNotFoundException) when (allowCreate)
+            {
+                SaveDocument(BuildDefaultDocument(GetString));
+                return;
+            }
+
+            _cachedDocument = EnsureBuiltInProfile(document, GetString);
+        }
+    }
 
     /// <summary>Returns all known configuration profiles with active-profile state applied.</summary>
     /// <returns>A read-only snapshot of known configuration profiles.</returns>
@@ -659,7 +691,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
 
                 try
                 {
-                    SetActiveProfilePointer(admissionLease, ProfileCatalogIds.BuiltInDirect);
+                    await SetActiveProfilePointerAsync(admissionLease, ProfileCatalogIds.BuiltInDirect).ConfigureAwait(false);
                 }
                 catch (Exception settingFailure) when (!ExceptionGraphClassifier.IsProcessFatal(settingFailure))
                 {
@@ -722,20 +754,20 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
         }
     }
 
-    private void SetActiveProfilePointer(
+    private async Task SetActiveProfilePointerAsync(
         MutationAdmissionLease? admissionLease,
         string profileId)
     {
         if (admissionLease is null)
         {
-            _settings.ActiveProfileId = profileId;
+            await _settings.SetActiveProfileAsync(profileId, CancellationToken.None).ConfigureAwait(false);
         }
         else
         {
             IProfileCatalogAdmittedSettings admittedSettings = _admittedSettings
                 ?? throw new InvalidOperationException(
                     "The configured profile settings do not support admitted writes.");
-            admittedSettings.SetActiveProfileAdmitted(admissionLease, profileId);
+            await admittedSettings.SetActiveProfileAdmittedAsync(admissionLease, profileId, CancellationToken.None).ConfigureAwait(false);
         }
 
         if (!StringComparer.Ordinal.Equals(GetActiveProfileId(), profileId))
@@ -752,7 +784,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
         List<Exception> failures = [];
         try
         {
-            SetActiveProfilePointer(admissionLease, previousActiveProfileId);
+            await SetActiveProfilePointerAsync(admissionLease, previousActiveProfileId).ConfigureAwait(false);
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
         {
@@ -1439,10 +1471,7 @@ public sealed partial class ProfileCatalogService : IAsyncDisposable
 
             try
             {
-                lock (_syncLock)
-                {
-                    SetActiveProfilePointer(admissionLease, profileId);
-                }
+                await SetActiveProfilePointerAsync(admissionLease, profileId).ConfigureAwait(false);
                 return true;
             }
             catch (Exception settingFailure) when (!ExceptionGraphClassifier.IsProcessFatal(settingFailure))

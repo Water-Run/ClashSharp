@@ -389,6 +389,12 @@ public sealed class MasterControlRuntimeAdapterTests
     private sealed class FixedProfileCatalogSettings : IProfileCatalogSettings
     {
         public string ActiveProfileId { get; set; } = "built-in-direct";
+
+        public Task SetActiveProfileAsync(string profileId, CancellationToken cancellationToken)
+        {
+            ActiveProfileId = profileId;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class UnusedProfileCatalogCoreConfiguration : IProfileCatalogCoreConfiguration

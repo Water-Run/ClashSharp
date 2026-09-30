@@ -25,6 +25,65 @@ namespace ClashSharp.Tests.Integration;
 public sealed class ProductionRepositoryLifetimeTests
 {
     [Fact]
+    public async Task CatalogRetirement_WaitsForAsyncPointerFailureAndItsCompleteCompensation()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "clashsharp-async-profile-" + Guid.NewGuid().ToString("N"));
+        TaskCompletionSource commitEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource commitRelease = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource restoreEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource restoreRelease = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        IOException failure = new("delayed pointer acknowledgement failure");
+        Settings settings = new() { ActiveProfileId = "previous-profile" };
+        settings.AfterCommit = async profileId =>
+        {
+            if (profileId == ProfileCatalogIds.BuiltInDirect)
+            {
+                commitEntered.TrySetResult();
+                await commitRelease.Task;
+                throw failure;
+            }
+            restoreEntered.TrySetResult();
+            await restoreRelease.Task;
+        };
+        Runtime runtime = new();
+        runtime.Release.TrySetResult(true);
+        MutationAdmissionBarrier admission = new();
+        await using LogStorageService logs = LogStorageServiceFactory.CreateForDirectory(root, () => settings.ActiveProfileId);
+        await using ProfileCatalogService profiles = ProfileCatalogServiceFactory.CreateForDirectory(root, settings, new Configuration(), runtime,
+            new Log(logs), key => key, new ProfileCatalogMutationCoordinator(admission, new FairAsyncMutationGate()));
+        Task<bool> activation = profiles.TryApplyActiveProfileAsync(ProfileCatalogIds.BuiltInDirect, CancellationToken.None);
+        Task? retiring = null;
+        Task<MutationAdmissionLease>? draining = null;
+        try
+        {
+            await commitEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(activation.IsCompleted);
+            retiring = profiles.DisposeAsync().AsTask();
+            draining = admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None).AsTask();
+            Assert.False(retiring.IsCompleted);
+            Assert.False(draining.IsCompleted);
+            commitRelease.TrySetResult();
+            await restoreEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal("previous-profile", settings.ActiveProfileId);
+            Assert.False(activation.IsCompleted);
+            Assert.False(retiring.IsCompleted);
+            Assert.False(draining.IsCompleted);
+            logs.AppendLog("Info", "Test", "compensation still owns its dependencies", null);
+        }
+        finally
+        {
+            commitRelease.TrySetResult();
+            restoreRelease.TrySetResult();
+            Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => activation));
+            if (retiring is not null) { await retiring.WaitAsync(TimeSpan.FromSeconds(5)); }
+            if (draining is not null) { (await draining.WaitAsync(TimeSpan.FromSeconds(5))).Dispose(); }
+            await profiles.DisposeAsync();
+            await logs.DisposeAsync();
+            if (Directory.Exists(root)) { Directory.Delete(root, recursive: true); }
+        }
+    }
+
+    [Fact]
     public async Task HostDisposal_DrainsActualCatalogThenRetiresActualLogStorage()
     {
         string root = Path.Combine(Path.GetTempPath(), "clashsharp-owned-repositories-" + Guid.NewGuid().ToString("N"));
@@ -91,8 +150,16 @@ public sealed class ProductionRepositoryLifetimeTests
     private sealed class Settings : IProfileCatalogSettings, IProfileCatalogAdmittedSettings
     {
         public string ActiveProfileId { get; set; } = ProfileCatalogIds.BuiltInDirect;
+        public Func<string, Task>? AfterCommit { get; set; }
 
-        public void SetActiveProfileAdmitted(MutationAdmissionLease admissionLease, string profileId) => ActiveProfileId = profileId;
+        public async Task SetActiveProfileAsync(string profileId, CancellationToken cancellationToken)
+        {
+            ActiveProfileId = profileId;
+            if (AfterCommit is not null) { await AfterCommit(profileId); }
+        }
+
+        public Task SetActiveProfileAdmittedAsync(MutationAdmissionLease admissionLease, string profileId, CancellationToken cancellationToken) =>
+            SetActiveProfileAsync(profileId, cancellationToken);
     }
 
     private sealed class Log(LogStorageService logs) : IProfileCatalogLog

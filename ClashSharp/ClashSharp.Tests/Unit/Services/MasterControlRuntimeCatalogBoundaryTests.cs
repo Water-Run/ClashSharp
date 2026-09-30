@@ -165,6 +165,12 @@ public sealed class MasterControlRuntimeCatalogBoundaryTests
     private sealed class FixedProfileSettings : IProfileCatalogSettings
     {
         public string ActiveProfileId { get; set; } = ProfileCatalogIds.BuiltInDirect;
+
+        public Task SetActiveProfileAsync(string profileId, CancellationToken cancellationToken)
+        {
+            ActiveProfileId = profileId;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class UnusedProfileCoreConfiguration : IProfileCatalogCoreConfiguration
