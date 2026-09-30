@@ -29,7 +29,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly MutationAdmissionBarrier _admissionBarrier;
     private readonly NetworkStateCoordinator _network;
     private readonly INetworkStateObserver _networkObserver;
-    private readonly ConnectionSamplingService _sampling;
+    private readonly IConnectionSamplingRuntime _sampling;
     private readonly MihomoConnectionService _connections;
     private readonly IApplicationNotificationSink _notifications;
     private readonly ITriggerRuntimeEventPublisher _triggerEvents;
@@ -45,7 +45,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         MutationAdmissionBarrier admissionBarrier,
         NetworkStateCoordinator network,
         INetworkStateObserver networkObserver,
-        ConnectionSamplingService sampling,
+        IConnectionSamplingRuntime sampling,
         MihomoConnectionService connections,
         IApplicationNotificationSink notifications,
         ITriggerRuntimeEventPublisher triggerEvents,

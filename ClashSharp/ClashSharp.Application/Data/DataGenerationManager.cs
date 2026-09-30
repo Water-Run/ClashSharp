@@ -3,6 +3,9 @@ namespace ClashSharp.ApplicationModel.Data;
 /// <summary>Owns current-generation admission, drain, swap, rollback, and scope disposal.</summary>
 public sealed partial class DataGenerationManager : IAsyncDisposable
 {
+    /// <summary>Gets whether startup has not yet activated any generation; closing or disposed managers never return true.</summary>
+    public bool IsAwaitingInitialization { get { lock (_syncLock) { return _state == ManagerState.Uninitialized; } } }
+
     private readonly object _syncLock = new();
     private ManagerState _state;
     private DataGenerationManifestSnapshot? _currentManifest;

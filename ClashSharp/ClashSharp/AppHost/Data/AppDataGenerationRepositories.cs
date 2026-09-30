@@ -28,6 +28,7 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
     private int _stoppedProducers;
     private int _disposedParticipants;
     private SettingsGenerationContext? _settingsContext;
+    private AppDataGenerationRuntime? _runtime;
 
     public AppDataGenerationRepositories(
         SettingsAuthoritySession session, ISettingsAuthority settingsAuthority,
@@ -55,6 +56,20 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
     public LogStorageService Logs { get; }
     public ProfileCatalogService Profiles { get; }
     public SqliteTriggerRepository Triggers { get; }
+
+    public void AttachRuntime(AppDataGenerationRuntime runtime)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        lock (_disposalLock)
+        {
+            ObjectDisposedException.ThrowIf(_closing, this);
+            if (_runtime is not null || _settingsContext is not null || !ReferenceEquals(runtime.Repositories, this))
+            {
+                throw new InvalidOperationException("Runtime ownership does not match this unsealed generation.");
+            }
+            _runtime = runtime;
+        }
+    }
 
     public async Task OpenStorageAsync(bool allowCreate, MutationAdmissionLease lease, CancellationToken cancellationToken)
     {
@@ -134,6 +149,7 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
             ObjectDisposedException.ThrowIf(_closing, this);
             if (_settingsContext is null) { throw new InvalidOperationException("Generation composition has not been sealed."); }
             if (serviceType == typeof(SettingsGenerationContext)) { return _settingsContext; }
+            if (serviceType == typeof(AppDataGenerationRuntime)) { return _runtime; }
             if (serviceType == typeof(SettingsAuthoritySession)) { return Session; }
             if (serviceType == typeof(ProfileCatalogService) || serviceType == typeof(IProfileCatalog)) { return Profiles; }
             if (serviceType == typeof(LogStorageService) || serviceType == typeof(ILogStorage)) { return Logs; }

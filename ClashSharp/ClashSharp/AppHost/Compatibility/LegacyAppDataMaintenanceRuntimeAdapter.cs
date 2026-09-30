@@ -8,7 +8,7 @@ namespace ClashSharp.Hosting.Compatibility;
 
 /// <summary>Temporary Phase 05 bridge for destructive data maintenance runtime cleanup.</summary>
 internal sealed class LegacyAppDataMaintenanceRuntimeAdapter(
-    ConnectionSamplingService sampling,
+    IConnectionSamplingRuntime sampling,
     Func<CancellationToken, Task> stopNetworkRuntimeAsync,
     ILogStorage logStorage,
     Func<string, string> getString) : IAppDataMaintenanceRuntime

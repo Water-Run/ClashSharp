@@ -21,8 +21,19 @@ public sealed class TriggerActionReconciler
     }
 
     /// <summary>Processes recoverable executions in durable order until work is drained or blocked.</summary>
-    public async Task<IReadOnlyList<TriggerActionResult>> ReconcileAsync(
-        CancellationToken cancellationToken)
+    public Task<IReadOnlyList<TriggerActionResult>> ReconcileAsync(CancellationToken cancellationToken) =>
+        ReconcileCoreAsync(null, cancellationToken);
+
+    /// <summary>Recovers outbox work under startup's existing exclusive ownership without reopening ordinary admission.</summary>
+    public Task<IReadOnlyList<TriggerActionResult>> ReconcileAdmittedAsync(
+        MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+    {
+        _admissionBarrier.EnsureActiveExclusiveLease(admissionLease);
+        return ReconcileCoreAsync(admissionLease, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<TriggerActionResult>> ReconcileCoreAsync(
+        MutationAdmissionLease? suppliedLease, CancellationToken cancellationToken)
     {
         TriggerPersistenceResult<IReadOnlyList<TriggerOutboxAction>> read =
             await _repository.ReadRecoverableActionsAsync(cancellationToken).ConfigureAwait(false);
@@ -38,23 +49,25 @@ public sealed class TriggerActionReconciler
         {
             cancellationToken.ThrowIfCancellationRequested();
             TriggerOutboxAction first = executionGroup.First();
-            MutationAdmissionLease admissionLease = await _admissionBarrier.AcquireOrdinaryAsync(
-                cancellationToken).ConfigureAwait(false);
-            await using (admissionLease.ConfigureAwait(false))
-            using (CancellationTokenSource admittedCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken,
-                    admissionLease.RevocationToken))
+            if (suppliedLease is not null)
             {
-                IReadOnlyList<TriggerActionResult> executionResults = await _executor.ReconcileAsync(
-                    executionGroup.Key,
-                    first.TaskRevision,
-                    admissionLease,
-                    admittedCancellation.Token).ConfigureAwait(false);
-                results.AddRange(executionResults);
+                _admissionBarrier.EnsureActiveExclusiveLease(suppliedLease);
+                results.AddRange(await ReconcileExecutionAsync(executionGroup.Key, first.TaskRevision, suppliedLease, cancellationToken).ConfigureAwait(false));
+            }
+            else
+            {
+                await using MutationAdmissionLease lease = await _admissionBarrier.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
+                results.AddRange(await ReconcileExecutionAsync(executionGroup.Key, first.TaskRevision, lease, cancellationToken).ConfigureAwait(false));
             }
         }
 
         return results.AsReadOnly();
+    }
+
+    private async Task<IReadOnlyList<TriggerActionResult>> ReconcileExecutionAsync(
+        Guid executionId, long revision, MutationAdmissionLease lease, CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource admittedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.RevocationToken);
+        return await _executor.ReconcileAsync(executionId, revision, lease, admittedCancellation.Token).ConfigureAwait(false);
     }
 }

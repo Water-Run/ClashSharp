@@ -33,6 +33,11 @@ public sealed partial class AppSettingsService
     {
         ArgumentNullException.ThrowIfNull(keys);
         SettingKey[] requested = keys.ToArray();
+        if (Volatile.Read(ref _authority) is { } authority)
+        {
+            SettingsEnvelope envelope = authority.CaptureSnapshot().Envelope;
+            return Array.AsReadOnly(requested.Select(key => new SettingValueChange(key, envelope.Desired[key].Value)).ToArray());
+        }
         lock (_syncLock)
         {
             return Array.AsReadOnly(requested.Select(key =>
@@ -73,6 +78,12 @@ public sealed partial class AppSettingsService
     internal async Task ResetPreferenceGroupAsync(SettingsResetScope scope, CancellationToken cancellationToken)
     {
         IReadOnlyList<SettingDefinition> definitions = GetPreferenceResetDefinitions(scope);
+        if (Volatile.Read(ref _authority) is { } authority)
+        {
+            await ApplyAuthorityChangesAsync(authority, definitions.Select(definition =>
+                new SettingValueChange(definition.Key, definition.DefaultValue)).ToArray(), cancellationToken).ConfigureAwait(false);
+            return;
+        }
         MutationAdmissionBarrier admission = Volatile.Read(ref _mutationAdmission);
         using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -98,6 +109,11 @@ public sealed partial class AppSettingsService
                 throw new ArgumentException("A preference change must match its canonical registry type and value.", nameof(changes));
             }
         }
+        if (Volatile.Read(ref _authority) is { } authority)
+        {
+            await ApplyAuthorityChangesAsync(authority, snapshot, cancellationToken).ConfigureAwait(false);
+            return;
+        }
         MutationAdmissionBarrier admission = Volatile.Read(ref _mutationAdmission);
         using MutationAdmissionLease lease = await admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -110,6 +126,12 @@ public sealed partial class AppSettingsService
     /// <summary>Reads the complete sampling preference pair under the same lock used by batch publication.</summary>
     internal ConnectionSamplingSettings ReadConnectionSamplingSettings()
     {
+        if (Volatile.Read(ref _authority) is { } authority)
+        {
+            SettingsEnvelope envelope = authority.CaptureSnapshot().Envelope;
+            return new(envelope.Desired[SettingsRegistry.Keys.ConnectionSamplingEnabled].Value.Get<bool>(),
+                envelope.Desired[SettingsRegistry.Keys.ConnectionSamplingIntervalSeconds].Value.Get<int>());
+        }
         lock (_syncLock)
         {
             return new ConnectionSamplingSettings(ConnectionSamplingEnabled, ConnectionSamplingIntervalSeconds);
@@ -139,6 +161,7 @@ public sealed partial class AppSettingsService
         lock (_syncLock)
         {
             admission.EnsureActiveLease(admissionLease);
+            if (_authority is not null) { throw new InvalidOperationException("Synchronous legacy settings writes are unavailable after authority binding."); }
             AppSettingsEditor editor = new(this);
             try
             {

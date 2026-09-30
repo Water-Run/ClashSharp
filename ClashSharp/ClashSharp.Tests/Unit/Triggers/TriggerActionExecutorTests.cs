@@ -531,6 +531,62 @@ public sealed class TriggerActionExecutorTests
         Assert.IsType<InvalidOperationException>(Assert.Single(notifications.Failures));
     }
 
+    [Fact]
+    public async Task ReconcileAdmittedAsync_UsesAndPreservesStartupExclusiveOwnership()
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(execution,
+            [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
+        MutationAdmissionBarrier admission = new();
+        await using MutationAdmissionLease lease = await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None);
+        LeaseRecordingRuntime runtime = new(lease);
+        TriggerActionReconciler reconciler = new(repository,
+            new TriggerActionExecutor(repository, runtime, NullTriggerFiredNotificationSink.Instance), admission);
+
+        IReadOnlyList<TriggerActionResult> results = await reconciler.ReconcileAdmittedAsync(lease, CancellationToken.None);
+
+        Assert.Equal(TriggerOutboxState.Succeeded, Assert.Single(results).FinalState);
+        Assert.Equal(1, runtime.Applications);
+        admission.EnsureActiveExclusiveLease(lease);
+        Assert.Throws<MutationAdmissionRejectedException>(() => admission.AcquireOrdinary());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReconcileAdmittedAsync_RejectsOrdinaryOrForeignOwnershipBeforeEffects(bool foreign)
+    {
+        TriggerExecution execution = Execution();
+        InMemoryTriggerRepository repository = new(execution,
+            [Outbox(execution, 0, BooleanAction(TriggerActionKind.SetTransparentProxy))]);
+        MutationAdmissionBarrier admission = new();
+        MutationAdmissionBarrier owner = foreign ? new() : admission;
+        await using MutationAdmissionLease lease = foreign
+            ? await owner.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None)
+            : owner.AcquireOrdinary();
+        LeaseRecordingRuntime runtime = new(lease);
+        TriggerActionReconciler reconciler = new(repository,
+            new TriggerActionExecutor(repository, runtime, NullTriggerFiredNotificationSink.Instance), admission);
+
+        Assert.Throws<InvalidOperationException>(() => { _ = reconciler.ReconcileAdmittedAsync(lease, CancellationToken.None); });
+
+        Assert.Equal(0, runtime.Applications);
+        Assert.Equal(TriggerOutboxState.Pending, repository.Actions[0].State);
+    }
+
+    private sealed class LeaseRecordingRuntime(MutationAdmissionLease expected) : ITriggerActionRuntime
+    {
+        public int Applications { get; private set; }
+        public Task<TriggerActionProbeResult> ProbeAsync(TriggerOutboxAction action, CancellationToken cancellationToken) =>
+            Task.FromResult(Applications == 0 ? TriggerActionProbeResult.NotDesired() : TriggerActionProbeResult.Desired());
+        public Task<TriggerActionApplyResult> ApplyAsync(TriggerOutboxAction action, MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+        {
+            Assert.Same(expected, admissionLease);
+            Applications++;
+            return Task.FromResult(TriggerActionApplyResult.Applied());
+        }
+    }
+
     public static TheoryData<TriggerAction, TriggerOutboxState> CurrentActions => new()
     {
         { new TriggerAction(TriggerActionKind.CloseConnections, new NoActionParameters()), TriggerOutboxState.Succeeded },

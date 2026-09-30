@@ -113,6 +113,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private bool _runtimeReady;
 
     private readonly CancellationTokenSource _windowLifetime = new();
+    internal CancellationToken WindowLifetime => _windowLifetime.Token;
     private Task? _mihomoServiceStatusMonitorTask;
     private int _trayRefreshQueued;
 

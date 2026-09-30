@@ -1,13 +1,14 @@
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Startup;
-using ClashSharp.Service;
+using ClashSharp.Hosting.Data;
 
 namespace ClashSharp.Hosting.Startup;
 
 /// <summary>Starts automatic profile subscription updates after the primary shell is ready.</summary>
 internal sealed class ProfileSubscriptionSchedulerStartupStep(
-    ProfileSubscriptionScheduler scheduler) : IStartupStep
+    DataGenerationManager generations) : IStartupStep
 {
     public string Name => "profile-subscription-updates";
 
@@ -17,7 +18,7 @@ internal sealed class ProfileSubscriptionSchedulerStartupStep(
         AppLaunchRequest request,
         CancellationToken cancellationToken)
     {
-        await scheduler.StartAsync(cancellationToken).ConfigureAwait(false);
+        await generations.ExecuteAsync<AppDataGenerationRuntime>((runtime, _, token) => runtime.Subscriptions.StartAsync(token), cancellationToken).ConfigureAwait(false);
         return StartupStepResult.Succeeded();
     }
 }

@@ -21,26 +21,57 @@ internal sealed class AppDataGenerationFactory : IDataGenerationBootstrapFactory
     private readonly MutationAdmissionBarrier _admission;
     private readonly Func<MutationAdmissionLease, CancellationToken, Task> _recoverLegacy;
     private readonly Func<SettingsAuthoritySession, AppDataGenerationRepositories> _createRepositories;
-    private readonly IReadOnlyDictionary<SettingApplicationKind, Func<AppDataGenerationRepositories, ISettingsApplicationParticipant>> _participants;
+    private readonly Func<AppDataGenerationRepositories, CancellationToken, Task> _composeRuntime;
 
     public AppDataGenerationFactory(
         string applicationDataRoot, MutationAdmissionBarrier admission, ILegacySettingsSource legacySettings,
         Func<MutationAdmissionLease, CancellationToken, Task> recoverLegacy,
         Func<SettingsAuthoritySession, AppDataGenerationRepositories> createRepositories,
         IReadOnlyDictionary<SettingApplicationKind, Func<AppDataGenerationRepositories, ISettingsApplicationParticipant>> participants)
+        : this(applicationDataRoot, admission, legacySettings, recoverLegacy, createRepositories, ComposeIndependentParticipants(participants))
+    {
+    }
+
+    public AppDataGenerationFactory(
+        string applicationDataRoot, MutationAdmissionBarrier admission, ILegacySettingsSource legacySettings,
+        Func<MutationAdmissionLease, CancellationToken, Task> recoverLegacy,
+        Func<SettingsAuthoritySession, AppDataGenerationRepositories> createRepositories,
+        Func<AppDataGenerationRepositories, CancellationToken, Task> composeRuntime)
     {
         _paths = new(applicationDataRoot);
         _admission = admission ?? throw new ArgumentNullException(nameof(admission));
         _preparer = new(applicationDataRoot, admission, legacySettings, SettingsRegistry.Default);
         _recoverLegacy = recoverLegacy ?? throw new ArgumentNullException(nameof(recoverLegacy));
         _createRepositories = createRepositories ?? throw new ArgumentNullException(nameof(createRepositories));
+        _composeRuntime = composeRuntime ?? throw new ArgumentNullException(nameof(composeRuntime));
+    }
+
+    private static Func<AppDataGenerationRepositories, CancellationToken, Task> ComposeIndependentParticipants(
+        IReadOnlyDictionary<SettingApplicationKind, Func<AppDataGenerationRepositories, ISettingsApplicationParticipant>> participants)
+    {
         ArgumentNullException.ThrowIfNull(participants);
-        _participants = participants.ToDictionary(pair => pair.Key, pair => pair.Value);
+        var factories = participants.ToDictionary(pair => pair.Key, pair => pair.Value);
         SettingApplicationKind[] expected = SettingsRegistry.Default.Definitions.Select(definition => definition.ApplicationKind).Distinct().Order().ToArray();
-        if (!expected.SequenceEqual(_participants.Keys.Order()) || _participants.Values.Any(factory => factory is null))
+        if (!expected.SequenceEqual(factories.Keys.Order()) || factories.Values.Any(factory => factory is null))
         {
             throw new ArgumentException("Every settings application kind requires one generation-local factory.", nameof(participants));
         }
+        return async (repositories, cancellationToken) =>
+        {
+            foreach ((SettingApplicationKind kind, Func<AppDataGenerationRepositories, ISettingsApplicationParticipant> create) in factories.OrderBy(pair => pair.Key))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                ISettingsApplicationParticipant participant = create(repositories)
+                    ?? throw new InvalidOperationException("A generation settings factory returned no participant.");
+                if (participant.ApplicationKind != kind)
+                {
+                    if (participant is IAsyncDisposable asynchronous) { await asynchronous.DisposeAsync().ConfigureAwait(false); }
+                    else if (participant is IDisposable synchronous) { synchronous.Dispose(); }
+                    throw new InvalidOperationException("A generation settings factory returned the wrong application kind.");
+                }
+                repositories.OwnSettingsParticipant(participant);
+            }
+        };
     }
 
     public async Task<DataGenerationScope> CreateInitialAsync(MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
@@ -68,19 +99,7 @@ internal sealed class AppDataGenerationFactory : IDataGenerationBootstrapFactory
             repositories = _createRepositories(session);
             if (!ReferenceEquals(repositories.Session, session)) { throw new InvalidOperationException("Repository composition replaced its owning settings session."); }
             await repositories.OpenStorageAsync(allowCreate, admissionLease, cancellationToken).ConfigureAwait(false);
-            foreach ((SettingApplicationKind kind, Func<AppDataGenerationRepositories, ISettingsApplicationParticipant> create) in _participants.OrderBy(pair => pair.Key))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                ISettingsApplicationParticipant participant = create(repositories)
-                    ?? throw new InvalidOperationException("A generation settings factory returned no participant.");
-                if (participant.ApplicationKind != kind)
-                {
-                    if (participant is IAsyncDisposable asynchronous) { await asynchronous.DisposeAsync().ConfigureAwait(false); }
-                    else if (participant is IDisposable synchronous) { synchronous.Dispose(); }
-                    throw new InvalidOperationException("A generation settings factory returned the wrong application kind.");
-                }
-                repositories.OwnSettingsParticipant(participant);
-            }
+            await _composeRuntime(repositories, cancellationToken).ConfigureAwait(false);
             repositories.SealComposition();
             return new(descriptor, repositories);
         }

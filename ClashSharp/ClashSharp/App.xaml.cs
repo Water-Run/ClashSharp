@@ -8,6 +8,7 @@ using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.Hosting;
+using ClashSharp.Hosting.Data;
 using ClashSharp.Hosting.Startup;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
@@ -89,7 +90,10 @@ public partial class App : Microsoft.UI.Xaml.Application
                     CompleteMainWindowStartup,
                     _lifetimeRequests,
                     _startupDiagnostics,
-                    _installerTransactionState),
+                    _installerTransactionState,
+                    _mainWindow is not MainWindow generationWindow ? null : new AppGenerationUi(
+                        () => generationWindow.Content as FrameworkElement, dispatcherQueue,
+                        () => _lifetimeRequests.HasAcceptedRequest, generationWindow.WindowLifetime)),
                 _lifetimeRunner,
                 CreatePrimaryStartupShell);
             ApplicationLaunchResult result = await bootstrapper.LaunchAsync(

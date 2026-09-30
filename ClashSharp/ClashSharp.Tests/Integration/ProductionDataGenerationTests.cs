@@ -227,6 +227,8 @@ public sealed partial class ProductionDataGenerationTests
         public FairAsyncMutationGate MutationGate { get; } = new();
         public ConfigurationValidator Validator { get; } = new();
         public DataGenerationManager Manager { get; } = new();
+        public GenerationSettingsAuthority Authority { get; }
+        public Func<Repositories, CancellationToken, Task>? ComposeRuntime { get; set; }
         public List<string> Calls { get; } = [];
         public List<Repositories> Containers { get; } = [];
         public List<Participant> Participants { get; } = [];
@@ -236,6 +238,7 @@ public sealed partial class ProductionDataGenerationTests
         {
             _directory = directory;
             GenerationSettingsAuthority authority = new(Manager, Admission);
+            Authority = authority;
             Dictionary<SettingApplicationKind, Func<Repositories, ISettingsApplicationParticipant>> participants =
                 SettingsRegistry.Default.Definitions.Select(definition => definition.ApplicationKind).Distinct().ToDictionary(kind => kind,
                     kind => new Func<Repositories, ISettingsApplicationParticipant>(repositories =>
@@ -256,7 +259,15 @@ public sealed partial class ProductionDataGenerationTests
                     new ProfileMetrics(), Validator, key => key, (_, _) => new Runtime());
                 Containers.Add(repositories);
                 return repositories;
-            }, participants);
+            }, async (repositories, token) =>
+            {
+                if (ComposeRuntime is not null) { await ComposeRuntime(repositories, token); return; }
+                foreach (var factory in participants.OrderBy(pair => pair.Key))
+                {
+                    token.ThrowIfCancellationRequested();
+                    repositories.OwnSettingsParticipant(factory.Value(repositories));
+                }
+            });
             _factory = factory;
             _bootstrap = new(directory.Store, factory, Manager, Admission);
         }

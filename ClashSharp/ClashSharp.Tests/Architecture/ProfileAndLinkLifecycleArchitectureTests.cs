@@ -122,10 +122,10 @@ public sealed class ProfileAndLinkLifecycleArchitectureTests
         string host = ReadApplicationSource("AppHost/ClashSharpAppHostFactory.cs");
         string coordinator = ReadApplicationSource("Service/ProfileCatalogMutationCoordinator.cs");
 
-        Assert.Contains(
-            "LateBoundProfileCatalogMutationCoordinator.Instance.Configure(",
-            host,
-            StringComparison.Ordinal);
+        string repositories = ReadApplicationSource("AppHost/Data/AppDataGenerationRepositories.cs");
+        Assert.Contains("new AppDataGenerationRepositories(session, authority, mutationAdmission", host, StringComparison.Ordinal);
+        Assert.Contains("new ProfileCatalogMutationCoordinator(admission, mutationGate)", repositories, StringComparison.Ordinal);
+        Assert.DoesNotContain("LateBoundProfileCatalogMutationCoordinator.Instance.Configure", host, StringComparison.Ordinal);
         Assert.Contains(
             "provider.GetRequiredService<MutationAdmissionBarrier>()",
             host,

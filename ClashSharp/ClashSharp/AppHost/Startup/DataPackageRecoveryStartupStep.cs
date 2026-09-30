@@ -12,7 +12,7 @@ namespace ClashSharp.Hosting.Startup;
 internal sealed class DataPackageRecoveryStartupStep(
     ClashDataPackageService dataPackages,
     MutationAdmissionBarrier mutationAdmission,
-    ILogStorage logStorage) : IStartupStep
+    LogStorageService logStorage) : IStartupStep
 {
     public string Name => "data-package-recovery";
 

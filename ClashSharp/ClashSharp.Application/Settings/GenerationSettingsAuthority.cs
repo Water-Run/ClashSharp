@@ -1,4 +1,6 @@
+using System.Runtime.ExceptionServices;
 using ClashSharp.ApplicationModel.Data;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.Settings;
 
@@ -7,6 +9,8 @@ namespace ClashSharp.ApplicationModel.Settings;
 /// <summary>Owns admission and one generation pin across complete consumer commands, including every affected runtime batch.</summary>
 public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthority
 {
+    /// <summary>Publishes a verified snapshot before the complete command releases its generation.</summary>
+    public event Action<SettingsAuthoritySnapshot>? StateChanged;
     private readonly DataGenerationManager _generations;
     private readonly MutationAdmissionBarrier _admission;
     private readonly SemaphoreSlim _commandGate = new(1, 1);
@@ -157,10 +161,12 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
         {
             _admission.EnsureActiveLease(lease);
             waiting.Token.ThrowIfCancellationRequested();
-            return await _generations.ExecuteAsync<SettingsGenerationContext, SettingsAuthorityResult>((context, generation, token) =>
+            return await _generations.ExecuteAsync<SettingsGenerationContext, SettingsAuthorityResult>(async (context, generation, token) =>
             {
                 _ = RequireSession(context, generation);
-                return command(context, lease, token);
+                SettingsAuthorityResult result = await command(context, lease, token).ConfigureAwait(false);
+                if (result.Envelope is not null) { PublishState(new SettingsAuthoritySnapshot(generation, result.Envelope)); }
+                return result;
             }, waiting.Token).ConfigureAwait(false);
         }
         finally
@@ -172,4 +178,18 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
     private static SettingsAuthoritySession RequireSession(SettingsGenerationContext context, DataGenerationDescriptor generation) =>
         context.Session.Generation.IsSameGeneration(generation) ? context.Session
             : throw new InvalidOperationException("The resolved settings session does not belong to the pinned generation.");
+
+    private void PublishState(SettingsAuthoritySnapshot snapshot)
+    {
+        Action<SettingsAuthoritySnapshot>? subscribers = StateChanged;
+        if (subscribers is null) { return; }
+        List<Exception> failures = [];
+        foreach (Action<SettingsAuthoritySnapshot> subscriber in subscribers.GetInvocationList())
+        {
+            try { subscriber(snapshot); }
+            catch (Exception error) when (!ExceptionGraphClassifier.IsProcessFatal(error)) { failures.Add(error); }
+        }
+        if (failures.Count == 1) { ExceptionDispatchInfo.Capture(failures[0]).Throw(); }
+        if (failures.Count > 1) { throw new AggregateException("Settings were committed but snapshot publication failed.", failures); }
+    }
 }

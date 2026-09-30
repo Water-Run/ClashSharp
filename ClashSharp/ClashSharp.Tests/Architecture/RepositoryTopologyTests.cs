@@ -362,7 +362,7 @@ public sealed class RepositoryTopologyTests
 
     /// <summary>Verifies runtime lifecycle ownership is direct and the legacy adapter cannot return.</summary>
     [Fact]
-    public void AppHost_RegistersSupervisedRuntimeParticipantsDirectly()
+    public void AppHost_RegistersGenerationRuntimeOwnershipBeforeProducerStartup()
     {
         string hostPath = Path.Combine(
             RepositoryRoot,
@@ -386,14 +386,20 @@ public sealed class RepositoryTopologyTests
             "ConnectionSamplingStartupStep.cs");
         string host = File.ReadAllText(hostPath);
         string startup = File.ReadAllText(startupPath);
+        string generationStartup = File.ReadAllText(Path.Combine(RepositoryRoot, "ClashSharp", "ClashSharp", "AppHost", "Startup", "DataGenerationStartupStep.cs"));
 
-        Assert.Contains("RegisterParticipant(ConnectionSamplingService.Instance, order: 200)", host, StringComparison.Ordinal);
-        Assert.Contains("RegisterParticipant(new TriggerScheduler(", host, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<GenerationSamplingRuntime>()", host, StringComparison.Ordinal);
+        Assert.Contains("lifetime.RegisterParticipant(sampling, order: 200)", generationStartup, StringComparison.Ordinal);
+        Assert.Contains("runtime => runtime.TriggerSettings.Scheduler", generationStartup, StringComparison.Ordinal);
+        Assert.True(generationStartup.IndexOf("bootstrap.InitializeAdmittedAsync", StringComparison.Ordinal)
+            < generationStartup.IndexOf("lifetime.RegisterParticipant", StringComparison.Ordinal));
+        Assert.True(generationStartup.IndexOf("lifetime.RegisterParticipant", StringComparison.Ordinal)
+            < generationStartup.IndexOf("runtime.InitializeAdmittedAsync", StringComparison.Ordinal));
         Assert.DoesNotContain("GetServices<IRuntimeParticipant>()", host, StringComparison.Ordinal);
         Assert.DoesNotContain("LegacyConnectionSamplingRuntimeParticipant", host, StringComparison.Ordinal);
         Assert.DoesNotContain("LegacyTriggerRuntimeParticipant", host, StringComparison.Ordinal);
         Assert.False(File.Exists(compatibilityPath));
-        Assert.Contains("ConnectionSamplingService sampling", startup, StringComparison.Ordinal);
+        Assert.Contains("IConnectionSamplingRuntime sampling", startup, StringComparison.Ordinal);
     }
 
     /// <summary>Prevents presentation service-locator debt from returning after the AppHost cutover.</summary>

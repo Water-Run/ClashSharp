@@ -24,7 +24,6 @@ public sealed class TriggerArchitectureTests
                 "ClashSharp/ClashSharp.Infrastructure/Data/LegacyDataGenerationPreparer.cs",
                 "ClashSharp/ClashSharp.Infrastructure/Triggers/TriggerMigrationCoordinator.cs",
                 "ClashSharp/ClashSharp.TriggerProbe/Program.cs",
-                "ClashSharp/ClashSharp/AppHost/ClashSharpAppHostFactory.cs",
                 "ClashSharp/ClashSharp/AppHost/Data/AppDataGenerationRepositories.cs",
             ],
             sourcesWithLegacyPath);
@@ -244,23 +243,25 @@ public sealed class TriggerArchitectureTests
     {
         string host = ReadSource(
             "ClashSharp/ClashSharp/AppHost/ClashSharpAppHostFactory.cs");
-        string executableHost = RemoveCommentsAndLiterals(host);
+        string composer = ReadSource("ClashSharp/ClashSharp/AppHost/Data/AppDataGenerationRuntimeComposer.cs");
+        string runtime = ReadSource("ClashSharp/ClashSharp/AppHost/Data/AppDataGenerationRuntime.cs");
+        string executableHost = RemoveCommentsAndLiterals(host + composer + runtime);
 
         string[] requiredRegistrations =
         [
-            "new SqliteTriggerRepository(triggerDatabasePath)",
-            "AddSingleton<ITriggerRepository>",
-            "AddSingleton<ITriggerDefinitionStore>",
-            "AddSingleton<ITriggerFiredNotificationSink>",
-            "AddSingleton<ITriggerContextProvider>",
-            "AddSingleton<ITriggerActionRuntime>",
-            "AddSingleton<TriggerActionExecutor>()",
-            "AddSingleton<ITriggerExecutionDispatcher>",
-            "new TriggerLifecycleHandoffCoordinator(",
-            "AddSingleton<ITriggerLifecycleHandoff>",
-            "new TriggerScheduler(",
-            "GetRequiredService<RuntimeLifetimeRegistry>().RegisterParticipant(new TriggerScheduler(",
-            "AddSingleton<ITriggerStartupInitializer>",
+            "AddSingleton<ITriggerDefinitionStore, GenerationTriggerDefinitionStore>()",
+            "TriggerDefinitionStore definitions = new(repositories.Triggers, time)",
+            "TriggerLifecycleHandoffCoordinator handoff = new(repositories.Triggers, lifetime, time, processEpoch)",
+            "TriggerActionRuntimeAdapter actions = new(authority, startup, sampling, connections, observer, notifications, handoff, service)",
+            "TriggerFiredNotificationAdapter fired = new(",
+            "TriggerActionExecutor executor = new(repositories.Triggers, actions, fired,",
+            "TriggerContextProviderAdapter context = new(",
+            "TriggerExecutionCoordinator executions = new(repositories.Triggers,",
+            "TriggersSettingsParticipant triggers = new(generation, admission, triggerState,",
+            "repositories.OwnSettingsParticipant(triggers)",
+            "repositories.OwnProducer(triggers.Scheduler)",
+            "outbox.ReconcileAdmittedAsync(lease, cancellationToken)",
+            "TriggerSettings.Scheduler.StartAsync(cancellationToken)",
         ];
 
         Assert.All(

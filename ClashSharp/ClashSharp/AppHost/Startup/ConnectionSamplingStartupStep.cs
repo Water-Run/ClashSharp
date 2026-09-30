@@ -7,7 +7,7 @@ namespace ClashSharp.Hosting.Startup;
 
 /// <summary>Starts configured connection sampling after the primary shell exists.</summary>
 internal sealed class ConnectionSamplingStartupStep(
-    ConnectionSamplingService sampling) : IStartupStep
+    IConnectionSamplingRuntime sampling) : IStartupStep
 {
     public string Name => "connection-sampling";
 

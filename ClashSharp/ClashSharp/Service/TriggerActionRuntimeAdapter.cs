@@ -22,7 +22,7 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
 {
     private readonly IRuntimeSettingsAuthority _settings;
     private readonly StartupLaunchService _startupLaunch;
-    private readonly ConnectionSamplingService _sampling;
+    private readonly IConnectionSamplingRuntime _sampling;
     private readonly MihomoConnectionService _connections;
     private readonly INetworkStateObserver _networkObserver;
     private readonly MihomoServiceManager? _mihomoService;
@@ -32,7 +32,7 @@ internal sealed class TriggerActionRuntimeAdapter : ITriggerActionRuntime
     public TriggerActionRuntimeAdapter(
         IRuntimeSettingsAuthority settings,
         StartupLaunchService startupLaunch,
-        ConnectionSamplingService sampling,
+        IConnectionSamplingRuntime sampling,
         MihomoConnectionService connections,
         INetworkStateObserver networkObserver,
         IIdempotentTriggerNotificationSink notifications,

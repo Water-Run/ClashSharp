@@ -2629,13 +2629,15 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("_eventSource.EventRaised += OnEventRaised", scheduler, StringComparison.Ordinal);
         Assert.Contains("IIdempotentTriggerNotificationSink", triggerRuntimeAdapter, StringComparison.Ordinal);
         Assert.Contains("ITriggerFiredNotificationSink", firedNotificationAdapter, StringComparison.Ordinal);
-        Assert.Contains("AddSingleton<ITriggerFiredNotificationSink>", appHostFactory, StringComparison.Ordinal);
-        Assert.Contains("settings.TriggerNotificationsEnabled", appHostFactory, StringComparison.Ordinal);
-        int catalogLoadIndex = schedulerAdapter.IndexOf(
+        string generationComposer = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Data", "AppDataGenerationRuntimeComposer.cs"));
+        string generationRuntime = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Data", "AppDataGenerationRuntime.cs"));
+        Assert.Contains("TriggerFiredNotificationAdapter fired = new(() => triggerState.NotificationsEnabled", generationComposer, StringComparison.Ordinal);
+        Assert.Contains("new TriggerSchedulerEventSourceAdapter(events)", generationComposer, StringComparison.Ordinal);
+        int catalogLoadIndex = generationRuntime.IndexOf(
             "TriggerPersistenceResult<TriggerDefinitionCatalog> catalog",
             StringComparison.Ordinal);
-        int reconciliationIndex = schedulerAdapter.IndexOf(
-            "reconciled = await _reconciler",
+        int reconciliationIndex = generationRuntime.IndexOf(
+            "outbox.ReconcileAdmittedAsync",
             StringComparison.Ordinal);
         Assert.True(catalogLoadIndex >= 0, "Trigger definition cache load is missing.");
         Assert.True(reconciliationIndex > catalogLoadIndex, "Definition cache must load before outbox reconciliation.");

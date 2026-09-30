@@ -11,14 +11,18 @@ using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Hosting.Compatibility;
+using ClashSharp.Hosting.Data;
 using ClashSharp.Hosting.Settings;
 using ClashSharp.Hosting.Startup;
+using ClashSharp.Infrastructure.Data;
 using ClashSharp.Infrastructure.Recovery;
 using ClashSharp.Infrastructure.Security;
+using ClashSharp.Infrastructure.Settings;
 using ClashSharp.Infrastructure.Triggers;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Navigation;
 using ClashSharp.Service;
+using ClashSharp.Settings;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ClashSharp.Hosting;
@@ -31,7 +35,8 @@ internal static class ClashSharpAppHostFactory
         Action<MainWindowStartupContext> completeWindow,
         IApplicationLifetimeRequestSink lifetimeRequests,
         IStartupDiagnosticSink startupDiagnostics,
-        InstallerTransactionState installerTransactionState)
+        InstallerTransactionState installerTransactionState,
+        AppGenerationUi? generationUi = null)
     {
         ArgumentNullException.ThrowIfNull(launchRequest);
         ArgumentNullException.ThrowIfNull(completeWindow);
@@ -40,7 +45,7 @@ internal static class ClashSharpAppHostFactory
         bool isStartupRestoreFallback = launchRequest.Arguments.Contains(
             StartupRestoreFallbackService.HelperArgument,
             StringComparison.OrdinalIgnoreCase);
-        Lazy<string> triggerRoot = new(AppDataPathService.ResolveLocalDataDirectory);
+        Lazy<string> dataRoot = new(AppDataPathService.ResolveLocalDataDirectory);
         Guid triggerProcessEpoch = Guid.NewGuid();
         MutationAdmissionBarrier mutationAdmission = new();
         return AppHost.Build(services =>
@@ -61,27 +66,18 @@ internal static class ClashSharpAppHostFactory
                 _ = provider.GetRequiredService<AppSettingsService>();
                 return ClashDataPackageService.Instance;
             });
-            services.AddSingleton(_ => AppSettingsAuditLogService.Instance);
+            services.AddSingleton(provider => new AppSettingsAuditLogService(
+                provider.GetRequiredService<AppSettingsService>(), provider.GetRequiredService<ILogStorage>()));
             services.AddSingleton(_ => LocalizationService.Instance);
             services.AddSingleton(_ => LogStorageService.Instance);
-            services.AddSingleton<ILogStorage>(provider => provider.GetRequiredService<LogStorageService>());
+            services.AddSingleton<ILogStorage, GenerationLogStorage>();
             services.AddSingleton<IApplicationErrorSink>(provider => new ApplicationErrorSink(
                 provider.GetRequiredService<ILogStorage>().AppendLog,
                 provider.GetRequiredService<LocalizationService>().GetString));
             services.AddSingleton<RuntimeLifetimeRegistry>();
-            services.AddSingleton(provider => provider.GetRequiredService<RuntimeLifetimeRegistry>()
-                .RegisterParticipant(ConnectionSamplingService.Instance, order: 200));
-            services.AddSingleton(provider =>
-            {
-                // Catalog compensation can append a log while disposal drains an active operation.
-                // Capture its dependency first so the host retires the catalog before log storage.
-                _ = provider.GetRequiredService<ILogStorage>();
-                LateBoundProfileCatalogMutationCoordinator.Instance.Configure(
-                    provider.GetRequiredService<MutationAdmissionBarrier>(),
-                    provider.GetRequiredService<FairAsyncMutationGate>());
-                return ProfileCatalogService.Instance;
-            });
-            services.AddSingleton<IProfileCatalog>(provider => provider.GetRequiredService<ProfileCatalogService>());
+            services.AddSingleton<GenerationSamplingRuntime>();
+            services.AddSingleton<IConnectionSamplingRuntime>(provider => provider.GetRequiredService<GenerationSamplingRuntime>());
+            services.AddSingleton<IProfileCatalog, GenerationProfileCatalog>();
             services.AddSingleton(_ => StartupLaunchServiceFactory.CreateDefault());
             services.AddSingleton(_ => MihomoConnectionService.Instance);
             services.AddSingleton(_ => MihomoControllerClient.Instance);
@@ -123,8 +119,9 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IMutationJournalStore>(_ => new FileMutationJournalStore(
                 RecoveryRootPolicy.GetDefaultRootPath()));
             services.AddSingleton<INetworkStateAdapter, LegacyNetworkStateAdapter>();
-            services.AddSingleton<INetworkStateObserver>(provider =>
-                (INetworkStateObserver)provider.GetRequiredService<INetworkStateAdapter>());
+            services.AddSingleton<INetworkStateObserver>(provider => new GenerationNetworkStateObserver(
+                provider.GetRequiredService<DataGenerationManager>(),
+                (INetworkStateObserver)provider.GetRequiredService<INetworkStateAdapter>()));
             services.AddSingleton<INetworkStateCommitter, LegacyNetworkStateCommitter>();
             services.AddSingleton<IMutationRecoveryPlanResolver, NetworkMutationRecoveryPlanResolver>();
             services.AddSingleton<ApplicationMutationCoordinator>();
@@ -143,7 +140,7 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<MutationAdmissionBarrier>(),
                 provider.GetRequiredService<NetworkStateCoordinator>(),
                 provider.GetRequiredService<INetworkStateObserver>(),
-                provider.GetRequiredService<ConnectionSamplingService>(),
+                provider.GetRequiredService<IConnectionSamplingRuntime>(),
                 provider.GetRequiredService<MihomoConnectionService>(),
                 provider.GetRequiredService<NotificationService>(),
                 provider.GetRequiredService<TriggerRuntimeEventHub>(),
@@ -156,104 +153,43 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IApplicationActionDispatcher>(provider =>
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton<SettingsRuntimeMutationAdapter>();
-            services.AddSingleton<INetworkSettingsRuntime, NetworkSettingsRuntime>();
-            services.AddSingleton(_ =>
-            {
-                string triggerDatabasePath = Path.Combine(triggerRoot.Value, "Triggers.db");
-                return new SqliteTriggerRepository(triggerDatabasePath);
-            });
-            services.AddSingleton<ITriggerRepository>(provider =>
-                provider.GetRequiredService<SqliteTriggerRepository>());
-            services.AddSingleton<TriggerDefinitionStore>();
-            services.AddSingleton<ITriggerDefinitionStore>(provider =>
-                provider.GetRequiredService<TriggerDefinitionStore>());
-            services.AddSingleton(provider =>
-            {
-                AppSettingsService settings = provider.GetRequiredService<AppSettingsService>();
-                NotificationService notifications =
-                    provider.GetRequiredService<NotificationService>();
-                return new TriggerFiredNotificationAdapter(
-                    () => settings.TriggerNotificationsEnabled,
-                    provider.GetRequiredService<ITriggerDefinitionStore>(),
-                    notifications.DeliverTriggerFiredNotificationAsync,
-                    notifications.ReportTriggerFiredNotificationFailure);
-            });
-            services.AddSingleton<ITriggerFiredNotificationSink>(provider =>
-                provider.GetRequiredService<TriggerFiredNotificationAdapter>());
-            services.AddSingleton(provider => new TriggerMigrationCoordinator(
-                provider.GetRequiredService<SqliteTriggerRepository>(),
-                Path.Combine(triggerRoot.Value, "Triggers.json"),
-                provider.GetRequiredService<TimeProvider>()));
-            services.AddSingleton<ITriggerContextProvider>(provider =>
-            {
-                TimeProvider timeProvider = provider.GetRequiredService<TimeProvider>();
-                return new TriggerContextProviderAdapter(
-                    new SqliteTriggerTrafficContextSource(
-                        provider.GetRequiredService<LogStorageService>().DatabasePath),
-                    new RuntimeTriggerContextSource(
-                        provider.GetRequiredService<RuntimeTrafficRateService>()),
-                    timeProvider,
-                    timeProvider.GetUtcNow());
-            });
-            services.AddSingleton<TriggerEvaluator>();
-            services.AddSingleton<TriggerExecutionGate>();
-            services.AddSingleton(provider => new TriggerLifecycleHandoffCoordinator(
-                provider.GetRequiredService<ITriggerRepository>(),
-                lifetimeRequests,
-                provider.GetRequiredService<TimeProvider>(),
-                triggerProcessEpoch));
-            services.AddSingleton<ITriggerLifecycleHandoff>(provider =>
-                provider.GetRequiredService<TriggerLifecycleHandoffCoordinator>());
-            services.AddSingleton<TriggerActionRuntimeAdapter>();
-            services.AddSingleton<ITriggerActionRuntime>(provider =>
-                provider.GetRequiredService<TriggerActionRuntimeAdapter>());
-            services.AddSingleton<ITriggerExecutionLog>(provider => new TriggerExecutionLogAdapter(
-                provider.GetRequiredService<ITriggerDefinitionStore>(),
-                provider.GetRequiredService<LocalizationService>().GetString,
-                provider.GetRequiredService<ILogStorage>().AppendLog,
-                provider.GetRequiredService<IApplicationErrorSink>()));
-            services.AddSingleton<TriggerActionExecutor>();
-            services.AddSingleton<ITriggerExecutionDispatcher>(provider =>
-                provider.GetRequiredService<TriggerActionExecutor>());
-            services.AddSingleton(provider => new TriggerExecutionCoordinator(
-                provider.GetRequiredService<ITriggerRepository>(),
-                provider.GetRequiredService<TriggerExecutionGate>(),
-                provider.GetRequiredService<TriggerEvaluator>(),
-                provider.GetRequiredService<MutationAdmissionBarrier>(),
-                provider.GetRequiredService<ITriggerExecutionDispatcher>(),
-                provider.GetRequiredService<TimeProvider>(),
-                triggerProcessEpoch));
-            services.AddSingleton<TriggerActionReconciler>();
-            services.AddSingleton<ITriggerSchedulerEvaluator, TriggerSchedulerEvaluator>();
-            services.AddSingleton<TriggerSchedulerSettingsAdapter>();
-            services.AddSingleton<ITriggerSchedulerSettings>(provider =>
-                provider.GetRequiredService<TriggerSchedulerSettingsAdapter>());
-            services.AddSingleton<TriggerSchedulerEventSourceAdapter>();
-            services.AddSingleton<ITriggerSchedulerEventSource>(provider =>
-                provider.GetRequiredService<TriggerSchedulerEventSourceAdapter>());
-            services.AddSingleton<ITriggerSchedulerClock>(provider =>
-                new SystemTriggerSchedulerClock(
-                    provider.GetRequiredService<TimeProvider>(),
-                    TimeSpan.FromSeconds(30)));
-            services.AddSingleton<TriggerSchedulerHealthLogAdapter>();
-            services.AddSingleton(provider => provider.GetRequiredService<RuntimeLifetimeRegistry>().RegisterParticipant(new TriggerScheduler(
-                provider.GetRequiredService<ITriggerSchedulerSettings>(),
-                provider.GetRequiredService<ITriggerSchedulerEventSource>(),
-                provider.GetRequiredService<ITriggerSchedulerClock>(),
-                provider.GetRequiredService<ITriggerSchedulerEvaluator>(),
-                provider.GetRequiredService<ITriggerLifecycleHandoff>(),
-                provider.GetRequiredService<TriggerSchedulerHealthLogAdapter>().Report), order: 100));
-            services.AddSingleton<TriggerStartupInitializer>();
-            services.AddSingleton<ITriggerStartupInitializer>(provider =>
-                provider.GetRequiredService<TriggerStartupInitializer>());
+            services.AddSingleton<INetworkSettingsRuntime, GenerationNetworkSettingsRuntime>();
+            services.AddSingleton<ITriggerDefinitionStore, GenerationTriggerDefinitionStore>();
             services.AddSingleton<TriggerPresentationFactory>();
-            services.AddSingleton<IProfileSubscriptionSchedulerCatalog>(provider =>
-                new ProfileSubscriptionSchedulerCatalogAdapter(
-                    provider.GetRequiredService<IProfileCatalog>()));
-            services.AddSingleton(provider => provider.GetRequiredService<RuntimeLifetimeRegistry>().RegisterParticipant(new ProfileSubscriptionScheduler(
-                provider.GetRequiredService<IProfileSubscriptionSchedulerCatalog>(),
-                provider.GetRequiredService<TimeProvider>(),
-                provider.GetRequiredService<ILogStorage>().AppendLog), order: 300));
+            services.AddSingleton<IDataGenerationStore>(_ => new FileDataGenerationStore(dataRoot.Value));
+            services.AddSingleton<IDataGenerationBootstrapFactory>(provider =>
+            {
+                AppGenerationUi ui = generationUi ?? throw new InvalidOperationException("The generation startup window is unavailable.");
+                var authority = provider.GetRequiredService<GenerationSettingsAuthority>();
+                var takeover = provider.GetRequiredService<NetworkTakeoverService>();
+                var localization = provider.GetRequiredService<LocalizationService>();
+                AppDataGenerationRuntimeComposer runtime = new(mutationAdmission, authority, ui.CreateDispatcher,
+                    ui.CreateAppearance(localization), provider.GetRequiredService<StartupLaunchService>(),
+                    provider.GetRequiredService<MihomoConnectionService>(), provider.GetRequiredService<RuntimeTrafficRateService>(),
+                    takeover, provider.GetRequiredService<WindowsProxyService>(), provider.GetRequiredService<MihomoServiceManager>(),
+                    provider.GetRequiredService<NotificationService>(), provider.GetRequiredService<ITriggerRuntimeEventSource>(),
+                    lifetimeRequests, ui.ExitRequested, provider.GetRequiredService<TimeProvider>(), triggerProcessEpoch, localization.GetString);
+                return new AppDataGenerationFactory(dataRoot.Value, mutationAdmission, new WindowsLegacySettingsSource(SettingsRegistry.Default),
+                    async (lease, token) =>
+                    {
+                        await provider.GetRequiredService<ClashDataPackageService>().ReconcilePendingTransactionAdmittedAsync(lease, token).ConfigureAwait(false);
+                        // Generated runtime files are intentionally not migrated. Release the
+                        // old root's verified native ownership before opening a new runtime root,
+                        // while preserving the desired mode for startup reconciliation.
+                        AppSettingsService legacy = provider.GetRequiredService<AppSettingsService>();
+                        var stopped = await provider.GetRequiredService<NetworkStateCoordinator>().ApplyAdmittedAsync(
+                            () => NetworkIntent.Shutdown(ClashSharp.Model.ClashSharpMode.Disabled, false, legacy.MixedPort), lease, token).ConfigureAwait(false);
+                        if (stopped.Outcome != MutationOutcome.Succeeded)
+                        {
+                            throw new NetworkTransitionFailedException(stopped.Outcome, stopped.ErrorCode);
+                        }
+                    },
+                    session => new AppDataGenerationRepositories(session, authority, mutationAdmission,
+                        provider.GetRequiredService<FairAsyncMutationGate>(), provider.GetRequiredService<IControllerCredentialProvider>(),
+                        new CoreConfigurationProfileMetricsAdapter(), new CoreConfigurationValidator(), localization.GetString,
+                        (configuration, ownedSession) => new GenerationProfileRuntime(ownedSession, configuration, takeover)), runtime.ComposeAsync);
+            });
+            services.AddSingleton<DataGenerationBootstrapper>();
             services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
                     provider.GetRequiredService<MutationAdmissionBarrier>(),
                     provider.GetRequiredService<RuntimeLifetimeRegistry>(),
@@ -285,11 +221,12 @@ internal static class ClashSharpAppHostFactory
             services.AddDeferredStartupStep<RuntimeShutdownOwnershipStartupStep>("runtime-shutdown-ownership", 145);
             services.AddDeferredStartupStep<MutationRecoveryStartupStep>("mutation-recovery", 150);
             services.AddDeferredStartupStep<StartupRestoreFallbackStep>("startup-restore-fallback", 200);
+            services.AddDeferredStartupStep<DataGenerationStartupStep>("data-generation", 225);
             services.AddDeferredStartupStep<ProxyRecoveryStartupStep>("proxy-recovery", 300);
             services.AddDeferredStartupStep<AppSettingsAuditStartupStep>("settings-audit", 400);
             services.AddDeferredStartupStep<StartupConflictProbeStep>("startup-conflict-probe", 425);
             services.AddDeferredStartupStep<StartupNetworkBehaviorStep>("startup-network-behavior", 450);
-            services.AddDeferredStartupStep<TriggerSupervisorStartupStep>("trigger-supervisor", 500);
+
             services.AddDeferredStartupStep<WindowShellStartupStep>("window-shell", 600);
             services.AddDeferredStartupStep<ConnectionSamplingStartupStep>("connection-sampling", 700);
             services.AddDeferredStartupStep<ProfileSubscriptionSchedulerStartupStep>("profile-subscription-updates", 710);

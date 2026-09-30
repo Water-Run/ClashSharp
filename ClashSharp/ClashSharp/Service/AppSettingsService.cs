@@ -680,7 +680,7 @@ public sealed partial class AppSettingsService :
     private object? GetValue(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
-
+        if (Volatile.Read(ref _authority) is { } authority) { return ReadAuthorityValue(authority, key); }
         return _values.TryGetValue(key, out object? value) ? value : null;
     }
 
