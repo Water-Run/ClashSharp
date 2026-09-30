@@ -312,6 +312,7 @@ internal static partial class LocalizationResources
             ["Command.Export"] = "내보내기",
             ["Command.PersistSnapshot"] = "스냅숏 기록",
             ["Command.Refresh"] = "새로 고침",
+            ["Command.Back"] = "뒤로",
             ["Command.SetActive"] = "현재로 설정",
             ["Command.TestLatency"] = "지연 시간 측정",
             ["Command.Update"] = "업데이트",

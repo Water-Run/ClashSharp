@@ -226,6 +226,8 @@ internal sealed class ConnectionsViewModel : ObservableObject
                     or WebSocketException
                     or IOException
                     or JsonException
+                    or TimeoutException
+                    or OperationCanceledException
                     or InvalidOperationException
                 && !ExceptionGraphClassifier.IsProcessFatal(exception)
                 && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
@@ -262,7 +264,8 @@ internal sealed class ConnectionsViewModel : ObservableObject
             return connections;
         }
         catch (Exception exception) when (
-            exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException
+            exception is HttpRequestException or WebSocketException or IOException or JsonException
+                or TimeoutException or OperationCanceledException or InvalidOperationException
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
@@ -336,6 +339,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
     public async Task CloseConnectionAsync(ActiveConnection connection, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        long revision = _snapshotRevision;
         _closeCount++;
         NotifyViewState();
         try
@@ -351,12 +355,12 @@ internal sealed class ConnectionsViewModel : ObservableObject
             _log.Append("Info", "Connections", ConnectionStatusText, connection.Id);
         }
         catch (Exception exception) when (
-            exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException or ArgumentException
+            exception is HttpRequestException or WebSocketException or IOException or JsonException
+                or TimeoutException or OperationCanceledException or InvalidOperationException or ArgumentException
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
-            _log.Append("Warning", "Connections", ConnectionStatusText, exception.Message);
+            ApplyCloseFailure(exception, revision);
         }
         finally
         {
@@ -371,6 +375,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
     public async Task CloseAllConnectionsAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        long revision = _snapshotRevision;
         _closeCount++;
         NotifyViewState();
         try
@@ -386,17 +391,30 @@ internal sealed class ConnectionsViewModel : ObservableObject
             _log.Append("Info", "Connections", ConnectionStatusText, null);
         }
         catch (Exception exception) when (
-            exception is HttpRequestException or JsonException or OperationCanceledException or InvalidOperationException or ArgumentException
+            exception is HttpRequestException or WebSocketException or IOException or JsonException
+                or TimeoutException or OperationCanceledException or InvalidOperationException or ArgumentException
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
-            _log.Append("Warning", "Connections", ConnectionStatusText, exception.Message);
+            ApplyCloseFailure(exception, revision);
         }
         finally
         {
             _closeCount--;
             NotifyViewState();
+        }
+    }
+
+    private void ApplyCloseFailure(Exception exception, long revision)
+    {
+        // A newer refresh or stream observation may already have recovered from this failure.
+        if (revision == _snapshotRevision)
+        {
+            ApplyUnavailableStatus(exception.Message);
+        }
+        else
+        {
+            _log.Append("Warning", "Connections", _localization.GetString("Connections.Status.Unavailable"), exception.Message);
         }
     }
 

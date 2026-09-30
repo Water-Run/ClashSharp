@@ -312,6 +312,7 @@ internal static partial class LocalizationResources
             ["Command.Export"] = "صادر کردن",
             ["Command.PersistSnapshot"] = "ذخیره نما",
             ["Command.Refresh"] = "تازه‌سازی",
+            ["Command.Back"] = "بازگشت",
             ["Command.SetActive"] = "فعال کردن",
             ["Command.TestLatency"] = "آزمایش تأخیر",
             ["Command.Update"] = "به‌روزرسانی",

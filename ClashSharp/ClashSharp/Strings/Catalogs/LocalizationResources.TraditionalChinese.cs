@@ -312,6 +312,7 @@ internal static partial class LocalizationResources
             ["Command.Export"] = "匯出",
             ["Command.PersistSnapshot"] = "寫入快照",
             ["Command.Refresh"] = "重新整理",
+            ["Command.Back"] = "返回",
             ["Command.SetActive"] = "設為目前",
             ["Command.TestLatency"] = "測試延遲",
             ["Command.Update"] = "更新",

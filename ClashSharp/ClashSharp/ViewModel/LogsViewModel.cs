@@ -121,6 +121,8 @@ internal sealed class LogsViewModel : ObservableObject
     /// <summary>Gets the text displayed when the cleanup impact cannot be read.</summary>
     public string CleanupPreviewFailedText => _getString("Logs.Cleanup.Preview.Failed");
 
+    public string BackText => _getString("Command.Back");
+
     public string RefreshText => _getString("Command.Refresh");
 
     public string SearchPlaceholderText => _getString("Logs.Filter.SearchPlaceholder");

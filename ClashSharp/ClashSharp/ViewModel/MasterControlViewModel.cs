@@ -1037,7 +1037,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         SetTile("port", _settings.MixedPort.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
         RefreshNetworkDiagnosticTiles();
         SetTile("app-update", UpdateStatus, _updateCheckedAt?.ToLocalTime().ToString("G", CultureInfo.CurrentCulture)
-            ?? _localization.GetString("Master.Diagnostics.NotTested"));
+            ?? string.Empty);
         SetTile("startup-prompt", _localization.GetString("Settings.StartupGuide.ShowNow"), string.Empty);
         SetTile("startup-conflicts", _localization.GetString("Settings.CheckStartupConflicts.Now"), string.Empty);
         SetTile("export-config", _localization.GetString("Command.Export"), string.Empty);

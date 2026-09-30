@@ -312,6 +312,7 @@ internal static partial class LocalizationResources
             ["Command.Export"] = "Export",
             ["Command.PersistSnapshot"] = "Save snapshot",
             ["Command.Refresh"] = "Refresh",
+            ["Command.Back"] = "Back",
             ["Command.SetActive"] = "Set active",
             ["Command.TestLatency"] = "Test latency",
             ["Command.Update"] = "Update",
