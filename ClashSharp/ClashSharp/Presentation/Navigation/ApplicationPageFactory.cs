@@ -16,7 +16,14 @@ internal sealed class ApplicationPageFactory(
             ShellRoute.MasterControl => new View.MasterControl(
                 MasterControlPageComposition.Create(
                     context,
-                    () => navigation.Navigate(ShellRoute.Settings))),
+                    () => navigation.Navigate(ShellRoute.Settings),
+                    tag =>
+                    {
+                        if (ShellRouteCatalog.TryParse(tag, out ShellRoute destination))
+                        {
+                            navigation.Navigate(destination);
+                        }
+                    })),
             ShellRoute.ProxyNodes => new View.Proxies(
                 ProxiesPageComposition.Create(context)),
             ShellRoute.Profiles => new View.Profiles(

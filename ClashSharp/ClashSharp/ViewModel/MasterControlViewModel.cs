@@ -26,6 +26,8 @@ namespace ClashSharp.ViewModel;
 /// </remarks>
 internal sealed partial class MasterControlViewModel : ObservableObject
 {
+    private readonly Action<string>? _navigateToPage;
+
     /// <summary>Localization provider used by visible text.</summary>
     private readonly IMasterControlLocalization _localization;
 
@@ -189,6 +191,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     /// <param name="probeWebsiteAsync">Optional explicit website check using the current network route.</param>
     /// <param name="probePublicIpAsync">Optional explicit public egress metadata check.</param>
     /// <param name="updateChecker">Optional read-only release checker.</param>
+    /// <param name="navigateToPage">Optional shell navigation for information-tile detail links.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public MasterControlViewModel(
         IMasterControlLocalization localization,
@@ -210,7 +213,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         Func<CancellationToken, Task<RuntimeTrafficRateSnapshot>>? getRuntimeTrafficAsync = null,
         Func<string, CancellationToken, Task<WebsiteProbeResult>>? probeWebsiteAsync = null,
         Func<CancellationToken, Task<PublicIpInformation>>? probePublicIpAsync = null,
-        IApplicationUpdateChecker? updateChecker = null)
+        IApplicationUpdateChecker? updateChecker = null,
+        Action<string>? navigateToPage = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -237,6 +241,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         _probeWebsiteAsync = probeWebsiteAsync;
         _probePublicIpAsync = probePublicIpAsync;
         _updateChecker = updateChecker;
+        _navigateToPage = navigateToPage;
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
         DisabledModeCommand = new AsyncRelayCommand(
             token => ApplyModeAsync(ClashSharpMode.Disabled, token),
@@ -953,6 +958,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         IReadOnlyList<MasterTileDefinition> definitions = MasterTileCatalog.Create(this);
         foreach (MasterTileDefinition tile in definitions)
         {
+            MasterControlTileNavigationTarget? destination = tile.Command is null && _navigateToPage is not null
+                ? MasterControlTileNavigationCatalog.Resolve(tile.Id) : null;
             MasterControlInfoTileViewModel viewModel = new(
                 tile.Id,
                 tile.Title,
@@ -966,6 +973,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 tile.Command)
             {
                 ReorderHint = _localization.GetString("Master.Tile.ReorderHint"),
+                NavigationText = destination is null ? string.Empty : _localization.GetString(destination.LabelKey),
+                NavigationCommand = destination is null ? null : new RelayCommand(() => _navigateToPage!(destination.Tag)),
             };
             _infoTiles.Add(viewModel);
         }

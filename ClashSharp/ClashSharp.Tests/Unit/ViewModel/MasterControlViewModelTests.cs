@@ -1132,7 +1132,8 @@ public sealed partial class MasterControlViewModelTests
         Func<string, CancellationToken, Task<WebsiteProbeResult>>? probeWebsiteAsync = null,
         Func<CancellationToken, Task<PublicIpInformation>>? probePublicIpAsync = null,
         IApplicationUpdateChecker? updateChecker = null,
-        Func<Func<CancellationToken, Task>, CancellationToken, Task>? runTileOperationAsync = null)
+        Func<Func<CancellationToken, Task>, CancellationToken, Task>? runTileOperationAsync = null,
+        Action<string>? navigateToPage = null)
     {
         return new MasterControlViewModel(
             new FakeMasterLocalization(),
@@ -1154,7 +1155,8 @@ public sealed partial class MasterControlViewModelTests
             getRuntimeTrafficAsync: getRuntimeTrafficAsync,
             probeWebsiteAsync: probeWebsiteAsync,
             probePublicIpAsync: probePublicIpAsync,
-            updateChecker: updateChecker);
+            updateChecker: updateChecker,
+            navigateToPage: navigateToPage);
     }
 
     /// <summary>Fake localization provider for master-control tests.</summary>

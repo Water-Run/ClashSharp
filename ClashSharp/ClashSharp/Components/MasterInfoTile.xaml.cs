@@ -117,6 +117,14 @@ public sealed partial class MasterInfoTile : UserControl
         typeof(MasterInfoTile),
         new PropertyMetadata(null, OnTileCommandChanged));
 
+    /// <summary>Identifies the optional command offered from the detail flyout.</summary>
+    public static readonly DependencyProperty NavigationCommandProperty = DependencyProperty.Register(
+        nameof(NavigationCommand), typeof(ICommand), typeof(MasterInfoTile), new PropertyMetadata(null));
+
+    /// <summary>Identifies the localized destination label for the detail link.</summary>
+    public static readonly DependencyProperty NavigationTextProperty = DependencyProperty.Register(
+        nameof(NavigationText), typeof(string), typeof(MasterInfoTile), new PropertyMetadata(string.Empty));
+
     /// <summary>Initializes an information tile and its pointer-aware visual states.</summary>
     public MasterInfoTile()
     {
@@ -187,6 +195,20 @@ public sealed partial class MasterInfoTile : UserControl
         set => SetValue(TileCommandProperty, value);
     }
 
+    /// <summary>Gets or sets the optional command for opening a related shell page.</summary>
+    public ICommand? NavigationCommand
+    {
+        get => (ICommand?)GetValue(NavigationCommandProperty);
+        set => SetValue(NavigationCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets the related page's localized link text.</summary>
+    public string NavigationText
+    {
+        get => (string)GetValue(NavigationTextProperty);
+        set => SetValue(NavigationTextProperty, value);
+    }
+
     /// <summary>Combines the current tile text without empty or repeated explanations.</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "WinUI x:Bind calls this function through the control instance.")]
     public string GetTooltipText(string value, string detail, string description) =>
@@ -210,6 +232,24 @@ public sealed partial class MasterInfoTile : UserControl
                 content.Children.Add(new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
             }
             Flyout flyout = new() { Content = new ScrollViewer { Content = content, MaxHeight = 360 } };
+            if (NavigationCommand is ICommand navigation && !string.IsNullOrWhiteSpace(NavigationText))
+            {
+                HyperlinkButton link = new()
+                {
+                    Content = NavigationText,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Padding = new Thickness(0),
+                };
+                link.Click += (_, _) =>
+                {
+                    flyout.Hide();
+                    if (_isLoaded && navigation.CanExecute(null))
+                    {
+                        navigation.Execute(null);
+                    }
+                };
+                content.Children.Add(link);
+            }
             flyout.ShowAt(TileButton);
             return;
         }

@@ -240,6 +240,7 @@
     <Compile Include="..\ClashSharp\ViewModel\UnavailableMasterControlRuntime.cs" Link="ViewModel\UnavailableMasterControlRuntime.cs" />
     <Compile Include="..\ClashSharp\ViewModel\UnavailableMasterControlTrayStatus.cs" Link="ViewModel\UnavailableMasterControlTrayStatus.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterControlInfoTileViewModel.cs" Link="ViewModel\MasterControlInfoTileViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterControlTileNavigationCatalog.cs" Link="ViewModel\MasterControlTileNavigationCatalog.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterHeroStatusItemViewModel.cs" Link="ViewModel\MasterHeroStatusItemViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterHeroStatusOptionViewModel.cs" Link="ViewModel\MasterHeroStatusOptionViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterHeroStatusSlotViewModel.cs" Link="ViewModel\MasterHeroStatusSlotViewModel.cs" />

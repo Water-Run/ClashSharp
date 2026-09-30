@@ -38,7 +38,8 @@ internal static class MasterControlPageComposition
     /// <summary>Creates one page dependency graph from the AppHost-owned page context.</summary>
     public static MasterControlPageDependencies Create(
         PageCompositionContext context,
-        Action openSettings)
+        Action openSettings,
+        Action<string>? navigateToPage = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(openSettings);
@@ -107,7 +108,8 @@ internal static class MasterControlPageComposition
             getRuntimeTrafficAsync: runtimeTrafficRate.GetSnapshotAsync,
             probeWebsiteAsync: networkProbe.CheckWebsiteAsync,
             probePublicIpAsync: networkProbe.GetPublicIpAsync,
-            updateChecker: new GitHubReleaseUpdateChecker(ReleaseHttpClient, ApplicationVersion.Current));
+            updateChecker: new GitHubReleaseUpdateChecker(ReleaseHttpClient, ApplicationVersion.Current),
+            navigateToPage: navigateToPage);
 
         return new MasterControlPageDependencies(
             viewModel,

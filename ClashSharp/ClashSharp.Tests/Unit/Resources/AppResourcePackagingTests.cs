@@ -2665,11 +2665,13 @@ public sealed class AppResourcePackagingTests
         string auditStartupStepPath = FindSourceFile("ClashSharp", "ClashSharp", "AppHost", "Startup", "AppSettingsAuditStartupStep.cs");
 
         string appSettings = File.ReadAllText(appSettingsPath);
+        string appSettingsMutations = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "Service", "AppSettingsService.Mutations.cs"));
         string auditService = File.ReadAllText(auditServicePath);
         string auditStartupStep = File.ReadAllText(auditStartupStepPath);
 
         Assert.Contains("event EventHandler<AppSettingChangedEventArgs>? SettingChanged", appSettings, StringComparison.Ordinal);
-        Assert.Contains("NotifySettingChanged", appSettings, StringComparison.Ordinal);
+        Assert.Contains("NotifySettingChanges", appSettingsMutations, StringComparison.Ordinal);
+        Assert.Contains("handlers.GetInvocationList()", appSettingsMutations, StringComparison.Ordinal);
         Assert.Contains("AppSettingChangedEventArgs", appSettings, StringComparison.Ordinal);
         Assert.Contains("AppSettingsAuditLogService auditLog", auditStartupStep, StringComparison.Ordinal);
         Assert.Contains("auditLog.Start()", auditStartupStep, StringComparison.Ordinal);

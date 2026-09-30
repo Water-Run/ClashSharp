@@ -224,7 +224,9 @@
                                     Glyph="{Binding Glyph}"
                                     IsToggleVisible="{Binding IsToggleVisible}"
                                     IsToggleOn="{Binding IsToggleOn, Mode=TwoWay}"
-                                    TileCommand="{Binding TileCommand}" />
+                                    TileCommand="{Binding TileCommand}"
+                                    NavigationCommand="{Binding NavigationCommand}"
+                                    NavigationText="{Binding NavigationText}" />
                             </DataTemplate>
                         </GridView.ItemTemplate>
                 </GridView>

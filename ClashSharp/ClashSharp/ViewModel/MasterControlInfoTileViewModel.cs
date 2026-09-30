@@ -58,6 +58,11 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
 
     public ICommand? TileCommand { get; }
 
+    /// <summary>Optional explicit page navigation, separate from opening the full details.</summary>
+    public ICommand? NavigationCommand { get; init; }
+
+    public string NavigationText { get; init; } = string.Empty;
+
     public double[] History
     {
         get => _history;

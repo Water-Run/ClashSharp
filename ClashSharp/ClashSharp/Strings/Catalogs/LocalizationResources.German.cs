@@ -32,7 +32,7 @@ internal static partial class LocalizationResources
             ["Master.Tile.Description.ProxyAddress"] = "Windows-Systemproxy und konfigurierter lokaler HTTP/SOCKS-Endpunkt.",
             ["Master.Tile.SystemInfo"] = "Systeminformationen",
             ["Master.Tile.Description.SystemInfo"] = "Betriebssystem sowie System- und Anwendungsarchitektur.",
-            ["Master.Tile.SubscriptionUsage"] = "Abonnementverbrauch",
+            ["Master.Tile.SubscriptionUsage"] = "Datenverbrauch",
             ["Master.Tile.Description.SubscriptionUsage"] = "Vom Anbieter gemeldeter Verbrauch und Kontingent; fehlende Daten bleiben unbekannt.",
             ["Master.Tile.SubscriptionExpiry"] = "Abonnementablauf",
             ["Master.Tile.Description.SubscriptionExpiry"] = "Vom Anbieter gemeldeter Ablauf des aktiven Abonnements in Ortszeit.",
