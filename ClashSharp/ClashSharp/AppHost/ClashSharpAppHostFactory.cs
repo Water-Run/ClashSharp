@@ -131,6 +131,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IApplicationMutationCoordinator>(provider =>
                 provider.GetRequiredService<ApplicationMutationCoordinator>());
             services.AddSingleton<NetworkStateCoordinator>();
+            services.AddSingleton<NetworkMaintenanceCoordinator>();
             services.AddSingleton<IRuntimeShutdownNetworkCoordinator>(provider =>
                 provider.GetRequiredService<NetworkStateCoordinator>());
             services.AddSingleton<LegacyNetworkIntentSource>();
@@ -187,8 +188,8 @@ internal static class ClashSharpAppHostFactory
                         // old root's verified native ownership before opening a new runtime root,
                         // while preserving the desired mode for startup reconciliation.
                         AppSettingsService legacy = provider.GetRequiredService<AppSettingsService>();
-                        var stopped = await provider.GetRequiredService<NetworkStateCoordinator>().ApplyAdmittedAsync(
-                            () => NetworkIntent.Shutdown(ClashSharp.Model.ClashSharpMode.Disabled, false, legacy.MixedPort), lease, token).ConfigureAwait(false);
+                        var stopped = await provider.GetRequiredService<NetworkStateCoordinator>().ApplyShutdownAsync(
+                            NetworkIntent.Shutdown(ClashSharp.Model.ClashSharpMode.Disabled, false, legacy.MixedPort), lease, token).ConfigureAwait(false);
                         if (stopped.Outcome != MutationOutcome.Succeeded)
                         {
                             throw new NetworkTransitionFailedException(stopped.Outcome, stopped.ErrorCode);

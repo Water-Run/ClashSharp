@@ -1050,9 +1050,12 @@ public sealed class AppResourcePackagingTests
         }
 
         Assert.DoesNotContain("Task.Run", proxyRecoveryStep, StringComparison.Ordinal);
-        Assert.Contains("NetworkStateCoordinator", proxyRecoveryStep, StringComparison.Ordinal);
-        Assert.Contains("NetworkStateCoordinator", fallbackStep, StringComparison.Ordinal);
-        Assert.Contains("NetworkStateCoordinator", applicationActions, StringComparison.Ordinal);
+        Assert.Contains("NetworkMaintenanceCoordinator", proxyRecoveryStep, StringComparison.Ordinal);
+        Assert.Contains("NetworkMaintenanceCoordinator", fallbackStep, StringComparison.Ordinal);
+        Assert.Contains("NetworkMaintenanceCoordinator", applicationActions, StringComparison.Ordinal);
+        string maintenance = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp.Application", "Network", "NetworkMaintenanceCoordinator.cs"));
+        Assert.Contains("admission.CloseAndDrainAsync", maintenance, StringComparison.Ordinal);
+        Assert.Contains("network.ApplyAdmittedAsync", maintenance, StringComparison.Ordinal);
         Assert.DoesNotContain("WindowsProxyService.Instance.DisableProxy", startupConflictFactory, StringComparison.Ordinal);
         Assert.Contains("DisableWindowsProxyAsync", applicationActions, StringComparison.Ordinal);
         Assert.Contains("NetworkTransitionFailedException", startupBehaviorStep, StringComparison.Ordinal);

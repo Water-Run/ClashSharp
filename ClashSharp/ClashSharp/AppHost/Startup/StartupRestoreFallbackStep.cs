@@ -12,7 +12,7 @@ namespace ClashSharp.Hosting.Startup;
 
 /// <summary>Runs the login restore helper without constructing the normal application shell.</summary>
 internal sealed class StartupRestoreFallbackStep(
-    NetworkStateCoordinator network,
+    NetworkMaintenanceCoordinator network,
     LegacyNetworkIntentSource intents,
     ILogStorage logStorage,
     LocalizationService localization) : IStartupStep
@@ -32,7 +32,7 @@ internal sealed class StartupRestoreFallbackStep(
         try
         {
             var result = await network
-                .ApplyAsync(intents.CreateStartupRecovery(), cancellationToken)
+                .ApplyAsync(intents.CreateStartupRecovery, cancellationToken)
                 .ConfigureAwait(false);
             if (result.Outcome != MutationOutcome.Succeeded)
             {

@@ -27,7 +27,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     private readonly IRuntimeSettingsAuthority _settings;
     private readonly IControllerCredentialProvider _controllerCredentials;
     private readonly MutationAdmissionBarrier _admissionBarrier;
-    private readonly NetworkStateCoordinator _network;
+    private readonly NetworkMaintenanceCoordinator _networkMaintenance;
     private readonly INetworkStateObserver _networkObserver;
     private readonly IConnectionSamplingRuntime _sampling;
     private readonly MihomoConnectionService _connections;
@@ -62,7 +62,8 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _controllerCredentials = controllerCredentials ?? throw new ArgumentNullException(nameof(controllerCredentials));
         _admissionBarrier = admissionBarrier ?? throw new ArgumentNullException(nameof(admissionBarrier));
-        _network = network ?? throw new ArgumentNullException(nameof(network));
+        ArgumentNullException.ThrowIfNull(network);
+        _networkMaintenance = new(network, admissionBarrier);
         _networkObserver = networkObserver ?? throw new ArgumentNullException(nameof(networkObserver));
         _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
@@ -261,7 +262,7 @@ internal sealed class ApplicationActionService : IApplicationActionDispatcher
     /// <summary>Disables an explicitly confirmed conflicting Windows proxy through durable mutation.</summary>
     public async Task DisableWindowsProxyAsync(CancellationToken cancellationToken)
     {
-        MutationResult<NetworkTransitionResult> mutation = await _network
+        MutationResult<NetworkTransitionResult> mutation = await _networkMaintenance
             .ApplyAsync(
                 () =>
                 {

@@ -12,7 +12,7 @@ namespace ClashSharp.Hosting.Startup;
 
 /// <summary>Completes best-effort stale proxy recovery before window startup.</summary>
 internal sealed class ProxyRecoveryStartupStep(
-    NetworkStateCoordinator network,
+    NetworkMaintenanceCoordinator network,
     LegacyNetworkIntentSource intents,
     ILogStorage logStorage,
     LocalizationService localization) : IStartupStep
@@ -26,7 +26,7 @@ internal sealed class ProxyRecoveryStartupStep(
         try
         {
             MutationResult<NetworkTransitionResult> result = await network
-                .ApplyAsync(intents.CreateStartupRecovery(), cancellationToken)
+                .ApplyAsync(intents.CreateStartupRecovery, cancellationToken)
                 .ConfigureAwait(false);
             if (result.Outcome == MutationOutcome.Succeeded)
             {

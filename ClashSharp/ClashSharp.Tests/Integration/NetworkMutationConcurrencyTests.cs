@@ -8,6 +8,116 @@ namespace ClashSharp.Tests.Integration;
 /// <summary>Verifies network transitions are planned, journaled, serialized, verified, and compensated.</summary>
 public sealed class NetworkMutationConcurrencyTests
 {
+    [Fact]
+    public async Task NetworkMaintenance_WaitsForSettingsOwnershipBeforeCapturingTheLatestIntent()
+    {
+        Fixture fixture = new();
+        NetworkMaintenanceCoordinator maintenance = new(fixture.Network, fixture.Barrier);
+        MutationAdmissionLease settings = fixture.Barrier.AcquireOrdinary();
+        int port = 7890;
+        bool captured = false;
+        Task<MutationResult<NetworkTransitionResult>> operation = maintenance.ApplyAsync(() =>
+        {
+            captured = true;
+            return NetworkIntent.DisableConflictingProxy(ClashSharpMode.Disabled, false, port);
+        }, CancellationToken.None);
+        Assert.False(captured);
+        Assert.False(operation.IsCompleted);
+        Assert.Equal(0, fixture.Adapter.PlanCount);
+        port = 18390;
+        settings.Dispose();
+
+        var result = await operation.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(captured);
+        Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
+        Assert.Equal(port, result.Value!.MixedPort);
+        Assert.Equal(MutationAdmissionState.Open, fixture.Barrier.State);
+    }
+
+    [Fact]
+    public async Task NetworkMaintenance_ExcludesNewSettingsCommandsThroughTheWholeNativeTransaction()
+    {
+        Fixture fixture = new();
+        fixture.Adapter.FirstStageEntered = CreateSignal();
+        fixture.Adapter.ReleaseFirstStage = CreateSignal();
+        NetworkMaintenanceCoordinator maintenance = new(fixture.Network, fixture.Barrier);
+        var operation = maintenance.ApplyAsync(() => NetworkIntent.RecoverStartupProxy(ClashSharpMode.Disabled, false, 7890), CancellationToken.None);
+        try
+        {
+            await fixture.Adapter.FirstStageEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Throws<MutationAdmissionRejectedException>(() => fixture.Barrier.AcquireOrdinary());
+            Assert.False(operation.IsCompleted);
+        }
+        finally { fixture.Adapter.ReleaseFirstStage.TrySetResult(null); }
+        Assert.Equal(MutationOutcome.Succeeded, (await operation.WaitAsync(TimeSpan.FromSeconds(5))).Outcome);
+        using var next = fixture.Barrier.AcquireOrdinary();
+    }
+
+    [Fact]
+    public async Task NetworkMaintenance_CancellationWhileDrainingDoesNotPlanOrApply()
+    {
+        Fixture fixture = new();
+        using var settings = fixture.Barrier.AcquireOrdinary();
+        using CancellationTokenSource cancellation = new();
+        NetworkMaintenanceCoordinator maintenance = new(fixture.Network, fixture.Barrier);
+        var operation = maintenance.ApplyAsync(() => throw new InvalidOperationException("Canceled maintenance must not read intent."), cancellation.Token);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+
+        Assert.Equal(0, fixture.Adapter.PlanCount);
+        Assert.Null(fixture.Store.Current);
+        Assert.Equal(MutationAdmissionState.Open, fixture.Barrier.State);
+    }
+
+    [Theory]
+    [InlineData(NetworkIntentKind.ModeTransition)]
+    [InlineData(NetworkIntentKind.Shutdown)]
+    public async Task NetworkMaintenance_RejectsModeAndShutdownIntentsBeforeNativePlanning(NetworkIntentKind kind)
+    {
+        Fixture fixture = new();
+        NetworkMaintenanceCoordinator maintenance = new(fixture.Network, fixture.Barrier);
+
+        var result = await maintenance.ApplyAsync(() => new NetworkIntent(kind, ClashSharpMode.Disabled, false, 7890), CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.Failed, result.Outcome);
+        Assert.Equal(0, fixture.Adapter.PlanCount);
+        Assert.Null(fixture.Store.Current);
+        Assert.Equal(MutationAdmissionState.Open, fixture.Barrier.State);
+    }
+
+    [Fact]
+    public async Task NetworkMaintenance_CommittedCleanupFailureRetainsRecoveryOwnership()
+    {
+        Fixture fixture = new();
+        fixture.Adapter.CleanupException = new IOException("cleanup unavailable");
+        NetworkMaintenanceCoordinator maintenance = new(fixture.Network, fixture.Barrier);
+
+        var result = await maintenance.ApplyAsync(() => NetworkIntent.DisableConflictingProxy(ClashSharpMode.Disabled, false, 7890), CancellationToken.None);
+
+        Assert.Equal(MutationOutcome.CommittedRecoveryRequired, result.Outcome);
+        Assert.Equal(MutationAdmissionState.RecoveryOnly, fixture.Barrier.State);
+        Assert.NotNull(fixture.Store.Current);
+        Assert.True(fixture.Store.Current.Journal.HasCommitMarker);
+        Assert.Throws<MutationAdmissionRejectedException>(() => fixture.Barrier.AcquireOrdinary());
+    }
+
+    [Fact]
+    public async Task NetworkMaintenance_MigrationCanReleaseNetworkWithoutClosingTheProcessAdmission()
+    {
+        Fixture fixture = new();
+        await using (var migration = await fixture.Barrier.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None))
+        {
+            var result = await fixture.Network.ApplyShutdownAsync(NetworkIntent.Shutdown(ClashSharpMode.Disabled, false, 7890), migration, CancellationToken.None);
+            Assert.Equal(MutationOutcome.Succeeded, result.Outcome);
+            Assert.Equal(ClashSharpMode.Disabled, result.Value!.Mode);
+            Assert.Equal(MutationAdmissionState.Closing, fixture.Barrier.State);
+        }
+        Assert.Equal(MutationAdmissionState.Open, fixture.Barrier.State);
+        using var command = fixture.Barrier.AcquireOrdinary();
+    }
+
     /// <summary>Verifies a successful transition commits only its verified desired state.</summary>
     [Fact]
     public async Task ApplyAsync_Success_CapturesBaselineAndReturnsVerifiedTarget()
