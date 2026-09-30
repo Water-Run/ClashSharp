@@ -12,6 +12,9 @@ internal interface INetworkSettingsRuntime
     Task<NetworkSettingsConfiguration> ReadConfigurationAsync(CancellationToken cancellationToken);
     Task RecoverConfigurationAsync(CancellationToken cancellationToken);
     Task ApplyConfigurationAsync(NetworkSettingsConfiguration configuration, CancellationToken cancellationToken);
+    /// <summary>Restores an explicitly captured baseline after another owned generation may have changed the runtime.</summary>
+    Task RestoreConfigurationAsync(NetworkSettingsConfiguration configuration, CancellationToken cancellationToken) =>
+        ApplyConfigurationAsync(configuration, cancellationToken);
 }
 
 /// <summary>Separates the installed TUN preference from its mode-dependent effective routing state.</summary>

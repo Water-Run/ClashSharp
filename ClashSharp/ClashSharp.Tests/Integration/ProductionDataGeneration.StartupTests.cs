@@ -197,7 +197,7 @@ public sealed partial class ProductionDataGenerationTests
 
     private sealed class StartupPlatform : StartupTaskProvider, StartupTask, StartupLog
     {
-        public StartupTaskState State { get; private set; } = StartupTaskState.Disabled;
+        public StartupTaskState State { get; set; } = StartupTaskState.Disabled;
         public Task<StartupTask> GetAsync(string taskId) => Task.FromResult<StartupTask>(this);
         public Task<StartupTaskState> RequestEnableAsync() { State = StartupTaskState.Enabled; return Task.FromResult(State); }
         public void Disable() => State = StartupTaskState.Disabled;
@@ -209,22 +209,27 @@ public sealed partial class ProductionDataGenerationTests
         private AppLanguage _language = AppLanguage.AutoDetect;
         private AppThemeMode _theme = AppThemeMode.FollowSystem;
         private AccentColorConfiguration _accent = new(AppAccentColorMode.FollowSystem, "#FF0078D4");
+        public Action<string>? BeforeApply { get; set; }
         public AppearanceNativeConfiguration CaptureConfiguration() => new(_language, _theme, _accent);
-        public void ApplyLanguage(AppLanguage language) => _language = language;
-        public void ApplyTheme(AppThemeMode theme) => _theme = theme;
-        public void ApplyAccent(AccentColorConfiguration accent) => _accent = accent;
+        public void ApplyLanguage(AppLanguage language) { BeforeApply?.Invoke("language"); _language = language; }
+        public void ApplyTheme(AppThemeMode theme) { BeforeApply?.Invoke("theme"); _theme = theme; }
+        public void ApplyAccent(AccentColorConfiguration accent) { BeforeApply?.Invoke("accent"); _accent = accent; }
     }
 
     private sealed class NetworkSurface : NetworkRuntime
     {
         private NetworkConfiguration _installed = new(ClashSharpMode.Disabled, "builtin-direct", false, 10000);
-        public bool Unknown { get; init; }
+        public bool Unknown { get; set; }
+        public Action<NetworkConfiguration, CancellationToken>? BeforeApply { get; set; }
+        public Action? AfterApply { get; set; }
         public Task<NetworkConfiguration> ReadConfigurationAsync(CancellationToken cancellationToken) => Unknown
             ? Task.FromException<NetworkConfiguration>(new IOException("native observation unavailable")) : Task.FromResult(_installed);
         public Task RecoverConfigurationAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ApplyConfigurationAsync(NetworkConfiguration configuration, CancellationToken cancellationToken)
         {
+            BeforeApply?.Invoke(configuration, cancellationToken);
             _installed = configuration;
+            AfterApply?.Invoke();
             return Task.CompletedTask;
         }
     }

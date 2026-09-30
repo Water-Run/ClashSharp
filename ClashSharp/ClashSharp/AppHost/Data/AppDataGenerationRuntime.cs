@@ -33,6 +33,7 @@ internal sealed partial class AppDataGenerationRuntime(
     ProfileSubscriptionScheduler subscriptions,
     ITriggerLifecycleHandoff handoff,
     GenerationPublicationGate publication,
+    GenerationExternalStateRecovery recovery,
     Guid processEpoch,
     Func<bool> exitRequested)
 {
@@ -52,6 +53,7 @@ internal sealed partial class AppDataGenerationRuntime(
     public INetworkSettingsRuntime Network { get; } = network;
     public ProfileSubscriptionScheduler Subscriptions { get; } = subscriptions;
     public bool IsExecutionPublished => publication.IsPublished;
+    public GenerationExternalStateRecovery ExternalState { get; } = recovery;
 
     public async Task<StartupStepResult> InitializeAdmittedAsync(MutationAdmissionLease lease, CancellationToken cancellationToken)
     {

@@ -44,7 +44,8 @@ internal sealed class AppDataGenerationRuntimeComposer(
         cancellationToken.ThrowIfCancellationRequested();
         var generation = repositories.Generation;
         repositories.OwnSettingsParticipant(new InternalSettingsParticipant(generation, admission, SettingsRegistry.Default));
-        repositories.OwnSettingsParticipant(new AppearanceSettingsParticipant(generation, admission, SettingsRegistry.Default, createDispatcher(), appearance));
+        OwnedUiDispatcher dispatcher = createDispatcher();
+        repositories.OwnSettingsParticipant(new AppearanceSettingsParticipant(generation, admission, SettingsRegistry.Default, dispatcher, appearance));
         repositories.OwnSettingsParticipant(new StartupTaskSettingsParticipant(generation, admission, startup));
         ConnectionSamplingService sampling = repositories.OwnProducer(new ConnectionSamplingService(
             new SamplingPreferences(repositories.Session), new ConnectionSamplingSourceAdapter(connections),
@@ -56,6 +57,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
         INetworkSettingsRuntime network = createNetwork?.Invoke(repositories.Configuration)
             ?? new NetworkSettingsRuntime(repositories.Configuration, scopedTakeover, proxy);
         repositories.OwnSettingsParticipant(new NetworkSettingsParticipant(generation, admission, network));
+        GenerationExternalStateRecovery recovery = new(repositories.Session, admission, dispatcher, appearance, startup, network);
         INetworkStateObserver observer = new NetworkObserver(network, proxy);
         TriggerDefinitionStore definitions = new(repositories.Triggers, time);
         TriggerSettingsState triggerState = new(generation);
@@ -80,7 +82,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
             new ProfileSubscriptionSchedulerCatalogAdapter(repositories.Profiles), time, repositories.Logs.AppendLog, producerClock));
         repositories.AttachRuntime(new(repositories, admission, generations, sampling, scopedTakeover, triggers, definitions,
             new TriggerActionReconciler(repositories.Triggers, executor, admission), executions, context, network, observer, subscriptions,
-            handoff, publication, processEpoch, exitRequested));
+            handoff, publication, recovery, processEpoch, exitRequested));
         return Task.CompletedTask;
     }
 

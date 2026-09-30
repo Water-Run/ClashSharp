@@ -14,6 +14,64 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class NetworkSettingsRuntimeTests
 {
     [Fact]
+    public async Task Restore_UsesTheOriginalConfigurationStoreAfterAnotherDirectoryTakesOver()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        NativePorts ports = new();
+        Host.Service.CoreConfigurationService baselineStore = CreateConfiguration(Path.Combine(directory.RootPath, "baseline"));
+        Host.Service.CoreConfigurationService candidateStore = CreateConfiguration(Path.Combine(directory.RootPath, "candidate"));
+        Host.Hosting.Settings.NetworkSettingsRuntime baseline = new(baselineStore, ports.Takeover, ports.WindowsProxy);
+        NetworkSettingsConfiguration original = new(ClashSharpMode.RuleTakeover, "builtin-direct", false, 18371);
+        NetworkSettingsConfiguration candidate = new(ClashSharpMode.RuleTakeover, "builtin-direct", false, 18372);
+        await baseline.ApplyConfigurationAsync(original, CancellationToken.None);
+        await ports.Takeover.ApplyNetworkSettingsConfigurationAsync(candidateStore, candidate, CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => baseline.ReadConfigurationAsync(CancellationToken.None));
+
+        await baseline.RestoreConfigurationAsync(original, CancellationToken.None);
+
+        Assert.Equal(original, await baseline.ReadConfigurationAsync(CancellationToken.None));
+        Assert.Equal("127.0.0.1:18371", ports.Proxy.ProxyServer);
+        Assert.Equal(18371, baselineStore.ObserveRuntimeConfigurationIntegrity().AppliedPlan!.MixedPort);
+        Assert.Equal(18372, candidateStore.ObserveRuntimeConfigurationIntegrity().AppliedPlan!.MixedPort);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Restore_ReinstallsBaselineWhenTheCandidateIsNotObservableAndVerifiesLostReplies(bool loseReply)
+    {
+        NetworkSettingsConfiguration target = new(ClashSharpMode.Disabled, "baseline", true, 23456);
+        NetworkSettingsConfiguration? observed = null;
+        Host.Hosting.Settings.NetworkSettingsRuntime runtime = new(
+            _ => observed is null ? Task.FromException<NetworkSettingsConfiguration>(new IOException("another generation owns the core")) : Task.FromResult(observed),
+            (configuration, _) =>
+            {
+                observed = new(configuration.Mode, configuration.ProfileId, configuration.EffectiveTunEnabled, configuration.MixedPort);
+                return loseReply ? Task.FromException(new IOException("lost reply")) : Task.CompletedTask;
+            });
+        await Assert.ThrowsAsync<IOException>(() => runtime.ReadConfigurationAsync(CancellationToken.None));
+
+        await runtime.RestoreConfigurationAsync(target, CancellationToken.None);
+
+        Assert.Equal(target, await runtime.ReadConfigurationAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FailedRestore_RemainsUnresolvedUntilTheExactCapturedTargetIsObserved()
+    {
+        NetworkSettingsConfiguration target = new(ClashSharpMode.RuleTakeover, "baseline", false, 23456);
+        NetworkSettingsConfiguration observed = new(ClashSharpMode.RuleTakeover, "candidate", false, 34567);
+        Host.Hosting.Settings.NetworkSettingsRuntime runtime = new(_ => Task.FromResult(observed),
+            (_, _) => Task.FromException(new IOException("restore failed")));
+        await Assert.ThrowsAsync<AggregateException>(() => runtime.RestoreConfigurationAsync(target, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.ReadConfigurationAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.RecoverConfigurationAsync(CancellationToken.None));
+        observed = target;
+        await runtime.RecoverConfigurationAsync(CancellationToken.None);
+        Assert.Equal(target, await runtime.ReadConfigurationAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task EmptyRuntime_RequiresReleasedOwnershipAndAllowsUnownedProxyWithoutCreatingStorage()
     {
         await using DataGenerationTestDirectory directory = new();

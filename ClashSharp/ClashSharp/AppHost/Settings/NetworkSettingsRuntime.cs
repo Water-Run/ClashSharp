@@ -85,6 +85,33 @@ internal sealed class NetworkSettingsRuntime : INetworkSettingsRuntime
         _inactiveTransparentProxyPolicy = configuration.TransparentProxyEnabled;
     }
 
+    /// <summary>Reinstalls an owned baseline without requiring the intervening candidate to match this generation's manifest.</summary>
+    public async Task RestoreConfigurationAsync(NetworkSettingsConfiguration configuration, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        cancellationToken.ThrowIfCancellationRequested();
+        Exception? applicationFailure = null;
+        try { await _apply(configuration, cancellationToken).ConfigureAwait(false); }
+        catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure)) { applicationFailure = failure; }
+        try
+        {
+            if (!Matches(configuration, await _observe(CancellationToken.None).ConfigureAwait(false)))
+            {
+                throw new InvalidOperationException("The captured network baseline could not be independently verified.");
+            }
+        }
+        catch (Exception verificationFailure) when (!ExceptionGraphClassifier.IsProcessFatal(verificationFailure))
+        {
+            // Only this complete target may resolve a failed compensation; observing an
+            // unrelated candidate later must not make the old runtime usable again.
+            _unresolved = new(configuration, configuration);
+            if (applicationFailure is not null) { throw new AggregateException(applicationFailure, verificationFailure); }
+            throw;
+        }
+        _inactiveTransparentProxyPolicy = configuration.TransparentProxyEnabled;
+        _unresolved = null;
+    }
+
     private static bool Matches(NetworkSettingsConfiguration expected, NetworkSettingsConfiguration observed) =>
         expected.Mode == observed.Mode && StringComparer.Ordinal.Equals(expected.ProfileId, observed.ProfileId)
         && expected.MixedPort == observed.MixedPort && expected.EffectiveTunEnabled == observed.TransparentProxyEnabled;

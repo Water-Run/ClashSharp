@@ -17,4 +17,7 @@ internal sealed class GenerationNetworkSettingsRuntime(DataGenerationManager gen
     public Task ApplyConfigurationAsync(NetworkSettingsConfiguration configuration, CancellationToken cancellationToken) =>
         generations.ExecuteAsync<AppDataGenerationRuntime>(
             (runtime, _, token) => runtime.Network.ApplyConfigurationAsync(configuration, token), cancellationToken);
+    public Task RestoreConfigurationAsync(NetworkSettingsConfiguration configuration, CancellationToken cancellationToken) =>
+        generations.ExecuteAsync<AppDataGenerationRuntime>(
+            (runtime, _, token) => runtime.Network.RestoreConfigurationAsync(configuration, token), cancellationToken);
 }
