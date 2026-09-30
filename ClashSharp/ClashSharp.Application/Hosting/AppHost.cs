@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Startup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -9,6 +10,7 @@ public sealed class AppHost : IApplicationHost
 {
     private readonly object _syncLock = new();
     private readonly ServiceProvider _services;
+    private Task<StartupStepResult>? _startupTask;
     private Task? _stopTask;
     private Task? _disposeTask;
     private long _stopAttemptVersion;
@@ -39,14 +41,17 @@ public sealed class AppHost : IApplicationHost
     public Task<StartupStepResult> StartAsync(AppLaunchRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ThrowIfDisposed();
-        if (Interlocked.Exchange(ref _started, 1) != 0)
+        lock (_syncLock)
         {
-            throw new InvalidOperationException("AppHost can only be started once.");
-        }
+            ThrowIfDisposed();
+            if (_stopAttemptVersion != 0 || Interlocked.Exchange(ref _started, 1) != 0)
+            {
+                throw new InvalidOperationException("AppHost can only be started once and before stop is requested.");
+            }
 
-        return _services.GetRequiredService<IApplicationStartupCoordinator>()
-            .StartAsync(request, cancellationToken);
+            _startupTask = StartCoreAsync(request, cancellationToken);
+            return _startupTask;
+        }
     }
 
     /// <inheritdoc />
@@ -80,6 +85,10 @@ public sealed class AppHost : IApplicationHost
         ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
     }
 
+    private async Task<StartupStepResult> StartCoreAsync(AppLaunchRequest request, CancellationToken cancellationToken) =>
+        await _services.GetRequiredService<IApplicationStartupCoordinator>()
+            .StartAsync(request, cancellationToken).ConfigureAwait(false);
+
     private async Task StopCoreAsync(
         long attemptVersion,
         CancellationToken cancellationToken)
@@ -87,6 +96,15 @@ public sealed class AppHost : IApplicationHost
         await Task.Yield();
         try
         {
+            Task<StartupStepResult>? startup;
+            lock (_syncLock) { startup = _startupTask; }
+            if (startup is not null)
+            {
+                // The outer lifetime owns startup cancellation. Even after cancellation or a
+                // failure, accepted startup work must settle before cleanup takes its snapshot.
+                try { await startup.ConfigureAwait(false); }
+                catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception)) { }
+            }
             await _services.GetRequiredService<IApplicationShutdownCoordinator>()
                 .StopAsync(cancellationToken)
                 .ConfigureAwait(false);

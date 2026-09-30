@@ -387,8 +387,9 @@ public sealed class RepositoryTopologyTests
         string host = File.ReadAllText(hostPath);
         string startup = File.ReadAllText(startupPath);
 
-        Assert.Contains("GetRequiredService<ConnectionSamplingService>()", host, StringComparison.Ordinal);
-        Assert.Contains("GetRequiredService<TriggerScheduler>()", host, StringComparison.Ordinal);
+        Assert.Contains("RegisterParticipant(ConnectionSamplingService.Instance, order: 200)", host, StringComparison.Ordinal);
+        Assert.Contains("RegisterParticipant(new TriggerScheduler(", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetServices<IRuntimeParticipant>()", host, StringComparison.Ordinal);
         Assert.DoesNotContain("LegacyConnectionSamplingRuntimeParticipant", host, StringComparison.Ordinal);
         Assert.DoesNotContain("LegacyTriggerRuntimeParticipant", host, StringComparison.Ordinal);
         Assert.False(File.Exists(compatibilityPath));

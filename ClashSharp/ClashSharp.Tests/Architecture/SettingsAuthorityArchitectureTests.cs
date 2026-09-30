@@ -82,6 +82,12 @@ public sealed class SettingsAuthorityArchitectureTests
         Assert.Contains("Order => 140", startup, StringComparison.Ordinal);
         Assert.Contains("Order => 125", ReadApplicationSource("AppHost/Startup/InstallerTransactionStartupGate.cs"), StringComparison.Ordinal);
         Assert.Contains("Order => 150", ReadApplicationSource("AppHost/Startup/MutationRecoveryStartupStep.cs"), StringComparison.Ordinal);
+        Assert.Contains("AddDeferredStartupStep<RuntimeShutdownOwnershipStartupStep>(\"runtime-shutdown-ownership\", 145)", host, StringComparison.Ordinal);
+        string shutdownOwnership = ReadApplicationSource("AppHost/Startup/RuntimeShutdownOwnershipStartupStep.cs");
+        Assert.Contains("Order => 145", shutdownOwnership, StringComparison.Ordinal);
+        Assert.Contains("runtime.RegisterNetwork(network, intents.CreateShutdown)", shutdownOwnership, StringComparison.Ordinal);
+        Assert.Contains("GetRequiredService<RuntimeLifetimeRegistry>()", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetServices<IRuntimeParticipant>()", host, StringComparison.Ordinal);
         Assert.Contains("_credentials.ClearAll", ReadApplicationSource("Service/AppDataMaintenanceService.cs"), StringComparison.Ordinal);
     }
 

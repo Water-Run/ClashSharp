@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Supervision;
@@ -7,9 +8,14 @@ namespace ClashSharp.Service;
 
 public sealed partial class ConnectionSamplingService
 {
-    /// <summary>Shared singleton instance created once at type initialization.</summary>
+    private static readonly Lazy<ConnectionSamplingService> SharedSampling = new(ConnectionSamplingServiceFactory.CreateDefault);
+
+    /// <summary>Shared singleton instance created when the host first requests sampling.</summary>
     /// <value>A non-null <see cref="ConnectionSamplingService"/> instance.</value>
-    public static ConnectionSamplingService Instance { get; } = ConnectionSamplingServiceFactory.CreateDefault();
+    public static ConnectionSamplingService Instance => SharedSampling.Value;
+
+    /// <summary>Returns an existing sampler without constructing settings or storage during partial-startup cleanup.</summary>
+    internal static ConnectionSamplingService? GetCreatedInstance() => SharedSampling.IsValueCreated ? SharedSampling.Value : null;
 }
 
 /// <summary>Creates connection sampling services with production dependencies.</summary>

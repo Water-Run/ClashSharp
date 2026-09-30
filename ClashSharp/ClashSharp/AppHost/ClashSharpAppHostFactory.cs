@@ -39,9 +39,7 @@ internal static class ClashSharpAppHostFactory
         bool isStartupRestoreFallback = launchRequest.Arguments.Contains(
             StartupRestoreFallbackService.HelperArgument,
             StringComparison.OrdinalIgnoreCase);
-        string triggerRoot = AppDataPathService.ResolveLocalDataDirectory();
-        string triggerDatabasePath = Path.Combine(triggerRoot, "Triggers.db");
-        string legacyTriggerPath = Path.Combine(triggerRoot, "Triggers.json");
+        Lazy<string> triggerRoot = new(AppDataPathService.ResolveLocalDataDirectory);
         Guid triggerProcessEpoch = Guid.NewGuid();
         MutationAdmissionBarrier mutationAdmission = new();
         return AppHost.Build(services =>
@@ -68,7 +66,9 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<IApplicationErrorSink>(provider => new ApplicationErrorSink(
                 provider.GetRequiredService<LogStorageService>().AppendLog,
                 provider.GetRequiredService<LocalizationService>().GetString));
-            services.AddSingleton(_ => ConnectionSamplingService.Instance);
+            services.AddSingleton<RuntimeLifetimeRegistry>();
+            services.AddSingleton(provider => provider.GetRequiredService<RuntimeLifetimeRegistry>()
+                .RegisterParticipant(ConnectionSamplingService.Instance, order: 200));
             services.AddSingleton(provider =>
             {
                 // Catalog compensation can append a log while disposal drains an active operation.
@@ -155,7 +155,11 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<ApplicationActionService>());
             services.AddSingleton<SettingsRuntimeMutationAdapter>();
             services.AddSingleton<INetworkSettingsRuntime, NetworkSettingsRuntime>();
-            services.AddSingleton(_ => new SqliteTriggerRepository(triggerDatabasePath));
+            services.AddSingleton(_ =>
+            {
+                string triggerDatabasePath = Path.Combine(triggerRoot.Value, "Triggers.db");
+                return new SqliteTriggerRepository(triggerDatabasePath);
+            });
             services.AddSingleton<ITriggerRepository>(provider =>
                 provider.GetRequiredService<SqliteTriggerRepository>());
             services.AddSingleton<TriggerDefinitionStore>();
@@ -176,7 +180,7 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<TriggerFiredNotificationAdapter>());
             services.AddSingleton(provider => new TriggerMigrationCoordinator(
                 provider.GetRequiredService<SqliteTriggerRepository>(),
-                legacyTriggerPath,
+                Path.Combine(triggerRoot.Value, "Triggers.json"),
                 provider.GetRequiredService<TimeProvider>()));
             services.AddSingleton<ITriggerContextProvider>(provider =>
             {
@@ -230,43 +234,30 @@ internal static class ClashSharpAppHostFactory
                     provider.GetRequiredService<TimeProvider>(),
                     TimeSpan.FromSeconds(30)));
             services.AddSingleton<TriggerSchedulerHealthLogAdapter>();
-            services.AddSingleton(provider => new TriggerScheduler(
+            services.AddSingleton(provider => provider.GetRequiredService<RuntimeLifetimeRegistry>().RegisterParticipant(new TriggerScheduler(
                 provider.GetRequiredService<ITriggerSchedulerSettings>(),
                 provider.GetRequiredService<ITriggerSchedulerEventSource>(),
                 provider.GetRequiredService<ITriggerSchedulerClock>(),
                 provider.GetRequiredService<ITriggerSchedulerEvaluator>(),
                 provider.GetRequiredService<ITriggerLifecycleHandoff>(),
-                provider.GetRequiredService<TriggerSchedulerHealthLogAdapter>().Report));
+                provider.GetRequiredService<TriggerSchedulerHealthLogAdapter>().Report), order: 100));
             services.AddSingleton<TriggerStartupInitializer>();
             services.AddSingleton<ITriggerStartupInitializer>(provider =>
                 provider.GetRequiredService<TriggerStartupInitializer>());
             services.AddSingleton<TriggerPresentationFactory>();
-            services.AddSingleton<IRuntimeParticipant>(provider =>
-                provider.GetRequiredService<TriggerScheduler>());
-            services.AddSingleton<IRuntimeParticipant>(provider =>
-                provider.GetRequiredService<ConnectionSamplingService>());
             services.AddSingleton<IProfileSubscriptionSchedulerCatalog>(provider =>
                 new ProfileSubscriptionSchedulerCatalogAdapter(
                     provider.GetRequiredService<ProfileCatalogService>()));
-            services.AddSingleton(provider => new ProfileSubscriptionScheduler(
+            services.AddSingleton(provider => provider.GetRequiredService<RuntimeLifetimeRegistry>().RegisterParticipant(new ProfileSubscriptionScheduler(
                 provider.GetRequiredService<IProfileSubscriptionSchedulerCatalog>(),
                 provider.GetRequiredService<TimeProvider>(),
-                provider.GetRequiredService<LogStorageService>().AppendLog));
-            services.AddSingleton<IRuntimeParticipant>(provider =>
-                provider.GetRequiredService<ProfileSubscriptionScheduler>());
-            services.AddSingleton(provider =>
-            {
-                LegacyNetworkIntentSource intents =
-                    provider.GetRequiredService<LegacyNetworkIntentSource>();
-                return new RuntimeLifecycleCoordinator(
+                provider.GetRequiredService<LogStorageService>().AppendLog), order: 300));
+            services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
                     provider.GetRequiredService<MutationAdmissionBarrier>(),
-                    provider.GetRequiredService<IRuntimeShutdownNetworkCoordinator>(),
-                    intents.CreateShutdown,
-                    provider.GetServices<IRuntimeParticipant>(),
+                    provider.GetRequiredService<RuntimeLifetimeRegistry>(),
                     networkPolicy: isStartupRestoreFallback
                         ? RuntimeShutdownNetworkPolicy.PreserveCurrentState
-                        : RuntimeShutdownNetworkPolicy.ApplyConfiguredIntent);
-            });
+                        : RuntimeShutdownNetworkPolicy.ApplyConfiguredIntent));
             services.AddSingleton<IApplicationShutdownCoordinator>(provider =>
                 provider.GetRequiredService<RuntimeLifecycleCoordinator>());
             services.AddSingleton(provider => TrayCommandServiceFactory.CreateDefault(
@@ -289,6 +280,7 @@ internal static class ClashSharpAppHostFactory
                     provider.GetRequiredService<MutationAdmissionBarrier>()));
             services.AddDeferredStartupStep<InstallerTransactionStartupGate>("installer-transaction-gate", 125);
             services.AddDeferredStartupStep<ControllerCredentialStartupStep>("controller-credential", 140);
+            services.AddDeferredStartupStep<RuntimeShutdownOwnershipStartupStep>("runtime-shutdown-ownership", 145);
             services.AddDeferredStartupStep<MutationRecoveryStartupStep>("mutation-recovery", 150);
             services.AddDeferredStartupStep<StartupRestoreFallbackStep>("startup-restore-fallback", 200);
             services.AddDeferredStartupStep<ProxyRecoveryStartupStep>("proxy-recovery", 300);

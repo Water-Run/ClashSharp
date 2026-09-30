@@ -44,7 +44,9 @@ internal static class NetworkTakeoverServiceFactory
     /// <summary>Best-effort final accounting is bounded and cannot prevent network ownership release.</summary>
     private static async Task FlushTrafficBeforeTransitionAsync(CancellationToken cancellationToken)
     {
-        if (!MihomoCoreService.Instance.IsRunning && !MihomoServiceManager.Instance.GetLatestStatus().HasRunningChild)
+        ConnectionSamplingService? sampling = ConnectionSamplingService.GetCreatedInstance();
+        if (sampling is null
+            || (!MihomoCoreService.Instance.IsRunning && !MihomoServiceManager.Instance.GetLatestStatus().HasRunningChild))
         {
             return;
         }
@@ -54,7 +56,7 @@ internal static class NetworkTakeoverServiceFactory
         try
         {
             await RuntimeTrafficRateService.Instance.RefreshAsync(deadline.Token).ConfigureAwait(false);
-            await ConnectionSamplingService.Instance.FlushAsync(deadline.Token).ConfigureAwait(false);
+            await sampling.FlushAsync(deadline.Token).ConfigureAwait(false);
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))

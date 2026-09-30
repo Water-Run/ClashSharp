@@ -71,9 +71,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
 
     private readonly object _syncLock = new();
     private readonly MutationAdmissionBarrier _admissionBarrier;
-    private readonly IRuntimeShutdownNetworkCoordinator _network;
-    private readonly Func<NetworkIntent> _shutdownIntentFactory;
-    private readonly IReadOnlyList<IRuntimeParticipant> _participants;
+    private readonly RuntimeLifetimeRegistry _runtime;
     private readonly TimeSpan _quiescenceTimeout;
     private readonly RuntimeShutdownNetworkPolicy _networkPolicy;
     private Task<RuntimeShutdownResult>? _shutdownTask;
@@ -88,37 +86,52 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         IEnumerable<IRuntimeParticipant> participants,
         TimeSpan? quiescenceTimeout = null,
         RuntimeShutdownNetworkPolicy networkPolicy = RuntimeShutdownNetworkPolicy.ApplyConfiguredIntent)
+        : this(admissionBarrier, CreateRegistry(network, shutdownIntentFactory, participants), quiescenceTimeout, networkPolicy)
+    {
+    }
+
+    /// <summary>Creates shutdown coordination without constructing services belonging to later startup steps.</summary>
+    /// <param name="admissionBarrier">Shared mutation admission closed before runtime cleanup.</param>
+    /// <param name="runtime">Services registered as they are constructed; each shutdown attempt captures the current set.</param>
+    /// <param name="quiescenceTimeout">Optional bounded drain and recovery timeout.</param>
+    /// <param name="networkPolicy">Whether normal exit applies the registered network intent.</param>
+    public RuntimeLifecycleCoordinator(
+        MutationAdmissionBarrier admissionBarrier,
+        RuntimeLifetimeRegistry runtime,
+        TimeSpan? quiescenceTimeout = null,
+        RuntimeShutdownNetworkPolicy networkPolicy = RuntimeShutdownNetworkPolicy.ApplyConfiguredIntent)
     {
         _admissionBarrier = admissionBarrier ?? throw new ArgumentNullException(nameof(admissionBarrier));
-        _network = network ?? throw new ArgumentNullException(nameof(network));
-        _shutdownIntentFactory = shutdownIntentFactory ?? throw new ArgumentNullException(nameof(shutdownIntentFactory));
+        _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         if (!Enum.IsDefined(networkPolicy))
         {
             throw new ArgumentOutOfRangeException(nameof(networkPolicy));
         }
 
         _networkPolicy = networkPolicy;
-        ArgumentNullException.ThrowIfNull(participants);
-        _participants = participants.ToArray();
-        if (_participants.Any(static participant => participant is null))
-        {
-            throw new ArgumentException("Runtime participants cannot contain null entries.", nameof(participants));
-        }
-
-        string? duplicateName = _participants
-            .GroupBy(static participant => participant.Name, StringComparer.Ordinal)
-            .FirstOrDefault(static group => string.IsNullOrWhiteSpace(group.Key) || group.Count() > 1)
-            ?.Key;
-        if (duplicateName is not null || _participants.Any(static participant => string.IsNullOrWhiteSpace(participant.Name)))
-        {
-            throw new ArgumentException("Runtime participant names must be non-empty and unique.", nameof(participants));
-        }
-
         _quiescenceTimeout = quiescenceTimeout ?? DefaultQuiescenceTimeout;
         if (_quiescenceTimeout <= TimeSpan.Zero || _quiescenceTimeout == Timeout.InfiniteTimeSpan)
         {
             throw new ArgumentOutOfRangeException(nameof(quiescenceTimeout));
         }
+    }
+
+    private static RuntimeLifetimeRegistry CreateRegistry(IRuntimeShutdownNetworkCoordinator network,
+        Func<NetworkIntent> shutdownIntentFactory, IEnumerable<IRuntimeParticipant> participants)
+    {
+        ArgumentNullException.ThrowIfNull(participants);
+        RuntimeLifetimeRegistry registry = new();
+        registry.RegisterNetwork(network, shutdownIntentFactory);
+        HashSet<string> names = new(StringComparer.Ordinal);
+        foreach (IRuntimeParticipant participant in participants)
+        {
+            if (participant is null || string.IsNullOrWhiteSpace(participant.Name) || !names.Add(participant.Name))
+            {
+                throw new ArgumentException("Runtime participants must be non-null with non-empty unique names.", nameof(participants));
+            }
+            registry.RegisterParticipant(participant);
+        }
+        return registry;
     }
 
     /// <summary>
@@ -174,7 +187,9 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         RuntimeShutdownResult result;
         try
         {
-            result = await ShutdownCoreAsync(disableNetwork, cancellationToken).ConfigureAwait(false);
+            using RuntimeLifetimeRegistry.ShutdownCapture runtime = _runtime.CaptureForShutdown();
+            result = await ShutdownCoreAsync(runtime.Snapshot, disableNetwork, cancellationToken).ConfigureAwait(false);
+            if (result.Outcome == RuntimeShutdownOutcome.PreparedForHostDisposal) { runtime.Commit(); }
         }
         catch
         {
@@ -201,7 +216,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         }
     }
 
-    private async Task<RuntimeShutdownResult> ShutdownCoreAsync(bool disableNetwork, CancellationToken cancellationToken)
+    private async Task<RuntimeShutdownResult> ShutdownCoreAsync(RuntimeLifetimeSnapshot runtime, bool disableNetwork, CancellationToken cancellationToken)
     {
         using CancellationTokenSource transitionDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         transitionDeadline.CancelAfter(_quiescenceTimeout);
@@ -210,7 +225,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             switch (_admissionBarrier.State)
             {
                 case MutationAdmissionState.Open:
-                    RuntimeShutdownResult result = await ShutdownOpenStateAsync(disableNetwork, cancellationToken).ConfigureAwait(false);
+                    RuntimeShutdownResult result = await ShutdownOpenStateAsync(runtime, disableNetwork, cancellationToken).ConfigureAwait(false);
                     if (!string.Equals(result.ErrorCode, "mutation-admission-busy", StringComparison.Ordinal))
                     {
                         return result;
@@ -221,12 +236,12 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                     break;
                 case MutationAdmissionState.RecoveryOnly:
                 case MutationAdmissionState.RecoveryClosing:
-                    RuntimeShutdownResult recovery = await ShutdownRecoveryStateAsync(cancellationToken).ConfigureAwait(false);
+                    RuntimeShutdownResult recovery = await ShutdownRecoveryStateAsync(runtime, cancellationToken).ConfigureAwait(false);
                     return disableNetwork
                         ? recovery with { ErrorCode = recovery.ErrorCode ?? "data-removal-network-unverified" }
                         : recovery;
                 case MutationAdmissionState.ClosedForShutdown:
-                    RuntimeShutdownResult closed = await ShutdownClosedStateAsync().ConfigureAwait(false);
+                    RuntimeShutdownResult closed = await ShutdownClosedStateAsync(runtime).ConfigureAwait(false);
                     return disableNetwork
                         ? closed with { ErrorCode = closed.ErrorCode ?? "data-removal-network-unverified" }
                         : closed;
@@ -250,7 +265,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         }
     }
 
-    private async Task<RuntimeShutdownResult> ShutdownOpenStateAsync(bool disableNetwork, CancellationToken callerToken)
+    private async Task<RuntimeShutdownResult> ShutdownOpenStateAsync(RuntimeLifetimeSnapshot runtime, bool disableNetwork, CancellationToken callerToken)
     {
         using CancellationTokenSource quiescenceDeadline = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
         quiescenceDeadline.CancelAfter(_quiescenceTimeout);
@@ -280,7 +295,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             string? quiescenceError = null;
             try
             {
-                await session.QuiesceAsync(_participants, quiescenceDeadline.Token).ConfigureAwait(false);
+                await session.QuiesceAsync(runtime.Participants, quiescenceDeadline.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException exception) when (
                 !ExceptionGraphClassifier.IsProcessFatal(exception))
@@ -304,25 +319,30 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                 return await RestoreAfterAbortAsync(session, quiescenceError).ConfigureAwait(false);
             }
 
-            if (_networkPolicy == RuntimeShutdownNetworkPolicy.PreserveCurrentState && !disableNetwork)
+            if ((_networkPolicy == RuntimeShutdownNetworkPolicy.PreserveCurrentState || runtime.Network is null) && !disableNetwork)
             {
                 if (callerToken.IsCancellationRequested)
                 {
                     return await RestoreAfterAbortAsync(session, "shutdown-cancelled").ConfigureAwait(false);
                 }
 
-                return await CommitShutdownAndStopAsync(admissionLease, true, null).ConfigureAwait(false);
+                return await CommitShutdownAndStopAsync(runtime, admissionLease, true, null).ConfigureAwait(false);
+            }
+
+            if (runtime.Network is null)
+            {
+                return await RestoreAfterAbortAsync(session, "shutdown-network-uninitialized").ConfigureAwait(false);
             }
 
             MutationResult<NetworkTransitionResult> networkResult;
             try
             {
-                NetworkIntent intent = _shutdownIntentFactory();
+                NetworkIntent intent = runtime.Network.CreateIntent();
                 if (disableNetwork)
                 {
                     intent = NetworkIntent.Shutdown(ClashSharpMode.Disabled, false, intent.MixedPort);
                 }
-                networkResult = await _network
+                networkResult = await runtime.Network.Coordinator
                     .ApplyShutdownAsync(intent, admissionLease, callerToken)
                     .ConfigureAwait(false);
             }
@@ -351,6 +371,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             }
 
             return await CommitShutdownAndStopAsync(
+                runtime,
                 admissionLease,
                 networkResult.Outcome == MutationOutcome.Succeeded,
                 networkResult.ErrorCode).ConfigureAwait(false);
@@ -358,12 +379,13 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
     }
 
     private async Task<RuntimeShutdownResult> CommitShutdownAndStopAsync(
+        RuntimeLifetimeSnapshot runtime,
         MutationAdmissionLease admissionLease,
         bool cleanNetworkCommit,
         string? errorCode)
     {
         admissionLease.CommitShutdown();
-        IReadOnlyList<string> stopFailures = await StopWithRecoveryDeadlineAsync().ConfigureAwait(false);
+        IReadOnlyList<string> stopFailures = await StopWithRecoveryDeadlineAsync(runtime.Participants).ConfigureAwait(false);
         return cleanNetworkCommit && stopFailures.Count == 0
             ? CreateResult(RuntimeShutdownOutcome.PreparedForHostDisposal, null)
             : CreateResult(
@@ -372,7 +394,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
                 stopFailures);
     }
 
-    private async Task<RuntimeShutdownResult> ShutdownRecoveryStateAsync(CancellationToken cancellationToken)
+    private async Task<RuntimeShutdownResult> ShutdownRecoveryStateAsync(RuntimeLifetimeSnapshot runtime, CancellationToken cancellationToken)
     {
         try
         {
@@ -384,10 +406,10 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             return CreateResult(RuntimeShutdownOutcome.Aborted, "recovery-shutdown-cancelled");
         }
 
-        return await ShutdownClosedStateAsync().ConfigureAwait(false);
+        return await ShutdownClosedStateAsync(runtime).ConfigureAwait(false);
     }
 
-    private async Task<RuntimeShutdownResult> ShutdownClosedStateAsync()
+    private async Task<RuntimeShutdownResult> ShutdownClosedStateAsync(RuntimeLifetimeSnapshot runtime)
     {
         QuiescenceSession session = new();
         List<string> degraded = [];
@@ -395,7 +417,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         {
             try
             {
-                await session.QuiesceAsync(_participants, deadline.Token).ConfigureAwait(false);
+                await session.QuiesceAsync(runtime.Participants, deadline.Token).ConfigureAwait(false);
             }
             catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
             {
@@ -403,7 +425,7 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
             }
         }
 
-        IReadOnlyList<string> stopFailures = await StopWithRecoveryDeadlineAsync().ConfigureAwait(false);
+        IReadOnlyList<string> stopFailures = await StopWithRecoveryDeadlineAsync(runtime.Participants).ConfigureAwait(false);
         degraded.AddRange(stopFailures);
         return degraded.Count == 0
             ? CreateResult(RuntimeShutdownOutcome.PreparedForHostDisposal, null)
@@ -447,14 +469,14 @@ public sealed class RuntimeLifecycleCoordinator : IApplicationShutdownCoordinato
         ExceptionDispatchInfo.Capture(processFatalFailure).Throw();
     }
 
-    private async Task<IReadOnlyList<string>> StopWithRecoveryDeadlineAsync()
+    private async Task<IReadOnlyList<string>> StopWithRecoveryDeadlineAsync(IReadOnlyList<IRuntimeParticipant> participants)
     {
         using CancellationTokenSource recoveryDeadline = new(_quiescenceTimeout);
         List<string> failures = [];
         List<Exception> processFatalFailures = [];
-        for (int index = _participants.Count - 1; index >= 0; index--)
+        for (int index = participants.Count - 1; index >= 0; index--)
         {
-            IRuntimeParticipant participant = _participants[index];
+            IRuntimeParticipant participant = participants[index];
             try
             {
                 await participant.StopAsync(recoveryDeadline.Token).ConfigureAwait(false);

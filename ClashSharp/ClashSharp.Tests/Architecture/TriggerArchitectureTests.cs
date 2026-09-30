@@ -257,7 +257,7 @@ public sealed class TriggerArchitectureTests
             "new TriggerLifecycleHandoffCoordinator(",
             "AddSingleton<ITriggerLifecycleHandoff>",
             "new TriggerScheduler(",
-            "GetRequiredService<TriggerScheduler>()",
+            "GetRequiredService<RuntimeLifetimeRegistry>().RegisterParticipant(new TriggerScheduler(",
             "AddSingleton<ITriggerStartupInitializer>",
         ];
 
