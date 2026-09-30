@@ -6,6 +6,28 @@ namespace ClashSharp.Tests.Unit.Startup;
 public sealed class StartupConflictSnapshotTests
 {
     [Fact]
+    public void UncapturedProbe_DoesNotAuthorizeStartupTakeover()
+    {
+        StartupConflictSnapshot snapshot = new();
+        Assert.False(snapshot.IsCaptured);
+        Assert.True(snapshot.HasBlockingConflicts(tunRequested: false));
+        snapshot.Capture([]);
+        Assert.True(snapshot.IsCaptured);
+        Assert.False(snapshot.HasBlockingConflicts(tunRequested: true));
+    }
+
+    [Fact]
+    public void CapturedIssues_DoNotChangeWhenTheProbeCollectionIsModified()
+    {
+        List<StartupConflictIssue> issues = [CreateIssue(StartupConflictKind.MixedPortOccupied)];
+        StartupConflictSnapshot snapshot = new();
+        snapshot.Capture(issues);
+        issues.Clear();
+        Assert.Single(snapshot.Issues);
+        Assert.True(snapshot.HasBlockingConflicts(tunRequested: false));
+    }
+
+    [Fact]
     public void ActiveTunInterface_IsAdvisoryWhenTunIsNotRequested()
     {
         StartupConflictSnapshot snapshot = new();

@@ -46,7 +46,7 @@ public sealed partial class ProductionDataGenerationTests
         Dictionary<string, object> legacy = new() { ["MixedPort"] = 54321 };
         SettingsService settings = new(legacy);
         SamplingFacade sampling = new(fixture.Manager);
-        StartupStep step = fixture.CreateStartupStep(lifetime, sampling, settings);
+        IStartupStep step = fixture.CreateStartupStep(lifetime, sampling, settings);
         Assert.False(Directory.Exists(directory.RootPath));
 
         StartupStepResult result = await step.ExecuteAsync(new AppLaunchRequest(""), CancellationToken.None);
@@ -82,7 +82,7 @@ public sealed partial class ProductionDataGenerationTests
         ConfigureRealRuntime(fixture, new StartupPlatform(), new AppearanceSurface(), new NetworkSurface());
         Dictionary<string, object> legacy = new() { ["NotificationEnabled"] = true, ["MixedPort"] = 54321 };
         SettingsService settings = new(legacy);
-        StartupStep step = fixture.CreateStartupStep(new RuntimeLifetimeRegistry(), new SamplingFacade(fixture.Manager), settings);
+        IStartupStep step = fixture.CreateStartupStep(new RuntimeLifetimeRegistry(), new SamplingFacade(fixture.Manager), settings);
         Assert.Equal(StartupStepOutcome.Succeeded, (await step.ExecuteAsync(new AppLaunchRequest(""), CancellationToken.None)).Outcome);
         List<string> changes = [];
         settings.SettingChanged += (_, change) => changes.Add(change.Key);
@@ -172,7 +172,7 @@ public sealed partial class ProductionDataGenerationTests
         IOException failedObserver = new("observer unavailable");
         fixture.Authority.StateChanged += _ => throw failedObserver;
         SettingsService settings = new(new Dictionary<string, object>());
-        Assert.Equal(StartupStepOutcome.Succeeded, (await fixture.CreateStartupStep(new RuntimeLifetimeRegistry(),
+        Assert.Equal(StartupStepOutcome.Warning, (await fixture.CreateStartupStep(new RuntimeLifetimeRegistry(),
             new SamplingFacade(fixture.Manager), settings).ExecuteAsync(new AppLaunchRequest(""), CancellationToken.None)).Outcome);
         List<string> observed = [];
         settings.SettingChanged += (_, change) => observed.Add(change.Key);
@@ -191,10 +191,29 @@ public sealed partial class ProductionDataGenerationTests
 
     private sealed partial class Fixture
     {
-        public StartupStep CreateStartupStep(RuntimeLifetimeRegistry lifetime, SamplingFacade sampling, SettingsService settings) =>
+        public IStartupStep CreateStartupStep(RuntimeLifetimeRegistry lifetime, SamplingFacade sampling, SettingsService settings) =>
+            new StartupSequence(CreateDataOpenStep(lifetime, sampling, settings));
+
+        public StartupStep CreateDataOpenStep(RuntimeLifetimeRegistry lifetime, SamplingFacade sampling, SettingsService settings) =>
             new(_bootstrap, Manager, Admission, lifetime, sampling, Authority, settings,
                 new ClashSharpUi::ClashSharp.Hosting.Data.GenerationReplacementStartupRecovery(
                     new ClashSharpUi::ClashSharp.Hosting.Data.FileGenerationReplacementJournal(_directory.RootPath), _directory.Store, Manager, Admission));
+    }
+
+    private sealed class StartupSequence(StartupStep data) : IStartupStep
+    {
+        public string Name => data.Name;
+        public int Order => data.Order;
+
+        public async Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
+        {
+            StartupStepResult opened = await data.ExecuteAsync(request, cancellationToken);
+            if (opened.Outcome is StartupStepOutcome.Fatal or StartupStepOutcome.ExitRequested) { return opened; }
+            ClashSharpUi::ClashSharp.Hosting.Startup.StartupConflictSnapshot conflicts = new();
+            conflicts.Capture([]);
+            return await new ClashSharpUi::ClashSharp.Hosting.Startup.GenerationRuntimeActivationStartupStep(
+                data, conflicts, (_, _) => Task.CompletedTask).ExecuteAsync(request, cancellationToken);
+        }
     }
 
     private sealed class StartupPlatform : StartupTaskProvider, StartupTask, StartupLog

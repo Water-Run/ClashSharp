@@ -10,6 +10,7 @@ using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Hosting.Settings;
+using ClashSharp.Model;
 using ClashSharp.Model.Triggers;
 using ClashSharp.Service;
 using ClashSharp.Settings;
@@ -39,6 +40,7 @@ internal sealed partial class AppDataGenerationRuntime(
 {
     private readonly SemaphoreSlim _startupGate = new(1, 1);
     private bool _started;
+    private bool _startupPrepared;
     private bool _replacementPrepared;
     private readonly List<TriggerLifecycleHandoffIdentity> _pendingReleases = [];
 
@@ -55,24 +57,65 @@ internal sealed partial class AppDataGenerationRuntime(
     public bool IsExecutionPublished => publication.IsPublished;
     public GenerationExternalStateRecovery ExternalState { get; } = recovery;
 
-    public async Task<StartupStepResult> InitializeAdmittedAsync(MutationAdmissionLease lease, CancellationToken cancellationToken)
+    /// <summary>Applies non-network startup settings while all execution remains held for the startup policy decision.</summary>
+    public async Task<StartupStepResult> PrepareStartupAdmittedAsync(MutationAdmissionLease lease, CancellationToken cancellationToken)
+    {
+        admission.EnsureActiveExclusiveLease(lease);
+        await _startupGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { return await PrepareStartupCoreAsync(lease, cancellationToken).ConfigureAwait(false); }
+        finally { _startupGate.Release(); }
+    }
+
+    private async Task<StartupStepResult> PrepareStartupCoreAsync(MutationAdmissionLease lease, CancellationToken cancellationToken)
+    {
+        if (_startupPrepared) { return StartupStepResult.Succeeded(); }
+        SettingsAuthorityResult prepared = await Repositories.Session.PrepareStartupAdmittedAsync(Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
+        if (!prepared.IsSucceeded) { return StartupStepResult.Fatal(prepared.Code ?? "settings.startup.prepare_failed"); }
+        SettingsGenerationContext context = (SettingsGenerationContext)Repositories.GetService(typeof(SettingsGenerationContext))!;
+        await TriggerSettings.Scheduler.StartAsync(cancellationToken).ConfigureAwait(false);
+        foreach (SettingApplicationKind kind in new[] { SettingApplicationKind.Internal, SettingApplicationKind.Appearance, SettingApplicationKind.StartupTask })
+        {
+            if (exitRequested()) { return StartupStepResult.ExitRequested(); }
+            foreach (SettingsApplicationBatch batch in Repositories.Session.Snapshot.PendingApplications.Where(batch => batch.ApplicationKind == kind).ToArray())
+            {
+                SettingsAuthorityResult applied = await Repositories.Session.ApplyBatchAdmittedAsync(
+                    batch.BatchId, batch.AttemptId, context.Participants[kind], SettingsApplicationPhase.Startup, lease, cancellationToken).ConfigureAwait(false);
+                if (!applied.IsSucceeded) { return StartupStepResult.Fatal(applied.Code ?? "settings.startup.application_failed"); }
+            }
+        }
+        _startupPrepared = true;
+        return StartupStepResult.Succeeded();
+    }
+
+    public Task<StartupStepResult> InitializeAdmittedAsync(MutationAdmissionLease lease, CancellationToken cancellationToken) =>
+        InitializeAdmittedAsync(lease, applyNetwork: true, startupMode: null, cancellationToken);
+
+    /// <summary>Finishes startup only after conflict checks and the configured startup policy have been resolved.</summary>
+    public async Task<StartupStepResult> InitializeAdmittedAsync(MutationAdmissionLease lease, bool applyNetwork,
+        ClashSharpMode? startupMode, CancellationToken cancellationToken)
     {
         admission.EnsureActiveExclusiveLease(lease);
         await _startupGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (_started) { return StartupStepResult.Succeeded(); }
-            SettingsAuthorityResult prepared = await Repositories.Session.PrepareStartupAdmittedAsync(Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
-            if (!prepared.IsSucceeded) { return StartupStepResult.Fatal(prepared.Code ?? "settings.startup.prepare_failed"); }
+            StartupStepResult prepared = await PrepareStartupCoreAsync(lease, cancellationToken).ConfigureAwait(false);
+            if (prepared.Outcome is StartupStepOutcome.Fatal or StartupStepOutcome.ExitRequested) { return prepared; }
+            if (applyNetwork && startupMode is { } mode)
+            {
+                SettingDefinition definition = SettingsRegistry.Default.Get(SettingsRegistry.Keys.CurrentMode.Value);
+                SettingsAuthorityResult selected = await Repositories.Session.ChangeAdmittedAsync(
+                    [new(definition.Key, definition.NormalizeValue(mode).Value!)], Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
+                if (!selected.IsSucceeded) { return StartupStepResult.Fatal(selected.Code ?? "settings.startup.mode_failed"); }
+            }
             SettingsGenerationContext context = (SettingsGenerationContext)Repositories.GetService(typeof(SettingsGenerationContext))!;
-            await TriggerSettings.Scheduler.StartAsync(cancellationToken).ConfigureAwait(false);
-            SettingApplicationKind[] order = [SettingApplicationKind.Internal, SettingApplicationKind.Appearance,
-                SettingApplicationKind.StartupTask, SettingApplicationKind.Network, SettingApplicationKind.Sampling, SettingApplicationKind.Triggers];
-            string? warning = null;
+            SettingApplicationKind[] order = [SettingApplicationKind.Network, SettingApplicationKind.Sampling, SettingApplicationKind.Triggers];
+            string? warning = applyNetwork ? null : "startup-network-conflicts-pending";
             foreach (SettingApplicationKind kind in order)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (exitRequested()) { return StartupStepResult.ExitRequested(); }
+                if (kind == SettingApplicationKind.Network && !applyNetwork) { continue; }
                 if (kind == SettingApplicationKind.Triggers)
                 {
                     TriggerPersistenceResult<TriggerDefinitionCatalog> catalog = await Definitions.ReadAsync(cancellationToken).ConfigureAwait(false);
@@ -88,7 +131,7 @@ internal sealed partial class AppDataGenerationRuntime(
                     {
                         return StartupStepResult.ExitRequested();
                     }
-                    warning = recovered.FirstOrDefault(result => result.DiagnosticCode is not null)?.DiagnosticCode;
+                    warning ??= recovered.FirstOrDefault(result => result.DiagnosticCode is not null)?.DiagnosticCode;
                     await TriggerSettings.Scheduler.StartAsync(cancellationToken).ConfigureAwait(false);
                 }
                 // An outbox action may have changed or completed an earlier batch. Always

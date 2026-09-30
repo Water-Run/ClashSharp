@@ -245,7 +245,11 @@ internal static class ClashSharpAppHostFactory
             services.AddDeferredStartupStep<ProxyRecoveryStartupStep>("proxy-recovery", 300);
             services.AddDeferredStartupStep<AppSettingsAuditStartupStep>("settings-audit", 400);
             services.AddDeferredStartupStep<StartupConflictProbeStep>("startup-conflict-probe", 425);
-            services.AddDeferredStartupStep<StartupNetworkBehaviorStep>("startup-network-behavior", 450);
+            services.AddSingleton(provider => new GenerationRuntimeActivationStartupStep(
+                provider.GetRequiredService<DataGenerationStartupStep>(),
+                provider.GetRequiredService<StartupConflictSnapshot>(),
+                provider.GetRequiredService<ApplicationActionService>().PublishProxyModeAppliedAsync));
+            services.AddDeferredStartupStep<GenerationRuntimeActivationStartupStep>("startup-network-behavior", 450);
 
             services.AddDeferredStartupStep<WindowShellStartupStep>("window-shell", 600);
             services.AddDeferredStartupStep<ConnectionSamplingStartupStep>("connection-sampling", 700);

@@ -11,6 +11,7 @@ internal sealed class StartupConflictSnapshot
     public IReadOnlyList<StartupConflictIssue> Issues { get; private set; } = [];
 
     public bool ProbeFailed { get; private set; }
+    public bool IsCaptured { get; private set; }
 
     /// <summary>
     /// Returns whether the captured conditions must prevent the requested startup transition.
@@ -19,7 +20,7 @@ internal sealed class StartupConflictSnapshot
     /// </summary>
     public bool HasBlockingConflicts(bool tunRequested)
     {
-        return ProbeFailed
+        return !IsCaptured || ProbeFailed
             || Issues.Any(issue =>
                 issue.Kind != StartupConflictKind.ActiveTunInterface || tunRequested);
     }
@@ -27,13 +28,15 @@ internal sealed class StartupConflictSnapshot
     public void Capture(IReadOnlyList<StartupConflictIssue> issues)
     {
         ArgumentNullException.ThrowIfNull(issues);
-        Issues = issues;
+        Issues = Array.AsReadOnly(issues.ToArray());
         ProbeFailed = false;
+        IsCaptured = true;
     }
 
     public void CaptureFailure()
     {
         Issues = [];
         ProbeFailed = true;
+        IsCaptured = true;
     }
 }

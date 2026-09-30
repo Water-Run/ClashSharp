@@ -365,7 +365,8 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             && serviceStatus.IsInstalled
             && serviceStatus.IsRunning;
         bool coreRunning = appCoreRunning || serviceCoreRunning;
-        CoreConfigurationObservation configuration = ObserveConfiguration(coreRunning);
+        CoreConfigurationObservation configuration = ObserveConfiguration(coreRunning,
+            !appCoreRunning && appCoreOwnershipKnown && serviceStatus.HasReleasedChildOwnership);
         bool singleOwner = !(appCoreRunning && serviceCoreRunning);
         bool ownerMatchesConfiguration = !coreRunning
             || (appCoreRunning && !configuration.TransparentProxyEnabled)
@@ -388,7 +389,7 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         return new ObservedNetworkState(snapshot, proxy.ProxyServer);
     }
 
-    private CoreConfigurationObservation ObserveConfiguration(bool coreRunning)
+    private CoreConfigurationObservation ObserveConfiguration(bool coreRunning, bool ownersReleased)
     {
         RuntimeConfigurationIntegrityObservation integrity =
             _configuration.ObserveRuntimeConfigurationIntegrity();
@@ -410,6 +411,12 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         }
 
         bool planRequiresOwner = plan.Mode != ClashSharpMode.Disabled;
+        if (planRequiresOwner && ownersReleased && integrity.AppliedGeneration is > 0 && integrity.AppliedContentHash is not null)
+        {
+            // Startup proxy recovery must be able to release a stranded owned proxy after
+            // a reboot, even though the last saved activation plan still describes a running core.
+            return new CoreConfigurationObservation(ClashSharpMode.Disabled, plan.MixedPort, false, true);
+        }
         if (planRequiresOwner != coreRunning
             || !StringComparer.Ordinal.Equals(plan.ProfileId, _settings.ActiveProfileId))
         {

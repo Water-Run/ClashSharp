@@ -58,7 +58,23 @@ public sealed partial class NetworkTakeoverService
                 return new(ClashSharpMode.Disabled, SettingsRegistry.Default.Get(SettingsRegistry.Keys.ActiveProfileId.Value).DefaultValue.Get<string>(),
                     false, SettingsRegistry.Default.Get(SettingsRegistry.Keys.MixedPort.Value).SafeFallback.Get<int>());
             }
-            if (!NetworkSettingsOwnerMatches(integrity, service) || integrity.AppliedGeneration is not long generation || generation < 1 || integrity.AppliedContentHash is null
+            if (integrity.AppliedGeneration is not long generation || generation < 1 || integrity.AppliedContentHash is null)
+            {
+                throw new InvalidOperationException("The stored configuration has no verified generation identity.");
+            }
+            // A saved active configuration may outlive its process (for example after a reboot).
+            // Independently released owners establish an inactive baseline without rewriting preferences
+            // or pretending the stopped core is still applying the saved activation plan.
+            if (plan.Mode != ClashSharpMode.Disabled && NetworkSettingsOwnersReleased(service) && readProxy().HasReleasedOwnership)
+            {
+                service = await _mihomoService.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+                if (!NetworkSettingsOwnersReleased(service) || !readProxy().HasReleasedOwnership || readIntegrity() != integrity)
+                {
+                    throw new InvalidOperationException("The inactive network baseline changed during startup observation.");
+                }
+                return new(ClashSharpMode.Disabled, plan.ProfileId, false, plan.MixedPort);
+            }
+            if (!NetworkSettingsOwnerMatches(integrity, service)
                 || plan.Mode != ClashSharpMode.Disabled && !await _readiness.MatchesRuntimeConfigurationAsync(plan,
                     generation, integrity.AppliedContentHash, service, cancellationToken).ConfigureAwait(false))
             {
@@ -83,7 +99,7 @@ public sealed partial class NetworkTakeoverService
     {
         RuntimeConfigurationActivationPlan plan = integrity.AppliedPlan!;
         return plan.Mode == ClashSharpMode.Disabled
-            ? !_core.IsRunning && _core.IsOwnershipKnown && service.HasReleasedChildOwnership
+            ? NetworkSettingsOwnersReleased(service)
             : plan.TunEnabled
                 ? !_core.IsRunning && _core.IsOwnershipKnown && service.IsKnown && service.IsReady
                     && service.ServiceSessionId is Guid session && session != Guid.Empty
@@ -92,4 +108,7 @@ public sealed partial class NetworkTakeoverService
                     && StringComparer.Ordinal.Equals(service.ActiveConfigurationHash, integrity.AppliedContentHash)
                 : _core.IsRunning && _core.IsOwnershipKnown && service.HasReleasedChildOwnership;
     }
+
+    private bool NetworkSettingsOwnersReleased(MihomoServiceStatus service) =>
+        !_core.IsRunning && _core.IsOwnershipKnown && service.HasReleasedChildOwnership;
 }

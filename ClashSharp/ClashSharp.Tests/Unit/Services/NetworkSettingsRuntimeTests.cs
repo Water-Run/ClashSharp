@@ -14,6 +14,52 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class NetworkSettingsRuntimeTests
 {
     [Fact]
+    public async Task ColdStartup_SavedActiveConfigurationWithReleasedOwnersCanResumeWithoutLegacySettings()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        NativePorts ports = new();
+        var configuration = CreateConfiguration(directory.RootPath);
+        NetworkSettingsConfiguration target = new(ClashSharpMode.RuleTakeover, "builtin-direct", false, 18381);
+        await ports.Takeover.ApplyNetworkSettingsConfigurationAsync(configuration, target, CancellationToken.None);
+        var before = configuration.ObserveRuntimeConfigurationIntegrity();
+        ports.CoreRunning = false;
+        ports.Proxy = new(false, string.Empty);
+        int writes = ports.Writes;
+        Host.Hosting.Settings.NetworkSettingsRuntime reopened = new(configuration, ports.Takeover, ports.WindowsProxy);
+
+        var inactive = await reopened.ReadConfigurationAsync(CancellationToken.None);
+
+        Assert.Equal(ClashSharpMode.Disabled, inactive.Mode);
+        Assert.Equal(target.ProfileId, inactive.ProfileId);
+        Assert.Equal(target.MixedPort, inactive.MixedPort);
+        Assert.Equal(before, configuration.ObserveRuntimeConfigurationIntegrity());
+        Assert.Equal(writes, ports.Writes);
+        await reopened.ApplyConfigurationAsync(target, CancellationToken.None);
+        Assert.Equal(target, await reopened.ReadConfigurationAsync(CancellationToken.None));
+        Assert.True(ports.CoreRunning);
+    }
+
+    [Theory]
+    [InlineData("unknown-core")]
+    [InlineData("unknown-service")]
+    [InlineData("owned-proxy")]
+    [InlineData("owner-returned")]
+    public async Task ColdStartup_IncompleteOrChangingReleaseEvidenceNeverClaimsAnInactiveBaseline(string failure)
+    {
+        NativePorts ports = new();
+        RuntimeConfigurationIntegrityObservation integrity = new(true,
+            new(ClashSharpMode.RuleTakeover, false, 18382, "builtin-direct"), 7, new string('a', 64));
+        if (failure == "unknown-core") { ports.OwnerKnown = false; }
+        if (failure == "unknown-service") { ports.ServiceStatus = Host.Model.MihomoServiceStatus.Unknown("unavailable"); }
+        if (failure == "owned-proxy") { ports.Proxy = new(true, "127.0.0.1:18382"); }
+        if (failure == "owner-returned") { ports.OnServiceRead = count => { if (count == 2) { ports.CoreRunning = true; } }; }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ports.Takeover.ObserveNetworkSettingsAsync(
+            () => integrity, ports.WindowsProxy.ObserveOwnership, CancellationToken.None));
+        Assert.Equal(0, ports.Writes);
+    }
+
+    [Fact]
     public async Task Restore_UsesTheOriginalConfigurationStoreAfterAnotherDirectoryTakesOver()
     {
         await using DataGenerationTestDirectory directory = new();
@@ -479,6 +525,8 @@ public sealed class NetworkSettingsRuntimeTests
         public string? LastReadinessHash { get; private set; }
         public int ReadinessCalls { get; private set; }
         public Exception? ReadinessFailure { get; set; }
+        public Action<int>? OnServiceRead { get; set; }
+        private int _serviceReads;
         bool Host.Service.INetworkTakeoverCore.IsRunning => CoreRunning;
         bool Host.Service.INetworkTakeoverCore.IsOwnershipKnown => OwnerKnown;
         public void Restart(Host.Model.CoreConfigurationState configurationState) { ++Writes; CoreRunning = true; }
@@ -486,7 +534,11 @@ public sealed class NetworkSettingsRuntimeTests
         public void DisableProxy() { ++Writes; WindowsProxy.DisableProxy(); }
         public void EnableProxy(string proxyServer) { ++Writes; WindowsProxy.EnableProxy(proxyServer); }
         public string BuildLoopbackProxyServer(int mixedPort) => "127.0.0.1:" + mixedPort.ToString(CultureInfo.InvariantCulture);
-        public Task<Host.Model.MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken) => Task.FromResult(ServiceStatus);
+        public Task<Host.Model.MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken)
+        {
+            OnServiceRead?.Invoke(++_serviceReads);
+            return Task.FromResult(ServiceStatus);
+        }
         public Task<Host.Model.MihomoServiceStatus> StopAsync(CancellationToken cancellationToken)
         { ++Writes; ServiceStatus = new(ServiceStatus.IsInstalled, false, "isolated stopped"); return Task.FromResult(ServiceStatus); }
         public Task<Host.Model.MihomoServiceStatus> RestartAsync(long generation, string configurationHash, CancellationToken cancellationToken)
