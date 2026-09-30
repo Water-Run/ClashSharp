@@ -29,6 +29,7 @@ internal sealed class RulesViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="Rules"/>.</summary>
     private IReadOnlyList<RulePreviewDisplay> _ruleRows = [];
+    private int _dataRevision;
 
     /// <summary>Initializes a rules view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
@@ -84,12 +85,21 @@ internal sealed class RulesViewModel : ObservableObject
     /// <returns>A task that completes after the snapshot is applied or the failure is reported.</returns>
     public Task LoadAsync(CancellationToken cancellationToken)
     {
+        int revision = _dataRevision;
         return ViewModelLoadExecutor.ExecuteAsync(
             _rules.GetRules,
             ApplyRules,
             _errorSink,
             "rules-load",
-            cancellationToken);
+            cancellationToken, () => revision == _dataRevision);
+    }
+
+    /// <summary>Removes the old directory's rule rows before reading the replacement.</summary>
+    public Task ReloadForDataChangeAsync(CancellationToken cancellationToken)
+    {
+        ++_dataRevision;
+        Rules = [];
+        return LoadAsync(cancellationToken);
     }
 
     private void ApplyRules(IReadOnlyList<RulePreview> rules)

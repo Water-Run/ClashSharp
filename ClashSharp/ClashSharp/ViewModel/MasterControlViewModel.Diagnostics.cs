@@ -141,7 +141,7 @@ internal sealed partial class MasterControlViewModel
         }
     }
 
-    private string GetDiagnosticContext() => string.Join("\n", _settings.CurrentMode, _settings.TransparentProxyEnabled,
+    private string GetDiagnosticContext() => string.Join("\n", _dataRevision, _settings.CurrentMode, _settings.TransparentProxyEnabled,
         _settings.ActiveProfileId, _settings.MixedPort, _systemProxyAddress, CurrentNodeText,
         _settings.ConnectionTestProxyUrl1, _settings.ConnectionTestProxyUrl2, _settings.ConnectionTestDirectUrl);
 

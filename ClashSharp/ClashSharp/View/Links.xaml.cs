@@ -24,6 +24,7 @@ public sealed partial class Links : Page
     private readonly PageLoadSession _loadSession = new();
 
     private readonly PageOperationSession _operations;
+    private readonly PageDataChangeSession _dataChanges;
 
     private bool _isLoaded;
 
@@ -38,29 +39,42 @@ public sealed partial class Links : Page
         _viewModel = dependencies.ViewModel;
         _getString = dependencies.GetString;
         _operations = new PageOperationSession(dependencies.ErrorSink, "links-page-action");
+        _dataChanges = new(dependencies.SubscribeToDataChanges, action => DispatcherQueue.TryEnqueue(() => action()),
+            [_loadSession.Cancel, _operations.Cancel], ReloadChangedDataAsync, dependencies.ErrorSink, "links-data-change");
         InitializeComponent();
         DataContext = _viewModel;
     }
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
+        if (_isLoaded) { return; }
         int visit = ++_visit;
         _isLoaded = true;
+        _dataChanges.Start();
         await _operations.DrainAsync();
+        await _dataChanges.DrainAsync();
         if (!_isLoaded || visit != _visit)
         {
             return;
         }
 
-        await _loadSession.RunAsync(_viewModel.LoadAsync);
+        await _loadSession.RunAsync(_viewModel.ReloadForDataChangeAsync);
     }
 
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
         ++_visit;
+        _dataChanges.Stop();
         _loadSession.Cancel();
         _operations.Cancel();
+    }
+
+    private async Task ReloadChangedDataAsync(CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(_operations.DrainAsync(), _loadSession.DrainAsync());
+        cancellationToken.ThrowIfCancellationRequested();
+        await _viewModel.ReloadForDataChangeAsync(cancellationToken);
     }
 
     /// <summary>Shows the add-link dialog and delegates accepted input to the view model.</summary>
@@ -126,13 +140,14 @@ public sealed partial class Links : Page
 
     private async void EditLinkButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink)
+        if (_viewModel.SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink || !_viewModel.IsCurrentLink(selectedLink))
         {
             return;
         }
 
         await RunPageOperationAsync(async cancellationToken =>
         {
+            if (!_viewModel.IsCurrentLink(selectedLink)) { return; }
             TextBox nameBox = new()
             {
                 Header = _getString("Links.Dialog.Name"),
@@ -175,7 +190,7 @@ public sealed partial class Links : Page
             AttachInputValidation(dialog, content, nameBox, uriBox, intervalBox);
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            if (result == ContentDialogResult.Primary)
+            if (result == ContentDialogResult.Primary && _viewModel.IsCurrentLink(selectedLink))
             {
                 int updateIntervalHours = checked((int)intervalBox.Value);
                 await _viewModel.EditLinkCommand.ExecuteObservedAsync(
@@ -192,13 +207,14 @@ public sealed partial class Links : Page
 
     private async void DeleteLinkButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink)
+        if (_viewModel.SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink || !_viewModel.IsCurrentLink(selectedLink))
         {
             return;
         }
 
         await RunPageOperationAsync(async cancellationToken =>
         {
+            if (!_viewModel.IsCurrentLink(selectedLink)) { return; }
             ThemedContentDialog dialog = new()
             {
                 Title = _getString("Links.Dialog.DeleteTitle"),
@@ -212,7 +228,7 @@ public sealed partial class Links : Page
             cancellationToken.ThrowIfCancellationRequested();
             if (result == ContentDialogResult.Primary)
             {
-                await _viewModel.DeleteLinkCommand.ExecuteObservedAsync(null, cancellationToken);
+                await _viewModel.DeleteLinkAsync(selectedLink, cancellationToken);
             }
         });
     }
@@ -221,13 +237,14 @@ public sealed partial class Links : Page
     private Task RunPageOperationAsync(Func<CancellationToken, Task> operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        if (!_isLoaded)
+        if (!_isLoaded || _dataChanges.IsInvalidated)
         {
             return Task.CompletedTask;
         }
 
         return _operations.RunAsync(async cancellationToken =>
         {
+            if (!_isLoaded || _dataChanges.IsInvalidated) { return; }
             SetOperationBusy(isBusy: true);
             try
             {

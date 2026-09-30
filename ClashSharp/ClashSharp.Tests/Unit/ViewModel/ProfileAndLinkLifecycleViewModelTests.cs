@@ -9,6 +9,90 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed class ProfileAndLinkLifecycleViewModelTests
 {
     [Fact]
+    public async Task RemainingPages_LinksReplacementRejectsAnOldRowEvenWhenEveryValueMatches()
+    {
+        FakeSubscriptionLinkCatalog catalog = new() { Links = [CreateLink("same-id")] };
+        LinksViewModel viewModel = CreateLinksViewModel(catalog, new RecordingPageLog());
+        await viewModel.LoadAsync(CancellationToken.None);
+        ProfileSubscriptionLinkDisplay oldRow = Assert.Single(viewModel.SubscriptionLinks);
+        viewModel.SelectedLink = oldRow;
+
+        await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
+
+        Assert.Null(viewModel.SelectedLink);
+        Assert.Equal(oldRow, Assert.Single(viewModel.SubscriptionLinks));
+        Assert.False(viewModel.IsCurrentLink(oldRow));
+        viewModel.SelectedLink = oldRow;
+        await viewModel.DeleteSelectedLinkAsync(CancellationToken.None);
+        await viewModel.CheckSelectedLinkAsync(CancellationToken.None);
+        await viewModel.UpdateSelectedLinkAsync(CancellationToken.None);
+        Assert.Empty(catalog.DeletedIds);
+        Assert.False(viewModel.HasStatusText);
+    }
+
+    [Fact]
+    public async Task RemainingPages_LinksDeleteUsesTheConfirmedRowInsteadOfALaterSelection()
+    {
+        FakeSubscriptionLinkCatalog catalog = new() { Links = [CreateLink("confirmed"), CreateLink("selected-later")] };
+        LinksViewModel viewModel = CreateLinksViewModel(catalog, new RecordingPageLog());
+        await viewModel.LoadAsync(CancellationToken.None);
+        ProfileSubscriptionLinkDisplay confirmed = viewModel.SubscriptionLinks[0];
+        viewModel.SelectedLink = viewModel.SubscriptionLinks[1];
+
+        await viewModel.DeleteLinkAsync(confirmed, CancellationToken.None);
+
+        Assert.Equal("confirmed", Assert.Single(catalog.DeletedIds));
+        Assert.Equal("selected-later", Assert.Single(viewModel.SubscriptionLinks).Model.Id);
+    }
+
+    [Fact]
+    public async Task RemainingPages_LinksReplacementClearsRowsSelectionAndFeedbackBeforeAFailedRead()
+    {
+        FakeSubscriptionLinkCatalog catalog = new() { Links = [CreateLink("old")] };
+        LinksViewModel viewModel = CreateLinksViewModel(catalog, new RecordingPageLog());
+        await viewModel.LoadAsync(CancellationToken.None);
+        await viewModel.DeleteLinkAsync(Assert.Single(viewModel.SubscriptionLinks), CancellationToken.None);
+        Assert.True(viewModel.HasStatusText);
+        catalog.Links = [CreateLink("retained")];
+        await viewModel.LoadAsync(CancellationToken.None);
+        viewModel.SelectedLink = Assert.Single(viewModel.SubscriptionLinks);
+        catalog.Read = () => throw new IOException("replacement unavailable");
+
+        await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
+
+        Assert.Empty(viewModel.SubscriptionLinks);
+        Assert.Null(viewModel.SelectedLink);
+        Assert.False(viewModel.HasStatusText);
+    }
+
+    [Fact]
+    public async Task RemainingPages_LinksDiscardAReadFromThePreviousDirectory()
+    {
+        using ManualResetEventSlim release = new();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeSubscriptionLinkCatalog catalog = new()
+        {
+            Read = () =>
+        {
+            entered.SetResult();
+            if (!release.Wait(TimeSpan.FromSeconds(5))) { throw new TimeoutException(); }
+            return [CreateLink("old")];
+        }
+        };
+        LinksViewModel viewModel = CreateLinksViewModel(catalog, new RecordingPageLog());
+        Task old = viewModel.LoadAsync(CancellationToken.None);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            catalog.Read = () => [CreateLink("new")];
+            await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
+        }
+        finally { release.Set(); }
+        await old;
+        Assert.Equal("new", Assert.Single(viewModel.SubscriptionLinks).Model.Id);
+    }
+
+    [Fact]
     public async Task LoadAsync_RefreshesAndReordersProfilesWithoutResettingRetainedRows()
     {
         ConfigurationProfile first = CreateProfile("first", false);
@@ -593,6 +677,8 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
     private sealed class FakeSubscriptionLinkCatalog : ISubscriptionLinkCatalog
     {
         public IReadOnlyList<ProfileSubscriptionLink> Links { get; set; } = [];
+        public Func<IReadOnlyList<ProfileSubscriptionLink>>? Read { get; set; }
+        public List<string> DeletedIds { get; } = [];
 
         public int GetLinksCallCount { get; private set; }
 
@@ -602,7 +688,7 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         public IReadOnlyList<ProfileSubscriptionLink> GetSubscriptionLinks()
         {
             GetLinksCallCount++;
-            return Links;
+            return Read?.Invoke() ?? Links;
         }
 
         public Task<ProfileSubscriptionLink> AddSubscriptionLinkAsync(
@@ -631,7 +717,9 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
             string linkId,
             CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            DeletedIds.Add(linkId);
+            Links = Links.Where(link => link.Id != linkId).ToArray();
+            return Task.FromResult(true);
         }
 
         public Task<ProfileImportResult> ImportSubscriptionLinkAsync(

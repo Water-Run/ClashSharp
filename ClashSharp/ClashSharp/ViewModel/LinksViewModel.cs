@@ -42,6 +42,7 @@ internal sealed class LinksViewModel : ObservableObject
     private ProfileSubscriptionLinkDisplay? _selectedLink;
 
     private string _statusText = string.Empty;
+    private int _dataRevision;
 
     /// <summary>Initializes a links view model.</summary>
     /// <param name="getString">Localization resolver. Must not be null.</param>
@@ -168,7 +169,7 @@ internal sealed class LinksViewModel : ObservableObject
     }
 
     /// <summary>Gets whether subscription actions have a selected target.</summary>
-    public bool HasSelectedLink => SelectedLink is not null;
+    public bool HasSelectedLink => SelectedLink is { } link && IsCurrentLink(link);
 
     /// <summary>Gets the command that adds link input accepted by the page.</summary>
     /// <value>Asynchronous add command.</value>
@@ -191,13 +192,26 @@ internal sealed class LinksViewModel : ObservableObject
     /// <returns>A task that completes after the snapshot is applied or the failure is reported.</returns>
     public Task LoadAsync(CancellationToken cancellationToken)
     {
+        int revision = _dataRevision;
         return ViewModelLoadExecutor.ExecuteAsync(
             _profiles.GetSubscriptionLinks,
             ApplyLinks,
             _errorSink,
             "links-load",
-            cancellationToken);
+            cancellationToken, () => revision == _dataRevision);
     }
+
+    /// <summary>Discards rows, selection, and feedback belonging to the previous data directory.</summary>
+    public Task ReloadForDataChangeAsync(CancellationToken cancellationToken)
+    {
+        ++_dataRevision;
+        SelectedLink = null;
+        SubscriptionLinks = [];
+        StatusText = string.Empty;
+        return LoadAsync(cancellationToken);
+    }
+
+    public bool IsCurrentLink(ProfileSubscriptionLinkDisplay link) => SubscriptionLinks.Any(row => ReferenceEquals(row, link));
 
     /// <summary>Adds a subscription link and refreshes visible rows.</summary>
     /// <param name="name">Link name. Must not be null.</param>
@@ -218,6 +232,7 @@ internal sealed class LinksViewModel : ObservableObject
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Links", $"Subscription link added: {link.Name}.", link.Uri);
             await LoadAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             SelectedLink = SubscriptionLinks.FirstOrDefault(row => row.Model.Id == link.Id);
             StatusText = _getString("Links.Status.Added");
         }
@@ -231,6 +246,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription link could not be added.", exception.Message);
             StatusText = _getString("Links.Status.AddFailed");
         }
@@ -245,7 +261,7 @@ internal sealed class LinksViewModel : ObservableObject
     /// </remarks>
     public async Task CheckSelectedLinkAsync(CancellationToken cancellationToken)
     {
-        if (SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink)
+        if (SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink || !IsCurrentLink(selectedLink))
         {
             _log.Append("Info", "Links", "No subscription link selected.", null);
             return;
@@ -270,6 +286,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription link check failed.", exception.Message);
             StatusText = _getString("Links.Status.CheckFailed");
         }
@@ -286,7 +303,7 @@ internal sealed class LinksViewModel : ObservableObject
     /// </remarks>
     public async Task UpdateSelectedLinkAsync(CancellationToken cancellationToken)
     {
-        if (SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink)
+        if (SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink || !IsCurrentLink(selectedLink))
         {
             _log.Append("Info", "Links", "No subscription link selected.", null);
             return;
@@ -311,6 +328,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription profile import failed.", exception.Message);
             StatusText = _getString("Links.Status.UpdateFailed");
         }
@@ -331,6 +349,7 @@ internal sealed class LinksViewModel : ObservableObject
             {
                 _log.Append("Info", "Links", "Subscription link updated.", request.LinkId);
                 await LoadAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 StatusText = _getString("Links.Status.Saved");
             }
             else { StatusText = _getString("Links.Status.EditFailed"); }
@@ -345,15 +364,22 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription link could not be edited.", exception.Message);
             StatusText = _getString("Links.Status.EditFailed");
         }
     }
 
     /// <summary>Deletes the selected subscription link and refreshes visible rows.</summary>
-    public async Task DeleteSelectedLinkAsync(CancellationToken cancellationToken)
+    public Task DeleteSelectedLinkAsync(CancellationToken cancellationToken) => SelectedLink is { } selectedLink
+        ? DeleteLinkAsync(selectedLink, cancellationToken)
+        : Task.CompletedTask;
+
+    /// <summary>Deletes only the row the user confirmed, while it still belongs to the displayed snapshot.</summary>
+    public async Task DeleteLinkAsync(ProfileSubscriptionLinkDisplay selectedLink, CancellationToken cancellationToken)
     {
-        if (SelectedLink is not ProfileSubscriptionLinkDisplay selectedLink)
+        ArgumentNullException.ThrowIfNull(selectedLink);
+        if (!IsCurrentLink(selectedLink))
         {
             _log.Append("Info", "Links", "No subscription link selected.", null);
             return;
@@ -370,6 +396,7 @@ internal sealed class LinksViewModel : ObservableObject
                 SelectedLink = null;
                 _log.Append("Info", "Links", "Subscription link deleted.", selectedLink.Model.Id);
                 await LoadAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 StatusText = _getString("Links.Status.Deleted");
             }
             else { StatusText = _getString("Links.Status.DeleteFailed"); }
@@ -384,6 +411,7 @@ internal sealed class LinksViewModel : ObservableObject
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription link could not be deleted.", exception.Message);
             StatusText = _getString("Links.Status.DeleteFailed");
         }

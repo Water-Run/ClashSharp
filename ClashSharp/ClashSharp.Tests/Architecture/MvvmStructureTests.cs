@@ -431,7 +431,11 @@ public sealed class MvvmStructureTests
             Assert.Contains("Loaded=\"Page_Loaded\"", xaml, StringComparison.Ordinal);
             Assert.Contains("Unloaded=\"Page_Unloaded\"", xaml, StringComparison.Ordinal);
             Assert.Contains("PageLoadSession", codeBehind, StringComparison.Ordinal);
-            Assert.Contains("_viewModel.LoadAsync", codeBehind, StringComparison.Ordinal);
+            Assert.Contains(pageName is "Links" or "Rules" ? "_viewModel.ReloadForDataChangeAsync" : "_viewModel.LoadAsync",
+                codeBehind, StringComparison.Ordinal);
+            Assert.Contains("PageDataChangeSession", codeBehind, StringComparison.Ordinal);
+            Assert.Contains("_dataChanges.Start()", codeBehind, StringComparison.Ordinal);
+            Assert.Contains("_dataChanges.Stop()", codeBehind, StringComparison.Ordinal);
             Assert.Contains("RunAsync(", codeBehind, StringComparison.Ordinal);
             Assert.Contains("_loadSession.Cancel()", codeBehind, StringComparison.Ordinal);
         }

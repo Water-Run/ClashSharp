@@ -28,7 +28,9 @@ internal sealed record MasterControlPageDependencies(
     Func<IReadOnlyList<ProxyNode>, CancellationToken, Task<IReadOnlyList<ProxyNode>>> TestProxyLatencyAsync,
     DataPackageDialogPresenter DataPackages,
     Action OpenSettings,
-    Func<string, string> FilterDisplayText);
+    Func<string, string> FilterDisplayText,
+    Func<Action, IDisposable> SubscribeToDataChanges,
+    Func<Guid?> GetDataGenerationId);
 
 /// <summary>Builds the explicit dependency graph for the master-control page.</summary>
 internal static class MasterControlPageComposition
@@ -133,7 +135,9 @@ internal static class MasterControlPageComposition
             proxyLatency.TestNodesAsync,
             new DataPackageDialogPresenter(SettingsPageComposition.CreateOperations(context), localization.GetString),
             openSettings,
-            context.MainlandChinaTextDisplay.Apply);
+            context.MainlandChinaTextDisplay.Apply,
+            changed => new DataGenerationSubscription(settings, changed),
+            settings.GetBoundDataGenerationId);
     }
 
     private static long GetWorkingSetBytes()

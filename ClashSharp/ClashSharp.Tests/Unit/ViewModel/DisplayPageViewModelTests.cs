@@ -7,6 +7,55 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for rules, statistics, and about page view models.</summary>
 public sealed class DisplayPageViewModelTests
 {
+    [Fact]
+    public async Task RemainingPages_RulesReplacementClearsOldRowsWhenTheNewReadFails()
+    {
+        MutableRuleCatalog catalog = new();
+        TestApplicationErrorSink errors = new();
+        RulesViewModel viewModel = new(new FakeDisplayLocalization(), catalog, errors, new ModelDisplayMapper(text => text));
+        await viewModel.LoadAsync(CancellationToken.None);
+        Assert.Single(viewModel.Rules);
+        catalog.Read = () => throw new IOException("replacement unavailable");
+
+        await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
+
+        Assert.Empty(viewModel.Rules);
+        Assert.Single(errors.Errors);
+    }
+
+    [Fact]
+    public async Task RemainingPages_RulesDiscardAReadFromThePreviousDirectory()
+    {
+        using ManualResetEventSlim release = new();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        MutableRuleCatalog catalog = new()
+        {
+            Read = () =>
+        {
+            entered.SetResult();
+            if (!release.Wait(TimeSpan.FromSeconds(5))) { throw new TimeoutException(); }
+            return [new("old", "DOMAIN", "old.example", "PROXY", 1)];
+        }
+        };
+        RulesViewModel viewModel = new(new FakeDisplayLocalization(), catalog, new TestApplicationErrorSink(), new ModelDisplayMapper(text => text));
+        Task old = viewModel.LoadAsync(CancellationToken.None);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            catalog.Read = () => [new("new", "DOMAIN", "new.example", "DIRECT", 0)];
+            await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
+        }
+        finally { release.Set(); }
+        await old;
+        Assert.Equal("new.example", Assert.Single(viewModel.Rules).Model.Payload);
+    }
+
+    private sealed class MutableRuleCatalog : IRuleCatalog
+    {
+        public Func<IReadOnlyList<RulePreview>> Read { get; set; } = () => [new("old", "DOMAIN", "old.example", "PROXY", 1)];
+        public IReadOnlyList<RulePreview> GetRules() => Read();
+    }
+
     /// <summary>Verifies rules view model loads labels and rule rows.</summary>
     [Fact]
     public async Task RulesViewModel_LoadAsync_LoadsRulesAfterPureConstruction()

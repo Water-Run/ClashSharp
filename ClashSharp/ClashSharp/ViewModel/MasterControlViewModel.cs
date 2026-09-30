@@ -158,6 +158,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
     // A read admitted before a network mutation must not overwrite its result.
     private int _statusRevision;
+    private int _dataRevision;
 
     private static readonly TimeSpan LoadRefreshThrottle = TimeSpan.FromSeconds(5);
 
@@ -243,33 +244,29 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         _updateChecker = updateChecker;
         _navigateToPage = navigateToPage;
         _modeApplied = modeApplied ?? (_ => Task.CompletedTask);
-        DisabledModeCommand = new AsyncRelayCommand(
+        DisabledModeCommand = CreatePageCommand(
             token => ApplyModeAsync(ClashSharpMode.Disabled, token),
-            errorSink,
-            operationName: "master-mode-disabled");
-        StandbyModeCommand = new AsyncRelayCommand(
+            "master-mode-disabled");
+        StandbyModeCommand = CreatePageCommand(
             token => ApplyModeAsync(ClashSharpMode.Standby, token),
-            errorSink,
-            operationName: "master-mode-standby");
-        RuleTakeoverModeCommand = new AsyncRelayCommand(
+            "master-mode-standby");
+        RuleTakeoverModeCommand = CreatePageCommand(
             token => ApplyModeAsync(ClashSharpMode.RuleTakeover, token),
-            errorSink,
-            operationName: "master-mode-rule-takeover");
-        FullTakeoverModeCommand = new AsyncRelayCommand(
+            "master-mode-rule-takeover");
+        FullTakeoverModeCommand = CreatePageCommand(
             token => ApplyModeAsync(ClashSharpMode.FullTakeover, token),
-            errorSink,
-            operationName: "master-mode-full-takeover");
+            "master-mode-full-takeover");
         LoadCommand = new AsyncRelayCommand(
             LoadAsync,
             errorSink,
             operationName: "master-load");
-        _toggleTransparentProxyCommand = CreateSettingCommand(
+        _toggleTransparentProxyCommand = CreatePageCommand(
             ToggleTransparentProxyAsync,
             "master-transparent-proxy-setting");
-        _toggleStartupLaunchCommand = CreateSettingCommand(
+        _toggleStartupLaunchCommand = CreatePageCommand(
             ToggleStartupLaunchAsync,
             "master-startup-launch-setting");
-        _toggleConnectionSamplingCommand = CreateSettingCommand(
+        _toggleConnectionSamplingCommand = CreatePageCommand(
             ToggleConnectionSamplingAsync,
             "master-connection-sampling-setting");
         SettingKey[] preferences =
@@ -282,11 +279,11 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         ];
         _togglePreferenceCommands = preferences.ToDictionary(
             key => key,
-            key => CreateSettingCommand(
+            key => CreatePageCommand(
                 token => TogglePreferenceAsync(key, token),
                 $"master-preference-{key.Value}"));
 
-        AsyncRelayCommand CreateSettingCommand(Func<CancellationToken, Task> apply, string operationName) =>
+        AsyncRelayCommand CreatePageCommand(Func<CancellationToken, Task> apply, string operationName) =>
             new(token => runTileOperationAsync(apply, token), errorSink, operationName: operationName);
 
         CoreStatusText = string.Empty;
@@ -584,6 +581,28 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         {
             _isInitialized = false;
         }
+    }
+
+    /// <summary>Forgets data-owned summaries and diagnostics even when the replacement reuses profile identifiers.</summary>
+    public void InvalidateForDataChange()
+    {
+        ++_dataRevision;
+        InvalidateAfterAction(settingsImported: true);
+        _lastCoreRefreshAt = null;
+        _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
+        _liveTraffic = null;
+        _uploadHistory.Clear();
+        _downloadHistory.Clear();
+        _lastHistoryAt = null;
+        _isCoreAvailable = false;
+        _mihomoVersionText = string.Empty;
+        CoreStatusText = _localization.GetString("Master.Status.Unavailable");
+        SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
+        TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
+        CurrentNodeText = _localization.GetString("Master.Status.CurrentNodeUnavailable");
+        LatencySummaryText = _localization.GetString("Master.Status.LatencyUnavailable");
+        OperationErrorText = string.Empty;
+        RefreshTileValues();
     }
 
     /// <summary>Loads persisted page state once without recreating collections on repeated Loaded events.</summary>

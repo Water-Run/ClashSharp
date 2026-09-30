@@ -108,7 +108,8 @@ internal sealed class DataPackageDialogPresenter
     /// <summary>Imports a package after scope validation and two explicit overwrite confirmations.</summary>
     /// <returns>True only after the import transaction has completed successfully.</returns>
     public async Task<bool> ImportAsync(XamlRoot xamlRoot,
-        Func<CancellationToken, Task> refreshCommittedData, CancellationToken cancellationToken)
+        Func<CancellationToken, Task> refreshCommittedData, CancellationToken cancellationToken,
+        CancellationToken? completionCancellationToken = null)
     {
         ArgumentNullException.ThrowIfNull(refreshCommittedData);
         cancellationToken.ThrowIfCancellationRequested();
@@ -161,6 +162,10 @@ internal sealed class DataPackageDialogPresenter
             return false;
         }
 
+        // A committed replacement revokes old-data actions, including this import's input token.
+        // Its confirmation remains owned by the same visible page; navigating away still cancels it.
+        cancellationToken = completionCancellationToken ?? cancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         // Publish page and tile state before presenting completion, while the page operation still owns input.
         await refreshCommittedData(cancellationToken);
         await ShowImportResultAsync(xamlRoot,

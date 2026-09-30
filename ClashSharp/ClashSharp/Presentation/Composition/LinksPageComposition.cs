@@ -19,17 +19,20 @@ internal static class LinksPageComposition
             context.ErrorSink,
             new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));
 
-        return new Dependencies(viewModel, context.Localization.GetString, context.ErrorSink);
+        return new Dependencies(viewModel, context.Localization.GetString, context.ErrorSink,
+            changed => new DataGenerationSubscription(context.Settings, changed));
     }
 
     /// <summary>Injected dependencies used by the subscription-links view.</summary>
     internal sealed class Dependencies
     {
-        public Dependencies(LinksViewModel viewModel, Func<string, string> getString, IApplicationErrorSink errorSink)
+        public Dependencies(LinksViewModel viewModel, Func<string, string> getString, IApplicationErrorSink errorSink,
+            Func<Action, IDisposable> subscribeToDataChanges)
         {
             ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             GetString = getString ?? throw new ArgumentNullException(nameof(getString));
             ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
+            SubscribeToDataChanges = subscribeToDataChanges ?? throw new ArgumentNullException(nameof(subscribeToDataChanges));
         }
 
         public LinksViewModel ViewModel { get; }
@@ -37,5 +40,6 @@ internal static class LinksPageComposition
         public Func<string, string> GetString { get; }
 
         public IApplicationErrorSink ErrorSink { get; }
+        public Func<Action, IDisposable> SubscribeToDataChanges { get; }
     }
 }

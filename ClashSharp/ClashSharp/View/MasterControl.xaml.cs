@@ -67,6 +67,12 @@ public sealed partial class MasterControl : Page
     private Task _loadTask = Task.CompletedTask;
 
     private readonly PageLoadSession _refreshSession;
+    private readonly PageLoadSession _loadSession;
+    private readonly PageDataChangeSession _dataChanges;
+    private readonly Func<Guid?> _getDataGenerationId;
+    private Guid? _dataGenerationId;
+    private bool _hasDataGeneration;
+    private bool _dataReady;
 
     private double _heroStatusItemWidth = PreferredHeroStatusItemWidth;
     private double _infoTileItemWidth = PreferredInfoTileWidth;
@@ -85,6 +91,11 @@ public sealed partial class MasterControl : Page
         _refreshSession = new PageLoadSession(_errorSink, "master-live-refresh");
         _tileActions = dependencies.TileActions
             ?? throw new ArgumentException("A tile action session is required.", nameof(dependencies));
+        _loadSession = new(_errorSink, "master-data-load");
+        _getDataGenerationId = dependencies.GetDataGenerationId
+            ?? throw new ArgumentException("A data identity reader is required.", nameof(dependencies));
+        _dataChanges = new(dependencies.SubscribeToDataChanges, action => DispatcherQueue.TryEnqueue(() => action()),
+            [_loadSession.Cancel, _tileActions.Cancel], ReloadChangedDataAsync, _errorSink, "master-data-change");
         _dataPackages = dependencies.DataPackages
             ?? throw new ArgumentException("A data-package presenter is required.", nameof(dependencies));
         _startupGuide = dependencies.StartupGuide
@@ -116,12 +127,14 @@ public sealed partial class MasterControl : Page
         CancellationTokenSource lifetime = new();
         _pageLifetime = lifetime;
         await Task.WhenAll(_tileActions.DrainAsync(), _refreshSession.DrainAsync());
+        await _dataChanges.DrainAsync();
         if (!ReferenceEquals(_pageLifetime, lifetime))
         {
             return;
         }
 
-        _tileActions.Activate(PresentTileActionAsync);
+        _dataChanges.Start();
+        _tileActions.Activate(PresentTileActionAsync, () => _dataReady && !_dataChanges.IsInvalidated);
         await LoadForCurrentPageAsync();
         if (ReferenceEquals(_pageLifetime, lifetime))
         {
@@ -139,14 +152,14 @@ public sealed partial class MasterControl : Page
     private async Task LoadForCurrentPageAsync()
     {
         CancellationTokenSource? lifetime = _pageLifetime;
-        if (lifetime is null)
+        if (lifetime is null || _dataChanges.IsInvalidated)
         {
             return;
         }
 
         Task previousLoad = _loadTask;
         await previousLoad;
-        if (!ReferenceEquals(_pageLifetime, lifetime))
+        if (!ReferenceEquals(_pageLifetime, lifetime) || _dataChanges.IsInvalidated)
         {
             return;
         }
@@ -157,8 +170,33 @@ public sealed partial class MasterControl : Page
             return;
         }
 
-        _loadTask = _viewModel.LoadCommand.ExecuteObservedAsync(null, lifetime.Token);
+        _loadTask = _loadSession.RunAsync(async token =>
+        {
+            Guid? dataGenerationId = _getDataGenerationId();
+            if (!_hasDataGeneration || _dataGenerationId != dataGenerationId)
+            {
+                _viewModel.InvalidateForDataChange();
+                _dataGenerationId = dataGenerationId;
+                _hasDataGeneration = true;
+            }
+            await _viewModel.LoadCommand.ExecuteObservedAsync(null, token);
+            token.ThrowIfCancellationRequested();
+            _dataReady = true;
+        }, cancellationToken: lifetime.Token);
         await _loadTask;
+    }
+
+    private async Task ReloadChangedDataAsync(CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(_tileActions.DrainAsync(), _loadSession.DrainAsync());
+        cancellationToken.ThrowIfCancellationRequested();
+        _dataReady = false;
+        _dataGenerationId = _getDataGenerationId();
+        _hasDataGeneration = true;
+        _viewModel.InvalidateForDataChange();
+        await _viewModel.LoadAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        _dataReady = true;
     }
 
     /// <summary>Opens the latency-test dialog and runs a timed progress workflow.</summary>
@@ -319,7 +357,8 @@ public sealed partial class MasterControl : Page
                 break;
             case MasterControlTileAction.ImportConfiguration:
                 await _dataPackages.ImportAsync(GetDialogXamlRoot(),
-                    token => RefreshAfterActionAsync(token, settingsImported: true), cancellationToken);
+                    token => RefreshAfterActionAsync(token, settingsImported: true), cancellationToken,
+                    completionCancellationToken: _pageLifetime?.Token ?? cancellationToken);
                 break;
             case MasterControlTileAction.OpenConnectionTest:
                 await ShowNetworkCheckAsync(false, cancellationToken);
@@ -408,12 +447,15 @@ public sealed partial class MasterControl : Page
         }
 
         _pageLifetime = null;
+        _dataReady = false;
+        _dataChanges.Stop();
         _tileActions.Deactivate();
+        _loadSession.Cancel();
         _refreshSession.Cancel();
         lifetime.Cancel();
         try
         {
-            await Task.WhenAll(_loadTask, _tileActions.DrainAsync(), _refreshSession.DrainAsync());
+            await Task.WhenAll(_loadTask, _tileActions.DrainAsync(), _refreshSession.DrainAsync(), _dataChanges.DrainAsync());
         }
         finally
         {
@@ -592,8 +634,20 @@ public sealed partial class MasterControl : Page
     {
         await _loadTask;
         cancellationToken.ThrowIfCancellationRequested();
-        _viewModel.InvalidateAfterAction(settingsImported);
-        await LoadForCurrentPageAsync();
+        if (settingsImported)
+        {
+            // The data-change refresh waits for this owned dialog to finish. Refresh directly here
+            // so completion is presented against the committed data without waiting on ourselves.
+            _dataGenerationId = _getDataGenerationId();
+            _hasDataGeneration = true;
+            _viewModel.InvalidateForDataChange();
+            await _viewModel.LoadAsync(cancellationToken);
+        }
+        else
+        {
+            _viewModel.InvalidateAfterAction();
+            await LoadForCurrentPageAsync();
+        }
     }
 
     /// <summary>Opens a small editor that toggles which information tiles are visible.</summary>

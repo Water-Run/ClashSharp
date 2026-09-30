@@ -97,7 +97,7 @@ public sealed class DialogPresentationArchitectureTests
         Assert.Contains(".CheckConflictsAsync(settings.MixedPort, cancellationToken)", masterComposition, StringComparison.Ordinal);
         Assert.DoesNotContain(".CheckConflicts(settings.MixedPort)", masterComposition, StringComparison.Ordinal);
         Assert.Contains("_showStartupConflicts(GetDialogXamlRoot(), cancellationToken)", masterPage, StringComparison.Ordinal);
-        Assert.Contains("_tileActions.Activate(PresentTileActionAsync)", masterPage, StringComparison.Ordinal);
+        Assert.Contains("_tileActions.Activate(PresentTileActionAsync, () => _dataReady && !_dataChanges.IsInvalidated)", masterPage, StringComparison.Ordinal);
         Assert.Contains("_tileActions.Deactivate()", masterPage, StringComparison.Ordinal);
         Assert.Contains("_tileActions.DrainAsync()", masterPage, StringComparison.Ordinal);
 

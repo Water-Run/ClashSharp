@@ -15,6 +15,7 @@ internal sealed class MasterControlTileActionSession
 {
     private readonly PageOperationSession _operations;
     private Func<MasterControlTileAction, CancellationToken, Task>? _presentAsync;
+    private Func<bool>? _canRun;
 
     public MasterControlTileActionSession(IApplicationErrorSink errorSink)
     {
@@ -22,7 +23,7 @@ internal sealed class MasterControlTileActionSession
     }
 
     /// <summary>Attaches the platform callback for a loaded page after its previous work has drained.</summary>
-    public void Activate(Func<MasterControlTileAction, CancellationToken, Task> presentAsync)
+    public void Activate(Func<MasterControlTileAction, CancellationToken, Task> presentAsync, Func<bool>? canRun = null)
     {
         ArgumentNullException.ThrowIfNull(presentAsync);
         if (_presentAsync is not null)
@@ -31,14 +32,19 @@ internal sealed class MasterControlTileActionSession
         }
 
         _presentAsync = presentAsync;
+        _canRun = canRun;
     }
 
     /// <summary>Releases the page callback and cancels every accepted interaction.</summary>
     public void Deactivate()
     {
         _presentAsync = null;
+        _canRun = null;
         _operations.Cancel();
     }
+
+    /// <summary>Revokes old data interactions while retaining the visible page's callback.</summary>
+    public void Cancel() => _operations.Cancel();
 
     /// <summary>Executes a tile action and completes only after its platform interaction has unwound.</summary>
     public Task ExecuteAsync(MasterControlTileAction action, CancellationToken cancellationToken)
@@ -55,9 +61,10 @@ internal sealed class MasterControlTileActionSession
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        return _presentAsync is null
+        return _presentAsync is null || _canRun?.Invoke() == false
             ? Task.CompletedTask
-            : _operations.RunAsync(operation, cancellationToken);
+            : _operations.RunAsync(token => _presentAsync is null || _canRun?.Invoke() == false
+                ? Task.CompletedTask : operation(token), cancellationToken);
     }
 
     /// <summary>Observes the completion of interactions accepted before this call.</summary>

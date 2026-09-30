@@ -7,6 +7,53 @@ namespace ClashSharp.Tests.Unit.Presentation;
 public sealed class MasterControlTileActionSessionTests
 {
     [Fact]
+    public async Task RemainingPages_TileActionsRejectNewAndQueuedWorkWhileTheDataIsInvalid()
+    {
+        MasterControlTileActionSession session = new(new TestApplicationErrorSink());
+        bool current = true;
+        int calls = 0;
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Activate((_, _) => { calls++; return Task.CompletedTask; }, () => current);
+        Task running = session.RunAsync(async _ => { entered.SetResult(); await release.Task; });
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task queued = session.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
+        current = false;
+        await session.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
+        release.SetResult();
+        await Task.WhenAll(running, queued);
+        Assert.Equal(0, calls);
+
+        current = true;
+        await session.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
+        Assert.Equal(1, calls);
+        session.Deactivate();
+    }
+
+    [Fact]
+    public async Task RemainingPages_TileCancellationRetainsThePresenterAndWaitsForAcceptedWork()
+    {
+        MasterControlTileActionSession session = new(new TestApplicationErrorSink());
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken accepted = default;
+        int calls = 0;
+        session.Activate((_, _) => { calls++; return Task.CompletedTask; });
+        Task old = session.RunAsync(async token => { accepted = token; entered.SetResult(); await release.Task; });
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        session.Cancel();
+        Task drain = session.DrainAsync();
+        Assert.True(accepted.IsCancellationRequested);
+        Assert.False(drain.IsCompleted);
+        release.SetResult();
+        await Task.WhenAll(old, drain);
+        await session.ExecuteAsync(MasterControlTileAction.RunLatencyTest, CancellationToken.None);
+        Assert.Equal(1, calls);
+        session.Deactivate();
+    }
+
+    [Fact]
     public async Task Deactivate_CancelsRunningAndQueuedInteractionsAndRejectsLateClicks()
     {
         TestApplicationErrorSink errors = new();
