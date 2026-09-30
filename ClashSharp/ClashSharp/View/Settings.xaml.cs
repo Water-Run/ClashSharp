@@ -710,6 +710,7 @@ public sealed partial class Settings : Page
         {
             cancellationToken.ThrowIfCancellationRequested();
             await resetAction(cancellationToken);
+            RefreshPreferenceControls();
         }
     }
 
@@ -822,6 +823,7 @@ public sealed partial class Settings : Page
             {
                 refreshToken.ThrowIfCancellationRequested();
                 _viewModel.ReloadAfterDataImport();
+                RefreshPreferenceControls();
                 await _viewModel.RefreshStartupRestoreFallbackStatusAsync(refreshToken);
             }, token);
         });
@@ -1013,6 +1015,7 @@ public sealed partial class Settings : Page
 
             cancellationToken.ThrowIfCancellationRequested();
             await _viewModel.ResetAllSettingsAsync(cancellationToken);
+            RefreshPreferenceControls();
         });
     }
 
