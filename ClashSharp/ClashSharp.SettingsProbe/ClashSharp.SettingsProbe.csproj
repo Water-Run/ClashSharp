@@ -12,5 +12,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
+    <Compile Include="..\ClashSharp\AppHost\Data\FileGenerationReplacementJournal.cs" Link="Recovery\FileGenerationReplacementJournal.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Data\GenerationReplacementJournal.cs" Link="Recovery\GenerationReplacementJournal.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Data\GenerationExternalStateSnapshot.cs" Link="Recovery\GenerationExternalStateSnapshot.cs" />
+    <Compile Include="..\ClashSharp\AppHost\Settings\INetworkSettingsRuntime.cs" Link="Recovery\INetworkSettingsRuntime.cs" />
   </ItemGroup>
 </Project>

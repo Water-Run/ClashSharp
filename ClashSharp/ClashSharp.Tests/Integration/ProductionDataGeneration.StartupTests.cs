@@ -192,7 +192,9 @@ public sealed partial class ProductionDataGenerationTests
     private sealed partial class Fixture
     {
         public StartupStep CreateStartupStep(RuntimeLifetimeRegistry lifetime, SamplingFacade sampling, SettingsService settings) =>
-            new(_bootstrap, Manager, Admission, lifetime, sampling, Authority, settings);
+            new(_bootstrap, Manager, Admission, lifetime, sampling, Authority, settings,
+                new ClashSharpUi::ClashSharp.Hosting.Data.GenerationReplacementStartupRecovery(
+                    new ClashSharpUi::ClashSharp.Hosting.Data.FileGenerationReplacementJournal(_directory.RootPath), _directory.Store, Manager, Admission));
     }
 
     private sealed class StartupPlatform : StartupTaskProvider, StartupTask, StartupLog

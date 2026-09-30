@@ -12,10 +12,6 @@ using ClashSharp.Service;
 
 namespace ClashSharp.Hosting.Data;
 
-/// <summary>Actual external state captured before a generation transition; no desired preferences or credentials are included.</summary>
-internal sealed record GenerationExternalStateSnapshot(DataGenerationDescriptor Generation,
-    AppearanceNativeConfiguration Appearance, bool StartupEnabled, NetworkSettingsConfiguration Network);
-
 /// <summary>Captures and independently verifies compensation through one generation's owned native boundaries.</summary>
 internal sealed class GenerationExternalStateRecovery(SettingsAuthoritySession session, MutationAdmissionBarrier admission,
     OwnedUiDispatcher dispatcher, IAppearanceNativeSettings appearance, StartupLaunchService startup, INetworkSettingsRuntime network)

@@ -202,6 +202,8 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(provider => new GenerationDataCandidatePreparer(dataRoot.Value, mutationAdmission,
                 provider.GetRequiredService<IDataGenerationBootstrapFactory>()));
             services.AddSingleton<GenerationReplacementCoordinator>();
+            services.AddSingleton<IGenerationReplacementJournal>(_ => new FileGenerationReplacementJournal(dataRoot.Value));
+            services.AddSingleton<GenerationReplacementStartupRecovery>();
             services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
                     provider.GetRequiredService<MutationAdmissionBarrier>(),
                     provider.GetRequiredService<RuntimeLifetimeRegistry>(),

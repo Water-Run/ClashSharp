@@ -1,6 +1,8 @@
 using System.Globalization;
 using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Settings;
+using ClashSharp.Hosting.Data;
+using ClashSharp.Infrastructure.Data;
 using ClashSharp.Infrastructure.Settings;
 using ClashSharp.Settings;
 
@@ -14,6 +16,7 @@ internal static class SettingsProbeProgram
 
     public static async Task<int> RunAsync(IReadOnlyList<string> args)
     {
+        if (args.Count > 0 && args[0].StartsWith("checkpoint-", StringComparison.Ordinal)) { return await RunCheckpointAsync(args); }
         if (args.Count is < 5 or > 6
             || !Guid.TryParseExact(args[2], "N", out Guid generationId)
             || !long.TryParse(
@@ -48,6 +51,31 @@ internal static class SettingsProbeProgram
                 await RecoverAsync(repository),
             _ => 64,
         };
+    }
+
+    private static async Task<int> RunCheckpointAsync(IReadOnlyList<string> args)
+    {
+        if (args.Count < 4 || !Guid.TryParseExact(args[2], "N", out Guid operationId)) { return 64; }
+        string cut = args[^1];
+        if (cut is not ("before-promotion" or "after-promotion")) { return 64; }
+        FileGenerationReplacementJournal journal = new(Path.GetFullPath(args[1]), point =>
+        {
+            if (point == cut) { Environment.Exit(CrashExitCode); }
+        });
+        if (args[0] == "checkpoint-complete" && args.Count == 4)
+        {
+            await journal.CompleteAsync(operationId, CancellationToken.None);
+            return 1;
+        }
+        if (args[0] == "checkpoint-candidate" && args.Count == 6
+            && Guid.TryParseExact(args[3], "N", out Guid candidateId)
+            && long.TryParse(args[4], NumberStyles.None, CultureInfo.InvariantCulture, out long number))
+        {
+            DataGenerationPathPolicy paths = new(Path.GetFullPath(args[1]));
+            await journal.SetCandidateAsync(operationId, new(candidateId, number, paths.GetGenerationRootPath(candidateId)), CancellationToken.None);
+            return 1;
+        }
+        return 64;
     }
 
     private static async Task<int> InitializeAsync(

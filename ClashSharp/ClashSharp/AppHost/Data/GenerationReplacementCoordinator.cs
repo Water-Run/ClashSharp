@@ -26,7 +26,8 @@ internal sealed class GenerationReplacementRecoveryException(Exception operation
 /// <summary>Owns in-process replacement, native compensation and producer publication through the complete exclusive decision.</summary>
 /// <remarks>Crash recovery and page integration must use the same durable manifest decision before enabling this entry point in the UI.</remarks>
 internal sealed class GenerationReplacementCoordinator(DataGenerationManager generations, MutationAdmissionBarrier admission,
-    IDataGenerationStore store, GenerationDataCandidatePreparer preparer, GenerationSettingsAuthority authority)
+    IDataGenerationStore store, GenerationDataCandidatePreparer preparer, GenerationSettingsAuthority authority,
+    IGenerationReplacementJournal journal)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -47,10 +48,28 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
         bool leaseReleased = false;
         List<string> warnings = [];
         GenerationRuntimePreparationResult? prepared = null;
+        Guid operationId = Guid.NewGuid();
+        bool checkpointAttempted = false;
+        bool checkpointReady = false;
         try
         {
             lease = await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken).ConfigureAwait(false);
             baseline = generations.CurrentManifest;
+            try
+            {
+                if (await journal.ReadPendingAsync(cancellationToken).ConfigureAwait(false) is not null)
+                {
+                    throw new InvalidOperationException("A previous data replacement requires startup recovery.");
+                }
+            }
+            catch (Exception pendingFailure) when (!ExceptionGraphClassifier.IsProcessFatal(pendingFailure)
+                && !ExceptionGraphClassifier.IsCallerCancellation(pendingFailure, cancellationToken))
+            {
+                retained = true;
+                await lease.RetainRecoveryOnlyAsync().ConfigureAwait(false);
+                throw new GenerationReplacementRecoveryException(pendingFailure,
+                    new InvalidOperationException("The replacement checkpoint could not be cleared for a new operation."), committed: false);
+            }
             DataPackageImportPlan? plan = packagePath is null ? null : await generations.ExecuteAsync<AppDataGenerationRuntime, DataPackageImportPlan>(
                 (runtime, descriptor, token) => preparer.ReadImportAdmittedAsync(packagePath, runtime.Repositories.Session.Snapshot, descriptor, lease, token),
                 cancellationToken).ConfigureAwait(false);
@@ -61,6 +80,9 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
                     throw new InvalidOperationException("The baseline runtime is not ready for a data transaction.");
                 }
                 external = await runtime.ExternalState.CaptureAdmittedAsync(lease, token).ConfigureAwait(false);
+                checkpointAttempted = true;
+                await journal.BeginAsync(operationId, baseline, external, token).ConfigureAwait(false);
+                checkpointReady = true;
                 publicationWasOpen = runtime.HoldExecutionAdmitted(lease);
                 foreach (IRuntimeParticipant producer in Producers(runtime))
                 {
@@ -76,6 +98,7 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
             transition = await generations.BeginDrainAsync(baseline.ContentHash, CancellationToken.None).ConfigureAwait(false);
             if (plan is null) { _ = await preparer.StageResetAdmittedAsync(transition, lease, CancellationToken.None).ConfigureAwait(false); }
             else { _ = await preparer.StagePlanAdmittedAsync(transition, plan, lease, CancellationToken.None).ConfigureAwait(false); }
+            await journal.SetCandidateAsync(operationId, transition.StagedDescriptor!, CancellationToken.None).ConfigureAwait(false);
             prepared = await transition.ExecuteCandidateAsync<AppDataGenerationRuntime, GenerationRuntimePreparationResult>(
                 (runtime, _, token) => runtime.PrepareReplacementAdmittedAsync(lease, token), CancellationToken.None).ConfigureAwait(false);
             if (!prepared.IsSucceeded) { throw new InvalidOperationException(prepared.Code ?? "Candidate runtime verification failed."); }
@@ -86,6 +109,7 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
             }
             transition.SwapToPromoted();
             await CompleteWithRetryAsync(() => transition.CommitAsync().AsTask()).ConfigureAwait(false);
+            await journal.CompleteAsync(operationId, CancellationToken.None).ConfigureAwait(false);
             try { _ = await authority.PublishCurrentAdmittedAsync(lease, CancellationToken.None).ConfigureAwait(false); }
             catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure)) { warnings.Add("data.replacement.notification_failed"); }
             await lease.DisposeAsync().ConfigureAwait(false);
@@ -110,12 +134,14 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
         }
         catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure))
         {
+            if (retained) { throw; }
             if (lease is null) { throw; }
-            if (transition?.IsCommitted == true)
+            if (transition?.IsCommitted == true || transition?.IsManifestPromoted == true
+                || failure is DataGenerationManagerException { Error: DataGenerationManagerError.ManifestPromotionUncertain })
             {
                 retained = true;
                 await RetainAdmissionAsync(lease, leaseReleased).ConfigureAwait(false);
-                throw new GenerationReplacementRecoveryException(failure, new InvalidOperationException("Committed generation cleanup did not complete."), committed: true);
+                throw new GenerationReplacementRecoveryException(failure, new InvalidOperationException("The durable directory decision requires startup recovery."), committed: transition?.IsManifestPromoted == true);
             }
             try
             {
@@ -152,6 +178,19 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
                 {
                     if (transition.IsManifestPromoted) { _ = await transition.RestoreBaselineAsync(store, CancellationToken.None).ConfigureAwait(false); }
                     else { await transition.AbortAsync(store, CancellationToken.None).ConfigureAwait(false); }
+                }
+                if (checkpointAttempted)
+                {
+                    if (checkpointReady) { await journal.CompleteAsync(operationId, CancellationToken.None).ConfigureAwait(false); }
+                    else
+                    {
+                        GenerationReplacementCheckpoint? pending = await journal.ReadPendingAsync(CancellationToken.None).ConfigureAwait(false);
+                        if (pending is not null)
+                        {
+                            if (pending.OperationId != operationId) { throw new InvalidOperationException("Another replacement owns the recovery checkpoint."); }
+                            await journal.CompleteAsync(operationId, CancellationToken.None).ConfigureAwait(false);
+                        }
+                    }
                 }
                 await lease.DisposeAsync().ConfigureAwait(false);
                 leaseReleased = true;

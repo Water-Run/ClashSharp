@@ -260,8 +260,8 @@ public sealed partial class ProductionDataGenerationTests
 
     private sealed partial class Fixture
     {
-        public UiData.GenerationReplacementCoordinator CreateReplacementCoordinator(IDataGenerationStore? store = null) =>
-            new(Manager, Admission, store ?? _directory.Store, CreateCandidatePreparer(), Authority);
+        public UiData.GenerationReplacementCoordinator CreateReplacementCoordinator(IDataGenerationStore? store = null, UiData.IGenerationReplacementJournal? journal = null) =>
+            new(Manager, Admission, store ?? _directory.Store, CreateCandidatePreparer(), Authority, journal ?? new UiData.FileGenerationReplacementJournal(_directory.RootPath));
     }
 
     private sealed class FailingPromotionStore(IDataGenerationStore inner, bool afterPromotion) : IDataGenerationStore
