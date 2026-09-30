@@ -10,7 +10,7 @@ namespace ClashSharp.Service;
 public sealed partial class NetworkTakeoverService
 {
     /// <summary>Applies an explicit profile and effective TUN plan without legacy preference reads or fallback.</summary>
-    internal async Task ApplyNetworkSettingsConfigurationAsync(CoreConfigurationService configuration,
+    internal async Task ApplyNetworkSettingsConfigurationAsync(ICoreConfigurationStore configuration,
         NetworkSettingsConfiguration target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(configuration);

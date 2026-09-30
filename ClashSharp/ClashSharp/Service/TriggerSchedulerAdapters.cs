@@ -200,7 +200,7 @@ internal sealed class TriggerSchedulerHealthLogAdapter
             return;
         }
 
-        LogStorageService.Instance.AppendLog(
+        RuntimeDataServices.Logs.AppendLog(
             "Warning",
             "Trigger",
             LocalizationService.Instance.GetString("Triggers.Log.RuntimeEventFailed"),

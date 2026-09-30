@@ -49,7 +49,7 @@ internal static class MasterControlPageComposition
         StartupConflictDetectionService conflictDetection = context.StartupConflicts;
         ProxyNodeCatalogService proxyNodes = context.ProxyNodes;
         ProxyLatencyService proxyLatency = context.ProxyLatency;
-        CoreConfigurationService coreConfiguration = context.CoreConfiguration;
+        ICoreConfigurationStore coreConfiguration = context.CoreConfiguration;
         StartupRestoreFallbackService startupRestoreFallback = context.StartupRestoreFallback;
         IProfileCatalog profileCatalog = context.Profiles;
         ILogStorage logStorage = context.LogStorage;

@@ -102,6 +102,10 @@
     <Compile Include="..\ClashSharp\Service\ConnectionSamplingService.Configuration.cs" Link="Service\ConnectionSamplingService.Configuration.cs" />
     <Compile Include="..\ClashSharp\Service\ConnectionSamplingServiceFactory.cs" Link="Service\ConnectionSamplingServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationService.cs" Link="Service\CoreConfigurationService.cs" />
+    <Compile Include="..\ClashSharp\Service\ICoreConfigurationStore.cs" Link="Service\ICoreConfigurationStore.cs" />
+    <Compile Include="..\ClashSharp\Service\CoreConfigurationService.Access.cs" Link="Service\CoreConfigurationService.Access.cs" />
+    <Compile Include="..\ClashSharp\Service\RuntimeDataServices.cs" Link="Service\RuntimeDataServices.cs" />
+    <Compile Include="..\ClashSharp\Service\IProxySelectionService.cs" Link="Service\IProxySelectionService.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationServiceFactory.cs" Link="Service\CoreConfigurationServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageFootprint.cs" Link="Service\LogStorageFootprint.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageMaintenance.cs" Link="Service\LogStorageMaintenance.cs" />

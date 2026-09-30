@@ -9,7 +9,7 @@ public sealed partial class NetworkTakeoverService
 {
     /// <summary>Applies one explicit profile through the current mode's sole runtime owner.</summary>
     internal async Task<RuntimeConfigurationTransactionResult> ApplyProfileConfigurationAsync(
-        CoreConfigurationService configuration,
+        ICoreConfigurationStore configuration,
         string profileId,
         ClashSharpMode mode,
         bool transparentProxyEnabled,
@@ -42,7 +42,7 @@ public sealed partial class NetworkTakeoverService
 
     /// <summary>Imports an active profile candidate and applies it inside the same rollback boundary.</summary>
     internal async Task<ProfileRuntimeConfigurationTransactionResult> ImportAndApplyProfileConfigurationAsync(
-        CoreConfigurationService configuration,
+        ICoreConfigurationStore configuration,
         string profileId,
         string profileName,
         string configurationText,

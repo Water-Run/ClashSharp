@@ -19,7 +19,7 @@ internal static class RuleCatalogServiceFactory
     {
         return new RuleCatalogService(
             new RuleCatalogProfileRulesAdapter(MihomoProfileParserService.Instance),
-            new RuleCatalogHitStorageAdapter(LogStorageService.Instance),
+            new RuleCatalogHitStorageAdapter(RuntimeDataServices.Logs),
             LocalizationService.Instance.GetString);
     }
 }

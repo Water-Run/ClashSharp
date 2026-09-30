@@ -27,7 +27,7 @@ internal static class ConnectionSamplingServiceFactory
         return new ConnectionSamplingService(
             new ConnectionSamplingSettingsAdapter(AppSettingsService.Instance),
             new ConnectionSamplingSourceAdapter(MihomoConnectionService.Instance),
-            new ConnectionSamplingStorageAdapter(LogStorageService.Instance),
+            new ConnectionSamplingStorageAdapter(RuntimeDataServices.Logs),
             LocalizationService.Instance.GetString,
             SystemSupervisorClock.Instance,
             SupervisorBackoffPolicy.CreateProduction("connection-sampling"));

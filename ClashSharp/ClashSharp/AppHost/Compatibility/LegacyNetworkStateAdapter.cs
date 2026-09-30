@@ -22,7 +22,7 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     private readonly NetworkTakeoverService _takeover;
     private readonly WindowsProxyService _windowsProxy;
     private readonly MihomoCoreService _core;
-    private readonly CoreConfigurationService _configuration;
+    private readonly ICoreConfigurationStore _configuration;
     private readonly MihomoServiceManager _mihomoService;
     private readonly ProxyRecoveryService _proxyRecovery;
 
@@ -31,7 +31,7 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         NetworkTakeoverService takeover,
         WindowsProxyService windowsProxy,
         MihomoCoreService core,
-        CoreConfigurationService configuration,
+        ICoreConfigurationStore configuration,
         MihomoServiceManager mihomoService,
         ProxyRecoveryService proxyRecovery)
     {

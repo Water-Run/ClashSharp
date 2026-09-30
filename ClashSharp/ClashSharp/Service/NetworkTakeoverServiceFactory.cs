@@ -30,23 +30,21 @@ internal static class NetworkTakeoverServiceFactory
         WindowsProxyService windowsProxy = WindowsProxyService.Instance;
         SubscribeCrashRecoveryOnce(core, windowsProxy);
         return new NetworkTakeoverService(
-            new NetworkTakeoverCoreConfigurationAdapter(CoreConfigurationService.Instance),
+            new NetworkTakeoverCoreConfigurationAdapter(RuntimeDataServices.Configuration),
             new NetworkTakeoverCoreAdapter(core),
             new NetworkTakeoverWindowsProxyAdapter(windowsProxy),
             new NetworkTakeoverMihomoServiceAdapter(MihomoServiceManager.Instance),
             new NetworkTakeoverProxyRecoveryAdapter(ProxyRecoveryService.Instance),
             new NetworkTakeoverReadinessAdapter(MihomoControllerClient.Instance),
             LocalizationService.Instance.GetString,
-            ProxySelectionService.Instance,
+            RuntimeDataServices.ProxySelections,
             FlushTrafficBeforeTransitionAsync);
     }
 
     /// <summary>Best-effort final accounting is bounded and cannot prevent network ownership release.</summary>
     private static async Task FlushTrafficBeforeTransitionAsync(CancellationToken cancellationToken)
     {
-        ConnectionSamplingService? sampling = ConnectionSamplingService.GetCreatedInstance();
-        if (sampling is null
-            || (!MihomoCoreService.Instance.IsRunning && !MihomoServiceManager.Instance.GetLatestStatus().HasRunningChild))
+        if (!MihomoCoreService.Instance.IsRunning && !MihomoServiceManager.Instance.GetLatestStatus().HasRunningChild)
         {
             return;
         }
@@ -56,7 +54,7 @@ internal static class NetworkTakeoverServiceFactory
         try
         {
             await RuntimeTrafficRateService.Instance.RefreshAsync(deadline.Token).ConfigureAwait(false);
-            await sampling.FlushAsync(deadline.Token).ConfigureAwait(false);
+            await RuntimeDataServices.FlushSamplingAsync(deadline.Token).ConfigureAwait(false);
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
@@ -101,7 +99,7 @@ internal static class NetworkTakeoverServiceFactory
     {
         try
         {
-            LogStorageService.Instance.AppendLog(level, "MihomoCore", message, detail);
+            RuntimeDataServices.Logs.AppendLog(level, "MihomoCore", message, detail);
         }
         catch (Exception logFailure) when (!ExceptionGraphClassifier.IsProcessFatal(logFailure))
         {
@@ -109,7 +107,7 @@ internal static class NetworkTakeoverServiceFactory
     }
 }
 
-internal sealed class NetworkTakeoverCoreConfigurationAdapter(CoreConfigurationService configuration) : INetworkTakeoverCoreConfiguration
+internal sealed class NetworkTakeoverCoreConfigurationAdapter(ICoreConfigurationStore configuration) : INetworkTakeoverCoreConfiguration
 {
     public Task<RuntimeConfigurationTransactionResult> ApplyConfigurationAsync(
         ClashSharpMode mode,

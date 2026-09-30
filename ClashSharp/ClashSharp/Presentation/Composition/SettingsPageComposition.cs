@@ -61,7 +61,7 @@ internal static class SettingsPageComposition
         AppSettingsService settings = context.Settings;
         LocalizationService localization = context.Localization;
         ILogStorage logStorage = context.LogStorage;
-        CoreConfigurationService coreConfiguration = context.CoreConfiguration;
+        ICoreConfigurationStore coreConfiguration = context.CoreConfiguration;
         MihomoCoreService mihomoCore = context.MihomoCore;
         ApplicationActionService applicationActions = context.ApplicationActions;
         ApplicationLifecycleService applicationLifecycle = context.ApplicationLifecycle;

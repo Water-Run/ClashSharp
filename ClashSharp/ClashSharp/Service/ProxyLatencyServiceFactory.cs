@@ -20,7 +20,7 @@ internal static class ProxyLatencyServiceFactory
     public static ProxyLatencyService CreateDefault()
     {
         return new ProxyLatencyService(
-            new ProxyLatencyStorageAdapter(LogStorageService.Instance),
+            new ProxyLatencyStorageAdapter(RuntimeDataServices.Logs),
             new TcpProxyLatencyProbe());
     }
 }

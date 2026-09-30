@@ -12,7 +12,7 @@ internal static class StartupLaunchServiceFactory
     {
         return new StartupLaunchService(
             new StartupLaunchTaskProvider(),
-            new StartupLaunchLogAdapter(LogStorageService.Instance),
+            new StartupLaunchLogAdapter(RuntimeDataServices.Logs),
             LocalizationService.Instance.GetString,
             taskId);
     }

@@ -35,7 +35,7 @@ internal sealed class PersistentStartupDiagnosticSink : IStartupDiagnosticSink, 
     public PersistentStartupDiagnosticSink()
         : this(
             (level, source, message, detail) =>
-                LogStorageService.Instance.AppendLog(level, source, message, detail),
+                RuntimeDataServices.Logs.AppendLog(level, source, message, detail),
             AppendFallbackFile)
     {
     }

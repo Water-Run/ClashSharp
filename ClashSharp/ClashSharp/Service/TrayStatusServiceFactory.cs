@@ -16,8 +16,8 @@ internal static class TrayStatusServiceFactory
         return new TrayStatusService(
             new TrayStatusRuntimeAdapter(
                 MihomoControllerClient.Instance.GetProxyGroupsAsync,
-                CoreConfigurationService.Instance.ObserveRuntimeConfigurationIntegrity),
-            new TrayStatusHealthStorageAdapter(LogStorageService.Instance),
+                RuntimeDataServices.Configuration.ObserveRuntimeConfigurationIntegrity),
+            new TrayStatusHealthStorageAdapter(RuntimeDataServices.Logs),
             MainlandChinaTextDisplayService.Instance.Apply);
     }
 }

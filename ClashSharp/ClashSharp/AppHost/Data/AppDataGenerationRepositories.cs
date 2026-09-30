@@ -35,7 +35,8 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
         MutationAdmissionBarrier admission, FairAsyncMutationGate mutationGate,
         IControllerCredentialProvider credentials, ICoreConfigurationProfileMetrics metrics,
         ICoreConfigurationValidator validator, Func<string, string> getString,
-        Func<CoreConfigurationService, SettingsAuthoritySession, IProfileCatalogRuntime> createProfileRuntime)
+        Func<CoreConfigurationService, SettingsAuthoritySession, IProfileCatalogRuntime> createProfileRuntime,
+        Func<CoreConfigurationService, ProxySelectionService>? createProxySelections = null)
     {
         Session = session ?? throw new ArgumentNullException(nameof(session));
         ArgumentNullException.ThrowIfNull(settingsAuthority);
@@ -48,6 +49,7 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
             new ProfileCatalogCoreConfigurationAdapter(Configuration), createProfileRuntime(Configuration, session),
             new ProfileCatalogLogAdapter(Logs), getString, new ProfileCatalogMutationCoordinator(admission, mutationGate));
         Triggers = new(Path.Combine(session.Generation.RootPath, "Triggers.db"));
+        ProxySelections = createProxySelections?.Invoke(Configuration);
     }
 
     public DataGenerationDescriptor Generation => Session.Generation;
@@ -56,6 +58,7 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
     public LogStorageService Logs { get; }
     public ProfileCatalogService Profiles { get; }
     public SqliteTriggerRepository Triggers { get; }
+    public ProxySelectionService? ProxySelections { get; }
 
     public void AttachRuntime(AppDataGenerationRuntime runtime)
     {
@@ -154,7 +157,8 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
             if (serviceType == typeof(ProfileCatalogService) || serviceType == typeof(IProfileCatalog)) { return Profiles; }
             if (serviceType == typeof(LogStorageService) || serviceType == typeof(ILogStorage)) { return Logs; }
             if (serviceType == typeof(ITriggerTrafficContextSource)) { return _trafficContext; }
-            if (serviceType == typeof(CoreConfigurationService)) { return Configuration; }
+            if (serviceType == typeof(CoreConfigurationService) || serviceType == typeof(ICoreConfigurationStore)) { return Configuration; }
+            if (serviceType == typeof(IProxySelectionService)) { return ProxySelections; }
             if (serviceType == typeof(ITriggerRepository) || serviceType == typeof(SqliteTriggerRepository)) { return Triggers; }
             return _participants.SingleOrDefault(serviceType.IsInstanceOfType);
         }

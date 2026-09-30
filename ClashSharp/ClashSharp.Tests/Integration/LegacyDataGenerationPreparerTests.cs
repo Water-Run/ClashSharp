@@ -21,6 +21,7 @@ public sealed class LegacyDataGenerationPreparerTests
             ["ProfileCatalog.json"] = "{\"Profiles\":[],\"Links\":[]}",
             ["Triggers.json"] = "{\"Tasks\":[]}",
             ["Triggers.json.migration-intent"] = "retained trigger migration identity",
+            [Path.Combine("mihomo", "proxy-selections.json")] = "{\"version\":1,\"profiles\":{\"example\":{\"GLOBAL\":\"Node B\"}}}",
             [Path.Combine("mihomo", "profiles", "example", "config.yaml")] = "proxies: []\nrules: [MATCH,DIRECT]",
             [Path.Combine("mihomo", "history", "example", "revision.yaml")] = "rules: [MATCH,REJECT]",
         };
@@ -138,6 +139,7 @@ public sealed class LegacyDataGenerationPreparerTests
     [Theory]
     [InlineData("ProfileCatalog.json")]
     [InlineData("Triggers.db")]
+    [InlineData("mihomo/proxy-selections.json")]
     public async Task DirectoryInPlaceOfAFile_FailsWithoutSilentlyDroppingData(string relativePath)
     {
         await using DataGenerationTestDirectory directory = new();

@@ -114,7 +114,7 @@ internal sealed class NotificationService :
         () => AppSettingsService.Instance.NotificationEnabled,
         () => AppSettingsService.Instance.NotificationLevel,
         LocalizationService.Instance.GetString,
-        LogStorageService.Instance.AppendLog,
+        RuntimeDataServices.Logs.AppendLog,
         TriggerRuntimeEventHub.Instance,
 #if UNIT_TESTS
         new ThrowingTestNotificationPlatform());

@@ -81,12 +81,12 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(_ => StartupLaunchServiceFactory.CreateDefault());
             services.AddSingleton(_ => MihomoConnectionService.Instance);
             services.AddSingleton(_ => MihomoControllerClient.Instance);
-            services.AddSingleton(_ => ProxySelectionService.Instance);
+            services.AddSingleton<IProxySelectionService>(_ => RuntimeDataServices.ProxySelections);
             services.AddSingleton(_ => NetworkTakeoverService.Instance);
             services.AddSingleton(_ => WindowsProxyService.Instance);
             services.AddSingleton(_ => WindowsNetworkDiagnosticService.Instance);
             services.AddSingleton(_ => MihomoCoreService.Instance);
-            services.AddSingleton(_ => CoreConfigurationService.Instance);
+            services.AddSingleton<ICoreConfigurationStore>(_ => RuntimeDataServices.Configuration);
             services.AddSingleton(_ => MihomoServiceManager.Instance);
             services.AddSingleton(_ => ProxyRecoveryService.Instance);
             services.AddSingleton(_ => NotificationService.Instance);
@@ -107,6 +107,7 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<TriggerRuntimeEventHub>());
             services.AddSingleton(mutationAdmission);
             services.AddSingleton<DataGenerationManager>();
+            services.AddSingleton<RuntimeDataBinding>();
             services.AddSingleton<GenerationSettingsAuthority>();
             services.AddSingleton<ISettingsAuthority>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
             services.AddSingleton<IRuntimeSettingsAuthority>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
@@ -187,7 +188,13 @@ internal static class ClashSharpAppHostFactory
                     session => new AppDataGenerationRepositories(session, authority, mutationAdmission,
                         provider.GetRequiredService<FairAsyncMutationGate>(), provider.GetRequiredService<IControllerCredentialProvider>(),
                         new CoreConfigurationProfileMetricsAdapter(), new CoreConfigurationValidator(), localization.GetString,
-                        (configuration, ownedSession) => new GenerationProfileRuntime(ownedSession, configuration, takeover)), runtime.ComposeAsync);
+                        (configuration, ownedSession) => new GenerationProfileRuntime(ownedSession, configuration, takeover),
+                        configuration => new ProxySelectionService(
+                            new ProxySelectionStore(Path.Combine(session.Generation.RootPath, "mihomo", "proxy-selections.json")),
+                            provider.GetRequiredService<MihomoControllerClient>().GetProxyGroupsAsync,
+                            provider.GetRequiredService<MihomoControllerClient>().SelectProxyAsync,
+                            configuration.ObserveRuntimeConfigurationIntegrity,
+                            new ProfileCatalogMutationCoordinator(mutationAdmission, provider.GetRequiredService<FairAsyncMutationGate>()))), runtime.ComposeAsync);
             });
             services.AddSingleton<DataGenerationBootstrapper>();
             services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
@@ -210,6 +217,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<MainWindowComposition.Runtime>();
             services.AddSingleton<StartupConflictSnapshot>();
             services.AddSingleton<IApplicationStartupCoordinator, StartupCoordinator>();
+            services.AddDeferredStartupStep<RuntimeDataBindingStartupStep>("runtime-data-binding", 25);
             services.AddDeferredStartupStep<DataPackageRecoveryStartupStep>("data-package-recovery", 50);
             services.AddDeferredStartupStep<ConfigureLocalizationStartupStep>("configure-localization", 100);
             services.AddSingleton(provider =>

@@ -9,8 +9,6 @@ namespace ClashSharp.Service;
 /// <summary>Subscribes to application setting changes and records an audit trail.</summary>
 internal sealed class AppSettingsAuditLogService
 {
-    public static AppSettingsAuditLogService Instance { get; } = new(AppSettingsService.Instance, LogStorageService.Instance);
-
     private readonly AppSettingsService _settings;
     private readonly ILogStorage _logStorage;
     private int _isStarted;

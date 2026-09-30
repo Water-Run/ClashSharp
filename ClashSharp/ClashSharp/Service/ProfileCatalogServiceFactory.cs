@@ -23,12 +23,12 @@ internal static class ProfileCatalogServiceFactory
         return CreateForDirectory(
             AppDataPathService.ResolveLocalDataDirectory(),
             new ProfileCatalogSettingsAdapter(AppSettingsService.Instance),
-            new ProfileCatalogCoreConfigurationAdapter(CoreConfigurationService.Instance),
+            new ProfileCatalogCoreConfigurationAdapter(RuntimeDataServices.Configuration),
             new ProfileCatalogRuntimeAdapter(
                 AppSettingsService.Instance,
-                CoreConfigurationService.Instance,
+                RuntimeDataServices.Configuration,
                 NetworkTakeoverService.Instance),
-            new ProfileCatalogLogAdapter(LogStorageService.Instance),
+            new ProfileCatalogLogAdapter(RuntimeDataServices.Logs),
             LocalizationService.Instance.GetString,
             LateBoundProfileCatalogMutationCoordinator.Instance);
     }
@@ -64,7 +64,7 @@ internal static class ProfileCatalogServiceFactory
 
 internal sealed class ProfileCatalogRuntimeAdapter(
     AppSettingsService settings,
-    CoreConfigurationService configuration,
+    ICoreConfigurationStore configuration,
     NetworkTakeoverService takeover) : IProfileCatalogRuntime
 {
     public async Task<bool> ApplyProfileAsync(string profileId, CancellationToken cancellationToken)
@@ -135,7 +135,7 @@ internal sealed class ProfileCatalogSettingsAdapter(AppSettingsService settings)
     }
 }
 
-internal sealed class ProfileCatalogCoreConfigurationAdapter(CoreConfigurationService coreConfiguration) : IProfileCatalogCoreConfiguration
+internal sealed class ProfileCatalogCoreConfigurationAdapter(ICoreConfigurationStore coreConfiguration) : IProfileCatalogCoreConfiguration
 {
     public Task<ProfileImportResult> ImportProfileConfigurationAsync(
         string profileId,

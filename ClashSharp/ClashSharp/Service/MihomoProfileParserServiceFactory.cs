@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 
 namespace ClashSharp.Service;
 
@@ -18,7 +17,7 @@ internal static class MihomoProfileParserServiceFactory
     public static MihomoProfileParserService CreateDefault()
     {
         return new MihomoProfileParserService(
-            new MihomoProfileTextSource(AppSettingsService.Instance, CoreConfigurationService.Instance),
+            new MihomoProfileTextSource(AppSettingsService.Instance, RuntimeDataServices.Configuration),
             RegionDisplayService.Instance.Resolve,
             LocalizationService.Instance.GetString);
     }
@@ -26,7 +25,7 @@ internal static class MihomoProfileParserServiceFactory
 
 internal sealed class MihomoProfileTextSource(
     AppSettingsService settings,
-    CoreConfigurationService coreConfiguration) : IMihomoProfileTextSource
+    ICoreConfigurationStore coreConfiguration) : IMihomoProfileTextSource
 {
     public string? TryReadActiveProfileText()
     {
@@ -36,7 +35,6 @@ internal sealed class MihomoProfileTextSource(
             return null;
         }
 
-        string path = coreConfiguration.GetProfileConfigurationPath(activeProfileId);
-        return File.Exists(path) ? File.ReadAllText(path) : null;
+        return coreConfiguration.TryReadProfileConfigurationText(activeProfileId, out string? text) ? text : null;
     }
 }

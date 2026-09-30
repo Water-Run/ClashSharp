@@ -15,7 +15,7 @@ internal sealed class NetworkSettingsRuntime : INetworkSettingsRuntime
     private bool _inactiveTransparentProxyPolicy;
     private UnresolvedConfiguration? _unresolved;
 
-    public NetworkSettingsRuntime(CoreConfigurationService configuration, NetworkTakeoverService takeover, WindowsProxyService proxy)
+    public NetworkSettingsRuntime(ICoreConfigurationStore configuration, NetworkTakeoverService takeover, WindowsProxyService proxy)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(takeover);

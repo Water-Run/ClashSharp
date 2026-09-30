@@ -15,7 +15,7 @@ internal interface INetworkTakeoverProxySelections
 }
 
 /// <summary>Persists acknowledged selections and reapplies them across App/service owner changes.</summary>
-internal sealed partial class ProxySelectionService : INetworkTakeoverProxySelections
+internal sealed partial class ProxySelectionService : IProxySelectionService
 {
     private readonly IProxySelectionStore _store;
     private readonly Func<CancellationToken, Task<IReadOnlyList<MihomoProxyGroup>>> _getGroups;

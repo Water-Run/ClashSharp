@@ -11,7 +11,11 @@ namespace ClashSharp.Infrastructure.Data;
 /// <remarks>Call only after retained legacy transactions have recovered and before runtime producers start.</remarks>
 public sealed class LegacyDataGenerationPreparer
 {
-    private static readonly string[] DocumentFiles = ["ProfileCatalog.json", "Triggers.json", "Triggers.json.migration-intent"];
+    private static readonly string[] DocumentFiles =
+    [
+        "ProfileCatalog.json", "Triggers.json", "Triggers.json.migration-intent",
+        Path.Combine("mihomo", "proxy-selections.json")
+    ];
     private static readonly string[] DatabaseFiles = ["ClashSharpLogs.sqlite3", "Triggers.db", "Triggers.db.backup"];
     private static readonly string[] ProfileDirectories = ["profiles", "history"];
     private readonly string _legacyRoot;

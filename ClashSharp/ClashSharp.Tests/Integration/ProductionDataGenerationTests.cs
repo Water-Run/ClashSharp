@@ -229,6 +229,7 @@ public sealed partial class ProductionDataGenerationTests
         public DataGenerationManager Manager { get; } = new();
         public GenerationSettingsAuthority Authority { get; }
         public Func<Repositories, CancellationToken, Task>? ComposeRuntime { get; set; }
+        public Func<ClashSharpUi::ClashSharp.Service.CoreConfigurationService, ClashSharpUi::ClashSharp.Service.ProxySelectionService>? CreateProxySelections { get; set; }
         public List<string> Calls { get; } = [];
         public List<Repositories> Containers { get; } = [];
         public List<Participant> Participants { get; } = [];
@@ -256,7 +257,7 @@ public sealed partial class ProductionDataGenerationTests
             }, session =>
             {
                 Repositories repositories = new(session, authority, Admission, MutationGate, new Credential(),
-                    new ProfileMetrics(), Validator, key => key, (_, _) => new Runtime());
+                    new ProfileMetrics(), Validator, key => key, (_, _) => new Runtime(), CreateProxySelections);
                 Containers.Add(repositories);
                 return repositories;
             }, async (repositories, token) =>

@@ -11,7 +11,7 @@ internal static class TrayCommandServiceFactory
     {
         return new TrayCommandService(
             new TrayCommandTakeoverAdapter(actions),
-            new TrayCommandLogAdapter(LogStorageService.Instance));
+            new TrayCommandLogAdapter(RuntimeDataServices.Logs));
     }
 }
 
