@@ -77,7 +77,7 @@ public sealed class SettingsAuthorityArchitectureTests
         Assert.DoesNotContain("_settings.MihomoControllerSecret", configuration, StringComparison.Ordinal);
         string host = ReadApplicationSource("AppHost/ClashSharpAppHostFactory.cs");
         Assert.Contains("AddSingleton<IControllerCredentialStore, WindowsControllerCredentialStore>()", host, StringComparison.Ordinal);
-        Assert.Contains("AddSingleton<IStartupStep, ControllerCredentialStartupStep>()", host, StringComparison.Ordinal);
+        Assert.Contains("AddDeferredStartupStep<ControllerCredentialStartupStep>(\"controller-credential\", 140)", host, StringComparison.Ordinal);
         string startup = ReadApplicationSource("AppHost/Startup/ControllerCredentialStartupStep.cs");
         Assert.Contains("Order => 140", startup, StringComparison.Ordinal);
         Assert.Contains("Order => 125", ReadApplicationSource("AppHost/Startup/InstallerTransactionStartupGate.cs"), StringComparison.Ordinal);

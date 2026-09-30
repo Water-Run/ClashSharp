@@ -44,7 +44,6 @@ internal static class ClashSharpAppHostFactory
         string legacyTriggerPath = Path.Combine(triggerRoot, "Triggers.json");
         Guid triggerProcessEpoch = Guid.NewGuid();
         MutationAdmissionBarrier mutationAdmission = new();
-        AppSettingsService.Instance.ConfigureMutationAdmission(mutationAdmission);
         return AppHost.Build(services =>
         {
             services.AddSingleton(completeWindow);
@@ -57,7 +56,12 @@ internal static class ClashSharpAppHostFactory
                 settings.ConfigureMutationAdmission(mutationAdmission);
                 return settings;
             });
-            services.AddSingleton(_ => ClashDataPackageService.Instance);
+            services.AddSingleton(provider =>
+            {
+                // Legacy recovery can write settings before the localization step resolves them.
+                _ = provider.GetRequiredService<AppSettingsService>();
+                return ClashDataPackageService.Instance;
+            });
             services.AddSingleton(_ => AppSettingsAuditLogService.Instance);
             services.AddSingleton(_ => LocalizationService.Instance);
             services.AddSingleton(_ => LogStorageService.Instance);
@@ -277,23 +281,24 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<MainWindowComposition.Runtime>();
             services.AddSingleton<StartupConflictSnapshot>();
             services.AddSingleton<IApplicationStartupCoordinator, StartupCoordinator>();
-            services.AddSingleton<IStartupStep, DataPackageRecoveryStartupStep>();
-            services.AddSingleton<IStartupStep, ConfigureLocalizationStartupStep>();
-            services.AddSingleton<IStartupStep>(provider =>
+            services.AddDeferredStartupStep<DataPackageRecoveryStartupStep>("data-package-recovery", 50);
+            services.AddDeferredStartupStep<ConfigureLocalizationStartupStep>("configure-localization", 100);
+            services.AddSingleton(provider =>
                 new InstallerTransactionStartupGate(
                     installerTransactionState,
                     provider.GetRequiredService<MutationAdmissionBarrier>()));
-            services.AddSingleton<IStartupStep, MutationRecoveryStartupStep>();
-            services.AddSingleton<IStartupStep, ControllerCredentialStartupStep>();
-            services.AddSingleton<IStartupStep, StartupRestoreFallbackStep>();
-            services.AddSingleton<IStartupStep, ProxyRecoveryStartupStep>();
-            services.AddSingleton<IStartupStep, AppSettingsAuditStartupStep>();
-            services.AddSingleton<IStartupStep, StartupConflictProbeStep>();
-            services.AddSingleton<IStartupStep, StartupNetworkBehaviorStep>();
-            services.AddSingleton<IStartupStep, TriggerSupervisorStartupStep>();
-            services.AddSingleton<IStartupStep, WindowShellStartupStep>();
-            services.AddSingleton<IStartupStep, ConnectionSamplingStartupStep>();
-            services.AddSingleton<IStartupStep, ProfileSubscriptionSchedulerStartupStep>();
+            services.AddDeferredStartupStep<InstallerTransactionStartupGate>("installer-transaction-gate", 125);
+            services.AddDeferredStartupStep<ControllerCredentialStartupStep>("controller-credential", 140);
+            services.AddDeferredStartupStep<MutationRecoveryStartupStep>("mutation-recovery", 150);
+            services.AddDeferredStartupStep<StartupRestoreFallbackStep>("startup-restore-fallback", 200);
+            services.AddDeferredStartupStep<ProxyRecoveryStartupStep>("proxy-recovery", 300);
+            services.AddDeferredStartupStep<AppSettingsAuditStartupStep>("settings-audit", 400);
+            services.AddDeferredStartupStep<StartupConflictProbeStep>("startup-conflict-probe", 425);
+            services.AddDeferredStartupStep<StartupNetworkBehaviorStep>("startup-network-behavior", 450);
+            services.AddDeferredStartupStep<TriggerSupervisorStartupStep>("trigger-supervisor", 500);
+            services.AddDeferredStartupStep<WindowShellStartupStep>("window-shell", 600);
+            services.AddDeferredStartupStep<ConnectionSamplingStartupStep>("connection-sampling", 700);
+            services.AddDeferredStartupStep<ProfileSubscriptionSchedulerStartupStep>("profile-subscription-updates", 710);
         });
     }
 }
