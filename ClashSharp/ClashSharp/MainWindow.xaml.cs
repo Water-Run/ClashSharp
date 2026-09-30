@@ -334,6 +334,12 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
         if (ShellRouteCatalog.TryParse(tag, out ShellRoute route))
         {
+            if (_currentNavigation is ShellNavigationEntry current
+                && ShellRouteCatalog.GetNavigationRoute(current.Route, current.Parameter) == route)
+            {
+                return;
+            }
+
             Runtime.Navigation.Navigate(route);
         }
     }
@@ -403,7 +409,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
         if (_currentNavigation is ShellNavigationEntry current && current == destination)
         {
-            SelectNavigationItem(destination.Route);
+            SelectNavigationItem(destination);
             return;
         }
 
@@ -420,11 +426,12 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
         ContentFrame.Content = page;
         _currentNavigation = destination;
-        SelectNavigationItem(destination.Route);
+        SelectNavigationItem(destination);
     }
 
-    private void SelectNavigationItem(ShellRoute route)
+    private void SelectNavigationItem(ShellNavigationEntry destination)
     {
+        ShellRoute route = ShellRouteCatalog.GetNavigationRoute(destination.Route, destination.Parameter);
         if (FindNavigationItem(route) is NavigationViewItem item
             && !ReferenceEquals(NavView.SelectedItem, item))
         {
@@ -455,7 +462,6 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             ShellRoute.Triggers => NavTriggersItem,
             ShellRoute.Connections => NavConnectionsItem,
             ShellRoute.Statistics => NavStatisticsItem,
-            ShellRoute.Logs => null,
             ShellRoute.About => NavAboutItem,
             ShellRoute.Settings => NavSettingsItem,
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Unsupported shell route."),

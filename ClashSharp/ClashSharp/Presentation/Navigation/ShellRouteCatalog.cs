@@ -5,6 +5,14 @@ namespace ClashSharp.Presentation.Navigation;
 /// <summary>Owns the boundary between XAML/tray tags and typed shell routes.</summary>
 internal static class ShellRouteCatalog
 {
+    /// <summary>Finds the sidebar destination that owns a page and its filter.</summary>
+    public static ShellRoute GetNavigationRoute(ShellRoute route, string? parameter = null)
+    {
+        return route == ShellRoute.Logs
+            ? parameter == "Trigger" ? ShellRoute.Triggers : ShellRoute.Statistics
+            : route;
+    }
+
     public static bool TryParse(string? tag, out ShellRoute route)
     {
         switch (tag)

@@ -29,6 +29,25 @@ public sealed class ShellNavigationServiceTests
         Assert.False(ShellRouteCatalog.TryParse(null, out _));
     }
 
+    [Theory]
+    [InlineData(null, "Statistics")]
+    [InlineData("Trigger", "Triggers")]
+    [InlineData("Connections", "Statistics")]
+    [InlineData("Unknown", "Statistics")]
+    public void RouteCatalog_LogsSelectsItsParent(string? filter, string expectedTag)
+    {
+        Assert.Equal(expectedTag, ShellRouteCatalog.GetTag(ShellRouteCatalog.GetNavigationRoute(ShellRoute.Logs, filter)));
+    }
+
+    [Fact]
+    public void RouteCatalog_TopLevelPagesKeepTheirOwnSelection()
+    {
+        foreach (ShellRoute route in Enum.GetValues<ShellRoute>().Where(route => route != ShellRoute.Logs))
+        {
+            Assert.Equal(route, ShellRouteCatalog.GetNavigationRoute(route, "Trigger"));
+        }
+    }
+
     [Fact]
     public void NavigationService_PublishesForwardAndBackIntents()
     {
