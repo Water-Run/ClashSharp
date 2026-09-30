@@ -2129,9 +2129,11 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("SetModeButtonLayout(StandbyModeButton, row: 0, column: 1, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SetModeButtonLayout(RuleTakeoverModeButton, row: 1, column: 0, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SetModeButtonLayout(FullTakeoverModeButton, row: 1, column: 1, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("SizeChanged=\"ContentHost_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("UpdateMasterLayout(e.NewSize.Width)", masterControlCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("ContentHost.Width =", masterControlCode, StringComparison.Ordinal);
+        Assert.Equal("RootScrollViewer_SizeChanged", (string?)rootScrollViewer.Attribute("SizeChanged"));
+        Assert.Null(NamedElement("ContentHost").Attribute("SizeChanged"));
+        Assert.Contains("e.NewSize.Width - RootScrollViewer.Padding.Left - RootScrollViewer.Padding.Right", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("ContentHost.Width = contentWidth", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("UpdateMasterLayout(contentWidth)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SizeChanged=\"HeroStatusItemGrid_SizeChanged\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("ContainerContentChanging=\"HeroStatusItemGrid_ContainerContentChanging\"", masterControlXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"HeroStatusItemContent\"", masterControlXaml, StringComparison.Ordinal);
