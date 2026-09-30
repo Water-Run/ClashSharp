@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
@@ -354,6 +355,250 @@ public sealed class ConnectionsViewModelTests
         Assert.Equal("Unavailable", viewModel.ConnectionStatusText);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task RefreshConnectionsAsync_TransportFailureClearsStaleRowsAndCanRecover(int failureKind)
+    {
+        FakeConnectionClient client = new();
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink());
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        viewModel.SearchText = "HOST";
+        client.ExceptionToThrow = CreateTransportFailure(failureKind);
+
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+
+        Assert.Empty(viewModel.Connections);
+        Assert.Equal("Unavailable", viewModel.EmptyStateText);
+        Assert.False(viewModel.CanCloseConnections);
+        Assert.False(viewModel.IsRefreshing);
+        Assert.Single(log.Entries);
+        client.ExceptionToThrow = null;
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.Equal("HOST", viewModel.SearchText);
+        Assert.Equal("2 of 2", viewModel.FilterCountText);
+        Assert.True(viewModel.CanCloseConnections);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task WatchConnectionsAsync_RetriesTransportFailuresAndPreservesFilter(int failureKind)
+    {
+        FakeConnectionClient client = new();
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink());
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        viewModel.SearchText = "HOST";
+        client.StreamFailures.Enqueue(CreateTransportFailure(failureKind));
+        client.StreamFailures.Enqueue(CreateTransportFailure(failureKind));
+        TaskCompletionSource recovered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ConnectionsViewModel.ConnectionStatusText)
+                && viewModel.ConnectionStatusText == "2 active")
+            {
+                recovered.TrySetResult();
+            }
+        };
+        using CancellationTokenSource lifetime = new();
+        Task watch = viewModel.WatchConnectionsAsync(lifetime.Token);
+        try
+        {
+            Assert.Equal("Unavailable", viewModel.ConnectionStatusText);
+            Assert.Empty(viewModel.Connections);
+            Assert.False(viewModel.CanCloseConnections);
+            await recovered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(3, client.StreamCallCount);
+            Assert.True(viewModel.CanCloseConnections);
+            Assert.Equal("HOST", viewModel.SearchText);
+            Assert.Equal("2 of 2", viewModel.FilterCountText);
+            Assert.Equal("Warning", Assert.Single(log.Entries).Level);
+        }
+        finally
+        {
+            lifetime.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watch);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    [InlineData(false, 4)]
+    [InlineData(true, 4)]
+    public async Task CloseConnectionsAsync_RequestFailureClearsStaleRowsAndRefreshRecovers(bool closeAll, int failureKind)
+    {
+        Task failure = Task.FromException(CreateTransportFailure(failureKind));
+        FakeConnectionClient client = new() { CloseResult = failure, CloseAllResult = failure };
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink());
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        viewModel.SearchText = "HOST";
+
+        await (closeAll
+            ? viewModel.CloseAllConnectionsAsync(CancellationToken.None)
+            : viewModel.CloseConnectionAsync(client.Connections[0], CancellationToken.None));
+
+        Assert.Equal("Unavailable", viewModel.ConnectionStatusText);
+        Assert.Empty(viewModel.Connections);
+        Assert.False(viewModel.CanCloseConnections);
+        Assert.False(viewModel.IsClosing);
+        Assert.Equal("Warning", Assert.Single(log.Entries).Level);
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.Equal("HOST", viewModel.SearchText);
+        Assert.Equal("2 of 2", viewModel.FilterCountText);
+        Assert.True(viewModel.CanCloseConnections);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CloseConnectionsAsync_LateFailureCannotReplaceANewerSnapshot(bool closeAll)
+    {
+        TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeConnectionClient client = new() { CloseResult = completion.Task, CloseAllResult = completion.Task };
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink());
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        Task close = closeAll
+            ? viewModel.CloseAllConnectionsAsync(CancellationToken.None)
+            : viewModel.CloseConnectionAsync(client.Connections[0], CancellationToken.None);
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+
+        completion.SetException(new HttpRequestException("Old close request failed."));
+        await close;
+
+        Assert.Equal("2 active", viewModel.ConnectionStatusText);
+        Assert.Equal(2, viewModel.Connections.Count);
+        Assert.True(viewModel.CanCloseConnections);
+        Assert.False(viewModel.IsClosing);
+        Assert.Equal("Old close request failed.", Assert.Single(log.Entries).Detail);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CloseConnectionsAsync_PageCancellationDoesNotPublishAnOutage(bool closeAll)
+    {
+        TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeConnectionClient client = new() { CloseResult = completion.Task, CloseAllResult = completion.Task };
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink());
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        using CancellationTokenSource lifetime = new();
+        Task close = closeAll
+            ? viewModel.CloseAllConnectionsAsync(lifetime.Token)
+            : viewModel.CloseConnectionAsync(client.Connections[0], lifetime.Token);
+
+        lifetime.Cancel();
+        completion.SetCanceled(lifetime.Token);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => close);
+
+        Assert.Equal("2 active", viewModel.ConnectionStatusText);
+        Assert.Equal(2, viewModel.Connections.Count);
+        Assert.False(viewModel.IsClosing);
+        Assert.Empty(log.Entries);
+    }
+
+    [Fact]
+    public async Task WatchConnectionsAsync_RepeatedOutageInvalidatesAManualRefreshWithoutDuplicateWarnings()
+    {
+        FakeConnectionClient client = new();
+        client.StreamFailures.Enqueue(new IOException("First stream failure."));
+        client.StreamFailures.Enqueue(new IOException("Stream still unavailable."));
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink());
+        using CancellationTokenSource lifetime = new();
+        Task watch = viewModel.WatchConnectionsAsync(lifetime.Token);
+        try
+        {
+            Assert.Equal("Unavailable", viewModel.ConnectionStatusText);
+            await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+            Assert.True(viewModel.CanCloseConnections);
+            TaskCompletionSource unavailableAgain = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(ConnectionsViewModel.ConnectionStatusText)
+                    && viewModel.ConnectionStatusText == "Unavailable")
+                {
+                    unavailableAgain.TrySetResult();
+                }
+            };
+
+            await unavailableAgain.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Empty(viewModel.Connections);
+            Assert.False(viewModel.CanCloseConnections);
+            Assert.Equal("First stream failure.", Assert.Single(log.Entries).Detail);
+        }
+        finally
+        {
+            lifetime.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watch);
+        }
+    }
+
+    [Theory]
+    [InlineData("refresh")]
+    [InlineData("stream")]
+    [InlineData("close")]
+    [InlineData("close-all")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2201:Do not raise reserved exception types", Justification = "Fault injection verifies that nested process-fatal exceptions are not converted into recoverable UI failures.")]
+    public async Task ControllerOperations_DoNotTreatWrappedFatalErrorsAsAnOutage(string operation)
+    {
+        TimeoutException failure = new("Transport failed.", new OutOfMemoryException());
+        FakeConnectionClient client = new()
+        {
+            CloseResult = operation == "close" ? Task.FromException(failure) : Task.CompletedTask,
+            CloseAllResult = operation == "close-all" ? Task.FromException(failure) : Task.CompletedTask,
+        };
+        FakeConnectionLog log = new();
+        ConnectionsViewModel viewModel = new(
+            new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink());
+        await viewModel.RefreshConnectionsAsync(CancellationToken.None);
+        client.ExceptionToThrow = failure;
+        client.StreamFailures.Enqueue(failure);
+
+        Task result = operation switch
+        {
+            "refresh" => viewModel.RefreshConnectionsAsync(CancellationToken.None),
+            "stream" => viewModel.WatchConnectionsAsync(CancellationToken.None),
+            "close" => viewModel.CloseConnectionAsync(client.Connections[0], CancellationToken.None),
+            "close-all" => viewModel.CloseAllConnectionsAsync(CancellationToken.None),
+            _ => throw new ArgumentOutOfRangeException(nameof(operation)),
+        };
+
+        Assert.Same(failure, await Assert.ThrowsAsync<TimeoutException>(() => result));
+        Assert.Equal("2 active", viewModel.ConnectionStatusText);
+        Assert.False(viewModel.IsClosing);
+        Assert.False(viewModel.IsRefreshing);
+        Assert.Empty(log.Entries);
+    }
+
+    private static Exception CreateTransportFailure(int kind) => kind switch
+    {
+        0 => new TimeoutException("Service IPC deadline exceeded.", new OperationCanceledException()),
+        1 => new IOException("Service pipe disconnected."),
+        2 => new WebSocketException("Controller disconnected."),
+        3 => new OperationCanceledException("Transport timed out without page cancellation."),
+        4 => new HttpRequestException("Controller unavailable."),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
     /// <summary>Fake localization provider for connection tests.</summary>
     private sealed class FakeConnectionsLocalization : IConnectionsLocalization
     {
@@ -399,6 +644,10 @@ public sealed class ConnectionsViewModelTests
 
         public IReadOnlyList<ActiveConnection>? StreamConnections { get; set; }
 
+        public Queue<Exception> StreamFailures { get; } = new();
+
+        public int StreamCallCount { get; private set; }
+
         /// <summary>Gets the number of refresh calls.</summary>
         /// <value>Refresh call count.</value>
         public int RefreshCount { get; private set; }
@@ -414,6 +663,8 @@ public sealed class ConnectionsViewModelTests
         public bool CloseAllCalled { get; private set; }
 
         public Task CloseAllResult { get; init; } = Task.CompletedTask;
+
+        public Task CloseResult { get; init; } = Task.CompletedTask;
 
         /// <summary>Gets fake active connections.</summary>
         /// <param name="cancellationToken">Cancellation token observed by the fake.</param>
@@ -434,6 +685,12 @@ public sealed class ConnectionsViewModelTests
         public async IAsyncEnumerable<IReadOnlyList<ActiveConnection>> StreamActiveConnectionsAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            StreamCallCount++;
+            if (StreamFailures.TryDequeue(out Exception? failure))
+            {
+                throw failure;
+            }
+
             yield return StreamConnections ?? Connections;
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         }
@@ -445,7 +702,7 @@ public sealed class ConnectionsViewModelTests
         public Task CloseConnectionAsync(string connectionId, CancellationToken cancellationToken)
         {
             ClosedConnectionId = connectionId;
-            return Task.CompletedTask;
+            return CloseResult;
         }
 
         /// <summary>Closes all fake connections.</summary>

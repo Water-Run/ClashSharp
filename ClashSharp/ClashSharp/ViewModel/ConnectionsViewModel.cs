@@ -215,9 +215,9 @@ internal sealed class ConnectionsViewModel : ObservableObject
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!unavailableLogged)
+                if (!unavailableLogged || _isAvailable)
                 {
-                    ApplyUnavailableStatus("The mihomo connection stream closed.");
+                    ApplyUnavailableStatus("The mihomo connection stream closed.", logWarning: !unavailableLogged);
                     unavailableLogged = true;
                 }
             }
@@ -232,9 +232,9 @@ internal sealed class ConnectionsViewModel : ObservableObject
                 && !ExceptionGraphClassifier.IsProcessFatal(exception)
                 && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
             {
-                if (!unavailableLogged)
+                if (!unavailableLogged || _isAvailable)
                 {
-                    ApplyUnavailableStatus(exception.Message);
+                    ApplyUnavailableStatus(exception.Message, logWarning: !unavailableLogged);
                     unavailableLogged = true;
                 }
             }
@@ -298,7 +298,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
             connections.Count);
     }
 
-    private void ApplyUnavailableStatus(string detail)
+    private void ApplyUnavailableStatus(string detail, bool logWarning = true)
     {
         ++_snapshotRevision;
         _hasObservation = true;
@@ -306,7 +306,10 @@ internal sealed class ConnectionsViewModel : ObservableObject
         _allConnections = [];
         ApplyFilter();
         ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
-        _log.Append("Warning", "Connections", ConnectionStatusText, detail);
+        if (logWarning)
+        {
+            _log.Append("Warning", "Connections", ConnectionStatusText, detail);
+        }
     }
 
     private void ApplyFilter()
