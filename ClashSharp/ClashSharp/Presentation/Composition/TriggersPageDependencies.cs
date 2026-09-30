@@ -10,11 +10,13 @@ internal sealed class TriggersPageDependencies
     public TriggersPageDependencies(
         TriggersViewModel viewModel,
         IApplicationErrorSink errorSink,
-        Action openLogs)
+        Action openLogs,
+        Func<Action, IDisposable> subscribeToDataChanges)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         OpenLogs = openLogs ?? throw new ArgumentNullException(nameof(openLogs));
+        SubscribeToDataChanges = subscribeToDataChanges ?? throw new ArgumentNullException(nameof(subscribeToDataChanges));
     }
 
     public TriggersViewModel ViewModel { get; }
@@ -22,4 +24,5 @@ internal sealed class TriggersPageDependencies
     public IApplicationErrorSink ErrorSink { get; }
 
     public Action OpenLogs { get; }
+    public Func<Action, IDisposable> SubscribeToDataChanges { get; }
 }

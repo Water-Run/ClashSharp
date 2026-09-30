@@ -14,6 +14,9 @@ public sealed partial class AppSettingsService
     private GenerationSettingsAuthority? _authority;
     private SettingsAuthoritySnapshot? _publishedAuthority;
 
+    /// <summary>Raised after a different data directory is published, even if preference values are identical.</summary>
+    internal event EventHandler? DataGenerationChanged;
+
     /// <summary>Identifies the current bound data namespace; an unavailable bound owner is never treated as legacy storage.</summary>
     internal Guid? GetBoundDataGenerationId() => Volatile.Read(ref _authority)?.CaptureSnapshot().Generation.GenerationId;
 
@@ -37,9 +40,11 @@ public sealed partial class AppSettingsService
     private void PublishAuthoritySnapshot(SettingsAuthoritySnapshot snapshot)
     {
         List<AppSettingChangedEventArgs> changed = [];
+        bool dataChanged;
         lock (_syncLock)
         {
             SettingsAuthoritySnapshot? previous = _publishedAuthority;
+            dataChanged = previous is not null && !previous.Generation.IsSameGeneration(snapshot.Generation);
             _publishedAuthority = snapshot;
             foreach ((SettingKey key, SettingDesiredEntry next) in snapshot.Envelope.Desired)
             {
@@ -49,7 +54,7 @@ public sealed partial class AppSettingsService
                 if (!Equals(before, after)) { changed.Add(new(key.Value, before, after, wasRemoved: false)); }
             }
         }
-        NotifySettingChanges(changed);
+        NotifySettingChanges(changed, dataChanged);
     }
 
     private object ReadAuthorityValue(GenerationSettingsAuthority authority, string key)

@@ -18,12 +18,29 @@ internal sealed class TriggersViewModel : ObservableObject
     private readonly ITriggerDefinitionStore _store;
     private readonly ITriggerPresentationSettings _settings;
     private readonly IApplicationErrorSink _errorSink;
-    private long _generation;
+    private TriggerCatalogVersion _version;
+
+    public TriggerCatalogVersion CatalogVersion => _version;
+
+    public bool IsCurrentTask(TriggerTaskItemViewModel item) => TriggerTasks.Contains(item);
     private bool _triggersEnabled;
     private TriggerEditorViewModel? _currentEditor;
     private string? _errorCode;
     private string? _errorResourceKey;
     private int _busy;
+    private TaskCompletionSource? _operationCompletion;
+
+    /// <summary>Waits for a current edit before refreshing a directory change; does not discard an open draft.</summary>
+    public async Task<bool> RefreshAfterDataChangeAsync(CancellationToken cancellationToken)
+    {
+        while (IsBusy)
+        {
+            Task idle = _operationCompletion?.Task ?? Task.CompletedTask;
+            await idle.WaitAsync(cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return await LoadAsync(cancellationToken);
+    }
 
     public TriggersViewModel(
         Func<string, string> getString,
@@ -225,13 +242,13 @@ internal sealed class TriggersViewModel : ObservableObject
     /// <summary>Opens a new complete draft with safe typed defaults.</summary>
     public TriggerEditorViewModel BeginCreate()
     {
-        long expectedGeneration = _generation;
+        TriggerCatalogVersion expectedVersion = _version;
         CurrentEditor = new TriggerEditorViewModel(
             _getString,
             original: null,
             TriggerTasks.Select(static task => task.Name),
             (definition, cancellationToken) =>
-                SaveDefinitionAsync(expectedGeneration, definition, cancellationToken),
+                SaveDefinitionAsync(expectedVersion, definition, cancellationToken),
             _errorSink);
         return CurrentEditor;
     }
@@ -248,7 +265,7 @@ internal sealed class TriggersViewModel : ObservableObject
             return null;
         }
 
-        long expectedGeneration = _generation;
+        TriggerCatalogVersion expectedVersion = _version;
         CurrentEditor = new TriggerEditorViewModel(
             _getString,
             item.Definition,
@@ -256,7 +273,7 @@ internal sealed class TriggersViewModel : ObservableObject
                 .Where(task => !StringComparer.Ordinal.Equals(task.Id, id))
                 .Select(static task => task.Name),
             (definition, cancellationToken) =>
-                SaveDefinitionAsync(expectedGeneration, definition, cancellationToken),
+                SaveDefinitionAsync(expectedVersion, definition, cancellationToken),
             _errorSink);
         return CurrentEditor;
     }
@@ -273,8 +290,17 @@ internal sealed class TriggersViewModel : ObservableObject
     }
 
     public Task<bool> DeleteTaskAsync(string id, CancellationToken cancellationToken)
+        => DeleteTaskAsync(id, _version, cancellationToken);
+
+    /// <summary>Deletes only from the catalog whose item the user confirmed.</summary>
+    public Task<bool> DeleteTaskAsync(string id, TriggerCatalogVersion expectedVersion, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (expectedVersion != _version)
+        {
+            SetError("trigger.definition.conflict");
+            return Task.FromResult(false);
+        }
         if (!TriggerTasks.Any(task => StringComparer.Ordinal.Equals(task.Id, id)))
         {
             SetError("trigger.definition.not_found");
@@ -286,7 +312,8 @@ internal sealed class TriggersViewModel : ObservableObject
                 .Where(task => !StringComparer.Ordinal.Equals(task.Id, id))
                 .Select(static task => task.Definition)
                 .ToArray(),
-            cancellationToken);
+            cancellationToken,
+            expectedVersion);
     }
 
     public Task<bool> MoveTaskAsync(string id, int direction, CancellationToken cancellationToken)
@@ -360,7 +387,7 @@ internal sealed class TriggersViewModel : ObservableObject
     }
 
     private async Task<TriggerEditorSaveResult> SaveDefinitionAsync(
-        long expectedGeneration,
+        TriggerCatalogVersion expectedVersion,
         TriggerTaskDefinition definition,
         CancellationToken cancellationToken)
     {
@@ -381,7 +408,7 @@ internal sealed class TriggersViewModel : ObservableObject
         bool saved = await ReplaceDefinitionsAsync(
             definitions,
             cancellationToken,
-            expectedGeneration);
+            expectedVersion);
         if (saved)
         {
             CurrentEditor = null;
@@ -395,7 +422,7 @@ internal sealed class TriggersViewModel : ObservableObject
     private async Task<bool> ReplaceDefinitionsAsync(
         IReadOnlyList<TriggerTaskDefinition> definitions,
         CancellationToken cancellationToken,
-        long? expectedGeneration = null)
+        TriggerCatalogVersion? expectedVersion = null)
     {
         if (!TryBeginOperation())
         {
@@ -408,7 +435,7 @@ internal sealed class TriggersViewModel : ObservableObject
             try
             {
                 result = await _store.ReplaceAsync(
-                    expectedGeneration ?? _generation,
+                    expectedVersion ?? _version,
                     definitions,
                     cancellationToken);
             }
@@ -467,7 +494,8 @@ internal sealed class TriggersViewModel : ObservableObject
 
     private void ApplyCatalog(TriggerDefinitionCatalog catalog)
     {
-        _generation = catalog.Generation;
+        if (_version.DataGenerationId != catalog.Version.DataGenerationId) { TriggerTasks.Clear(); }
+        _version = catalog.Version;
         Dictionary<string, TriggerTaskItemViewModel> existing = TriggerTasks.ToDictionary(
             static task => task.Id,
             StringComparer.Ordinal);
@@ -524,16 +552,28 @@ internal sealed class TriggersViewModel : ObservableObject
             return false;
         }
 
-        OnPropertyChanged(nameof(IsBusy));
-        OnPropertyChanged(nameof(CanEditTriggers));
-        OnPropertyChanged(nameof(CanEnableAllTriggers));
-        OnPropertyChanged(nameof(CanDisableAllTriggers));
+        _operationCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        try { NotifyOperationStateChanged(); }
+        catch
+        {
+            Interlocked.Exchange(ref _busy, 0);
+            _operationCompletion.TrySetResult();
+            throw;
+        }
         return true;
     }
 
     private void EndOperation()
     {
+        TaskCompletionSource? completion = _operationCompletion;
+        _operationCompletion = null;
         Interlocked.Exchange(ref _busy, 0);
+        try { NotifyOperationStateChanged(); }
+        finally { completion?.TrySetResult(); }
+    }
+
+    private void NotifyOperationStateChanged()
+    {
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(CanEditTriggers));
         OnPropertyChanged(nameof(CanEnableAllTriggers));

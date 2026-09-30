@@ -34,9 +34,11 @@ public sealed class TriggerDefinitionCatalog
     public TriggerDefinitionCatalog(
         long generation,
         IEnumerable<TriggerDefinitionCatalogItem> tasks,
-        IEnumerable<TriggerDiagnostic> diagnostics)
+        IEnumerable<TriggerDiagnostic> diagnostics,
+        Guid? dataGenerationId = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(generation);
+        if (dataGenerationId == Guid.Empty) { throw new ArgumentException("Data identity cannot be empty.", nameof(dataGenerationId)); }
         ArgumentNullException.ThrowIfNull(tasks);
         ArgumentNullException.ThrowIfNull(diagnostics);
         TriggerDefinitionCatalogItem[] taskArray = tasks.ToArray();
@@ -55,6 +57,7 @@ public sealed class TriggerDefinitionCatalog
         }
 
         Generation = generation;
+        Version = new(dataGenerationId, generation);
         Tasks = Array.AsReadOnly(taskArray);
         Diagnostics = Array.AsReadOnly(diagnosticArray);
     }
@@ -64,6 +67,9 @@ public sealed class TriggerDefinitionCatalog
 
     /// <summary>Gets the optimistic definition generation.</summary>
     public long Generation { get; }
+
+    /// <summary>Gets the complete optimistic identity, including its managed data directory.</summary>
+    public TriggerCatalogVersion Version { get; }
 
     /// <summary>Gets definitions in display and evaluation order.</summary>
     public ReadOnlyCollection<TriggerDefinitionCatalogItem> Tasks { get; }
@@ -84,7 +90,7 @@ public interface ITriggerDefinitionStore
 
     /// <summary>Atomically replaces definitions and caches the committed generation.</summary>
     Task<TriggerPersistenceResult<TriggerDefinitionCatalog>> ReplaceAsync(
-        long expectedGeneration,
+        TriggerCatalogVersion expectedVersion,
         IReadOnlyList<TriggerTaskDefinition> definitions,
         CancellationToken cancellationToken);
 }
@@ -132,6 +138,13 @@ public sealed class TriggerDefinitionStore : ITriggerDefinitionStore
     }
 
     /// <inheritdoc />
+    public Task<TriggerPersistenceResult<TriggerDefinitionCatalog>> ReplaceAsync(
+        TriggerCatalogVersion expectedVersion, IReadOnlyList<TriggerTaskDefinition> definitions, CancellationToken cancellationToken) =>
+        expectedVersion.DataGenerationId is not null
+            ? Task.FromResult(TriggerPersistenceResult.Conflict<TriggerDefinitionCatalog>())
+            : ReplaceAsync(expectedVersion.Generation, definitions, cancellationToken);
+
+    /// <summary>Replaces definitions within this fixed repository lifetime.</summary>
     public async Task<TriggerPersistenceResult<TriggerDefinitionCatalog>> ReplaceAsync(
         long expectedGeneration,
         IReadOnlyList<TriggerTaskDefinition> definitions,

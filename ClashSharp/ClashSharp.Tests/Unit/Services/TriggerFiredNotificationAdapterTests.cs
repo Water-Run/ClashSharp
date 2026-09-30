@@ -84,7 +84,7 @@ public sealed class TriggerFiredNotificationAdapterTests
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<TriggerPersistenceResult<TriggerDefinitionCatalog>> ReplaceAsync(
-            long expectedGeneration,
+            TriggerCatalogVersion expectedVersion,
             IReadOnlyList<TriggerTaskDefinition> definitions,
             CancellationToken cancellationToken) => throw new NotSupportedException();
     }

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
+using ClashSharp.ApplicationModel.Triggers;
 using ClashSharp.Components;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
@@ -20,6 +21,10 @@ public sealed partial class Triggers : Page
     private readonly TriggersViewModel _viewModel;
     private readonly IApplicationErrorSink _errorSink;
     private readonly Action _openLogs;
+    private readonly Func<Action, IDisposable> _subscribeToDataChanges;
+    private IDisposable? _dataSubscription;
+    private Task _dataRefresh = Task.CompletedTask;
+    private bool _dataRefreshPending;
     private CancellationTokenSource? _pageLifetime;
 
     internal Triggers(TriggersPageDependencies dependencies)
@@ -28,6 +33,7 @@ public sealed partial class Triggers : Page
         _viewModel = dependencies.ViewModel;
         _errorSink = dependencies.ErrorSink;
         _openLogs = dependencies.OpenLogs;
+        _subscribeToDataChanges = dependencies.SubscribeToDataChanges;
         InitializeComponent();
         DataContext = _viewModel;
         Loaded += OnLoaded;
@@ -42,15 +48,37 @@ public sealed partial class Triggers : Page
         }
 
         _pageLifetime = new CancellationTokenSource();
-        await AwaitPageOperationAsync(token => _viewModel.LoadAsync(token));
+        CancellationTokenSource lifetime = _pageLifetime;
+        _dataSubscription = _subscribeToDataChanges(() => DispatcherQueue.TryEnqueue(() => QueueDataRefresh(lifetime)));
+        await AwaitPageOperationAsync(token => _viewModel.RefreshAfterDataChangeAsync(token));
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs args)
+    private async void OnUnloaded(object sender, RoutedEventArgs args)
     {
+        _dataSubscription?.Dispose();
+        _dataSubscription = null;
         CancellationTokenSource? lifetime = _pageLifetime;
         _pageLifetime = null;
         lifetime?.Cancel();
+        await _dataRefresh;
         lifetime?.Dispose();
+    }
+
+    private void QueueDataRefresh(CancellationTokenSource lifetime)
+    {
+        if (!ReferenceEquals(_pageLifetime, lifetime)) { return; }
+        _dataRefreshPending = true;
+        if (!_dataRefresh.IsCompleted) { return; }
+        _dataRefresh = RefreshChangedDataAsync(lifetime);
+    }
+
+    private async Task RefreshChangedDataAsync(CancellationTokenSource lifetime)
+    {
+        while (_dataRefreshPending && ReferenceEquals(_pageLifetime, lifetime))
+        {
+            _dataRefreshPending = false;
+            await AwaitPageOperationAsync(token => _viewModel.RefreshAfterDataChangeAsync(token));
+        }
     }
 
     private void AddTriggerCardButton_Click(object sender, RoutedEventArgs args)
@@ -60,7 +88,7 @@ public sealed partial class Triggers : Page
 
     private void EditTriggerButton_Click(object sender, RoutedEventArgs args)
     {
-        if (sender is Button { Tag: TriggerTaskItemViewModel item })
+        if (sender is Button { Tag: TriggerTaskItemViewModel item } && _viewModel.IsCurrentTask(item))
         {
             _viewModel.BeginEdit(item.Id);
         }
@@ -83,7 +111,7 @@ public sealed partial class Triggers : Page
 
     private async void MoveTriggerUpButton_Click(object sender, RoutedEventArgs args)
     {
-        if (sender is Button { Tag: string id })
+        if (sender is Button { Tag: string id, DataContext: TriggerTaskItemViewModel item } && _viewModel.IsCurrentTask(item))
         {
             await AwaitPageOperationAsync(token => _viewModel.MoveTaskAsync(id, -1, token));
         }
@@ -91,7 +119,7 @@ public sealed partial class Triggers : Page
 
     private async void MoveTriggerDownButton_Click(object sender, RoutedEventArgs args)
     {
-        if (sender is Button { Tag: string id })
+        if (sender is Button { Tag: string id, DataContext: TriggerTaskItemViewModel item } && _viewModel.IsCurrentTask(item))
         {
             await AwaitPageOperationAsync(token => _viewModel.MoveTaskAsync(id, 1, token));
         }
@@ -99,24 +127,28 @@ public sealed partial class Triggers : Page
 
     private async void DeleteTriggerButton_Click(object sender, RoutedEventArgs args)
     {
-        if (sender is not Button { Tag: string id })
+        if (sender is not Button { Tag: string id, DataContext: TriggerTaskItemViewModel item } || !_viewModel.IsCurrentTask(item))
         {
             return;
         }
 
-        ThemedContentDialog dialog = new()
+        TriggerCatalogVersion expectedVersion = _viewModel.CatalogVersion;
+        await AwaitPageOperationAsync(async token =>
         {
-            Title = _viewModel.DeleteTitleText,
-            Content = _viewModel.DeleteMessageText,
-            PrimaryButtonText = _viewModel.DeleteText,
-            CloseButtonText = _viewModel.CancelText,
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = XamlRoot,
-        };
-        if (await dialog.ShowManagedAsync() is ContentDialogResult.Primary)
-        {
-            await AwaitPageOperationAsync(token => _viewModel.DeleteTaskAsync(id, token));
-        }
+            ThemedContentDialog dialog = new()
+            {
+                Title = _viewModel.DeleteTitleText,
+                Content = _viewModel.DeleteMessageText,
+                PrimaryButtonText = _viewModel.DeleteText,
+                CloseButtonText = _viewModel.CancelText,
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+            };
+            if (await dialog.ShowManagedAsync(token) is ContentDialogResult.Primary)
+            {
+                await _viewModel.DeleteTaskAsync(id, expectedVersion, token);
+            }
+        });
     }
 
     private async void TriggerEnabledToggle_Toggled(object sender, RoutedEventArgs args)
@@ -124,6 +156,7 @@ public sealed partial class Triggers : Page
         if (_viewModel.IsBusy
             || sender is not ToggleSwitch { IsLoaded: true, Tag: TriggerTaskItemViewModel item } toggle
             || !ReferenceEquals(toggle.DataContext, item)
+            || !_viewModel.IsCurrentTask(item)
             || toggle.IsOn == item.IsEnabled)
         {
             return;

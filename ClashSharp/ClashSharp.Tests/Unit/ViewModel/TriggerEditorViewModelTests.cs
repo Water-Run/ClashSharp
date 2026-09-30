@@ -816,6 +816,51 @@ public sealed class TriggerEditorViewModelTests
             newId: "new-task");
     }
 
+    [Fact]
+    public async Task TriggerDataIdentity_RefreshWaitsForAnAcceptedWriteAndThenLoadsTheNewDirectory()
+    {
+        TriggerTaskDefinition original = CompleteDefinition("old", "Old");
+        TaskCompletionSource<TriggerPersistenceResult<TriggerDefinitionCatalog>> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        RecordingDefinitionStore store = new(Catalog(1, original)) { ReplaceCompletion = completion };
+        TriggersViewModel page = NewList(store);
+        Assert.True(await page.LoadAsync(CancellationToken.None));
+        Task<bool> write = page.SetTaskEnabledAsync("old", false, CancellationToken.None);
+        Task<bool> refresh = page.RefreshAfterDataChangeAsync(CancellationToken.None);
+        Assert.False(refresh.IsCompleted);
+        Assert.Equal(1, store.ReadCallCount);
+        Guid nextDirectory = Guid.NewGuid();
+        store.SetCatalog(new TriggerDefinitionCatalog(1,
+            [new TriggerDefinitionCatalogItem(CompleteDefinition("new", "New"), null)], [], nextDirectory));
+        completion.SetResult(TriggerPersistenceResult.Succeeded(Catalog(2, original)));
+
+        Assert.True(await write.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(await refresh.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        Assert.Equal(nextDirectory, page.CatalogVersion.DataGenerationId);
+        Assert.Equal("new", Assert.Single(page.TriggerTasks).Id);
+        Assert.Equal(2, store.ReadCallCount);
+    }
+
+    [Fact]
+    public async Task TriggerDataIdentity_CancelingQueuedRefreshDoesNotCancelTheAcceptedWrite()
+    {
+        TriggerTaskDefinition original = CompleteDefinition("old", "Old");
+        TaskCompletionSource<TriggerPersistenceResult<TriggerDefinitionCatalog>> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        RecordingDefinitionStore store = new(Catalog(1, original)) { ReplaceCompletion = completion };
+        TriggersViewModel page = NewList(store);
+        Assert.True(await page.LoadAsync(CancellationToken.None));
+        Task<bool> write = page.SetTaskEnabledAsync("old", false, CancellationToken.None);
+        using CancellationTokenSource cancellation = new();
+        Task<bool> refresh = page.RefreshAfterDataChangeAsync(cancellation.Token);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
+        Assert.False(write.IsCompleted);
+        completion.SetResult(TriggerPersistenceResult.Succeeded(Catalog(2, original)));
+        Assert.True(await write.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.False(page.IsBusy);
+        Assert.Equal(1, store.ReadCallCount);
+    }
+
     private static TriggersViewModel NewList(
         RecordingDefinitionStore store,
         TestApplicationErrorSink? errorSink = null)
@@ -911,6 +956,7 @@ public sealed class TriggerEditorViewModelTests
 
     private sealed class RecordingDefinitionStore : ITriggerDefinitionStore
     {
+        public void SetCatalog(TriggerDefinitionCatalog catalog) => _current = catalog;
         private TriggerDefinitionCatalog _current;
 
         public RecordingDefinitionStore(TriggerDefinitionCatalog current)
@@ -957,7 +1003,7 @@ public sealed class TriggerEditorViewModelTests
         }
 
         public Task<TriggerPersistenceResult<TriggerDefinitionCatalog>> ReplaceAsync(
-            long expectedGeneration,
+            TriggerCatalogVersion expectedVersion,
             IReadOnlyList<TriggerTaskDefinition> definitions,
             CancellationToken cancellationToken)
         {
@@ -974,7 +1020,7 @@ public sealed class TriggerEditorViewModelTests
                 return ReplaceCompletion.Task;
             }
 
-            if (ForceConflict || expectedGeneration != _current.Generation)
+            if (ForceConflict || expectedVersion != _current.Version)
             {
                 _current = ConflictCatalog ?? _current;
                 return Task.FromResult(TriggerPersistenceResult.Conflict<TriggerDefinitionCatalog>());
@@ -985,11 +1031,12 @@ public sealed class TriggerEditorViewModelTests
                 static task => task.LastTriggeredAt,
                 StringComparer.Ordinal);
             _current = new TriggerDefinitionCatalog(
-                expectedGeneration + 1,
+                expectedVersion.Generation + 1,
                 definitions.Select(definition => new TriggerDefinitionCatalogItem(
                     definition,
                     timestamps.GetValueOrDefault(definition.Id))),
-                _current.Diagnostics);
+                _current.Diagnostics,
+                _current.Version.DataGenerationId);
             return Task.FromResult(TriggerPersistenceResult.Succeeded(_current));
         }
     }

@@ -18,6 +18,7 @@ internal static class TriggersPageComposition
                 context.Localization.GetString,
                 errorSink),
             errorSink,
-            openLogs);
+            openLogs,
+            changed => new DataGenerationSubscription(context.Settings, changed));
     }
 }

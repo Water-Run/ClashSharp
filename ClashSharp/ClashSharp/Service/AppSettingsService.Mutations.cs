@@ -178,7 +178,7 @@ public sealed partial class AppSettingsService
     }
 
     /// <summary>Delivers every committed change before reporting ordinary observer failures.</summary>
-    private void NotifySettingChanges(IReadOnlyList<AppSettingChangedEventArgs> changes)
+    private void NotifySettingChanges(IReadOnlyList<AppSettingChangedEventArgs> changes, bool dataGenerationChanged = false)
     {
         List<Exception>? failures = null;
         foreach (AppSettingChangedEventArgs change in changes)
@@ -199,6 +199,18 @@ public sealed partial class AppSettingsService
             }
         }
 
+        if (dataGenerationChanged && DataGenerationChanged is { } generationHandlers)
+        {
+            foreach (EventHandler handler in generationHandlers.GetInvocationList())
+            {
+                try { handler(this, EventArgs.Empty); }
+                catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+                {
+                    failures ??= [];
+                    failures.Add(exception);
+                }
+            }
+        }
         if (failures is { Count: 1 })
         {
             ExceptionDispatchInfo.Capture(failures[0]).Throw();

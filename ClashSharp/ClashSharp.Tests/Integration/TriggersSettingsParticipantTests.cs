@@ -559,7 +559,7 @@ public sealed class TriggersSettingsParticipantTests
     {
         public TriggerDefinitionCatalog Current { get; } = new(0, [], []);
         public Task<TriggerPersistenceResult<TriggerDefinitionCatalog>> ReadAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<TriggerPersistenceResult<TriggerDefinitionCatalog>> ReplaceAsync(long expectedGeneration,
+        public Task<TriggerPersistenceResult<TriggerDefinitionCatalog>> ReplaceAsync(TriggerCatalogVersion expectedVersion,
             IReadOnlyList<TriggerTaskDefinition> definitions, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 

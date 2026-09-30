@@ -112,6 +112,7 @@ public sealed class TriggerPresentationArchitectureTests
             string methodName = declaration.Groups["name"].Value;
             Assert.True(
                 string.Equals(methodName, "OnLoaded", StringComparison.Ordinal)
+                || string.Equals(methodName, "OnUnloaded", StringComparison.Ordinal)
                 || methodName.EndsWith("Button_Click", StringComparison.Ordinal)
                 || methodName.EndsWith("Toggle_Toggled", StringComparison.Ordinal),
                 $"{methodName} is not a routed-event handler.");
@@ -119,6 +120,7 @@ public sealed class TriggerPresentationArchitectureTests
                 "object sender, RoutedEventArgs args",
                 declaration.Groups["parameters"].Value.Trim());
         });
+        Assert.Contains("Unloaded += OnUnloaded;", source, StringComparison.Ordinal);
     }
 
     private static string ReadApplicationSource(params string[] segments)
