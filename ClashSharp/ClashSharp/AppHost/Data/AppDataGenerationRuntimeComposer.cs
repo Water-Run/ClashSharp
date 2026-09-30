@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
@@ -18,6 +19,7 @@ namespace ClashSharp.Hosting.Data;
 /// <summary>Constructs the real settings participants and paused producers over one opened repository container.</summary>
 internal sealed class AppDataGenerationRuntimeComposer(
     MutationAdmissionBarrier admission,
+    DataGenerationManager generations,
     IRuntimeSettingsAuthority authority,
     Func<OwnedUiDispatcher> createDispatcher,
     IAppearanceNativeSettings appearance,
@@ -57,6 +59,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
         INetworkStateObserver observer = new NetworkObserver(network, proxy);
         TriggerDefinitionStore definitions = new(repositories.Triggers, time);
         TriggerSettingsState triggerState = new(generation);
+        GenerationPublicationGate publication = new();
         TriggerLifecycleHandoffCoordinator handoff = new(repositories.Triggers, lifetime, time, processEpoch);
         TriggerActionRuntimeAdapter actions = new(authority, startup, sampling, connections, observer, notifications, handoff, service);
         TriggerFiredNotificationAdapter fired = new(() => triggerState.NotificationsEnabled, definitions,
@@ -70,14 +73,14 @@ internal sealed class AppDataGenerationRuntimeComposer(
             admission, executor, time, processEpoch);
         TriggersSettingsParticipant triggers = new(generation, admission, triggerState, new TriggerSchedulerEventSourceAdapter(events),
             new SystemTriggerSchedulerClock(time, TimeSpan.FromSeconds(30)), new TriggerSchedulerEvaluator(repositories.Triggers, executions),
-            handoff, health => ReportHealth(repositories.Logs, health));
+            handoff, health => ReportHealth(repositories.Logs, health), () => publication.IsPublished);
         repositories.OwnSettingsParticipant(triggers);
         repositories.OwnProducer(triggers.Scheduler);
         ProfileSubscriptionScheduler subscriptions = repositories.OwnProducer(new ProfileSubscriptionScheduler(
             new ProfileSubscriptionSchedulerCatalogAdapter(repositories.Profiles), time, repositories.Logs.AppendLog, producerClock));
-        repositories.AttachRuntime(new(repositories, admission, sampling, scopedTakeover, triggers, definitions,
+        repositories.AttachRuntime(new(repositories, admission, generations, sampling, scopedTakeover, triggers, definitions,
             new TriggerActionReconciler(repositories.Triggers, executor, admission), executions, context, network, observer, subscriptions,
-            handoff, processEpoch, exitRequested));
+            handoff, publication, processEpoch, exitRequested));
         return Task.CompletedTask;
     }
 

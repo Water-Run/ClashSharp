@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Settings;
@@ -16,9 +17,10 @@ using ClashSharp.Settings;
 namespace ClashSharp.Hosting.Data;
 
 /// <summary>Holds one generation's actual runtime services and orders their startup under exclusive ownership.</summary>
-internal sealed class AppDataGenerationRuntime(
+internal sealed partial class AppDataGenerationRuntime(
     AppDataGenerationRepositories repositories,
     MutationAdmissionBarrier admission,
+    DataGenerationManager generations,
     ConnectionSamplingService sampling,
     NetworkTakeoverService takeover,
     TriggersSettingsParticipant triggerSettings,
@@ -30,11 +32,13 @@ internal sealed class AppDataGenerationRuntime(
     INetworkStateObserver networkObserver,
     ProfileSubscriptionScheduler subscriptions,
     ITriggerLifecycleHandoff handoff,
+    GenerationPublicationGate publication,
     Guid processEpoch,
     Func<bool> exitRequested)
 {
     private readonly SemaphoreSlim _startupGate = new(1, 1);
     private bool _started;
+    private bool _replacementPrepared;
     private readonly List<TriggerLifecycleHandoffIdentity> _pendingReleases = [];
 
     public AppDataGenerationRepositories Repositories { get; } = repositories;
@@ -47,6 +51,7 @@ internal sealed class AppDataGenerationRuntime(
     public INetworkStateObserver NetworkObserver { get; } = networkObserver;
     public INetworkSettingsRuntime Network { get; } = network;
     public ProfileSubscriptionScheduler Subscriptions { get; } = subscriptions;
+    public bool IsExecutionPublished => publication.IsPublished;
 
     public async Task<StartupStepResult> InitializeAdmittedAsync(MutationAdmissionLease lease, CancellationToken cancellationToken)
     {
@@ -58,6 +63,7 @@ internal sealed class AppDataGenerationRuntime(
             SettingsAuthorityResult prepared = await Repositories.Session.PrepareStartupAdmittedAsync(Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
             if (!prepared.IsSucceeded) { return StartupStepResult.Fatal(prepared.Code ?? "settings.startup.prepare_failed"); }
             SettingsGenerationContext context = (SettingsGenerationContext)Repositories.GetService(typeof(SettingsGenerationContext))!;
+            await TriggerSettings.Scheduler.StartAsync(cancellationToken).ConfigureAwait(false);
             SettingApplicationKind[] order = [SettingApplicationKind.Internal, SettingApplicationKind.Appearance,
                 SettingApplicationKind.StartupTask, SettingApplicationKind.Network, SettingApplicationKind.Sampling, SettingApplicationKind.Triggers];
             string? warning = null;
@@ -111,7 +117,18 @@ internal sealed class AppDataGenerationRuntime(
                 await handoff.AcknowledgeReleaseAsync(_pendingReleases[0], cancellationToken).ConfigureAwait(false);
                 _pendingReleases.RemoveAt(0);
             }
+            if (_started && !exitRequested()) { PublishTriggerProcessing(); }
         }
         finally { _startupGate.Release(); }
+    }
+
+    private void PublishTriggerProcessing()
+    {
+        if (admission.State != MutationAdmissionState.Open)
+        {
+            throw new InvalidOperationException("Trigger execution cannot be published while ordinary mutations remain closed.");
+        }
+        publication.Publish();
+        TriggerSettings.Scheduler.NotifyProcessingAvailabilityChanged();
     }
 }

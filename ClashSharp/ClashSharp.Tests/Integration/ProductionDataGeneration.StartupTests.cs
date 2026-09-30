@@ -122,7 +122,8 @@ public sealed partial class ProductionDataGenerationTests
         Assert.Contains(repositories.Session.Snapshot.PendingApplications,
             batch => batch.ApplicationKind == SettingApplicationKind.Network && batch.State == SettingsApplicationBatchState.Failed);
         Assert.False(runtime.Sampling.IsRunning);
-        Assert.False(runtime.TriggerSettings.Scheduler.IsRunning);
+        Assert.True(runtime.TriggerSettings.Scheduler.IsRunning);
+        Assert.False(runtime.IsExecutionPublished);
         Assert.Equal(RuntimeShutdownOutcome.PreparedForHostDisposal,
             (await new RuntimeLifecycleCoordinator(fixture.Admission, lifetime).ShutdownAsync(CancellationToken.None)).Outcome);
         await fixture.Manager.DisposeAsync();
@@ -153,7 +154,7 @@ public sealed partial class ProductionDataGenerationTests
     {
         _ = ConfigureSelections(fixture);
         StartupService startup = new(platform, platform, key => key);
-        Composer composer = new(fixture.Admission, fixture.Authority,
+        Composer composer = new(fixture.Admission, fixture.Manager, fixture.Authority,
             () => new OwnedUiDispatcher(() => true, action => { action(); return true; }, CancellationToken.None),
             appearance, startup, UnusedNative<Connections>(), UnusedNative<Traffic>(), CreateUnusedTakeover(),
             UnusedNative<Proxy>(), UnusedNative<ServiceManager>(), UnusedNative<Notifications>(), new EventHub(),

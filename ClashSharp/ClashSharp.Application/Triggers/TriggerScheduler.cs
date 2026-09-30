@@ -216,6 +216,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
     private readonly ITriggerSchedulerEvaluator _evaluator;
     private readonly ITriggerLifecycleHandoff _lifecycleHandoff;
     private readonly Action<SupervisorHealth>? _healthChanged;
+    private readonly Func<bool> _canProcess;
 
     private SupervisorHealth _health = SupervisorHealth.Stopped;
     private CancellationTokenSource? _workCancellation;
@@ -233,7 +234,8 @@ public sealed class TriggerScheduler : IRuntimeParticipant
         ITriggerSchedulerClock clock,
         ITriggerSchedulerEvaluator evaluator,
         ITriggerLifecycleHandoff lifecycleHandoff,
-        Action<SupervisorHealth>? healthChanged = null)
+        Action<SupervisorHealth>? healthChanged = null,
+        Func<bool>? canProcess = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _eventSource = eventSource ?? throw new ArgumentNullException(nameof(eventSource));
@@ -241,6 +243,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
         _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
         _lifecycleHandoff = lifecycleHandoff ?? throw new ArgumentNullException(nameof(lifecycleHandoff));
         _healthChanged = healthChanged;
+        _canProcess = canProcess ?? (static () => true);
     }
 
     /// <inheritdoc />
@@ -254,6 +257,9 @@ public sealed class TriggerScheduler : IRuntimeParticipant
 
     /// <summary>Gets whether the sole owned scheduler task is active.</summary>
     public bool IsRunning => Volatile.Read(ref _runTask) is { IsCompleted: false };
+
+    /// <summary>Wakes the owned loop after its publication gate changes, preserving queued events until processing is permitted.</summary>
+    public void NotifyProcessingAvailabilityChanged() => SignalWork();
 
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -460,7 +466,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
         Task tickTask = StartTickWait();
         while (!workCancellationToken.IsCancellationRequested)
         {
-            if (_pendingEvents.TryDequeue(out TriggerSchedulerEvent? triggerEvent))
+            if (_canProcess() && _pendingEvents.TryDequeue(out TriggerSchedulerEvent? triggerEvent))
             {
                 await ProcessEventAsync(triggerEvent, workCancellationToken).ConfigureAwait(false);
                 continue;
@@ -513,7 +519,7 @@ public sealed class TriggerScheduler : IRuntimeParticipant
                     continue;
                 }
 
-                if (IsAcceptingEvents)
+                if (IsAcceptingEvents && _canProcess())
                 {
                     _pendingEvents.Enqueue(new TriggerSchedulerEvent(TriggerEventKind.Periodic));
                 }

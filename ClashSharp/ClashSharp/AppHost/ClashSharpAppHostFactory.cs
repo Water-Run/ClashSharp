@@ -166,7 +166,7 @@ internal static class ClashSharpAppHostFactory
                 var authority = provider.GetRequiredService<GenerationSettingsAuthority>();
                 var takeover = provider.GetRequiredService<NetworkTakeoverService>();
                 var localization = provider.GetRequiredService<LocalizationService>();
-                AppDataGenerationRuntimeComposer runtime = new(mutationAdmission, authority, ui.CreateDispatcher,
+                AppDataGenerationRuntimeComposer runtime = new(mutationAdmission, provider.GetRequiredService<DataGenerationManager>(), authority, ui.CreateDispatcher,
                     ui.CreateAppearance(localization), provider.GetRequiredService<StartupLaunchService>(),
                     provider.GetRequiredService<MihomoConnectionService>(), provider.GetRequiredService<RuntimeTrafficRateService>(),
                     takeover, provider.GetRequiredService<WindowsProxyService>(), provider.GetRequiredService<MihomoServiceManager>(),

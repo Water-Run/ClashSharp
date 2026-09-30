@@ -13,6 +13,101 @@ namespace ClashSharp.Tests.Integration;
 public sealed partial class ProductionDataGenerationTests
 {
     [Fact]
+    public async Task PreparedCandidate_IsClaimedBeforeShutdownCanRetireItsRepositories()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        var baseline = await fixture.StartAsync();
+        await using MutationAdmissionLease admission = await fixture.Admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None);
+        await using DataGenerationTransition transition = await fixture.Manager.BeginDrainAsync(baseline.ContentHash, CancellationToken.None);
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<DataGenerationDescriptor> preparing = transition.PrepareAndStageAsync(async _ =>
+        {
+            DataGenerationScope candidate = await fixture.CreateEmptyScopeAsync(admission);
+            entered.TrySetResult();
+            await release.Task;
+            return candidate;
+        }, CancellationToken.None);
+        Task? closing = null;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            closing = fixture.Manager.DisposeAsync().AsTask();
+            Assert.False(closing.IsCompleted);
+            Assert.All(fixture.Participants, participant => Assert.Equal(0, participant.Disposals));
+        }
+        finally { release.TrySetResult(); }
+        DataGenerationDescriptor prepared = await preparing.WaitAsync(TimeSpan.FromSeconds(5));
+        await closing!.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(prepared.GenerationId, fixture.Containers[^1].Generation.GenerationId);
+        Assert.All(fixture.Participants, participant => Assert.Equal(1, participant.Disposals));
+        Assert.Throws<ObjectDisposedException>(() => fixture.Containers[^1].Logs.GetRecentLogs(5));
+        Assert.Equal(baseline.ContentHash, (await directory.Store.LoadCurrentAsync(CancellationToken.None))!.ContentHash);
+    }
+
+    [Fact]
+    public async Task CancelledPreparation_RetiresReturnedUnclaimedScopeAndAllowsAbort()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        var baseline = await fixture.StartAsync();
+        await using MutationAdmissionLease admission = await fixture.Admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None);
+        await using DataGenerationTransition transition = await fixture.Manager.BeginDrainAsync(baseline.ContentHash, CancellationToken.None);
+        using CancellationTokenSource cancellation = new();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => transition.PrepareAndStageAsync(async _ =>
+        {
+            DataGenerationScope candidate = await fixture.CreateEmptyScopeAsync(admission);
+            cancellation.Cancel();
+            return candidate;
+        }, cancellation.Token));
+        Assert.Null(transition.StagedDescriptor);
+        Assert.Throws<ObjectDisposedException>(() => fixture.Containers[^1].Session.Snapshot);
+        Assert.NotEmpty(fixture.Containers[0].Session.Snapshot.Desired);
+        await transition.AbortAsync(directory.Store, CancellationToken.None);
+        Assert.Equal(baseline.ContentHash, fixture.Manager.CurrentManifest.ContentHash);
+    }
+
+    [Fact]
+    public async Task StagedReset_UsesProductionPreparationAndRejectsAnotherFactoryBeforeItRuns()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        var baseline = await fixture.StartAsync();
+        await using MutationAdmissionLease admission = await fixture.Admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None);
+        await using DataGenerationTransition transition = await fixture.Manager.BeginDrainAsync(baseline.ContentHash, CancellationToken.None);
+
+        DataGenerationDescriptor prepared = await fixture.CreateCandidatePreparer().StageResetAdmittedAsync(transition, admission, CancellationToken.None);
+
+        Assert.True(prepared.IsSameGeneration(transition.StagedDescriptor!));
+        int calls = 0;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => transition.PrepareAndStageAsync(_ =>
+        {
+            ++calls;
+            throw new InvalidOperationException("must not run");
+        }, CancellationToken.None));
+        Assert.Equal(0, calls);
+        await transition.AbortAsync(directory.Store, CancellationToken.None);
+        Assert.Equal(baseline.ContentHash, fixture.Manager.CurrentManifest.ContentHash);
+    }
+
+    [Fact]
+    public async Task PreparationFailure_ReleasesTheOperationSlotWithoutPublishing()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        var baseline = await fixture.StartAsync();
+        await using MutationAdmissionLease admission = await fixture.Admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None);
+        await using DataGenerationTransition transition = await fixture.Manager.BeginDrainAsync(baseline.ContentHash, CancellationToken.None);
+        await Assert.ThrowsAsync<IOException>(() => transition.PrepareAndStageAsync(
+            _ => Task.FromException<DataGenerationScope>(new IOException("preparation failed")), CancellationToken.None));
+        Assert.Null(transition.StagedDescriptor);
+        Assert.Single(fixture.Containers);
+        await transition.AbortAsync(directory.Store, CancellationToken.None);
+        Assert.Equal(baseline.ContentHash, fixture.Manager.CurrentManifest.ContentHash);
+    }
+
+    [Fact]
     public async Task TransitionOperations_TargetOwnedRepositoriesWithoutPublishingOrOpeningReaders()
     {
         await using DataGenerationTestDirectory directory = new();

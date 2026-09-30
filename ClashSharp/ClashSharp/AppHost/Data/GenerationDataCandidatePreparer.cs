@@ -20,6 +20,20 @@ internal sealed class GenerationDataCandidatePreparer(
 {
     private readonly DataGenerationPathPolicy _paths = new(applicationDataRoot);
 
+    public Task<DataGenerationDescriptor> StageImportAdmittedAsync(DataGenerationTransition transition, string packagePath,
+        MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        return transition.PrepareAndStageAsync(token => PrepareImportAdmittedAsync(transition, packagePath, admissionLease, token), cancellationToken);
+    }
+
+    public Task<DataGenerationDescriptor> StageResetAdmittedAsync(DataGenerationTransition transition,
+        MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        return transition.PrepareAndStageAsync(token => PrepareResetAdmittedAsync(transition, admissionLease, token), cancellationToken);
+    }
+
     public Task<DataGenerationScope> PrepareImportAdmittedAsync(DataGenerationTransition transition, string packagePath,
         MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
     {

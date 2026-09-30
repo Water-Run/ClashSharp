@@ -23,7 +23,7 @@ internal sealed class TriggersSettingsParticipant : ISettingsApplicationParticip
     public TriggersSettingsParticipant(DataGenerationDescriptor generation, MutationAdmissionBarrier admission,
         TriggerSettingsState settings,
         ITriggerSchedulerEventSource events, ITriggerSchedulerClock clock, ITriggerSchedulerEvaluator evaluator,
-        ITriggerLifecycleHandoff handoff, Action<SupervisorHealth>? healthChanged = null)
+        ITriggerLifecycleHandoff handoff, Action<SupervisorHealth>? healthChanged = null, Func<bool>? canProcess = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         if (!_settings.Generation.IsSameGeneration(generation))
@@ -32,7 +32,7 @@ internal sealed class TriggersSettingsParticipant : ISettingsApplicationParticip
         }
         _binding = new(generation, admission, SettingApplicationKind.Triggers,
             SettingsRegistry.Keys.TriggersEnabled, SettingsRegistry.Keys.TriggerNotificationsEnabled);
-        Scheduler = new(_settings, events, clock, evaluator, handoff, healthChanged);
+        Scheduler = new(_settings, events, clock, evaluator, handoff, healthChanged, canProcess);
     }
 
     /// <summary>Gets the same scheduler that host startup initializes and runtime lifecycle operations drain.</summary>

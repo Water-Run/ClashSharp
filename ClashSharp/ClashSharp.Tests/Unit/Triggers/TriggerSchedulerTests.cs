@@ -11,6 +11,51 @@ namespace ClashSharp.Tests.Unit.Triggers;
 public sealed class TriggerSchedulerTests
 {
     [Fact]
+    public async Task PublicationGate_PreservesRuntimeEventsAcrossSettingsQuiescenceWithoutExecutingOrAccumulatingTicks()
+    {
+        int published = 0;
+        FakeSchedulerEventSource events = new();
+        FakeSchedulerClock clock = new();
+        RecordingEvaluator evaluator = new();
+        TriggerScheduler scheduler = CreateScheduler(new FakeSchedulerSettings(), events, clock, evaluator,
+            canProcess: () => Volatile.Read(ref published) != 0);
+        await scheduler.StartAsync(CancellationToken.None);
+        await clock.WaitUntilWaitingAsync(1);
+        events.Publish(TriggerEventKind.ProxyStarted);
+        await clock.TickAndWaitForNextAsync();
+        QuiescedState first = await scheduler.QuiesceAsync(CancellationToken.None);
+        Assert.True(first.WasRunning);
+        Assert.Empty(evaluator.Events);
+        await scheduler.ResumeAsync(first, CancellationToken.None);
+        QuiescedState second = await scheduler.QuiesceAsync(CancellationToken.None);
+        Assert.True(second.WasRunning);
+        Assert.Empty(evaluator.Events);
+        await scheduler.ResumeAsync(second, CancellationToken.None);
+
+        Volatile.Write(ref published, 1);
+        scheduler.NotifyProcessingAvailabilityChanged();
+
+        Assert.Equal(TriggerEventKind.ProxyStarted, (await evaluator.ReadCallAsync()).EventKind);
+        await scheduler.QuiesceAsync(CancellationToken.None);
+        Assert.Single(evaluator.Events);
+        await scheduler.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task UnpublishedScheduler_StopDropsRetainedEventsWithoutExecutingThem()
+    {
+        FakeSchedulerEventSource events = new();
+        RecordingEvaluator evaluator = new();
+        TriggerScheduler scheduler = CreateScheduler(new FakeSchedulerSettings(), events, new FakeSchedulerClock(), evaluator,
+            canProcess: () => false);
+        await scheduler.StartAsync(CancellationToken.None);
+        events.Publish(TriggerEventKind.AppEntered);
+        await scheduler.StopAsync(CancellationToken.None);
+        Assert.Empty(evaluator.Events);
+        Assert.False(scheduler.IsRunning);
+    }
+
+    [Fact]
     public async Task DisabledScheduler_DrainsTicksAndEventsWithoutRequestingEvaluation()
     {
         FakeSchedulerSettings settings = new() { IsEnabled = false };
@@ -579,7 +624,8 @@ public sealed class TriggerSchedulerTests
         FakeSchedulerClock clock,
         RecordingEvaluator evaluator,
         Action<SupervisorHealth>? healthChanged = null,
-        RecordingLifecycleHandoff? lifecycleHandoff = null)
+        RecordingLifecycleHandoff? lifecycleHandoff = null,
+        Func<bool>? canProcess = null)
     {
         return new TriggerScheduler(
             settings,
@@ -587,7 +633,8 @@ public sealed class TriggerSchedulerTests
             clock,
             evaluator,
             lifecycleHandoff ?? new RecordingLifecycleHandoff(),
-            healthChanged);
+            healthChanged,
+            canProcess);
     }
 
     private static TaskCompletionSource<object?> Signal() =>

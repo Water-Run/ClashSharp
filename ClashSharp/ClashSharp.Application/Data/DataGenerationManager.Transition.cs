@@ -4,12 +4,13 @@ public sealed partial class DataGenerationManager
 {
     internal void Stage(
         DataGenerationTransition transition,
-        DataGenerationScope scope)
+        DataGenerationScope scope,
+        object? storeOperationToken = null)
     {
         ArgumentNullException.ThrowIfNull(scope);
         lock (_syncLock)
         {
-            ValidateTransitionUnderLock(transition);
+            ValidateTransitionUnderLock(transition, storeOperationToken: storeOperationToken);
             DataGenerationManifestSnapshot baseline = transition.BaselineManifest;
             bool generationNumberIsNext =
                 baseline.HighestGenerationNumber < long.MaxValue
