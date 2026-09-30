@@ -9,6 +9,22 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the active connections view model.</summary>
 public sealed class ConnectionsViewModelTests
 {
+    [Fact]
+    public async Task PageDataChange_ConnectionResetDropsThePreviousControllerRows()
+    {
+        FakeConnectionClient client = new()
+        {
+            Connections = [new("1", "Browser", "example.test", "rule", "", "Route", 1, 2, DateTimeOffset.UnixEpoch)],
+        };
+        ConnectionsViewModel page = new(new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
+        await page.RefreshConnectionsAsync(CancellationToken.None);
+        var old = Assert.Single(page.Connections);
+        page.ResetDataObservation();
+        Assert.Empty(page.Connections);
+        await page.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.NotSame(old, Assert.Single(page.Connections));
+    }
+
     [Theory]
     [InlineData("browser")]
     [InlineData("EXAMPLE")]

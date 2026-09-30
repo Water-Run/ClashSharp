@@ -31,6 +31,7 @@ public sealed partial class Profiles : Page
     private readonly PageLoadSession _loadSession = new();
 
     private readonly PageOperationSession _operations;
+    private readonly PageDataChangeSession _dataChanges;
 
     private bool _isLoaded;
 
@@ -48,6 +49,8 @@ public sealed partial class Profiles : Page
         _getString = dependencies.GetString;
         _reportFilePickerUnavailable = dependencies.ReportFilePickerUnavailable;
         _operations = new PageOperationSession(dependencies.ErrorSink, "profiles-page-action");
+        _dataChanges = new(dependencies.SubscribeToDataChanges, action => DispatcherQueue.TryEnqueue(() => action()),
+            [_loadSession.Cancel, _operations.Cancel], ReloadChangedDataAsync, dependencies.ErrorSink, "profiles-data-change");
         InitializeComponent();
         DataContext = _viewModel;
     }
@@ -56,7 +59,9 @@ public sealed partial class Profiles : Page
     {
         int visit = ++_visit;
         _isLoaded = true;
+        _dataChanges.Start();
         await _operations.DrainAsync();
+        await _dataChanges.DrainAsync();
         if (!_isLoaded || visit != _visit)
         {
             return;
@@ -68,9 +73,17 @@ public sealed partial class Profiles : Page
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
+        _dataChanges.Stop();
         ++_visit;
         _loadSession.Cancel();
         _operations.Cancel();
+    }
+
+    private async Task ReloadChangedDataAsync(CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(_loadSession.DrainAsync(), _operations.DrainAsync());
+        cancellationToken.ThrowIfCancellationRequested();
+        await _loadSession.RunAsync(_viewModel.ReloadForDataChangeAsync, cancellationToken: cancellationToken);
     }
 
     /// <summary>Shows a native file picker and imports the selected profile file.</summary>
@@ -278,7 +291,7 @@ public sealed partial class Profiles : Page
     private Task RunPageOperationAsync(Func<CancellationToken, Task> operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        if (!_isLoaded)
+        if (!_isLoaded || _dataChanges.IsInvalidated)
         {
             return Task.CompletedTask;
         }

@@ -9,6 +9,23 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Tests profile-page state derived through explicit dependencies.</summary>
 public sealed class ProfilesViewModelTests
 {
+    [Fact]
+    public async Task PageDataChange_ProfileReloadReplacesOldRowsAndSelection()
+    {
+        using TempDirectory directory = new();
+        ProfileCatalogService profiles = CreateProfileCatalog(directory);
+        LogStorageService logs = new(Path.Combine(directory.Path, "profile-refresh.db"), static () => "fixture");
+        ProfilesViewModel page = new(static key => key, new ProfileManagementCatalogAdapter(profiles), new PageLogAdapter(logs),
+            () => "builtin-direct", new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await page.LoadAsync(CancellationToken.None);
+        ConfigurationProfileDisplay old = page.Profiles[0];
+        page.SelectedProfile = old;
+        await page.ReloadForDataChangeAsync(CancellationToken.None);
+        Assert.DoesNotContain(old, page.Profiles);
+        Assert.NotSame(old, page.SelectedProfile);
+        Assert.NotEmpty(page.Profiles);
+    }
+
     /// <summary>Verifies the persisted-id fallback is injected instead of service-located.</summary>
     [Fact]
     public async Task LoadAsync_WhenNoCatalogRowIsActive_UsesInjectedActiveProfileId()

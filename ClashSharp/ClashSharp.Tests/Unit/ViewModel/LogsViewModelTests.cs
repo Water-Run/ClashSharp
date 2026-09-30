@@ -12,6 +12,22 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed partial class LogsViewModelTests
 {
     [Fact]
+    public async Task PageDataChange_LogReloadDoesNotKeepThePreviousRuntimeTail()
+    {
+        TaskCompletionSource<bool> advanced = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        LogsViewModel page = new(GetString, new FakeLogManagementStore(), new TestApplicationErrorSink(),
+            token => StreamRuntimeLogsAsync(advanced, token));
+        using CancellationTokenSource cancellation = new();
+        Task watching = page.WatchRuntimeLogsAsync(cancellation.Token);
+        await advanced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Contains(page.RecentLogs, row => row.Message == "runtime message");
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watching);
+        await page.ReloadForDataChangeAsync(CancellationToken.None);
+        Assert.DoesNotContain(page.RecentLogs, row => row.Message == "runtime message");
+    }
+
+    [Fact]
     public async Task LoadAsync_EmptyRequestedCategorySurvivesNativeItemChangesAndRefresh()
     {
         FakeLogManagementStore store = new() { Sources = ["Application"] };

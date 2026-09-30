@@ -6,6 +6,22 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the proxies view model.</summary>
 public sealed class ProxiesViewModelTests
 {
+    [Fact]
+    public async Task PageDataChange_ProxyReloadDoesNotReuseOldNodeObjects()
+    {
+        FakeProxyCatalog catalog = new()
+        {
+            Nodes = [new("Node", "HTTPS", new RegionMetadata("US", "United States", "us"), null)],
+        };
+        ProxiesViewModel page = new(new FakeProxiesLocalization(), catalog, new FakeProxyLatency(),
+            new FakeProxyRuntimeController(), new FakeProxiesLog(), new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+        await page.LoadAsync(CancellationToken.None);
+        ProxyNodeDisplay old = Assert.Single(page.ProxyNodes);
+        await page.ReloadForDataChangeAsync(CancellationToken.None);
+        Assert.NotSame(old, Assert.Single(page.ProxyNodes));
+        Assert.Equal(2, catalog.ReadCount);
+    }
+
     /// <summary>Verifies construction initializes labels without reading the proxy catalog.</summary>
     [Fact]
     public void Constructor_IsSideEffectFree()

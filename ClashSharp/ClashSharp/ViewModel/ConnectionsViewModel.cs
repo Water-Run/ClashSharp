@@ -195,6 +195,18 @@ internal sealed class ConnectionsViewModel : ObservableObject
         return await TryRefreshConnectionsAsync(cancellationToken) ?? [];
     }
 
+    /// <summary>Invalidates old connection identities after their page-owned readers have drained.</summary>
+    public void ResetDataObservation()
+    {
+        ++_snapshotRevision;
+        _hasObservation = false;
+        _isAvailable = false;
+        _allConnections = [];
+        Connections = [];
+        ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
+        NotifyViewState();
+    }
+
     /// <summary>Consumes live controller snapshots until the page lifetime is canceled.</summary>
     /// <param name="cancellationToken">Cancels the active socket and reconnect delay.</param>
     /// <returns>A task that completes when cancellation stops the stream.</returns>

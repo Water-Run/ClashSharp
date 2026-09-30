@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Lifecycle;
@@ -26,6 +28,7 @@ public sealed partial class Connections : Page
     private readonly PageLoadSession _streamSession;
 
     private readonly PageOperationSession _operations;
+    private readonly PageDataChangeSession _dataChanges;
 
     private bool _isLoaded;
 
@@ -39,6 +42,8 @@ public sealed partial class Connections : Page
         _loadSession = new PageLoadSession(dependencies.ErrorSink, "connections-page-refresh");
         _streamSession = new PageLoadSession(dependencies.ErrorSink, "connections-page-stream");
         _operations = new PageOperationSession(dependencies.ErrorSink, "connections-page-close");
+        _dataChanges = new(dependencies.SubscribeToDataChanges, action => DispatcherQueue.TryEnqueue(() => action()),
+            [_loadSession.Cancel, _streamSession.Cancel, _operations.Cancel], ReloadChangedDataAsync, dependencies.ErrorSink, "connections-data-change");
         InitializeComponent();
         DataContext = _viewModel;
     }
@@ -48,7 +53,8 @@ public sealed partial class Connections : Page
     {
         int visit = ++_visit;
         _isLoaded = true;
-        await _operations.DrainAsync();
+        _dataChanges.Start();
+        await Task.WhenAll(_operations.DrainAsync(), _dataChanges.DrainAsync());
         if (!_isLoaded || visit != _visit)
         {
             return;
@@ -63,10 +69,22 @@ public sealed partial class Connections : Page
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
+        _dataChanges.Stop();
         ++_visit;
         _loadSession.Cancel();
         _streamSession.Cancel();
         _operations.Cancel();
+    }
+
+    private async Task ReloadChangedDataAsync(CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(_loadSession.DrainAsync(), _streamSession.DrainAsync(), _operations.DrainAsync());
+        cancellationToken.ThrowIfCancellationRequested();
+        _viewModel.ResetDataObservation();
+        await _loadSession.RunAsync(token => _viewModel.RefreshConnectionsAsync(token), cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        // The stream session owns observation and errors until the next cancellation or page unload.
+        _ = _streamSession.RunAsync(_viewModel.WatchConnectionsAsync, cancellationToken: CancellationToken.None);
     }
 
     private async void RefreshConnectionsButton_Click(object sender, RoutedEventArgs e)
@@ -76,7 +94,7 @@ public sealed partial class Connections : Page
 
     private async void CloseAllConnectionsButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isLoaded)
+        if (_isLoaded && !_dataChanges.IsInvalidated)
         {
             await _operations.RunAsync(_viewModel.CloseAllConnectionsAsync);
         }
@@ -84,7 +102,8 @@ public sealed partial class Connections : Page
 
     private async void CloseConnectionButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isLoaded && sender is FrameworkElement { DataContext: ActiveConnectionDisplayRow row })
+        if (_isLoaded && !_dataChanges.IsInvalidated && sender is FrameworkElement { DataContext: ActiveConnectionDisplayRow row }
+            && _viewModel.Connections.Contains(row))
         {
             await _operations.RunAsync(
                 cancellationToken => _viewModel.CloseConnectionAsync(row.Connection, cancellationToken));

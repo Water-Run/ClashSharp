@@ -27,7 +27,8 @@ internal static class LogsPageComposition
             context.Localization.GetString,
             context.ErrorSink,
             initialSourceFilter,
-            navigateBack);
+            navigateBack,
+            changed => new DataGenerationSubscription(context.Settings, changed));
     }
 
     /// <summary>Injected dependencies used by the logs view.</summary>
@@ -38,13 +39,15 @@ internal static class LogsPageComposition
             Func<string, string> getString,
             IApplicationErrorSink errorSink,
             string? initialSourceFilter,
-            Action navigateBack)
+            Action navigateBack,
+            Func<Action, IDisposable> subscribeToDataChanges)
         {
             ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             GetString = getString ?? throw new ArgumentNullException(nameof(getString));
             ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
             InitialSourceFilter = initialSourceFilter;
             NavigateBack = navigateBack ?? throw new ArgumentNullException(nameof(navigateBack));
+            SubscribeToDataChanges = subscribeToDataChanges ?? throw new ArgumentNullException(nameof(subscribeToDataChanges));
         }
 
         public LogsViewModel ViewModel { get; }
@@ -56,5 +59,6 @@ internal static class LogsPageComposition
         public string? InitialSourceFilter { get; }
 
         public Action NavigateBack { get; }
+        public Func<Action, IDisposable> SubscribeToDataChanges { get; }
     }
 }

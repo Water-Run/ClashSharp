@@ -307,6 +307,27 @@ internal sealed class StatisticsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Does not carry totals or rows from a previous data directory into a failed refresh.</summary>
+    public Task ReloadForDataChangeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ++_loadRevision;
+        _hasSnapshot = false;
+        _lastUpdated = null;
+        _totalTrafficText = _connectionCountText = _profileStatisticText = _snapshotStatisticText = _nodeStatisticText = _ruleStatisticText = string.Empty;
+        _profileTrafficRows = [];
+        _dailyTrafficRows = [];
+        _nodeTrafficRows = [];
+        _ruleHitRows = [];
+        foreach (string property in new[] { nameof(TotalTrafficText), nameof(ConnectionCountText), nameof(ProfileStatisticText),
+            nameof(SnapshotStatisticText), nameof(NodeStatisticText), nameof(RuleStatisticText), nameof(ProfileTrafficRows),
+            nameof(DailyTrafficRows), nameof(NodeTrafficRows), nameof(RuleHitRows), nameof(HasSnapshot), nameof(StatusText) })
+        {
+            OnPropertyChanged(property);
+        }
+        return LoadAsync(cancellationToken);
+    }
+
     private StatisticsLoadSnapshot ReadLoadSnapshot()
     {
         StatisticsSummary summary = _statistics.GetTrafficStatisticsSummary();

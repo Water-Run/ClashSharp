@@ -265,6 +265,15 @@ internal sealed class ProfilesViewModel : ObservableObject
             cancellationToken);
     }
 
+    /// <summary>Discards references to old profile rows before loading a replacement data directory.</summary>
+    public Task ReloadForDataChangeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        SelectedProfile = null;
+        _profilesRows.Clear();
+        return LoadAsync(cancellationToken);
+    }
+
     /// <summary>Imports a local profile file and refreshes profile rows.</summary>
     /// <param name="filePath">Local profile file path. Must not be null.</param>
     /// <param name="cancellationToken">Cancels the import when requested.</param>

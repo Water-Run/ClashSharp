@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Lifecycle;
@@ -27,6 +29,7 @@ public sealed partial class Proxies : Page
     private readonly PageLoadSession _loadSession = new();
 
     private readonly PageOperationSession _selectionSession;
+    private readonly PageDataChangeSession _dataChanges;
 
     private readonly HashSet<AsyncRelayCommand> _pendingCommands = [];
 
@@ -42,6 +45,8 @@ public sealed partial class Proxies : Page
         ArgumentNullException.ThrowIfNull(dependencies);
         _viewModel = dependencies.ViewModel;
         _selectionSession = new PageOperationSession(dependencies.ErrorSink, "proxies-page-selection");
+        _dataChanges = new(dependencies.SubscribeToDataChanges, action => DispatcherQueue.TryEnqueue(() => action()),
+            [_loadSession.Cancel, _selectionSession.Cancel], ReloadChangedDataAsync, dependencies.ErrorSink, "proxies-data-change");
         InitializeComponent();
         DataContext = _viewModel;
         foreach (ListView list in new[] { ProxyGroupsList, ProxyNodesList, ProviderResourcesList })
@@ -55,7 +60,8 @@ public sealed partial class Proxies : Page
     {
         int visit = ++_visit;
         _isLoaded = true;
-        await _selectionSession.DrainAsync();
+        _dataChanges.Start();
+        await Task.WhenAll(_selectionSession.DrainAsync(), _dataChanges.DrainAsync());
         if (!_isLoaded || visit != _visit)
         {
             return;
@@ -69,9 +75,17 @@ public sealed partial class Proxies : Page
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
+        _dataChanges.Stop();
         ++_visit;
         _loadSession.Cancel();
         _selectionSession.Cancel();
+    }
+
+    private async Task ReloadChangedDataAsync(CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(_loadSession.DrainAsync(), _selectionSession.DrainAsync());
+        cancellationToken.ThrowIfCancellationRequested();
+        await _loadSession.RunAsync(_viewModel.ReloadForDataChangeAsync, cancellationToken: cancellationToken);
     }
 
     private async void RefreshNodes_Click(object sender, RoutedEventArgs e)
@@ -92,7 +106,7 @@ public sealed partial class Proxies : Page
     /// <summary>Owns toolbar work until completion and coalesces repeated clicks without moving focus.</summary>
     private async Task RunPageCommandAsync(AsyncRelayCommand command)
     {
-        if (!_isLoaded || !command.CanExecute(null) || !_pendingCommands.Add(command))
+        if (!_isLoaded || _dataChanges.IsInvalidated || !command.CanExecute(null) || !_pendingCommands.Add(command))
         {
             return;
         }
@@ -189,7 +203,9 @@ public sealed partial class Proxies : Page
     private async void ProxyGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_isLoaded
+            || _dataChanges.IsInvalidated
             || sender is not ComboBox { DataContext: MihomoProxyGroupDisplay group, SelectedItem: string proxyName }
+            || !_viewModel.ProxyGroups.Contains(group)
             || string.Equals(group.CurrentSelection, proxyName, StringComparison.Ordinal))
         {
             return;
@@ -202,8 +218,9 @@ public sealed partial class Proxies : Page
     /// <summary>Keeps the update control focused while admitting only one page-owned update.</summary>
     private async void UpdateProvider_Click(object sender, RoutedEventArgs e)
     {
-        if (!_isLoaded || _updatingProvider
+        if (!_isLoaded || _dataChanges.IsInvalidated || _updatingProvider
             || sender is not Button { DataContext: MihomoProviderResourceDisplay provider }
+            || !_viewModel.ProviderResources.Contains(provider)
             || !_viewModel.UpdateProviderCommand.CanExecute(provider))
         {
             return;

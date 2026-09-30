@@ -39,6 +39,7 @@ public sealed partial class Logs : Page
     private readonly PageLoadSession _runtimeLogStreamSession;
 
     private readonly PageOperationSession _pageOperations;
+    private readonly PageDataChangeSession _dataChanges;
 
     private readonly Func<string, string> _getString;
 
@@ -61,6 +62,8 @@ public sealed partial class Logs : Page
         _loadSession = new PageLoadSession(_errorSink, "logs-load");
         _runtimeLogStreamSession = new PageLoadSession(_errorSink, "logs-stream");
         _pageOperations = new PageOperationSession(_errorSink, "logs-cleanup");
+        _dataChanges = new(dependencies.SubscribeToDataChanges, action => DispatcherQueue.TryEnqueue(() => action()),
+            [_loadSession.Cancel, _runtimeLogStreamSession.Cancel, _pageOperations.Cancel], ReloadChangedDataAsync, _errorSink, "logs-data-change");
         _navigateBack = dependencies.NavigateBack;
         _viewModel.SetSourceFilter(dependencies.InitialSourceFilter);
         InitializeComponent();
@@ -74,6 +77,7 @@ public sealed partial class Logs : Page
             return;
         }
         _isLoaded = true;
+        _dataChanges.Start();
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         SynchronizeFilterControls();
         int visit = ++_visit;
@@ -81,7 +85,7 @@ public sealed partial class Logs : Page
             "logs-page-load",
             async () =>
             {
-                await DrainPageOperationsAsync();
+                await Task.WhenAll(DrainPageOperationsAsync(), _dataChanges.DrainAsync());
                 if (!_isLoaded || visit != _visit)
                 {
                     return;
@@ -95,12 +99,23 @@ public sealed partial class Logs : Page
     private async void Page_Unloaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = false;
+        _dataChanges.Stop();
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
         ++_visit;
         _loadSession.Cancel();
         _runtimeLogStreamSession.Cancel();
         _pageOperations.Cancel();
-        await RunObservedPageEventAsync("logs-page-unload", DrainPageOperationsAsync);
+        await RunObservedPageEventAsync("logs-page-unload", () => Task.WhenAll(DrainPageOperationsAsync(), _dataChanges.DrainAsync()));
+    }
+
+    private async Task ReloadChangedDataAsync(CancellationToken cancellationToken)
+    {
+        await DrainPageOperationsAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        await _loadSession.RunAsync(_viewModel.ReloadForDataChangeAsync, cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        // The read session owns the stream; this refresh completes after the new snapshot is installed.
+        _ = _runtimeLogStreamSession.RunAsync(_viewModel.WatchRuntimeLogsAsync, cancellationToken: CancellationToken.None);
     }
 
     private async void LogSearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -206,7 +221,7 @@ public sealed partial class Logs : Page
     /// <param name="e">Routed event arguments. Not null.</param>
     private async void CleanupButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!_isLoaded || _cleanupPending)
+        if (!_isLoaded || _dataChanges.IsInvalidated || _cleanupPending)
         {
             return;
         }

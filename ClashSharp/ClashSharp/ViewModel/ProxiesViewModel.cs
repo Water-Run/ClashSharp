@@ -280,6 +280,17 @@ internal sealed class ProxiesViewModel : ObservableObject
         await RefreshRuntimeAsync(cancellationToken);
     }
 
+    /// <summary>Forgets old proxy and provider objects before loading the new data directory.</summary>
+    public Task ReloadForDataChangeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _proxyNodeModels = [];
+        ProxyNodes = [];
+        ProxyGroups = [];
+        _providerResources.Clear();
+        return LoadAsync(cancellationToken);
+    }
+
     /// <summary>Refreshes visible proxy nodes without blocking the UI thread.</summary>
     /// <param name="cancellationToken">Cancels this catalog read.</param>
     /// <returns>A task that completes after the isolated snapshot is applied.</returns>

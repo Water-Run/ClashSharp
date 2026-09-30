@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
@@ -19,18 +21,24 @@ public sealed partial class Statistics : Page
     private readonly StatisticsViewModel _viewModel;
 
     private readonly PageLoadSession _loadSession = new();
+    private readonly PageDataChangeSession _dataChanges;
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal Statistics(StatisticsPageComposition.Dependencies dependencies)
     {
         ArgumentNullException.ThrowIfNull(dependencies);
         _viewModel = dependencies.ViewModel;
+        _dataChanges = new(dependencies.SubscribeToDataChanges, action => DispatcherQueue.TryEnqueue(() => action()),
+            [_loadSession.Cancel], ReloadChangedDataAsync, dependencies.ErrorSink, "statistics-data-change");
         InitializeComponent();
         DataContext = _viewModel;
     }
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
+        _dataChanges.Start();
+        await _dataChanges.DrainAsync();
+        if (!IsLoaded) { return; }
         await _loadSession.RunAsync(_viewModel.LoadAsync);
     }
 
@@ -41,6 +49,14 @@ public sealed partial class Statistics : Page
 
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
+        _dataChanges.Stop();
         _loadSession.Cancel();
+    }
+
+    private async Task ReloadChangedDataAsync(CancellationToken cancellationToken)
+    {
+        await _loadSession.DrainAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        await _loadSession.RunAsync(_viewModel.ReloadForDataChangeAsync, cancellationToken: cancellationToken);
     }
 }

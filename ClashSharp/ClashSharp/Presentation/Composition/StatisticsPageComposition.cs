@@ -26,17 +26,22 @@ internal static class StatisticsPageComposition
             profiles,
             openLogs,
             context.ErrorSink,
-            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply)));
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply)), context.ErrorSink,
+            changed => new DataGenerationSubscription(context.Settings, changed));
     }
 
     /// <summary>Injected dependencies used by the statistics view.</summary>
     internal sealed class Dependencies
     {
-        public Dependencies(StatisticsViewModel viewModel)
+        public Dependencies(StatisticsViewModel viewModel, IApplicationErrorSink errorSink, Func<Action, IDisposable> subscribeToDataChanges)
         {
             ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
+            SubscribeToDataChanges = subscribeToDataChanges ?? throw new ArgumentNullException(nameof(subscribeToDataChanges));
         }
 
         public StatisticsViewModel ViewModel { get; }
+        public IApplicationErrorSink ErrorSink { get; }
+        public Func<Action, IDisposable> SubscribeToDataChanges { get; }
     }
 }

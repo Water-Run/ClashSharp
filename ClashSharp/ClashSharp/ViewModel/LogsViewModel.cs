@@ -225,6 +225,15 @@ internal sealed class LogsViewModel : ObservableObject
             cancellationToken);
     }
 
+    /// <summary>Clears the previous runtime's in-memory log tail before reading replacement storage.</summary>
+    public Task ReloadForDataChangeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _liveRuntimeLogs.Clear();
+        RecentLogs = [];
+        return LoadAsync(cancellationToken);
+    }
+
     /// <summary>Consumes live mihomo logs until the owning page is unloaded.</summary>
     /// <param name="cancellationToken">Cancels connection, reconnect delay, and message reads.</param>
     /// <returns>A task that normally completes only after cancellation.</returns>
