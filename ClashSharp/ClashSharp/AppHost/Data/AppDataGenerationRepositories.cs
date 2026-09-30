@@ -21,6 +21,7 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
 {
     private readonly object _disposalLock = new();
     private readonly ITriggerTrafficContextSource _trafficContext;
+    private readonly IProfileCatalogRuntime _profileRuntime;
     private readonly List<IRuntimeParticipant> _producers = [];
     private readonly List<ISettingsApplicationParticipant> _participants = [];
     private Task? _disposal;
@@ -46,8 +47,9 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
             dataGenerationId: session.Generation.GenerationId);
         Logs = LogStorageServiceFactory.CreateForDirectory(session.Generation.RootPath, () => settings.ActiveProfileId);
         _trafficContext = new SqliteTriggerTrafficContextSource(Logs.DatabasePath);
+        _profileRuntime = createProfileRuntime(Configuration, session);
         Profiles = ProfileCatalogServiceFactory.CreateForDirectory(session.Generation.RootPath, settings,
-            new ProfileCatalogCoreConfigurationAdapter(Configuration), createProfileRuntime(Configuration, session),
+            new ProfileCatalogCoreConfigurationAdapter(Configuration), _profileRuntime,
             new ProfileCatalogLogAdapter(Logs), getString, new ProfileCatalogMutationCoordinator(admission, mutationGate));
         Triggers = new(Path.Combine(session.Generation.RootPath, "Triggers.db"));
         ProxySelections = createProxySelections?.Invoke(Configuration);
@@ -71,6 +73,7 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
             {
                 throw new InvalidOperationException("Runtime ownership does not match this unsealed generation.");
             }
+            if (_profileRuntime is GenerationProfileRuntime profileRuntime) { profileRuntime.BindTakeover(runtime.Takeover); }
             _runtime = runtime;
         }
     }

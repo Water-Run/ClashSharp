@@ -48,8 +48,11 @@ internal sealed class AppDataGenerationRuntimeComposer(
             new SamplingPreferences(repositories.Session), new ConnectionSamplingSourceAdapter(connections),
             new ConnectionSamplingStorageAdapter(repositories.Logs), getString, producerClock));
         repositories.OwnSettingsParticipant(new SamplingSettingsParticipant(generation, admission, sampling));
+        NetworkTakeoverService scopedTakeover = takeover.BindDataScope(repositories.Configuration,
+            repositories.ProxySelections ?? throw new InvalidOperationException("The generation has no proxy-selection owner."),
+            traffic.RefreshAsync, sampling.FlushAsync, repositories.Logs);
         INetworkSettingsRuntime network = createNetwork?.Invoke(repositories.Configuration)
-            ?? new NetworkSettingsRuntime(repositories.Configuration, takeover, proxy);
+            ?? new NetworkSettingsRuntime(repositories.Configuration, scopedTakeover, proxy);
         repositories.OwnSettingsParticipant(new NetworkSettingsParticipant(generation, admission, network));
         INetworkStateObserver observer = new NetworkObserver(network, proxy);
         TriggerDefinitionStore definitions = new(repositories.Triggers, time);
@@ -72,7 +75,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
         repositories.OwnProducer(triggers.Scheduler);
         ProfileSubscriptionScheduler subscriptions = repositories.OwnProducer(new ProfileSubscriptionScheduler(
             new ProfileSubscriptionSchedulerCatalogAdapter(repositories.Profiles), time, repositories.Logs.AppendLog, producerClock));
-        repositories.AttachRuntime(new(repositories, admission, sampling, triggers, definitions,
+        repositories.AttachRuntime(new(repositories, admission, sampling, scopedTakeover, triggers, definitions,
             new TriggerActionReconciler(repositories.Triggers, executor, admission), executions, context, network, observer, subscriptions,
             handoff, processEpoch, exitRequested));
         return Task.CompletedTask;

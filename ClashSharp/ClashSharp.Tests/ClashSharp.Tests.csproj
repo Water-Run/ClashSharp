@@ -161,6 +161,7 @@
     <Compile Include="..\ClashSharp\Service\CoreConfigurationService.RuntimeTransaction.cs" Link="Service\CoreConfigurationService.RuntimeTransaction.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationService.ProfileRuntimeTransaction.cs" Link="Service\CoreConfigurationService.ProfileRuntimeTransaction.cs" />
     <Compile Include="..\ClashSharp\Service\NetworkTakeoverService.cs" Link="Service\NetworkTakeoverService.cs" />
+    <Compile Include="..\ClashSharp\Service\NetworkTakeoverService.DataScope.cs" Link="Service\NetworkTakeoverService.DataScope.cs" />
     <Compile Include="..\ClashSharp\Service\ProxySelectionService.cs" Link="Service\ProxySelectionService.cs" />
     <Compile Include="..\ClashSharp\Service\ProxySelectionServiceFactory.cs" Link="Service\ProxySelectionServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\ProxySelectionStore.cs" Link="Service\ProxySelectionStore.cs" />

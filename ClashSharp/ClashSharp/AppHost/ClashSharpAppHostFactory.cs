@@ -190,7 +190,7 @@ internal static class ClashSharpAppHostFactory
                     session => new AppDataGenerationRepositories(session, authority, mutationAdmission,
                         provider.GetRequiredService<FairAsyncMutationGate>(), provider.GetRequiredService<IControllerCredentialProvider>(),
                         new CoreConfigurationProfileMetricsAdapter(), new CoreConfigurationValidator(), localization.GetString,
-                        (configuration, ownedSession) => new GenerationProfileRuntime(ownedSession, configuration, takeover),
+                        (configuration, ownedSession) => new GenerationProfileRuntime(ownedSession, configuration),
                         configuration => new ProxySelectionService(
                             new ProxySelectionStore(Path.Combine(session.Generation.RootPath, "mihomo", "proxy-selections.json")),
                             provider.GetRequiredService<MihomoControllerClient>().GetProxyGroupsAsync,

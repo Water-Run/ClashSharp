@@ -7,7 +7,7 @@ using ClashSharp.ServiceProtocol;
 namespace ClashSharp.Tests.Unit.Services;
 
 /// <summary>Unit tests for network takeover mode application.</summary>
-public sealed class NetworkTakeoverServiceTests
+public sealed partial class NetworkTakeoverServiceTests
 {
     [Theory]
     [InlineData(ClashSharpMode.Disabled, false)]
@@ -669,7 +669,7 @@ public sealed class NetworkTakeoverServiceTests
     private sealed class FakeNetworkTakeoverCoreConfiguration(List<string>? operations = null)
         : INetworkTakeoverCoreConfiguration
     {
-        public CoreConfigurationState State { get; } = new(
+        public CoreConfigurationState State { get; init; } = new(
             AppContext.BaseDirectory,
             typeof(NetworkTakeoverServiceTests).Assembly.Location,
             true);

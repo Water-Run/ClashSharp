@@ -151,10 +151,11 @@ public sealed partial class ProductionDataGenerationTests
 
     private static void ConfigureRealRuntime(Fixture fixture, StartupPlatform platform, AppearanceSurface appearance, NetworkSurface network)
     {
+        _ = ConfigureSelections(fixture);
         StartupService startup = new(platform, platform, key => key);
         Composer composer = new(fixture.Admission, fixture.Authority,
             () => new OwnedUiDispatcher(() => true, action => { action(); return true; }, CancellationToken.None),
-            appearance, startup, UnusedNative<Connections>(), UnusedNative<Traffic>(), UnusedNative<Takeover>(),
+            appearance, startup, UnusedNative<Connections>(), UnusedNative<Traffic>(), CreateUnusedTakeover(),
             UnusedNative<Proxy>(), UnusedNative<ServiceManager>(), UnusedNative<Notifications>(), new EventHub(),
             new ApplicationLifetimeRequestChannel(), () => false, TimeProvider.System, Guid.NewGuid(), key => key,
             _ => network, new SuspendedClock());

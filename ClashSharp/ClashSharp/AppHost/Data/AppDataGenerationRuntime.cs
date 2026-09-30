@@ -20,6 +20,7 @@ internal sealed class AppDataGenerationRuntime(
     AppDataGenerationRepositories repositories,
     MutationAdmissionBarrier admission,
     ConnectionSamplingService sampling,
+    NetworkTakeoverService takeover,
     TriggersSettingsParticipant triggerSettings,
     TriggerDefinitionStore definitions,
     TriggerActionReconciler outbox,
@@ -38,6 +39,7 @@ internal sealed class AppDataGenerationRuntime(
 
     public AppDataGenerationRepositories Repositories { get; } = repositories;
     public ConnectionSamplingService Sampling { get; } = sampling;
+    public NetworkTakeoverService Takeover { get; } = takeover;
     public TriggersSettingsParticipant TriggerSettings { get; } = triggerSettings;
     public TriggerDefinitionStore Definitions { get; } = definitions;
     public TriggerExecutionCoordinator Executions { get; } = executions;

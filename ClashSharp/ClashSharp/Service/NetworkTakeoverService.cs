@@ -114,7 +114,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
     private static readonly TimeSpan ReadinessPollInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>Synchronization object guarding runtime mode transitions for this service lifetime.</summary>
-    private readonly SemaphoreSlim _transitionGate = new(1, 1);
+    private readonly SemaphoreSlim _transitionGate;
 
     private readonly INetworkTakeoverCoreConfiguration _configuration;
 
@@ -144,7 +144,8 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         INetworkTakeoverReadiness readiness,
         Func<string, string> getString,
         INetworkTakeoverProxySelections? proxySelections = null,
-        Func<CancellationToken, Task>? flushTraffic = null)
+        Func<CancellationToken, Task>? flushTraffic = null,
+        SemaphoreSlim? transitionGate = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _core = core ?? throw new ArgumentNullException(nameof(core));
@@ -155,6 +156,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _proxySelections = proxySelections;
         _flushTraffic = flushTraffic;
+        _transitionGate = transitionGate ?? new(1, 1);
     }
 
     /// <summary>Applies one immutable planned mode without rereading mutable TUN or port settings.</summary>
