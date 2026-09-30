@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Presentation;
@@ -60,13 +61,15 @@ internal sealed class StatisticsViewModel : ObservableObject
     private string _ruleStatisticText = string.Empty;
 
     /// <summary>Backing field for <see cref="ProfileTrafficRows"/>.</summary>
-    private IReadOnlyList<TrafficStatisticRow> _profileTrafficRows = [];
+    private IReadOnlyList<StatisticsTrafficRowDisplay> _profileTrafficRows = [];
 
     /// <summary>Backing field for <see cref="DailyTrafficRows"/>.</summary>
-    private IReadOnlyList<TrafficStatisticRow> _dailyTrafficRows = [];
+    private IReadOnlyList<StatisticsTrafficRowDisplay> _dailyTrafficRows = [];
 
     /// <summary>Backing field for <see cref="NodeTrafficRows"/>.</summary>
-    private IReadOnlyList<TrafficStatisticRow> _nodeTrafficRows = [];
+    private IReadOnlyList<StatisticsTrafficRowDisplay> _nodeTrafficRows = [];
+
+    private IReadOnlyList<StatisticsRuleHitDisplay> _ruleHitRows = [];
 
     /// <summary>Initializes a statistics view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
@@ -127,6 +130,8 @@ internal sealed class StatisticsViewModel : ObservableObject
     /// <summary>Gets the node breakdown title.</summary>
     /// <value>Localized section title.</value>
     public string ByNodeTitleText => _localization.GetString("Statistics.ByNode.Title");
+
+    public string ByRuleTitleText => _localization.GetString("Statistics.ByRule.Title");
 
     /// <summary>Gets the log shortcut title.</summary>
     /// <value>Localized shortcut title.</value>
@@ -190,7 +195,7 @@ internal sealed class StatisticsViewModel : ObservableObject
 
     /// <summary>Gets profile traffic rows.</summary>
     /// <value>Profile traffic rows with current names applied.</value>
-    public IReadOnlyList<TrafficStatisticRow> ProfileTrafficRows
+    public IReadOnlyList<StatisticsTrafficRowDisplay> ProfileTrafficRows
     {
         get => _profileTrafficRows;
         private set => SetProperty(ref _profileTrafficRows, value);
@@ -198,7 +203,7 @@ internal sealed class StatisticsViewModel : ObservableObject
 
     /// <summary>Gets daily traffic rows.</summary>
     /// <value>Daily traffic rows.</value>
-    public IReadOnlyList<TrafficStatisticRow> DailyTrafficRows
+    public IReadOnlyList<StatisticsTrafficRowDisplay> DailyTrafficRows
     {
         get => _dailyTrafficRows;
         private set => SetProperty(ref _dailyTrafficRows, value);
@@ -206,11 +211,14 @@ internal sealed class StatisticsViewModel : ObservableObject
 
     /// <summary>Gets node traffic rows.</summary>
     /// <value>Node traffic rows.</value>
-    public IReadOnlyList<TrafficStatisticRow> NodeTrafficRows
+    public IReadOnlyList<StatisticsTrafficRowDisplay> NodeTrafficRows
     {
         get => _nodeTrafficRows;
         private set => SetProperty(ref _nodeTrafficRows, value);
     }
+
+    /// <summary>Gets the ten most-hit rules, with deterministic ordering for equal counts.</summary>
+    public IReadOnlyList<StatisticsRuleHitDisplay> RuleHitRows => _ruleHitRows;
 
     /// <summary>Gets the command that navigates to logs.</summary>
     /// <value>Synchronous navigation command.</value>
@@ -264,11 +272,15 @@ internal sealed class StatisticsViewModel : ObservableObject
 
     public bool HasNoNodeTraffic => HasSnapshot && !IsLoading && !HasLoadError && NodeTrafficRows.Count == 0;
 
+    public bool HasNoRuleHits => HasSnapshot && !IsLoading && !HasLoadError && RuleHitRows.Count == 0;
+
     public string NoProfileTrafficText => _localization.GetString("Statistics.Empty.Profile");
 
     public string NoDailyTrafficText => _localization.GetString("Statistics.Empty.Date");
 
     public string NoNodeTrafficText => _localization.GetString("Statistics.Empty.Node");
+
+    public string NoRuleHitsText => _localization.GetString("Statistics.Empty.Rule");
 
     /// <summary>Loads statistics without blocking the UI thread.</summary>
     /// <param name="cancellationToken">Cancels this page-load attempt.</param>
@@ -300,9 +312,14 @@ internal sealed class StatisticsViewModel : ObservableObject
         StatisticsSummary summary = _statistics.GetTrafficStatisticsSummary();
         return new StatisticsLoadSnapshot(
             summary,
-            ResolveProfileTrafficRows(_statistics.GetProfileTrafficRows(10)),
+            _statistics.GetProfileTrafficRows(10),
             _statistics.GetDailyTrafficRows(14),
-            _statistics.GetNodeTrafficRows(10));
+            _statistics.GetNodeTrafficRows(10),
+            _statistics.GetRuleHitCounts()
+                .OrderByDescending(static row => row.Value)
+                .ThenBy(static row => row.Key, StringComparer.Ordinal)
+                .Take(10).ToArray(),
+            _profiles.GetProfileDisplayNamesById());
     }
 
     private void ApplyLoadSnapshot(StatisticsLoadSnapshot snapshot)
@@ -318,6 +335,15 @@ internal sealed class StatisticsViewModel : ObservableObject
         string snapshots = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.SnapshotCount.Format"), summary.SnapshotCount);
         string nodes = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.NodeCount.Format"), summary.NodeCount, summary.NodeHealthCount);
         string rules = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.RuleCount.Format"), summary.RuleCount);
+        IReadOnlyList<StatisticsTrafficRowDisplay> profileRows = FormatTrafficRows(snapshot.ProfileTrafficRows,
+            "Statistics.ConnectionCount.Format", snapshot.ProfileNames);
+        IReadOnlyList<StatisticsTrafficRowDisplay> dailyRows = FormatTrafficRows(snapshot.DailyTrafficRows,
+            "Statistics.SnapshotCount.Format", daily: true);
+        IReadOnlyList<StatisticsTrafficRowDisplay> nodeRows = FormatTrafficRows(snapshot.NodeTrafficRows,
+            "Statistics.SnapshotCount.Format");
+        StatisticsRuleHitDisplay[] ruleRows = snapshot.RuleHitCounts.Select(row => new StatisticsRuleHitDisplay(
+            _displayMapper.MapText(row.Key), row.Value,
+            string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.RuleHits.Format"), row.Value))).ToArray();
         DateTimeOffset updated = _getNow();
 
         // Prepare every value first, then publish one complete snapshot to binding observers.
@@ -327,9 +353,10 @@ internal sealed class StatisticsViewModel : ObservableObject
         _snapshotStatisticText = snapshots;
         _nodeStatisticText = nodes;
         _ruleStatisticText = rules;
-        _profileTrafficRows = snapshot.ProfileTrafficRows;
-        _dailyTrafficRows = snapshot.DailyTrafficRows;
-        _nodeTrafficRows = snapshot.NodeTrafficRows;
+        _profileTrafficRows = profileRows;
+        _dailyTrafficRows = dailyRows;
+        _nodeTrafficRows = nodeRows;
+        _ruleHitRows = ruleRows;
         _lastUpdated = updated;
         _hasSnapshot = true;
         OnPropertyChanged(nameof(TotalTrafficText));
@@ -341,6 +368,7 @@ internal sealed class StatisticsViewModel : ObservableObject
         OnPropertyChanged(nameof(ProfileTrafficRows));
         OnPropertyChanged(nameof(DailyTrafficRows));
         OnPropertyChanged(nameof(NodeTrafficRows));
+        OnPropertyChanged(nameof(RuleHitRows));
         OnPropertyChanged(nameof(HasSnapshot));
         OnPropertyChanged(nameof(StatusText));
         NotifyEmptyStates();
@@ -351,6 +379,7 @@ internal sealed class StatisticsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasNoProfileTraffic));
         OnPropertyChanged(nameof(HasNoDailyTraffic));
         OnPropertyChanged(nameof(HasNoNodeTraffic));
+        OnPropertyChanged(nameof(HasNoRuleHits));
     }
 
     /// <summary>Formats a byte count for compact UI display.</summary>
@@ -370,22 +399,28 @@ internal sealed class StatisticsViewModel : ObservableObject
         return $"{value:N1} {units[unitIndex]}";
     }
 
-    /// <summary>Applies current profile display names to profile traffic rows.</summary>
-    /// <param name="rows">Stored profile traffic rows. Must not be null.</param>
-    /// <returns>Rows with display names applied when available.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="rows"/> is null.</exception>
-    private IReadOnlyList<TrafficStatisticRow> ResolveProfileTrafficRows(IReadOnlyList<TrafficStatisticRow> rows)
+    private IReadOnlyList<StatisticsTrafficRowDisplay> FormatTrafficRows(
+        IReadOnlyList<TrafficStatisticRow> rows,
+        string countFormat,
+        IReadOnlyDictionary<string, string>? profileNames = null,
+        bool daily = false)
     {
-        ArgumentNullException.ThrowIfNull(rows);
-        IReadOnlyDictionary<string, string> profileNames = _profiles.GetProfileDisplayNamesById();
-        List<TrafficStatisticRow> resolvedRows = new(rows.Count);
+        List<StatisticsTrafficRowDisplay> resolvedRows = new(rows.Count);
         foreach (TrafficStatisticRow row in rows)
         {
-            string rawLabel = profileNames.TryGetValue(row.Label, out string? profileName)
+            string rawLabel = profileNames is not null && profileNames.TryGetValue(row.Label, out string? profileName)
                 ? profileName
                 : row.Label;
-            string label = _displayMapper.MapText(rawLabel);
-            resolvedRows.Add(row with { Label = label });
+            string label = daily && DateOnly.TryParseExact(rawLabel, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out DateOnly date)
+                ? date.ToString("d", CultureInfo.CurrentCulture)
+                : _displayMapper.MapText(rawLabel);
+            resolvedRows.Add(new StatisticsTrafficRowDisplay(row, label,
+                string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Total.Format"), row.TotalDisplay),
+                string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.TotalTraffic.Format"), row.UploadDisplay, row.DownloadDisplay),
+                string.Format(CultureInfo.CurrentCulture, _localization.GetString(countFormat), row.SampleCount),
+                string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Updated.Format"),
+                    row.UpdatedAt.ToLocalTime().ToString("G", CultureInfo.CurrentCulture))));
         }
 
         return resolvedRows;
@@ -395,5 +430,7 @@ internal sealed class StatisticsViewModel : ObservableObject
         StatisticsSummary Summary,
         IReadOnlyList<TrafficStatisticRow> ProfileTrafficRows,
         IReadOnlyList<TrafficStatisticRow> DailyTrafficRows,
-        IReadOnlyList<TrafficStatisticRow> NodeTrafficRows);
+        IReadOnlyList<TrafficStatisticRow> NodeTrafficRows,
+        IReadOnlyList<KeyValuePair<string, long>> RuleHitCounts,
+        IReadOnlyDictionary<string, string> ProfileNames);
 }

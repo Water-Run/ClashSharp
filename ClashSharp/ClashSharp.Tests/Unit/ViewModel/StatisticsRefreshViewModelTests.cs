@@ -1,6 +1,7 @@
 using System.Globalization;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
+using ClashSharp.Strings;
 using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.ViewModel;
@@ -132,7 +133,7 @@ public sealed class StatisticsRefreshViewModelTests
             Assert.Equal("10 nodes / 11 health", viewModel.NodeStatisticText);
             Assert.Equal("12 rules", viewModel.RuleStatisticText);
             Assert.Equal("Current profile", Assert.Single(viewModel.ProfileTrafficRows).Label);
-            Assert.Equal("2026-09-30", Assert.Single(viewModel.DailyTrafficRows).Label);
+            Assert.Equal(new DateOnly(2026, 9, 30).ToString("d", CultureInfo.CurrentCulture), Assert.Single(viewModel.DailyTrafficRows).Label);
             Assert.Equal("Node A", Assert.Single(viewModel.NodeTrafficRows).Label);
         };
 
@@ -155,6 +156,95 @@ public sealed class StatisticsRefreshViewModelTests
         Assert.False(viewModel.HasNoProfileTraffic);
         Assert.True(viewModel.HasNoDailyTraffic);
         Assert.False(viewModel.HasNoNodeTraffic);
+        Assert.True(viewModel.HasNoRuleHits);
+    }
+
+    [Theory]
+    [InlineData(AppLanguage.English)]
+    [InlineData(AppLanguage.SimplifiedChinese)]
+    [InlineData(AppLanguage.TraditionalChinese)]
+    [InlineData(AppLanguage.German)]
+    [InlineData(AppLanguage.French)]
+    [InlineData(AppLanguage.Russian)]
+    [InlineData(AppLanguage.Korean)]
+    [InlineData(AppLanguage.Persian)]
+    public async Task Rows_UseAuthoredLabelsAndDistinguishConnectionsFromSnapshots(AppLanguage language)
+    {
+        StatisticsStore store = WithRows();
+        store.ReadRuleHits = () => new Dictionary<string, long> { ["MATCH"] = 0 };
+        CatalogLocalization localization = new(language);
+        StatisticsViewModel viewModel = new(localization, store, new Profiles(), static () => { },
+            new TestApplicationErrorSink(), new ModelDisplayMapper(static text => text));
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        StatisticsTrafficRowDisplay profile = Assert.Single(viewModel.ProfileTrafficRows);
+        StatisticsTrafficRowDisplay daily = Assert.Single(viewModel.DailyTrafficRows);
+        StatisticsTrafficRowDisplay node = Assert.Single(viewModel.NodeTrafficRows);
+        Assert.Equal(store.ProfileRows[0], profile.Model);
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, localization.GetString("Statistics.Total.Format"), "3.0 B"), profile.TotalDisplay);
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, localization.GetString("Statistics.TotalTraffic.Format"), "1.0 B", "2.0 B"), profile.TransferDisplay);
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, localization.GetString("Statistics.ConnectionCount.Format"), 3), profile.SampleCountDisplay);
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, localization.GetString("Statistics.SnapshotCount.Format"), 3), daily.SampleCountDisplay);
+        Assert.NotEqual(profile.SampleCountDisplay, daily.SampleCountDisplay);
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, localization.GetString("Statistics.Updated.Format"), RefreshTime.ToLocalTime().ToString("G", CultureInfo.CurrentCulture)), node.UpdatedAtDisplay);
+        Assert.Equal(0, Assert.Single(viewModel.RuleHitRows).HitCount);
+        Assert.False(viewModel.HasNoRuleHits);
+        Assert.DoesNotContain("Statistics.", viewModel.ByRuleTitleText);
+        Assert.DoesNotContain("Statistics.", Assert.Single(viewModel.RuleHitRows).HitCountDisplay);
+    }
+
+    [Theory]
+    [InlineData(5)]
+    [InlineData(12)]
+    public async Task RuleHits_AreBoundedAndOrderedBeforeDisplayFiltering(int count)
+    {
+        StatisticsStore store = WithRows();
+        Dictionary<string, long> hits = Enumerable.Range(0, count).Reverse()
+            .ToDictionary(index => $"private-{index:D2}", index => index / 2L, StringComparer.Ordinal);
+        store.ReadRuleHits = () => hits;
+        StatisticsViewModel viewModel = new(new Localization(), store, new Profiles(), static () => { },
+            new TestApplicationErrorSink(), new ModelDisplayMapper(static _ => "filtered"));
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(Math.Min(10, count), viewModel.RuleHitRows.Count);
+        Assert.Equal(hits.OrderByDescending(row => row.Value).ThenBy(row => row.Key, StringComparer.Ordinal)
+            .Take(10).Select(row => row.Value), viewModel.RuleHitRows.Select(row => row.HitCount));
+        Assert.All(viewModel.RuleHitRows, row => Assert.Equal("filtered", row.Label));
+        Assert.Equal("filtered", Assert.Single(viewModel.NodeTrafficRows).Label);
+        Assert.Equal("Node A", Assert.Single(viewModel.NodeTrafficRows).Model.Label);
+        Assert.Equal("profile-1", Assert.Single(viewModel.ProfileTrafficRows).Model.Label);
+        Assert.Equal(count, hits.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RuleHitFailure_PreservesTheEntireSnapshotAndDoesNotClaimEmpty(bool failFormatting)
+    {
+        StatisticsStore store = WithRows();
+        store.ReadRuleHits = () => new Dictionary<string, long> { ["MATCH"] = 17 };
+        Localization localization = new();
+        TestApplicationErrorSink sink = new();
+        StatisticsViewModel viewModel = Create(store, sink, localization);
+        await viewModel.LoadAsync(CancellationToken.None);
+        DisplayedSnapshot previous = Capture(viewModel);
+
+        store.ProfileRows = [];
+        store.DailyRows = [];
+        store.NodeRows = [];
+        store.ReadRuleHits = failFormatting
+            ? () => new Dictionary<string, long> { ["REPLACEMENT"] = 99 }
+            : () => throw new IOException("Synthetic rule read failure.");
+        localization.BrokenHitFormat = failFormatting;
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(previous, Capture(viewModel));
+        Assert.True(viewModel.HasLoadError);
+        Assert.False(viewModel.HasNoRuleHits);
+        Assert.Equal("MATCH", Assert.Single(viewModel.RuleHitRows).Label);
+        Assert.Single(sink.Errors);
     }
 
     [Theory]
@@ -294,12 +384,12 @@ public sealed class StatisticsRefreshViewModelTests
     private static DisplayedSnapshot Capture(StatisticsViewModel viewModel) => new(
         viewModel.TotalTrafficText, viewModel.ConnectionCountText, viewModel.ProfileStatisticText,
         viewModel.SnapshotStatisticText, viewModel.NodeStatisticText, viewModel.RuleStatisticText,
-        viewModel.ProfileTrafficRows, viewModel.DailyTrafficRows, viewModel.NodeTrafficRows, viewModel.StatusText);
+        viewModel.ProfileTrafficRows, viewModel.DailyTrafficRows, viewModel.NodeTrafficRows, viewModel.RuleHitRows, viewModel.StatusText);
 
     private sealed record DisplayedSnapshot(
         string Total, string Connections, string Profiles, string Snapshots, string Nodes, string Rules,
-        IReadOnlyList<TrafficStatisticRow> ProfileRows, IReadOnlyList<TrafficStatisticRow> DailyRows,
-        IReadOnlyList<TrafficStatisticRow> NodeRows, string Status);
+        IReadOnlyList<StatisticsTrafficRowDisplay> ProfileRows, IReadOnlyList<StatisticsTrafficRowDisplay> DailyRows,
+        IReadOnlyList<StatisticsTrafficRowDisplay> NodeRows, IReadOnlyList<StatisticsRuleHitDisplay> RuleRows, string Status);
 
     private sealed class StatisticsStore : IStatisticsStore
     {
@@ -309,6 +399,7 @@ public sealed class StatisticsRefreshViewModelTests
         public IReadOnlyList<TrafficStatisticRow> ProfileRows { get; set; } = [];
         public IReadOnlyList<TrafficStatisticRow> DailyRows { get; set; } = [];
         public IReadOnlyList<TrafficStatisticRow> NodeRows { get; set; } = [];
+        public Func<IReadOnlyDictionary<string, long>> ReadRuleHits { get; set; } = static () => new Dictionary<string, long>();
 
         public StatisticsSummary GetTrafficStatisticsSummary()
         {
@@ -319,6 +410,7 @@ public sealed class StatisticsRefreshViewModelTests
         public IReadOnlyList<TrafficStatisticRow> GetProfileTrafficRows(int limit) => ProfileRows;
         public IReadOnlyList<TrafficStatisticRow> GetDailyTrafficRows(int limit) => DailyRows;
         public IReadOnlyList<TrafficStatisticRow> GetNodeTrafficRows(int limit) => NodeRows;
+        public IReadOnlyDictionary<string, long> GetRuleHitCounts() => ReadRuleHits();
     }
 
     private sealed class Profiles : IStatisticsProfiles
@@ -330,6 +422,7 @@ public sealed class StatisticsRefreshViewModelTests
     private sealed class Localization : IDisplayPageLocalization
     {
         public bool BrokenRuleFormat { get; set; }
+        public bool BrokenHitFormat { get; set; }
 
         public string GetString(string key) => key switch
         {
@@ -339,12 +432,19 @@ public sealed class StatisticsRefreshViewModelTests
             "Statistics.SnapshotCount.Format" => "{0} snapshots",
             "Statistics.NodeCount.Format" => "{0} nodes / {1} health",
             "Statistics.RuleCount.Format" => BrokenRuleFormat ? "{broken}" : "{0} rules",
+            "Statistics.Total.Format" => "Total {0}",
+            "Statistics.RuleHits.Format" => BrokenHitFormat ? "{broken}" : "{0:N0} hits",
             "Statistics.Loading" => "Loading statistics",
             "Statistics.LoadFailed" => "Could not load statistics",
             "Statistics.RefreshFailed" => "Showing the last loaded statistics",
             "Statistics.Updated.Format" => "Updated {0}",
             _ => key,
         };
+    }
+
+    private sealed class CatalogLocalization(AppLanguage language) : IDisplayPageLocalization
+    {
+        public string GetString(string key) => LocalizationResources.BuildExplicitTranslations()[language][key];
     }
 
     private sealed class ReadGate : IDisposable

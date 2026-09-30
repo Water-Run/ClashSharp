@@ -64,4 +64,8 @@ internal sealed class StatisticsStoreAdapter : IStatisticsStore
     {
         return _logStorage.GetNodeTrafficRows(limit);
     }
+
+    /// <summary>Gets persisted rule-hit aggregates.</summary>
+    /// <returns>Counts keyed by the original rule identity.</returns>
+    public IReadOnlyDictionary<string, long> GetRuleHitCounts() => _logStorage.GetRuleHitCounts();
 }

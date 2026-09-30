@@ -272,6 +272,7 @@
     <Compile Include="..\ClashSharp\ViewModel\IUriLauncher.cs" Link="ViewModel\IUriLauncher.cs" />
     <Compile Include="..\ClashSharp\ViewModel\RulesViewModel.cs" Link="ViewModel\RulesViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\StatisticsViewModel.cs" Link="ViewModel\StatisticsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\StatisticsRowDisplay.cs" Link="ViewModel\StatisticsRowDisplay.cs" />
     <Compile Include="..\ClashSharp\ViewModel\AboutViewModel.cs" Link="ViewModel\AboutViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ConnectionsViewModel.cs" Link="ViewModel\ConnectionsViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IConnectionsLocalization.cs" Link="ViewModel\IConnectionsLocalization.cs" />

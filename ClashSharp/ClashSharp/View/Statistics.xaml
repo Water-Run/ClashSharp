@@ -92,7 +92,7 @@
 
                 <Grid Style="{StaticResource ClashCardGridStyle}">
                     <StackPanel Spacing="10">
-                        <TextBlock x:Name="ByProfileTitleText" Text="{Binding ByProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="ByProfileTitleText" Text="{Binding ByProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding NoProfileTrafficText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Visibility="{Binding HasNoProfileTraffic, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <ListView x:Name="ProfileTrafficList" ItemsSource="{Binding ProfileTrafficRows}" MaxHeight="320" SelectionMode="None" ItemContainerStyle="{StaticResource StatisticsRowStyle}">
@@ -101,14 +101,7 @@
                                     <StackPanel Padding="2,6" Spacing="2">
                                         <TextBlock Text="{Binding Label}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Label}" />
                                         <TextBlock Text="{Binding TotalDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                        <Grid ColumnSpacing="10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding UploadDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                            <TextBlock Grid.Column="1" Text="{Binding DownloadDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                        </Grid>
+                                        <TextBlock Text="{Binding TransferDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding SampleCountDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -119,7 +112,7 @@
 
                 <Grid Grid.Column="1" Style="{StaticResource ClashCardGridStyle}">
                     <StackPanel Spacing="10">
-                        <TextBlock x:Name="ByDateTitleText" Text="{Binding ByDateTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="ByDateTitleText" Text="{Binding ByDateTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding NoDailyTrafficText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Visibility="{Binding HasNoDailyTraffic, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <ListView x:Name="DailyTrafficList" ItemsSource="{Binding DailyTrafficRows}" MaxHeight="320" SelectionMode="None" ItemContainerStyle="{StaticResource StatisticsRowStyle}">
@@ -128,14 +121,7 @@
                                     <StackPanel Padding="2,6" Spacing="2">
                                         <TextBlock Text="{Binding Label}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding TotalDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                        <Grid ColumnSpacing="10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding UploadDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                            <TextBlock Grid.Column="1" Text="{Binding DownloadDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                        </Grid>
+                                        <TextBlock Text="{Binding TransferDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding SampleCountDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -146,7 +132,7 @@
 
                 <Grid Grid.Column="2" Style="{StaticResource ClashCardGridStyle}">
                     <StackPanel Spacing="10">
-                        <TextBlock x:Name="ByNodeTitleText" Text="{Binding ByNodeTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="ByNodeTitleText" Text="{Binding ByNodeTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding NoNodeTrafficText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Visibility="{Binding HasNoNodeTraffic, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <ListView x:Name="NodeTrafficList" ItemsSource="{Binding NodeTrafficRows}" MaxHeight="320" SelectionMode="None" ItemContainerStyle="{StaticResource StatisticsRowStyle}">
@@ -155,14 +141,7 @@
                                     <StackPanel Padding="2,6" Spacing="2">
                                         <TextBlock Text="{Binding Label}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Label}" />
                                         <TextBlock Text="{Binding TotalDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                        <Grid ColumnSpacing="10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding UploadDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                            <TextBlock Grid.Column="1" Text="{Binding DownloadDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                        </Grid>
+                                        <TextBlock Text="{Binding TransferDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding UpdatedAtDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -170,6 +149,27 @@
                         </ListView>
                     </StackPanel>
                 </Grid>
+            </Grid>
+
+            <Grid Style="{StaticResource ClashCardGridStyle}" Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{Binding ByRuleTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding NoRuleHitsText}" Style="{ThemeResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                               Visibility="{Binding HasNoRuleHits, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <ListView x:Name="RuleHitList" ItemsSource="{Binding RuleHitRows}" MaxHeight="320" SelectionMode="None"
+                              ItemContainerStyle="{StaticResource StatisticsRowStyle}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Padding="2,6" Spacing="2">
+                                    <TextBlock Text="{Binding Label}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding Label}" />
+                                    <TextBlock Text="{Binding HitCountDisplay}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </StackPanel>
             </Grid>
 
             <Grid Style="{StaticResource ClashCardGridStyle}">

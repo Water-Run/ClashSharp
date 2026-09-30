@@ -79,8 +79,9 @@ public sealed class DisplayPageViewModelTests
         Assert.Equal("2 nodes / 4 health", viewModel.NodeStatisticText);
         Assert.Equal("6 rules", viewModel.RuleStatisticText);
         Assert.Equal("display:Active profile", viewModel.ProfileTrafficRows.Single().Label);
-        Assert.Equal(statistics.DailyRows, viewModel.DailyTrafficRows);
-        Assert.Equal(statistics.NodeRows, viewModel.NodeTrafficRows);
+        Assert.Equal(statistics.DailyRows, viewModel.DailyTrafficRows.Select(static row => row.Model));
+        Assert.Equal(statistics.NodeRows, viewModel.NodeTrafficRows.Select(static row => row.Model));
+        Assert.Equal("display:Node", Assert.Single(viewModel.NodeTrafficRows).Label);
         Assert.Equal(1, statistics.SummaryReadCount);
     }
 
@@ -288,6 +289,7 @@ public sealed class DisplayPageViewModelTests
     /// <summary>Fake statistics store for statistics tests.</summary>
     private sealed class FakeStatisticsStore : IStatisticsStore
     {
+        public IReadOnlyDictionary<string, long> GetRuleHitCounts() => new Dictionary<string, long>();
         public int SummaryReadCount { get; private set; }
 
         /// <summary>Gets fake daily traffic rows.</summary>

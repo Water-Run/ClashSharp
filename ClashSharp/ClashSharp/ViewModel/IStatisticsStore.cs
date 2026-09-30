@@ -29,4 +29,8 @@ internal interface IStatisticsStore
     /// <param name="limit">Maximum number of rows; must be greater than zero.</param>
     /// <returns>Node traffic rows.</returns>
     IReadOnlyList<TrafficStatisticRow> GetNodeTrafficRows(int limit);
+
+    /// <summary>Gets persisted rule-hit aggregates, including rules with no hits.</summary>
+    /// <returns>Counts keyed by the original rule identity.</returns>
+    IReadOnlyDictionary<string, long> GetRuleHitCounts();
 }
