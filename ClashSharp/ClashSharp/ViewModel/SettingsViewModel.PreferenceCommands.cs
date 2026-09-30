@@ -197,6 +197,7 @@ internal sealed partial class SettingsViewModel
                     Stage(ref _triggerNotificationsEnabled, change.Value, nameof(TriggerNotificationsEnabled));
                     break;
                 case nameof(ConnectionTestProxyUrl1):
+                    Stage(ref _connectionTestUrl, change.Value, nameof(ConnectionTestUrl));
                     Stage(ref _connectionTestProxyUrl1, change.Value, nameof(ConnectionTestProxyUrl1), nameof(ConnectionTestUrlSummaryText));
                     break;
                 case nameof(ConnectionTestProxyUrl2):

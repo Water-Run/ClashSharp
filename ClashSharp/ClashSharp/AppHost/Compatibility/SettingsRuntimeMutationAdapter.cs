@@ -124,8 +124,9 @@ internal sealed class SettingsRuntimeMutationAdapter
                 _dataPackages.BeginResetNetworkSettingsAdmitted(GetLease(), scope, transparentProxyEnabled));
         }
 
-        public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
+        public Task RestoreDurableSettingsAsync(SettingsExternalDurableSnapshot snapshot, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _settings.WriteAdmitted(GetLease(), editor =>
             {
                 editor.DisplayLanguage = snapshot.DisplayLanguage;
@@ -140,6 +141,7 @@ internal sealed class SettingsRuntimeMutationAdapter
                 editor.TransparentProxyEnabled = snapshot.TransparentProxyEnabled;
                 editor.MixedPort = snapshot.MixedPort;
             });
+            return Task.CompletedTask;
         }
 
         public Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken)

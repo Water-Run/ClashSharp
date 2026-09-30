@@ -8,7 +8,7 @@ using ClashSharp.Tests.Unit.Settings;
 namespace ClashSharp.Tests.Integration;
 
 /// <summary>Checks complete consumer commands through actual generation and settings stores.</summary>
-public sealed class GenerationSettingsAuthorityTests
+public sealed partial class GenerationSettingsAuthorityTests
 {
     [Fact]
     public async Task CompleteChangeSet_VerifiesAllAffectedParticipantsWithinOneAuthorityCommand()

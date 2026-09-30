@@ -30,7 +30,7 @@ internal interface ISettingsDestructiveRuntimeScope : IAsyncDisposable
         bool transparentProxyEnabled);
 
     /// <summary>Restores the durable participant-facing settings through this scope's exclusive authority.</summary>
-    void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot);
+    Task RestoreDurableSettingsAsync(SettingsExternalDurableSnapshot snapshot, CancellationToken cancellationToken);
 
     /// <summary>Applies launch registration without reacquiring ordinary mutation admission.</summary>
     Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken);

@@ -33,7 +33,7 @@ public sealed partial class SettingsViewModelTests
             },
         };
         SettingsViewModel viewModel = CreateStartupResetViewModel(store, scope);
-        viewModel.SetDisplayLanguageIndex(0);
+        await viewModel.SetDisplayLanguageIndexAsync(0);
         Assert.True(viewModel.IsDisplayLanguageRestartPending);
         List<StartupResetState> observations = [];
         viewModel.PropertyChanged += (_, change) =>
@@ -352,7 +352,7 @@ public sealed partial class SettingsViewModelTests
         public Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(string packagePath, CancellationToken cancellationToken)
             => throw new InvalidOperationException("Unexpected import.");
 
-        public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
+        public Task RestoreDurableSettingsAsync(SettingsExternalDurableSnapshot snapshot, CancellationToken cancellationToken)
             => throw new InvalidOperationException("The retained receipt owns startup rollback.");
 
         public Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken)

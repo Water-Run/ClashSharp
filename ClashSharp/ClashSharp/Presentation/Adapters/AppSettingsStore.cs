@@ -30,80 +30,59 @@ internal sealed class AppSettingsStore : ISettingsStore
     public IReadOnlyList<SettingValueChange> ReadPreferenceChanges(IReadOnlyList<SettingKey> keys) =>
         _settings.ReadPreferenceChanges(keys);
 
-    public void ResetPreferenceGroup(SettingsResetScope scope)
-    {
-        _settings.ResetPreferenceGroup(scope);
-    }
-
     public AppLanguage DisplayLanguage
     {
         get => _settings.DisplayLanguage;
-        set => _settings.DisplayLanguage = value;
     }
 
     public bool TransparentProxyEnabled
     {
         get => _settings.TransparentProxyEnabled;
-        set => _settings.TransparentProxyEnabled = value;
     }
 
     public AppThemeMode AppThemeMode
     {
         get => _settings.AppThemeMode;
-        set => _settings.AppThemeMode = value;
     }
 
     public AppAccentColorMode AppAccentColorMode
     {
         get => _settings.AppAccentColorMode;
-        set => _settings.AppAccentColorMode = value;
     }
 
     public string AppAccentColorValue
     {
         get => _settings.AppAccentColorValue;
-        set => _settings.AppAccentColorValue = value;
-    }
-
-    public string SetCustomAppAccentColor(string value)
-    {
-        return _settings.SetCustomAppAccentColor(value);
     }
 
     public bool LaunchAtStartupEnabled
     {
         get => _settings.LaunchAtStartupEnabled;
-        set => _settings.LaunchAtStartupEnabled = value;
     }
 
     public ClashSharpMode CurrentMode
     {
         get => _settings.CurrentMode;
-        set => _settings.CurrentMode = value;
     }
 
     public string ActiveProfileId
     {
         get => _settings.ActiveProfileId;
-        set => _settings.ActiveProfileId = value;
     }
 
     public int MixedPort
     {
         get => _settings.MixedPort;
-        set => _settings.MixedPort = value;
     }
 
     public bool ConnectionSamplingEnabled
     {
         get => _settings.ConnectionSamplingEnabled;
-        set => _settings.ConnectionSamplingEnabled = value;
     }
 
     public int ConnectionSamplingIntervalSeconds
     {
         get => _settings.ConnectionSamplingIntervalSeconds;
-        set => _settings.ConnectionSamplingIntervalSeconds = value;
     }
 
     public ConnectionSamplingSettings ReadConnectionSamplingSettings() => _settings.ReadConnectionSamplingSettings();
@@ -111,91 +90,71 @@ internal sealed class AppSettingsStore : ISettingsStore
     public bool StartupConflictCheckEnabled
     {
         get => _settings.StartupConflictCheckEnabled;
-        set => _settings.StartupConflictCheckEnabled = value;
     }
 
     public StartupBehaviorMode StartupBehaviorMode
     {
         get => _settings.StartupBehaviorMode;
-        set => _settings.StartupBehaviorMode = value;
     }
 
     public bool ShowStartupGuideOnStartup
     {
         get => _settings.ShowStartupGuideOnStartup;
-        set => _settings.ShowStartupGuideOnStartup = value;
     }
 
     public bool TriggersEnabled
     {
         get => _settings.TriggersEnabled;
-        set => _settings.TriggersEnabled = value;
     }
 
     public bool TriggerNotificationsEnabled
     {
         get => _settings.TriggerNotificationsEnabled;
-        set => _settings.TriggerNotificationsEnabled = value;
     }
 
     public CloseBehaviorMode CloseBehaviorMode
     {
         get => _settings.CloseBehaviorMode;
-        set => _settings.CloseBehaviorMode = value;
     }
 
     public bool TrayUseMonochromeInactiveIcon
     {
         get => _settings.TrayUseMonochromeInactiveIcon;
-        set => _settings.TrayUseMonochromeInactiveIcon = value;
     }
 
     public string TrayVisibleFeatureIds
     {
         get => _settings.TrayVisibleFeatureIds;
-        set => _settings.TrayVisibleFeatureIds = value;
     }
 
     public bool CheckStaleProxyOnStartup
     {
         get => _settings.CheckStaleProxyOnStartup;
-        set => _settings.CheckStaleProxyOnStartup = value;
     }
 
     public bool RestoreProxyOnExit
     {
         get => _settings.RestoreProxyOnExit;
-        set => _settings.RestoreProxyOnExit = value;
     }
 
     public MainlandChinaFeatureMode MainlandChinaFeatureMode
     {
         get => _settings.MainlandChinaFeatureMode;
-        set => _settings.MainlandChinaFeatureMode = value;
     }
 
     public bool MainlandChinaUrlBlockingEnabled
     {
         get => _settings.MainlandChinaUrlBlockingEnabled;
-        set => _settings.MainlandChinaUrlBlockingEnabled = value;
     }
 
     public bool NotificationEnabled
     {
         get => _settings.NotificationEnabled;
-        set => _settings.NotificationEnabled = value;
     }
 
     public NotificationLevel NotificationLevel
     {
         get => _settings.NotificationLevel;
-        set => _settings.NotificationLevel = value;
-    }
-
-    public string ConnectionTestUrl
-    {
-        get => _settings.ConnectionTestUrl;
-        set => _settings.ConnectionTestUrl = value;
     }
 
     public string ConnectionTestProxyUrl1 => _settings.ConnectionTestProxyUrl1;
@@ -204,9 +163,4 @@ internal sealed class AppSettingsStore : ISettingsStore
 
     public string ConnectionTestDirectUrl => _settings.ConnectionTestDirectUrl;
 
-    /// <inheritdoc />
-    public void SetConnectionTestUrls(string proxyUrl1, string proxyUrl2, string directUrl)
-    {
-        _settings.SetConnectionTestUrls(proxyUrl1, proxyUrl2, directUrl);
-    }
 }

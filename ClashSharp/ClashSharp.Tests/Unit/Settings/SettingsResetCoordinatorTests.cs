@@ -414,6 +414,45 @@ public sealed class SettingsResetCoordinatorTests
         Assert.Equal(0, operation.RollbackCalls);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedReset_AwaitsDurableCompensationBeforeApplyingBaselineOrDisposingReceipt(bool cancelCaller)
+    {
+        IOException activationFailure = new("activation failed");
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using CancellationTokenSource cancellation = new();
+        ProbeOperation operation = new()
+        {
+            SkipRollbackRestore = true,
+            OnApply = (name, snapshot) => name == "network" && snapshot == Defaults ? activationFailure : null,
+            BeforeRestore = async token =>
+            {
+                Assert.False(token.CanBeCanceled);
+                entered.TrySetResult();
+                await release.Task;
+            },
+        };
+        Task reset = ExecuteAsync(operation, cancellationToken: cancellation.Token);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (cancelCaller) { cancellation.Cancel(); }
+            Assert.False(reset.IsCompleted);
+            Assert.False(operation.Disposed);
+            Assert.Equal(Defaults, operation.Current);
+            Assert.Equal(AllParticipants, operation.Applied.Select(call => call.Participant));
+            Assert.Empty(operation.Published);
+        }
+        finally { release.TrySetResult(); }
+        Assert.Same(activationFailure, await Assert.ThrowsAsync<IOException>(() => reset.WaitAsync(TimeSpan.FromSeconds(5))));
+        Assert.Equal(Baseline, operation.Current);
+        Assert.Equal(AllParticipants.Concat(AllParticipants), operation.Applied.Select(call => call.Participant));
+        Assert.All(operation.Applied.Skip(AllParticipants.Length), call => Assert.Equal(Baseline, call.Snapshot));
+        Assert.True(operation.Disposed);
+    }
+
     private static Task ExecuteAsync(
         ProbeOperation operation,
         SettingsResetScope scope = SettingsResetScope.All,
@@ -422,6 +461,7 @@ public sealed class SettingsResetCoordinatorTests
 
     private sealed class ProbeOperation : ISettingsResetOperation, IRetainedSettingsResetReceipt
     {
+        public Func<CancellationToken, Task>? BeforeRestore { get; init; }
         public SettingsRuntimeSnapshot Current { get; set; } = Baseline;
         public List<string> Events { get; } = [];
         public List<(string Participant, SettingsRuntimeSnapshot Snapshot)> Applied { get; } = [];
@@ -469,9 +509,11 @@ public sealed class SettingsResetCoordinatorTests
             return this;
         }
 
-        public void RestoreDurableSnapshot(SettingsRuntimeSnapshot snapshot)
+        public async Task RestoreDurableSnapshotAsync(SettingsRuntimeSnapshot snapshot, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Events.Add("restore");
+            if (BeforeRestore is not null) { await BeforeRestore(cancellationToken); }
             Current = snapshot;
         }
 

@@ -42,7 +42,7 @@ public sealed partial class SettingsViewModelTests
             },
         };
         SettingsViewModel viewModel = CreateNetworkResetViewModel(store, scope, serviceAvailable);
-        viewModel.SetDisplayLanguageIndex(0);
+        await viewModel.SetDisplayLanguageIndexAsync(0);
         Assert.True(viewModel.IsDisplayLanguageRestartPending);
         List<NetworkResetState> observations = [];
         viewModel.PropertyChanged += (_, change) =>
@@ -62,7 +62,7 @@ public sealed partial class SettingsViewModelTests
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.False(reset.IsCompleted);
             Assert.False(scope.Disposed);
-            Assert.Equal(before, NetworkResetState.Capture(viewModel));
+            Assert.Equal(before.ForPage, NetworkResetState.Capture(viewModel));
             Assert.Empty(observations);
         }
         finally
@@ -71,9 +71,9 @@ public sealed partial class SettingsViewModelTests
             await reset.WaitAsync(TimeSpan.FromSeconds(5));
         }
 
-        Assert.Equal(expected, NetworkResetState.Capture(viewModel));
+        Assert.Equal(expected.ForPage, NetworkResetState.Capture(viewModel));
         Assert.Equal(selectedScope == SettingsResetScope.Proxy ? 4 : 1, observations.Count);
-        Assert.All(observations, state => Assert.Equal(expected, state));
+        Assert.All(observations, state => Assert.Equal(expected.ForPage, state));
         Assert.Equal([(expected.Tun, expected.Port)], scope.NetworkCalls);
         Assert.Equal(selectedScope == SettingsResetScope.Proxy ? [expected] : [], scope.SamplingCalls);
         Assert.Equal(1, scope.Receipt!.CommitCalls);
@@ -131,7 +131,7 @@ public sealed partial class SettingsViewModelTests
         }
 
         Assert.Equal(before, NetworkResetState.Capture(store));
-        Assert.Equal(before, NetworkResetState.Capture(viewModel));
+        Assert.Equal(before.ForPage, NetworkResetState.Capture(viewModel));
         Assert.Equal([(desired.Tun, desired.Port), (before.Tun, before.Port)], scope.NetworkCalls);
         Assert.Equal(selectedScope == SettingsResetScope.Proxy ? [desired, before] : [], scope.SamplingCalls);
         Assert.Equal(0, scope.Receipt!.CommitCalls);
@@ -228,6 +228,10 @@ public sealed partial class SettingsViewModelTests
     private sealed record NetworkResetState(
         bool Tun, int Port, bool Sampling, int Interval, string TestUrl, string ProxyOne, string ProxyTwo, string Direct)
     {
+        // The page's old single-target alias now projects the first canonical target.
+        // Store comparisons still preserve and verify the legacy key independently.
+        public NetworkResetState ForPage => this with { TestUrl = ProxyOne };
+
         public static NetworkResetState Capture(FakeSettingsStore store) => new(
             store.TransparentProxyEnabled, store.MixedPort, store.ConnectionSamplingEnabled, store.ConnectionSamplingIntervalSeconds,
             store.ConnectionTestUrl, store.ConnectionTestProxyUrl1, store.ConnectionTestProxyUrl2, store.ConnectionTestDirectUrl);
@@ -277,7 +281,7 @@ public sealed partial class SettingsViewModelTests
         public ISettingsResetTransactionReceipt BeginResetSettings() => throw new InvalidOperationException("Unexpected full reset.");
         public Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(string packagePath, CancellationToken cancellationToken)
             => throw new InvalidOperationException("Unexpected import.");
-        public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
+        public Task RestoreDurableSettingsAsync(SettingsExternalDurableSnapshot snapshot, CancellationToken cancellationToken)
             => throw new InvalidOperationException("The retained receipt owns rollback.");
         public Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken)
             => throw new InvalidOperationException("Unexpected startup registration.");

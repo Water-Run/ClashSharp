@@ -36,8 +36,8 @@ internal sealed partial class SettingsViewModel
             _ => throw new ArgumentOutOfRangeException(nameof(scope)),
         };
 
-        public void RestoreDurableSnapshot(SettingsRuntimeSnapshot snapshot) =>
-            runtimeMutation.RestoreDurableSettings(new SettingsExternalDurableSnapshot(
+        public Task RestoreDurableSnapshotAsync(SettingsRuntimeSnapshot snapshot, CancellationToken cancellationToken) =>
+            runtimeMutation.RestoreDurableSettingsAsync(new SettingsExternalDurableSnapshot(
                 snapshot.DisplayLanguage,
                 snapshot.AppThemeMode,
                 snapshot.AppAccentColorMode,
@@ -48,7 +48,7 @@ internal sealed partial class SettingsViewModel
                 snapshot.CurrentMode,
                 snapshot.ActiveProfileId,
                 snapshot.TransparentProxyEnabled,
-                snapshot.MixedPort));
+                snapshot.MixedPort), cancellationToken);
 
         public void ApplyLanguage(AppLanguage language) => owner._applyLanguage(language);
 

@@ -9,9 +9,9 @@ namespace ClashSharp.ViewModel;
 
 /// <summary>Minimal storage contract required by <see cref="SettingsViewModel"/>.</summary>
 /// <remarks>
-/// Invariants: Implementations persist valid values immediately.
+/// Invariants: Change commands complete before committed values are published.
 /// Thread safety: Determined by the concrete implementation.
-/// Side effects: Property setters may write to durable user settings.
+/// Side effects: Writes occur only through asynchronous change and reset commands.
 /// </remarks>
 internal interface ISettingsStore
 {
@@ -24,66 +24,58 @@ internal interface ISettingsStore
     /// <summary>Reads a coherent committed snapshot to reconcile a command that returned an error.</summary>
     IReadOnlyList<SettingValueChange> ReadPreferenceChanges(IReadOnlyList<SettingKey> keys);
 
-    /// <summary>Resets one supported preference group as a complete batch before notifying observers.</summary>
-    void ResetPreferenceGroup(SettingsResetScope scope);
+    AppLanguage DisplayLanguage { get; }
 
-    AppLanguage DisplayLanguage { get; set; }
+    AppThemeMode AppThemeMode { get; }
 
-    AppThemeMode AppThemeMode { get; set; }
+    AppAccentColorMode AppAccentColorMode { get; }
 
-    AppAccentColorMode AppAccentColorMode { get; set; }
+    string AppAccentColorValue { get; }
 
-    string AppAccentColorValue { get; set; }
+    bool LaunchAtStartupEnabled { get; }
 
-    /// <summary>Commits custom mode and color together and returns the normalized persisted color.</summary>
-    string SetCustomAppAccentColor(string value);
+    ClashSharpMode CurrentMode { get; }
 
-    bool LaunchAtStartupEnabled { get; set; }
+    string ActiveProfileId { get; }
 
-    ClashSharpMode CurrentMode { get; set; }
+    bool TransparentProxyEnabled { get; }
 
-    string ActiveProfileId { get; set; }
+    int MixedPort { get; }
 
-    bool TransparentProxyEnabled { get; set; }
+    bool ConnectionSamplingEnabled { get; }
 
-    int MixedPort { get; set; }
-
-    bool ConnectionSamplingEnabled { get; set; }
-
-    int ConnectionSamplingIntervalSeconds { get; set; }
+    int ConnectionSamplingIntervalSeconds { get; }
 
     /// <summary>Reads the complete sampling preference pair from one authority snapshot.</summary>
     ConnectionSamplingSettings ReadConnectionSamplingSettings();
 
-    bool StartupConflictCheckEnabled { get; set; }
+    bool StartupConflictCheckEnabled { get; }
 
-    StartupBehaviorMode StartupBehaviorMode { get; set; }
+    StartupBehaviorMode StartupBehaviorMode { get; }
 
-    bool ShowStartupGuideOnStartup { get; set; }
+    bool ShowStartupGuideOnStartup { get; }
 
-    bool TriggersEnabled { get; set; }
+    bool TriggersEnabled { get; }
 
-    bool TriggerNotificationsEnabled { get; set; }
+    bool TriggerNotificationsEnabled { get; }
 
-    CloseBehaviorMode CloseBehaviorMode { get; set; }
+    CloseBehaviorMode CloseBehaviorMode { get; }
 
-    bool TrayUseMonochromeInactiveIcon { get; set; }
+    bool TrayUseMonochromeInactiveIcon { get; }
 
-    string TrayVisibleFeatureIds { get; set; }
+    string TrayVisibleFeatureIds { get; }
 
-    bool CheckStaleProxyOnStartup { get; set; }
+    bool CheckStaleProxyOnStartup { get; }
 
-    bool RestoreProxyOnExit { get; set; }
+    bool RestoreProxyOnExit { get; }
 
-    MainlandChinaFeatureMode MainlandChinaFeatureMode { get; set; }
+    MainlandChinaFeatureMode MainlandChinaFeatureMode { get; }
 
-    bool MainlandChinaUrlBlockingEnabled { get; set; }
+    bool MainlandChinaUrlBlockingEnabled { get; }
 
-    bool NotificationEnabled { get; set; }
+    bool NotificationEnabled { get; }
 
-    NotificationLevel NotificationLevel { get; set; }
-
-    string ConnectionTestUrl { get; set; }
+    NotificationLevel NotificationLevel { get; }
 
     string ConnectionTestProxyUrl1 { get; }
 
@@ -91,6 +83,4 @@ internal interface ISettingsStore
 
     string ConnectionTestDirectUrl { get; }
 
-    /// <summary>Persists all three connection-test targets in one admitted, rollback-capable batch.</summary>
-    void SetConnectionTestUrls(string proxyUrl1, string proxyUrl2, string directUrl);
 }

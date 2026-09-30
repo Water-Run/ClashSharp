@@ -10,7 +10,7 @@ public interface ISettingsResetOperation : ISettingsRuntimeParticipants
     IRetainedSettingsResetReceipt BeginReset(SettingsResetScope scope, bool transparentProxyEnabled);
 
     /// <summary>Restores participant-facing values for the legacy full-reset adapter.</summary>
-    void RestoreDurableSnapshot(SettingsRuntimeSnapshot snapshot);
+    Task RestoreDurableSnapshotAsync(SettingsRuntimeSnapshot snapshot, CancellationToken cancellationToken);
 
     /// <summary>Publishes a verified snapshot before retained-decision cleanup is attempted.</summary>
     void ReportApplied(SettingsRuntimeSnapshot snapshot, SettingsResetScope scope, bool operationFailed);

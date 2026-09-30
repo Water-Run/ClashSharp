@@ -13,7 +13,7 @@ public sealed partial class SettingsViewModelTests
     [InlineData(SettingsResetScope.Tray)]
     [InlineData(SettingsResetScope.WindowsNative)]
     [InlineData(SettingsResetScope.MainlandChina)]
-    public void PreferenceReset_WhenPersistenceFails_PreservesTheDisplayedGroup(SettingsResetScope scope)
+    public async Task PreferenceReset_WhenPersistenceFails_PreservesTheDisplayedGroup(SettingsResetScope scope)
     {
         IOException failure = new("preference persistence unavailable");
         FakeSettingsStore store = CreateModifiedPreferenceStore();
@@ -25,17 +25,19 @@ public sealed partial class SettingsViewModelTests
         List<string?> notifications = [];
         viewModel.PropertyChanged += (_, change) => notifications.Add(change.PropertyName);
 
-        Exception? observed = Record.Exception(() => ResetPreferenceViewModel(viewModel, scope));
+        Exception? observed = await Record.ExceptionAsync(() => ResetPreferenceViewModelAsync(viewModel, scope));
 
         Assert.Same(failure, observed);
         Assert.Equal(scope, store.LastPreferenceReset);
         Assert.Equal(before, ReadPreferenceViewModel(viewModel));
-        Assert.Empty(notifications);
+        Assert.DoesNotContain(notifications, IsPreferenceNotification);
+        Assert.True(viewModel.IsPreferenceInputEnabled);
+        Assert.NotEmpty(viewModel.OperationErrorText);
         Assert.Equal(0, themeApplications);
     }
 
     [Fact]
-    public void BasicPreferenceReset_PublishesTheCompleteGroupBeforeAnyNotification()
+    public async Task BasicPreferenceReset_PublishesTheCompleteGroupBeforeAnyNotification()
     {
         FakeSettingsStore store = CreateModifiedPreferenceStore();
         int themeApplications = 0;
@@ -44,6 +46,7 @@ public sealed partial class SettingsViewModelTests
         List<string?> notifications = [];
         viewModel.PropertyChanged += (_, change) =>
         {
+            if (!IsPreferenceNotification(change.PropertyName)) { return; }
             Assert.Equal(SettingsResetScope.Basic, store.LastPreferenceReset);
             Assert.Equal(AppLanguage.AutoDetect, viewModel.DisplayLanguage);
             Assert.Equal(AppThemeMode.FollowSystem, viewModel.AppThemeMode);
@@ -54,7 +57,7 @@ public sealed partial class SettingsViewModelTests
             notifications.Add(change.PropertyName);
         };
 
-        viewModel.ResetBasicSettingsToDefaults();
+        await viewModel.ResetBasicSettingsToDefaultsAsync();
 
         Assert.Contains(nameof(SettingsViewModel.AppAccentColorValue), notifications);
         Assert.Contains(nameof(SettingsViewModel.DisplayLanguageIndex), notifications);
@@ -95,17 +98,21 @@ public sealed partial class SettingsViewModelTests
         viewModel.MainlandChinaFeatureMode, viewModel.MainlandChinaUrlBlockingEnabled, viewModel.MixedPort,
     ];
 
-    private static void ResetPreferenceViewModel(SettingsViewModel viewModel, SettingsResetScope scope)
+    private static async Task ResetPreferenceViewModelAsync(SettingsViewModel viewModel, SettingsResetScope scope)
     {
         switch (scope)
         {
-            case SettingsResetScope.Basic: viewModel.ResetBasicSettingsToDefaults(); break;
-            case SettingsResetScope.Notifications: viewModel.ResetNotificationSettingsToDefaults(); break;
-            case SettingsResetScope.Triggers: viewModel.ResetTriggerSettingsToDefaults(); break;
-            case SettingsResetScope.Tray: viewModel.ResetTraySettingsToDefaults(); break;
-            case SettingsResetScope.WindowsNative: viewModel.ResetWindowsNativeSettingsToDefaults(); break;
-            case SettingsResetScope.MainlandChina: viewModel.ResetMainlandChinaSettingsToDefaults(); break;
+            case SettingsResetScope.Basic: await viewModel.ResetBasicSettingsToDefaultsAsync(); break;
+            case SettingsResetScope.Notifications: await viewModel.ResetNotificationSettingsToDefaultsAsync(); break;
+            case SettingsResetScope.Triggers: await viewModel.ResetTriggerSettingsToDefaultsAsync(); break;
+            case SettingsResetScope.Tray: await viewModel.ResetTraySettingsToDefaultsAsync(); break;
+            case SettingsResetScope.WindowsNative: await viewModel.ResetWindowsNativeSettingsToDefaultsAsync(); break;
+            case SettingsResetScope.MainlandChina: await viewModel.ResetMainlandChinaSettingsToDefaultsAsync(); break;
             default: throw new ArgumentOutOfRangeException(nameof(scope));
         }
     }
+
+    private static bool IsPreferenceNotification(string? property) =>
+        property is not (nameof(SettingsViewModel.IsPreferenceInputEnabled)
+            or nameof(SettingsViewModel.OperationErrorText) or nameof(SettingsViewModel.HasOperationError));
 }

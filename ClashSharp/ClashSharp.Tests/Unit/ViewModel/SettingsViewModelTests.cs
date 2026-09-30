@@ -16,7 +16,7 @@ public sealed partial class SettingsViewModelTests
     [Theory]
     [InlineData(AppLanguage.SimplifiedChinese, AppLanguage.English)]
     [InlineData(AppLanguage.AutoDetect, AppLanguage.French)]
-    public void LanguageRestartPending_TracksAppliedLanguageAcrossPageRecreation(
+    public async Task LanguageRestartPending_TracksAppliedLanguageAcrossPageRecreation(
         AppLanguage originalLanguage,
         AppLanguage requestedLanguage)
     {
@@ -25,7 +25,7 @@ public sealed partial class SettingsViewModelTests
         SettingsViewModel firstPage = CreateAccentRestartViewModel(
             store, (_, _) => false, language => language != appliedLanguage);
 
-        firstPage.SetDisplayLanguageIndex((int)requestedLanguage + 1);
+        await firstPage.SetDisplayLanguageIndexAsync((int)requestedLanguage + 1);
         Assert.True(firstPage.IsDisplayLanguageRestartPending);
 
         SettingsViewModel returnedPage = CreateAccentRestartViewModel(
@@ -35,9 +35,9 @@ public sealed partial class SettingsViewModelTests
         returnedPage.Load();
         Assert.True(returnedPage.IsDisplayLanguageRestartPending);
 
-        returnedPage.SetDisplayLanguageIndex((int)originalLanguage + 1);
+        await returnedPage.SetDisplayLanguageIndexAsync((int)originalLanguage + 1);
         Assert.False(returnedPage.HasRestartRequiredSettings);
-        returnedPage.SetDisplayLanguageIndex((int)requestedLanguage + 1);
+        await returnedPage.SetDisplayLanguageIndexAsync((int)requestedLanguage + 1);
         Assert.True(returnedPage.HasRestartRequiredSettings);
 
         appliedLanguage = requestedLanguage;
@@ -46,12 +46,12 @@ public sealed partial class SettingsViewModelTests
     }
 
     [Fact]
-    public void ExternalRuntimeChange_RefreshesCommittedControlsWithoutResettingRestartBaseline()
+    public async Task ExternalRuntimeChange_RefreshesCommittedControlsWithoutResettingRestartBaseline()
     {
         FakeSettingsStore store = new();
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
         viewModel.Load();
-        viewModel.SetDisplayLanguageIndex((int)AppLanguage.French + 1);
+        await viewModel.SetDisplayLanguageIndexAsync((int)AppLanguage.French + 1);
         Assert.True(viewModel.IsDisplayLanguageRestartPending);
 
         store.LaunchAtStartupEnabled = true;
@@ -98,7 +98,6 @@ public sealed partial class SettingsViewModelTests
             RestoreProxyOnExit = false,
             MainlandChinaFeatureMode = MainlandChinaFeatureMode.AllIncludingUrlBlacklist,
             MainlandChinaUrlBlockingEnabled = true,
-            ConnectionTestUrl = "https://example.com/generate_204",
             ConnectionTestProxyUrl1 = "https://proxy-one.example",
             ConnectionTestProxyUrl2 = "https://proxy-two.example",
             ConnectionTestDirectUrl = "https://direct.example",
@@ -136,7 +135,7 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(MainlandChinaFeatureMode.AllIncludingUrlBlacklist, viewModel.MainlandChinaFeatureMode);
         Assert.Equal((int)MainlandChinaFeatureMode.AllIncludingUrlBlacklist, viewModel.MainlandChinaFeatureModeIndex);
         Assert.True(viewModel.MainlandChinaUrlBlockingEnabled);
-        Assert.Equal("https://example.com/generate_204", viewModel.ConnectionTestUrl);
+        Assert.Equal("https://proxy-one.example", viewModel.ConnectionTestUrl);
         Assert.Equal("https://proxy-one.example", ReadProperty<string>(viewModel, "ConnectionTestProxyUrl1"));
         Assert.Equal("https://proxy-two.example", ReadProperty<string>(viewModel, "ConnectionTestProxyUrl2"));
         Assert.Equal("https://direct.example", ReadProperty<string>(viewModel, "ConnectionTestDirectUrl"));
@@ -144,7 +143,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies language selection persists and is marked for restart instead of applying immediately.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_ValidIndex_PersistsAndMarksRestartPending()
+    public async Task SetDisplayLanguageIndex_ValidIndex_PersistsAndMarksRestartPending()
     {
         FakeSettingsStore store = new();
         int applyCount = 0;
@@ -155,7 +154,7 @@ public sealed partial class SettingsViewModelTests
             notifiedLanguage = language;
         }, () => { });
 
-        bool changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.German + 1);
+        bool changed = await viewModel.SetDisplayLanguageIndexAsync((int)AppLanguage.German + 1);
 
         Assert.True(changed);
         Assert.Equal(AppLanguage.German, store.DisplayLanguage);
@@ -167,13 +166,13 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies the first language option stores automatic detection for next restart.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_Zero_PersistsAutoDetect()
+    public async Task SetDisplayLanguageIndex_Zero_PersistsAutoDetect()
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
         AppLanguage? notifiedLanguage = null;
         SettingsViewModel viewModel = new(store, language => notifiedLanguage = language, () => { });
 
-        bool changed = viewModel.SetDisplayLanguageIndex(0);
+        bool changed = await viewModel.SetDisplayLanguageIndexAsync(0);
 
         Assert.True(changed);
         Assert.Equal(AppLanguage.AutoDetect, store.DisplayLanguage);
@@ -185,13 +184,13 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies language switching no longer relocalizes option sources during the current process.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_DoesNotRelocalizeOptionsBeforeRestart()
+    public async Task SetDisplayLanguageIndex_DoesNotRelocalizeOptionsBeforeRestart()
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
         IReadOnlyList<string> originalOptions = viewModel.DisplayLanguageOptions;
 
-        bool changed = viewModel.SetDisplayLanguageIndex(0);
+        bool changed = await viewModel.SetDisplayLanguageIndexAsync(0);
 
         Assert.True(changed);
         Assert.Same(originalOptions, viewModel.DisplayLanguageOptions);
@@ -199,7 +198,7 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(9, viewModel.DisplayLanguageOptions.Count);
         Assert.All(viewModel.DisplayLanguageOptions, Assert.NotEmpty);
 
-        changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.Persian + 1);
+        changed = await viewModel.SetDisplayLanguageIndexAsync((int)AppLanguage.Persian + 1);
 
         Assert.True(changed);
         Assert.Same(originalOptions, viewModel.DisplayLanguageOptions);
@@ -212,7 +211,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies language switching only updates the selected index and restart state.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_DoesNotMutateLanguageOptionCollection()
+    public async Task SetDisplayLanguageIndex_DoesNotMutateLanguageOptionCollection()
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
@@ -227,7 +226,7 @@ public sealed partial class SettingsViewModelTests
         };
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
-        bool changed = viewModel.SetDisplayLanguageIndex(0);
+        bool changed = await viewModel.SetDisplayLanguageIndexAsync(0);
 
         Assert.True(changed);
         Assert.Empty(countsDuringRefresh);
@@ -239,7 +238,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies every localized ComboBox option source remains stable and populated after selecting a restart-required language.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_KeepsSelectorOptionsStableUntilRestart()
+    public async Task SetDisplayLanguageIndex_KeepsSelectorOptionsStableUntilRestart()
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
@@ -251,7 +250,7 @@ public sealed partial class SettingsViewModelTests
         IReadOnlyList<string> mainlandOptions = viewModel.MainlandChinaFeatureModeOptions;
         IReadOnlyList<string> notificationOptions = viewModel.NotificationLevelOptions;
 
-        bool changed = viewModel.SetDisplayLanguageIndex(0);
+        bool changed = await viewModel.SetDisplayLanguageIndexAsync(0);
 
         Assert.True(changed);
         Assert.Same(languageOptions, viewModel.DisplayLanguageOptions);
@@ -280,7 +279,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies repeated ComboBox write-back for the current language does not re-enter localization refresh.</summary>
     [Fact]
-    public void SetDisplayLanguageIndex_CurrentLanguage_DoesNotReapplyLanguage()
+    public async Task SetDisplayLanguageIndex_CurrentLanguage_DoesNotReapplyLanguage()
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.German };
         int applyCount = 0;
@@ -289,7 +288,7 @@ public sealed partial class SettingsViewModelTests
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
-        bool changed = viewModel.SetDisplayLanguageIndex((int)AppLanguage.German + 1);
+        bool changed = await viewModel.SetDisplayLanguageIndexAsync((int)AppLanguage.German + 1);
 
         Assert.False(changed);
         Assert.Equal(0, applyCount);
@@ -433,13 +432,13 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies app theme selection persists and notifies the shell theme controller.</summary>
     [Fact]
-    public void SetAppThemeModeIndex_ValidIndex_PersistsAndAppliesTheme()
+    public async Task SetAppThemeModeIndex_ValidIndex_PersistsAndAppliesTheme()
     {
         FakeSettingsStore store = new();
         AppThemeMode? appliedTheme = null;
         SettingsViewModel viewModel = new(store, _ => { }, theme => appliedTheme = theme, () => { });
 
-        bool changed = viewModel.SetAppThemeModeIndex((int)AppThemeMode.Dark);
+        bool changed = await viewModel.SetAppThemeModeIndexAsync((int)AppThemeMode.Dark);
 
         Assert.True(changed);
         Assert.Equal(AppThemeMode.Dark, store.AppThemeMode);
@@ -623,12 +622,12 @@ public sealed partial class SettingsViewModelTests
     [Theory]
     [InlineData(-1)]
     [InlineData(100)]
-    public void SetDisplayLanguageIndex_InvalidIndex_DoesNotPersist(int index)
+    public async Task SetDisplayLanguageIndex_InvalidIndex_DoesNotPersist(int index)
     {
         FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.English };
         SettingsViewModel viewModel = new(store, _ => throw new InvalidOperationException("Should not notify."), () => { });
 
-        bool changed = viewModel.SetDisplayLanguageIndex(index);
+        bool changed = await viewModel.SetDisplayLanguageIndexAsync(index);
 
         Assert.False(changed);
         Assert.Equal(AppLanguage.English, store.DisplayLanguage);
@@ -970,7 +969,7 @@ public sealed partial class SettingsViewModelTests
     [InlineData((int)StartupBehaviorMode.DisableProxy, StartupBehaviorMode.DisableProxy, true)]
     [InlineData(-1, StartupBehaviorMode.LastSetting, false)]
     [InlineData(100, StartupBehaviorMode.LastSetting, false)]
-    public void SetStartupBehaviorModeIndex_ValidatesAndPersists(
+    public async Task SetStartupBehaviorModeIndex_ValidatesAndPersists(
         int index,
         StartupBehaviorMode expectedMode,
         bool expectedResult)
@@ -978,7 +977,7 @@ public sealed partial class SettingsViewModelTests
         FakeSettingsStore store = new() { StartupBehaviorMode = StartupBehaviorMode.LastSetting };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
-        bool changed = viewModel.SetStartupBehaviorModeIndex(index);
+        bool changed = await viewModel.SetStartupBehaviorModeIndexAsync(index);
 
         Assert.Equal(expectedResult, changed);
         Assert.Equal(expectedMode, store.StartupBehaviorMode);
@@ -988,7 +987,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies the startup conflict check switch persists independently.</summary>
     [Fact]
-    public void StartupConflictCheckEnabled_Setter_PersistsAndRaisesPropertyChanged()
+    public async Task StartupConflictCheckEnabled_Setter_PersistsAndRaisesPropertyChanged()
     {
         FakeSettingsStore store = new() { StartupConflictCheckEnabled = true };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
@@ -996,7 +995,7 @@ public sealed partial class SettingsViewModelTests
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
-        viewModel.StartupConflictCheckEnabled = false;
+        await viewModel.SetStartupConflictCheckEnabledAsync(false);
 
         Assert.False(store.StartupConflictCheckEnabled);
         Assert.False(viewModel.StartupConflictCheckEnabled);
@@ -1005,7 +1004,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies notification enablement and level are persisted through the settings view model.</summary>
     [Fact]
-    public void NotificationSettings_PersistEnablementAndLevel()
+    public async Task NotificationSettings_PersistEnablementAndLevel()
     {
         FakeSettingsStore store = new()
         {
@@ -1017,8 +1016,8 @@ public sealed partial class SettingsViewModelTests
         List<string?> changedProperties = [];
         viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
-        viewModel.NotificationEnabled = false;
-        bool levelChanged = viewModel.SetNotificationLevelIndex((int)NotificationLevel.More);
+        await viewModel.SetNotificationEnabledAsync(false);
+        bool levelChanged = await viewModel.SetNotificationLevelIndexAsync((int)NotificationLevel.More);
 
         Assert.True(levelChanged);
         Assert.False(store.NotificationEnabled);
@@ -1031,7 +1030,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies trigger settings persist independently from notification verbosity.</summary>
     [Fact]
-    public void TriggerSettings_PersistEnablementAndNotificationSwitch()
+    public async Task TriggerSettings_PersistEnablementAndNotificationSwitch()
     {
         FakeSettingsStore store = new()
         {
@@ -1040,8 +1039,8 @@ public sealed partial class SettingsViewModelTests
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
-        viewModel.TriggersEnabled = false;
-        viewModel.TriggerNotificationsEnabled = false;
+        await viewModel.SetTriggersEnabledAsync(false);
+        await viewModel.SetTriggerNotificationsEnabledAsync(false);
 
         Assert.False(store.TriggersEnabled);
         Assert.False(store.TriggerNotificationsEnabled);
@@ -1051,7 +1050,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies trigger enablement is a live setting and does not mark the settings page as restart-pending.</summary>
     [Fact]
-    public void TriggerSettings_DoNotRequireRestart()
+    public async Task TriggerSettings_DoNotRequireRestart()
     {
         FakeSettingsStore store = new()
         {
@@ -1059,7 +1058,7 @@ public sealed partial class SettingsViewModelTests
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
-        viewModel.TriggersEnabled = false;
+        await viewModel.SetTriggersEnabledAsync(false);
 
         Assert.False(viewModel.IsTriggerEngineRestartPending);
         Assert.False(viewModel.HasRestartRequiredSettings);
@@ -1067,7 +1066,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies tray settings persist close behavior, inactive icon behavior, and visible feature ids.</summary>
     [Fact]
-    public void TraySettings_PersistCloseBehaviorAndVisibleFeatures()
+    public async Task TraySettings_PersistCloseBehaviorAndVisibleFeatures()
     {
         FakeSettingsStore store = new()
         {
@@ -1076,9 +1075,9 @@ public sealed partial class SettingsViewModelTests
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
-        bool changed = viewModel.SetCloseBehaviorModeIndex((int)CloseBehaviorMode.ConfirmExit);
-        viewModel.TrayUseMonochromeInactiveIcon = false;
-        viewModel.SetTrayVisibleFeatureIds(["pages", "safe-exit"]);
+        bool changed = await viewModel.SetCloseBehaviorModeIndexAsync((int)CloseBehaviorMode.ConfirmExit);
+        await viewModel.SetTrayUseMonochromeInactiveIconAsync(false);
+        await viewModel.SetTrayVisibleFeatureIdsAsync(["pages", "safe-exit"]);
 
         Assert.True(changed);
         Assert.Equal(CloseBehaviorMode.ConfirmExit, store.CloseBehaviorMode);
@@ -1090,7 +1089,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies tray color indication is process-live and never contributes a restart marker.</summary>
     [Fact]
-    public void TrayColorStatusIndicator_ChangeAppliesWithoutRestartMarker()
+    public async Task TrayColorStatusIndicator_ChangeAppliesWithoutRestartMarker()
     {
         FakeSettingsStore store = new()
         {
@@ -1098,7 +1097,7 @@ public sealed partial class SettingsViewModelTests
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
 
-        viewModel.TrayUseMonochromeInactiveIcon = false;
+        await viewModel.SetTrayUseMonochromeInactiveIconAsync(false);
 
         Assert.False(store.TrayUseMonochromeInactiveIcon);
         Assert.False(viewModel.TrayUseMonochromeInactiveIcon);
@@ -1163,13 +1162,13 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies custom accent color mode and value are persisted through explicit ViewModel methods.</summary>
     [Fact]
-    public void AccentColorSettings_PersistCustomModeAndColor()
+    public async Task AccentColorSettings_PersistCustomModeAndColor()
     {
         FakeSettingsStore store = new();
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
 
-        bool modeChanged = InvokeMethod<bool>(viewModel, "SetAppAccentColorModeIndex", 1);
-        bool colorChanged = InvokeMethod<bool>(viewModel, "SetAppAccentColorValue", "#FF2D7D9A");
+        bool modeChanged = await viewModel.SetAppAccentColorModeIndexAsync(1);
+        bool colorChanged = await viewModel.SetAppAccentColorValueAsync("#FF2D7D9A");
 
         Assert.True(modeChanged);
         Assert.True(colorChanged);
@@ -1181,7 +1180,7 @@ public sealed partial class SettingsViewModelTests
     }
 
     [Fact]
-    public void CustomAccentColor_PublishesCompleteSelectionAndOneRestartNotification()
+    public async Task CustomAccentColor_PublishesCompleteSelectionAndOneRestartNotification()
     {
         FakeSettingsStore store = new();
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
@@ -1189,6 +1188,7 @@ public sealed partial class SettingsViewModelTests
         List<string?> notifications = [];
         viewModel.PropertyChanged += (_, change) =>
         {
+            if (!IsPreferenceNotification(change.PropertyName)) { return; }
             notifications.Add(change.PropertyName);
             Assert.Equal(AppAccentColorMode.Custom, store.AppAccentColorMode);
             Assert.Equal("#FF2D7D9A", store.AppAccentColorValue);
@@ -1197,7 +1197,7 @@ public sealed partial class SettingsViewModelTests
             Assert.True(viewModel.IsAppAccentColorRestartPending);
         };
 
-        viewModel.SetCustomAppAccentColor("#FF2D7D9A");
+        await viewModel.SetCustomAppAccentColorAsync("#FF2D7D9A");
 
         Assert.Contains(nameof(SettingsViewModel.AppAccentColorMode), notifications);
         Assert.Contains(nameof(SettingsViewModel.AppAccentColorModeIndex), notifications);
@@ -1210,7 +1210,7 @@ public sealed partial class SettingsViewModelTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CustomAccentColor_FailedSelectionKeepsCommittedAppearance(bool invalidInput)
+    public async Task CustomAccentColor_FailedSelectionKeepsCommittedAppearance(bool invalidInput)
     {
         Exception failure = invalidInput
             ? new ArgumentException("Invalid test color.")
@@ -1221,7 +1221,7 @@ public sealed partial class SettingsViewModelTests
         List<string?> notifications = [];
         viewModel.PropertyChanged += (_, change) => notifications.Add(change.PropertyName);
 
-        Exception? observed = Record.Exception(() => viewModel.SetCustomAppAccentColor("#FF2D7D9A"));
+        Exception? observed = await Record.ExceptionAsync(async () => await viewModel.SetCustomAppAccentColorAsync("#FF2D7D9A"));
 
         Assert.Same(failure, observed);
         Assert.Equal(AppAccentColorMode.FollowSystem, store.AppAccentColorMode);
@@ -1229,11 +1229,13 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(AppAccentColorMode.FollowSystem, viewModel.AppAccentColorMode);
         Assert.Equal("#FF0078D4", viewModel.AppAccentColorValue);
         Assert.False(viewModel.IsAppAccentColorRestartPending);
-        Assert.Empty(notifications);
+        Assert.DoesNotContain(notifications, IsPreferenceNotification);
+        Assert.True(viewModel.IsPreferenceInputEnabled);
+        Assert.NotEmpty(viewModel.OperationErrorText);
     }
 
     [Fact]
-    public void CustomAccentColor_UnchangedSelectionDoesNotRepeatRestartNotifications()
+    public async Task CustomAccentColor_UnchangedSelectionDoesNotRepeatRestartNotifications()
     {
         FakeSettingsStore store = new()
         {
@@ -1245,26 +1247,27 @@ public sealed partial class SettingsViewModelTests
         List<string?> notifications = [];
         viewModel.PropertyChanged += (_, change) => notifications.Add(change.PropertyName);
 
-        viewModel.SetCustomAppAccentColor("#FF2D7D9A");
+        await viewModel.SetCustomAppAccentColorAsync("#FF2D7D9A");
 
-        Assert.Empty(notifications);
+        Assert.DoesNotContain(notifications, IsPreferenceNotification);
+        Assert.True(viewModel.IsPreferenceInputEnabled);
         Assert.False(viewModel.IsAppAccentColorRestartPending);
     }
 
     /// <summary>Verifies custom accent color changes mark the setting as restart-required until reverted.</summary>
     [Fact]
-    public void AccentColorSettings_RestartPendingTracksChangesUntilReverted()
+    public async Task AccentColorSettings_RestartPendingTracksChangesUntilReverted()
     {
         FakeSettingsStore store = new();
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
 
-        InvokeMethod<bool>(viewModel, "SetAppAccentColorModeIndex", (int)AppAccentColorMode.Custom);
-        InvokeMethod<bool>(viewModel, "SetAppAccentColorValue", "#FF00AA00");
+        await viewModel.SetAppAccentColorModeIndexAsync((int)AppAccentColorMode.Custom);
+        await viewModel.SetAppAccentColorValueAsync("#FF00AA00");
 
         Assert.True(ReadProperty<bool>(viewModel, "IsAppAccentColorRestartPending"));
         Assert.Equal("Settings.AppAccentColor.Title*", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
 
-        InvokeMethod<bool>(viewModel, "SetAppAccentColorModeIndex", (int)AppAccentColorMode.FollowSystem);
+        await viewModel.SetAppAccentColorModeIndexAsync((int)AppAccentColorMode.FollowSystem);
 
         Assert.False(ReadProperty<bool>(viewModel, "IsAppAccentColorRestartPending"));
         Assert.Equal("Settings.AppAccentColor.Title", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
@@ -1272,7 +1275,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies restart markers compare against the currently applied app accent state.</summary>
     [Fact]
-    public void AccentColorSettings_RestartPendingUsesCurrentAppliedAccentState()
+    public async Task AccentColorSettings_RestartPendingUsesCurrentAppliedAccentState()
     {
         FakeSettingsStore store = new()
         {
@@ -1287,7 +1290,7 @@ public sealed partial class SettingsViewModelTests
         Assert.True(ReadProperty<bool>(viewModel, "IsAppAccentColorRestartPending"));
         Assert.Equal("Settings.AppAccentColor.Title*", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
 
-        InvokeMethod<bool>(viewModel, "SetAppAccentColorModeIndex", (int)AppAccentColorMode.FollowSystem);
+        await viewModel.SetAppAccentColorModeIndexAsync((int)AppAccentColorMode.FollowSystem);
 
         Assert.False(ReadProperty<bool>(viewModel, "IsAppAccentColorRestartPending"));
         Assert.Equal("Settings.AppAccentColor.Title", ReadProperty<string>(viewModel, "AppAccentColorTitleText"));
@@ -1299,7 +1302,7 @@ public sealed partial class SettingsViewModelTests
     [InlineData((int)MainlandChinaFeatureMode.AllIncludingUrlBlacklist, MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter, true)]
     [InlineData(-1, MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter, false)]
     [InlineData(100, MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter, false)]
-    public void SetMainlandChinaFeatureModeIndex_ValidatesAndPersists(
+    public async Task SetMainlandChinaFeatureModeIndex_ValidatesAndPersists(
         int index,
         MainlandChinaFeatureMode expectedMode,
         bool expectedResult)
@@ -1311,7 +1314,7 @@ public sealed partial class SettingsViewModelTests
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
         viewModel.Load();
 
-        bool changed = viewModel.SetMainlandChinaFeatureModeIndex(index);
+        bool changed = await viewModel.SetMainlandChinaFeatureModeIndexAsync(index);
 
         Assert.Equal(expectedResult, changed);
         Assert.Equal(expectedMode, store.MainlandChinaFeatureMode);
@@ -1321,7 +1324,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies mainland China URL blocking is persisted independently from the display mode combo box.</summary>
     [Fact]
-    public void MainlandChinaUrlBlockingEnabled_Setter_PersistsSwitchOnly()
+    public async Task MainlandChinaUrlBlockingEnabled_Setter_PersistsSwitchOnly()
     {
         FakeSettingsStore store = new()
         {
@@ -1330,7 +1333,7 @@ public sealed partial class SettingsViewModelTests
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
-        viewModel.MainlandChinaUrlBlockingEnabled = true;
+        await viewModel.SetMainlandChinaUrlBlockingEnabledAsync(true);
 
         Assert.True(store.MainlandChinaUrlBlockingEnabled);
         Assert.True(viewModel.MainlandChinaUrlBlockingEnabled);
@@ -1339,7 +1342,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies mainland China display and URL blocking changes are surfaced as restart-required settings.</summary>
     [Fact]
-    public void MainlandChinaSettings_RestartPendingTracksDisplayAndUrlBlockingChanges()
+    public async Task MainlandChinaSettings_RestartPendingTracksDisplayAndUrlBlockingChanges()
     {
         FakeSettingsStore store = new()
         {
@@ -1349,18 +1352,18 @@ public sealed partial class SettingsViewModelTests
         SettingsViewModel viewModel = new(store, _ => { }, () => { }, key => key);
         viewModel.Load();
 
-        viewModel.SetMainlandChinaFeatureModeIndex((int)MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter);
+        await viewModel.SetMainlandChinaFeatureModeIndexAsync((int)MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter);
 
         Assert.True(ReadProperty<bool>(viewModel, "IsMainlandChinaDisplayRestartPending"));
         Assert.True(ReadProperty<bool>(viewModel, "HasRestartRequiredSettings"));
         Assert.Equal("Settings.MainlandChinaDisplay.Title*", ReadProperty<string>(viewModel, "MainlandChinaDisplayTitleText"));
 
-        viewModel.SetMainlandChinaFeatureModeIndex((int)MainlandChinaFeatureMode.FlagReplacementOnly);
+        await viewModel.SetMainlandChinaFeatureModeIndexAsync((int)MainlandChinaFeatureMode.FlagReplacementOnly);
 
         Assert.False(ReadProperty<bool>(viewModel, "IsMainlandChinaDisplayRestartPending"));
         Assert.False(ReadProperty<bool>(viewModel, "HasRestartRequiredSettings"));
 
-        viewModel.MainlandChinaUrlBlockingEnabled = true;
+        await viewModel.SetMainlandChinaUrlBlockingEnabledAsync(true);
 
         Assert.True(ReadProperty<bool>(viewModel, "IsMainlandChinaDisplayRestartPending"));
         Assert.Equal("Settings.MainlandChinaUrlBlocking.Title*", ReadProperty<string>(viewModel, "MainlandChinaUrlBlockingTitleText"));
@@ -1368,21 +1371,21 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies connection test URL input persists non-empty normalized text.</summary>
     [Fact]
-    public void SetConnectionTestUrl_PersistsNonEmptyUrl()
+    public async Task SetConnectionTestUrl_PersistsNonEmptyUrl()
     {
-        FakeSettingsStore store = new() { ConnectionTestUrl = "https://www.google.com/generate_204" };
+        FakeSettingsStore store = new() { ConnectionTestProxyUrl1 = "https://www.google.com/generate_204" };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
-        bool changed = viewModel.SetConnectionTestUrl(" example.com/generate_204 ");
+        bool changed = await viewModel.SetConnectionTestUrlAsync(" example.com/generate_204 ");
 
         Assert.True(changed);
-        Assert.Equal("https://example.com/generate_204", store.ConnectionTestUrl);
+        Assert.Equal("https://example.com/generate_204", store.ConnectionTestProxyUrl1);
         Assert.Equal("https://example.com/generate_204", viewModel.ConnectionTestUrl);
     }
 
     /// <summary>Verifies the three registered connection-test URLs can be edited and restored to defaults.</summary>
     [Fact]
-    public void ConnectionTestUrls_EditAndRestoreDefaults()
+    public async Task ConnectionTestUrls_EditAndRestoreDefaults()
     {
         FakeSettingsStore store = new()
         {
@@ -1392,10 +1395,7 @@ public sealed partial class SettingsViewModelTests
         };
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
 
-        bool changed = InvokeMethod<bool>(
-            viewModel,
-            "SetConnectionTestUrls",
-            ["google.com", " github.com ", "baidu.com"]);
+        bool changed = await viewModel.SetConnectionTestUrlsAsync("google.com", " github.com ", "baidu.com");
 
         Assert.True(changed);
         Assert.Equal("https://google.com", store.ConnectionTestProxyUrl1);
@@ -1404,7 +1404,7 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal("https://google.com", ReadProperty<string>(viewModel, "ConnectionTestProxyUrl1"));
         Assert.Equal(1, store.ConnectionTestUrlBatchCount);
 
-        InvokeMethod<object?>(viewModel, "ResetConnectionTestUrlsToDefaults", Array.Empty<object>());
+        await viewModel.ResetConnectionTestUrlsToDefaultsAsync();
 
         Assert.Equal("https://www.google.com", store.ConnectionTestProxyUrl1);
         Assert.Equal("https://github.com", store.ConnectionTestProxyUrl2);
@@ -1420,7 +1420,7 @@ public sealed partial class SettingsViewModelTests
     [InlineData("google.com", "file:///C:/test", "baidu.com", 1)]
     [InlineData("google.com", "github.com", "", 2)]
     [InlineData("google.com", "github.com", "https://", 2)]
-    public void ConnectionTestUrls_InvalidDraftIdentifiesFieldAndPreservesAllSettings(
+    public async Task ConnectionTestUrls_InvalidDraftIdentifiesFieldAndPreservesAllSettings(
         string proxyUrl1,
         string proxyUrl2,
         string directUrl,
@@ -1432,7 +1432,7 @@ public sealed partial class SettingsViewModelTests
 
         Assert.Equal(invalidIndex, SettingsViewModel.GetInvalidConnectionTestUrlIndex(
             proxyUrl1, proxyUrl2, directUrl));
-        Assert.False(viewModel.SetConnectionTestUrls(proxyUrl1, proxyUrl2, directUrl));
+        Assert.False(await viewModel.SetConnectionTestUrlsAsync(proxyUrl1, proxyUrl2, directUrl));
 
         Assert.Equal(0, store.ConnectionTestUrlBatchCount);
         Assert.Equal(SettingsViewModel.DefaultConnectionTestProxyUrl1, viewModel.ConnectionTestProxyUrl1);
@@ -1445,7 +1445,7 @@ public sealed partial class SettingsViewModelTests
     }
 
     [Fact]
-    public void ConnectionTestUrls_ValidDraftDoesNotPersistUntilSaved()
+    public async Task ConnectionTestUrls_ValidDraftDoesNotPersistUntilSaved()
     {
         FakeSettingsStore store = new();
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
@@ -1456,7 +1456,7 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(0, store.ConnectionTestUrlBatchCount);
         Assert.Equal(SettingsViewModel.DefaultConnectionTestProxyUrl1, store.ConnectionTestProxyUrl1);
 
-        Assert.True(viewModel.SetConnectionTestUrls(
+        Assert.True(await viewModel.SetConnectionTestUrlsAsync(
             " one.example.test ", "http://two.example.test:8080/probe", "https://three.example.test/status"));
 
         Assert.Equal(1, store.ConnectionTestUrlBatchCount);
@@ -1468,7 +1468,7 @@ public sealed partial class SettingsViewModelTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ConnectionTestUrls_FailedBatchDoesNotPublishUncommittedValues(bool reset)
+    public async Task ConnectionTestUrls_FailedBatchDoesNotPublishUncommittedValues(bool reset)
     {
         IOException failure = new("settings write rejected");
         FakeSettingsStore store = new()
@@ -1481,15 +1481,15 @@ public sealed partial class SettingsViewModelTests
         SettingsViewModel viewModel = new(store, _ => { }, () => { });
         viewModel.Load();
 
-        IOException observed = Assert.Throws<IOException>(() =>
+        IOException observed = await Assert.ThrowsAsync<IOException>(async () =>
         {
             if (reset)
             {
-                viewModel.ResetConnectionTestUrlsToDefaults();
+                await viewModel.ResetConnectionTestUrlsToDefaultsAsync();
             }
             else
             {
-                viewModel.SetConnectionTestUrls("one.example.test", "two.example.test", "three.example.test");
+                await viewModel.SetConnectionTestUrlsAsync("one.example.test", "two.example.test", "three.example.test");
             }
         });
 
@@ -1698,7 +1698,7 @@ public sealed partial class SettingsViewModelTests
             ActiveProfileId = "profile-before-reset",
             TransparentProxyEnabled = false,
             MixedPort = 7890,
-            ConnectionTestUrl = "https://example.com/old",
+            ConnectionTestProxyUrl1 = "https://example.com/old",
         };
         bool resetCalled = false;
         List<AppLanguage> languages = [];
@@ -1714,7 +1714,7 @@ public sealed partial class SettingsViewModelTests
             {
                 resetCalled = true;
                 ResetExternalSettingsToDefaults(store);
-                store.ConnectionTestUrl = "https://example.com/reset";
+                store.ConnectionTestProxyUrl1 = "https://example.com/reset";
             },
             clearAllData: () => { },
             applyTheme: themes.Add,
@@ -1812,7 +1812,7 @@ public sealed partial class SettingsViewModelTests
     public async Task ResetAllSettings_ParticipantFails_CompensatesEveryExternalSetting()
     {
         FakeSettingsStore store = CreateNonDefaultExternalSettings();
-        store.ConnectionTestUrl = "https://example.com/before";
+        store.ConnectionTestProxyUrl1 = "https://example.com/before";
         List<bool> startupRegistrations = [];
         List<(bool TunEnabled, int MixedPort)> networkStates = [];
         bool restartRequested = false;
@@ -1822,7 +1822,7 @@ public sealed partial class SettingsViewModelTests
             resetAllSettings: () =>
             {
                 ResetExternalSettingsToDefaults(store);
-                store.ConnectionTestUrl = "https://example.com/reset";
+                store.ConnectionTestProxyUrl1 = "https://example.com/reset";
             },
             clearAllData: () => { },
             restartApplication: () => restartRequested = true,
@@ -1845,7 +1845,7 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal([false, true], startupRegistrations);
         Assert.Equal([(true, 10000), (false, 7890)], networkStates);
         AssertExternalSettingsMatchNonDefaultBaseline(store);
-        Assert.Equal("https://example.com/reset", store.ConnectionTestUrl);
+        Assert.Equal("https://example.com/reset", store.ConnectionTestProxyUrl1);
         Assert.False(restartRequested);
         Assert.False(viewModel.IsResetRecoveryRequired);
         Assert.True(viewModel.HasOperationError);
@@ -1856,7 +1856,7 @@ public sealed partial class SettingsViewModelTests
     public async Task ResetAllSettings_ParticipantFails_RollsBackRetainedCompleteGeneration()
     {
         FakeSettingsStore store = CreateNonDefaultExternalSettings();
-        store.ConnectionTestUrl = "https://example.com/before";
+        store.ConnectionTestProxyUrl1 = "https://example.com/before";
         TrackingSettingsResetReceipt? receipt = null;
         int startupCalls = 0;
         SettingsViewModel viewModel = CreateMaintenanceViewModel(
@@ -1875,7 +1875,7 @@ public sealed partial class SettingsViewModelTests
             {
                 FakeSettingsStoreSnapshot baseline = FakeSettingsStoreSnapshot.Capture(store);
                 ResetExternalSettingsToDefaults(store);
-                store.ConnectionTestUrl = "https://example.com/reset";
+                store.ConnectionTestProxyUrl1 = "https://example.com/reset";
                 receipt = new TrackingSettingsResetReceipt(
                     rollback: () => baseline.Restore(store));
                 return receipt;
@@ -1888,7 +1888,7 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(0, receipt.CommitCalls);
         Assert.Equal(1, receipt.RollbackCalls);
         Assert.True(receipt.Disposed);
-        Assert.Equal("https://example.com/before", store.ConnectionTestUrl);
+        Assert.Equal("https://example.com/before", store.ConnectionTestProxyUrl1);
         AssertExternalSettingsMatchNonDefaultBaseline(store);
     }
 
@@ -2128,7 +2128,7 @@ public sealed partial class SettingsViewModelTests
         FakeSettingsStore store = new()
         {
             DisplayLanguage = AppLanguage.French,
-            ConnectionTestUrl = "https://example.com/old",
+            ConnectionTestProxyUrl1 = "https://example.com/old",
         };
         bool clearCalled = false;
         AppLanguage? appliedLanguage = null;
@@ -2140,7 +2140,7 @@ public sealed partial class SettingsViewModelTests
             {
                 clearCalled = true;
                 store.DisplayLanguage = AppLanguage.AutoDetect;
-                store.ConnectionTestUrl = "https://example.com/cleared";
+                store.ConnectionTestProxyUrl1 = "https://example.com/cleared";
             });
 
         await viewModel.ClearAllDataAsync(CancellationToken.None);
@@ -2153,7 +2153,7 @@ public sealed partial class SettingsViewModelTests
 
     /// <summary>Verifies settings can be reset by visible settings group without touching unrelated groups.</summary>
     [Fact]
-    public void ResetGroupDefaults_RestoresExpectedSettingsPerGroup()
+    public async Task ResetGroupDefaults_RestoresExpectedSettingsPerGroup()
     {
         FakeSettingsStore store = new()
         {
@@ -2178,7 +2178,7 @@ public sealed partial class SettingsViewModelTests
             RestoreProxyOnExit = false,
             MainlandChinaFeatureMode = MainlandChinaFeatureMode.Disabled,
             MainlandChinaUrlBlockingEnabled = true,
-            ConnectionTestUrl = "https://example.com/test",
+            ConnectionTestProxyUrl1 = "https://example.com/test",
         };
         AppLanguage? appliedLanguage = null;
         AppThemeMode? appliedTheme = null;
@@ -2191,7 +2191,7 @@ public sealed partial class SettingsViewModelTests
             _ => { });
         viewModel.Load();
 
-        InvokeMethod<object?>(viewModel, "ResetBasicSettingsToDefaults", Array.Empty<object>());
+        await viewModel.ResetBasicSettingsToDefaultsAsync();
 
         Assert.Equal(AppLanguage.AutoDetect, store.DisplayLanguage);
         Assert.Equal(AppThemeMode.FollowSystem, store.AppThemeMode);
@@ -2201,12 +2201,12 @@ public sealed partial class SettingsViewModelTests
         Assert.Null(appliedLanguage);
         Assert.Equal(AppThemeMode.FollowSystem, appliedTheme);
 
-        InvokeMethod<object?>(viewModel, "ResetTriggerSettingsToDefaults", Array.Empty<object>());
+        await viewModel.ResetTriggerSettingsToDefaultsAsync();
 
         Assert.True(store.TriggersEnabled);
         Assert.True(store.TriggerNotificationsEnabled);
 
-        InvokeMethod<object?>(viewModel, "ResetTraySettingsToDefaults", Array.Empty<object>());
+        await viewModel.ResetTraySettingsToDefaultsAsync();
 
         Assert.False(store.TrayUseMonochromeInactiveIcon);
         Assert.Contains("pages", store.TrayVisibleFeatureIds, StringComparison.Ordinal);
@@ -2215,15 +2215,15 @@ public sealed partial class SettingsViewModelTests
         Assert.Equal(12345, store.MixedPort);
         Assert.False(store.ConnectionSamplingEnabled);
         Assert.Equal(90, store.ConnectionSamplingIntervalSeconds);
-        Assert.Equal("https://example.com/test", store.ConnectionTestUrl);
+        Assert.Equal("https://example.com/test", store.ConnectionTestProxyUrl1);
         Assert.Equal(0, samplingRestarts);
 
-        InvokeMethod<object?>(viewModel, "ResetWindowsNativeSettingsToDefaults", Array.Empty<object>());
+        await viewModel.ResetWindowsNativeSettingsToDefaultsAsync();
 
         Assert.True(store.CheckStaleProxyOnStartup);
         Assert.True(store.RestoreProxyOnExit);
 
-        InvokeMethod<object?>(viewModel, "ResetMainlandChinaSettingsToDefaults", Array.Empty<object>());
+        await viewModel.ResetMainlandChinaSettingsToDefaultsAsync();
 
         Assert.Equal(MainlandChinaFeatureMode.FlagReplacementAndTextCompletion, store.MainlandChinaFeatureMode);
         Assert.False(store.MainlandChinaUrlBlockingEnabled);
@@ -2298,6 +2298,15 @@ public sealed partial class SettingsViewModelTests
         {
             if (BeforePreferenceApply is not null) { await BeforePreferenceApply(changes, cancellationToken); }
             cancellationToken.ThrowIfCancellationRequested();
+            if (changes.Any(change => change.Key == SettingsRegistry.Keys.AppAccentColorValue)
+                && CustomAccentColorWriteFailure is not null) { throw CustomAccentColorWriteFailure; }
+            if (changes.Any(change => change.Key == SettingsRegistry.Keys.ConnectionTestProxyUrl1
+                || change.Key == SettingsRegistry.Keys.ConnectionTestProxyUrl2
+                || change.Key == SettingsRegistry.Keys.ConnectionTestDirectUrl))
+            {
+                ConnectionTestUrlBatchCount++;
+                if (ConnectionTestUrlWriteFailure is not null) { throw ConnectionTestUrlWriteFailure; }
+            }
             foreach (SettingValueChange change in changes)
             {
                 System.Reflection.PropertyInfo property = GetType().GetProperty(change.Key.Value)!;
@@ -2642,9 +2651,11 @@ public sealed partial class SettingsViewModelTests
             throw new NotSupportedException();
         }
 
-        public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
+        public Task RestoreDurableSettingsAsync(SettingsExternalDurableSnapshot snapshot, CancellationToken cancellationToken)
         {
             Assert.True(IsActive);
+            Assert.False(cancellationToken.CanBeCanceled);
+            return Task.CompletedTask;
         }
 
         public Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken)
@@ -2749,7 +2760,7 @@ public sealed partial class SettingsViewModelTests
             store.ActiveProfileId,
             store.TransparentProxyEnabled,
             store.MixedPort,
-            store.ConnectionTestUrl);
+            store.ConnectionTestProxyUrl1);
 
         public void Restore(FakeSettingsStore store)
         {
@@ -2764,7 +2775,7 @@ public sealed partial class SettingsViewModelTests
             store.ActiveProfileId = ActiveProfileId;
             store.TransparentProxyEnabled = TransparentProxyEnabled;
             store.MixedPort = MixedPort;
-            store.ConnectionTestUrl = ConnectionTestUrl;
+            store.ConnectionTestProxyUrl1 = ConnectionTestUrl;
         }
     }
 

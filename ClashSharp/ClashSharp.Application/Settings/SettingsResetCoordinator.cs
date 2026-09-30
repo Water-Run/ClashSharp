@@ -166,7 +166,7 @@ public sealed class SettingsResetCoordinator
         List<Exception> failures = [];
         if (scope == SettingsResetScope.All)
         {
-            CaptureFailure(() => operation.RestoreDurableSnapshot(baseline), failures);
+            await CaptureFailureAsync(() => operation.RestoreDurableSnapshotAsync(baseline, CancellationToken.None), failures);
         }
 
         SettingsRuntimeSnapshot durableTarget = operation.CaptureSnapshot();

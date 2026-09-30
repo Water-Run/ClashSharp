@@ -457,42 +457,43 @@ internal sealed partial class SettingsViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(applyLaunchAtStartup);
         ArgumentNullException.ThrowIfNull(restartConnectionSampling);
 #if UNIT_TESTS
-        _applyLaunchAtStartupAsync = applyLaunchAtStartupAsync ?? ((isEnabled, cancellationToken) =>
+        _applyLaunchAtStartupAsync = applyLaunchAtStartupAsync ?? (async (isEnabled, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             applyLaunchAtStartup(isEnabled);
-            settings.LaunchAtStartupEnabled = isEnabled;
-            return Task.CompletedTask;
+            await settings.ApplyChangesAsync([CreatePreferenceChange(SettingsRegistry.Keys.LaunchAtStartupEnabled, isEnabled)], cancellationToken);
         });
 #else
         _applyLaunchAtStartupAsync = applyLaunchAtStartupAsync
             ?? throw new ArgumentNullException(nameof(applyLaunchAtStartupAsync));
 #endif
 #if UNIT_TESTS
-        _applyConnectionSamplingAsync = applyConnectionSamplingAsync ?? ((enabled, intervalSeconds, cancellationToken) =>
+        _applyConnectionSamplingAsync = applyConnectionSamplingAsync ?? (async (enabled, intervalSeconds, cancellationToken) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             restartConnectionSampling();
-            settings.ConnectionSamplingEnabled = enabled;
-            settings.ConnectionSamplingIntervalSeconds = intervalSeconds;
-            return Task.CompletedTask;
+            await settings.ApplyChangesAsync(
+                [CreatePreferenceChange(SettingsRegistry.Keys.ConnectionSamplingEnabled, enabled),
+                 CreatePreferenceChange(SettingsRegistry.Keys.ConnectionSamplingIntervalSeconds, intervalSeconds)], cancellationToken);
         });
 #else
         _applyConnectionSamplingAsync = applyConnectionSamplingAsync
             ?? throw new ArgumentNullException(nameof(applyConnectionSamplingAsync));
 #endif
+#if UNIT_TESTS
         _applyNetworkSettingsAsync = applyNetworkSettingsAsync
-            ?? ((transparentProxyEnabled, mixedPort, cancellationToken) =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                settings.TransparentProxyEnabled = transparentProxyEnabled;
-                settings.MixedPort = mixedPort;
-                return Task.CompletedTask;
-            });
+            ?? ((transparentProxyEnabled, mixedPort, cancellationToken) => settings.ApplyChangesAsync(
+                [CreatePreferenceChange(SettingsRegistry.Keys.TransparentProxyEnabled, transparentProxyEnabled),
+                 CreatePreferenceChange(SettingsRegistry.Keys.MixedPort, mixedPort)], cancellationToken));
+#else
+        _applyNetworkSettingsAsync = applyNetworkSettingsAsync
+            ?? throw new ArgumentNullException(nameof(applyNetworkSettingsAsync));
+#endif
         _resetAllSettings = resetAllSettings ?? (() => { });
         _beginResetSettings = beginResetSettings
             ?? new Func<ISettingsResetTransactionReceipt>(
                 () => new LegacySettingsResetTransactionReceipt(_resetAllSettings));
+#if UNIT_TESTS
         _beginDestructiveRuntimeMutationAsync = beginDestructiveRuntimeMutationAsync
             ?? (cancellationToken =>
             {
@@ -506,21 +507,23 @@ internal sealed partial class SettingsViewModel : ObservableObject
                             cancellationToken),
                         _applyNetworkSettingsAsync,
                         () => _beginResetSettings(),
-                        snapshot =>
-                        {
-                            settings.DisplayLanguage = snapshot.DisplayLanguage;
-                            settings.AppThemeMode = snapshot.AppThemeMode;
-                            settings.AppAccentColorMode = snapshot.AppAccentColorMode;
-                            settings.AppAccentColorValue = snapshot.AppAccentColorValue;
-                            settings.LaunchAtStartupEnabled = snapshot.LaunchAtStartupEnabled;
-                            settings.ConnectionSamplingEnabled = snapshot.ConnectionSamplingEnabled;
-                            settings.ConnectionSamplingIntervalSeconds = snapshot.ConnectionSamplingIntervalSeconds;
-                            settings.CurrentMode = snapshot.CurrentMode;
-                            settings.ActiveProfileId = snapshot.ActiveProfileId;
-                            settings.TransparentProxyEnabled = snapshot.TransparentProxyEnabled;
-                            settings.MixedPort = snapshot.MixedPort;
-                        }));
+                        (snapshot, token) => settings.ApplyChangesAsync(
+                            [CreatePreferenceChange(SettingsRegistry.Keys.DisplayLanguage, snapshot.DisplayLanguage),
+                             CreatePreferenceChange(SettingsRegistry.Keys.AppThemeMode, snapshot.AppThemeMode),
+                             CreatePreferenceChange(SettingsRegistry.Keys.AppAccentColorMode, snapshot.AppAccentColorMode),
+                             CreatePreferenceChange(SettingsRegistry.Keys.AppAccentColorValue, snapshot.AppAccentColorValue),
+                             CreatePreferenceChange(SettingsRegistry.Keys.LaunchAtStartupEnabled, snapshot.LaunchAtStartupEnabled),
+                             CreatePreferenceChange(SettingsRegistry.Keys.ConnectionSamplingEnabled, snapshot.ConnectionSamplingEnabled),
+                             CreatePreferenceChange(SettingsRegistry.Keys.ConnectionSamplingIntervalSeconds, snapshot.ConnectionSamplingIntervalSeconds),
+                             CreatePreferenceChange(SettingsRegistry.Keys.CurrentMode, snapshot.CurrentMode),
+                             CreatePreferenceChange(SettingsRegistry.Keys.ActiveProfileId, snapshot.ActiveProfileId),
+                             CreatePreferenceChange(SettingsRegistry.Keys.TransparentProxyEnabled, snapshot.TransparentProxyEnabled),
+                             CreatePreferenceChange(SettingsRegistry.Keys.MixedPort, snapshot.MixedPort)], token)));
             });
+#else
+        _beginDestructiveRuntimeMutationAsync = beginDestructiveRuntimeMutationAsync
+            ?? throw new ArgumentNullException(nameof(beginDestructiveRuntimeMutationAsync));
+#endif
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
 #if UNIT_TESTS
         supportedLanguages ??= TestSupportedLanguages;
@@ -1163,7 +1166,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public int DisplayLanguageIndex
     {
         get => DisplayLanguage == AppLanguage.AutoDetect ? 0 : (int)DisplayLanguage + 1;
-        set => SetDisplayLanguageIndex(value);
     }
 
     public AppThemeMode AppThemeMode
@@ -1181,7 +1183,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public int AppThemeModeIndex
     {
         get => (int)AppThemeMode;
-        set => SetAppThemeModeIndex(value);
     }
 
     public AppAccentColorMode AppAccentColorMode
@@ -1201,7 +1202,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public int AppAccentColorModeIndex
     {
         get => (int)AppAccentColorMode;
-        set => SetAppAccentColorModeIndex(value);
     }
 
     public string AppAccentColorValue
@@ -1306,7 +1306,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public bool StartupConflictCheckEnabled
     {
         get => _startupConflictCheckEnabled;
-        set => SetStartupConflictCheckEnabled(value);
     }
 
     public StartupBehaviorMode StartupBehaviorMode
@@ -1324,25 +1323,21 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public int StartupBehaviorModeIndex
     {
         get => (int)StartupBehaviorMode;
-        set => SetStartupBehaviorModeIndex(value);
     }
 
     public bool ShowStartupGuideOnStartup
     {
         get => _showStartupGuideOnStartup;
-        set => SetShowStartupGuideOnStartup(value);
     }
 
     public bool TriggersEnabled
     {
         get => _triggersEnabled;
-        set => SetTriggersEnabled(value);
     }
 
     public bool TriggerNotificationsEnabled
     {
         get => _triggerNotificationsEnabled;
-        set => SetTriggerNotificationsEnabled(value);
     }
 
     public CloseBehaviorMode CloseBehaviorMode
@@ -1360,13 +1355,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public int CloseBehaviorModeIndex
     {
         get => (int)CloseBehaviorMode;
-        set => SetCloseBehaviorModeIndex(value);
     }
 
     public bool TrayUseMonochromeInactiveIcon
     {
         get => _trayUseMonochromeInactiveIcon;
-        set => SetTrayUseMonochromeInactiveIcon(value);
     }
 
     public string TrayVisibleFeatureIds
@@ -1390,13 +1383,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public bool CheckStaleProxyOnStartup
     {
         get => _checkStaleProxyOnStartup;
-        set => SetCheckStaleProxyOnStartup(value);
     }
 
     public bool RestoreProxyOnExit
     {
         get => _restoreProxyOnExit;
-        set => SetRestoreProxyOnExit(value);
     }
 
     public MainlandChinaFeatureMode MainlandChinaFeatureMode
@@ -1415,19 +1406,16 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public int MainlandChinaFeatureModeIndex
     {
         get => (int)MainlandChinaFeatureMode;
-        set => SetMainlandChinaFeatureModeIndex(value);
     }
 
     public bool MainlandChinaUrlBlockingEnabled
     {
         get => _mainlandChinaUrlBlockingEnabled;
-        set => SetMainlandChinaUrlBlockingEnabled(value);
     }
 
     public bool NotificationEnabled
     {
         get => _notificationEnabled;
-        set => SetNotificationEnabled(value);
     }
 
     public NotificationLevel NotificationLevel
@@ -1445,7 +1433,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public int NotificationLevelIndex
     {
         get => (int)NotificationLevel;
-        set => SetNotificationLevelIndex(value);
     }
 
     public string ConnectionTestUrl
@@ -1530,7 +1517,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         RaiseMainlandChinaRestartStateChanged();
         SetProperty(ref _notificationEnabled, _settings.NotificationEnabled, nameof(NotificationEnabled));
         NotificationLevel = _settings.NotificationLevel;
-        ConnectionTestUrl = _settings.ConnectionTestUrl;
+        ConnectionTestUrl = _settings.ConnectionTestProxyUrl1;
         ConnectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
         ConnectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
         ConnectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
@@ -1562,125 +1549,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
             && Volatile.Read(ref _connectionSamplingRevision) == Volatile.Read(ref _appliedConnectionSamplingRevision))
         {
             ReloadCommittedConnectionSampling();
-        }
-    }
-
-    /// <summary>Persists a display language selected by combo box index.</summary>
-    /// <param name="index">Language enum index.</param>
-    /// <returns>True when the language was valid and persisted; otherwise false.</returns>
-    public bool SetDisplayLanguageIndex(int index)
-    {
-        AppLanguage language;
-        if (index == 0)
-        {
-            language = AppLanguage.AutoDetect;
-        }
-        else
-        {
-            int languageValue = index - 1;
-            if (!Enum.IsDefined((AppLanguage)languageValue))
-            {
-                return false;
-            }
-
-            language = (AppLanguage)languageValue;
-            if (language == AppLanguage.AutoDetect)
-            {
-                return false;
-            }
-        }
-
-        if (DisplayLanguage == language && _settings.DisplayLanguage == language)
-        {
-            return false;
-        }
-
-        _settings.DisplayLanguage = language;
-        DisplayLanguage = language;
-        RaiseDisplayLanguageRestartStateChanged();
-        return true;
-    }
-
-    /// <summary>Persists an app theme selected by combo box index.</summary>
-    /// <param name="index">Theme enum index.</param>
-    /// <returns>True when the theme was valid and persisted; otherwise false.</returns>
-    public bool SetAppThemeModeIndex(int index)
-    {
-        if (!Enum.IsDefined((AppThemeMode)index))
-        {
-            return false;
-        }
-
-        AppThemeMode mode = (AppThemeMode)index;
-        _settings.AppThemeMode = mode;
-        AppThemeMode = mode;
-        _applyTheme(mode);
-        return true;
-    }
-
-    /// <summary>Persists an app accent color behavior selected by combo box index.</summary>
-    /// <param name="index">Accent color mode enum index.</param>
-    /// <returns>True when the mode was valid and persisted; otherwise false.</returns>
-    public bool SetAppAccentColorModeIndex(int index)
-    {
-        if (!Enum.IsDefined((AppAccentColorMode)index))
-        {
-            return false;
-        }
-
-        AppAccentColorMode mode = (AppAccentColorMode)index;
-        _settings.AppAccentColorMode = mode;
-        AppAccentColorMode = mode;
-        return true;
-    }
-
-    /// <summary>Persists a custom accent color value.</summary>
-    /// <param name="value">Hex color value.</param>
-    /// <returns>True when the color was valid and persisted; otherwise false.</returns>
-    public bool SetAppAccentColorValue(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-
-        try
-        {
-            _settings.AppAccentColorValue = value;
-            AppAccentColorValue = _settings.AppAccentColorValue;
-            return true;
-        }
-        catch (ArgumentException exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
-        {
-            return false;
-        }
-    }
-
-    /// <summary>Commits a color-picker selection and publishes the complete appearance before notifying observers.</summary>
-    /// <param name="value">Selected hexadecimal color; invalid values are rejected by the settings store.</param>
-    public void SetCustomAppAccentColor(string value)
-    {
-        string persistedColor = _settings.SetCustomAppAccentColor(value);
-        bool modeChanged = _appAccentColorMode != AppAccentColorMode.Custom;
-        bool colorChanged = !string.Equals(_appAccentColorValue, persistedColor, StringComparison.Ordinal);
-        _appAccentColorMode = AppAccentColorMode.Custom;
-        _appAccentColorValue = persistedColor;
-
-        if (modeChanged)
-        {
-            OnPropertyChanged(nameof(AppAccentColorMode));
-            OnPropertyChanged(nameof(AppAccentColorModeIndex));
-            OnPropertyChanged(nameof(IsCustomAccentColorSelected));
-        }
-
-        if (colorChanged)
-        {
-            OnPropertyChanged(nameof(AppAccentColorValue));
-        }
-
-        if (modeChanged || colorChanged)
-        {
-            RaiseAppAccentColorRestartStateChanged();
         }
     }
 
@@ -2486,84 +2354,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Persists the startup conflict check switch.</summary>
-    /// <param name="isEnabled">Switch value.</param>
-    public void SetStartupConflictCheckEnabled(bool isEnabled)
-    {
-        _settings.StartupConflictCheckEnabled = isEnabled;
-        SetProperty(ref _startupConflictCheckEnabled, isEnabled, nameof(StartupConflictCheckEnabled));
-    }
-
-    /// <summary>Persists a startup behavior mode selected by combo box index.</summary>
-    /// <param name="index">Startup behavior enum index.</param>
-    /// <returns>True when the index was valid and persisted; otherwise false.</returns>
-    public bool SetStartupBehaviorModeIndex(int index)
-    {
-        if (!Enum.IsDefined((StartupBehaviorMode)index))
-        {
-            return false;
-        }
-
-        StartupBehaviorMode mode = (StartupBehaviorMode)index;
-        _settings.StartupBehaviorMode = mode;
-        StartupBehaviorMode = mode;
-        return true;
-    }
-
-    /// <summary>Persists whether the startup guide is shown during application startup.</summary>
-    /// <param name="isEnabled">Switch value.</param>
-    public void SetShowStartupGuideOnStartup(bool isEnabled)
-    {
-        _settings.ShowStartupGuideOnStartup = isEnabled;
-        SetProperty(ref _showStartupGuideOnStartup, isEnabled, nameof(ShowStartupGuideOnStartup));
-    }
-
-    /// <summary>Persists whether trigger evaluation is enabled.</summary>
-    public void SetTriggersEnabled(bool isEnabled)
-    {
-        _settings.TriggersEnabled = isEnabled;
-        if (SetProperty(ref _triggersEnabled, isEnabled, nameof(TriggersEnabled)))
-        {
-            RaiseTriggerRestartStateChanged();
-        }
-    }
-
-    /// <summary>Persists whether fired triggers send dedicated notifications.</summary>
-    public void SetTriggerNotificationsEnabled(bool isEnabled)
-    {
-        _settings.TriggerNotificationsEnabled = isEnabled;
-        SetProperty(ref _triggerNotificationsEnabled, isEnabled, nameof(TriggerNotificationsEnabled));
-    }
-
-    /// <summary>Persists the close behavior selected by combo box index.</summary>
-    public bool SetCloseBehaviorModeIndex(int index)
-    {
-        if (!Enum.IsDefined((CloseBehaviorMode)index))
-        {
-            return false;
-        }
-
-        CloseBehaviorMode mode = (CloseBehaviorMode)index;
-        _settings.CloseBehaviorMode = mode;
-        CloseBehaviorMode = mode;
-        return true;
-    }
-
-    /// <summary>Persists whether the tray icon indicates runtime state with color.</summary>
-    public void SetTrayUseMonochromeInactiveIcon(bool isEnabled)
-    {
-        _settings.TrayUseMonochromeInactiveIcon = isEnabled;
-        SetProperty(ref _trayUseMonochromeInactiveIcon, isEnabled, nameof(TrayUseMonochromeInactiveIcon));
-    }
-
-    /// <summary>Persists selected tray feature ids.</summary>
-    public void SetTrayVisibleFeatureIds(IEnumerable<string> ids)
-    {
-        ArgumentNullException.ThrowIfNull(ids);
-        _settings.TrayVisibleFeatureIds = NormalizeTrayVisibleFeatureIds(ids);
-        TrayVisibleFeatureIds = _settings.TrayVisibleFeatureIds;
-    }
-
     /// <summary>Gets visible tray feature definitions in persisted order.</summary>
     public IReadOnlyList<SettingsTrayFeatureDefinition> GetTrayVisibleFeatureDefinitions()
     {
@@ -2604,122 +2394,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     {
         await _removeStartupRestoreFallbackRegistration(cancellationToken);
         await RefreshStartupRestoreFallbackStatusAsync(cancellationToken);
-    }
-
-    /// <summary>Persists the stale proxy startup check switch.</summary>
-    /// <param name="isEnabled">Switch value.</param>
-    public void SetCheckStaleProxyOnStartup(bool isEnabled)
-    {
-        _settings.CheckStaleProxyOnStartup = isEnabled;
-        SetProperty(ref _checkStaleProxyOnStartup, isEnabled, nameof(CheckStaleProxyOnStartup));
-    }
-
-    /// <summary>Persists the shutdown proxy restoration switch.</summary>
-    /// <param name="isEnabled">Switch value.</param>
-    public void SetRestoreProxyOnExit(bool isEnabled)
-    {
-        _settings.RestoreProxyOnExit = isEnabled;
-        SetProperty(ref _restoreProxyOnExit, isEnabled, nameof(RestoreProxyOnExit));
-    }
-
-    /// <summary>Persists a mainland China feature mode selected by combo box index.</summary>
-    /// <param name="index">Feature mode enum index.</param>
-    /// <returns>True when the index was valid and persisted; otherwise false.</returns>
-    public bool SetMainlandChinaFeatureModeIndex(int index)
-    {
-        if (!Enum.IsDefined((MainlandChinaFeatureMode)index))
-        {
-            return false;
-        }
-
-        MainlandChinaFeatureMode mode = (MainlandChinaFeatureMode)index;
-        if (mode == MainlandChinaFeatureMode.AllIncludingUrlBlacklist)
-        {
-            mode = MainlandChinaFeatureMode.FlagTextCompletionAndKeywordFilter;
-        }
-
-        _settings.MainlandChinaFeatureMode = mode;
-        MainlandChinaFeatureMode = mode;
-        return true;
-    }
-
-    /// <summary>Persists the mainland China URL blocking switch.</summary>
-    /// <param name="isEnabled">Switch value.</param>
-    public void SetMainlandChinaUrlBlockingEnabled(bool isEnabled)
-    {
-        _settings.MainlandChinaUrlBlockingEnabled = isEnabled;
-        if (SetProperty(ref _mainlandChinaUrlBlockingEnabled, isEnabled, nameof(MainlandChinaUrlBlockingEnabled)))
-        {
-            RaiseMainlandChinaRestartStateChanged();
-        }
-    }
-
-    /// <summary>Persists a notification verbosity selected by combo box index.</summary>
-    /// <param name="index">Notification level enum index.</param>
-    /// <returns>True when the index was valid and persisted; otherwise false.</returns>
-    public bool SetNotificationLevelIndex(int index)
-    {
-        if (!Enum.IsDefined((NotificationLevel)index))
-        {
-            return false;
-        }
-
-        NotificationLevel level = (NotificationLevel)index;
-        _settings.NotificationLevel = level;
-        NotificationLevel = level;
-        return true;
-    }
-
-    /// <summary>Persists whether Windows system notifications are enabled.</summary>
-    /// <param name="isEnabled">True to show notifications subject to level filtering.</param>
-    public void SetNotificationEnabled(bool isEnabled)
-    {
-        _settings.NotificationEnabled = isEnabled;
-        SetProperty(ref _notificationEnabled, isEnabled, nameof(NotificationEnabled));
-    }
-
-    /// <summary>Persists the proxy connection-test URL.</summary>
-    /// <param name="value">User-entered URL.</param>
-    /// <returns>True when the value was valid and persisted; otherwise false.</returns>
-    public bool SetConnectionTestUrl(string value)
-    {
-        if (!TryNormalizeConnectionTestUrl(value, out string persistedValue))
-        {
-            return false;
-        }
-
-        _settings.ConnectionTestUrl = persistedValue;
-        ConnectionTestUrl = persistedValue;
-        return true;
-    }
-
-    /// <summary>Persists all registered connection-test URLs.</summary>
-    public bool SetConnectionTestUrls(string proxyUrl1, string proxyUrl2, string directUrl)
-    {
-        if (!TryNormalizeConnectionTestUrl(proxyUrl1, out string normalizedProxyUrl1)
-            || !TryNormalizeConnectionTestUrl(proxyUrl2, out string normalizedProxyUrl2)
-            || !TryNormalizeConnectionTestUrl(directUrl, out string normalizedDirectUrl))
-        {
-            return false;
-        }
-
-        _settings.SetConnectionTestUrls(normalizedProxyUrl1, normalizedProxyUrl2, normalizedDirectUrl);
-        ConnectionTestProxyUrl1 = normalizedProxyUrl1;
-        ConnectionTestProxyUrl2 = normalizedProxyUrl2;
-        ConnectionTestDirectUrl = normalizedDirectUrl;
-        return true;
-    }
-
-    /// <summary>Restores registered connection-test URLs to defaults.</summary>
-    public void ResetConnectionTestUrlsToDefaults()
-    {
-        _settings.SetConnectionTestUrls(
-            DefaultConnectionTestProxyUrl1,
-            DefaultConnectionTestProxyUrl2,
-            DefaultConnectionTestDirectUrl);
-        ConnectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
-        ConnectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
-        ConnectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
     }
 
     /// <summary>Returns the first invalid editor field, or -1 when all targets can be saved.</summary>
@@ -2922,69 +2596,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
         return $"{milliseconds} ms";
     }
 
-    /// <summary>Restores base display settings to defaults.</summary>
-    public void ResetBasicSettingsToDefaults()
-    {
-        _settings.ResetPreferenceGroup(SettingsResetScope.Basic);
-        _displayLanguage = AppLanguage.AutoDetect;
-        _appThemeMode = AppThemeMode.FollowSystem;
-        _appAccentColorMode = AppAccentColorMode.FollowSystem;
-        _appAccentColorValue = DefaultAppAccentColorValue;
-        _closeBehaviorMode = CloseBehaviorMode.MinimizeToTray;
-        OnPropertyChanged(nameof(DisplayLanguage));
-        OnPropertyChanged(nameof(AppThemeMode));
-        OnPropertyChanged(nameof(AppAccentColorMode));
-        OnPropertyChanged(nameof(AppAccentColorValue));
-        OnPropertyChanged(nameof(CloseBehaviorMode));
-        OnPropertyChanged(nameof(IsCustomAccentColorSelected));
-        RaiseDisplayLanguageRestartStateChanged();
-        RaiseAppAccentColorRestartStateChanged();
-        RaiseSelectorBindingsChanged();
-        RefreshProxyInformation();
-        ResetDiagnosticStatusText();
-        _applyTheme(AppThemeMode.FollowSystem);
-    }
-
-    /// <summary>Restores notification settings to defaults.</summary>
-    public void ResetNotificationSettingsToDefaults()
-    {
-        _settings.ResetPreferenceGroup(SettingsResetScope.Notifications);
-        _notificationEnabled = true;
-        _notificationLevel = NotificationLevel.Default;
-        OnPropertyChanged(nameof(NotificationEnabled));
-        OnPropertyChanged(nameof(NotificationLevel));
-        OnPropertyChanged(nameof(NotificationLevelIndex));
-        RaiseSelectorBindingsChanged();
-    }
-
     /// <summary>Restores the complete startup group and system registration through a retained transaction.</summary>
     /// <param name="cancellationToken">Cancels before the durable reset; activation and rollback then run to completion.</param>
     public Task ResetStartupSettingsToDefaultsAsync(CancellationToken cancellationToken)
     {
         return ResetSettingsAsync(SettingsResetScope.Startup, cancellationToken);
-    }
-
-    /// <summary>Restores trigger settings to defaults.</summary>
-    public void ResetTriggerSettingsToDefaults()
-    {
-        _settings.ResetPreferenceGroup(SettingsResetScope.Triggers);
-        _triggersEnabled = true;
-        _triggerNotificationsEnabled = true;
-        OnPropertyChanged(nameof(TriggersEnabled));
-        OnPropertyChanged(nameof(TriggerNotificationsEnabled));
-        RaiseTriggerRestartStateChanged();
-    }
-
-    /// <summary>Restores taskbar tray settings to defaults without changing deployed services.</summary>
-    public void ResetTraySettingsToDefaults()
-    {
-        _settings.ResetPreferenceGroup(SettingsResetScope.Tray);
-        _trayUseMonochromeInactiveIcon = false;
-        _trayVisibleFeatureIds = DefaultTrayVisibleFeatureIds;
-        OnPropertyChanged(nameof(TrayUseMonochromeInactiveIcon));
-        OnPropertyChanged(nameof(TrayVisibleFeatureIds));
-        OnPropertyChanged(nameof(TrayVisibleFeatureSummaryText));
-        RaiseSelectorBindingsChanged();
     }
 
     /// <summary>Restores the supported transparent proxy default through a retained network transaction.</summary>
@@ -2999,28 +2615,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public Task ResetProxySettingsToDefaultsAsync(CancellationToken cancellationToken)
     {
         return ResetSettingsAsync(SettingsResetScope.Proxy, cancellationToken);
-    }
-
-    /// <summary>Restores Windows-native repair settings to defaults.</summary>
-    public void ResetWindowsNativeSettingsToDefaults()
-    {
-        _settings.ResetPreferenceGroup(SettingsResetScope.WindowsNative);
-        _checkStaleProxyOnStartup = true;
-        _restoreProxyOnExit = true;
-        OnPropertyChanged(nameof(CheckStaleProxyOnStartup));
-        OnPropertyChanged(nameof(RestoreProxyOnExit));
-    }
-
-    /// <summary>Restores mainland China feature settings to defaults.</summary>
-    public void ResetMainlandChinaSettingsToDefaults()
-    {
-        _settings.ResetPreferenceGroup(SettingsResetScope.MainlandChina);
-        _mainlandChinaFeatureMode = MainlandChinaFeatureMode.FlagReplacementAndTextCompletion;
-        _mainlandChinaUrlBlockingEnabled = false;
-        OnPropertyChanged(nameof(MainlandChinaFeatureMode));
-        OnPropertyChanged(nameof(MainlandChinaUrlBlockingEnabled));
-        RaiseMainlandChinaRestartStateChanged();
-        RaiseSelectorBindingsChanged();
     }
 
     /// <summary>
@@ -3235,7 +2829,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             _mixedPort = _settings.MixedPort;
             _connectionSamplingEnabled = _settings.ConnectionSamplingEnabled;
             _connectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
-            _connectionTestUrl = _settings.ConnectionTestUrl;
+            _connectionTestUrl = _settings.ConnectionTestProxyUrl1;
             _connectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
             _connectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
             _connectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
@@ -3268,7 +2862,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<CancellationToken, Task> restartConnectionSamplingAsync,
         Func<bool, int, CancellationToken, Task> applyNetworkSettingsAsync,
         Func<ISettingsResetTransactionReceipt> beginResetSettings,
-        Action<SettingsExternalDurableSnapshot> restoreDurableSettings)
+        Func<SettingsExternalDurableSnapshot, CancellationToken, Task> restoreDurableSettings)
         : ISettingsDestructiveRuntimeScope
     {
         public Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(
@@ -3300,9 +2894,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 "A network group reset requires an admitted retained transaction.");
         }
 
-        public void RestoreDurableSettings(SettingsExternalDurableSnapshot snapshot)
+        public Task RestoreDurableSettingsAsync(SettingsExternalDurableSnapshot snapshot, CancellationToken cancellationToken)
         {
-            restoreDurableSettings(snapshot);
+            return restoreDurableSettings(snapshot, cancellationToken);
         }
 
         public Task ApplyLaunchAtStartupAsync(
