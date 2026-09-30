@@ -50,6 +50,16 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string _settingsText = string.Empty;
 
     private bool _isExitFailureVisible;
+    private bool _hasSettingsApplicationFailures;
+
+    public bool HasSettingsApplicationFailures
+    {
+        get => _hasSettingsApplicationFailures;
+        set => SetProperty(ref _hasSettingsApplicationFailures, value);
+    }
+    public string SettingsRecoveryTitleText => _localization.GetString("Settings.Recovery.Title");
+    public string SettingsRecoveryDescriptionText => _localization.GetString("Settings.Recovery.Description");
+    public string OpenSettingsRecoveryText => _localization.GetString("Settings.Recovery.Open");
 
     /// <summary>Gets or sets whether the shell exposes a failed safe-exit attempt.</summary>
     public bool IsExitFailureVisible
@@ -189,6 +199,9 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         AboutText = _localization.GetString("Nav.About");
         OnPropertyChanged(nameof(ExitFailureTitleText));
         OnPropertyChanged(nameof(ExitFailureMessageText));
+        OnPropertyChanged(nameof(SettingsRecoveryTitleText));
+        OnPropertyChanged(nameof(SettingsRecoveryDescriptionText));
+        OnPropertyChanged(nameof(OpenSettingsRecoveryText));
         SettingsText = _restartState.IsRestartPending
             ? $"{_localization.GetString("Nav.Settings")}*"
             : _localization.GetString("Nav.Settings");

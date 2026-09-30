@@ -41,6 +41,7 @@ internal sealed partial class AppDataGenerationRuntime(
     private readonly SemaphoreSlim _startupGate = new(1, 1);
     private bool _started;
     private bool _startupPrepared;
+    private string? _startupWarning;
     private bool _replacementPrepared;
     private readonly List<TriggerLifecycleHandoffIdentity> _pendingReleases = [];
 
@@ -68,7 +69,7 @@ internal sealed partial class AppDataGenerationRuntime(
 
     private async Task<StartupStepResult> PrepareStartupCoreAsync(MutationAdmissionLease lease, CancellationToken cancellationToken)
     {
-        if (_startupPrepared) { return StartupStepResult.Succeeded(); }
+        if (_startupPrepared) { return _startupWarning is null ? StartupStepResult.Succeeded() : StartupStepResult.Warning(_startupWarning); }
         SettingsAuthorityResult prepared = await Repositories.Session.PrepareStartupAdmittedAsync(Guid.NewGuid(), lease, cancellationToken).ConfigureAwait(false);
         if (!prepared.IsSucceeded) { return StartupStepResult.Fatal(prepared.Code ?? "settings.startup.prepare_failed"); }
         SettingsGenerationContext context = (SettingsGenerationContext)Repositories.GetService(typeof(SettingsGenerationContext))!;
@@ -78,13 +79,22 @@ internal sealed partial class AppDataGenerationRuntime(
             if (exitRequested()) { return StartupStepResult.ExitRequested(); }
             foreach (SettingsApplicationBatch batch in Repositories.Session.Snapshot.PendingApplications.Where(batch => batch.ApplicationKind == kind).ToArray())
             {
+                if (CanLeaveStartupFailureForUser(kind) && batch.State == SettingsApplicationBatchState.Failed)
+                {
+                    _startupWarning ??= "settings.startup.retry_required";
+                    continue;
+                }
                 SettingsAuthorityResult applied = await Repositories.Session.ApplyBatchAdmittedAsync(
                     batch.BatchId, batch.AttemptId, context.Participants[kind], SettingsApplicationPhase.Startup, lease, cancellationToken).ConfigureAwait(false);
-                if (!applied.IsSucceeded) { return StartupStepResult.Fatal(applied.Code ?? "settings.startup.application_failed"); }
+                if (!applied.IsSucceeded)
+                {
+                    if (HasVerifiedFailedApplication(kind, batch, applied)) { _startupWarning ??= applied.Code; continue; }
+                    return StartupStepResult.Fatal(applied.Code ?? "settings.startup.application_failed");
+                }
             }
         }
         _startupPrepared = true;
-        return StartupStepResult.Succeeded();
+        return _startupWarning is null ? StartupStepResult.Succeeded() : StartupStepResult.Warning(_startupWarning);
     }
 
     public Task<StartupStepResult> InitializeAdmittedAsync(MutationAdmissionLease lease, CancellationToken cancellationToken) =>
@@ -110,7 +120,7 @@ internal sealed partial class AppDataGenerationRuntime(
             }
             SettingsGenerationContext context = (SettingsGenerationContext)Repositories.GetService(typeof(SettingsGenerationContext))!;
             SettingApplicationKind[] order = [SettingApplicationKind.Network, SettingApplicationKind.Sampling, SettingApplicationKind.Triggers];
-            string? warning = applyNetwork ? null : "startup-network-conflicts-pending";
+            string? warning = applyNetwork ? _startupWarning : "startup-network-conflicts-pending";
             foreach (SettingApplicationKind kind in order)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -140,9 +150,18 @@ internal sealed partial class AppDataGenerationRuntime(
                     .Where(batch => batch.ApplicationKind == kind).ToArray();
                 foreach (SettingsApplicationBatch batch in batches)
                 {
+                    if (CanLeaveStartupFailureForUser(kind) && batch.State == SettingsApplicationBatchState.Failed)
+                    {
+                        warning ??= "settings.startup.retry_required";
+                        continue;
+                    }
                     SettingsAuthorityResult applied = await Repositories.Session.ApplyBatchAdmittedAsync(
                         batch.BatchId, batch.AttemptId, context.Participants[kind], SettingsApplicationPhase.Startup, lease, cancellationToken).ConfigureAwait(false);
-                    if (!applied.IsSucceeded) { return StartupStepResult.Fatal(applied.Code ?? "settings.startup.application_failed"); }
+                    if (!applied.IsSucceeded)
+                    {
+                        if (HasVerifiedFailedApplication(kind, batch, applied)) { warning ??= applied.Code; continue; }
+                        return StartupStepResult.Fatal(applied.Code ?? "settings.startup.application_failed");
+                    }
                 }
             }
             _started = true;
@@ -176,4 +195,12 @@ internal sealed partial class AppDataGenerationRuntime(
         publication.Publish();
         TriggerSettings.Scheduler.NotifyProcessingAvailabilityChanged();
     }
+
+    private static bool CanLeaveStartupFailureForUser(SettingApplicationKind kind) =>
+        kind is SettingApplicationKind.Appearance or SettingApplicationKind.StartupTask or SettingApplicationKind.Network or SettingApplicationKind.Sampling;
+
+    private static bool HasVerifiedFailedApplication(SettingApplicationKind kind, SettingsApplicationBatch attempted, SettingsAuthorityResult result) =>
+        CanLeaveStartupFailureForUser(kind) && result.Status == SettingsAuthorityStatus.ApplicationFailed
+        && result.Envelope?.PendingApplications.Any(batch => batch.BatchId == attempted.BatchId && batch.AttemptId == attempted.AttemptId
+            && batch.State == SettingsApplicationBatchState.Failed) == true;
 }

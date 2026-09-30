@@ -33,6 +33,7 @@ public sealed partial class Settings : Page
 {
     /// <summary>Owns settings state transitions and persistence.</summary>
     private readonly SettingsViewModel _viewModel;
+    private readonly SettingsRecoveryViewModel _recovery;
     private readonly Func<string, string> _getString;
     private readonly Action<bool> _setRestartPending;
     private readonly Func<string, Windows.UI.Color> _parseAccentColor;
@@ -56,6 +57,7 @@ public sealed partial class Settings : Page
         ArgumentNullException.ThrowIfNull(dependencies);
         _viewModel = dependencies.ViewModel
             ?? throw new ArgumentException("A settings view model is required.", nameof(dependencies));
+        _recovery = dependencies.Recovery ?? throw new ArgumentException("Settings recovery state is required.", nameof(dependencies));
         _getString = dependencies.GetString
             ?? throw new ArgumentException("A localization function is required.", nameof(dependencies));
         _setRestartPending = dependencies.SetRestartPending
@@ -74,6 +76,8 @@ public sealed partial class Settings : Page
         _subscribeToRuntimeSettingsChanges = dependencies.SubscribeToRuntimeSettingsChanges
             ?? throw new ArgumentException("A runtime settings subscription is required.", nameof(dependencies));
         InitializeComponent();
+        ApplicationRecoveryPanel.DataContext = _recovery;
+        _recovery.Refresh();
         // Bind persisted choices on the first frame, before the asynchronous page queue runs.
         _viewModel.Load();
         DataContext = _viewModel;
@@ -85,6 +89,7 @@ public sealed partial class Settings : Page
     private void LoadSettings()
     {
         _viewModel.Load();
+        _recovery.Refresh();
         RefreshPreferenceControls();
         UpdateRestartRequiredState();
     }
@@ -173,6 +178,7 @@ public sealed partial class Settings : Page
         {
             token.ThrowIfCancellationRequested();
             _viewModel.RefreshCommittedRuntimeSettings();
+            _recovery.Refresh();
             return Task.CompletedTask;
         });
     }
@@ -975,6 +981,15 @@ public sealed partial class Settings : Page
         button.Content = content;
 
         panel.Children.Add(button);
+    }
+
+    /// <summary>Retries the failed settings applications still identified by the page.</summary>
+    private async void RetryApplication_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: SettingsApplicationIssue issue })
+        {
+            await RunPageOperationAsync(token => _recovery.RetryAsync(issue, token));
+        }
     }
 
     /// <summary>Retries the failed settings applications still identified by the page.</summary>

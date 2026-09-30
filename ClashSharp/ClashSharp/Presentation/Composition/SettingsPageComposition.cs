@@ -19,6 +19,7 @@ namespace ClashSharp.Presentation.Composition;
 /// <summary>Injected dependencies used by the settings view's platform-only interactions.</summary>
 internal sealed record SettingsPageDependencies(
     SettingsViewModel ViewModel,
+    SettingsRecoveryViewModel Recovery,
     Func<string, string> GetString,
     Action<bool> SetRestartPending,
     Func<string, Color> ParseAccentColor,
@@ -117,6 +118,7 @@ internal static class SettingsPageComposition
 
         return new SettingsPageDependencies(
             viewModel,
+            new SettingsRecoveryViewModel(localization.GetString, context.SettingsApplicationRecovery, errorSink, context.RestartState.RequireRestart),
             localization.GetString,
             context.RestartState.SetRestartPending,
             AppThemeService.ParseAccentColorOrDefault,
@@ -137,7 +139,10 @@ internal static class SettingsPageComposition
             _settings = settings;
             _changed = changed;
             settings.SettingChanged += OnSettingChanged;
+            settings.SettingsApplicationStateChanged += OnApplicationStateChanged;
         }
+
+        private void OnApplicationStateChanged(object? sender, EventArgs args) => _changed();
 
         private void OnSettingChanged(object? sender, AppSettingChangedEventArgs args)
         {
@@ -157,6 +162,7 @@ internal static class SettingsPageComposition
             if (settings is not null)
             {
                 settings.SettingChanged -= OnSettingChanged;
+                settings.SettingsApplicationStateChanged -= OnApplicationStateChanged;
             }
         }
     }

@@ -123,7 +123,7 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <Grid RowDefinitions="Auto,*">
+            <Grid RowDefinitions="Auto,Auto,*">
                 <InfoBar
                     Margin="24,12,24,0"
                     IsOpen="{Binding IsExitFailureVisible, Mode=TwoWay}"
@@ -131,7 +131,14 @@
                     Severity="Error"
                     Title="{Binding ExitFailureTitleText}"
                     Message="{Binding ExitFailureMessageText}" />
-                <Frame x:Name="ContentFrame" Grid.Row="1" />
+                <InfoBar Grid.Row="1" Margin="24,12,24,0" IsClosable="False" Severity="Warning"
+                         IsOpen="{Binding HasSettingsApplicationFailures, Mode=OneWay}"
+                         Title="{Binding SettingsRecoveryTitleText}" Message="{Binding SettingsRecoveryDescriptionText}">
+                    <InfoBar.ActionButton>
+                        <HyperlinkButton Content="{Binding OpenSettingsRecoveryText}" Click="OpenSettingsRecovery_Click" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+                <Frame x:Name="ContentFrame" Grid.Row="2" />
             </Grid>
         </NavigationView>
 

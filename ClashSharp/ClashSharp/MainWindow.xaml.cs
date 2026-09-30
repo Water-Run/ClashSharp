@@ -72,6 +72,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     /// <summary>Runtime-only shell dependencies created after startup completes.</summary>
     private MainWindowComposition.Runtime? _runtime;
+    private IDisposable? _settingsApplicationSubscription;
 
     /// <summary>Coordinates tray commands without coupling behavior to WinUI callbacks.</summary>
     private TrayCommandService _trayCommandService = null!;
@@ -160,6 +161,11 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _runtime.TrayStateChanged += OnTrayStateChanged;
         _runtime.ApplyTheme((FrameworkElement)Content);
         NavView.DataContext = _runtime.ViewModel;
+        _settingsApplicationSubscription = runtime.SubscribeToSettingsApplicationChanges(() => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (ReferenceEquals(_runtime, runtime)) { runtime.ViewModel.HasSettingsApplicationFailures = runtime.HasFailedSettingsApplications; }
+        }));
+        runtime.ViewModel.HasSettingsApplicationFailures = runtime.HasFailedSettingsApplications;
 
         _runtimeReady = true;
         StartupOverlay.Visibility = Visibility.Collapsed;
@@ -346,6 +352,11 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     }
 
     /// <summary>Returns to a selected navigation item's page when a child page is currently open.</summary>
+    private void OpenSettingsRecovery_Click(object sender, RoutedEventArgs e)
+    {
+        if (_runtimeReady) { Runtime.Navigation.Navigate(ShellRoute.Settings); }
+    }
+
     private void OnNavigationItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         if (!_runtimeReady || !ReferenceEquals(args.InvokedItemContainer, sender.SelectedItem))
@@ -484,6 +495,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _appWindow = null;
         MainWindowComposition.Runtime? runtime = _runtime;
         _runtime = null;
+        _settingsApplicationSubscription?.Dispose();
+        _settingsApplicationSubscription = null;
         _currentNavigation = null;
         _navigationHistory.Clear();
 

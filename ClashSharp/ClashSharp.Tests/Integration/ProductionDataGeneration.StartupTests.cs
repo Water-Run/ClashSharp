@@ -116,14 +116,14 @@ public sealed partial class ProductionDataGenerationTests
         StartupStepResult result = await fixture.CreateStartupStep(lifetime, new SamplingFacade(fixture.Manager), settings)
             .ExecuteAsync(new AppLaunchRequest(""), CancellationToken.None);
 
-        Assert.Equal(StartupStepOutcome.Fatal, result.Outcome);
+        Assert.Equal(StartupStepOutcome.Warning, result.Outcome);
         var repositories = Assert.Single(fixture.Containers);
         RuntimeServices runtime = Assert.IsType<RuntimeServices>(repositories.GetService(typeof(RuntimeServices)));
         Assert.Contains(repositories.Session.Snapshot.PendingApplications,
             batch => batch.ApplicationKind == SettingApplicationKind.Network && batch.State == SettingsApplicationBatchState.Failed);
-        Assert.False(runtime.Sampling.IsRunning);
+        Assert.True(runtime.Sampling.IsRunning);
         Assert.True(runtime.TriggerSettings.Scheduler.IsRunning);
-        Assert.False(runtime.IsExecutionPublished);
+        Assert.True(runtime.IsExecutionPublished);
         Assert.Equal(RuntimeShutdownOutcome.PreparedForHostDisposal,
             (await new RuntimeLifecycleCoordinator(fixture.Admission, lifetime).ShutdownAsync(CancellationToken.None)).Outcome);
         await fixture.Manager.DisposeAsync();

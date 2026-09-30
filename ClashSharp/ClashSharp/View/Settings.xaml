@@ -24,6 +24,23 @@
         <StackPanel x:Name="SettingsContentPanel" Spacing="6" HorizontalAlignment="Stretch">
             <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}"
                        Style="{ThemeResource TitleTextBlockStyle}" Margin="0,0,0,18" />
+            <StackPanel x:Name="ApplicationRecoveryPanel" Spacing="6"
+                        Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <InfoBar Title="{Binding Title}" Message="{Binding Description}"
+                         Severity="Warning" IsClosable="False" IsOpen="{Binding IsVisible, Mode=OneWay}" />
+                <ItemsControl ItemsSource="{Binding Issues}" IsEnabled="{Binding CanRetry}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="12" Margin="12,0">
+                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                                <HyperlinkButton Content="{Binding RetryText}" Tag="{Binding}" Click="RetryApplication_Click" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" Margin="12,0"
+                           Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </StackPanel>
             <InfoBar
                 Message="{Binding OperationErrorText}"
                 Severity="Error"

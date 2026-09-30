@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Data;
@@ -16,6 +17,18 @@ public sealed partial class AppSettingsService
 
     /// <summary>Raised after a different data directory is published, even if preference values are identical.</summary>
     internal event EventHandler? DataGenerationChanged;
+    internal event EventHandler? SettingsApplicationStateChanged;
+
+    internal bool HasFailedSettingsApplications
+    {
+        get
+        {
+            lock (_syncLock)
+            {
+                return _publishedAuthority?.Envelope.PendingApplications.Any(batch => batch.State == SettingsApplicationBatchState.Failed) == true;
+            }
+        }
+    }
 
     /// <summary>Identifies the current bound data namespace; an unavailable bound owner is never treated as legacy storage.</summary>
     internal Guid? GetBoundDataGenerationId() => Volatile.Read(ref _authority)?.CaptureSnapshot().Generation.GenerationId;
@@ -54,7 +67,7 @@ public sealed partial class AppSettingsService
                 if (!Equals(before, after)) { changed.Add(new(key.Value, before, after, wasRemoved: false)); }
             }
         }
-        NotifySettingChanges(changed, dataChanged);
+        NotifySettingChanges(changed, dataChanged, applicationStateChanged: true);
     }
 
     private object ReadAuthorityValue(GenerationSettingsAuthority authority, string key)

@@ -150,6 +150,8 @@ internal sealed class MainWindowComposition
 
         /// <summary>Bindable shell state and navigation resolution.</summary>
         public MainWindowViewModel ViewModel { get; }
+        public bool HasFailedSettingsApplications => _settings.HasFailedSettingsApplications;
+        public IDisposable SubscribeToSettingsApplicationChanges(Action changed) => new SettingsApplicationSubscription(_settings, changed);
 
         /// <summary>Window-scoped page activator for typed routes.</summary>
         public IPageFactory PageFactory { get; }
