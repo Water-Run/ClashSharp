@@ -133,6 +133,7 @@ public sealed partial class MasterControlViewModelTests
         {
             Snapshot = MasterControlRuntimeSnapshot.Unavailable with
             {
+                IsAvailable = true,
                 ActiveProfileId = settings.ActiveProfileId,
                 ActiveSubscription = link,
                 RuntimeTraffic = new(0, 0, 0, long.MaxValue, long.MaxValue),
@@ -152,7 +153,7 @@ public sealed partial class MasterControlViewModelTests
         Assert.DoesNotContain("Remaining:", Tile(viewModel, "subscription-usage").Detail);
         settings.ActiveProfileId = "builtin-direct";
         await viewModel.LoadAsync(CancellationToken.None);
-        Assert.Equal("Master.Subscription.Local", Tile(viewModel, "subscription-usage").Value);
+        Assert.Equal("Unavailable", Tile(viewModel, "subscription-usage").Value);
     }
 
     private static MasterControlInfoTileViewModel Tile(MasterControlViewModel viewModel, string id) => viewModel.InfoTiles.Single(tile => tile.Id == id);
@@ -173,6 +174,7 @@ public sealed partial class MasterControlViewModelTests
         {
             Snapshot = MasterControlRuntimeSnapshot.Unavailable with
             {
+                IsAvailable = true,
                 ActiveProfileId = settings.ActiveProfileId,
                 ActiveSubscription = link,
             },

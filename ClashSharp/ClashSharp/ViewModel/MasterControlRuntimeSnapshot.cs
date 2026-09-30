@@ -26,6 +26,9 @@ internal sealed record MasterControlRuntimeSnapshot(
     ProfileSubscriptionLink? ActiveSubscription = null,
     System.DateTimeOffset? ActiveProfileUpdatedAt = null)
 {
+    /// <summary>Whether the aggregate was read successfully; zero counts remain valid observations.</summary>
+    public bool IsAvailable { get; init; } = true;
+
     public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
         new CoreConfigurationState(string.Empty, string.Empty, false),
         0,
@@ -37,5 +40,8 @@ internal sealed record MasterControlRuntimeSnapshot(
         new LogStorageSummary(string.Empty, 0, 0, 0),
         new TrafficStatisticsSummary(0, 0, 0, 0, 0, 0, 0, 0),
         MihomoServiceStatus.Unknown(string.Empty),
-        new StartupRestoreFallbackStatus(false, string.Empty));
+        new StartupRestoreFallbackStatus(false, string.Empty))
+    {
+        IsAvailable = false,
+    };
 }

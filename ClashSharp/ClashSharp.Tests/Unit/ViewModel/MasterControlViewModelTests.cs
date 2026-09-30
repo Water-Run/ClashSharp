@@ -103,6 +103,7 @@ public sealed partial class MasterControlViewModelTests
         {
             Snapshot = MasterControlRuntimeSnapshot.Unavailable with
             {
+                IsAvailable = true,
                 RuntimeOwnershipKnown = ownershipKnown,
                 EffectiveOwner = owner,
             },
@@ -123,6 +124,7 @@ public sealed partial class MasterControlViewModelTests
         {
             Snapshot = MasterControlRuntimeSnapshot.Unavailable with
             {
+                IsAvailable = true,
                 ActiveProfileId = "local-123",
                 ActiveProfileName = "Office profile",
             },
@@ -345,6 +347,7 @@ public sealed partial class MasterControlViewModelTests
         {
             Snapshot = MasterControlRuntimeSnapshot.Unavailable with
             {
+                IsAvailable = true,
                 RuntimeTraffic = new RuntimeTrafficRateSnapshot(1024, 4096, 2, 1024, 4096, 5000, DateTimeOffset.UtcNow),
             },
         };
@@ -775,7 +778,8 @@ public sealed partial class MasterControlViewModelTests
                 new LogStorageSummary(@"C:\Data\logs.sqlite", 2048, 9, 11),
                 new TrafficStatisticsSummary(1024, 2048, 11, 7, 3, 6, 8, 10),
                 new MihomoServiceStatus(true, true, "Service running"),
-                new StartupRestoreFallbackStatus(true, "helper.exe --restore")),
+                new StartupRestoreFallbackStatus(true, "helper.exe --restore"),
+                ActiveProfileId: "direct"),
         };
         MasterControlViewModel viewModel = CreateViewModel(runtime: runtime);
 
@@ -873,7 +877,7 @@ public sealed partial class MasterControlViewModelTests
                 }
 
                 return Task.FromResult(
-                    MasterControlRuntimeSnapshot.Unavailable with { ProfileCount = 7 });
+                    MasterControlRuntimeSnapshot.Unavailable with { IsAvailable = true, ProfileCount = 7 });
             },
         };
         MasterControlViewModel viewModel = CreateViewModel(
@@ -887,10 +891,10 @@ public sealed partial class MasterControlViewModelTests
         firstCoreCompletion.SetResult("Mihomo Meta v41.0.0");
         firstTrayCompletion.SetResult(new TrayStatusSnapshot("Old node", 410));
         firstCompletion.SetResult(
-            MasterControlRuntimeSnapshot.Unavailable with { ProfileCount = 41 });
+            MasterControlRuntimeSnapshot.Unavailable with { IsAvailable = true, ProfileCount = 41 });
         await firstLoad;
 
-        Assert.Equal("0", viewModel.InfoTiles.Single(static tile => tile.Id == "profile-count").Value);
+        Assert.Equal("Unavailable", viewModel.InfoTiles.Single(static tile => tile.Id == "profile-count").Value);
         Assert.Equal(string.Empty, viewModel.CoreStatusText);
         Assert.Equal("No node", viewModel.CurrentNodeText);
 
@@ -914,7 +918,7 @@ public sealed partial class MasterControlViewModelTests
                 callCount++;
                 return callCount == 1
                     ? Task.FromResult(
-                        MasterControlRuntimeSnapshot.Unavailable with { ProfileCount = 9 })
+                        MasterControlRuntimeSnapshot.Unavailable with { IsAvailable = true, ProfileCount = 9 })
                     : Task.FromException<MasterControlRuntimeSnapshot>(
                         new MasterControlRuntimeUnavailableException(
                             new IOException("storage failed")));
@@ -930,7 +934,7 @@ public sealed partial class MasterControlViewModelTests
         now = now.AddSeconds(6);
         await viewModel.LoadAsync(CancellationToken.None);
 
-        Assert.Equal("0", viewModel.InfoTiles.Single(static tile => tile.Id == "profile-count").Value);
+        Assert.Equal("Unavailable", viewModel.InfoTiles.Single(static tile => tile.Id == "profile-count").Value);
     }
 
     /// <summary>Verifies the transparent-proxy tile toggle persists through the settings boundary.</summary>
@@ -942,6 +946,7 @@ public sealed partial class MasterControlViewModelTests
         {
             Snapshot = MasterControlRuntimeSnapshot.Unavailable with
             {
+                IsAvailable = true,
                 RuntimeOwnershipKnown = true,
                 EffectiveOwner = MihomoCoreOwner.None,
             },

@@ -159,6 +159,13 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
     private static readonly TimeSpan CoreRefreshThrottle = TimeSpan.FromMinutes(1);
 
+    private static readonly string[] RuntimeSummaryTileIds =
+    [
+        "memory-usage", "profile-count", "subscription-count", "proxy-node-count", "rule-count",
+        "trigger-count", "system-log-count", "connection-records", "traffic-total", "traffic-snapshots",
+        "node-health-records",
+    ];
+
     /// <summary>Initializes a master control view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
     /// <param name="core">Core runtime provider. Must not be null.</param>
@@ -837,8 +844,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 return;
             }
 
-            _runtimeSnapshot = snapshot;
-            TransparentProxyStatusText = snapshot.RuntimeOwnershipKnown
+            _runtimeSnapshot = snapshot.IsAvailable ? snapshot : MasterControlRuntimeSnapshot.Unavailable;
+            TransparentProxyStatusText = snapshot.IsAvailable && snapshot.RuntimeOwnershipKnown
                 ? ResolveTransparentProxyStatus(snapshot.TunEffective, snapshot.TunRequested)
                 : _localization.GetString("Master.Status.Unavailable");
         }
@@ -847,6 +854,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 or InvalidOperationException
                 or IOException
                 or UnauthorizedAccessException
+                or TimeoutException
+                or OperationCanceledException
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
@@ -1068,9 +1077,11 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         SetTile("startup-conflict-check", FormatSwitch(_settings.StartupConflictCheckEnabled), string.Empty, _settings.StartupConflictCheckEnabled);
         SetTile("startup-guide", FormatSwitch(_settings.ShowStartupGuideOnStartup), string.Empty, _settings.ShowStartupGuideOnStartup);
         SetTile("mainland-feature-mode", GetMainlandChinaFeatureText(_settings.MainlandChinaFeatureMode), string.Empty);
-        SetTile("startup-restore-fallback", GetStartupRestoreFallbackStatusText(), CompactPath(_runtimeSnapshot.StartupRestoreFallback.CommandLine));
+        SetTile("startup-restore-fallback", GetStartupRestoreFallbackStatusText(),
+            _runtimeSnapshot.IsAvailable ? CompactPath(_runtimeSnapshot.StartupRestoreFallback.CommandLine) : string.Empty);
         SetTile("mihomo-service", GetMihomoServiceStatusText(), string.Empty);
-        SetTile("core-config-file", GetCoreConfigurationStatusText(), CompactPath(_runtimeSnapshot.CoreConfiguration.ConfigPath));
+        SetTile("core-config-file", GetCoreConfigurationStatusText(),
+            _runtimeSnapshot.IsAvailable ? CompactPath(_runtimeSnapshot.CoreConfiguration.ConfigPath) : string.Empty);
         SetTile("upload-rate", FormatBytesPerSecond(RuntimeTraffic.UploadBytesPerSecond), _localization.GetString("Master.Tile.Detail.TrafficTrend"));
         SetTile("download-rate", FormatBytesPerSecond(RuntimeTraffic.DownloadBytesPerSecond), _localization.GetString("Master.Tile.Detail.TrafficTrend"));
         RefreshTrafficHistory();
@@ -1083,11 +1094,27 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 _localization.GetString("Statistics.TotalTraffic.Format"),
                 FormatBytes(RuntimeTraffic.SessionUploadBytes),
                 FormatBytes(RuntimeTraffic.SessionDownloadBytes)));
+        RefreshRuntimeSummaryTiles();
+        RefreshHeroStatusValues();
+    }
+
+    private void RefreshRuntimeSummaryTiles()
+    {
+        if (!_runtimeSnapshot.IsAvailable)
+        {
+            string unavailable = _localization.GetString("Master.Status.Unavailable");
+            foreach (string id in RuntimeSummaryTileIds) { SetTile(id, unavailable, string.Empty); }
+            return;
+        }
+
         SetTile("memory-usage", FormatBytes(_runtimeSnapshot.AppWorkingSetBytes), _localization.GetString("Master.Tile.Detail.AppProcess"));
         SetTile("profile-count", FormatNumber(_runtimeSnapshot.ProfileCount), GetActiveProfileDisplayName());
         SetTile("subscription-count", FormatNumber(_runtimeSnapshot.SubscriptionCount), string.Empty);
-        SetTile("proxy-node-count", FormatNumber(_runtimeSnapshot.ProxyNodeCount), string.Empty);
-        SetTile("rule-count", FormatNumber(_runtimeSnapshot.RuleCount), string.Empty);
+        bool currentProfile = StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId);
+        SetTile("proxy-node-count", currentProfile ? FormatNumber(_runtimeSnapshot.ProxyNodeCount)
+            : _localization.GetString("Master.Status.Unavailable"), string.Empty);
+        SetTile("rule-count", currentProfile ? FormatNumber(_runtimeSnapshot.RuleCount)
+            : _localization.GetString("Master.Status.Unavailable"), string.Empty);
         SetTile("trigger-count", FormatEnabledCount(_runtimeSnapshot.EnabledTriggerTaskCount, _runtimeSnapshot.TriggerTaskCount), FormatSwitch(_settings.TriggersEnabled));
         string logDatabaseSize = string.Format(CultureInfo.CurrentCulture,
             _localization.GetString("Master.Tile.Detail.SharedLogDatabase.Format"),
@@ -1107,13 +1134,21 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             string.Format(CultureInfo.CurrentCulture,
                 _localization.GetString("Master.Tile.Detail.NodeTrafficRecords.Format"),
                 FormatNumber(_runtimeSnapshot.Traffic.NodeCount)));
-        RefreshHeroStatusValues();
     }
 
     private void RefreshSubscriptionTiles()
     {
         bool current = StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId);
-        ProfileSubscriptionLink? subscription = current ? _runtimeSnapshot.ActiveSubscription : null;
+        if (!_runtimeSnapshot.IsAvailable || !current)
+        {
+            string unavailable = _localization.GetString("Master.Status.Unavailable");
+            SetTile("subscription-usage", unavailable, string.Empty);
+            SetTile("subscription-expiry", unavailable, string.Empty);
+            SetTile("profile-updated", unavailable, string.Empty);
+            return;
+        }
+
+        ProfileSubscriptionLink? subscription = _runtimeSnapshot.ActiveSubscription;
         string missing = _localization.GetString(subscription is null ? "Master.Subscription.Local" : "Links.Metadata.NotProvided");
         SubscriptionUsage? usage = subscription?.Usage;
         string used = usage is { UploadBytes: >= 0, DownloadBytes: >= 0 }
@@ -1155,7 +1190,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         }
         SetTile("subscription-usage", subscription is null ? missing : $"{used} / {quota}", usageDetail);
         SetTile("subscription-expiry", expiry, expiryDetail);
-        string updated = current && _runtimeSnapshot.ActiveProfileUpdatedAt is DateTimeOffset date && date > DateTimeOffset.UnixEpoch
+        string updated = _runtimeSnapshot.ActiveProfileUpdatedAt is DateTimeOffset date && date > DateTimeOffset.UnixEpoch
             ? date.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : _localization.GetString("Links.Metadata.NotProvided");
         string schedule = subscription is ProfileSubscriptionLink link
             ? link.IsEnabled
@@ -1235,7 +1270,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             MasterHeroStatusItemKind.Latency => LatencySummaryText,
             MasterHeroStatusItemKind.UploadRate => FormatBytesPerSecond(RuntimeTraffic.UploadBytesPerSecond),
             MasterHeroStatusItemKind.DownloadRate => FormatBytesPerSecond(RuntimeTraffic.DownloadBytesPerSecond),
-            MasterHeroStatusItemKind.TotalTraffic => FormatBytes((decimal)_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes),
+            MasterHeroStatusItemKind.TotalTraffic => _runtimeSnapshot.IsAvailable
+                ? FormatBytes((decimal)_runtimeSnapshot.Traffic.TotalUploadBytes + _runtimeSnapshot.Traffic.TotalDownloadBytes)
+                : _localization.GetString("Master.Status.Unavailable"),
             MasterHeroStatusItemKind.ActiveConnections => FormatNumber(RuntimeTraffic.ActiveConnectionCount),
             MasterHeroStatusItemKind.CurrentMode => GetModeTitle(SelectedMode),
             MasterHeroStatusItemKind.ActiveProfile => GetActiveProfileDisplayName(),
@@ -1477,6 +1514,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
     private string GetStartupRestoreFallbackStatusText()
     {
+        if (!_runtimeSnapshot.IsAvailable) { return _localization.GetString("Master.Status.Unavailable"); }
         return _runtimeSnapshot.StartupRestoreFallback.IsRegistered
             ? _localization.GetString("Settings.StartupRestoreFallback.Status.Registered")
             : _localization.GetString("Settings.StartupRestoreFallback.Status.NotRegistered");
@@ -1503,6 +1541,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
     private string GetCoreConfigurationStatusText()
     {
+        if (!_runtimeSnapshot.IsAvailable) { return _localization.GetString("Master.Status.Unavailable"); }
         return _runtimeSnapshot.CoreConfiguration.Exists
             ? _localization.GetString("ProfileCatalog.Status.Available")
             : _localization.GetString("Settings.ProxyInformation.CoreBinary.Missing");
