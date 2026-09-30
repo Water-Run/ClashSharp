@@ -191,8 +191,11 @@ public sealed partial class ProductionDataGenerationTests
 
     private sealed partial class Fixture
     {
-        public IStartupStep CreateStartupStep(RuntimeLifetimeRegistry lifetime, SamplingFacade sampling, SettingsService settings) =>
-            new StartupSequence(CreateDataOpenStep(lifetime, sampling, settings));
+        public IStartupStep CreateStartupStep(RuntimeLifetimeRegistry lifetime, SamplingFacade sampling, SettingsService settings)
+        {
+            StartupStep data = CreateDataOpenStep(lifetime, sampling, settings);
+            return new StartupSequence(new ClashSharpUi::ClashSharp.Hosting.Startup.GenerationRecoveryDataStartupStep(_directory.Store, data), data);
+        }
 
         public StartupStep CreateDataOpenStep(RuntimeLifetimeRegistry lifetime, SamplingFacade sampling, SettingsService settings) =>
             new(_bootstrap, Manager, Admission, lifetime, sampling, Authority, settings,
@@ -200,13 +203,15 @@ public sealed partial class ProductionDataGenerationTests
                     new ClashSharpUi::ClashSharp.Hosting.Data.FileGenerationReplacementJournal(_directory.RootPath), _directory.Store, Manager, Admission));
     }
 
-    private sealed class StartupSequence(StartupStep data) : IStartupStep
+    private sealed class StartupSequence(IStartupStep recoveryData, StartupStep data) : IStartupStep
     {
         public string Name => data.Name;
         public int Order => data.Order;
 
         public async Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
         {
+            StartupStepResult recovery = await recoveryData.ExecuteAsync(request, cancellationToken);
+            if (recovery.Outcome is StartupStepOutcome.Fatal or StartupStepOutcome.ExitRequested) { return recovery; }
             StartupStepResult opened = await data.ExecuteAsync(request, cancellationToken);
             if (opened.Outcome is StartupStepOutcome.Fatal or StartupStepOutcome.ExitRequested) { return opened; }
             ClashSharpUi::ClashSharp.Hosting.Startup.StartupConflictSnapshot conflicts = new();

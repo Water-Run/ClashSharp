@@ -47,18 +47,7 @@ internal sealed class DataGenerationStartupStep(
                 return StartupStepResult.Fatal("data-generation.recovery_required");
             }
             _ = await bootstrap.InitializeAdmittedAsync(lease, cancellationToken).ConfigureAwait(false);
-            settings.BindAuthority(authority);
-            if (!_registered)
-            {
-                // Registration follows successful initialization and precedes every producer start.
-                // Early startup cleanup therefore never resolves a generation that does not exist.
-                lifetime.RegisterParticipant(new GenerationRuntimeParticipant("trigger-scheduler", generations,
-                    runtime => runtime.TriggerSettings.Scheduler), order: 100);
-                lifetime.RegisterParticipant(sampling, order: 200);
-                lifetime.RegisterParticipant(new GenerationRuntimeParticipant("profile-subscription-updates", generations,
-                    runtime => runtime.Subscriptions), order: 300);
-                _registered = true;
-            }
+            BindOpenedData();
             try
             {
                 _checkpoint = await replacementRecovery.PrepareAdmittedAsync(lease, cancellationToken).ConfigureAwait(false);
@@ -75,6 +64,38 @@ internal sealed class DataGenerationStartupStep(
         }
         _opened = result.Outcome is StartupStepOutcome.Succeeded or StartupStepOutcome.Warning;
         return result;
+    }
+
+    /// <summary>Opens existing repositories for journal and login-helper recovery without applying startup settings.</summary>
+    public async Task<StartupStepResult> PrepareRecoveryDataAsync(DataGenerationManifestSnapshot? expected, CancellationToken cancellationToken)
+    {
+        await using MutationAdmissionLease lease = await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await replacementRecovery.ValidateBeforeBootstrapAdmittedAsync(lease, cancellationToken).ConfigureAwait(false);
+            if (expected is null) { return StartupStepResult.Succeeded(); }
+            _ = await bootstrap.OpenExistingAdmittedAsync(expected, lease, cancellationToken).ConfigureAwait(false);
+            BindOpenedData();
+            return StartupStepResult.Succeeded();
+        }
+        catch (Exception failure)
+        {
+            await lease.RetainRecoveryOnlyAsync().ConfigureAwait(false);
+            if (ExceptionGraphClassifier.IsProcessFatal(failure) || ExceptionGraphClassifier.IsCallerCancellation(failure, cancellationToken)) { throw; }
+            return StartupStepResult.Fatal("data-generation.recovery_required");
+        }
+    }
+
+    private void BindOpenedData()
+    {
+        settings.BindAuthority(authority);
+        if (_registered) { return; }
+        lifetime.RegisterParticipant(new GenerationRuntimeParticipant("trigger-scheduler", generations,
+            runtime => runtime.TriggerSettings.Scheduler), order: 100);
+        lifetime.RegisterParticipant(sampling, order: 200);
+        lifetime.RegisterParticipant(new GenerationRuntimeParticipant("profile-subscription-updates", generations,
+            runtime => runtime.Subscriptions), order: 300);
+        _registered = true;
     }
 
     /// <summary>Applies the startup policy after its conflict snapshot, then publishes the complete runtime.</summary>

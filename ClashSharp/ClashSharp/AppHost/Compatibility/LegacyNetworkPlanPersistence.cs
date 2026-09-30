@@ -10,7 +10,7 @@ namespace ClashSharp.Hosting.Compatibility;
 /// <summary>Serializes the exact legacy rollback material retained by the durable mutation journal.</summary>
 internal static class LegacyNetworkPlanPersistence
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     public static string Serialize(
@@ -23,7 +23,8 @@ internal static class LegacyNetworkPlanPersistence
         string desiredProxyServer,
         ClashSharpMode durableBaselineMode,
         bool durableBaselineTransparentProxyEnabled,
-        int durableBaselineMixedPort)
+        int durableBaselineMixedPort,
+        Guid? dataGenerationId = null)
     {
         PersistedNetworkPlan persisted = new(
             SchemaVersion,
@@ -36,7 +37,8 @@ internal static class LegacyNetworkPlanPersistence
             desiredProxyServer,
             durableBaselineMode,
             durableBaselineTransparentProxyEnabled,
-            durableBaselineMixedPort);
+            durableBaselineMixedPort,
+            dataGenerationId);
         return JsonSerializer.Serialize(persisted, SerializerOptions);
     }
 
@@ -47,7 +49,9 @@ internal static class LegacyNetworkPlanPersistence
             compensationData,
             SerializerOptions)
             ?? throw new InvalidOperationException("The network recovery payload is empty.");
-        if (persisted.SchemaVersion != SchemaVersion
+        if (persisted.SchemaVersion is not (1 or SchemaVersion)
+            || persisted.DataGenerationId == Guid.Empty
+            || persisted.SchemaVersion == 1 && persisted.DataGenerationId is not null
             || persisted.Intent is null
             || persisted.Baseline is null
             || persisted.Desired is null
@@ -58,6 +62,16 @@ internal static class LegacyNetworkPlanPersistence
         }
 
         return persisted;
+    }
+
+    /// <summary>Refuses replay across data directories, including legacy payloads after managed storage is bound.</summary>
+    public static void RequireDataGeneration(PersistedNetworkPlan persisted, Guid? currentGenerationId)
+    {
+        ArgumentNullException.ThrowIfNull(persisted);
+        if (persisted.DataGenerationId != currentGenerationId)
+        {
+            throw new InvalidOperationException("The retained network operation belongs to a different data directory.");
+        }
     }
 
     public static PersistedNetworkPlan Restore(MutationJournal journal)
@@ -89,7 +103,8 @@ internal static class LegacyNetworkPlanPersistence
         string DesiredProxyServer,
         ClashSharpMode DurableBaselineMode,
         bool? DurableBaselineTransparentProxyEnabled = null,
-        int? DurableBaselineMixedPort = null)
+        int? DurableBaselineMixedPort = null,
+        Guid? DataGenerationId = null)
     {
         public NetworkPlan ToPlan(string compensationData)
         {

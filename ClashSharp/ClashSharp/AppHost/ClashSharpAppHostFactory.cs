@@ -243,6 +243,7 @@ internal static class ClashSharpAppHostFactory
                     provider.GetRequiredService<MutationAdmissionBarrier>()));
             services.AddDeferredStartupStep<InstallerTransactionStartupGate>("installer-transaction-gate", 125);
             services.AddDeferredStartupStep<ControllerCredentialStartupStep>("controller-credential", 140);
+            services.AddDeferredStartupStep<GenerationRecoveryDataStartupStep>("recovery-data-generation", 142);
             services.AddDeferredStartupStep<RuntimeShutdownOwnershipStartupStep>("runtime-shutdown-ownership", 145);
             services.AddDeferredStartupStep<MutationRecoveryStartupStep>("mutation-recovery", 150);
             services.AddDeferredStartupStep<StartupRestoreFallbackStep>("startup-restore-fallback", 200);

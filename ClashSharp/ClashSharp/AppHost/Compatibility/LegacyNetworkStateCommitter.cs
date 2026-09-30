@@ -16,6 +16,7 @@ internal sealed class LegacyNetworkStateCommitter(AppSettingsService settings) :
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        RequireDataGeneration(plan);
         if (plan.Intent.Kind == NetworkIntentKind.ModeTransition)
         {
             settings.WriteAdmitted(admissionLease, editor =>
@@ -35,6 +36,7 @@ internal sealed class LegacyNetworkStateCommitter(AppSettingsService settings) :
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        RequireDataGeneration(plan);
         if (plan.Intent.Kind == NetworkIntentKind.ModeTransition)
         {
             LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted =
@@ -55,6 +57,7 @@ internal sealed class LegacyNetworkStateCommitter(AppSettingsService settings) :
     public Task VerifyDesiredAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        RequireDataGeneration(plan);
         if (plan.Intent.Kind == NetworkIntentKind.ModeTransition
             && (settings.CurrentMode != plan.Intent.Mode
                 || settings.TransparentProxyEnabled != plan.Intent.TransparentProxyEnabled
@@ -69,6 +72,7 @@ internal sealed class LegacyNetworkStateCommitter(AppSettingsService settings) :
     public Task VerifyBaselineAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        RequireDataGeneration(plan);
         if (plan.Intent.Kind == NetworkIntentKind.ModeTransition)
         {
             LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted =
@@ -86,5 +90,15 @@ internal sealed class LegacyNetworkStateCommitter(AppSettingsService settings) :
         }
 
         return Task.CompletedTask;
+    }
+
+    private void RequireDataGeneration(NetworkPlan plan)
+    {
+        var persisted = LegacyNetworkPlanPersistence.Deserialize(plan.CompensationData);
+        LegacyNetworkPlanPersistence.RequireDataGeneration(persisted, settings.GetBoundDataGenerationId());
+        if (persisted.DataGenerationId is not null && plan.Intent.Kind == NetworkIntentKind.ModeTransition)
+        {
+            throw new InvalidOperationException("Managed mode preferences cannot be written through legacy recovery.");
+        }
     }
 }

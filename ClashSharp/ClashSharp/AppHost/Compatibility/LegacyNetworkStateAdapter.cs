@@ -47,6 +47,11 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     public async Task<NetworkPlan> PlanAsync(NetworkIntent intent, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        Guid? dataGenerationId = _settings.GetBoundDataGenerationId();
+        if (dataGenerationId is not null && intent.Kind == NetworkIntentKind.ModeTransition)
+        {
+            throw new InvalidOperationException("Managed mode changes must use the settings authority.");
+        }
         MihomoServiceStatus serviceStatus = await _mihomoService
             .GetStatusAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -66,7 +71,8 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             observed.Snapshot.StateHash,
             _settings.CurrentMode,
             _settings.TransparentProxyEnabled,
-            _settings.MixedPort);
+            _settings.MixedPort,
+            dataGenerationId);
         string desiredHash = ComputeAggregateHash(
             desired.StateHash,
             intent.Kind == NetworkIntentKind.ModeTransition ? intent.Mode : _settings.CurrentMode,
@@ -75,7 +81,8 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
                 : _settings.TransparentProxyEnabled,
             intent.Kind == NetworkIntentKind.ModeTransition
                 ? intent.MixedPort
-                : _settings.MixedPort);
+                : _settings.MixedPort,
+            dataGenerationId);
         string compensationData = LegacyNetworkPlanPersistence.Serialize(
             intent,
             observed.Snapshot,
@@ -86,7 +93,12 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             desiredProxyServer,
             _settings.CurrentMode,
             _settings.TransparentProxyEnabled,
-            _settings.MixedPort);
+            _settings.MixedPort,
+            dataGenerationId);
+        if (_settings.GetBoundDataGenerationId() != dataGenerationId)
+        {
+            throw new InvalidOperationException("The data directory changed while planning network maintenance.");
+        }
         return new NetworkPlan(
             intent,
             observed.Snapshot,
@@ -109,6 +121,8 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     {
         cancellationToken.ThrowIfCancellationRequested();
         LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted = LegacyNetworkPlanPersistence.Restore(journal);
+        LegacyNetworkPlanPersistence.RequireDataGeneration(persisted, _settings.GetBoundDataGenerationId());
+        RejectManagedModeTransition(persisted);
         string compensationData = journal.Steps.Single(
             static step => string.Equals(step.Name, "network-state", StringComparison.Ordinal)).CompensationData!;
         return Task.FromResult(persisted.ToPlan(compensationData));
@@ -117,6 +131,7 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     public async Task ValidateAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var persisted = RequirePlanDataGeneration(plan);
         MihomoServiceStatus serviceStatus = await _mihomoService
             .GetStatusAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -125,7 +140,8 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
             current.Snapshot.StateHash,
             _settings.CurrentMode,
             _settings.TransparentProxyEnabled,
-            _settings.MixedPort);
+            _settings.MixedPort,
+            persisted.DataGenerationId);
         if (!current.Snapshot.IsKnown)
         {
             throw CreateServiceObservationFailure(
@@ -158,11 +174,14 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     public Task StageAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _ = RequirePlanDataGeneration(plan);
         return Task.CompletedTask;
     }
 
     public async Task ApplyAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        _ = RequirePlanDataGeneration(plan);
         switch (plan.Intent.Kind)
         {
             case NetworkIntentKind.ModeTransition:
@@ -185,6 +204,7 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     public async Task<NetworkStateSnapshot> ProbeAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _ = RequirePlanDataGeneration(plan);
         MihomoServiceStatus serviceStatus = await _mihomoService
             .GetStatusAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -224,6 +244,7 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
 
     public async Task CompensateAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
+        _ = RequirePlanDataGeneration(plan);
         LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted =
             LegacyNetworkPlanPersistence.Deserialize(plan.CompensationData);
         if (plan.Intent.Kind is not (NetworkIntentKind.StartupProxyRecovery
@@ -255,12 +276,14 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
     public Task ActivateAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _ = RequirePlanDataGeneration(plan);
         return Task.CompletedTask;
     }
 
     public Task CleanupAsync(NetworkPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _ = RequirePlanDataGeneration(plan);
         return Task.CompletedTask;
     }
 
@@ -461,14 +484,32 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
         string externalHash,
         ClashSharpMode durableMode,
         bool transparentProxyEnabled,
-        int mixedPort)
+        int mixedPort,
+        Guid? dataGenerationId)
     {
-        return ComputeHash(string.Join(
+        string state = string.Join(
             "|",
             externalHash,
             ((int)durableMode).ToString(CultureInfo.InvariantCulture),
             transparentProxyEnabled ? "1" : "0",
-            mixedPort.ToString(CultureInfo.InvariantCulture)));
+            mixedPort.ToString(CultureInfo.InvariantCulture));
+        return ComputeHash(dataGenerationId is { } id ? state + "|data-generation:" + id.ToString("N") : state);
+    }
+
+    private LegacyNetworkPlanPersistence.PersistedNetworkPlan RequirePlanDataGeneration(NetworkPlan plan)
+    {
+        var persisted = LegacyNetworkPlanPersistence.Deserialize(plan.CompensationData);
+        LegacyNetworkPlanPersistence.RequireDataGeneration(persisted, _settings.GetBoundDataGenerationId());
+        RejectManagedModeTransition(persisted);
+        return persisted;
+    }
+
+    private static void RejectManagedModeTransition(LegacyNetworkPlanPersistence.PersistedNetworkPlan persisted)
+    {
+        if (persisted.DataGenerationId is not null && persisted.Intent.Kind == NetworkIntentKind.ModeTransition)
+        {
+            throw new InvalidOperationException("A managed mode change cannot replay through the legacy settings writer.");
+        }
     }
 
     private static string ComputeHash(string value)

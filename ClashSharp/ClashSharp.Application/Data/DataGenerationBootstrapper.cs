@@ -33,8 +33,20 @@ public sealed class DataGenerationBootstrapper
     /// <remarks>Cancellation cannot abandon manifest outcome resolution after a promotion was attempted.</remarks>
     /// <param name="admissionLease">Caller-owned exclusive startup lease covering this operation and later reconciliation.</param>
     /// <param name="cancellationToken">Cancels work before publication begins.</param>
-    public async Task<DataGenerationManifestSnapshot> InitializeAdmittedAsync(
+    public Task<DataGenerationManifestSnapshot> InitializeAdmittedAsync(
+        MutationAdmissionLease admissionLease, CancellationToken cancellationToken) =>
+        InitializeCoreAsync(admissionLease, null, cancellationToken);
+
+    /// <summary>Opens exactly one existing pointer without allocating or migrating when it disappears or changes.</summary>
+    public Task<DataGenerationManifestSnapshot> OpenExistingAdmittedAsync(DataGenerationManifestSnapshot expected,
         MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        return InitializeCoreAsync(admissionLease, expected, cancellationToken);
+    }
+
+    private async Task<DataGenerationManifestSnapshot> InitializeCoreAsync(MutationAdmissionLease admissionLease,
+        DataGenerationManifestSnapshot? requiredExisting, CancellationToken cancellationToken)
     {
         _admission.EnsureActiveExclusiveLease(admissionLease);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -42,8 +54,13 @@ public sealed class DataGenerationBootstrapper
         try
         {
             _admission.EnsureActiveExclusiveLease(admissionLease);
-            if (_initialized) { return _manager.CurrentManifest; }
+            if (_initialized)
+            {
+                RequireExpectedManifest(requiredExisting, _manager.CurrentManifest);
+                return _manager.CurrentManifest;
+            }
             DataGenerationManifestSnapshot? manifest = await _store.LoadCurrentAsync(cancellationToken).ConfigureAwait(false);
+            RequireExpectedManifest(requiredExisting, manifest);
             if (manifest is null)
             {
                 ownedScope = await _factory.CreateInitialAsync(admissionLease, cancellationToken).ConfigureAwait(false);
@@ -67,6 +84,10 @@ public sealed class DataGenerationBootstrapper
             }
 
             ownedScope ??= await _factory.OpenAsync(manifest.Descriptor, admissionLease, cancellationToken).ConfigureAwait(false);
+            if (requiredExisting is not null)
+            {
+                RequireExpectedManifest(requiredExisting, await _store.LoadCurrentAsync(cancellationToken).ConfigureAwait(false));
+            }
             _admission.EnsureActiveExclusiveLease(admissionLease);
             _manager.Initialize(manifest, ownedScope);
             ownedScope = null; // Manager now owns retirement and disposal.
@@ -88,6 +109,15 @@ public sealed class DataGenerationBootstrapper
         finally
         {
             _gate.Release();
+        }
+    }
+
+    private static void RequireExpectedManifest(DataGenerationManifestSnapshot? expected, DataGenerationManifestSnapshot? current)
+    {
+        if (expected is not null && (current is null || expected.ContentHash != current.ContentHash
+            || !expected.Descriptor.IsSameGeneration(current.Descriptor)))
+        {
+            throw new InvalidOperationException("The existing data pointer changed before startup recovery could own it.");
         }
     }
 

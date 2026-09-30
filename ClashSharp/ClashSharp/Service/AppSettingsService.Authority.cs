@@ -14,6 +14,9 @@ public sealed partial class AppSettingsService
     private GenerationSettingsAuthority? _authority;
     private SettingsAuthoritySnapshot? _publishedAuthority;
 
+    /// <summary>Identifies the current bound data namespace; an unavailable bound owner is never treated as legacy storage.</summary>
+    internal Guid? GetBoundDataGenerationId() => Volatile.Read(ref _authority)?.CaptureSnapshot().Generation.GenerationId;
+
     /// <summary>Ends legacy writes and binds existing read-only consumers to the verified process authority.</summary>
     internal void BindAuthority(GenerationSettingsAuthority authority)
     {
