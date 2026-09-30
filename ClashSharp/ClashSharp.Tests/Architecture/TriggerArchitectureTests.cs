@@ -21,7 +21,7 @@ public sealed class TriggerArchitectureTests
 
         Assert.Equal(
             [
-                "ClashSharp/ClashSharp.Infrastructure/Data/LegacyDataGenerationPreparer.cs",
+                "ClashSharp/ClashSharp.Infrastructure/Data/UserDataRepositorySnapshot.cs",
                 "ClashSharp/ClashSharp.Infrastructure/Triggers/TriggerMigrationCoordinator.cs",
                 "ClashSharp/ClashSharp.TriggerProbe/Program.cs",
                 "ClashSharp/ClashSharp/AppHost/Data/AppDataGenerationRepositories.cs",

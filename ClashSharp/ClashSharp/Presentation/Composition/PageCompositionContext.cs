@@ -12,7 +12,7 @@ namespace ClashSharp.Presentation.Composition;
 internal sealed record PageCompositionContext(
     AppSettingsService Settings,
     LocalizationService Localization,
-    ClashDataPackageService DataPackages,
+    IDataPackageExporter DataPackages,
     ILogStorage LogStorage,
     IProfileCatalog Profiles,
     MihomoConnectionService MihomoConnections,

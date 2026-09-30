@@ -183,7 +183,7 @@ internal sealed class SettingsPageOperations(
     AppSettingsService settings,
     LocalizationService localization,
     ILogStorage logStorage,
-    ClashDataPackageService dataPackages,
+    IDataPackageExporter dataPackages,
     SettingsRuntimeMutationAdapter runtimeMutations,
     ApplicationLifecycleService applicationLifecycle,
     IProfileCatalog profiles,
@@ -232,15 +232,17 @@ internal sealed class SettingsPageOperations(
         DataPackageExportScope scope,
         CancellationToken cancellationToken)
     {
-        return exports.ExecuteAsync(token => scope switch
+        return exports.ExecuteAsync((lease, token) => scope switch
         {
-            DataPackageExportScope.Settings => dataPackages.ExportAsync(
+            DataPackageExportScope.Settings => dataPackages.ExportAdmittedAsync(
                 destinationPath,
                 ClashDataPackageScope.Settings,
+                lease,
                 token),
-            DataPackageExportScope.SettingsAndProxyConfiguration => dataPackages.ExportAsync(
+            DataPackageExportScope.SettingsAndProxyConfiguration => dataPackages.ExportAdmittedAsync(
                 destinationPath,
                 ClashDataPackageScope.SettingsAndProxyConfiguration,
+                lease,
                 token),
             DataPackageExportScope.SystemLogSqlite => ExportLogDatabaseAsync(
                 destinationPath,

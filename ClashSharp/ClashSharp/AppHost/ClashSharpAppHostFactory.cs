@@ -158,6 +158,8 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<ITriggerDefinitionStore, GenerationTriggerDefinitionStore>();
             services.AddSingleton<TriggerPresentationFactory>();
             services.AddSingleton<IDataGenerationStore>(_ => new FileDataGenerationStore(dataRoot.Value));
+            services.AddSingleton<IDataPackageExporter>(provider => new GenerationDataPackageExporter(
+                provider.GetRequiredService<DataGenerationManager>(), mutationAdmission, dataRoot.Value));
             services.AddSingleton<IDataGenerationBootstrapFactory>(provider =>
             {
                 AppGenerationUi ui = generationUi ?? throw new InvalidOperationException("The generation startup window is unavailable.");
@@ -197,6 +199,8 @@ internal static class ClashSharpAppHostFactory
                             new ProfileCatalogMutationCoordinator(mutationAdmission, provider.GetRequiredService<FairAsyncMutationGate>()))), runtime.ComposeAsync);
             });
             services.AddSingleton<DataGenerationBootstrapper>();
+            services.AddSingleton(provider => new GenerationDataCandidatePreparer(dataRoot.Value, mutationAdmission,
+                provider.GetRequiredService<IDataGenerationBootstrapFactory>()));
             services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
                     provider.GetRequiredService<MutationAdmissionBarrier>(),
                     provider.GetRequiredService<RuntimeLifetimeRegistry>(),

@@ -231,6 +231,7 @@ public sealed partial class ProductionDataGenerationTests
         public Func<Repositories, CancellationToken, Task>? ComposeRuntime { get; set; }
         public Func<ClashSharpUi::ClashSharp.Service.CoreConfigurationService, ClashSharpUi::ClashSharp.Service.ProxySelectionService>? CreateProxySelections { get; set; }
         public List<string> Calls { get; } = [];
+        public Dictionary<string, object?> LegacyValues { get; } = [];
         public List<Repositories> Containers { get; } = [];
         public List<Participant> Participants { get; } = [];
         public Func<Task>? Recover { get; set; }
@@ -282,7 +283,7 @@ public sealed partial class ProductionDataGenerationTests
         public Task<LegacySettingsSnapshot> ReadSnapshotAsync(CancellationToken cancellationToken)
         {
             Calls.Add("preferences");
-            return Task.FromResult(new LegacySettingsSnapshot(SettingsRegistry.Default, new Dictionary<string, object?>()));
+            return Task.FromResult(new LegacySettingsSnapshot(SettingsRegistry.Default, LegacyValues));
         }
 
         public ValueTask DisposeAsync() => Manager.DisposeAsync();

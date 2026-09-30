@@ -90,6 +90,7 @@
     <Compile Include="..\ClashSharp\Service\SettingsActionFailedException.cs" Link="Service\SettingsActionFailedException.cs" />
     <Compile Include="..\ClashSharp\Service\ApplicationLifecycleService.cs" Link="Service\ApplicationLifecycleService.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageService.cs" Link="Service\ClashDataPackageService.cs" />
+    <Compile Include="..\ClashSharp\Service\ClashDataPackageService.Read.cs" Link="Service\ClashDataPackageService.Read.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageService.Transaction.cs" Link="Service\ClashDataPackageService.Transaction.cs" />
     <Compile Include="..\ClashSharp\Service\ClashDataPackageServiceFactory.cs" Link="Service\ClashDataPackageServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\AppDataMaintenanceService.cs" Link="Service\AppDataMaintenanceService.cs" />
