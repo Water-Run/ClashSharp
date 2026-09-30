@@ -28,6 +28,16 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
     public SettingsAuthoritySnapshot CaptureSnapshot() => _generations.ReadSnapshot<SettingsGenerationContext, SettingsAuthoritySnapshot>(
         (context, generation) => new(generation, RequireSession(context, generation).Snapshot));
 
+    /// <summary>Publishes the verified current generation after an exclusive directory transaction, without rewriting preferences.</summary>
+    /// <param name="admissionLease">Exclusive ownership retained through notification.</param>
+    /// <param name="cancellationToken">Cancels waiting before publication starts.</param>
+    public Task<SettingsAuthorityResult> PublishCurrentAdmittedAsync(MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+    {
+        _admission.EnsureActiveExclusiveLease(admissionLease);
+        return ExecuteAdmittedAsync((context, _, _) => Task.FromResult(new SettingsAuthorityResult(
+            SettingsAuthorityStatus.Succeeded, context.Session.Snapshot)), admissionLease, cancellationToken);
+    }
+
     /// <inheritdoc />
     public Task<SettingsAuthorityResult> OpenAsync(CancellationToken cancellationToken) =>
         ExecuteOrdinaryAsync((context, lease, token) => context.Session.OpenAdmittedAsync(lease, token), cancellationToken);

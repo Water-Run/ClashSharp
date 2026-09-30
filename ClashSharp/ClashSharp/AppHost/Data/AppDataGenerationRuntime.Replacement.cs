@@ -73,4 +73,15 @@ internal sealed partial class AppDataGenerationRuntime
         }
         finally { _startupGate.Release(); }
     }
+
+    public bool HoldExecutionAdmitted(MutationAdmissionLease lease)
+    {
+        admission.EnsureActiveExclusiveLease(lease);
+        return publication.Hold();
+    }
+
+    public void RestoreExecutionPublication(bool wasPublished)
+    {
+        if (wasPublished) { PublishTriggerProcessing(); }
+    }
 }

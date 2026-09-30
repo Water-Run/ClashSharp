@@ -7,10 +7,12 @@ public sealed partial class DataGenerationTransition
     /// <summary>Promotes through the store and safely classifies any uncertain failure.</summary>
     /// <param name="store">Durable current-generation store.</param>
     /// <param name="cancellationToken">Cancels work only before the store commit boundary.</param>
+    /// <param name="retainCandidateOnFailure">Keeps a verified unpromoted candidate owned for external-effect compensation.</param>
     /// <returns>The verified promoted manifest.</returns>
     public async Task<DataGenerationManifestSnapshot> PromoteManifestAsync(
         IDataGenerationStore store,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool retainCandidateOnFailure = false)
     {
         ArgumentNullException.ThrowIfNull(store);
         cancellationToken.ThrowIfCancellationRequested();
@@ -57,6 +59,7 @@ public sealed partial class DataGenerationTransition
 
             if (IsExactBaseline(observed))
             {
+                if (retainCandidateOnFailure) { ExceptionDispatchInfo.Capture(failure).Throw(); }
                 try
                 {
                     await owner

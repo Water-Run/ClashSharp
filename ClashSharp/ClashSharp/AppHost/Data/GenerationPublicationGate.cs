@@ -7,5 +7,6 @@ internal sealed class GenerationPublicationGate
 {
     private int _published;
     public bool IsPublished => Volatile.Read(ref _published) != 0;
+    public bool Hold() => Interlocked.Exchange(ref _published, 0) != 0;
     public void Publish() => Interlocked.Exchange(ref _published, 1);
 }

@@ -52,6 +52,15 @@ public sealed class MutationAdmissionLease : IDisposable, IAsyncDisposable
         owner.CommitShutdown(this, _kind);
     }
 
+    /// <summary>Consumes this lease and atomically leaves ordinary mutations closed until explicit recovery succeeds.</summary>
+    public async Task RetainRecoveryOnlyAsync()
+    {
+        MutationAdmissionBarrier owner = _owner ?? throw new ObjectDisposedException(nameof(MutationAdmissionLease));
+        Task ready = owner.BeginRecoveryOnlyTransition(this);
+        Dispose();
+        await ready.ConfigureAwait(false);
+    }
+
     /// <summary>Completes the sole recovery attempt and atomically chooses open, retained, or shutdown admission.</summary>
     /// <param name="journalPresent">Whether a replay-capable journal remains durable.</param>
     /// <param name="verifiedSuccess">Whether recovery verified its permitted final state.</param>

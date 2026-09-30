@@ -20,6 +20,22 @@ internal sealed class GenerationDataCandidatePreparer(
 {
     private readonly DataGenerationPathPolicy _paths = new(applicationDataRoot);
 
+    public Task<DataPackageImportPlan> ReadImportAdmittedAsync(string packagePath, SettingsEnvelope baseline,
+        DataGenerationDescriptor source, MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+    {
+        admission.EnsureActiveExclusiveLease(admissionLease);
+        return Task.Run(() => new ClashDataPackageService(new DataPackageSettingsSnapshot(baseline), source.RootPath)
+            .ReadImportPlan(packagePath, cancellationToken), cancellationToken);
+    }
+
+    public Task<DataGenerationDescriptor> StagePlanAdmittedAsync(DataGenerationTransition transition, DataPackageImportPlan plan,
+        MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        return transition.PrepareAndStageAsync(async token => await Task.Run(() => PrepareAsync(transition, admissionLease,
+            (_, _, _) => plan, token), token).ConfigureAwait(false), cancellationToken);
+    }
+
     public Task<DataGenerationDescriptor> StageImportAdmittedAsync(DataGenerationTransition transition, string packagePath,
         MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
     {
