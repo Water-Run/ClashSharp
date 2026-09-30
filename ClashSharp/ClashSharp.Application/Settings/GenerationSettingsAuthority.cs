@@ -146,9 +146,14 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
         Func<SettingsGenerationContext, MutationAdmissionLease, CancellationToken, Task<SettingsAuthorityResult>> command,
         CancellationToken cancellationToken) => ExecuteConsumerAsync(command, drainProducers: false, cancellationToken);
 
+    private Task<SettingsAuthorityResult> ExecuteConsumerAsync(
+        Func<SettingsGenerationContext, MutationAdmissionLease, CancellationToken, Task<SettingsAuthorityResult>> command,
+        bool drainProducers, CancellationToken cancellationToken) =>
+        ExecuteConsumerAsync(command, drainProducers, null, cancellationToken);
+
     private async Task<SettingsAuthorityResult> ExecuteConsumerAsync(
         Func<SettingsGenerationContext, MutationAdmissionLease, CancellationToken, Task<SettingsAuthorityResult>> command,
-        bool drainProducers, CancellationToken cancellationToken)
+        bool drainProducers, Action<Exception>? onPublicationFailure, CancellationToken cancellationToken)
     {
         // A trigger evaluation can itself submit a settings command. Drain/revoke its ordinary
         // authority before taking the command gate, so quiescence never waits on that gate's owner.
@@ -157,12 +162,17 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
         await using MutationAdmissionLease lease = drainProducers
             ? await _admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken).ConfigureAwait(false)
             : await _admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
-        return await ExecuteAdmittedAsync(command, lease, cancellationToken).ConfigureAwait(false);
+        return await ExecuteAdmittedAsync(command, lease, onPublicationFailure, cancellationToken).ConfigureAwait(false);
     }
+
+    private Task<SettingsAuthorityResult> ExecuteAdmittedAsync(
+        Func<SettingsGenerationContext, MutationAdmissionLease, CancellationToken, Task<SettingsAuthorityResult>> command,
+        MutationAdmissionLease lease, CancellationToken cancellationToken) =>
+        ExecuteAdmittedAsync(command, lease, null, cancellationToken);
 
     private async Task<SettingsAuthorityResult> ExecuteAdmittedAsync(
         Func<SettingsGenerationContext, MutationAdmissionLease, CancellationToken, Task<SettingsAuthorityResult>> command,
-        MutationAdmissionLease lease, CancellationToken cancellationToken)
+        MutationAdmissionLease lease, Action<Exception>? onPublicationFailure, CancellationToken cancellationToken)
     {
         _admission.EnsureActiveLease(lease);
         using CancellationTokenSource waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.RevocationToken);
@@ -175,7 +185,14 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
             {
                 _ = RequireSession(context, generation);
                 SettingsAuthorityResult result = await command(context, lease, token).ConfigureAwait(false);
-                if (result.Envelope is not null) { PublishState(new SettingsAuthoritySnapshot(generation, result.Envelope)); }
+                if (result.Envelope is not null)
+                {
+                    try { PublishState(new SettingsAuthoritySnapshot(generation, result.Envelope)); }
+                    catch (Exception failure) when (onPublicationFailure is not null && !ExceptionGraphClassifier.IsProcessFatal(failure))
+                    {
+                        onPublicationFailure(failure);
+                    }
+                }
                 return result;
             }, waiting.Token).ConfigureAwait(false);
         }

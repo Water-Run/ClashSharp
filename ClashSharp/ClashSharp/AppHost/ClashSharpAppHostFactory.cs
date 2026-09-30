@@ -111,6 +111,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<GenerationSettingsAuthority>();
             services.AddSingleton<ISettingsAuthority>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
             services.AddSingleton<IRuntimeSettingsAuthority>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
+            services.AddSingleton<ISettingsRuntimeGroupReset>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
             services.AddSingleton<IControllerCredentialStore, WindowsControllerCredentialStore>();
             services.AddSingleton<ControllerCredentialService>();
             services.AddSingleton(_ => MihomoControllerCredentials.Instance);

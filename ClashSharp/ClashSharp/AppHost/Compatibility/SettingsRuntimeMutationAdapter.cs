@@ -2,11 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Mutations;
-using ClashSharp.Hosting.Settings;
 using ClashSharp.Model;
 using ClashSharp.Service;
-using ClashSharp.Settings;
-using ClashSharp.ViewModel;
 
 namespace ClashSharp.Hosting.Compatibility;
 
@@ -15,220 +12,22 @@ internal sealed class SettingsRuntimeMutationAdapter
 {
     private readonly IApplicationActionDispatcher _actions;
     private readonly ApplicationActionService _applicationActions;
-    private readonly AppSettingsService _settings;
-    private readonly ClashDataPackageService _dataPackages;
-    private readonly INetworkSettingsRuntime _networkRuntime;
 
-    public SettingsRuntimeMutationAdapter(
-        IApplicationActionDispatcher actions,
-        ApplicationActionService applicationActions,
-        AppSettingsService settings,
-        ClashDataPackageService dataPackages,
-        INetworkSettingsRuntime networkRuntime)
+    public SettingsRuntimeMutationAdapter(IApplicationActionDispatcher actions, ApplicationActionService applicationActions)
     {
         _actions = actions ?? throw new ArgumentNullException(nameof(actions));
-        _applicationActions = applicationActions
-            ?? throw new ArgumentNullException(nameof(applicationActions));
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _dataPackages = dataPackages ?? throw new ArgumentNullException(nameof(dataPackages));
-        _networkRuntime = networkRuntime ?? throw new ArgumentNullException(nameof(networkRuntime));
+        _applicationActions = applicationActions ?? throw new ArgumentNullException(nameof(applicationActions));
     }
 
     /// <summary>Applies startup registration through the tracked application action boundary.</summary>
-    public Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken)
-    {
-        return _actions.DispatchAsync(
-            ApplicationActionKind.SetLaunchAtStartup,
-            isEnabled.ToString(),
-            cancellationToken);
-    }
+    public Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken) =>
+        _actions.DispatchAsync(ApplicationActionKind.SetLaunchAtStartup, isEnabled.ToString(), cancellationToken);
 
     /// <summary>Applies the complete page choice through the shared sampling transaction.</summary>
-    public Task ApplyConnectionSamplingAsync(bool isEnabled, int intervalSeconds, CancellationToken cancellationToken)
-    {
-        return _applicationActions.ApplyConnectionSamplingSettingsAsync(
-            isEnabled,
-            intervalSeconds,
-            cancellationToken);
-    }
-
-    /// <summary>Drains ordinary runtime mutations before a settings import or full reset commit point.</summary>
-    public async ValueTask<ISettingsDestructiveRuntimeScope> BeginDestructiveMutationAsync(
-        CancellationToken cancellationToken)
-    {
-        MutationAdmissionLease lease = await _applicationActions
-            .BeginSettingsDestructiveMutationAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return new DestructiveRuntimeScope(
-            _applicationActions,
-            _dataPackages,
-            _settings,
-            _networkRuntime,
-            lease);
-    }
+    public Task ApplyConnectionSamplingAsync(bool isEnabled, int intervalSeconds, CancellationToken cancellationToken) =>
+        _applicationActions.ApplyConnectionSamplingSettingsAsync(isEnabled, intervalSeconds, cancellationToken);
 
     /// <summary>Applies requested TUN and mixed-port values as one verified runtime generation.</summary>
-    public async Task ApplyNetworkSettingsAsync(
-        bool transparentProxyEnabled,
-        int mixedPort,
-        CancellationToken cancellationToken)
-    {
-        _ = await _applicationActions
-            .ApplyNetworkSettingsAsync(
-                transparentProxyEnabled,
-                mixedPort,
-                cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    private sealed class DestructiveRuntimeScope(
-        ApplicationActionService actions,
-        ClashDataPackageService dataPackages,
-        AppSettingsService settings,
-        INetworkSettingsRuntime networkRuntime,
-        MutationAdmissionLease admissionLease) : ISettingsDestructiveRuntimeScope
-    {
-        private ApplicationActionService? _actions = actions;
-        private readonly ClashDataPackageService _dataPackages = dataPackages;
-        private readonly AppSettingsService _settings = settings;
-        private readonly INetworkSettingsRuntime _networkRuntime = networkRuntime;
-        private MutationAdmissionLease? _admissionLease = admissionLease;
-
-        public async Task<ISettingsDataPackageTransactionReceipt> BeginImportAsync(
-            string packagePath,
-            CancellationToken cancellationToken)
-        {
-            DataPackageTransactionReceipt receipt = await _dataPackages
-                .BeginImportAdmittedAsync(packagePath, GetLease(), cancellationToken)
-                .ConfigureAwait(false);
-            return new DataTransactionReceipt(receipt);
-        }
-
-        public ISettingsResetTransactionReceipt BeginResetSettings()
-        {
-            return new ResetTransactionReceipt(
-                _dataPackages.BeginResetSettingsAdmitted(GetLease()));
-        }
-
-        public ISettingsResetTransactionReceipt BeginResetStartupSettings()
-        {
-            return new ResetTransactionReceipt(
-                _dataPackages.BeginResetStartupSettingsAdmitted(GetLease()));
-        }
-
-        public ISettingsResetTransactionReceipt BeginResetNetworkSettings(
-            SettingsResetScope scope,
-            bool transparentProxyEnabled)
-        {
-            return new ResetTransactionReceipt(
-                _dataPackages.BeginResetNetworkSettingsAdmitted(GetLease(), scope, transparentProxyEnabled));
-        }
-
-        public Task RestoreDurableSettingsAsync(SettingsExternalDurableSnapshot snapshot, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _settings.WriteAdmitted(GetLease(), editor =>
-            {
-                editor.DisplayLanguage = snapshot.DisplayLanguage;
-                editor.AppThemeMode = snapshot.AppThemeMode;
-                editor.AppAccentColorMode = snapshot.AppAccentColorMode;
-                editor.AppAccentColorValue = snapshot.AppAccentColorValue;
-                editor.LaunchAtStartupEnabled = snapshot.LaunchAtStartupEnabled;
-                editor.ConnectionSamplingEnabled = snapshot.ConnectionSamplingEnabled;
-                editor.ConnectionSamplingIntervalSeconds = snapshot.ConnectionSamplingIntervalSeconds;
-                editor.CurrentMode = snapshot.CurrentMode;
-                editor.ActiveProfileId = snapshot.ActiveProfileId;
-                editor.TransparentProxyEnabled = snapshot.TransparentProxyEnabled;
-                editor.MixedPort = snapshot.MixedPort;
-            });
-            return Task.CompletedTask;
-        }
-
-        public Task ApplyLaunchAtStartupAsync(bool isEnabled, CancellationToken cancellationToken)
-        {
-            return GetActions().ApplyLaunchAtStartupAdmittedAsync(isEnabled, cancellationToken);
-        }
-
-        public Task RestartConnectionSamplingAsync(CancellationToken cancellationToken)
-        {
-            return GetActions().RestartConnectionSamplingAdmittedAsync(cancellationToken);
-        }
-
-        public async Task ApplyNetworkSettingsAsync(
-            bool transparentProxyEnabled,
-            int mixedPort,
-            CancellationToken cancellationToken)
-        {
-            _ = GetLease();
-            // The retained data transaction has already published the desired profile and
-            // settings. Observe the independently verified runtime, not those new preferences,
-            // when deciding whether the previous network generation is safe to replace.
-            await _networkRuntime.RecoverConfigurationAsync(cancellationToken).ConfigureAwait(false);
-            await _networkRuntime.ApplyConfigurationAsync(
-                new NetworkSettingsConfiguration(
-                    _settings.CurrentMode,
-                    _settings.ActiveProfileId,
-                    transparentProxyEnabled,
-                    mixedPort),
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            _actions = null;
-            MutationAdmissionLease? lease = Interlocked.Exchange(ref _admissionLease, null);
-            if (lease is not null)
-            {
-                await lease.DisposeAsync().ConfigureAwait(false);
-            }
-        }
-
-        private ApplicationActionService GetActions()
-        {
-            return _actions ?? throw new ObjectDisposedException(nameof(DestructiveRuntimeScope));
-        }
-
-        private MutationAdmissionLease GetLease()
-        {
-            return _admissionLease ?? throw new ObjectDisposedException(nameof(DestructiveRuntimeScope));
-        }
-    }
-
-    private sealed class DataTransactionReceipt(DataPackageTransactionReceipt receipt)
-        : ISettingsDataPackageTransactionReceipt
-    {
-        public Task CommitAsync(CancellationToken cancellationToken)
-        {
-            return receipt.CommitAsync(cancellationToken);
-        }
-
-        public Task RollbackAsync(CancellationToken cancellationToken)
-        {
-            return receipt.RollbackAsync(cancellationToken);
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return receipt.DisposeAsync();
-        }
-    }
-
-    private sealed class ResetTransactionReceipt(DataPackageTransactionReceipt receipt)
-        : ISettingsResetTransactionReceipt
-    {
-        public Task CommitAsync(CancellationToken cancellationToken)
-        {
-            return receipt.CommitAsync(cancellationToken);
-        }
-
-        public Task RollbackAsync(CancellationToken cancellationToken)
-        {
-            return receipt.RollbackAsync(cancellationToken);
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            return receipt.DisposeAsync();
-        }
-    }
+    public async Task ApplyNetworkSettingsAsync(bool transparentProxyEnabled, int mixedPort, CancellationToken cancellationToken) =>
+        _ = await _applicationActions.ApplyNetworkSettingsAsync(transparentProxyEnabled, mixedPort, cancellationToken).ConfigureAwait(false);
 }

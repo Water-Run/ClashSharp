@@ -40,4 +40,5 @@ internal sealed record PageCompositionContext(
     StartupGuideComposition StartupGuide,
     IApplicationErrorSink ErrorSink,
     SettingsExportCoordinator SettingsExports,
-    ISettingsDataReplacement DataReplacement);
+    ISettingsDataReplacement DataReplacement,
+    ISettingsRuntimeGroupReset RuntimeGroupReset);

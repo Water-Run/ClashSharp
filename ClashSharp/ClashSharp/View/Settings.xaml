@@ -29,7 +29,13 @@
                 Severity="Error"
                 IsClosable="False"
                 IsOpen="{Binding HasOperationError, Mode=OneWay}"
-                Visibility="{Binding HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                Visibility="{Binding HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <InfoBar.ActionButton>
+                    <Button Content="{Binding RetrySettingsResetText}"
+                            Click="RetryRuntimeSettingsReset_Click"
+                            Visibility="{Binding CanRetrySettingsReset, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </InfoBar.ActionButton>
+            </InfoBar>
 
             <InfoBar
                 Message="{Binding DataReplacementWarningText}"

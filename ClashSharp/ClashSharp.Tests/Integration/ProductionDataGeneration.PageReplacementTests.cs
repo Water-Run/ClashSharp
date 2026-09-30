@@ -14,6 +14,46 @@ namespace ClashSharp.Tests.Integration;
 
 public sealed partial class ProductionDataGenerationTests
 {
+    [Theory]
+    [InlineData(SettingsResetScope.Startup)]
+    [InlineData(SettingsResetScope.Proxy)]
+    [InlineData(SettingsResetScope.TransparentProxy)]
+    public async Task ProductionRuntimeGroupReset_UsesOwnedRuntimeAndKeepsTheCurrentDataDirectory(SettingsResetScope scope)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        fixture.LegacyValues[SettingsRegistry.Keys.LaunchAtStartupEnabled.Value] = true;
+        fixture.LegacyValues[SettingsRegistry.Keys.MixedPort.Value] = 23456;
+        fixture.LegacyValues[SettingsRegistry.Keys.TransparentProxyEnabled.Value] = false;
+        fixture.LegacyValues[SettingsRegistry.Keys.ConnectionSamplingEnabled.Value] = false;
+        fixture.LegacyValues[SettingsRegistry.Keys.ConnectionSamplingIntervalSeconds.Value] = 90;
+        var legacy = fixture.LegacyValues.OrderBy(pair => pair.Key).ToArray();
+        NetworkSurface network = new();
+        var settings = await StartReplacementFixtureAsync(fixture, network);
+        var manifest = fixture.Manager.CurrentManifest;
+
+        var result = await fixture.Authority.ResetRuntimeGroupAsync(scope, true, CancellationToken.None);
+
+        Assert.True(result.Outcome.IsSucceeded, result.Outcome.Code);
+        Assert.Equal(manifest, fixture.Manager.CurrentManifest);
+        Assert.Equal(legacy, fixture.LegacyValues.OrderBy(pair => pair.Key).ToArray());
+        Assert.Equal(scope == SettingsResetScope.Proxy ? 10000 : 23456, settings.MixedPort);
+        Assert.Equal(scope != SettingsResetScope.Startup, settings.LaunchAtStartupEnabled);
+        Assert.Equal(scope != SettingsResetScope.Startup, settings.TransparentProxyEnabled);
+        Assert.Equal(scope == SettingsResetScope.Proxy, settings.ConnectionSamplingEnabled);
+        Assert.Equal(scope == SettingsResetScope.Proxy ? 30 : 90, settings.ConnectionSamplingIntervalSeconds);
+        Assert.All(SettingsRegistry.Default.GetResetDefinitions(scope), definition =>
+        {
+            Assert.Equal(definition.DefaultValue, result.Outcome.Envelope!.Desired[definition.Key].Value);
+            Assert.Equal(SettingAppliedStateKind.Verified, result.Outcome.Envelope.Applied[definition.Key].Kind);
+        });
+        await using var lease = await fixture.Admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, CancellationToken.None);
+        var actual = await RuntimeOf(fixture).ExternalState.CaptureAdmittedAsync(lease, CancellationToken.None);
+        Assert.Equal(settings.LaunchAtStartupEnabled, actual.StartupEnabled);
+        Assert.Equal(settings.MixedPort, actual.Network.MixedPort);
+        Assert.Equal(settings.TransparentProxyEnabled, actual.Network.TransparentProxyEnabled);
+    }
+
     [Fact]
     public async Task PageImport_ReachesOwnedReplacementAndPublishesTheNewSettings()
     {

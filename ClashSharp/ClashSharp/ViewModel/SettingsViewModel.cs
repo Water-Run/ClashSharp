@@ -377,7 +377,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             beginDestructiveRuntimeMutationAsync = null,
         Func<ISettingsResetTransactionReceipt>? beginResetSettings = null,
         Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null,
-        Func<CancellationToken, Task<SettingsDataReplacementResult>>? replaceAllSettingsAsync = null)
+        Func<CancellationToken, Task<SettingsDataReplacementResult>>? replaceAllSettingsAsync = null,
+        ISettingsRuntimeGroupReset? runtimeGroupReset = null,
+        Action? requireSettingsRestart = null)
         : this(
             settings,
             applyLanguage,
@@ -411,7 +413,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
             beginDestructiveRuntimeMutationAsync,
             beginResetSettings,
             isDisplayLanguageRestartPending,
-            replaceAllSettingsAsync)
+            replaceAllSettingsAsync,
+            runtimeGroupReset,
+            requireSettingsRestart)
     {
     }
 
@@ -450,13 +454,18 @@ internal sealed partial class SettingsViewModel : ObservableObject
             beginDestructiveRuntimeMutationAsync = null,
         Func<ISettingsResetTransactionReceipt>? beginResetSettings = null,
         Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null,
-        Func<CancellationToken, Task<SettingsDataReplacementResult>>? replaceAllSettingsAsync = null)
+        Func<CancellationToken, Task<SettingsDataReplacementResult>>? replaceAllSettingsAsync = null,
+        ISettingsRuntimeGroupReset? runtimeGroupReset = null,
+        Action? requireSettingsRestart = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _requireSettingsRestart = requireSettingsRestart ?? (() => { });
 #if UNIT_TESTS
         _replaceAllSettingsAsync = replaceAllSettingsAsync;
+        _runtimeGroupReset = runtimeGroupReset;
 #else
         _replaceAllSettingsAsync = replaceAllSettingsAsync ?? throw new ArgumentNullException(nameof(replaceAllSettingsAsync));
+        _runtimeGroupReset = runtimeGroupReset ?? throw new ArgumentNullException(nameof(runtimeGroupReset));
 #endif
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
@@ -530,7 +539,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             });
 #else
         _beginDestructiveRuntimeMutationAsync = beginDestructiveRuntimeMutationAsync
-            ?? throw new ArgumentNullException(nameof(beginDestructiveRuntimeMutationAsync));
+            ?? (_ => throw new InvalidOperationException("Legacy runtime reset scopes are unavailable in production."));
 #endif
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
 #if UNIT_TESTS
@@ -2150,6 +2159,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public void ReloadAfterDataImport()
     {
+        ClearRuntimeGroupResetRetry();
+        OperationErrorText = string.Empty;
         RestartRequiredSettingsBaseline baseline = CaptureRestartRequiredSettingsBaseline();
         ReloadAfterSettingsReset(baseline);
     }
@@ -2654,6 +2665,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 await ResetThroughDataReplacementAsync(cancellationToken);
                 return;
             }
+            if (scope != SettingsResetScope.All && _runtimeGroupReset is not null)
+            {
+                SettingsRuntimeGroupResetResult result = await _runtimeGroupReset.ResetRuntimeGroupAsync(
+                    scope, CanToggleTransparentProxy, cancellationToken);
+                PublishRuntimeGroupReset(result);
+                return;
+            }
             runtimeMutation = await _beginDestructiveRuntimeMutationAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             restartRequiredBaseline = CaptureRestartRequiredSettingsBaseline();
@@ -2821,12 +2839,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>Publishes the complete startup group without rebasing other groups' pending restart notices.</summary>
-    private void ReloadStartupSettingsAfterReset()
+    private void ReloadStartupSettingsAfterReset(SettingsEnvelope? envelope = null)
     {
-        _launchAtStartupEnabled = _settings.LaunchAtStartupEnabled;
-        _startupConflictCheckEnabled = _settings.StartupConflictCheckEnabled;
-        _showStartupGuideOnStartup = _settings.ShowStartupGuideOnStartup;
-        _startupBehaviorMode = _settings.StartupBehaviorMode;
+        _launchAtStartupEnabled = ReadResetValue(envelope, SettingsRegistry.Keys.LaunchAtStartupEnabled, () => _settings.LaunchAtStartupEnabled);
+        _startupConflictCheckEnabled = ReadResetValue(envelope, SettingsRegistry.Keys.StartupConflictCheckEnabled, () => _settings.StartupConflictCheckEnabled);
+        _showStartupGuideOnStartup = ReadResetValue(envelope, SettingsRegistry.Keys.ShowStartupGuideOnStartup, () => _settings.ShowStartupGuideOnStartup);
+        _startupBehaviorMode = ReadResetValue(envelope, SettingsRegistry.Keys.StartupBehaviorMode, () => _settings.StartupBehaviorMode);
         OnPropertyChanged(nameof(LaunchAtStartupEnabled));
         OnPropertyChanged(nameof(StartupConflictCheckEnabled));
         OnPropertyChanged(nameof(ShowStartupGuideOnStartup));
@@ -2835,18 +2853,18 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>Publishes the selected network group without changing unrelated restart baselines.</summary>
-    private void ReloadNetworkSettingsAfterReset(bool includeProxySettings)
+    private void ReloadNetworkSettingsAfterReset(bool includeProxySettings, SettingsEnvelope? envelope = null)
     {
-        _transparentProxyEnabled = _settings.TransparentProxyEnabled;
+        _transparentProxyEnabled = ReadResetValue(envelope, SettingsRegistry.Keys.TransparentProxyEnabled, () => _settings.TransparentProxyEnabled);
         if (includeProxySettings)
         {
-            _mixedPort = _settings.MixedPort;
-            _connectionSamplingEnabled = _settings.ConnectionSamplingEnabled;
-            _connectionSamplingIntervalSeconds = _settings.ConnectionSamplingIntervalSeconds;
-            _connectionTestUrl = _settings.ConnectionTestProxyUrl1;
-            _connectionTestProxyUrl1 = _settings.ConnectionTestProxyUrl1;
-            _connectionTestProxyUrl2 = _settings.ConnectionTestProxyUrl2;
-            _connectionTestDirectUrl = _settings.ConnectionTestDirectUrl;
+            _mixedPort = ReadResetValue(envelope, SettingsRegistry.Keys.MixedPort, () => _settings.MixedPort);
+            _connectionSamplingEnabled = ReadResetValue(envelope, SettingsRegistry.Keys.ConnectionSamplingEnabled, () => _settings.ConnectionSamplingEnabled);
+            _connectionSamplingIntervalSeconds = ReadResetValue(envelope, SettingsRegistry.Keys.ConnectionSamplingIntervalSeconds, () => _settings.ConnectionSamplingIntervalSeconds);
+            _connectionTestProxyUrl1 = ReadResetValue(envelope, SettingsRegistry.Keys.ConnectionTestProxyUrl1, () => _settings.ConnectionTestProxyUrl1);
+            _connectionTestUrl = _connectionTestProxyUrl1;
+            _connectionTestProxyUrl2 = ReadResetValue(envelope, SettingsRegistry.Keys.ConnectionTestProxyUrl2, () => _settings.ConnectionTestProxyUrl2);
+            _connectionTestDirectUrl = ReadResetValue(envelope, SettingsRegistry.Keys.ConnectionTestDirectUrl, () => _settings.ConnectionTestDirectUrl);
         }
 
         OnPropertyChanged(nameof(TransparentProxyEnabled));

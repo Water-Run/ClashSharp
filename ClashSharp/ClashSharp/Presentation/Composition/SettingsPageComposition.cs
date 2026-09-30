@@ -108,10 +108,10 @@ internal static class SettingsPageComposition
             applyNetworkSettingsAsync: runtimeMutations.ApplyNetworkSettingsAsync,
             requestResetRecoveryRestart: () =>
                 applicationLifecycle.RequestRestart("settings-reset-recovery"),
-            beginDestructiveRuntimeMutationAsync:
-                runtimeMutations.BeginDestructiveMutationAsync,
             isDisplayLanguageRestartPending: language => language != localization.CurrentLanguage,
-            replaceAllSettingsAsync: context.DataReplacement.ResetAllSettingsAsync);
+            replaceAllSettingsAsync: context.DataReplacement.ResetAllSettingsAsync,
+            runtimeGroupReset: context.RuntimeGroupReset,
+            requireSettingsRestart: context.RestartState.RequireRestart);
 
         SettingsPageOperations operations = CreateOperations(context);
 

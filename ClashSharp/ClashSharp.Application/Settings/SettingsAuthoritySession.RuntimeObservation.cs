@@ -5,6 +5,15 @@ namespace ClashSharp.ApplicationModel.Settings;
 
 public sealed partial class SettingsAuthoritySession
 {
+    /// <summary>Continues a multi-participant explicit retry after its first durable retry decision.</summary>
+    internal Task<SettingsAuthorityResult> ContinueRetryAdmittedAsync(Guid batchId, Guid expectedAttemptId,
+        Guid newAttemptId, MutationAdmissionLease lease) => ExecuteAdmittedAsync(lease, async token =>
+        {
+            SettingsAuthorityResult read = await ReadCoreAsync(token).ConfigureAwait(false);
+            return !read.IsSucceeded ? read : await PersistEditAsync(read.Envelope!,
+                _batches.RetryFailed(read.Envelope!, batchId, expectedAttemptId, newAttemptId), token).ConfigureAwait(false);
+        }, honorRevocation: false, CancellationToken.None);
+
     /// <summary>Includes accepted companion values without consuming unrelated pending or blocked intent.</summary>
     internal SettingKey[] GetRuntimeObservationKeys(SettingsEnvelope envelope, IEnumerable<SettingKey> keys)
     {

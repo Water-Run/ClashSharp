@@ -130,11 +130,10 @@ public sealed class SettingsAuthorityArchitectureTests
 
         string runtimeAdapter = ReadApplicationSource(
             "AppHost/Compatibility/SettingsRuntimeMutationAdapter.cs");
-        Assert.Contains("BeginImportAdmittedAsync", runtimeAdapter, StringComparison.Ordinal);
-        Assert.Contains("BeginResetSettingsAdmitted", runtimeAdapter, StringComparison.Ordinal);
-        Assert.Contains("BeginResetStartupSettingsAdmitted", runtimeAdapter, StringComparison.Ordinal);
-        Assert.Contains("BeginResetNetworkSettingsAdmitted", runtimeAdapter, StringComparison.Ordinal);
-        Assert.Contains("WriteAdmitted(GetLease()", runtimeAdapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClashDataPackageService", runtimeAdapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("BeginDestructiveMutationAsync", runtimeAdapter, StringComparison.Ordinal);
+        Assert.DoesNotContain("WriteAdmitted", runtimeAdapter, StringComparison.Ordinal);
+        Assert.Contains("runtimeGroupReset: context.RuntimeGroupReset", pageComposition, StringComparison.Ordinal);
         Assert.DoesNotContain("AsyncLocal", runtimeAdapter, StringComparison.Ordinal);
 
         string dataPackages = ReadApplicationSource("Service/ClashDataPackageService.cs");

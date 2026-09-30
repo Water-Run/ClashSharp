@@ -31,6 +31,7 @@ internal sealed partial class SettingsViewModel
         }
 
         _dataReplacementRestartPending |= result.RequiresRestart;
+        ClearRuntimeGroupResetRetry();
         _dataReplacementHasWarnings = result.Warnings.Count > 0;
         OperationErrorText = string.Empty;
         ReloadAfterSettingsReset(baseline);

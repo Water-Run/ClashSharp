@@ -977,6 +977,12 @@ public sealed partial class Settings : Page
         panel.Children.Add(button);
     }
 
+    /// <summary>Retries the failed settings applications still identified by the page.</summary>
+    private async void RetryRuntimeSettingsReset_Click(object sender, RoutedEventArgs e)
+    {
+        await RunPageOperationAsync(_viewModel.RetryRuntimeSettingsResetAsync);
+    }
+
     /// <summary>Confirms the effect of restoring all settings before changing them.</summary>
     private async void ResetAllSettingsButton_Click(object sender, RoutedEventArgs e)
     {
