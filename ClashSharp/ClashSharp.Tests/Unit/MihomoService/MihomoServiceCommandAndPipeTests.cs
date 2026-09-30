@@ -44,8 +44,10 @@ public sealed class MihomoServiceCommandAndPipeTests
     }
 
     /// <summary>Verifies incompatible versions receive a correlated current-version failure.</summary>
-    [Fact]
-    public async Task ProcessAsync_RejectsIncompatibleProtocolVersion()
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1)]
+    public async Task ProcessAsync_RejectsIncompatibleProtocolVersion(int offset)
     {
         await using MihomoChildSupervisorTestContext context = new([]);
         MihomoServiceCommandProcessor processor = new(
@@ -58,7 +60,7 @@ public sealed class MihomoServiceCommandAndPipeTests
             MihomoServiceIpcCommand.Hello,
             requestId) with
         {
-            ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion + 1,
+            ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion + offset,
         };
 
         MihomoServiceIpcResponse response = await processor.ProcessAsync(

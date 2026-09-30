@@ -9,4 +9,8 @@ namespace ClashSharp.Model;
 /// Thread safety: Immutable value type and inherently thread-safe after construction.
 /// Side effects: None.
 /// </remarks>
-public readonly record struct CoreConfigurationState(string DirectoryPath, string ConfigPath, bool Exists);
+public readonly record struct CoreConfigurationState(string DirectoryPath, string ConfigPath, bool Exists)
+{
+    /// <summary>Gets the immutable user-data generation containing this file, or null for the legacy root.</summary>
+    public System.Guid? DataGenerationId { get; init; }
+}

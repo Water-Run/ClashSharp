@@ -95,14 +95,16 @@ internal sealed class MihomoServiceCommandProcessor
                 await _supervisor.StartAsync(
                         request.Generation!.Value,
                         request.ConfigurationHash!,
-                        cancellationToken)
+                        cancellationToken,
+                        request.DataGenerationId)
                     .ConfigureAwait(false)),
             MihomoServiceIpcCommand.Reload => FromOperation(
                 request.RequestId,
                 await _supervisor.ReloadAsync(
                         request.Generation!.Value,
                         request.ConfigurationHash!,
-                        cancellationToken)
+                        cancellationToken,
+                        request.DataGenerationId)
                     .ConfigureAwait(false)),
             MihomoServiceIpcCommand.Stop => FromOperation(
                 request.RequestId,

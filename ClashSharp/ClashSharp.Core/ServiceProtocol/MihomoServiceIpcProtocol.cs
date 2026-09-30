@@ -11,7 +11,7 @@ namespace ClashSharp.ServiceProtocol;
 public static class MihomoServiceIpcProtocol
 {
     /// <summary>Gets the only protocol version accepted by this build.</summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     /// <summary>Gets the maximum encoded request or response size.</summary>
     public const int MaximumFrameBytes = 1024 * 1024;
@@ -215,6 +215,9 @@ public enum MihomoServiceIpcRuntimeLogLevel
 /// <summary>Binds one broker operation to the exact service-owned mihomo runtime.</summary>
 public sealed record MihomoServiceIpcControllerBinding
 {
+    /// <summary>Gets the owning user-data generation, or null for the legacy data root.</summary>
+    public Guid? DataGenerationId { get; init; }
+
     /// <summary>Gets the expected service-host process session.</summary>
     public Guid ServiceSessionId { get; init; }
 
@@ -229,6 +232,7 @@ public sealed record MihomoServiceIpcControllerBinding
     public string? Validate()
     {
         return ServiceSessionId == Guid.Empty
+            || DataGenerationId == Guid.Empty
             || Generation < 1
             || !MihomoServiceIpcProtocol.IsCanonicalSha256(ConfigurationHash)
                 ? "service.ipc.controller_binding_invalid"
@@ -298,6 +302,9 @@ public sealed record MihomoServiceIpcRuntimeLogQuery
 /// <summary>Contains one framed authenticated request sent to the mihomo service.</summary>
 public sealed record MihomoServiceIpcRequest
 {
+    /// <summary>Gets the exact user-data generation for start/reload, or null for legacy recovery.</summary>
+    public Guid? DataGenerationId { get; init; }
+
     /// <summary>Gets the caller protocol version.</summary>
     public int ProtocolVersion { get; init; }
 
@@ -362,12 +369,13 @@ public sealed record MihomoServiceIpcRequest
             or MihomoServiceIpcCommand.Reload;
         if (requiresGeneration
             && (Generation is null or < 1
+                || DataGenerationId == Guid.Empty
                 || !MihomoServiceIpcProtocol.IsCanonicalSha256(ConfigurationHash)))
         {
             return "service.ipc.generation_invalid";
         }
 
-        if (!requiresGeneration && (Generation is not null || ConfigurationHash is not null))
+        if (!requiresGeneration && (Generation is not null || ConfigurationHash is not null || DataGenerationId is not null))
         {
             return "service.ipc.generation_unexpected";
         }
@@ -460,6 +468,9 @@ public sealed record MihomoServiceIpcRequest
 /// <summary>Captures the service session and its currently owned runtime generation.</summary>
 public sealed record MihomoServiceIpcSnapshot
 {
+    /// <summary>Gets the user-data generation belonging to the active runtime, or null for legacy ownership.</summary>
+    public Guid? ActiveDataGenerationId { get; init; }
+
     /// <summary>Gets the nonempty identity regenerated for every service-host process.</summary>
     public Guid SessionId { get; init; }
 
@@ -508,9 +519,10 @@ public sealed record MihomoServiceIpcSnapshot
             return "service.ipc.child_process_invalid";
         }
 
-        bool hasGeneration = ActiveGeneration is not null || ActiveConfigurationHash is not null;
+        bool hasGeneration = ActiveGeneration is not null || ActiveConfigurationHash is not null || ActiveDataGenerationId is not null;
         if (hasGeneration
             && (ActiveGeneration is null or < 1
+                || ActiveDataGenerationId == Guid.Empty
                 || !MihomoServiceIpcProtocol.IsCanonicalSha256(ActiveConfigurationHash)))
         {
             return "service.ipc.active_generation_invalid";
@@ -1082,6 +1094,7 @@ public sealed record MihomoServiceIpcResponse
                 }
                 || Snapshot.SessionId != expectedRuntime.ServiceSessionId
                 || Snapshot.ActiveGeneration != expectedRuntime.Generation
+                || Snapshot.ActiveDataGenerationId != expectedRuntime.DataGenerationId
                 || !string.Equals(
                     Snapshot.ActiveConfigurationHash,
                     expectedRuntime.ConfigurationHash,

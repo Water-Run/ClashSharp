@@ -940,6 +940,7 @@ public sealed class MihomoControllerClient
             && serviceStatus.ServiceSessionId is { } serviceSessionId
             && serviceSessionId != Guid.Empty
             && serviceStatus.ActiveGeneration is >= 1
+            && serviceStatus.ActiveDataGenerationId != Guid.Empty
             && MihomoServiceIpcProtocol.IsCanonicalSha256(
                 serviceStatus.ActiveConfigurationHash);
 
@@ -966,6 +967,7 @@ public sealed class MihomoControllerClient
         {
             ServiceSessionId = serviceStatus.ServiceSessionId!.Value,
             Generation = serviceStatus.ActiveGeneration!.Value,
+            DataGenerationId = serviceStatus.ActiveDataGenerationId,
             ConfigurationHash = serviceStatus.ActiveConfigurationHash!,
         });
     }

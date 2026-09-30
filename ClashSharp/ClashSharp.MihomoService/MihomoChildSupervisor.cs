@@ -48,6 +48,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
     private MihomoServiceChildState _childState = MihomoServiceChildState.Stopped;
     private int? _childProcessId;
     private long? _activeGeneration;
+    private Guid? _activeDataGenerationId;
     private string? _activeConfigurationHash;
     private string? _faultCode;
     private IMihomoChildProcess? _activeProcess;
@@ -137,6 +138,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 ChildState = _childState,
                 ChildProcessId = _childProcessId,
                 ActiveGeneration = _activeGeneration,
+                ActiveDataGenerationId = _activeDataGenerationId,
                 ActiveConfigurationHash = _activeConfigurationHash,
                 FaultCode = _faultCode,
             };
@@ -154,6 +156,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
             context = null;
             if (expected.ServiceSessionId != _sessionId
                 || expected.Generation != _activeGeneration
+                || expected.DataGenerationId != _activeDataGenerationId
                 || !string.Equals(
                     expected.ConfigurationHash,
                     _activeConfigurationHash,
@@ -251,7 +254,8 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
     internal async Task<MihomoChildOperationResult> StartAsync(
         long generation,
         string configurationHash,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? dataGenerationId = null)
     {
         await _commandGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -264,6 +268,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 {
                     if (_childState == MihomoServiceChildState.Running
                         && _activeGeneration == generation
+                        && _activeDataGenerationId == dataGenerationId
                         && string.Equals(
                             _activeConfigurationHash,
                             configurationHash,
@@ -296,6 +301,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 await TryPrepareGenerationAsync(
                     generation,
                     configurationHash,
+                    dataGenerationId,
                     cancellationToken)
                 .ConfigureAwait(false);
             if (effective is null || plan is null)
@@ -328,7 +334,8 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
     internal async Task<MihomoChildOperationResult> ReloadAsync(
         long generation,
         string configurationHash,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? dataGenerationId = null)
     {
         await _commandGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -337,6 +344,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
             InitializeUnderCommandGate(cancellationToken);
             if (_childState == MihomoServiceChildState.Running
                 && _activeGeneration == generation
+                && _activeDataGenerationId == dataGenerationId
                 && string.Equals(_activeConfigurationHash, configurationHash, StringComparison.Ordinal))
             {
                 return Success();
@@ -346,6 +354,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 await TryPrepareGenerationAsync(
                     generation,
                     configurationHash,
+                    dataGenerationId,
                     cancellationToken)
                 .ConfigureAwait(false);
             if (effective is null || plan is null)
@@ -470,6 +479,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
         string? ErrorCode)> TryPrepareGenerationAsync(
         long generation,
         string configurationHash,
+        Guid? dataGenerationId,
         CancellationToken cancellationToken)
     {
         try
@@ -482,7 +492,8 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                     generation,
                     configurationHash,
                     linked.Token,
-                    _desiredGeneration?.Source.ConfigurationPath)
+                    _desiredGeneration?.Source.ConfigurationPath,
+                    dataGenerationId)
                 .ConfigureAwait(false);
             MihomoRuntimeConfigurationPlan plan = await MihomoRuntimeConfigurationPlan
                 .ReadAsync(staged.ConfigurationPath, linked.Token)
@@ -552,7 +563,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
             null,
             staged.Generation,
             staged.ConfigurationHash,
-            null);
+            null, staged.DataGenerationId);
         IMihomoChildProcess? process = null;
         try
         {
@@ -588,7 +599,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 process.Id,
                 staged.Generation,
                 staged.ConfigurationHash,
-                null);
+                null, staged.DataGenerationId);
             StartOutputPumps(process);
             if (_startupObservationDelay > TimeSpan.Zero)
             {
@@ -620,7 +631,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                     null,
                     staged.Generation,
                     staged.ConfigurationHash,
-                    "service.child.startup_exit");
+                    "service.child.startup_exit", staged.DataGenerationId);
                 _logs.Append("child", $"mihomo exited during startup with code {exitCode}.");
                 return Failure("service.child.startup_exit");
             }
@@ -691,7 +702,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 null,
                 staged.Generation,
                 staged.ConfigurationHash,
-                "service.child.staging_hash_mismatch");
+                "service.child.staging_hash_mismatch", staged.DataGenerationId);
             return Failure("service.child.staging_hash_mismatch");
         }
         catch (MihomoControllerNotReadyException exception)
@@ -722,7 +733,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 null,
                 staged.Generation,
                 staged.ConfigurationHash,
-                "service.child.controller_not_ready");
+                "service.child.controller_not_ready", staged.DataGenerationId);
             _logs.Append(
                 "child",
                 $"mihomo controller readiness failed ({exception.GetType().Name}).");
@@ -742,7 +753,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 null,
                 staged.Generation,
                 staged.ConfigurationHash,
-                exception.ErrorCode);
+                exception.ErrorCode, staged.DataGenerationId);
             _logs.Append("service", $"Runtime asset validation failed ({exception.ErrorCode}).");
             return Failure(exception.ErrorCode);
         }
@@ -760,7 +771,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 null,
                 staged.Generation,
                 staged.ConfigurationHash,
-                "service.child.configuration_untrusted");
+                "service.child.configuration_untrusted", staged.DataGenerationId);
             return Failure("service.child.configuration_untrusted");
         }
         catch (FileNotFoundException)
@@ -777,7 +788,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 null,
                 staged.Generation,
                 staged.ConfigurationHash,
-                "service.child.binary_missing");
+                "service.child.binary_missing", staged.DataGenerationId);
             return Failure("service.child.binary_missing");
         }
         catch (Exception exception) when (IsExpectedLifecycleException(exception))
@@ -808,7 +819,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 null,
                 staged.Generation,
                 staged.ConfigurationHash,
-                "service.child.launch_failed");
+                "service.child.launch_failed", staged.DataGenerationId);
             _logs.Append("child", $"mihomo launch failed ({exception.GetType().Name}).");
             return Failure("service.child.launch_failed");
         }
@@ -827,7 +838,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
             GetOwnedProcessId(process),
             _activeGeneration,
             _activeConfigurationHash,
-            null);
+            null, _activeDataGenerationId);
         try
         {
             await process.StopTreeAsync(_stopTimeout, CancellationToken.None).ConfigureAwait(false);
@@ -843,7 +854,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 processId,
                 _activeGeneration,
                 _activeConfigurationHash,
-                "service.child.stop_failed");
+                "service.child.stop_failed", _activeDataGenerationId);
             _logs.Append("child", $"mihomo Job shutdown failed ({exception.GetType().Name}).");
             return Failure("service.child.stop_failed");
         }
@@ -932,7 +943,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                     null,
                     staged.Generation,
                     staged.ConfigurationHash,
-                    "service.child.exit_cleanup_failed");
+                    "service.child.exit_cleanup_failed", staged.DataGenerationId);
                 _logs.Append("child", $"Exited child Job cleanup failed ({exception.GetType().Name}).");
                 return;
             }
@@ -965,7 +976,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                         null,
                         staged.Generation,
                         staged.ConfigurationHash,
-                        "service.child.restart_exhausted");
+                        "service.child.restart_exhausted", staged.DataGenerationId);
                     _logs.Append("child", "Unexpected-exit restart budget exhausted.");
                     return;
                 }
@@ -977,7 +988,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                     null,
                     staged.Generation,
                     staged.ConfigurationHash,
-                    null);
+                    null, staged.DataGenerationId);
             }
             finally
             {
@@ -1176,7 +1187,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
             TryGetLiveProcessId(process),
             staged.Generation,
             staged.ConfigurationHash,
-            faultCode);
+            faultCode, staged.DataGenerationId);
         return Failure(faultCode);
     }
 
@@ -1203,7 +1214,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 null,
                 effective.Source.Generation,
                 effective.Source.ConfigurationHash,
-                "service.child.effective_cleanup_failed");
+                "service.child.effective_cleanup_failed", effective.Source.DataGenerationId);
             _logs.Append(
                 "service",
                 $"Effective configuration cleanup failed ({exception.GetType().Name}).");
@@ -1280,7 +1291,8 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
         int? processId,
         long? generation,
         string? configurationHash,
-        string? faultCode)
+        string? faultCode,
+        Guid? dataGenerationId = null)
     {
         lock (_stateLock)
         {
@@ -1288,6 +1300,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
             _childState = state;
             _childProcessId = processId;
             _activeGeneration = generation;
+            _activeDataGenerationId = dataGenerationId;
             _activeConfigurationHash = configurationHash;
             _faultCode = faultCode;
         }
@@ -1310,6 +1323,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
             _childState = MihomoServiceChildState.Running;
             _childProcessId = process.Id;
             _activeGeneration = effective.Source.Generation;
+            _activeDataGenerationId = effective.Source.DataGenerationId;
             _activeConfigurationHash = effective.Source.ConfigurationHash;
             _faultCode = null;
             _controllerContext = new MihomoControllerRuntimeContext(
@@ -1322,6 +1336,7 @@ internal sealed class MihomoChildSupervisor : IAsyncDisposable
                 ready)
             {
                 TrafficEpoch = _trafficEpoch,
+                DataGenerationId = effective.Source.DataGenerationId,
                 CoreStartedAt = process.StartedAt,
                 ReadCoreMemory = () => process.MemoryBytes,
             };

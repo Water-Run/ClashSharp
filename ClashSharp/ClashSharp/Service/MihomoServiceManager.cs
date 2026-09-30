@@ -200,13 +200,16 @@ public sealed partial class MihomoServiceManager
     /// <param name="generation">Promoted runtime generation.</param>
     /// <param name="configurationHash">Exact lowercase SHA-256 of the promoted configuration bytes.</param>
     /// <param name="cancellationToken">Cancels waiting for service-control operations.</param>
+    /// <param name="dataGenerationId">Immutable user-data generation, or null for the legacy root.</param>
     /// <returns>The authenticated child state observed after the activation attempt.</returns>
     public async Task<MihomoServiceStatus> RestartAsync(
         long generation,
         string configurationHash,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? dataGenerationId = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(generation, 1);
+        if (dataGenerationId == Guid.Empty) { throw new ArgumentException("A data generation identity must not be empty.", nameof(dataGenerationId)); }
 
         if (!MihomoServiceIpcProtocol.IsCanonicalSha256(configurationHash))
         {
@@ -253,10 +256,11 @@ public sealed partial class MihomoServiceManager
                     MihomoServiceIpcCommand.Reload,
                     generation,
                     configurationHash,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    dataGenerationId).ConfigureAwait(false);
                 MihomoServiceIpcSnapshot snapshot = RequireSuccessfulSnapshot(response);
                 EnsureSameSession(session.Snapshot, snapshot);
-                EnsureActivatedSnapshot(snapshot, generation, configurationHash);
+                EnsureActivatedSnapshot(snapshot, generation, configurationHash, dataGenerationId);
 
                 MihomoServiceStatus status = CreateReadyStatus(response.ProtocolVersion, snapshot);
                 CacheLatestStatus(status);

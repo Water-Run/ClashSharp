@@ -33,6 +33,8 @@ public sealed partial class ProductionDataGenerationTests
         DataGenerationManifestSnapshot manifest = await fixture.StartAsync();
         Repositories repositories = Assert.Single(fixture.Containers);
         Assert.True(manifest.Descriptor.IsSameGeneration(repositories.Generation));
+        Assert.Equal(manifest.Descriptor.GenerationId, repositories.Configuration.GetState().DataGenerationId);
+        Assert.Equal(manifest.Descriptor.GenerationId, repositories.Configuration.ObserveRuntimeConfigurationIntegrity().DataGenerationId);
         Assert.Equal(["recover", "preferences"], fixture.Calls);
         Assert.Equal(6, ((SettingsGenerationContext)repositories.GetService(typeof(SettingsGenerationContext))!).Participants.Count);
         Assert.NotEmpty(repositories.Session.Snapshot.PendingApplications);

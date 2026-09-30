@@ -54,6 +54,9 @@ public readonly record struct MihomoServiceStatus(bool IsInstalled, bool IsRunni
     /// <summary>Gets the exact active runtime generation reported by the service child.</summary>
     public long? ActiveGeneration { get; init; }
 
+    /// <summary>Gets the user-data generation owning the service runtime, or null for legacy ownership.</summary>
+    public Guid? ActiveDataGenerationId { get; init; }
+
     /// <summary>Gets the exact active configuration hash reported by the service child.</summary>
     public string? ActiveConfigurationHash { get; init; }
 
@@ -88,6 +91,7 @@ public readonly record struct MihomoServiceStatus(bool IsInstalled, bool IsRunni
                 && ChildState == MihomoServiceChildState.Stopped
                 && ChildProcessId is null
                 && ActiveGeneration is null
+                && ActiveDataGenerationId is null
                 && ActiveConfigurationHash is null));
 
     /// <summary>Creates a status for an unobserved or inconclusive service state.</summary>

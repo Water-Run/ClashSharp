@@ -18,13 +18,14 @@ internal static class MihomoServiceTestSupport
     internal static MihomoServiceOptions CreateOptions(
         string rootPath,
         SecurityIdentifier? allowedSid = null,
-        string? token = null)
+        string? token = null,
+        bool generationLayout = false)
     {
         SecurityIdentifier sid = allowedSid ?? TestUserSid;
         string authenticationToken = token ?? Token;
         return new MihomoServiceOptions(
             Path.Combine(rootPath, "mihomo.exe"),
-            Path.Combine(rootPath, "runtime.yaml"),
+            generationLayout ? Path.Combine(rootPath, "app", "mihomo", "config.yaml") : Path.Combine(rootPath, "runtime.yaml"),
             MihomoServiceIpcProtocol.BuildPipeName(sid.Value, authenticationToken),
             authenticationToken,
             sid,
@@ -417,9 +418,10 @@ internal sealed class MihomoChildSupervisorTestContext : IAsyncDisposable
         IEnumerable<FakeMihomoChildProcess> processes,
         IReadOnlyList<TimeSpan>? restartBackoffs = null,
         ConcurrentQueue<string>? events = null,
-        FakeMihomoControllerReadinessProbe? readinessProbe = null)
+        FakeMihomoControllerReadinessProbe? readinessProbe = null,
+        bool generationLayout = false)
     {
-        Options = MihomoServiceTestSupport.CreateOptions(_temporaryDirectory.Path);
+        Options = MihomoServiceTestSupport.CreateOptions(_temporaryDirectory.Path, generationLayout: generationLayout);
         File.WriteAllText(Options.MihomoPath, "test executable placeholder");
         WriteConfiguration("mixed-port: 7890\n");
         Logs = new MihomoServiceLogBuffer(Options);
@@ -463,6 +465,7 @@ internal sealed class MihomoChildSupervisorTestContext : IAsyncDisposable
     internal string WriteConfiguration(string content)
     {
         LastConfigurationText = MihomoServiceTestSupport.BuildManagedServiceConfiguration(content);
+        Directory.CreateDirectory(Path.GetDirectoryName(Options.ConfigPath)!);
         File.WriteAllText(Options.ConfigPath, LastConfigurationText);
         return MihomoServiceTestSupport.ComputeHash(LastConfigurationText);
     }

@@ -42,7 +42,8 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
         ArgumentNullException.ThrowIfNull(settingsAuthority);
         ArgumentNullException.ThrowIfNull(createProfileRuntime);
         GenerationRepositorySettings settings = new(session, settingsAuthority);
-        Configuration = new(Path.Combine(session.Generation.RootPath, "mihomo"), settings, credentials, metrics, validator, getString);
+        Configuration = new(Path.Combine(session.Generation.RootPath, "mihomo"), settings, credentials, metrics, validator, getString,
+            dataGenerationId: session.Generation.GenerationId);
         Logs = LogStorageServiceFactory.CreateForDirectory(session.Generation.RootPath, () => settings.ActiveProfileId);
         _trafficContext = new SqliteTriggerTrafficContextSource(Logs.DatabasePath);
         Profiles = ProfileCatalogServiceFactory.CreateForDirectory(session.Generation.RootPath, settings,

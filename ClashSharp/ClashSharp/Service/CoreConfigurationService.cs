@@ -58,6 +58,7 @@ public sealed partial class CoreConfigurationService
 
     /// <summary>Absolute file path for the generated mihomo configuration.</summary>
     private readonly string _configurationFilePath;
+    private readonly Guid? _dataGenerationId;
 
     private readonly ICoreConfigurationSettings _settings;
     private readonly IControllerCredentialProvider _controllerCredentials;
@@ -79,7 +80,8 @@ public sealed partial class CoreConfigurationService
         IControllerCredentialProvider controllerCredentials,
         ICoreConfigurationProfileMetrics profileMetrics,
         ICoreConfigurationValidator validator,
-        Func<string, string> getString)
+        Func<string, string> getString,
+        Guid? dataGenerationId = null)
         : this(
             configurationDirectoryPath,
             settings,
@@ -88,7 +90,8 @@ public sealed partial class CoreConfigurationService
             validator,
             getString,
             File.ReadAllText,
-            File.WriteAllText)
+            File.WriteAllText,
+            dataGenerationId)
     {
     }
 
@@ -101,12 +104,15 @@ public sealed partial class CoreConfigurationService
         ICoreConfigurationValidator validator,
         Func<string, string> getString,
         Func<string, string> readAllText,
-        Action<string, string, Encoding> writeAllText)
+        Action<string, string, Encoding> writeAllText,
+        Guid? dataGenerationId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configurationDirectoryPath);
 
         _configurationDirectoryPath = Path.GetFullPath(configurationDirectoryPath);
         _configurationFilePath = Path.Combine(_configurationDirectoryPath, "config.yaml");
+        if (dataGenerationId == Guid.Empty) { throw new ArgumentException("A data generation identity must not be empty.", nameof(dataGenerationId)); }
+        _dataGenerationId = dataGenerationId;
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _controllerCredentials = controllerCredentials ?? throw new ArgumentNullException(nameof(controllerCredentials));
         _profileMetrics = profileMetrics ?? throw new ArgumentNullException(nameof(profileMetrics));
@@ -125,7 +131,8 @@ public sealed partial class CoreConfigurationService
             return new CoreConfigurationState(
                 _configurationDirectoryPath,
                 _configurationFilePath,
-                File.Exists(_configurationFilePath));
+                File.Exists(_configurationFilePath))
+            { DataGenerationId = _dataGenerationId };
         }
     }
 

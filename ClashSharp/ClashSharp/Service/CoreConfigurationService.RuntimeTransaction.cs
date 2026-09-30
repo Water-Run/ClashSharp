@@ -23,6 +23,8 @@ internal readonly record struct RuntimeConfigurationIntegrityObservation(
     long? AppliedGeneration = null,
     string? AppliedContentHash = null)
 {
+    public Guid? DataGenerationId { get; init; }
+
     public static RuntimeConfigurationIntegrityObservation Unknown { get; } = new(false, null);
 
     public static RuntimeConfigurationIntegrityObservation Inactive { get; } = new(true, null);
@@ -65,7 +67,7 @@ public sealed partial class CoreConfigurationService
     {
         lock (_runtimeIntegrityObservationLock)
         {
-            return ObserveRuntimeConfigurationIntegrityCore();
+            return ObserveRuntimeConfigurationIntegrityCore() with { DataGenerationId = _dataGenerationId };
         }
     }
 

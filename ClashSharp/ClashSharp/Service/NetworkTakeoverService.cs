@@ -17,6 +17,9 @@ namespace ClashSharp.Service;
 /// <summary>Ensures the mihomo runtime configuration matches the desired takeover mode.</summary>
 internal interface INetworkTakeoverCoreConfiguration
 {
+    /// <summary>Gets the data generation owning the configuration, or null for legacy recovery.</summary>
+    Guid? DataGenerationId => null;
+
     /// <summary>Applies one desired runtime generation through validation, promotion, readiness, and rollback.</summary>
     Task<RuntimeConfigurationTransactionResult> ApplyConfigurationAsync(
         ClashSharpMode mode,
@@ -63,6 +66,17 @@ internal interface INetworkTakeoverMihomoService
         long generation,
         string configurationHash,
         CancellationToken cancellationToken);
+
+    /// <summary>Restarts the child from the explicitly owned configuration namespace.</summary>
+    Task<MihomoServiceStatus> RestartAsync(CoreConfigurationState configuration, long generation,
+        string configurationHash, CancellationToken cancellationToken)
+    {
+        if (configuration.DataGenerationId is not null)
+        {
+            throw new InvalidOperationException("This service adapter does not support data-generation ownership.");
+        }
+        return RestartAsync(generation, configurationHash, cancellationToken);
+    }
 
     /// <summary>Stops the installed service and confirms that it released core ownership.</summary>
     Task<MihomoServiceStatus> StopAsync(CancellationToken cancellationToken);
@@ -455,7 +469,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         _windowsProxy.DisableProxy();
         _core.Stop();
         MihomoServiceStatus restartedStatus = await _mihomoService
-            .RestartAsync(generation, configurationHash, cancellationToken)
+            .RestartAsync(preparedConfiguration, generation, configurationHash, cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (!restartedStatus.IsKnown
@@ -463,6 +477,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
             || restartedStatus.ServiceSessionId is not Guid serviceSessionId
             || serviceSessionId == Guid.Empty
             || restartedStatus.ActiveGeneration != generation
+            || restartedStatus.ActiveDataGenerationId != preparedConfiguration.DataGenerationId
             || !StringComparer.Ordinal.Equals(
                 restartedStatus.ActiveConfigurationHash,
                 configurationHash))
@@ -620,6 +635,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
         }
 
         Stopwatch stopwatch = Stopwatch.StartNew();
+        Guid? dataGenerationId = _configuration.DataGenerationId;
         while (stopwatch.Elapsed < ReadinessTimeout)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -636,6 +652,7 @@ public sealed partial class NetworkTakeoverService : ICoreConfigurationRuntime
                         && serviceStatus.ServiceSessionId is Guid serviceSessionId
                         && serviceSessionId != Guid.Empty
                         && serviceStatus.ActiveGeneration == generation
+                        && serviceStatus.ActiveDataGenerationId == dataGenerationId
                         && StringComparer.Ordinal.Equals(
                             serviceStatus.ActiveConfigurationHash,
                             configurationHash)

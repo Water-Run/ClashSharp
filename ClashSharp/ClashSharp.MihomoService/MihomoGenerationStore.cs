@@ -9,7 +9,8 @@ namespace ClashSharp.MihomoService;
 internal sealed record MihomoStagedGeneration(
     long Generation,
     string ConfigurationHash,
-    string ConfigurationPath);
+    string ConfigurationPath,
+    Guid? DataGenerationId = null);
 
 internal sealed class MihomoConfigurationHashMismatchException : IOException
 {
@@ -58,9 +59,11 @@ internal sealed class MihomoGenerationStore
         long generation,
         string expectedHash,
         CancellationToken cancellationToken,
-        string? retainedConfigurationPath = null)
+        string? retainedConfigurationPath = null,
+        Guid? dataGenerationId = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(generation, 1);
+        if (dataGenerationId == Guid.Empty) { throw new ArgumentException("A data generation identity must not be empty.", nameof(dataGenerationId)); }
 
         if (!MihomoServiceIpcProtocol.IsCanonicalSha256(expectedHash))
         {
@@ -68,17 +71,19 @@ internal sealed class MihomoGenerationStore
         }
 
         string runtimeDirectory = PrepareRuntimeDirectory();
-        if (!File.Exists(_options.ConfigPath))
+        string sourceConfiguration = ResolveSourceConfiguration(dataGenerationId);
+        if (!File.Exists(sourceConfiguration))
         {
             throw new FileNotFoundException(
                 "The source mihomo configuration was not found.",
-                _options.ConfigPath);
+                sourceConfiguration);
         }
 
+        string sourceNamespace = dataGenerationId is Guid id ? $"{id:N}-" : string.Empty;
         string finalPath = Path.Combine(
             _options.ServiceDataDirectory,
-            $"generation-{generation:D20}-{expectedHash}.yaml");
-        string generationPattern = $"generation-{generation:D20}-*.yaml";
+            $"generation-{sourceNamespace}{generation:D20}-{expectedHash}.yaml");
+        string generationPattern = $"generation-{sourceNamespace}{generation:D20}-*.yaml";
         if (Directory.EnumerateFiles(_options.ServiceDataDirectory, generationPattern)
             .Any(path => !string.Equals(path, finalPath, StringComparison.OrdinalIgnoreCase)))
         {
@@ -95,14 +100,14 @@ internal sealed class MihomoGenerationStore
                     cancellationToken)
                 .ConfigureAwait(false);
             PruneOldGenerations(finalPath, retainedConfigurationPath);
-            return new MihomoStagedGeneration(generation, expectedHash, finalPath);
+            return new MihomoStagedGeneration(generation, expectedHash, finalPath, dataGenerationId);
         }
 
         string temporaryPath = finalPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             string copiedHash = await CopyAndHashAsync(
-                    _options.ConfigPath,
+                    sourceConfiguration,
                     temporaryPath,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -132,13 +137,37 @@ internal sealed class MihomoGenerationStore
 
             SecureStagedFile(finalPath);
             PruneOldGenerations(finalPath, retainedConfigurationPath);
-            return new MihomoStagedGeneration(generation, expectedHash, finalPath);
+            return new MihomoStagedGeneration(generation, expectedHash, finalPath, dataGenerationId);
         }
         catch
         {
             TryDeleteTemporaryFile(temporaryPath);
             throw;
         }
+    }
+
+    private string ResolveSourceConfiguration(Guid? dataGenerationId)
+    {
+        if (dataGenerationId is not Guid identity) { return _options.ConfigPath; }
+        string? mihomoDirectory = Path.GetDirectoryName(_options.ConfigPath);
+        if (!string.Equals(Path.GetFileName(_options.ConfigPath), "config.yaml", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(Path.GetFileName(mihomoDirectory), "mihomo", StringComparison.OrdinalIgnoreCase)
+            || Path.GetDirectoryName(mihomoDirectory) is not string applicationRoot)
+        {
+            throw new InvalidDataException("The installed service configuration has no canonical application data root.");
+        }
+        string source = Path.Combine(applicationRoot, "Data", "v1", "generations", identity.ToString("N"), "mihomo", "config.yaml");
+        // The request carries an opaque identity, never an arbitrary privileged input path.
+        string? current = source;
+        while (current is not null)
+        {
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidDataException("A service configuration source traverses a reparse point.");
+            }
+            current = Directory.GetParent(current)?.FullName;
+        }
+        return source;
     }
 
     internal static async Task VerifyHashAsync(

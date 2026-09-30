@@ -88,6 +88,7 @@ public sealed partial class NetworkTakeoverService
                 ? !_core.IsRunning && _core.IsOwnershipKnown && service.IsKnown && service.IsReady
                     && service.ServiceSessionId is Guid session && session != Guid.Empty
                     && service.ActiveGeneration == integrity.AppliedGeneration
+                    && service.ActiveDataGenerationId == integrity.DataGenerationId
                     && StringComparer.Ordinal.Equals(service.ActiveConfigurationHash, integrity.AppliedContentHash)
                 : _core.IsRunning && _core.IsOwnershipKnown && service.HasReleasedChildOwnership;
     }

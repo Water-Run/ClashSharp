@@ -8,6 +8,36 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for mihomo Windows service management.</summary>
 public sealed class MihomoServiceManagerTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestartAsync_RequiresExactDataGenerationAcknowledgement(bool ignoreIdentity)
+    {
+        Guid identity = Guid.NewGuid();
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 4  RUNNING"));
+        runner.Results.Enqueue(Completed(0));
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE              : 1  STOPPED"));
+        FakeMihomoServiceIpcClient ipc = new() { IgnoreDataGeneration = ignoreIdentity };
+        MihomoServiceManager manager = CreateManager(runner, ipcClient: ipc);
+
+        MihomoServiceStatus result = await manager.RestartAsync(Generation, ConfigurationHash, CancellationToken.None, identity);
+
+        Assert.Equal(identity, Assert.Single(ipc.Requests, request => request.Command == MihomoServiceIpcCommand.Reload).DataGenerationId);
+        Assert.Equal(!ignoreIdentity, result.IsReady);
+        if (ignoreIdentity)
+        {
+            Assert.Equal("service.ipc.protocol_invalid", result.IpcFailureCode);
+            Assert.Equal(["query", "stop", "query"], runner.Requests.Select(request => request.Arguments[0]));
+        }
+        else
+        {
+            Assert.Equal(identity, result.ActiveDataGenerationId);
+            Assert.Equal(identity, manager.GetLatestStatus().ActiveDataGenerationId);
+            Assert.Single(runner.Requests);
+        }
+    }
+
     private const long Generation = 17;
 
     private const string ConfigurationHash =
@@ -790,6 +820,9 @@ public sealed class MihomoServiceManagerTests
         private MihomoServiceChildState _childState = MihomoServiceChildState.Running;
 
         private long? _generation = 1;
+        private Guid? _dataGenerationId;
+
+        public bool IgnoreDataGeneration { get; init; }
 
         private string? _configurationHash = new('a', 64);
 
@@ -824,11 +857,13 @@ public sealed class MihomoServiceManagerTests
                 case MihomoServiceIpcCommand.Reload:
                     _childState = MihomoServiceChildState.Running;
                     _generation = request.Generation;
+                    _dataGenerationId = IgnoreDataGeneration ? null : request.DataGenerationId;
                     _configurationHash = request.ConfigurationHash;
                     break;
                 case MihomoServiceIpcCommand.Stop:
                     _childState = MihomoServiceChildState.Stopped;
                     _generation = null;
+                    _dataGenerationId = null;
                     _configurationHash = null;
                     break;
             }
@@ -850,6 +885,7 @@ public sealed class MihomoServiceManagerTests
                     ChildState = _childState,
                     ChildProcessId = _childState == MihomoServiceChildState.Running ? 4242 : null,
                     ActiveGeneration = _generation,
+                    ActiveDataGenerationId = _dataGenerationId,
                     ActiveConfigurationHash = _configurationHash,
                 },
             };

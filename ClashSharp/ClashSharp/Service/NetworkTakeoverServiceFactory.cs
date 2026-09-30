@@ -109,6 +109,8 @@ internal static class NetworkTakeoverServiceFactory
 
 internal sealed class NetworkTakeoverCoreConfigurationAdapter(ICoreConfigurationStore configuration) : INetworkTakeoverCoreConfiguration
 {
+    public Guid? DataGenerationId => configuration.GetState().DataGenerationId;
+
     public Task<RuntimeConfigurationTransactionResult> ApplyConfigurationAsync(
         ClashSharpMode mode,
         bool transparentProxyEnabled,
@@ -160,6 +162,10 @@ internal sealed class NetworkTakeoverWindowsProxyAdapter(WindowsProxyService win
 
 internal sealed class NetworkTakeoverMihomoServiceAdapter(MihomoServiceManager serviceManager) : INetworkTakeoverMihomoService
 {
+    public Task<MihomoServiceStatus> RestartAsync(CoreConfigurationState configuration, long generation,
+        string configurationHash, CancellationToken cancellationToken) =>
+        serviceManager.RestartAsync(generation, configurationHash, cancellationToken, configuration.DataGenerationId);
+
     public Task<MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
         return serviceManager.GetStatusAsync(cancellationToken);
@@ -213,6 +219,7 @@ internal sealed class NetworkTakeoverReadinessAdapter(MihomoControllerClient con
             MihomoServiceIpcControllerBinding expectedRuntime = new()
             {
                 ServiceSessionId = serviceSessionId,
+                DataGenerationId = observedServiceStatus.ActiveDataGenerationId,
                 Generation = generation,
                 ConfigurationHash = configurationHash,
             };

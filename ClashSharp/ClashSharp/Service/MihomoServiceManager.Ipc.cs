@@ -68,7 +68,8 @@ public sealed partial class MihomoServiceManager
         MihomoServiceIpcCommand command,
         long? generation,
         string? configurationHash,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? dataGenerationId = null)
     {
         MihomoServiceIpcRequest request = new()
         {
@@ -77,6 +78,7 @@ public sealed partial class MihomoServiceManager
             AuthenticationToken = _ipcEndpoint.AuthenticationToken,
             Command = command,
             Generation = generation,
+            DataGenerationId = dataGenerationId,
             ConfigurationHash = configurationHash,
         };
         return await SendIpcRequestAsync(request, cancellationToken).ConfigureAwait(false);
@@ -200,6 +202,7 @@ public sealed partial class MihomoServiceManager
             ChildState = snapshot.ChildState,
             ChildProcessId = snapshot.ChildProcessId,
             ActiveGeneration = snapshot.ActiveGeneration,
+            ActiveDataGenerationId = snapshot.ActiveDataGenerationId,
             ActiveConfigurationHash = snapshot.ActiveConfigurationHash,
             IpcFailureCode = snapshot.FaultCode,
         };
@@ -328,10 +331,12 @@ public sealed partial class MihomoServiceManager
     private static void EnsureActivatedSnapshot(
         MihomoServiceIpcSnapshot snapshot,
         long generation,
-        string configurationHash)
+        string configurationHash,
+        Guid? dataGenerationId)
     {
         if (snapshot.ChildState != MihomoServiceChildState.Running
             || snapshot.ActiveGeneration != generation
+            || snapshot.ActiveDataGenerationId != dataGenerationId
             || !StringComparer.Ordinal.Equals(
                 snapshot.ActiveConfigurationHash,
                 configurationHash))

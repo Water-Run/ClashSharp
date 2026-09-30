@@ -7,6 +7,75 @@ namespace ClashSharp.Tests.Unit.ServiceProtocol;
 /// <summary>Verifies the bounded, versioned mihomo service IPC wire contract.</summary>
 public sealed class MihomoServiceIpcProtocolTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FrameRoundTrip_PreservesActivationAndControllerDataIdentity(bool controllerCommand)
+    {
+        Guid identity = Guid.NewGuid();
+        MihomoServiceIpcRequest expected = controllerCommand
+            ? CreateBrokerRequest(MihomoServiceIpcCommand.CloseAllConnections) with { ExpectedRuntime = CreateBinding() with { DataGenerationId = identity } }
+            : CreateRequest(MihomoServiceIpcCommand.Reload) with { DataGenerationId = identity, Generation = 1, ConfigurationHash = Hash };
+        using MemoryStream requestBytes = new();
+        await MihomoServiceIpcFrameCodec.WriteRequestAsync(requestBytes, expected, CancellationToken.None);
+        requestBytes.Position = 0;
+        MihomoServiceIpcRequest actual = await MihomoServiceIpcFrameCodec.ReadRequestAsync(requestBytes, CancellationToken.None);
+        Assert.Equal(expected, actual);
+        Assert.Null(actual.Validate());
+        MihomoServiceIpcResponse response = CreateBrokerResponse(CreateBrokerRequest(MihomoServiceIpcCommand.CloseAllConnections) with
+        {
+            ExpectedRuntime = CreateBinding() with { DataGenerationId = identity },
+        });
+        using MemoryStream responseBytes = new();
+        await MihomoServiceIpcFrameCodec.WriteResponseAsync(responseBytes, response, CancellationToken.None);
+        responseBytes.Position = 0;
+        MihomoServiceIpcResponse observed = await MihomoServiceIpcFrameCodec.ReadResponseAsync(responseBytes, CancellationToken.None);
+        Assert.Equal(identity, observed.Snapshot!.ActiveDataGenerationId);
+        Assert.Null(observed.Validate());
+    }
+
+    [Theory]
+    [InlineData(MihomoServiceIpcCommand.Start)]
+    [InlineData(MihomoServiceIpcCommand.Reload)]
+    public void ActivationIdentity_AcceptsADataNamespaceAndRejectsAnEmptyIdentity(MihomoServiceIpcCommand command)
+    {
+        MihomoServiceIpcRequest request = CreateRequest(command) with
+        {
+            Generation = 1,
+            ConfigurationHash = Hash,
+            DataGenerationId = Guid.NewGuid(),
+        };
+        Assert.Null(request.Validate());
+        Assert.Equal("service.ipc.generation_invalid", (request with { DataGenerationId = Guid.Empty }).Validate());
+        Assert.Null((request with { DataGenerationId = null }).Validate());
+        Assert.Equal("service.ipc.generation_unexpected", (CreateRequest(MihomoServiceIpcCommand.Status) with { DataGenerationId = request.DataGenerationId }).Validate());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BrokerResponse_RejectsAnotherDirectoryEvenWhenSessionVersionAndHashMatch(bool missingIdentity)
+    {
+        MihomoServiceIpcRequest request = CreateBrokerRequest(MihomoServiceIpcCommand.CloseAllConnections) with
+        {
+            ExpectedRuntime = CreateBinding() with { DataGenerationId = Guid.NewGuid() },
+        };
+        MihomoServiceIpcResponse response = CreateBrokerResponse(request);
+        Assert.Null(response.ValidateFor(request));
+        response = response with { Snapshot = response.Snapshot! with { ActiveDataGenerationId = missingIdentity ? null : Guid.NewGuid() } };
+        Assert.Equal("service.ipc.response_runtime_binding_invalid", response.ValidateFor(request));
+    }
+
+    [Fact]
+    public void DataIdentity_CannotExistWithoutARuntimeOrContainAnEmptyGuid()
+    {
+        MihomoServiceIpcSnapshot running = CreateRunningSnapshot(CreateBinding()) with { ActiveDataGenerationId = Guid.NewGuid() };
+        Assert.Null(running.Validate());
+        Assert.Equal("service.ipc.active_generation_invalid", (running with { ActiveDataGenerationId = Guid.Empty }).Validate());
+        Assert.Equal("service.ipc.active_generation_invalid", (running with { ActiveGeneration = null, ActiveConfigurationHash = null }).Validate());
+        Assert.Equal("service.ipc.controller_binding_invalid", (CreateBinding() with { DataGenerationId = Guid.Empty }).Validate());
+    }
+
     private const string Token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private const string Hash = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
@@ -679,6 +748,7 @@ public sealed class MihomoServiceIpcProtocolTests
             ChildState = MihomoServiceChildState.Running,
             ChildProcessId = 42,
             ActiveGeneration = binding.Generation,
+            ActiveDataGenerationId = binding.DataGenerationId,
             ActiveConfigurationHash = binding.ConfigurationHash,
         };
     }

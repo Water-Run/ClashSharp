@@ -25,6 +25,9 @@ internal sealed record MihomoControllerRuntimeContext(
     MihomoControllerAuthority Authority,
     MihomoServiceIpcEffectiveConfiguration EffectiveConfiguration)
 {
+    /// <summary>Gets the data generation containing the activated configuration.</summary>
+    internal Guid? DataGenerationId { get; init; }
+
     /// <summary>Identifies counter continuity for the exact child, independently of configuration generations.</summary>
     internal Guid TrafficEpoch { get; init; }
 
