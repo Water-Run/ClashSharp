@@ -34,6 +34,11 @@ public sealed partial class Statistics : Page
         await _loadSession.RunAsync(_viewModel.LoadAsync);
     }
 
+    private async void RefreshStatisticsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await _loadSession.RunAsync(_viewModel.LoadAsync);
+    }
+
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
         _loadSession.Cancel();

@@ -34,6 +34,13 @@ internal sealed class StatisticsViewModel : ObservableObject
     /// <summary>Applies the injected UI-only display policy to persisted labels.</summary>
     private readonly IModelDisplayMapper _displayMapper;
 
+    private readonly Func<DateTimeOffset> _getNow;
+    private int _loadRevision;
+    private bool _isLoading;
+    private bool _hasSnapshot;
+    private bool _hasLoadError;
+    private DateTimeOffset? _lastUpdated;
+
     /// <summary>Backing field for <see cref="TotalTrafficText"/>.</summary>
     private string _totalTrafficText = string.Empty;
 
@@ -68,6 +75,7 @@ internal sealed class StatisticsViewModel : ObservableObject
     /// <param name="openLogs">Navigation action. Must not be null.</param>
     /// <param name="errorSink">Unexpected error sink. Must not be null.</param>
     /// <param name="displayMapper">UI display row mapper. Must not be null.</param>
+    /// <param name="getNow">Optional clock for the last successful refresh time.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public StatisticsViewModel(
         IDisplayPageLocalization localization,
@@ -75,7 +83,8 @@ internal sealed class StatisticsViewModel : ObservableObject
         IStatisticsProfiles profiles,
         Action openLogs,
         IApplicationErrorSink errorSink,
-        IModelDisplayMapper displayMapper)
+        IModelDisplayMapper displayMapper,
+        Func<DateTimeOffset>? getNow = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _statistics = statistics ?? throw new ArgumentNullException(nameof(statistics));
@@ -83,6 +92,7 @@ internal sealed class StatisticsViewModel : ObservableObject
         _openLogs = openLogs ?? throw new ArgumentNullException(nameof(openLogs));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _displayMapper = displayMapper ?? throw new ArgumentNullException(nameof(displayMapper));
+        _getNow = getNow ?? (static () => DateTimeOffset.UtcNow);
         OpenLogsCommand = new RelayCommand(_openLogs);
     }
 
@@ -206,23 +216,83 @@ internal sealed class StatisticsViewModel : ObservableObject
     /// <value>Synchronous navigation command.</value>
     public RelayCommand OpenLogsCommand { get; }
 
+    public string RefreshText => _localization.GetString("Command.Refresh");
+
+    public string LoadingText => _localization.GetString("Statistics.Loading");
+
+    public bool IsLoading
+    {
+        get => _isLoading;
+        private set
+        {
+            if (SetProperty(ref _isLoading, value))
+            {
+                OnPropertyChanged(nameof(CanRefresh));
+                OnPropertyChanged(nameof(StatusText));
+                NotifyEmptyStates();
+            }
+        }
+    }
+
+    public bool CanRefresh => !IsLoading;
+
+    public bool HasSnapshot => _hasSnapshot;
+
+    public bool HasLoadError
+    {
+        get => _hasLoadError;
+        private set
+        {
+            if (SetProperty(ref _hasLoadError, value))
+            {
+                OnPropertyChanged(nameof(LoadErrorText));
+                NotifyEmptyStates();
+            }
+        }
+    }
+
+    public string LoadErrorText => HasLoadError
+        ? _localization.GetString(HasSnapshot ? "Statistics.RefreshFailed" : "Statistics.LoadFailed") : string.Empty;
+
+    public string StatusText => IsLoading ? LoadingText : _lastUpdated is DateTimeOffset updated
+        ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Updated.Format"), updated.ToLocalTime().ToString("G", CultureInfo.CurrentCulture))
+        : string.Empty;
+
+    public bool HasNoProfileTraffic => HasSnapshot && !IsLoading && !HasLoadError && ProfileTrafficRows.Count == 0;
+
+    public bool HasNoDailyTraffic => HasSnapshot && !IsLoading && !HasLoadError && DailyTrafficRows.Count == 0;
+
+    public bool HasNoNodeTraffic => HasSnapshot && !IsLoading && !HasLoadError && NodeTrafficRows.Count == 0;
+
+    public string NoProfileTrafficText => _localization.GetString("Statistics.Empty.Profile");
+
+    public string NoDailyTrafficText => _localization.GetString("Statistics.Empty.Date");
+
+    public string NoNodeTrafficText => _localization.GetString("Statistics.Empty.Node");
+
     /// <summary>Loads statistics without blocking the UI thread.</summary>
     /// <param name="cancellationToken">Cancels this page-load attempt.</param>
     /// <returns>A task that completes after the snapshot is applied or the failure is reported.</returns>
-    public Task LoadAsync(CancellationToken cancellationToken)
+    public async Task LoadAsync(CancellationToken cancellationToken)
     {
-        return ViewModelLoadExecutor.ExecuteAsync(
-            ReadLoadSnapshot,
-            ApplyLoadSnapshot,
-            _errorSink,
-            "statistics-load",
-            cancellationToken);
-    }
-
-    /// <summary>Refreshes statistics summary and row collections.</summary>
-    public void Refresh()
-    {
-        ApplyLoadSnapshot(ReadLoadSnapshot());
+        if (cancellationToken.IsCancellationRequested) { return; }
+        int revision = ++_loadRevision;
+        IsLoading = true;
+        HasLoadError = false;
+        try
+        {
+            bool loaded = await ViewModelLoadExecutor.ExecuteAsync(
+                ReadLoadSnapshot, ApplyLoadSnapshot, _errorSink, "statistics-load", cancellationToken,
+                () => revision == _loadRevision);
+            if (revision == _loadRevision && !cancellationToken.IsCancellationRequested)
+            {
+                HasLoadError = !loaded;
+            }
+        }
+        finally
+        {
+            if (revision == _loadRevision) { IsLoading = false; }
+        }
     }
 
     private StatisticsLoadSnapshot ReadLoadSnapshot()
@@ -238,19 +308,49 @@ internal sealed class StatisticsViewModel : ObservableObject
     private void ApplyLoadSnapshot(StatisticsLoadSnapshot snapshot)
     {
         StatisticsSummary summary = snapshot.Summary;
-        TotalTrafficText = string.Format(
+        string totalTraffic = string.Format(
             CultureInfo.CurrentCulture,
             _localization.GetString("Statistics.TotalTraffic.Format"),
             FormatByteCount(summary.TotalUploadBytes),
             FormatByteCount(summary.TotalDownloadBytes));
-        ConnectionCountText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.ConnectionCount.Format"), summary.ConnectionCount);
-        ProfileStatisticText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.ProfileCount.Format"), summary.ProfileCount);
-        SnapshotStatisticText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.SnapshotCount.Format"), summary.SnapshotCount);
-        NodeStatisticText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.NodeCount.Format"), summary.NodeCount, summary.NodeHealthCount);
-        RuleStatisticText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.RuleCount.Format"), summary.RuleCount);
-        ProfileTrafficRows = snapshot.ProfileTrafficRows;
-        DailyTrafficRows = snapshot.DailyTrafficRows;
-        NodeTrafficRows = snapshot.NodeTrafficRows;
+        string connections = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.ConnectionCount.Format"), summary.ConnectionCount);
+        string profiles = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.ProfileCount.Format"), summary.ProfileCount);
+        string snapshots = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.SnapshotCount.Format"), summary.SnapshotCount);
+        string nodes = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.NodeCount.Format"), summary.NodeCount, summary.NodeHealthCount);
+        string rules = string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.RuleCount.Format"), summary.RuleCount);
+        DateTimeOffset updated = _getNow();
+
+        // Prepare every value first, then publish one complete snapshot to binding observers.
+        _totalTrafficText = totalTraffic;
+        _connectionCountText = connections;
+        _profileStatisticText = profiles;
+        _snapshotStatisticText = snapshots;
+        _nodeStatisticText = nodes;
+        _ruleStatisticText = rules;
+        _profileTrafficRows = snapshot.ProfileTrafficRows;
+        _dailyTrafficRows = snapshot.DailyTrafficRows;
+        _nodeTrafficRows = snapshot.NodeTrafficRows;
+        _lastUpdated = updated;
+        _hasSnapshot = true;
+        OnPropertyChanged(nameof(TotalTrafficText));
+        OnPropertyChanged(nameof(ConnectionCountText));
+        OnPropertyChanged(nameof(ProfileStatisticText));
+        OnPropertyChanged(nameof(SnapshotStatisticText));
+        OnPropertyChanged(nameof(NodeStatisticText));
+        OnPropertyChanged(nameof(RuleStatisticText));
+        OnPropertyChanged(nameof(ProfileTrafficRows));
+        OnPropertyChanged(nameof(DailyTrafficRows));
+        OnPropertyChanged(nameof(NodeTrafficRows));
+        OnPropertyChanged(nameof(HasSnapshot));
+        OnPropertyChanged(nameof(StatusText));
+        NotifyEmptyStates();
+    }
+
+    private void NotifyEmptyStates()
+    {
+        OnPropertyChanged(nameof(HasNoProfileTraffic));
+        OnPropertyChanged(nameof(HasNoDailyTraffic));
+        OnPropertyChanged(nameof(HasNoNodeTraffic));
     }
 
     /// <summary>Formats a byte count for compact UI display.</summary>

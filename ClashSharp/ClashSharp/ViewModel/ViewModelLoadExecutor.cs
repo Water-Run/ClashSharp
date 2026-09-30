@@ -16,13 +16,15 @@ internal static class ViewModelLoadExecutor
     /// <param name="errorSink">Unexpected error sink. Must not be null.</param>
     /// <param name="operationName">Stable diagnostic operation name.</param>
     /// <param name="cancellationToken">Cancels this load attempt.</param>
-    /// <returns>A task that completes after application, cancellation, or failure reporting.</returns>
-    public static async Task ExecuteAsync<TSnapshot>(
+    /// <param name="isCurrent">Optional caller-owned revision check before publishing data or errors.</param>
+    /// <returns>True only when the current snapshot was applied successfully.</returns>
+    public static async Task<bool> ExecuteAsync<TSnapshot>(
         Func<TSnapshot> readSnapshot,
         Action<TSnapshot> applySnapshot,
         IApplicationErrorSink errorSink,
         string operationName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<bool>? isCurrent = null)
     {
         ArgumentNullException.ThrowIfNull(readSnapshot);
         ArgumentNullException.ThrowIfNull(applySnapshot);
@@ -33,7 +35,9 @@ internal static class ViewModelLoadExecutor
         {
             TSnapshot snapshot = await Task.Run(readSnapshot, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            if (isCurrent?.Invoke() == false) { return false; }
             applySnapshot(snapshot);
+            return true;
         }
         catch (OperationCanceledException exception) when (
             ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
@@ -42,8 +46,13 @@ internal static class ViewModelLoadExecutor
         catch (Exception exception) when (
             !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
-            await ReportUnexpectedAsync(errorSink, operationName, exception);
+            if (!cancellationToken.IsCancellationRequested && isCurrent?.Invoke() != false)
+            {
+                await ReportUnexpectedAsync(errorSink, operationName, exception);
+            }
         }
+
+        return false;
     }
 
     private static async Task ReportUnexpectedAsync(
