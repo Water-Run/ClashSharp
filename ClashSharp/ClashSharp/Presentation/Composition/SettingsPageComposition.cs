@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,7 +35,7 @@ internal interface ISettingsPageOperations
     ClashDataPackageScope? ReadPackageScope(string packagePath);
 
     /// <summary>Imports one validated data package.</summary>
-    Task ImportDataPackageAsync(string packagePath, CancellationToken cancellationToken);
+    Task<SettingsDataReplacementResult> ImportDataPackageAsync(string packagePath, CancellationToken cancellationToken);
 
     /// <summary>Exports settings data or the diagnostic log database.</summary>
     Task ExportDataAsync(
@@ -111,7 +110,8 @@ internal static class SettingsPageComposition
                 applicationLifecycle.RequestRestart("settings-reset-recovery"),
             beginDestructiveRuntimeMutationAsync:
                 runtimeMutations.BeginDestructiveMutationAsync,
-            isDisplayLanguageRestartPending: language => language != localization.CurrentLanguage);
+            isDisplayLanguageRestartPending: language => language != localization.CurrentLanguage,
+            replaceAllSettingsAsync: context.DataReplacement.ResetAllSettingsAsync);
 
         SettingsPageOperations operations = CreateOperations(context);
 
@@ -166,13 +166,9 @@ internal static class SettingsPageComposition
     {
         ArgumentNullException.ThrowIfNull(context);
         return new SettingsPageOperations(
-            context.Settings,
-            context.Localization,
             context.LogStorage,
             context.DataPackages,
-            context.SettingsRuntimeMutations,
-            context.ApplicationLifecycle,
-            context.Profiles,
+            context.DataReplacement,
             context.ErrorSink,
             context.SettingsExports);
     }
@@ -180,13 +176,9 @@ internal static class SettingsPageComposition
 
 /// <summary>Default settings-page implementation for package, log-export, and error operations.</summary>
 internal sealed class SettingsPageOperations(
-    AppSettingsService settings,
-    LocalizationService localization,
     ILogStorage logStorage,
     IDataPackageExporter dataPackages,
-    SettingsRuntimeMutationAdapter runtimeMutations,
-    ApplicationLifecycleService applicationLifecycle,
-    IProfileCatalog profiles,
+    ISettingsDataReplacement dataReplacement,
     IApplicationErrorSink errorSink,
     SettingsExportCoordinator exports) : ISettingsPageOperations
 {
@@ -209,22 +201,8 @@ internal sealed class SettingsPageOperations(
     }
 
     /// <inheritdoc />
-    public async Task ImportDataPackageAsync(string packagePath, CancellationToken cancellationToken)
-    {
-        await using ISettingsDestructiveRuntimeScope runtimeMutation =
-            await runtimeMutations.BeginDestructiveMutationAsync(cancellationToken);
-        try
-        {
-            await new SettingsImportCoordinator().ExecuteAsync(
-                new SettingsImportOperationAdapter(settings, localization, profiles, runtimeMutation),
-                packagePath,
-                cancellationToken);
-        }
-        catch (SettingsImportRecoveryException recoveryFailure) when (!ExceptionGraphClassifier.IsProcessFatal(recoveryFailure))
-        {
-            throw CreateImportRecoveryFailure(recoveryFailure.ActivationFailure, recoveryFailure.RecoveryFailure);
-        }
-    }
+    public Task<SettingsDataReplacementResult> ImportDataPackageAsync(string packagePath, CancellationToken cancellationToken) =>
+        dataReplacement.ImportAsync(packagePath, cancellationToken);
 
     /// <inheritdoc />
     public Task ExportDataAsync(
@@ -270,25 +248,4 @@ internal sealed class SettingsPageOperations(
             cancellationToken);
     }
 
-    private Exception CreateImportRecoveryFailure(Exception activationFailure, Exception recoveryFailure)
-    {
-        List<Exception> failures = [activationFailure, recoveryFailure];
-
-        try
-        {
-            if (!applicationLifecycle.RequestRestart("settings-import-recovery"))
-            {
-                failures.Add(new InvalidOperationException(
-                    "The mandatory restart request was rejected after settings import recovery failed."));
-            }
-        }
-        catch (Exception restartFailure) when (!ExceptionGraphClassifier.IsProcessFatal(restartFailure))
-        {
-            failures.Add(restartFailure);
-        }
-
-        return new AggregateException(
-            "Settings import could not restore a consistent durable and external generation; restart recovery is required.",
-            failures);
-    }
 }

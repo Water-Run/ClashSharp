@@ -2565,7 +2565,8 @@ public sealed partial class SettingsViewModelTests
         Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
             beginDestructiveRuntimeMutationAsync = null,
         Func<ISettingsResetTransactionReceipt>? beginResetSettings = null,
-        IMihomoServiceController? mihomoServiceController = null)
+        IMihomoServiceController? mihomoServiceController = null,
+        Func<CancellationToken, Task<ClashSharp.ApplicationModel.Settings.SettingsDataReplacementResult>>? replaceAllSettingsAsync = null)
     {
         SettingsViewModel viewModel = new(
             store,
@@ -2594,7 +2595,8 @@ public sealed partial class SettingsViewModelTests
             requestResetRecoveryRestart: requestResetRecoveryRestart,
             beginDestructiveRuntimeMutationAsync: beginDestructiveRuntimeMutationAsync,
             beginResetSettings: beginResetSettings,
-            mihomoServiceController: mihomoServiceController);
+            mihomoServiceController: mihomoServiceController,
+            replaceAllSettingsAsync: replaceAllSettingsAsync);
         viewModel.Load();
         return viewModel;
     }

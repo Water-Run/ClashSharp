@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Settings;
 
@@ -50,13 +51,27 @@ public sealed partial class AppSettingsService
 
     private object ReadAuthorityValue(GenerationSettingsAuthority authority, string key)
     {
+        SettingsAuthoritySnapshot snapshot = CaptureReadableAuthoritySnapshot(authority);
         string canonical = key == KeyConnectionTestUrl ? SettingsRegistry.Keys.ConnectionTestProxyUrl1.Value : key;
         if (key == KeyMainlandChinaDisplayEnabled)
         {
-            return authority.CaptureSnapshot().Envelope.Desired[SettingsRegistry.Keys.MainlandChinaFeatureMode].Value
+            return snapshot.Envelope.Desired[SettingsRegistry.Keys.MainlandChinaFeatureMode].Value
                 .Get<ClashSharp.Model.MainlandChinaFeatureMode>() != ClashSharp.Model.MainlandChinaFeatureMode.Disabled;
         }
-        return ToLegacyValue(authority.CaptureSnapshot().Envelope.Desired[new SettingKey(canonical)].Value);
+        return ToLegacyValue(snapshot.Envelope.Desired[new SettingKey(canonical)].Value);
+    }
+
+    /// <summary>Keeps display-only readers on the last verified publication while repository access is drained.</summary>
+    private SettingsAuthoritySnapshot CaptureReadableAuthoritySnapshot(GenerationSettingsAuthority authority)
+    {
+        try { return authority.CaptureSnapshot(); }
+        catch (DataGenerationManagerException exception) when (exception.Error == DataGenerationManagerError.Draining)
+        {
+            lock (_syncLock)
+            {
+                return _publishedAuthority ?? throw new InvalidOperationException("No verified settings have been published.");
+            }
+        }
     }
 
     private static object ToLegacyValue(SettingValue value) => value.ValueType == typeof(bool) ? value.Get<bool>()

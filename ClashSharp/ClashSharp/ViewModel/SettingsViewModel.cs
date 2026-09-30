@@ -376,7 +376,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
             beginDestructiveRuntimeMutationAsync = null,
         Func<ISettingsResetTransactionReceipt>? beginResetSettings = null,
-        Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null)
+        Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null,
+        Func<CancellationToken, Task<SettingsDataReplacementResult>>? replaceAllSettingsAsync = null)
         : this(
             settings,
             applyLanguage,
@@ -409,7 +410,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
             requestResetRecoveryRestart,
             beginDestructiveRuntimeMutationAsync,
             beginResetSettings,
-            isDisplayLanguageRestartPending)
+            isDisplayLanguageRestartPending,
+            replaceAllSettingsAsync)
     {
     }
 
@@ -447,9 +449,15 @@ internal sealed partial class SettingsViewModel : ObservableObject
         Func<CancellationToken, ValueTask<ISettingsDestructiveRuntimeScope>>?
             beginDestructiveRuntimeMutationAsync = null,
         Func<ISettingsResetTransactionReceipt>? beginResetSettings = null,
-        Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null)
+        Func<AppLanguage, bool>? isDisplayLanguageRestartPending = null,
+        Func<CancellationToken, Task<SettingsDataReplacementResult>>? replaceAllSettingsAsync = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+#if UNIT_TESTS
+        _replaceAllSettingsAsync = replaceAllSettingsAsync;
+#else
+        _replaceAllSettingsAsync = replaceAllSettingsAsync ?? throw new ArgumentNullException(nameof(replaceAllSettingsAsync));
+#endif
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _applyLanguage = applyLanguage ?? throw new ArgumentNullException(nameof(applyLanguage));
         _applyTheme = applyTheme ?? throw new ArgumentNullException(nameof(applyTheme));
@@ -1229,7 +1237,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public bool IsTriggerEngineRestartPending => false;
 
     public bool HasRestartRequiredSettings =>
-        IsDisplayLanguageRestartPending
+        _dataReplacementRestartPending
+        || IsDisplayLanguageRestartPending
         || IsAppAccentColorRestartPending
         || IsMainlandChinaDisplayRestartPending;
 
@@ -2640,6 +2649,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
         {
             await WaitForOutstandingRuntimeSettingsAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            if (scope == SettingsResetScope.All && _replaceAllSettingsAsync is not null)
+            {
+                await ResetThroughDataReplacementAsync(cancellationToken);
+                return;
+            }
             runtimeMutation = await _beginDestructiveRuntimeMutationAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             restartRequiredBaseline = CaptureRestartRequiredSettingsBaseline();

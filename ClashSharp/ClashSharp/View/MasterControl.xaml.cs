@@ -318,10 +318,8 @@ public sealed partial class MasterControl : Page
                 await _dataPackages.ExportAsync(GetDialogXamlRoot(), cancellationToken);
                 break;
             case MasterControlTileAction.ImportConfiguration:
-                if (await _dataPackages.ImportAsync(GetDialogXamlRoot(), cancellationToken))
-                {
-                    await RefreshAfterActionAsync(cancellationToken, settingsImported: true);
-                }
+                await _dataPackages.ImportAsync(GetDialogXamlRoot(),
+                    token => RefreshAfterActionAsync(token, settingsImported: true), cancellationToken);
                 break;
             case MasterControlTileAction.OpenConnectionTest:
                 await ShowNetworkCheckAsync(false, cancellationToken);

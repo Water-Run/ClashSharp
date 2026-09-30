@@ -35,7 +35,7 @@ public sealed partial class AppSettingsService
         SettingKey[] requested = keys.ToArray();
         if (Volatile.Read(ref _authority) is { } authority)
         {
-            SettingsEnvelope envelope = authority.CaptureSnapshot().Envelope;
+            SettingsEnvelope envelope = CaptureReadableAuthoritySnapshot(authority).Envelope;
             return Array.AsReadOnly(requested.Select(key => new SettingValueChange(key, envelope.Desired[key].Value)).ToArray());
         }
         lock (_syncLock)
@@ -128,7 +128,7 @@ public sealed partial class AppSettingsService
     {
         if (Volatile.Read(ref _authority) is { } authority)
         {
-            SettingsEnvelope envelope = authority.CaptureSnapshot().Envelope;
+            SettingsEnvelope envelope = CaptureReadableAuthoritySnapshot(authority).Envelope;
             return new(envelope.Desired[SettingsRegistry.Keys.ConnectionSamplingEnabled].Value.Get<bool>(),
                 envelope.Desired[SettingsRegistry.Keys.ConnectionSamplingIntervalSeconds].Value.Get<int>());
         }

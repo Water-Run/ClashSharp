@@ -32,6 +32,13 @@
                 Visibility="{Binding HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
             <InfoBar
+                Message="{Binding DataReplacementWarningText}"
+                Severity="Warning"
+                IsClosable="False"
+                IsOpen="{Binding HasDataReplacementWarning, Mode=OneWay}"
+                Visibility="{Binding HasDataReplacementWarning, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+            <InfoBar
                 x:Name="SettingsRestartRequiredNoticeText"
                 Title="{Binding RestartRequiredTitleText}"
                 Message="{Binding RestartRequiredNoticeText}"

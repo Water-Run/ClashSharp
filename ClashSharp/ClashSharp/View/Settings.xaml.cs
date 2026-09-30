@@ -812,12 +812,12 @@ public sealed partial class Settings : Page
     {
         await RunPageOperationAsync(async token =>
         {
-            if (await _dataPackages.ImportAsync(GetDialogXamlRoot(), token))
+            await _dataPackages.ImportAsync(GetDialogXamlRoot(), async refreshToken =>
             {
-                token.ThrowIfCancellationRequested();
+                refreshToken.ThrowIfCancellationRequested();
                 _viewModel.ReloadAfterDataImport();
-                await _viewModel.RefreshStartupRestoreFallbackStatusAsync(token);
-            }
+                await _viewModel.RefreshStartupRestoreFallbackStatusAsync(refreshToken);
+            }, token);
         });
     }
 

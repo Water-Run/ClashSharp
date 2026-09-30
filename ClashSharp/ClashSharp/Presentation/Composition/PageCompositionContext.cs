@@ -39,4 +39,5 @@ internal sealed record PageCompositionContext(
     TriggerPresentationFactory TriggerPresentation,
     StartupGuideComposition StartupGuide,
     IApplicationErrorSink ErrorSink,
-    SettingsExportCoordinator SettingsExports);
+    SettingsExportCoordinator SettingsExports,
+    ISettingsDataReplacement DataReplacement);

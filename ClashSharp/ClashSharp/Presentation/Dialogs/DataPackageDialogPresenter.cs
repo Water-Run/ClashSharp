@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Components;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Composition;
@@ -106,8 +107,10 @@ internal sealed class DataPackageDialogPresenter
 
     /// <summary>Imports a package after scope validation and two explicit overwrite confirmations.</summary>
     /// <returns>True only after the import transaction has completed successfully.</returns>
-    public async Task<bool> ImportAsync(XamlRoot xamlRoot, CancellationToken cancellationToken)
+    public async Task<bool> ImportAsync(XamlRoot xamlRoot,
+        Func<CancellationToken, Task> refreshCommittedData, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(refreshCommittedData);
         cancellationToken.ThrowIfCancellationRequested();
         FileOpenPicker picker = new() { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
         InitializePickerWithWindow(picker);
@@ -133,9 +136,10 @@ internal sealed class DataPackageDialogPresenter
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        SettingsDataReplacementResult result;
         try
         {
-            await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
+            result = await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
         }
         catch (Exception exception) when (
             !ExceptionGraphClassifier.IsProcessFatal(exception)
@@ -143,8 +147,11 @@ internal sealed class DataPackageDialogPresenter
         {
             try
             {
+                bool recoveryRequired = exception is SettingsDataReplacementRecoveryException;
                 await ShowImportResultAsync(xamlRoot,
-                    "Settings.DataImport.Failed", "Settings.DataImport.Failed.Description", cancellationToken);
+                    recoveryRequired ? "Settings.DataReplacement.RecoveryRequired" : "Settings.DataImport.Failed",
+                    recoveryRequired ? "Settings.DataReplacement.RecoveryRequired.Description" : "Settings.DataImport.Failed.Description",
+                    cancellationToken);
             }
             finally
             {
@@ -154,8 +161,13 @@ internal sealed class DataPackageDialogPresenter
             return false;
         }
 
+        // Publish page and tile state before presenting completion, while the page operation still owns input.
+        await refreshCommittedData(cancellationToken);
         await ShowImportResultAsync(xamlRoot,
-            "Settings.DataImport.Completed", "Settings.DataImport.Completed.Description", cancellationToken);
+            "Settings.DataImport.Completed",
+            result.RequiresRestart ? "Settings.DataReplacement.RestartRequired.Description"
+                : result.Warnings.Count > 0 ? "Settings.DataReplacement.Warning.Description"
+                : "Settings.DataImport.Completed.Description", cancellationToken);
         return true;
     }
 
