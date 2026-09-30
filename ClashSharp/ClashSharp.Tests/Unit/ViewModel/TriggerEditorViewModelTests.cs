@@ -27,6 +27,31 @@ public sealed class TriggerEditorViewModelTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task ReloadReflectsGlobalEnablementWithoutWritingSettingsOrDefinitions(bool enabled)
+    {
+        RecordingDefinitionStore store = new(Catalog(3, CompleteDefinition("alpha", "Alpha")));
+        FakeTriggerSettings settings = new() { CurrentValue = !enabled };
+        TestApplicationErrorSink errors = new();
+        TriggersViewModel model = new(Localize, store, settings, errors);
+        List<string?> notifications = [];
+        model.PropertyChanged += (_, change) => notifications.Add(change.PropertyName);
+        settings.CurrentValue = enabled;
+
+        Assert.True(await model.LoadAsync(CancellationToken.None));
+
+        Assert.Equal(enabled, model.TriggersEnabled);
+        Assert.Equal(enabled, model.CanEditTriggers);
+        Assert.Equal(!enabled, model.IsDisabledNoticeVisible);
+        Assert.Contains(nameof(model.TriggersEnabled), notifications);
+        Assert.Contains(nameof(model.CanEditTriggers), notifications);
+        Assert.Contains(nameof(model.IsDisabledNoticeVisible), notifications);
+        Assert.Equal(0, store.ReplaceCallCount);
+        Assert.Empty(errors.Errors);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task NavigationReloadRetainsUnsavedDraftUntilExplicitSaveOrCancel(bool existingTask)
     {
         RecordingDefinitionStore store = new(Catalog(3, CompleteDefinition("alpha", "Alpha")));
@@ -880,7 +905,8 @@ public sealed class TriggerEditorViewModelTests
 
     private sealed class FakeTriggerSettings : ITriggerPresentationSettings
     {
-        public bool IsEnabled { get; set; } = true;
+        public bool CurrentValue { get; set; } = true;
+        public bool IsEnabled => CurrentValue;
     }
 
     private sealed class RecordingDefinitionStore : ITriggerDefinitionStore

@@ -49,10 +49,6 @@ internal sealed class TriggerPresentationFactory
         private readonly AppSettingsService _settings = settings
             ?? throw new ArgumentNullException(nameof(settings));
 
-        public bool IsEnabled
-        {
-            get => _settings.TriggersEnabled;
-            set => _settings.TriggersEnabled = value;
-        }
+        public bool IsEnabled => _settings.TriggersEnabled;
     }
 }

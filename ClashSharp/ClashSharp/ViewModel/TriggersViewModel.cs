@@ -113,11 +113,10 @@ internal sealed class TriggersViewModel : ObservableObject
     public bool TriggersEnabled
     {
         get => _triggersEnabled;
-        set
+        private set
         {
             if (SetProperty(ref _triggersEnabled, value))
             {
-                _settings.IsEnabled = value;
                 OnPropertyChanged(nameof(CanEditTriggers));
                 OnPropertyChanged(nameof(CanEnableAllTriggers));
                 OnPropertyChanged(nameof(CanDisableAllTriggers));
