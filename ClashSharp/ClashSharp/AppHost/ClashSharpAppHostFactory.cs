@@ -63,8 +63,9 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton(_ => AppSettingsAuditLogService.Instance);
             services.AddSingleton(_ => LocalizationService.Instance);
             services.AddSingleton(_ => LogStorageService.Instance);
+            services.AddSingleton<ILogStorage>(provider => provider.GetRequiredService<LogStorageService>());
             services.AddSingleton<IApplicationErrorSink>(provider => new ApplicationErrorSink(
-                provider.GetRequiredService<LogStorageService>().AppendLog,
+                provider.GetRequiredService<ILogStorage>().AppendLog,
                 provider.GetRequiredService<LocalizationService>().GetString));
             services.AddSingleton<RuntimeLifetimeRegistry>();
             services.AddSingleton(provider => provider.GetRequiredService<RuntimeLifetimeRegistry>()
@@ -73,12 +74,13 @@ internal static class ClashSharpAppHostFactory
             {
                 // Catalog compensation can append a log while disposal drains an active operation.
                 // Capture its dependency first so the host retires the catalog before log storage.
-                _ = provider.GetRequiredService<LogStorageService>();
+                _ = provider.GetRequiredService<ILogStorage>();
                 LateBoundProfileCatalogMutationCoordinator.Instance.Configure(
                     provider.GetRequiredService<MutationAdmissionBarrier>(),
                     provider.GetRequiredService<FairAsyncMutationGate>());
                 return ProfileCatalogService.Instance;
             });
+            services.AddSingleton<IProfileCatalog>(provider => provider.GetRequiredService<ProfileCatalogService>());
             services.AddSingleton(_ => StartupLaunchServiceFactory.CreateDefault());
             services.AddSingleton(_ => MihomoConnectionService.Instance);
             services.AddSingleton(_ => MihomoControllerClient.Instance);
@@ -143,7 +145,7 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<MihomoConnectionService>(),
                 provider.GetRequiredService<NotificationService>(),
                 provider.GetRequiredService<TriggerRuntimeEventHub>(),
-                provider.GetRequiredService<LogStorageService>().AppendLog,
+                provider.GetRequiredService<ILogStorage>().AppendLog,
                 provider.GetRequiredService<LocalizationService>().GetString,
                 provider.GetRequiredService<ApplicationLifecycleService>(),
                 provider.GetRequiredService<RuntimeLifecycleCoordinator>(),
@@ -208,7 +210,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<ITriggerExecutionLog>(provider => new TriggerExecutionLogAdapter(
                 provider.GetRequiredService<ITriggerDefinitionStore>(),
                 provider.GetRequiredService<LocalizationService>().GetString,
-                provider.GetRequiredService<LogStorageService>().AppendLog,
+                provider.GetRequiredService<ILogStorage>().AppendLog,
                 provider.GetRequiredService<IApplicationErrorSink>()));
             services.AddSingleton<TriggerActionExecutor>();
             services.AddSingleton<ITriggerExecutionDispatcher>(provider =>
@@ -247,11 +249,11 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<TriggerPresentationFactory>();
             services.AddSingleton<IProfileSubscriptionSchedulerCatalog>(provider =>
                 new ProfileSubscriptionSchedulerCatalogAdapter(
-                    provider.GetRequiredService<ProfileCatalogService>()));
+                    provider.GetRequiredService<IProfileCatalog>()));
             services.AddSingleton(provider => provider.GetRequiredService<RuntimeLifetimeRegistry>().RegisterParticipant(new ProfileSubscriptionScheduler(
                 provider.GetRequiredService<IProfileSubscriptionSchedulerCatalog>(),
                 provider.GetRequiredService<TimeProvider>(),
-                provider.GetRequiredService<LogStorageService>().AppendLog), order: 300));
+                provider.GetRequiredService<ILogStorage>().AppendLog), order: 300));
             services.AddSingleton(provider => new RuntimeLifecycleCoordinator(
                     provider.GetRequiredService<MutationAdmissionBarrier>(),
                     provider.GetRequiredService<RuntimeLifetimeRegistry>(),

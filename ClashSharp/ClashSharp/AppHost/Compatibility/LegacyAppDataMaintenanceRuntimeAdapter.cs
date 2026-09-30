@@ -10,7 +10,7 @@ namespace ClashSharp.Hosting.Compatibility;
 internal sealed class LegacyAppDataMaintenanceRuntimeAdapter(
     ConnectionSamplingService sampling,
     Func<CancellationToken, Task> stopNetworkRuntimeAsync,
-    LogStorageService logStorage,
+    ILogStorage logStorage,
     Func<string, string> getString) : IAppDataMaintenanceRuntime
 {
     public async Task ShutdownAsync(CancellationToken cancellationToken)

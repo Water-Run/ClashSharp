@@ -60,7 +60,7 @@ internal static class SettingsPageComposition
         ArgumentNullException.ThrowIfNull(context);
         AppSettingsService settings = context.Settings;
         LocalizationService localization = context.Localization;
-        LogStorageService logStorage = context.LogStorage;
+        ILogStorage logStorage = context.LogStorage;
         CoreConfigurationService coreConfiguration = context.CoreConfiguration;
         MihomoCoreService mihomoCore = context.MihomoCore;
         ApplicationActionService applicationActions = context.ApplicationActions;
@@ -182,11 +182,11 @@ internal static class SettingsPageComposition
 internal sealed class SettingsPageOperations(
     AppSettingsService settings,
     LocalizationService localization,
-    LogStorageService logStorage,
+    ILogStorage logStorage,
     ClashDataPackageService dataPackages,
     SettingsRuntimeMutationAdapter runtimeMutations,
     ApplicationLifecycleService applicationLifecycle,
-    ProfileCatalogService profiles,
+    IProfileCatalog profiles,
     IApplicationErrorSink errorSink,
     SettingsExportCoordinator exports) : ISettingsPageOperations
 {

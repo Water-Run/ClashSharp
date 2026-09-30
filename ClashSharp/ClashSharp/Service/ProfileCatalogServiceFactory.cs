@@ -164,7 +164,7 @@ internal sealed class ProfileCatalogCoreConfigurationAdapter(CoreConfigurationSe
     }
 }
 
-internal sealed class ProfileCatalogLogAdapter(LogStorageService logStorage) : IProfileCatalogLog
+internal sealed class ProfileCatalogLogAdapter(ILogStorage logStorage) : IProfileCatalogLog
 {
     public void AppendLog(string level, string category, string message, string? detail)
     {

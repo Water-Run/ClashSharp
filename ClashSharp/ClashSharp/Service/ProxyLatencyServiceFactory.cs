@@ -25,7 +25,7 @@ internal static class ProxyLatencyServiceFactory
     }
 }
 
-internal sealed class ProxyLatencyStorageAdapter(LogStorageService logStorage) : IProxyLatencyStorage
+internal sealed class ProxyLatencyStorageAdapter(ILogStorage logStorage) : IProxyLatencyStorage
 {
     public void UpsertNodeHealth(string name, string regionCode, int? latencyMilliseconds)
     {

@@ -11,9 +11,9 @@ namespace ClashSharp.Presentation.Adapters;
 /// <summary>Adapts profile persistence to the links presentation contract.</summary>
 internal sealed class SubscriptionLinkCatalogAdapter : ISubscriptionLinkCatalog
 {
-    private readonly ProfileCatalogService _catalog;
+    private readonly IProfileCatalog _catalog;
 
-    public SubscriptionLinkCatalogAdapter(ProfileCatalogService catalog)
+    public SubscriptionLinkCatalogAdapter(IProfileCatalog catalog)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
     }

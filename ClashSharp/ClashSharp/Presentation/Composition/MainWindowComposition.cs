@@ -106,7 +106,7 @@ internal sealed class MainWindowComposition
         private readonly MihomoCoreService _mihomoCore;
         private readonly MihomoServiceManager _mihomoService;
         private readonly NetworkStateCoordinator _networkState;
-        private readonly LogStorageService _logs;
+        private readonly ILogStorage _logs;
         private readonly TrayStatusService _trayStatus;
         private readonly IStartupGuidePresenter _startupGuide;
         private readonly ShellNavigationService _navigation;
@@ -118,7 +118,7 @@ internal sealed class MainWindowComposition
             MihomoCoreService mihomoCore,
             MihomoServiceManager mihomoService,
             NetworkStateCoordinator networkState,
-            LogStorageService logs,
+            ILogStorage logs,
             TrayStatusService trayStatus,
             RestartRequiredStateService restartState,
             IApplicationErrorSink errorSink,

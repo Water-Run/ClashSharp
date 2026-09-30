@@ -11,7 +11,7 @@ namespace ClashSharp.Presentation.Adapters;
 internal sealed class SettingsImportOperationAdapter(
     AppSettingsService settings,
     LocalizationService localization,
-    ProfileCatalogService profiles,
+    IProfileCatalog profiles,
     ISettingsDestructiveRuntimeScope runtimeMutation) : ISettingsImportOperation
 {
     public SettingsRuntimeSnapshot CaptureSnapshot() => new(
@@ -30,7 +30,7 @@ internal sealed class SettingsImportOperationAdapter(
     public async Task<IRetainedSettingsTransactionReceipt> BeginImportAsync(string packagePath, CancellationToken cancellationToken) =>
         await runtimeMutation.BeginImportAsync(packagePath, cancellationToken);
 
-    public void InvalidateProfiles() => profiles.ResetAfterDataDeletion();
+    public void InvalidateProfiles() => profiles.InvalidateCache();
 
     public void ApplyLanguage(AppLanguage language) => localization.CurrentLanguage = language;
 

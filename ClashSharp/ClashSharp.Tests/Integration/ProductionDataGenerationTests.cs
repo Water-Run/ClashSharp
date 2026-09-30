@@ -17,7 +17,7 @@ using Validator = ClashSharpUi::ClashSharp.Service.ICoreConfigurationValidator;
 namespace ClashSharp.Tests.Integration;
 
 /// <summary>Runs the actual production repository composition in temporary directories with isolated native-effect boundaries.</summary>
-public sealed class ProductionDataGenerationTests
+public sealed partial class ProductionDataGenerationTests
 {
     [Fact]
     public async Task FirstGeneration_OwnsAllRealRepositories_AndRestartReusesThemWithoutLegacyRecovery()
@@ -218,10 +218,14 @@ public sealed class ProductionDataGenerationTests
         Assert.Throws<ObjectDisposedException>(() => repositories.Logs.GetRecentLogs(5));
     }
 
-    private sealed class Fixture : IAsyncDisposable, ILegacySettingsSource
+    private sealed partial class Fixture : IAsyncDisposable, ILegacySettingsSource
     {
         private readonly DataGenerationBootstrapper _bootstrap;
+        private readonly DataGenerationTestDirectory _directory;
+        private readonly Factory _factory;
         public MutationAdmissionBarrier Admission { get; } = new();
+        public FairAsyncMutationGate MutationGate { get; } = new();
+        public ConfigurationValidator Validator { get; } = new();
         public DataGenerationManager Manager { get; } = new();
         public List<string> Calls { get; } = [];
         public List<Repositories> Containers { get; } = [];
@@ -230,6 +234,7 @@ public sealed class ProductionDataGenerationTests
 
         public Fixture(DataGenerationTestDirectory directory, bool failThirdParticipant = false, Producer? producer = null)
         {
+            _directory = directory;
             GenerationSettingsAuthority authority = new(Manager, Admission);
             Dictionary<SettingApplicationKind, Func<Repositories, ISettingsApplicationParticipant>> participants =
                 SettingsRegistry.Default.Definitions.Select(definition => definition.ApplicationKind).Distinct().ToDictionary(kind => kind,
@@ -247,11 +252,12 @@ public sealed class ProductionDataGenerationTests
                 if (Recover is not null) { await Recover(); }
             }, session =>
             {
-                Repositories repositories = new(session, authority, Admission, new FairAsyncMutationGate(), new Credential(),
-                    new ProfileMetrics(), new ConfigurationValidator(), key => key, (_, _) => new Runtime());
+                Repositories repositories = new(session, authority, Admission, MutationGate, new Credential(),
+                    new ProfileMetrics(), Validator, key => key, (_, _) => new Runtime());
                 Containers.Add(repositories);
                 return repositories;
             }, participants);
+            _factory = factory;
             _bootstrap = new(directory.Store, factory, Manager, Admission);
         }
 
@@ -309,7 +315,9 @@ public sealed class ProductionDataGenerationTests
 
     private sealed class ConfigurationValidator : Validator
     {
-        public Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Func<CancellationToken, Task>? OnValidate { get; set; }
+        public Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
+            OnValidate?.Invoke(cancellationToken) ?? Task.CompletedTask;
     }
 
     private sealed class Runtime : ProfileRuntime

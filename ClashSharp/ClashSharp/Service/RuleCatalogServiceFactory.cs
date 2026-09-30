@@ -32,7 +32,7 @@ internal sealed class RuleCatalogProfileRulesAdapter(MihomoProfileParserService 
     }
 }
 
-internal sealed class RuleCatalogHitStorageAdapter(LogStorageService storage) : IRuleCatalogHitStorage
+internal sealed class RuleCatalogHitStorageAdapter(ILogStorage storage) : IRuleCatalogHitStorage
 {
     public void EnsureRuleHitRows(IReadOnlyList<RulePreview> rules)
     {

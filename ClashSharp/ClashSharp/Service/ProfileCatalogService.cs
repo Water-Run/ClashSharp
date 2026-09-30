@@ -103,7 +103,7 @@ internal readonly record struct ProfileCatalogSummary(
 /// Thread safety: Public members serialize mutable state through a private lock.
 /// Side effects: Reads and writes the local profile catalog JSON file; persists active profile selection to application settings.
 /// </remarks>
-public sealed partial class ProfileCatalogService : IAsyncDisposable
+public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDisposable
 {
     private readonly RepositoryOperationLifetime _operations;
 

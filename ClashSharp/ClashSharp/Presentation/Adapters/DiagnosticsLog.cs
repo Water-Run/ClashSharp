@@ -4,15 +4,15 @@ using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
 
-/// <summary>Adapts <see cref="LogStorageService"/> to <see cref="IDiagnosticsLog"/>.</summary>
+/// <summary>Adapts <see cref="ILogStorage"/> to <see cref="IDiagnosticsLog"/>.</summary>
 internal sealed class DiagnosticsLog : IDiagnosticsLog
 {
     /// <summary>Underlying application log storage.</summary>
-    private readonly LogStorageService _logStorage;
+    private readonly ILogStorage _logStorage;
 
     /// <summary>Initializes the adapter.</summary>
     /// <param name="logStorage">Log storage service. Must not be null.</param>
-    public DiagnosticsLog(LogStorageService logStorage)
+    public DiagnosticsLog(ILogStorage logStorage)
     {
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));
     }

@@ -9,9 +9,9 @@ namespace ClashSharp.Presentation.Adapters;
 /// <summary>Adapts SQLite storage to presentation-owned log contracts.</summary>
 internal sealed class LogManagementStoreAdapter : ILogManagementStore
 {
-    private readonly LogStorageService _logStorage;
+    private readonly ILogStorage _logStorage;
 
-    public LogManagementStoreAdapter(LogStorageService logStorage)
+    public LogManagementStoreAdapter(ILogStorage logStorage)
     {
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));
     }

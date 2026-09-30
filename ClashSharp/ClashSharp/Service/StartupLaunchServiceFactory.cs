@@ -53,7 +53,7 @@ internal sealed class StartupLaunchTaskAdapter(StartupTask task) : IStartupLaunc
     }
 }
 
-internal sealed class StartupLaunchLogAdapter(LogStorageService logStorage) : IStartupLaunchLog
+internal sealed class StartupLaunchLogAdapter(ILogStorage logStorage) : IStartupLaunchLog
 {
     public void AppendLog(string level, string category, string message, string? detail)
     {

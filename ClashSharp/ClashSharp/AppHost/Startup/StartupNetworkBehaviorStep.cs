@@ -17,7 +17,7 @@ internal sealed class StartupNetworkBehaviorStep(
     LegacyNetworkIntentSource intents,
     ApplicationActionService actions,
     StartupConflictSnapshot conflicts,
-    LogStorageService logStorage,
+    ILogStorage logStorage,
     LocalizationService localization) : IStartupStep
 {
     public string Name => "startup-network-behavior";

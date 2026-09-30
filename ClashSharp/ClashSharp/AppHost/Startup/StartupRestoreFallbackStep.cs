@@ -14,7 +14,7 @@ namespace ClashSharp.Hosting.Startup;
 internal sealed class StartupRestoreFallbackStep(
     NetworkStateCoordinator network,
     LegacyNetworkIntentSource intents,
-    LogStorageService logStorage,
+    ILogStorage logStorage,
     LocalizationService localization) : IStartupStep
 {
     public string Name => "startup-restore-fallback";

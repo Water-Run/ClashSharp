@@ -6,7 +6,7 @@ using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
 
-/// <summary>Adapts <see cref="ProfileCatalogService"/> to canonical profile-name lookup.</summary>
+/// <summary>Adapts <see cref="IProfileCatalog"/> to canonical profile-name lookup.</summary>
 /// <remarks>
 /// Invariants: Returns unmodified profile names keyed by profile identifiers.
 /// Thread safety: Matches the wrapped service.
@@ -15,12 +15,12 @@ namespace ClashSharp.Presentation.Adapters;
 internal sealed class StatisticsProfilesAdapter : IStatisticsProfiles
 {
     /// <summary>Wrapped profile catalog service.</summary>
-    private readonly ProfileCatalogService _profiles;
+    private readonly IProfileCatalog _profiles;
 
     /// <summary>Initializes a statistics profiles adapter.</summary>
     /// <param name="profiles">Profile catalog service. Must not be null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="profiles"/> is null.</exception>
-    public StatisticsProfilesAdapter(ProfileCatalogService profiles)
+    public StatisticsProfilesAdapter(IProfileCatalog profiles)
     {
         _profiles = profiles ?? throw new ArgumentNullException(nameof(profiles));
     }

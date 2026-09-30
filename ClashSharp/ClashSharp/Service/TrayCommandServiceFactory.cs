@@ -36,7 +36,7 @@ internal sealed class TrayCommandTakeoverAdapter(ApplicationActionService action
 }
 
 /// <summary>Adapts log storage to tray command logging.</summary>
-internal sealed class TrayCommandLogAdapter(LogStorageService log) : ITrayCommandLog
+internal sealed class TrayCommandLogAdapter(ILogStorage log) : ITrayCommandLog
 {
     public void Append(string level, string category, string message, string? detail)
     {

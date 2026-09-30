@@ -6,7 +6,7 @@ using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
 
-/// <summary>Adapts <see cref="LogStorageService"/> to statistics reads.</summary>
+/// <summary>Adapts <see cref="ILogStorage"/> to statistics reads.</summary>
 /// <remarks>
 /// Invariants: Wraps a non-null log storage service.
 /// Thread safety: Matches the wrapped service.
@@ -15,12 +15,12 @@ namespace ClashSharp.Presentation.Adapters;
 internal sealed class StatisticsStoreAdapter : IStatisticsStore
 {
     /// <summary>Wrapped log storage service.</summary>
-    private readonly LogStorageService _logStorage;
+    private readonly ILogStorage _logStorage;
 
     /// <summary>Initializes a statistics store adapter.</summary>
     /// <param name="logStorage">Log storage service. Must not be null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="logStorage"/> is null.</exception>
-    public StatisticsStoreAdapter(LogStorageService logStorage)
+    public StatisticsStoreAdapter(ILogStorage logStorage)
     {
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));
     }

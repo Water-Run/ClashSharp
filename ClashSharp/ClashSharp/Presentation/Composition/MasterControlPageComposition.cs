@@ -51,8 +51,8 @@ internal static class MasterControlPageComposition
         ProxyLatencyService proxyLatency = context.ProxyLatency;
         CoreConfigurationService coreConfiguration = context.CoreConfiguration;
         StartupRestoreFallbackService startupRestoreFallback = context.StartupRestoreFallback;
-        ProfileCatalogService profileCatalog = context.Profiles;
-        LogStorageService logStorage = context.LogStorage;
+        IProfileCatalog profileCatalog = context.Profiles;
+        ILogStorage logStorage = context.LogStorage;
         MihomoCoreService mihomoCore = context.MihomoCore;
         MihomoServiceManager mihomoServiceManager = context.MihomoService;
         RuntimeTrafficRateService runtimeTrafficRate = context.RuntimeTraffic;

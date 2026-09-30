@@ -11,9 +11,9 @@ namespace ClashSharp.Presentation.Adapters;
 /// <summary>Adapts profile persistence to the profiles presentation contract.</summary>
 internal sealed class ProfileManagementCatalogAdapter : IProfileManagementCatalog
 {
-    private readonly ProfileCatalogService _catalog;
+    private readonly IProfileCatalog _catalog;
 
-    public ProfileManagementCatalogAdapter(ProfileCatalogService catalog)
+    public ProfileManagementCatalogAdapter(IProfileCatalog catalog)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
     }

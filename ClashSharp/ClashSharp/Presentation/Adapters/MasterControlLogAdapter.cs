@@ -4,7 +4,7 @@ using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
 
-/// <summary>Adapts <see cref="LogStorageService"/> to master-control logging.</summary>
+/// <summary>Adapts <see cref="ILogStorage"/> to master-control logging.</summary>
 /// <remarks>
 /// Invariants: Wraps a non-null log service for the adapter lifetime.
 /// Thread safety: Matches the wrapped service.
@@ -13,12 +13,12 @@ namespace ClashSharp.Presentation.Adapters;
 internal sealed class MasterControlLogAdapter : IMasterControlLog
 {
     /// <summary>Wrapped log service.</summary>
-    private readonly LogStorageService _log;
+    private readonly ILogStorage _log;
 
     /// <summary>Initializes a master-control log adapter.</summary>
     /// <param name="log">Log service. Must not be null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="log"/> is null.</exception>
-    public MasterControlLogAdapter(LogStorageService log)
+    public MasterControlLogAdapter(ILogStorage log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }

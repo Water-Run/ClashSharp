@@ -20,6 +20,7 @@ namespace ClashSharp.Hosting.Data;
 internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDisposable
 {
     private readonly object _disposalLock = new();
+    private readonly ITriggerTrafficContextSource _trafficContext;
     private readonly List<IRuntimeParticipant> _producers = [];
     private readonly List<ISettingsApplicationParticipant> _participants = [];
     private Task? _disposal;
@@ -41,6 +42,7 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
         GenerationRepositorySettings settings = new(session, settingsAuthority);
         Configuration = new(Path.Combine(session.Generation.RootPath, "mihomo"), settings, credentials, metrics, validator, getString);
         Logs = LogStorageServiceFactory.CreateForDirectory(session.Generation.RootPath, () => settings.ActiveProfileId);
+        _trafficContext = new SqliteTriggerTrafficContextSource(Logs.DatabasePath);
         Profiles = ProfileCatalogServiceFactory.CreateForDirectory(session.Generation.RootPath, settings,
             new ProfileCatalogCoreConfigurationAdapter(Configuration), createProfileRuntime(Configuration, session),
             new ProfileCatalogLogAdapter(Logs), getString, new ProfileCatalogMutationCoordinator(admission, mutationGate));
@@ -133,8 +135,9 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
             if (_settingsContext is null) { throw new InvalidOperationException("Generation composition has not been sealed."); }
             if (serviceType == typeof(SettingsGenerationContext)) { return _settingsContext; }
             if (serviceType == typeof(SettingsAuthoritySession)) { return Session; }
-            if (serviceType == typeof(ProfileCatalogService)) { return Profiles; }
-            if (serviceType == typeof(LogStorageService)) { return Logs; }
+            if (serviceType == typeof(ProfileCatalogService) || serviceType == typeof(IProfileCatalog)) { return Profiles; }
+            if (serviceType == typeof(LogStorageService) || serviceType == typeof(ILogStorage)) { return Logs; }
+            if (serviceType == typeof(ITriggerTrafficContextSource)) { return _trafficContext; }
             if (serviceType == typeof(CoreConfigurationService)) { return Configuration; }
             if (serviceType == typeof(ITriggerRepository) || serviceType == typeof(SqliteTriggerRepository)) { return Triggers; }
             return _participants.SingleOrDefault(serviceType.IsInstanceOfType);

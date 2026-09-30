@@ -4,7 +4,7 @@ using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
 
-/// <summary>Adapts <see cref="LogStorageService"/> to connection logging.</summary>
+/// <summary>Adapts <see cref="ILogStorage"/> to connection logging.</summary>
 /// <remarks>
 /// Invariants: Wraps a non-null log storage service.
 /// Thread safety: Matches the wrapped service.
@@ -13,12 +13,12 @@ namespace ClashSharp.Presentation.Adapters;
 internal sealed class ConnectionLogAdapter : IConnectionLog
 {
     /// <summary>Wrapped log storage service.</summary>
-    private readonly LogStorageService _log;
+    private readonly ILogStorage _log;
 
     /// <summary>Initializes a connection log adapter.</summary>
     /// <param name="log">Log storage service. Must not be null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="log"/> is null.</exception>
-    public ConnectionLogAdapter(LogStorageService log)
+    public ConnectionLogAdapter(ILogStorage log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }

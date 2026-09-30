@@ -12,7 +12,7 @@ namespace ClashSharp.Presentation.Composition;
 internal sealed class StartupGuideComposition(
     AppSettingsService settings,
     LocalizationService localization,
-    ProfileCatalogService profileCatalog,
+    IProfileCatalog profileCatalog,
     MihomoServiceManager mihomoServiceManager,
     StartupRestoreFallbackService startupRestoreFallback,
     WindowsProxyService windowsProxy,
@@ -45,7 +45,7 @@ internal sealed class StartupGuideComposition(
     /// <summary>Adapts application services to background-safe startup probes.</summary>
     private sealed class StartupCheckProbe(
         AppSettingsService settings,
-        ProfileCatalogService profileCatalog,
+        IProfileCatalog profileCatalog,
         MihomoServiceManager mihomoServiceManager,
         StartupRestoreFallbackService startupRestoreFallback,
         WindowsProxyService windowsProxy,

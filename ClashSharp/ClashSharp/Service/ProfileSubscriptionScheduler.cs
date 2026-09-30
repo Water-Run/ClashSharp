@@ -146,7 +146,7 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
 }
 
 /// <summary>Adapts the profile catalog to the automatic update scheduler.</summary>
-internal sealed class ProfileSubscriptionSchedulerCatalogAdapter(ProfileCatalogService catalog) :
+internal sealed class ProfileSubscriptionSchedulerCatalogAdapter(IProfileCatalog catalog) :
     IProfileSubscriptionSchedulerCatalog
 {
     public IReadOnlyList<ProfileSubscriptionLink> GetDueSubscriptionLinks(DateTimeOffset now)

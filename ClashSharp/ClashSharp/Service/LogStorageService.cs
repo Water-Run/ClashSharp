@@ -22,7 +22,7 @@ public readonly record struct LogCleanupPreview(long EntryCount, long EstimatedS
 /// Thread safety: Public methods serialize database access through a private lock.
 /// Side effects: Creates and mutates a local SQLite database under the application data directory.
 /// </remarks>
-public sealed partial class LogStorageService : IAsyncDisposable
+public sealed partial class LogStorageService : ILogStorage, IAsyncDisposable
 {
     private static readonly string[] DatabaseFileSuffixes = ["", "-wal", "-shm", "-journal"];
     private readonly RepositoryOperationLifetime _operations;

@@ -12,10 +12,10 @@ internal sealed class AppSettingsAuditLogService
     public static AppSettingsAuditLogService Instance { get; } = new(AppSettingsService.Instance, LogStorageService.Instance);
 
     private readonly AppSettingsService _settings;
-    private readonly LogStorageService _logStorage;
+    private readonly ILogStorage _logStorage;
     private int _isStarted;
 
-    internal AppSettingsAuditLogService(AppSettingsService settings, LogStorageService logStorage)
+    internal AppSettingsAuditLogService(AppSettingsService settings, ILogStorage logStorage)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));

@@ -13,7 +13,7 @@ internal sealed class StartupConflictProbeStep(
     AppSettingsService settings,
     StartupConflictDetectionService conflicts,
     StartupConflictSnapshot snapshot,
-    LogStorageService logStorage,
+    ILogStorage logStorage,
     LocalizationService localization) : IStartupStep
 {
     public string Name => "startup-conflict-probe";

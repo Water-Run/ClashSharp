@@ -20,8 +20,8 @@ internal sealed class MasterControlRuntimeSnapshotSource : IMasterControlRuntime
     private readonly Func<string> _getActiveProfileId;
     private readonly Func<CoreConfigurationState> _getCoreConfiguration;
     private readonly Func<string, string?> _readProfileConfigurationText;
-    private readonly ProfileCatalogService _profileCatalog;
-    private readonly LogStorageService _logStorage;
+    private readonly IProfileCatalog _profileCatalog;
+    private readonly ILogStorage _logStorage;
     private readonly Func<string, string> _getString;
     private readonly Func<MihomoServiceStatus> _getMihomoServiceStatus;
     private readonly Func<CancellationToken, Task<StartupRestoreFallbackStatus>> _getStartupRestoreFallbackStatus;
@@ -36,8 +36,8 @@ internal sealed class MasterControlRuntimeSnapshotSource : IMasterControlRuntime
         Func<string> getActiveProfileId,
         Func<CoreConfigurationState> getCoreConfiguration,
         Func<string, string?> readProfileConfigurationText,
-        ProfileCatalogService profileCatalog,
-        LogStorageService logStorage,
+        IProfileCatalog profileCatalog,
+        ILogStorage logStorage,
         Func<string, string> getString,
         Func<MihomoServiceStatus> getMihomoServiceStatus,
         Func<CancellationToken, Task<StartupRestoreFallbackStatus>> getStartupRestoreFallbackStatus,

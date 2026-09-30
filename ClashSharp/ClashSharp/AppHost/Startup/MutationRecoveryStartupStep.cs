@@ -13,7 +13,7 @@ internal sealed class MutationRecoveryStartupStep(
     IMutationJournalStore journalStore,
     MutationAdmissionBarrier admissionBarrier,
     IApplicationMutationCoordinator mutations,
-    LogStorageService logStorage) : IStartupStep
+    ILogStorage logStorage) : IStartupStep
 {
     public string Name => "mutation-recovery";
 

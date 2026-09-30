@@ -49,7 +49,7 @@ internal sealed class ConnectionSamplingSourceAdapter(MihomoConnectionService co
     }
 }
 
-internal sealed class ConnectionSamplingStorageAdapter(LogStorageService logStorage) : IConnectionSamplingStorage
+internal sealed class ConnectionSamplingStorageAdapter(ILogStorage logStorage) : IConnectionSamplingStorage
 {
     public int AppendTrafficSnapshot(MihomoTrafficSnapshot snapshot)
     {

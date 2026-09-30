@@ -23,7 +23,7 @@ internal static class TrayStatusServiceFactory
 }
 
 /// <summary>Adapts log storage node health rows to tray status latency data.</summary>
-internal sealed class TrayStatusHealthStorageAdapter(LogStorageService logStorage) : ITrayStatusHealthStorage
+internal sealed class TrayStatusHealthStorageAdapter(ILogStorage logStorage) : ITrayStatusHealthStorage
 {
     public int? GetNodeLatencyMilliseconds(string nodeName)
     {

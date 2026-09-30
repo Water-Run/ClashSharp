@@ -103,6 +103,8 @@
     <Compile Include="..\ClashSharp\Service\LogStorageMaintenance.cs" Link="Service\LogStorageMaintenance.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageSchema.cs" Link="Service\LogStorageSchema.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.cs" Link="Service\LogStorageService.cs" />
+    <Compile Include="..\ClashSharp\Service\ILogStorage.cs" Link="Service\ILogStorage.cs" />
+    <Compile Include="..\ClashSharp\Service\LogStorageService.Access.cs" Link="Service\LogStorageService.Access.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.CleanupPreview.cs" Link="Service\LogStorageService.CleanupPreview.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.Traffic.cs" Link="Service\LogStorageService.Traffic.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageServiceFactory.cs" Link="Service\LogStorageServiceFactory.cs" />
@@ -158,6 +160,8 @@
     <Compile Include="..\ClashSharp\Service\ProfileCatalogIds.cs" Link="Service\ProfileCatalogIds.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogMutationCoordinator.cs" Link="Service\ProfileCatalogMutationCoordinator.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.cs" Link="Service\ProfileCatalogService.cs" />
+    <Compile Include="..\ClashSharp\Service\IProfileCatalog.cs" Link="Service\IProfileCatalog.cs" />
+    <Compile Include="..\ClashSharp\Service\ProfileCatalogService.Access.cs" Link="Service\ProfileCatalogService.Access.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileStatusText.cs" Link="Service\ProfileStatusText.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileOperationGate.cs" Link="Service\ProfileOperationGate.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogServiceFactory.cs" Link="Service\ProfileCatalogServiceFactory.cs" />

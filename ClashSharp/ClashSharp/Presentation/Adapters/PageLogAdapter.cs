@@ -7,9 +7,9 @@ namespace ClashSharp.Presentation.Adapters;
 /// <summary>Adapts persistent logging to the presentation log boundary.</summary>
 internal sealed class PageLogAdapter : IPageLog
 {
-    private readonly LogStorageService _logStorage;
+    private readonly ILogStorage _logStorage;
 
-    public PageLogAdapter(LogStorageService logStorage)
+    public PageLogAdapter(ILogStorage logStorage)
     {
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));
     }

@@ -4,7 +4,7 @@ using ClashSharp.ViewModel;
 
 namespace ClashSharp.Presentation.Adapters;
 
-/// <summary>Adapts <see cref="LogStorageService"/> to proxies logging.</summary>
+/// <summary>Adapts <see cref="ILogStorage"/> to proxies logging.</summary>
 /// <remarks>
 /// Invariants: Wraps a non-null log service for the adapter lifetime.
 /// Thread safety: Matches the wrapped service.
@@ -13,12 +13,12 @@ namespace ClashSharp.Presentation.Adapters;
 internal sealed class ProxiesLogAdapter : IProxiesLog
 {
     /// <summary>Wrapped log service.</summary>
-    private readonly LogStorageService _log;
+    private readonly ILogStorage _log;
 
     /// <summary>Initializes a proxies log adapter.</summary>
     /// <param name="log">Log service. Must not be null.</param>
     /// <exception cref="ArgumentNullException"><paramref name="log"/> is null.</exception>
-    public ProxiesLogAdapter(LogStorageService log)
+    public ProxiesLogAdapter(ILogStorage log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
