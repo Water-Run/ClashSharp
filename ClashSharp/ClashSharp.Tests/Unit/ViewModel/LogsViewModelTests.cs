@@ -9,7 +9,7 @@ using ClashSharp.ViewModel;
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Verifies asynchronous log maintenance and preview presentation boundaries.</summary>
-public sealed class LogsViewModelTests
+public sealed partial class LogsViewModelTests
 {
     [Fact]
     public async Task LoadAsync_EmptyRequestedCategorySurvivesNativeItemChangesAndRefresh()

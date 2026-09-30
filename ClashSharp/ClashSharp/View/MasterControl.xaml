@@ -25,11 +25,11 @@
             Padding="{StaticResource ClashPagePadding}"
             VerticalScrollBarVisibility="Auto"
             HorizontalScrollBarVisibility="Disabled"
-            HorizontalContentAlignment="Stretch">
+            HorizontalContentAlignment="Stretch"
+            SizeChanged="RootScrollViewer_SizeChanged">
             <StackPanel
                 x:Name="ContentHost"
-                Spacing="14"
-                SizeChanged="ContentHost_SizeChanged">
+                Spacing="14">
                 <InfoBar
                     Message="{Binding OperationErrorText}"
                     Severity="Error"

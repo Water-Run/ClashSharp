@@ -849,9 +849,18 @@ public sealed partial class MasterControl : Page
             HeroStatusFlyoutMaxListHeight);
     }
 
-    private void ContentHost_SizeChanged(object sender, SizeChangedEventArgs e)
+    private void RootScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        UpdateMasterLayout(e.NewSize.Width);
+        double contentWidth = e.NewSize.Width - RootScrollViewer.Padding.Left - RootScrollViewer.Padding.Right;
+        if (!double.IsFinite(contentWidth) || contentWidth <= 0)
+        {
+            return;
+        }
+
+        // The content can retain a wider desired size when GridView containers resize.
+        // Constrain it to the viewport before sizing the hero, modes and information tiles.
+        ContentHost.Width = contentWidth;
+        UpdateMasterLayout(contentWidth);
     }
 
     private void UpdateMasterLayout(double contentWidth)

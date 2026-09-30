@@ -9,6 +9,7 @@ using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Diagnostics;
 using ClashSharp.Model;
@@ -233,15 +234,16 @@ internal sealed class LogsViewModel : ObservableObject
     /// </remarks>
     public async Task WatchRuntimeLogsAsync(CancellationToken cancellationToken)
     {
+        using CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         List<Task> watchers = [];
         if (_streamRuntimeLogs is not null)
         {
-            watchers.Add(WatchCoreLogsAsync(cancellationToken));
+            watchers.Add(WatchCoreLogsAsync(lifetime.Token));
         }
 
         if (_readServiceHostLogs is not null)
         {
-            watchers.Add(WatchServiceHostLogsAsync(cancellationToken));
+            watchers.Add(WatchServiceHostLogsAsync(lifetime.Token));
         }
 
         if (watchers.Count == 0)
@@ -249,7 +251,21 @@ internal sealed class LogsViewModel : ObservableObject
             return;
         }
 
-        await Task.WhenAll(watchers);
+        // These sources normally run until cancellation. If either terminates, cancel and
+        // observe its companion before returning so a failed source cannot strand the page.
+        await Task.WhenAny(watchers);
+        watchers.Add(lifetime.CancelAsync());
+        Task completion = Task.WhenAll(watchers);
+        try
+        {
+            await completion;
+        }
+        catch (Exception) when (completion.Exception is { InnerExceptions.Count: > 1 } failures)
+        {
+            // Await exposes only one failure. Preserve simultaneous source/cancellation
+            // failures so the outer error boundary can still detect a nested fatal error.
+            throw failures;
+        }
     }
 
     private async Task WatchCoreLogsAsync(CancellationToken cancellationToken)
@@ -266,11 +282,13 @@ internal sealed class LogsViewModel : ObservableObject
                     AppendRuntimeLog("Core", level, message);
                 }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (ExceptionGraphClassifier.IsProcessFatal(exception))
             {
-                throw;
+                // A canceled Task can lose its exception when combined with a faulted Task.
+                // Keep nested fatal cancellation faulted so WhenAll preserves the whole graph.
+                throw new AggregateException(exception);
             }
-            catch (Exception exception) when (IsRecoverableRuntimeStreamFailure(exception))
+            catch (Exception exception) when (IsRecoverableRuntimeStreamFailure(exception, cancellationToken))
             {
                 // A stopped/restarting core is normal. Keep the last stable window and reconnect.
             }
@@ -306,11 +324,11 @@ internal sealed class LogsViewModel : ObservableObject
                     AppendRuntimeLog("Service", "Info", entry);
                 }
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException exception) when (ExceptionGraphClassifier.IsProcessFatal(exception))
             {
-                throw;
+                throw new AggregateException(exception);
             }
-            catch (Exception exception) when (IsRecoverableRuntimeStreamFailure(exception))
+            catch (Exception exception) when (IsRecoverableRuntimeStreamFailure(exception, cancellationToken))
             {
                 // A missing/stopped Service is a normal App-owned runtime state.
             }
@@ -438,7 +456,7 @@ internal sealed class LogsViewModel : ObservableObject
             || record.Detail.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsRecoverableRuntimeStreamFailure(Exception exception)
+    private static bool IsRecoverableRuntimeStreamFailure(Exception exception, CancellationToken cancellationToken)
     {
         return exception is HttpRequestException
             or WebSocketException
@@ -446,7 +464,10 @@ internal sealed class LogsViewModel : ObservableObject
             or JsonException
             or InvalidOperationException
             or TimeoutException
-            or UnauthorizedAccessException;
+            or OperationCanceledException
+            or UnauthorizedAccessException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken);
     }
 
     public void ApplySearchText(string? searchText)
