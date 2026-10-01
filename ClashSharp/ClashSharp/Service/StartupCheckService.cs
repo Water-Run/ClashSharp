@@ -80,7 +80,7 @@ public sealed class StartupCheckService
         ArgumentNullException.ThrowIfNull(unknownDescription);
         if (!transparentProxyEnabled)
         {
-            return new StartupCheckItem(true, title, disabledDescription);
+            return new StartupCheckItem(true, title, disabledDescription) { Kind = StartupCheckKind.TransparentProxy };
         }
 
         string statusMessage = string.IsNullOrWhiteSpace(status.Message)
@@ -94,7 +94,11 @@ public sealed class StartupCheckService
         return new StartupCheckItem(
             status.IsKnown && status.IsInstalled,
             title,
-            description);
+            description)
+        {
+            Kind = StartupCheckKind.TransparentProxy,
+            IsUnavailable = !status.IsKnown,
+        };
     }
 
     private async Task<CheckEvaluation[]> EvaluateChecksAsync(
@@ -126,13 +130,14 @@ public sealed class StartupCheckService
                     text.SubscriptionTitle,
                     hasSubscription
                         ? text.SubscriptionReady
-                        : text.SubscriptionMissing),
+                        : text.SubscriptionMissing)
+                { Kind = StartupCheckKind.Subscription, IsOptional = !hasSubscription },
                 operationName);
         }
         catch (Exception exception) when (CanContain(exception, cancellationToken))
         {
             return CheckEvaluation.Failed(
-                new StartupCheckItem(false, text.SubscriptionTitle, text.Unavailable),
+                new StartupCheckItem(false, text.SubscriptionTitle, text.Unavailable) { Kind = StartupCheckKind.Subscription, IsUnavailable = true },
                 operationName,
                 exception);
         }
@@ -164,7 +169,7 @@ public sealed class StartupCheckService
         catch (Exception exception) when (CanContain(exception, cancellationToken))
         {
             return CheckEvaluation.Failed(
-                new StartupCheckItem(false, text.TransparentProxyTitle, text.Unavailable),
+                new StartupCheckItem(false, text.TransparentProxyTitle, text.Unavailable) { Kind = StartupCheckKind.TransparentProxy, IsUnavailable = true },
                 operationName,
                 exception);
         }
@@ -186,13 +191,14 @@ public sealed class StartupCheckService
                     text.FallbackTitle,
                     isRegistered
                         ? text.FallbackRegistered
-                        : text.FallbackNotRegistered),
+                        : text.FallbackNotRegistered)
+                { Kind = StartupCheckKind.StartupRecovery, IsOptional = !isRegistered },
                 operationName);
         }
         catch (Exception exception) when (CanContain(exception, cancellationToken))
         {
             return CheckEvaluation.Failed(
-                new StartupCheckItem(false, text.FallbackTitle, text.Unavailable),
+                new StartupCheckItem(false, text.FallbackTitle, text.Unavailable) { Kind = StartupCheckKind.StartupRecovery, IsUnavailable = true },
                 operationName,
                 exception);
         }
@@ -219,13 +225,14 @@ public sealed class StartupCheckService
                     text.StaleProxyTitle,
                     hasStaleProxy
                         ? text.StaleProxyDetected
-                        : text.StaleProxyClean),
+                        : text.StaleProxyClean)
+                { Kind = StartupCheckKind.SystemProxy },
                 operationName);
         }
         catch (Exception exception) when (CanContain(exception, cancellationToken))
         {
             return CheckEvaluation.Failed(
-                new StartupCheckItem(false, text.StaleProxyTitle, text.Unavailable),
+                new StartupCheckItem(false, text.StaleProxyTitle, text.Unavailable) { Kind = StartupCheckKind.SystemProxy, IsUnavailable = true },
                 operationName,
                 exception);
         }

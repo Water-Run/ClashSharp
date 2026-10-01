@@ -30,7 +30,9 @@
             x:Name="ModeButton"
             MinHeight="78"
             HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
             HorizontalContentAlignment="Stretch"
+            VerticalContentAlignment="Stretch"
             Padding="0"
             Background="Transparent"
             BorderThickness="0"
@@ -57,10 +59,10 @@
                 Glyph="{Binding Glyph, ElementName=Root}"
                 FontSize="20"
                 Width="28"
-                VerticalAlignment="Top"
+                VerticalAlignment="Center"
                 Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
 
-            <StackPanel Grid.Column="1" Spacing="3">
+            <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
                 <TextBlock
                     Text="{Binding Title, ElementName=Root}"
                     Style="{ThemeResource BodyStrongTextBlockStyle}"

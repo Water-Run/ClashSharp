@@ -44,7 +44,7 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorHorizontalChrome = 96;
     private const double InfoTileEditorMinListHeight = 80;
     private const double InfoTileEditorMaxListHeight = 420;
-    private const double InfoTileEditorVerticalChrome = 406;
+    private const double InfoTileEditorVerticalChrome = 470;
 
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
@@ -678,6 +678,26 @@ public sealed partial class MasterControl : Page
             tile,
             tile.IsVisible)));
 
+        IReadOnlyList<MasterInfoTilePreset> presets = MasterInfoTilePresetCatalog.Create(_getString, _viewModel.RecommendedInfoTileIds);
+        IReadOnlyList<string>? templateOrder = null;
+        bool applyingTemplate = false;
+        ComboBox templatePicker = new()
+        {
+            Header = _getString("Master.Preset.Label"),
+            PlaceholderText = _getString("Master.Preset.Custom"),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        foreach (MasterInfoTilePreset preset in presets)
+        {
+            ComboBoxItem item = new() { Content = preset.Title, Tag = preset };
+            ToolTipService.SetToolTip(item, preset.Description);
+            templatePicker.Items.Add(item);
+            if (_viewModel.VisibleInfoTiles.Select(static tile => tile.Id).SequenceEqual(preset.TileIds, StringComparer.Ordinal))
+            {
+                templatePicker.SelectedItem = item;
+            }
+        }
+
         StackPanel panel = new()
         {
             Spacing = 10,
@@ -690,6 +710,7 @@ public sealed partial class MasterControl : Page
             Opacity = 0.72,
             TextWrapping = TextWrapping.WrapWholeWords,
         });
+        panel.Children.Add(templatePicker);
         panel.Children.Add(optionList);
 
         TextBlock selectionCount = new()
@@ -714,7 +735,38 @@ public sealed partial class MasterControl : Page
             }
             RefreshSelectionCount();
         }
-        optionList.SelectionChanged += (_, _) => RefreshSelectionCount();
+        optionList.SelectionChanged += (_, _) =>
+        {
+            if (applyingTemplate) { return; }
+            templatePicker.SelectedIndex = -1;
+            ToolTipService.SetToolTip(templatePicker, null);
+            RefreshSelectionCount();
+        };
+        void ApplyTemplate(IReadOnlyList<string> order)
+        {
+            applyingTemplate = true;
+            try
+            {
+                templateOrder = order.ToArray();
+                HashSet<string> selected = order.ToHashSet(StringComparer.Ordinal);
+                foreach (SearchableOptionItem option in optionList.Options) { option.IsChecked = selected.Contains(option.Id); }
+                templatePicker.SelectedItem = templatePicker.Items.OfType<ComboBoxItem>().FirstOrDefault(
+                    item => item.Tag is MasterInfoTilePreset preset && preset.TileIds.SequenceEqual(order, StringComparer.Ordinal));
+                if (templatePicker.SelectedItem is ComboBoxItem { Tag: MasterInfoTilePreset chosen })
+                {
+                    ToolTipService.SetToolTip(templatePicker, chosen.Description);
+                }
+                RefreshSelectionCount();
+            }
+            finally { applyingTemplate = false; }
+        }
+        templatePicker.SelectionChanged += (_, _) =>
+        {
+            if (!applyingTemplate && templatePicker.SelectedItem is ComboBoxItem { Tag: MasterInfoTilePreset chosen })
+            {
+                ApplyTemplate(chosen.TileIds);
+            }
+        };
         Button showAll = new() { Content = _getString("Master.Tile.ShowAll") };
         Button hideAll = new() { Content = _getString("Master.Tile.HideAll") };
         showAll.Click += (_, _) => SetAllChecked(true);
@@ -731,22 +783,12 @@ public sealed partial class MasterControl : Page
         panel.Children.Add(selectionActions);
         RefreshSelectionCount();
 
-        bool recommendedOrder = false;
         HyperlinkButton restoreLayout = new()
         {
             Content = _getString("Master.Tile.RestoreRecommended"),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        restoreLayout.Click += (_, _) =>
-        {
-            HashSet<string> recommended = _viewModel.RecommendedInfoTileIds.ToHashSet(StringComparer.Ordinal);
-            foreach (SearchableOptionItem option in optionList.Options)
-            {
-                option.IsChecked = recommended.Contains(option.Id);
-            }
-            recommendedOrder = true;
-            RefreshSelectionCount();
-        };
+        restoreLayout.Click += (_, _) => ApplyTemplate(_viewModel.RecommendedInfoTileIds);
         panel.Children.Add(restoreLayout);
 
         ThemedContentDialog dialog = new()
@@ -792,8 +834,7 @@ public sealed partial class MasterControl : Page
         HashSet<string> selectedIds = optionList.SelectedOptions
             .Select(static option => option.Id)
             .ToHashSet(StringComparer.Ordinal);
-        IEnumerable<string> initialOrder = recommendedOrder ? _viewModel.RecommendedInfoTileIds
-            : _viewModel.VisibleInfoTiles.Select(static tile => tile.Id);
+        IEnumerable<string> initialOrder = templateOrder ?? _viewModel.VisibleInfoTiles.Select(static tile => tile.Id);
         List<string> orderedSelectedIds = initialOrder
             .Where(selectedIds.Contains)
             .ToList();
@@ -975,6 +1016,10 @@ public sealed partial class MasterControl : Page
     private void ArrangeModeButtons(bool isSideBySide)
     {
         ModeButtonGrid.RowSpacing = isSideBySide ? 10 : 0;
+        foreach (RowDefinition row in ModeButtonGrid.RowDefinitions)
+        {
+            row.Height = isSideBySide ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        }
         Thickness narrowSecondRowMargin = isSideBySide
             ? new Thickness(0)
             : new Thickness(0, 10, 0, 0);

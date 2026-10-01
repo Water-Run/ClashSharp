@@ -20,7 +20,7 @@ internal sealed class StartupGuideComposition(
     MihomoCoreService core)
 {
     /// <summary>Creates a presenter backed by explicitly composed application services.</summary>
-    public IStartupGuidePresenter Create(IApplicationErrorSink errorSink)
+    public IStartupGuidePresenter Create(IApplicationErrorSink errorSink, Action<string>? navigate = null)
     {
         ArgumentNullException.ThrowIfNull(errorSink);
 
@@ -39,7 +39,8 @@ internal sealed class StartupGuideComposition(
         return new StartupGuidePresenter(
             checks,
             localization.GetString,
-            errorSink);
+            errorSink,
+            navigate);
     }
 
     /// <summary>Adapts application services to background-safe startup probes.</summary>

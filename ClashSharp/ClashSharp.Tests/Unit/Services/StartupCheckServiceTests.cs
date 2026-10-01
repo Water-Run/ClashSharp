@@ -7,6 +7,43 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class StartupCheckServiceTests
 {
     [Fact]
+    public async Task StartupPanel_OptionalSetupIsNotReportedAsAnOperationalWarning()
+    {
+        FakeStartupCheckProbe probe = new() { SubscriptionConfigured = false, FallbackRegistered = false };
+        StartupCheckService service = new(probe, GetString, new RecordingErrorSink());
+
+        IReadOnlyList<StartupCheckItem> checks = await service.GetChecksAsync(CancellationToken.None);
+
+        Assert.Equal(StartupCheckState.Optional, checks[0].State);
+        Assert.Equal(StartupCheckKind.Subscription, checks[0].Kind);
+        Assert.Equal(StartupCheckState.Optional, checks[2].State);
+        Assert.Equal(StartupCheckKind.StartupRecovery, checks[2].Kind);
+        Assert.DoesNotContain(checks, static check => check.State is StartupCheckState.Attention or StartupCheckState.Unavailable);
+    }
+
+    [Fact]
+    public async Task StartupPanel_RecheckReflectsNewResultsAndKeepsFailedProbesDistinctFromOptionalSetup()
+    {
+        FakeStartupCheckProbe probe = new() { SubscriptionConfigured = false, HasStaleProxy = true };
+        StartupCheckService service = new(probe, GetString, new RecordingErrorSink());
+        IReadOnlyList<StartupCheckItem> before = await service.GetChecksAsync(CancellationToken.None);
+        Assert.Equal(StartupCheckState.Attention, before[3].State);
+        Assert.Equal(StartupCheckKind.SystemProxy, before[3].Kind);
+
+        probe.SubscriptionConfigured = true;
+        probe.HasStaleProxy = false;
+        IReadOnlyList<StartupCheckItem> after = await service.GetChecksAsync(CancellationToken.None);
+        Assert.All(after, static check => Assert.Equal(StartupCheckState.Healthy, check.State));
+        Assert.Equal(StartupCheckState.Optional, before[0].State);
+        Assert.Equal(StartupCheckState.Attention, before[3].State);
+
+        probe.SubscriptionFailure = new IOException("Private probe error");
+        IReadOnlyList<StartupCheckItem> unavailable = await service.GetChecksAsync(CancellationToken.None);
+        Assert.Equal(StartupCheckState.Unavailable, unavailable[0].State);
+        Assert.DoesNotContain("Private", unavailable[0].Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetChecksAsync_CollectsEachRequiredProbeOnceOffTheCallingPath()
     {
         using ManualResetEventSlim subscriptionStarted = new();
@@ -253,7 +290,10 @@ public sealed class StartupCheckServiceTests
 
         public ManualResetEventSlim? ReleaseSubscription { get; init; }
 
-        public Exception? SubscriptionFailure { get; init; }
+        public Exception? SubscriptionFailure { get; set; }
+        public bool SubscriptionConfigured { get; set; } = true;
+        public bool FallbackRegistered { get; set; } = true;
+        public bool HasStaleProxy { get; set; }
 
         public bool TransparentProxyEnabled { get; init; } = true;
 
@@ -281,7 +321,7 @@ public sealed class StartupCheckServiceTests
                 throw SubscriptionFailure;
             }
 
-            return true;
+            return SubscriptionConfigured;
         }
 
         public bool IsTransparentProxyEnabled(CancellationToken cancellationToken)
@@ -302,7 +342,7 @@ public sealed class StartupCheckServiceTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             FallbackRegisteredCalls++;
-            return Task.FromResult(true);
+            return Task.FromResult(FallbackRegistered);
         }
 
         public WindowsProxyState GetWindowsProxyState(CancellationToken cancellationToken)
@@ -326,7 +366,7 @@ public sealed class StartupCheckServiceTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             StaleProxyCalls++;
-            return false;
+            return HasStaleProxy;
         }
     }
 }

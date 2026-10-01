@@ -1830,8 +1830,8 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("MaxWidth=\"520\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("MinWidth=\"0\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("MinWidth=\"360\"", dialogXaml, StringComparison.Ordinal);
-        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">520</x:Double>", dialogXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth=\"480\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">560</x:Double>", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("MaxWidth=\"512\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMinWidth", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMaxWidth", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ChecksScroll\"", dialogXaml, StringComparison.Ordinal);
@@ -2111,7 +2111,7 @@ public sealed class AppResourcePackagingTests
 
         Assert.Equal("Stretch", (string?)rootScrollViewer.Attribute("HorizontalContentAlignment"));
         Assert.Equal("360", (string?)modeColumn.Attribute("Width"));
-        Assert.Equal("Top", (string?)modeButtonGrid.Attribute("VerticalAlignment"));
+        Assert.Equal("Stretch", (string?)modeButtonGrid.Attribute("VerticalAlignment"));
         Assert.Same(heroAndModeGrid, heroStatusCard.Parent);
         Assert.Same(heroAndModeGrid, modeButtonGrid.Parent);
         XElement[] modeRows = modeButtonGrid
@@ -2119,7 +2119,7 @@ public sealed class AppResourcePackagingTests
             .Elements(presentation + "RowDefinition")
             .ToArray();
         Assert.Equal(4, modeRows.Length);
-        Assert.All(modeRows, static row => Assert.Equal("Auto", (string?)row.Attribute("Height")));
+        Assert.All(modeRows, static row => Assert.Equal("*", (string?)row.Attribute("Height")));
         Assert.Equal("Horizontal", (string?)heroItemsPanel.Attribute("Orientation"));
         Assert.Equal("2", (string?)heroItemsPanel.Attribute("MaximumRowsOrColumns"));
         Assert.Contains("x:Name=\"StandbyModeButton\"", masterControlXaml, StringComparison.Ordinal);
@@ -2947,12 +2947,12 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("XamlRoot = GetDialogXamlRoot()", settingsCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
-        Assert.Contains("ChecksScroll.MaxHeight = Math.Max(120, _layoutRoot.Size.Height - 260)", guideCode, StringComparison.Ordinal);
+        Assert.Contains("ChecksScroll.MaxHeight = Math.Max(120, _layoutRoot.Size.Height - 380)", guideCode, StringComparison.Ordinal);
         Assert.Contains("_layoutRoot.Changed += OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.Contains("_layoutRoot.Changed -= OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"520\"", guideXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxWidth=\"520\"", guideXaml, StringComparison.Ordinal);
-        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">520</x:Double>", guideXaml, StringComparison.Ordinal);
+        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">560</x:Double>", guideXaml, StringComparison.Ordinal);
         Assert.Contains(
             "await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken)",
             masterControlCode,

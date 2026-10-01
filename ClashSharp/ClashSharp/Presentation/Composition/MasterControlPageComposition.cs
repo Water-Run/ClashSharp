@@ -118,7 +118,7 @@ internal static class MasterControlPageComposition
             localization.GetString,
             errorSink,
             tileActions,
-            context.StartupGuide.Create(errorSink),
+            context.StartupGuide.Create(errorSink, navigateToPage),
             async (xamlRoot, cancellationToken) =>
             {
                 IReadOnlyList<StartupConflictIssue> issues = await conflictDetection

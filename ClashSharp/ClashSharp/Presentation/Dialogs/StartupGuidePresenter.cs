@@ -7,6 +7,7 @@ using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Components;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 
 namespace ClashSharp.Presentation.Dialogs;
@@ -29,16 +30,19 @@ internal sealed class StartupGuidePresenter : IStartupGuidePresenter
     private readonly StartupCheckService _checks;
     private readonly Func<string, string> _getString;
     private readonly IApplicationErrorSink _errorSink;
+    private readonly Action<string>? _navigate;
     private int _isPresentationActive;
 
     public StartupGuidePresenter(
         StartupCheckService checks,
         Func<string, string> getString,
-        IApplicationErrorSink errorSink)
+        IApplicationErrorSink errorSink,
+        Action<string>? navigate = null)
     {
         _checks = checks ?? throw new ArgumentNullException(nameof(checks));
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
+        _navigate = navigate;
     }
 
     /// <inheritdoc />
@@ -58,11 +62,48 @@ internal sealed class StartupGuidePresenter : IStartupGuidePresenter
                 await _checks.GetChecksAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            StartupGuideDialog dialog = new(checks, _getString)
+            StartupGuideDialog dialog = new(checks, _getString, _navigate is not null)
             {
                 XamlRoot = xamlRoot,
             };
-            _ = await WindowDialogCoordinator.ShowAsync(dialog, cancellationToken);
+            using CancellationTokenSource refreshLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            AsyncRelayCommand refresh = new(async _ =>
+            {
+                CancellationToken token = refreshLifetime.Token;
+                try
+                {
+                    token.ThrowIfCancellationRequested();
+                    dialog.SetRefreshing(true);
+                    IReadOnlyList<StartupCheckItem> updated = await _checks.GetChecksAsync(token);
+                    token.ThrowIfCancellationRequested();
+                    dialog.UpdateSnapshot(updated);
+                }
+                catch (Exception exception) when (ExceptionGraphClassifier.IsCallerCancellation(exception, token))
+                {
+                }
+                catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+                {
+                    if (!token.IsCancellationRequested) { dialog.ShowRefreshFailure(); }
+                    throw;
+                }
+                finally
+                {
+                    if (!token.IsCancellationRequested) { dialog.SetRefreshing(false); }
+                }
+            }, _errorSink, () => !refreshLifetime.IsCancellationRequested, "startup-guide-refresh");
+            dialog.SetRefreshCommand(refresh);
+            try
+            {
+                _ = await WindowDialogCoordinator.ShowAsync(dialog, cancellationToken);
+            }
+            finally
+            {
+                refreshLifetime.Cancel();
+                refresh.NotifyCanExecuteChanged();
+                if (refresh.ExecutionTask is { } pending) { await pending; }
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            if (dialog.RequestedNavigationTag is { } destination) { _navigate?.Invoke(destination); }
         }
         catch (Exception exception) when (
             ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))

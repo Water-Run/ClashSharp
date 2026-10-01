@@ -136,9 +136,12 @@ internal sealed class MainWindowComposition
             ArgumentNullException.ThrowIfNull(restartState);
             ErrorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
             ArgumentNullException.ThrowIfNull(startupGuideComposition);
-            _startupGuide = startupGuideComposition.Create(errorSink);
             PageFactory = pageFactory ?? throw new ArgumentNullException(nameof(pageFactory));
             _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+            _startupGuide = startupGuideComposition.Create(errorSink, tag =>
+            {
+                if (ShellRouteCatalog.TryParse(tag, out ShellRoute route)) { _navigation.Navigate(route); }
+            });
 
             ViewModel = new MainWindowViewModel(
                 new ShellLocalizationAdapter(_localization),

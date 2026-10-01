@@ -17,13 +17,7 @@ internal sealed class ApplicationPageFactory(
                 MasterControlPageComposition.Create(
                     context,
                     () => navigation.Navigate(ShellRoute.Settings),
-                    tag =>
-                    {
-                        if (ShellRouteCatalog.TryParse(tag, out ShellRoute destination))
-                        {
-                            navigation.Navigate(destination);
-                        }
-                    })),
+                    NavigateToTag)),
             ShellRoute.ProxyNodes => new View.Proxies(
                 ProxiesPageComposition.Create(context)),
             ShellRoute.Profiles => new View.Profiles(
@@ -50,11 +44,16 @@ internal sealed class ApplicationPageFactory(
             ShellRoute.About => new View.About(
                 AboutPageComposition.Create(context)),
             ShellRoute.Settings => new View.Settings(
-                SettingsPageComposition.Create(context)),
+                SettingsPageComposition.Create(context, NavigateToTag)),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(route),
                 route,
                 "Unsupported shell route."),
         };
+    }
+
+    private void NavigateToTag(string tag)
+    {
+        if (ShellRouteCatalog.TryParse(tag, out ShellRoute destination)) { navigation.Navigate(destination); }
     }
 }

@@ -55,7 +55,7 @@ internal interface ISettingsPageOperations
 internal static class SettingsPageComposition
 {
     /// <summary>Creates one settings-page dependency graph from the AppHost-owned page context.</summary>
-    public static SettingsPageDependencies Create(PageCompositionContext context)
+    public static SettingsPageDependencies Create(PageCompositionContext context, Action<string>? navigateToPage = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         AppSettingsService settings = context.Settings;
@@ -124,7 +124,7 @@ internal static class SettingsPageComposition
             AppThemeService.ParseAccentColorOrDefault,
             AppThemeService.FormatAccentColor,
             errorSink,
-            context.StartupGuide.Create(errorSink),
+            context.StartupGuide.Create(errorSink, navigateToPage),
             new DataPackageDialogPresenter(operations, localization.GetString),
             changed => new RuntimeSettingsSubscription(settings, changed));
     }
