@@ -45,6 +45,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     private string _primaryActionText = "安装";
     private string _secondaryActionText = string.Empty;
     private bool _hasSecondaryAction;
+    private bool _isUpgrade;
     private InstallerOperation _primaryOperation = InstallerOperation.Install;
     private InstallerOperation? _secondaryOperation;
     private TaskCompletionSource<bool>? _ownerTransferDecision;
@@ -363,6 +364,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 ? readiness.ProductState switch
                 {
                     InstallerProductState.Available => "未安装",
+                    InstallerProductState.Installed when readiness.IsUpgrade => "可更新",
                     InstallerProductState.Installed => "已安装",
                     InstallerProductState.RecoveryRequired => "待恢复",
                     _ => throw new InstallerProtocolException("installer.runtime.readiness_invalid"),
@@ -420,11 +422,12 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
         IsCancellationRequested = false;
         IsBusy = true;
+        string operationLabel = requestedOperation is { } selected ? GetOperationLabel(selected, _isUpgrade) : string.Empty;
         InvalidateReadiness();
         IsProgressIndeterminate = ownerTransfer || retiredUninstall;
         ProgressValue = 0;
-        ProgressStatus = ownerTransfer ? "正在检查使用账户…" : retiredUninstall ? "等待确认。" : $"正在开始{GetOperationLabel(requestedOperation!.Value)}…";
-        StatusTitle = ownerTransfer ? "正在准备切换账户" : retiredUninstall ? "卸载此账户副本" : $"正在{GetOperationLabel(requestedOperation!.Value)}";
+        ProgressStatus = ownerTransfer ? "正在检查使用账户…" : retiredUninstall ? "等待确认。" : $"正在开始{operationLabel}…";
+        StatusTitle = ownerTransfer ? "正在准备切换账户" : retiredUninstall ? "卸载此账户副本" : $"正在{operationLabel}";
         StatusDetail = ownerTransfer ? "完成身份检查后，将在此处请你确认切换。"
             : retiredUninstall ? "移除当前账户已不再使用的 ClashSharp 副本。" : "正在处理应用及所需组件。";
         StatusBadge = "执行中";
@@ -770,6 +773,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     {
         Capabilities = Array.Empty<InstallerCapabilityStatus>();
         CanExecuteMutations = false;
+        _isUpgrade = false;
         _secondaryOperation = null;
         SecondaryActionText = string.Empty;
         HasSecondaryAction = false;
@@ -796,6 +800,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private void ApplyProductState(InstallerRuntimeReadiness readiness)
     {
+        _isUpgrade = readiness.IsUpgrade;
         InstallerOperation fallbackOperation = readiness.ProductState switch
         {
             InstallerProductState.Available => InstallerOperation.Install,
@@ -812,7 +817,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             : null;
         PrimaryActionText = readiness.ProductState == InstallerProductState.RecoveryRequired
             ? $"继续{GetOperationLabel(_primaryOperation)}"
-            : GetOperationLabel(_primaryOperation);
+            : GetOperationLabel(_primaryOperation, _isUpgrade);
         SecondaryActionText = _secondaryOperation is { } secondary
             ? GetOperationLabel(secondary)
             : string.Empty;
@@ -821,10 +826,10 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             && _secondaryOperation is not null;
     }
 
-    private static string GetOperationLabel(InstallerOperation operation) => operation switch
+    private static string GetOperationLabel(InstallerOperation operation, bool isUpgrade = false) => operation switch
     {
         InstallerOperation.Install => "安装",
-        InstallerOperation.Repair => "修复",
+        InstallerOperation.Repair => isUpgrade ? "更新" : "修复",
         InstallerOperation.Uninstall => "卸载",
         _ => "执行",
     };
@@ -834,6 +839,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         if (readiness is null
             || !HasValidProductState(readiness)
             || !HasValidAllowedOperations(readiness)
+            || readiness.IsUpgrade && (!readiness.CanExecute || readiness.ProductState != InstallerProductState.Installed
+                || !readiness.AllowedOperations.Contains(InstallerOperation.Repair))
             || !IsValidDiagnosticCode(readiness.DiagnosticCode)
             || !IsValidDisplayText(readiness.StatusTitle, 160)
             || !IsValidDisplayText(readiness.StatusDetail, 1_024)

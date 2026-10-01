@@ -4,7 +4,7 @@ using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Presentation.Tests;
 
-public sealed class ProductionInstallerRuntimeTests
+public sealed partial class ProductionInstallerRuntimeTests
 {
     [Theory]
     [InlineData(null, InstallerProductState.Available)]

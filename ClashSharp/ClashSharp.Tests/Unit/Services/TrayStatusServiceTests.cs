@@ -6,6 +6,56 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for tray status snapshot construction.</summary>
 public sealed class TrayStatusServiceTests
 {
+    [Theory]
+    [InlineData(ProfileCatalogIds.BuiltInDirect, "DIRECT")]
+    [InlineData("custom-profile", "")]
+    [InlineData("", "")]
+    public async Task DirectProfileStatus_UsesTheVerifiedProfileWithoutSelectingAnInactiveGlobalGroup(string profileId, string expected)
+    {
+        RuntimeConfigurationIntegrityObservation state = ActiveRuntime(ClashSharpMode.RuleTakeover);
+        state = state with { AppliedPlan = state.AppliedPlan! with { ProfileId = profileId } };
+        int reads = 0;
+        TrayStatusRuntimeAdapter adapter = new(_ =>
+        {
+            reads++;
+            return Task.FromResult<IReadOnlyList<MihomoProxyGroup>>([new("GLOBAL", "Selector", "Inactive selection", ["Inactive selection"])]);
+        }, () => state);
+        FakeHealthStorage health = new() { LatencyMilliseconds = 42 };
+        TrayStatusService service = new(adapter, health, static text => text);
+
+        TrayStatusSnapshot snapshot = await service.GetSnapshotAsync(CancellationToken.None);
+
+        Assert.Equal(expected, snapshot.CurrentNodeName);
+        Assert.Equal(1, reads);
+        Assert.Null(snapshot.LatencyMilliseconds);
+        Assert.Null(health.RequestedNodeName);
+    }
+
+    [Fact]
+    public async Task DirectProfileStatus_CannotTurnAControllerFailureIntoVerifiedDirectConnectivity()
+    {
+        RuntimeConfigurationIntegrityObservation state = ActiveRuntime(ClashSharpMode.RuleTakeover);
+        state = state with { AppliedPlan = state.AppliedPlan! with { ProfileId = ProfileCatalogIds.BuiltInDirect } };
+        TrayStatusService service = new(new TrayStatusRuntimeAdapter(
+            _ => throw new InvalidOperationException("Controller unavailable"), () => state), new FakeHealthStorage(), static text => text);
+
+        Assert.Equal(TrayStatusSnapshot.Unavailable, await service.GetSnapshotAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DirectProfileStatus_RejectsAProfileChangeDuringControllerObservation()
+    {
+        RuntimeConfigurationIntegrityObservation state = ActiveRuntime(ClashSharpMode.RuleTakeover);
+        state = state with { AppliedPlan = state.AppliedPlan! with { ProfileId = ProfileCatalogIds.BuiltInDirect } };
+        TrayStatusService service = new(new TrayStatusRuntimeAdapter(_ =>
+        {
+            state = state with { AppliedPlan = state.AppliedPlan! with { ProfileId = "custom-profile" } };
+            return Task.FromResult<IReadOnlyList<MihomoProxyGroup>>([]);
+        }, () => state), new FakeHealthStorage(), static text => text);
+
+        Assert.Equal(TrayStatusSnapshot.Unavailable, await service.GetSnapshotAsync(CancellationToken.None));
+    }
+
     /// <summary>Verifies the primary runtime proxy group contributes current node and health latency.</summary>
     [Fact]
     public async Task GetSnapshotAsync_UsesPrimaryProxyGroupAndStoredLatency()

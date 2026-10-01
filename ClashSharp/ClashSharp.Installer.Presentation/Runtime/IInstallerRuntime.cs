@@ -62,4 +62,8 @@ public sealed record InstallerRuntimeReadiness(
     InstallerProductState ProductState,
     InstallerOperation? RecoveryOperation,
     IReadOnlyList<InstallerOperation> AllowedOperations,
-    IReadOnlyList<InstallerCapabilityStatus> Capabilities);
+    IReadOnlyList<InstallerCapabilityStatus> Capabilities)
+{
+    /// <summary>Whether the verified maintenance action installs a newer package version.</summary>
+    public bool IsUpgrade { get; init; }
+}

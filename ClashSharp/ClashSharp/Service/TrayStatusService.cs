@@ -16,7 +16,8 @@ internal interface ITrayStatusRuntime
 /// <summary>Proxy selections observed without a concurrent runtime configuration transition.</summary>
 internal readonly record struct TrayStatusRuntimeSnapshot(
     ClashSharpMode Mode,
-    IReadOnlyList<MihomoProxyGroup> Groups);
+    IReadOnlyList<MihomoProxyGroup> Groups,
+    string ProfileId = "");
 
 /// <summary>Node health contract required by <see cref="TrayStatusService"/>.</summary>
 internal interface ITrayStatusHealthStorage
@@ -106,7 +107,9 @@ public sealed partial class TrayStatusService
 
     private static string? ResolveCurrentNode(TrayStatusRuntimeSnapshot runtime)
     {
-        if (runtime.Mode == ClashSharpMode.Standby)
+        if (runtime.Mode == ClashSharpMode.Standby
+            || runtime.Mode == ClashSharpMode.RuleTakeover
+            && StringComparer.Ordinal.Equals(runtime.ProfileId, ProfileCatalogIds.BuiltInDirect))
         {
             return "DIRECT";
         }

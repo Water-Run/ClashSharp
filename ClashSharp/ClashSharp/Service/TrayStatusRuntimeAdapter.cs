@@ -52,6 +52,6 @@ internal sealed class TrayStatusRuntimeAdapter : ITrayStatusRuntime
             throw new InvalidOperationException("The runtime configuration changed during status sampling.");
         }
 
-        return new TrayStatusRuntimeSnapshot(mode, groups);
+        return new TrayStatusRuntimeSnapshot(mode, groups, before.AppliedPlan!.ProfileId);
     }
 }

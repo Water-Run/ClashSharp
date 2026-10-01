@@ -67,7 +67,11 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
             BuildCapabilities(
                 inspection,
                 platformAllowsVisibleAction,
-                removalPathAvailable));
+                removalPathAvailable))
+        {
+            IsUpgrade = canExecute && product.ProductState == InstallerProductState.Installed
+                && allowedOperations.Contains(InstallerOperation.Repair) && IsNewerRelease(inspection),
+        };
     }
 
     /// <inheritdoc />
@@ -174,6 +178,9 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
             InstallerProductState.Available => (
                 "可以安装",
                 "为当前账户安装 ClashSharp，并配置所需的系统组件。"),
+            InstallerProductState.Installed when IsNewerRelease(inspection) => (
+                "可以更新",
+                $"将 ClashSharp 从 {inspection.Environment.InstalledPackageVersion} 更新到 {inspection.ReleaseVersion}。现有设置和数据将保留。"),
             InstallerProductState.Installed => (
                 "已安装",
                 "可修复当前安装，或从此电脑移除 ClashSharp。"),
@@ -184,6 +191,10 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
                 "installer.runtime.product_state_invalid"),
         };
     }
+
+    private static bool IsNewerRelease(InstallerRuntimeInspection inspection) =>
+        Version.TryParse(inspection.Environment.InstalledPackageVersion, out Version? installed)
+        && Version.TryParse(inspection.ReleaseVersion, out Version? release) && release > installed;
 
     private static IReadOnlyList<InstallerCapabilityStatus> BuildCapabilities(
         InstallerRuntimeInspection inspection,
