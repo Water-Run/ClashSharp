@@ -47,6 +47,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
     private readonly IInstallerCertificateMutation _certificateMutation;
     private readonly IInstallerCertificateMutationVerifier _certificateVerifier;
     private readonly IInstallerCertificatePreflight _certificatePreflight;
+    private readonly IWindowsPackageDeploymentPreflight _packagePreflight;
     private readonly IWindowsTargetUserPackageCommitInspector _packageInspector;
     private readonly IWindowsMachineHelperMachineOperations _machineOperations;
     private bool _disposed;
@@ -56,6 +57,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
         IInstallerCertificateMutation certificateMutation,
         IInstallerCertificateMutationVerifier certificateVerifier,
         IInstallerCertificatePreflight certificatePreflight,
+        IWindowsPackageDeploymentPreflight packagePreflight,
         IWindowsTargetUserPackageCommitInspector packageInspector,
         IWindowsMachineHelperMachineOperations machineOperations)
     {
@@ -63,12 +65,14 @@ internal sealed class WindowsMachineHelperOperationExecutor
         ArgumentNullException.ThrowIfNull(certificateMutation);
         ArgumentNullException.ThrowIfNull(certificateVerifier);
         ArgumentNullException.ThrowIfNull(certificatePreflight);
+        ArgumentNullException.ThrowIfNull(packagePreflight);
         ArgumentNullException.ThrowIfNull(packageInspector);
         ArgumentNullException.ThrowIfNull(machineOperations);
         _releaseVerifier = releaseVerifier;
         _certificateMutation = certificateMutation;
         _certificateVerifier = certificateVerifier;
         _certificatePreflight = certificatePreflight;
+        _packagePreflight = packagePreflight;
         _packageInspector = packageInspector;
         _machineOperations = machineOperations;
     }
@@ -108,6 +112,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
             ?? throw new InstallerProtocolException("installer.release.lease_missing");
         ValidateRelease(request, release);
         await _certificatePreflight.VerifyCanInstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+        await _packagePreflight.VerifyCanDeployAsync(request, release, cancellationToken).ConfigureAwait(false);
         await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
@@ -141,6 +146,8 @@ internal sealed class WindowsMachineHelperOperationExecutor
                     && disposition == InstallerMachineHelperSessionDisposition.Execute)
                 {
                     await _certificatePreflight.VerifyCanInstallAsync(request, release, cancellationToken)
+                        .ConfigureAwait(false);
+                    await _packagePreflight.VerifyCanDeployAsync(request, release, cancellationToken)
                         .ConfigureAwait(false);
                 }
                 await _machineOperations
@@ -261,6 +268,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
             certificateMutation,
             certificateMutation,
             certificateMutation,
+            new WindowsPackageDeploymentPreflight(new WindowsInstalledPackageFootprintCatalog(), new WindowsPackageFootprintReader()),
             new WindowsTargetUserPackageCommitInspector(
                 new WindowsPackageManagerFacade()),
             machineOperations);

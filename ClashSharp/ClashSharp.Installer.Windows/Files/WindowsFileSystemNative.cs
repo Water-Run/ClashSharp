@@ -75,6 +75,9 @@ internal static class WindowsFileSystemNative
             FileShareRead | FileShareWrite);
     }
 
+    internal static SafeFileHandle OpenOrdinaryDirectoryForObservation(string path) =>
+        OpenOrdinaryDirectory(path, FileReadAttributes, FileShareRead | FileShareWrite);
+
     internal static SafeFileHandle OpenOrdinaryDirectoryForDeletion(string path)
     {
         return OpenOrdinaryDirectory(

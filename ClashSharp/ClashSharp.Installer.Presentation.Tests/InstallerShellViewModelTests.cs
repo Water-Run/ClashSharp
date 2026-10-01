@@ -91,6 +91,26 @@ public sealed class InstallerShellViewModelTests
     }
 
     [Fact]
+    public async Task ContentConflictPreflightExplainsThatMaintenanceDidNotStart()
+    {
+        var runtime = new ScriptedInstallerRuntime
+        {
+            Execute = (_, _, _) => Task.FromResult(new InstallerExecutionResult(
+                InstallerExecutionOutcome.Blocked, "installer.package.content_conflict", null, RecoveryPending: false)),
+        };
+        using var viewModel = new InstallerShellViewModel(runtime);
+        await viewModel.InitializeAsync();
+
+        await viewModel.PrimaryActionCommand.ExecuteAsync();
+
+        Assert.Equal("同版本安装包内容冲突", viewModel.StatusTitle);
+        Assert.Contains("维护开始前停止", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.DoesNotContain("当前未完成", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.Equal("操作未开始。", viewModel.ProgressStatus);
+        Assert.False(viewModel.CanExecuteMutations);
+    }
+
+    [Fact]
     public void DisposeReleasesRuntimeLifetimeExactlyOnce()
     {
         var runtime = new ScriptedInstallerRuntime();

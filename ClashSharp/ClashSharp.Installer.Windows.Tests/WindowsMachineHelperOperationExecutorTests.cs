@@ -15,6 +15,36 @@ public sealed class WindowsMachineHelperOperationExecutorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task PackageConflictIsRejectedBeforeMachinePreparationOrCertificateImport(bool initialInspection)
+    {
+        using var fixture = Fixture();
+        InstallerRequest request = fixture.Request(targetSid: TargetSid);
+        var release = new RecordingReleaseVerifier(fixture.Manifest);
+        var machine = new RecordingMachineOperations();
+        var package = new RecordingPackageInspector
+        {
+            PreflightFailure = new InstallerProtocolException("installer.package.content_conflict"),
+        };
+        WindowsMachineHelperOperationExecutor executor = Executor(release,
+            new RecordingCertificateStore(InstallerCertificatePresence.ExactMatch), package, machine,
+            out RecordingCertificateMutation certificates);
+        InstallerMachineHelperCommand command = Command(request, InstallerMachineHelperVerb.Prepare);
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() => initialInspection
+            ? executor.VerifyPreparationAsync(command, CancellationToken.None)
+            : executor.ExecuteAsync(command, InstallerMachineHelperSessionDisposition.Execute, CancellationToken.None));
+
+        Assert.Equal("installer.package.content_conflict", failure.DiagnosticCode);
+        Assert.Empty(machine.Calls);
+        Assert.Equal(1, package.PreflightCalls);
+        Assert.Equal(0, package.VerifyCalls);
+        Assert.Equal(0, certificates.ApplyCalls);
+        Assert.Equal(1, release.Lease!.DisposeCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task CertificateConflictIsRejectedBeforeMachinePreparation(bool initialInspection)
     {
         using var fixture = Fixture();
@@ -409,6 +439,7 @@ public sealed class WindowsMachineHelperOperationExecutorTests
             certificateMutation,
             certificateMutation,
             certificateMutation,
+            (IWindowsPackageDeploymentPreflight)packageInspector,
             packageInspector,
             machineOperations);
     }
@@ -665,9 +696,24 @@ public sealed class WindowsMachineHelperOperationExecutorTests
     }
 
     private sealed class RecordingPackageInspector
-        : IWindowsTargetUserPackageCommitInspector
+        : IWindowsTargetUserPackageCommitInspector, IWindowsPackageDeploymentPreflight
     {
         internal int VerifyCalls { get; private set; }
+
+        internal int PreflightCalls { get; private set; }
+
+        internal Exception? PreflightFailure { get; set; }
+
+        public Task VerifyCanDeployAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PreflightCalls++;
+            if (PreflightFailure is not null)
+            {
+                throw PreflightFailure;
+            }
+            return Task.CompletedTask;
+        }
 
         internal InstallerRequest? Request { get; private set; }
 

@@ -671,13 +671,16 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                 ("失败", "结果协议无效", "运行时返回了未知结果；安装器已保持禁用。", "需要诊断。"),
         };
 
-        if (result.Outcome == InstallerExecutionOutcome.Failed
+        if (result.Outcome is InstallerExecutionOutcome.Failed or InstallerExecutionOutcome.Blocked
             && result.DiagnosticCode == "installer.package.content_conflict")
         {
             StatusTitle = "同版本安装包内容冲突";
-            StatusDetail = "Windows 已拒绝用不同内容覆盖同版本应用，直接重试无法解决。"
-                + "请备份应用数据并保留此安装器，联系发布者提供恢复方案。"
-                + "当前未完成的操作仍需使用此安装器恢复，不能直接换用另一个安装包。";
+            StatusDetail = "候选包与系统中同版本软件包的内容不一致，直接重试无法解决。"
+                + "请保留诊断代码和安装包，联系发布者提供可维护的更新包。"
+                + (result.RecoveryPending
+                    ? "请备份应用数据。当前未完成的操作仍需使用此安装器恢复，不能直接换用另一个安装包。"
+                    : "检查已在维护开始前停止，现有应用和服务保留。可关闭安装器后继续使用应用。");
+            ProgressStatus = result.RecoveryPending ? "需要恢复或诊断。" : "操作未开始。";
         }
 
         if (result.Outcome is InstallerExecutionOutcome.Failed or InstallerExecutionOutcome.Blocked)

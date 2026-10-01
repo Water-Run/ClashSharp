@@ -14,7 +14,7 @@
   <Identity
     Name="67dc1dc3-13fd-46c5-84f4-2932d94b566f"
     Publisher="CN=linzh"
-    Version="1.0.0.6" />
+    Version="1.0.0.7" />
 
   <mp:PhoneIdentity PhoneProductId="67dc1dc3-13fd-46c5-84f4-2932d94b566f" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

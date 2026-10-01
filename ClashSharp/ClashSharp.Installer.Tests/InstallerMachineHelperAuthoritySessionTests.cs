@@ -6,8 +6,10 @@ namespace ClashSharp.Installer.Tests;
 
 public sealed class InstallerMachineHelperAuthoritySessionTests
 {
-    [Fact]
-    public async Task InitialPreflightConflictLeavesNoRecoveryIntentOrOperation()
+    [Theory]
+    [InlineData("installer.machine_certificate.ownership_conflict")]
+    [InlineData("installer.package.content_conflict")]
+    public async Task InitialPreflightConflictLeavesNoRecoveryIntentOrOperation(string diagnostic)
     {
         List<string> events = [];
         var store = new MemoryInstallerTransactionStore(events, initialJournal: null);
@@ -15,7 +17,7 @@ public sealed class InstallerMachineHelperAuthoritySessionTests
             StateAt(InstallerOperation.Install, InstallerTransactionPhase.Prepared));
         var operations = new RecordingOperations(events)
         {
-            Preflight = _ => throw new InstallerProtocolException("installer.machine_certificate.ownership_conflict"),
+            Preflight = _ => throw new InstallerProtocolException(diagnostic),
         };
         InstallerMachineHelperAuthoritySession session = await InstallerMachineHelperAuthoritySession.CreateAsync(
             command.ToInvocation(), store, operations, CancellationToken.None);
@@ -23,7 +25,7 @@ public sealed class InstallerMachineHelperAuthoritySessionTests
         InstallerMachineHelperResult result = await session.ExecuteAsync(command, CancellationToken.None);
 
         Assert.Equal(InstallerMachineHelperOutcome.Failed, result.Outcome);
-        Assert.Equal("installer.machine_certificate.ownership_conflict", result.DiagnosticCode);
+        Assert.Equal(diagnostic, result.DiagnosticCode);
         Assert.Equal(command.ToDurableState(), result.ValidateAgainst(command));
         Assert.Null(store.Current);
         Assert.Equal(["journal.load", "journal.load", "preflight", "journal.load"], events);
