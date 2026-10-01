@@ -734,6 +734,8 @@ public sealed partial class MasterControl : Page
             {
                 option.IsChecked = isChecked;
             }
+            templatePicker.SelectedIndex = -1;
+            ToolTipService.SetToolTip(templatePicker, null);
             RefreshSelectionCount();
         }
         optionList.SelectionChanged += (_, _) =>
