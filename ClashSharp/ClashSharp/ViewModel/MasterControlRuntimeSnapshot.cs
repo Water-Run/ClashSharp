@@ -28,6 +28,7 @@ internal sealed record MasterControlRuntimeSnapshot(
 {
     /// <summary>Whether the aggregate was read successfully; zero counts remain valid observations.</summary>
     public bool IsAvailable { get; init; } = true;
+    public RuntimeDnsConfiguration? Dns { get; init; }
 
     public static MasterControlRuntimeSnapshot Unavailable { get; } = new(
         new CoreConfigurationState(string.Empty, string.Empty, false),

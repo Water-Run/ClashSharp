@@ -9,6 +9,7 @@ internal static class MasterControlTileNavigationCatalog
     public static MasterControlTileNavigationTarget? Resolve(string id) => id switch
     {
         "active-profile" or "profile-count" or "profile-updated" or "core-config-file"
+            or "dns-mode" or "dns-listen" or "dns-ipv6" or "dns-upstream" or "dns-fallback" or "dns-bootstrap"
             => new("Profiles", "Nav.Profiles"),
         "subscription-count" or "subscription-usage" or "subscription-expiry"
             => new("Links", "Nav.Links"),

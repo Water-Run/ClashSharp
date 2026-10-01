@@ -53,6 +53,7 @@
     <Compile Include="..\ClashSharp\Model\ApplicationActionKind.cs" Link="Model\ApplicationActionKind.cs" />
     <Compile Include="..\ClashSharp\Model\MasterHeroStatusItemKind.cs" Link="Model\MasterHeroStatusItemKind.cs" />
     <Compile Include="..\ClashSharp\Model\CoreConfigurationState.cs" Link="Model\CoreConfigurationState.cs" />
+    <Compile Include="..\ClashSharp\Model\RuntimeDnsConfiguration.cs" Link="Model\RuntimeDnsConfiguration.cs" />
     <Compile Include="..\ClashSharp\Model\ConfigurationProfile.cs" Link="Model\ConfigurationProfile.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileIdentifiers.cs" Link="Model\ProfileIdentifiers.cs" />
     <Compile Include="..\ClashSharp\Model\ProfileImportResult.cs" Link="Model\ProfileImportResult.cs" />
@@ -158,6 +159,7 @@
     <Compile Include="..\ClashSharp\Service\MihomoServiceIpcEndpoint.cs" Link="Service\MihomoServiceIpcEndpoint.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoRuntimeConfigurationBuilder.cs" Link="Service\MihomoRuntimeConfigurationBuilder.cs" />
     <Compile Include="..\ClashSharp\Service\MihomoYamlSemanticValidator.cs" Link="Service\MihomoYamlSemanticValidator.cs" />
+    <Compile Include="..\ClashSharp\Service\RuntimeDnsConfigurationReader.cs" Link="Service\RuntimeDnsConfigurationReader.cs" />
     <Compile Include="..\ClashSharp\Service\RuntimeConfigurationTransaction.cs" Link="Service\RuntimeConfigurationTransaction.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationService.RuntimeTransaction.cs" Link="Service\CoreConfigurationService.RuntimeTransaction.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationService.ProfileRuntimeTransaction.cs" Link="Service\CoreConfigurationService.ProfileRuntimeTransaction.cs" />
@@ -243,6 +245,7 @@
     <Compile Include="..\ClashSharp\ViewModel\CoreVersionDisplayFormatter.cs" Link="ViewModel\CoreVersionDisplayFormatter.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterControlViewModel.cs" Link="ViewModel\MasterControlViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterControlViewModel.Diagnostics.cs" Link="ViewModel\MasterControlViewModel.Diagnostics.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\MasterControlViewModel.Dns.cs" Link="ViewModel\MasterControlViewModel.Dns.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IMasterControlLocalization.cs" Link="ViewModel\IMasterControlLocalization.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IMasterControlCore.cs" Link="ViewModel\IMasterControlCore.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IMasterControlWindowsProxy.cs" Link="ViewModel\IMasterControlWindowsProxy.cs" />

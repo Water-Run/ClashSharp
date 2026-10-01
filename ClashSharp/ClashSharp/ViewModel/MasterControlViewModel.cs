@@ -1159,6 +1159,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 FormatBytes(RuntimeTraffic.SessionUploadBytes),
                 FormatBytes(RuntimeTraffic.SessionDownloadBytes)));
         RefreshRuntimeSummaryTiles();
+        RefreshDnsTiles();
         RefreshHeroStatusValues();
     }
 
@@ -1779,6 +1780,12 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 owner.CreateTile("core-uptime", "CoreUptime", "\uE916", infoType),
                 owner.CreateTile("core-owner", "CoreOwner", "\uE95A", infoType),
                 owner.CreateTile("proxy-address", "ProxyAddress", "\uE968", infoType),
+                owner.CreateTile("dns-mode", "DnsMode", "\uE774", infoType),
+                owner.CreateTile("dns-listen", "DnsListen", "\uE968", infoType),
+                owner.CreateTile("dns-ipv6", "DnsIpv6", "\uE774", infoType),
+                owner.CreateTile("dns-upstream", "DnsUpstream", "\uE8F1", infoType),
+                owner.CreateTile("dns-fallback", "DnsFallback", "\uE8F1", infoType),
+                owner.CreateTile("dns-bootstrap", "DnsBootstrap", "\uE8F1", infoType),
                 owner.CreateTile("system-info", "SystemInfo", "\uE7F8", infoType),
                 owner.CreateTile("subscription-usage", "SubscriptionUsage", "\uE9D2", infoType),
                 owner.CreateTile("subscription-expiry", "SubscriptionExpiry", "\uE787", infoType),

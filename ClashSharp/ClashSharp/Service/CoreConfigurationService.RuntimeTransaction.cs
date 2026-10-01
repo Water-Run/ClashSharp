@@ -24,6 +24,7 @@ internal readonly record struct RuntimeConfigurationIntegrityObservation(
     string? AppliedContentHash = null)
 {
     public Guid? DataGenerationId { get; init; }
+    public RuntimeDnsConfiguration? Dns { get; init; }
 
     public static RuntimeConfigurationIntegrityObservation Unknown { get; } = new(false, null);
 
@@ -164,17 +165,16 @@ public sealed partial class CoreConfigurationService
                     : RuntimeConfigurationIntegrityObservation.Inactive;
             }
 
-            if (!File.Exists(_configurationFilePath)
-                || !StringComparer.Ordinal.Equals(
-                    ComputeFileHash(_configurationFilePath),
-                    state.AppliedContentHash))
+            byte[] liveBytes = File.ReadAllBytes(_configurationFilePath);
+            if (!StringComparer.Ordinal.Equals(Convert.ToHexStringLower(SHA256.HashData(liveBytes)), state.AppliedContentHash))
             {
                 return RuntimeConfigurationIntegrityObservation.Unknown;
             }
 
+            string liveText = Encoding.UTF8.GetString(liveBytes).TrimStart('\uFEFF');
             RuntimeConfigurationActivationPlan observedPlan =
                 MihomoYamlSemanticValidator.ReadActivationPlan(
-                    File.ReadAllText(_configurationFilePath),
+                    liveText,
                     state.AppliedPlan!.ProfileId);
             if (!ActivationPlanMatchesConfiguration(state.AppliedPlan, observedPlan))
             {
@@ -193,7 +193,10 @@ public sealed partial class CoreConfigurationService
             }
 
             return new RuntimeConfigurationIntegrityObservation(true, state.AppliedPlan,
-                state.AppliedGeneration, state.AppliedContentHash);
+                state.AppliedGeneration, state.AppliedContentHash)
+            {
+                Dns = RuntimeDnsConfigurationReader.Read(liveText),
+            };
         }
         catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception) && exception is
             IOException or

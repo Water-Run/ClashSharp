@@ -302,6 +302,9 @@ public sealed class MasterControlRuntimeAdapterTests
                             configurationTunEnabled,
                             7890,
                             "built-in-direct"))
+                    {
+                        Dns = ClashSharpUi::ClashSharp.Service.RuntimeDnsConfigurationReader.Read("dns: { enable: true, enhanced-mode: fake-ip }"),
+                    }
                     : RuntimeConfigurationIntegrityObservation.Unknown);
 
             RuntimeSnapshot snapshot = await source.Capture().ExecuteAsync(CancellationToken.None);
@@ -310,6 +313,7 @@ public sealed class MasterControlRuntimeAdapterTests
             Assert.Equal((MihomoCoreOwner)expectedOwnerValue, snapshot.EffectiveOwner);
             Assert.Equal(expectedKnown && serviceCoreRunning, snapshot.TunEffective);
             Assert.True(snapshot.TunRequested);
+            Assert.Equal(expectedKnown && expectedOwnerValue != (int)MihomoCoreOwner.None, snapshot.Dns is not null);
         }
         finally
         {

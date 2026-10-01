@@ -46,7 +46,10 @@ internal sealed record MasterControlRuntimeSnapshotWork(
         StartupRestoreFallbackStatus startupRestoreFallbackStatus =
             await GetStartupRestoreFallbackStatus(cancellationToken).ConfigureAwait(false);
         long workingSetBytes = GetWorkingSetBytes();
-        RuntimeOwnershipObservation ownership = ObserveRuntimeOwnership(coreConfiguration);
+        RuntimeConfigurationIntegrityObservation integrity = MihomoServiceStatus.IsKnown
+            ? ObserveRuntimeConfigurationIntegrity?.Invoke() ?? RuntimeConfigurationIntegrityObservation.Unknown
+            : RuntimeConfigurationIntegrityObservation.Unknown;
+        RuntimeOwnershipObservation ownership = ObserveRuntimeOwnership(coreConfiguration, integrity);
 
         cancellationToken.ThrowIfCancellationRequested();
         return new MasterControlRuntimeSnapshot(
@@ -70,19 +73,20 @@ internal sealed record MasterControlRuntimeSnapshotWork(
             ActiveProfileId,
             profileSummary.ActiveProfileName,
             profileSummary.ActiveSubscription,
-            profileSummary.ActiveProfileUpdatedAt);
+            profileSummary.ActiveProfileUpdatedAt)
+        {
+            Dns = ownership.IsKnown && ownership.Owner != MihomoCoreOwner.None ? integrity.Dns : null,
+        };
     }
 
-    private RuntimeOwnershipObservation ObserveRuntimeOwnership(CoreConfigurationState coreConfiguration)
+    private RuntimeOwnershipObservation ObserveRuntimeOwnership(CoreConfigurationState coreConfiguration,
+        RuntimeConfigurationIntegrityObservation integrity)
     {
         if (!MihomoServiceStatus.IsKnown)
         {
             return RuntimeOwnershipObservation.Unknown;
         }
 
-        RuntimeConfigurationIntegrityObservation integrity =
-            ObserveRuntimeConfigurationIntegrity?.Invoke()
-            ?? RuntimeConfigurationIntegrityObservation.Unknown;
         if (!integrity.IsKnown)
         {
             return RuntimeOwnershipObservation.Unknown;

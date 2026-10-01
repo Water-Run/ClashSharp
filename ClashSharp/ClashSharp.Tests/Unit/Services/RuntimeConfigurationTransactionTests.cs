@@ -4,7 +4,7 @@ using ClashSharp.Service;
 namespace ClashSharp.Tests.Unit.Services;
 
 /// <summary>Unit tests for durable mihomo runtime configuration transactions.</summary>
-public sealed class RuntimeConfigurationTransactionTests
+public sealed partial class RuntimeConfigurationTransactionTests
 {
     [Theory]
     [InlineData(false)]
