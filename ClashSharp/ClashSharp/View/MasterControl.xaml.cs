@@ -44,6 +44,7 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorHorizontalChrome = 96;
     private const double InfoTileEditorMinListHeight = 80;
     private const double InfoTileEditorMaxListHeight = 420;
+    private const double InfoTileEditorMaxDialogHeight = 756;
     private const double InfoTileEditorVerticalChrome = 470;
 
     /// <summary>Bindable view model for this page.</summary>
@@ -962,8 +963,10 @@ public sealed partial class MasterControl : Page
 
     private static double CalculateInfoTilesEditorListHeight(XamlRoot dialogRoot)
     {
+        // The native ContentDialog caps its outer height even on a tall desktop.
+        // Reserve its title, template selector and action rows before sizing the list.
         double availableHeight = dialogRoot.Size.Height > 0
-            ? dialogRoot.Size.Height - InfoTileEditorVerticalChrome
+            ? Math.Min(dialogRoot.Size.Height, InfoTileEditorMaxDialogHeight) - InfoTileEditorVerticalChrome
             : InfoTileEditorMinListHeight;
         return Math.Clamp(availableHeight, InfoTileEditorMinListHeight, InfoTileEditorMaxListHeight);
     }
