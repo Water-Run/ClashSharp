@@ -1,6 +1,10 @@
 # Settings generation cutover
 
-> 2026-09-22：源码与测试已统一纳入 `main`，后续在主线继续；下述分支和 PR 记录为实现历史。[设置页普通偏好的异步生产入口](../reviews/2026-09-22-settings-preference-commands.md)已接通；生产偏好仍由 LocalSettings 管理，完整代际切换未激活。当前状态见[主线整理](../reviews/2026-09-22-development-status.md)。
+> 2026-10-01：当前候选已接入生产数据代际和唯一设置权威，完成页面、磁贴、触发器、导入、重置、回滚及清除重启的生命周期接线。旧同步偏好写入在绑定后拒绝；LocalSettings 只保留迁移输入和独立通知回执等非偏好职责。主程序 3,906 项测试全部通过，旧的禁止激活检查已原子替换为正向所有权约束。蓝色服务器已验证打包应用迁移、运行模式、还原及清除重启；本轮新增 10 项隔离回归也通过。准确范围见[切换门禁与恢复顺序](../reviews/2026-10-01-settings-cutover-admission.md)和[原生验收](../reviews/2026-10-01-generation-native-acceptance.md)。递增版本升级、证书变更、完整页面与磁贴矩阵及正式发行仍需完成，不能据此声明生产就绪。
+
+## 历史实现记录
+
+以下按原实现阶段保留证据。涉及“未激活”“尚未装配”的文字描述当时状态，不代表上面的当前候选状态。2026-09-22 的主线整理见[开发状态](../reviews/2026-09-22-development-status.md)。
 
 版本保持 `1.0.0`。完整切换在 `feat/settings-generation` 分支和[草稿 PR #5](https://github.com/Water-Run/ClashSharp/pull/5) 推进，基础提交为 `e3f597c`。当前已实现迁移、异步设置会话、应用状态流转、代际内服务访问、公共异步入口、内部设置运行快照，以及 Appearance、StartupTask、Sampling、Triggers、Network 的服务适配器。控制端凭据已从偏好中拆分并接入生产启动、运行时和数据清理；生产偏好仍使用现有设置入口。Profile 和 Log 仓库已能退休并等待已接收操作结束，但完整代际容器及页面消费者尚未切换。整体接入后，才替换临时架构门禁并合入 main。
 
@@ -147,13 +151,15 @@ Triggers 适配和入口顺序修复新增 22 项回归，本分支累计净增 
 
 Appearance 参与者及 UI 操作所有者新增 26 项回归，本分支累计净增 218 项。完整主程序 2839 项全部通过、零失败、零跳过，用时 59 秒；18 项目 Release x64 构建零警告、零错误，用时 27.66 秒，format 检查 1510 文件、零处变更。收据为 `local-validation-appearance-runtime.json`，报告为 `1.0.0-appearance-runtime-main.trx`、`build-appearance-runtime-complete.log` 和 `format-appearance-runtime-verified.log`。初次定向编译修正了一处异步异常断言的分析器用法，原日志 `test-appearance-dispatcher-components.log` 保留；此前两个定向集合分别通过 22 和 26 项。该节点没有激活新的生产设置权威，完整装配后的 UI 与安装器候选仍需原生验收。
 
-## 完整切换的剩余依赖
+## 完整切换的验收要求
 
 1. 将偏好写入统一为应用层异步 change set；页面、磁贴、触发器和网络提交者使用同一个接口。独立控制端凭据已接入生产调用，后续代际重置继续使用该能力。
 2. 将已实现的 Network、Appearance、Internal、StartupTask、Sampling、Triggers 一起装配；先恢复启动时的运行时归属，再执行真实观察，不能用 desired 推定 applied。明确读取 desired、有效状态和待办的消费者，并接通外观变化后的页面刷新。
 3. 在设置驱动的启动步骤之前完成旧事务恢复、代际打开和偏好迁移。profile/log/trigger 与 settings 必须由同一代际容器解析、排空和替换。
 4. 将导入、重置和回滚接入候选代际及 manifest 提交，完成生产消费者替换后，原子替换 `SettingsAuthorityArchitectureTests` 中的临时门禁。
 5. 运行新候选的 CI、打包应用及隔离 Windows 验收，再将完整节点推送 main。
+
+2026-10-01：第 1–4 项已在当前候选接通并建立正向回归，具体实现、测试及原生证据索引见[切换检查点](../reviews/2026-10-01-settings-cutover-admission.md)。第 5 项的打包应用验收已有范围明确的记录；完整候选的托管 CI、递增版本升级和发行验收仍按实际结果推进。
 
 2026-09-12 的 `4640685` 已补齐 Network 四键批次，观察实际配置 generation/hash、SCM 会话、认证控制端以及完整 Windows 代理状态和自有 journal；只有独立观察到上一状态或目标状态，才允许显式重试。Profile 和 Log 的每个已接受操作持有寿命租约到异步工作及补偿结束，退休排空后再释放存储。它们尚不构成生产 JSON 权威切换。
 

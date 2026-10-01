@@ -3,8 +3,7 @@ using System.Xml.Linq;
 namespace ClashSharp.Tests.Architecture;
 
 /// <summary>
-/// Guards the current production settings authority until the generation-backed cutover can be
-/// performed as one migration, consumer, and repository-lifetime change.
+/// Guards the generation-backed production authority and the boundaries of legacy recovery.
 /// </summary>
 public sealed class SettingsAuthorityArchitectureTests
 {
@@ -27,41 +26,27 @@ public sealed class SettingsAuthorityArchitectureTests
         "ClashSharp");
 
     /// <summary>
-    /// Prevents a generation-backed envelope from becoming a shadow writer while synchronous
-    /// LocalSettings consumers still treat <c>AppSettingsService</c> as the production authority.
-    /// This guard must be replaced atomically by the eventual single-authority cutover tests.
+    /// Keeps physical settings persistence in the scoped factory and exclusive candidate preparation.
+    /// Runtime ownership and the rejection of legacy writers are also exercised against the compiled host.
     /// </summary>
     [Fact]
-    public void ProductionApp_DoesNotActivateEnvelopeBesideLocalSettingsAuthority()
+    public void ProductionSettingsPersistence_IsConfinedToGenerationCreationAndCandidatePreparation()
     {
-        string settingsService = ReadApplicationSource("Service/AppSettingsService.cs");
-        Assert.Contains(
-            "ApplicationData.Current.LocalSettings",
-            settingsService,
-            StringComparison.Ordinal);
-
-        string[] forbiddenEnvelopeActivationTokens =
-        [
-            "JsonSettingsRepository",
-            "ISettingsRepository",
-            "SettingsEnvelopeEditor",
-            "DataGenerationManager",
-            "FileDataGenerationStore",
-        ];
-
-        string[] offenders = EnumerateApplicationSources()
-            .Where(path => forbiddenEnvelopeActivationTokens.Any(
-                token => File.ReadAllText(path).Contains(token, StringComparison.Ordinal)))
+        string[] writers = EnumerateApplicationSources()
+            .Where(path => File.ReadAllText(path).Contains("new JsonSettingsRepository", StringComparison.Ordinal))
             .Select(path => Path.GetRelativePath(ApplicationRoot, path).Replace('\\', '/'))
             .Order(StringComparer.Ordinal)
             .ToArray();
-
-        Assert.True(
-            offenders.Length == 0,
-            "The LocalSettings authority cannot be shadow-written to a settings envelope. "
-            + "Complete migration, async change-set, consumer, and generation-lifetime cutover "
-            + $"together. Envelope activation found in:{Environment.NewLine}"
-            + string.Join(Environment.NewLine, offenders));
+        Assert.Equal(["AppHost/Data/AppDataGenerationFactory.cs", "AppHost/Data/GenerationDataCandidatePreparer.cs"], writers);
+        foreach (string writer in writers)
+        {
+            Assert.Contains("EnsureActiveExclusiveLease", ReadApplicationSource(writer), StringComparison.Ordinal);
+        }
+        string host = ReadApplicationSource("AppHost/ClashSharpAppHostFactory.cs");
+        Assert.DoesNotContain("AddSingleton<ISettingsRepository", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddSingleton<SettingsAuthoritySession", host, StringComparison.Ordinal);
+        Assert.Contains("BindAuthority", ReadApplicationSource("AppHost/Startup/DataGenerationStartupStep.cs"), StringComparison.Ordinal);
+        Assert.Contains("if (_authority is not null)", ReadApplicationSource("Service/AppSettingsService.Mutations.cs"), StringComparison.Ordinal);
     }
 
     [Fact]

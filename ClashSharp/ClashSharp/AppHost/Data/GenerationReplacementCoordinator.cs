@@ -51,6 +51,7 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
         Guid operationId = Guid.NewGuid();
         bool checkpointAttempted = false;
         bool checkpointReady = false;
+        string? quiescingProducer = null;
         try
         {
             lease = await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken).ConfigureAwait(false);
@@ -86,7 +87,9 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
                 publicationWasOpen = runtime.HoldExecutionAdmitted(lease);
                 foreach (IRuntimeParticipant producer in Producers(runtime))
                 {
-                    paused.Add((producer.Name, await producer.QuiesceAsync(token).ConfigureAwait(false)));
+                    quiescingProducer = producer.Name;
+                    paused.Add((producer.Name, await producer.QuiesceAsync(CancellationToken.None).ConfigureAwait(false)));
+                    quiescingProducer = null;
                 }
                 token.ThrowIfCancellationRequested();
                 nativeEffectsStarted = true;
@@ -136,6 +139,13 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
         {
             if (retained) { throw; }
             if (lease is null) { throw; }
+            if (quiescingProducer is not null)
+            {
+                retained = true;
+                await RetainAdmissionAsync(lease, leaseReleased).ConfigureAwait(false);
+                throw new GenerationReplacementRecoveryException(failure,
+                    new InvalidOperationException($"Producer '{quiescingProducer}' did not return a verified quiesced state."), committed: false);
+            }
             if (transition?.IsCommitted == true || transition?.IsManifestPromoted == true
                 || failure is DataGenerationManagerException { Error: DataGenerationManagerError.ManifestPromotionUncertain })
             {
@@ -192,8 +202,6 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
                         }
                     }
                 }
-                await lease.DisposeAsync().ConfigureAwait(false);
-                leaseReleased = true;
                 if (paused.Count > 0 || publicationWasOpen)
                 {
                     await generations.ExecuteAsync<AppDataGenerationRuntime>(async (runtime, descriptor, token) =>
@@ -203,8 +211,17 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
                         {
                             await Producers(runtime).Single(producer => producer.Name == state.Name).ResumeAsync(state.State, token).ConfigureAwait(false);
                         }
+                        // Settings participants must be ready before another ordinary command can
+                        // enter. Keep this generation pinned through reopening and publication.
+                        await lease.DisposeAsync().ConfigureAwait(false);
+                        leaseReleased = true;
                         runtime.RestoreExecutionPublication(publicationWasOpen);
                     }, CancellationToken.None).ConfigureAwait(false);
+                }
+                else
+                {
+                    await lease.DisposeAsync().ConfigureAwait(false);
+                    leaseReleased = true;
                 }
             }
             catch (Exception recoveryFailure) when (!ExceptionGraphClassifier.IsProcessFatal(recoveryFailure))
@@ -232,8 +249,12 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
         }
     }
 
-    private static IRuntimeParticipant[] Producers(AppDataGenerationRuntime runtime) =>
-        [runtime.TriggerSettings.Scheduler, runtime.Subscriptions, runtime.Sampling];
+    private static IRuntimeParticipant[] Producers(AppDataGenerationRuntime runtime)
+    {
+        IRuntimeParticipant[] primary = [runtime.TriggerSettings.Scheduler, runtime.Subscriptions, runtime.Sampling];
+        return [.. primary, .. runtime.Repositories.CaptureProducers().Where(
+            producer => !primary.Any(existing => ReferenceEquals(existing, producer)))];
+    }
 
     private async Task RetainAdmissionAsync(MutationAdmissionLease lease, bool released)
     {

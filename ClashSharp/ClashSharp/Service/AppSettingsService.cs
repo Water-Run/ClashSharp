@@ -8,11 +8,11 @@ using Windows.Storage;
 
 namespace ClashSharp.Service;
 
-/// <summary>Provides persistent storage for user-facing application settings and network behavior policies.</summary>
+/// <summary>Bridges legacy startup preferences to the generation-backed settings authority.</summary>
 /// <remarks>
-/// Invariants: Every setting has an explicit default value and can be read before any user modification.
-/// Thread safety: Public members serialize access through a private lock.
-/// Side effects: Writes setting changes to Windows local settings when available, otherwise to an in-memory fallback.
+/// Invariants: Binding switches reads and asynchronous commands to the sole authority and rejects legacy writes.
+/// Thread safety: Legacy access and snapshot publication are serialized; commands retain their generation.
+/// Side effects: Before binding, recovery may write legacy storage. After binding, commands use the authority.
 /// </remarks>
 public sealed partial class AppSettingsService :
     IMasterHeroStatusLayoutSettings,
@@ -36,7 +36,7 @@ public sealed partial class AppSettingsService :
     /// <summary>Process-wide write admission; replaced with the AppHost-owned instance during composition.</summary>
     private MutationAdmissionBarrier _mutationAdmission = new();
 
-    /// <summary>The sole settings map owned by this service, either Windows storage or an isolated fallback.</summary>
+    /// <summary>Legacy migration and recovery input, writable only before binding or verified terminal removal.</summary>
     private readonly IDictionary<string, object> _values;
 
     /// <summary>Windows local settings container cached for this service lifetime when available.</summary>

@@ -103,6 +103,16 @@ internal sealed class AppDataGenerationRepositories : IServiceProvider, IAsyncDi
         if (!triggers.IsSucceeded || triggers.Value is null) { throw new InvalidDataException("The generation trigger repository is unavailable."); }
     }
 
+    /// <summary>Captures every owned producer for lifecycle work performed under this generation's lease.</summary>
+    public IReadOnlyList<IRuntimeParticipant> CaptureProducers()
+    {
+        lock (_disposalLock)
+        {
+            ObjectDisposedException.ThrowIf(_closing, this);
+            return _producers.ToArray();
+        }
+    }
+
     /// <summary>Transfers a newly constructed producer to this generation before it can start.</summary>
     public T OwnProducer<T>(T producer) where T : class, IRuntimeParticipant
     {

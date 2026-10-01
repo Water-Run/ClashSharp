@@ -313,8 +313,8 @@ public sealed partial class ProductionDataGenerationTests
             return FailStop ? Task.FromException(new IOException("producer stop failed")) : Task.CompletedTask;
         }
         public Task StartAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task ResumeAsync(QuiescedState priorState, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<QuiescedState> QuiesceAsync(CancellationToken cancellationToken) => Task.FromResult(new QuiescedState(false));
+        public Task ResumeAsync(QuiescedState priorState, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class Credential : IControllerCredentialProvider

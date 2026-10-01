@@ -79,7 +79,8 @@ internal sealed class AppDataGenerationRuntimeComposer(
         repositories.OwnSettingsParticipant(triggers);
         repositories.OwnProducer(triggers.Scheduler);
         ProfileSubscriptionScheduler subscriptions = repositories.OwnProducer(new ProfileSubscriptionScheduler(
-            new ProfileSubscriptionSchedulerCatalogAdapter(repositories.Profiles), time, repositories.Logs.AppendLog, producerClock));
+            new ProfileSubscriptionSchedulerCatalogAdapter(repositories.Profiles), time, repositories.Logs.AppendLog, producerClock,
+            waitForExecution: publication.WaitAsync));
         repositories.AttachRuntime(new(repositories, admission, generations, sampling, scopedTakeover, triggers, definitions,
             new TriggerActionReconciler(repositories.Triggers, executor, admission), executions, context, network, observer, subscriptions,
             handoff, publication, recovery, processEpoch, exitRequested));

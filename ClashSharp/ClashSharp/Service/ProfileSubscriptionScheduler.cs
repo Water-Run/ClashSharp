@@ -34,17 +34,20 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
     private readonly TimeProvider _timeProvider;
     private readonly Action<string, string, string, string?> _appendLog;
     private readonly SupervisedLoop _supervisor;
+    private readonly Func<CancellationToken, Task> _waitForExecution;
 
     internal ProfileSubscriptionScheduler(
         IProfileSubscriptionSchedulerCatalog catalog,
         TimeProvider timeProvider,
         Action<string, string, string, string?> appendLog,
         ISupervisorClock? clock = null,
-        SupervisorBackoffPolicy? backoff = null)
+        SupervisorBackoffPolicy? backoff = null,
+        Func<CancellationToken, Task>? waitForExecution = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _appendLog = appendLog ?? throw new ArgumentNullException(nameof(appendLog));
+        _waitForExecution = waitForExecution ?? (_ => Task.CompletedTask);
         _supervisor = new SupervisedLoop(
             "profile-subscription-updates",
             UpdateDueSubscriptionsAsync,
@@ -96,6 +99,8 @@ internal sealed class ProfileSubscriptionScheduler : IRuntimeParticipant
     /// <summary>Runs one deterministic scheduler pass, continuing after an individual link failure.</summary>
     internal async Task UpdateDueSubscriptionsAsync(CancellationToken cancellationToken)
     {
+        await _waitForExecution(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<ProfileSubscriptionLink> dueLinks = _catalog.GetDueSubscriptionLinks(
             _timeProvider.GetUtcNow());
         foreach (ProfileSubscriptionLink link in dueLinks)

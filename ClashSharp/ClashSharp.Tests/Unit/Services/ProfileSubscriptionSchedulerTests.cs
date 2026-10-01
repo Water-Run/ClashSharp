@@ -1,11 +1,64 @@
+extern alias ClashSharpUi;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using PublicationGate = ClashSharpUi::ClashSharp.Hosting.Data.GenerationPublicationGate;
 
 namespace ClashSharp.Tests.Unit.Services;
 
 /// <summary>Unit tests for automatic profile subscription scheduling.</summary>
 public sealed class ProfileSubscriptionSchedulerTests
 {
+    [Fact]
+    public async Task ReplacementPublication_SubscriptionPassCannotReadOrImportBeforePublication()
+    {
+        PublicationGate gate = new();
+        FakeSchedulerCatalog catalog = new([Link("held")]);
+        ProfileSubscriptionScheduler scheduler = new(catalog, TimeProvider.System, (_, _, _, _) => { }, waitForExecution: gate.WaitAsync);
+        Task pass = scheduler.UpdateDueSubscriptionsAsync(CancellationToken.None);
+        Assert.False(pass.IsCompleted);
+        Assert.Equal(0, catalog.Reads);
+        Assert.Empty(catalog.ImportedLinkIds);
+
+        gate.Publish();
+        await pass.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, catalog.Reads);
+        Assert.Equal(["held"], catalog.ImportedLinkIds);
+    }
+
+    [Fact]
+    public async Task ReplacementPublication_QuiescenceCancelsAWaitingSubscriptionPassAndResumeRemainsHeld()
+    {
+        PublicationGate gate = new();
+        FakeSchedulerCatalog catalog = new([Link("resumed")]);
+        TaskCompletionSource firstWait = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource secondWait = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource imported = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int waits = 0;
+        catalog.Imported = () => imported.TrySetResult();
+        ProfileSubscriptionScheduler scheduler = new(catalog, TimeProvider.System, (_, _, _, _) => { }, waitForExecution: token =>
+        {
+            if (Interlocked.Increment(ref waits) == 1) { firstWait.TrySetResult(); }
+            else { secondWait.TrySetResult(); }
+            return gate.WaitAsync(token);
+        });
+        try
+        {
+            await scheduler.StartAsync(CancellationToken.None);
+            await firstWait.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var paused = await scheduler.QuiesceAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(paused.WasRunning);
+            Assert.Equal(0, catalog.Reads);
+
+            await scheduler.ResumeAsync(paused, CancellationToken.None);
+            await secondWait.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Empty(catalog.ImportedLinkIds);
+            gate.Publish();
+            await imported.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(["resumed"], catalog.ImportedLinkIds);
+        }
+        finally { await scheduler.StopAsync(CancellationToken.None); }
+    }
+
     [Fact]
     public async Task UpdateDueSubscriptionsAsync_ContinuesAfterOneLinkFails()
     {
@@ -43,6 +96,8 @@ public sealed class ProfileSubscriptionSchedulerTests
         IProfileSubscriptionSchedulerCatalog
     {
         public string? FailingLinkId { get; init; }
+        public int Reads { get; private set; }
+        public Action? Imported { get; set; }
 
         public List<string> ImportedLinkIds { get; } = [];
 
@@ -50,6 +105,7 @@ public sealed class ProfileSubscriptionSchedulerTests
 
         public IReadOnlyList<ProfileSubscriptionLink> GetDueSubscriptionLinks(DateTimeOffset now)
         {
+            ++Reads;
             ObservedNow = now;
             return dueLinks;
         }
@@ -65,6 +121,7 @@ public sealed class ProfileSubscriptionSchedulerTests
             CancellationToken cancellationToken)
         {
             ImportedLinkIds.Add(link.Id);
+            Imported?.Invoke();
             if (StringComparer.Ordinal.Equals(link.Id, FailingLinkId))
             {
                 throw new HttpRequestException("simulated failure");
