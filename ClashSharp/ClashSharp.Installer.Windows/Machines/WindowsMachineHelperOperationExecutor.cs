@@ -37,15 +37,16 @@ internal interface IWindowsMachineHelperMachineOperations
 /// <summary>
 /// Reconstructs every operation from the authenticated journal, acquires an independent signed
 /// release lease, and composes helper-only certificate ownership, target-user certificate,
-/// package-observation, and fixed machine/SCM operations. The WPF entry point remains deliberately
-/// disconnected until parent/runtime composition and signed Windows VM evidence are complete.
+/// package-observation, and fixed machine/SCM operations. Read-only preparation checks run before
+/// new journal intent and again before service maintenance; committed replays stay observation-only.
 /// </summary>
 internal sealed class WindowsMachineHelperOperationExecutor
-    : IInstallerMachineHelperOperationExecutor, IDisposable
+    : IInstallerMachineHelperOperationExecutor, IInstallerMachineHelperPreparationPreflight, IDisposable
 {
     private readonly IInstallerReleaseVerifier _releaseVerifier;
     private readonly IInstallerCertificateMutation _certificateMutation;
     private readonly IInstallerCertificateMutationVerifier _certificateVerifier;
+    private readonly IInstallerCertificatePreflight _certificatePreflight;
     private readonly IWindowsTargetUserPackageCommitInspector _packageInspector;
     private readonly IWindowsMachineHelperMachineOperations _machineOperations;
     private bool _disposed;
@@ -54,17 +55,20 @@ internal sealed class WindowsMachineHelperOperationExecutor
         IInstallerReleaseVerifier releaseVerifier,
         IInstallerCertificateMutation certificateMutation,
         IInstallerCertificateMutationVerifier certificateVerifier,
+        IInstallerCertificatePreflight certificatePreflight,
         IWindowsTargetUserPackageCommitInspector packageInspector,
         IWindowsMachineHelperMachineOperations machineOperations)
     {
         ArgumentNullException.ThrowIfNull(releaseVerifier);
         ArgumentNullException.ThrowIfNull(certificateMutation);
         ArgumentNullException.ThrowIfNull(certificateVerifier);
+        ArgumentNullException.ThrowIfNull(certificatePreflight);
         ArgumentNullException.ThrowIfNull(packageInspector);
         ArgumentNullException.ThrowIfNull(machineOperations);
         _releaseVerifier = releaseVerifier;
         _certificateMutation = certificateMutation;
         _certificateVerifier = certificateVerifier;
+        _certificatePreflight = certificatePreflight;
         _packageInspector = packageInspector;
         _machineOperations = machineOperations;
     }
@@ -85,6 +89,27 @@ internal sealed class WindowsMachineHelperOperationExecutor
             embeddedManifestBytes,
             certificateOwnershipStore,
             machineOperations);
+
+    public async Task VerifyPreparationAsync(
+        InstallerMachineHelperCommand command,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(command);
+        InstallerRequest request = RequestFrom(command.ToDurableState().Journal);
+        if (command.Verb != InstallerMachineHelperVerb.Prepare
+            || request.Operation is not (InstallerOperation.Install or InstallerOperation.Repair))
+        {
+            throw new InstallerProtocolException("installer.machine_helper.preflight_command_invalid");
+        }
+
+        await using IInstallerReleaseLease release = await _releaseVerifier
+            .VerifyAsync(request, cancellationToken).ConfigureAwait(false)
+            ?? throw new InstallerProtocolException("installer.release.lease_missing");
+        ValidateRelease(request, release);
+        await _certificatePreflight.VerifyCanInstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+        await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task ExecuteAsync(
         InstallerMachineHelperCommand command,
@@ -112,6 +137,12 @@ internal sealed class WindowsMachineHelperOperationExecutor
         switch (command.Verb)
         {
             case InstallerMachineHelperVerb.Prepare:
+                if (request.Operation is InstallerOperation.Install or InstallerOperation.Repair
+                    && disposition == InstallerMachineHelperSessionDisposition.Execute)
+                {
+                    await _certificatePreflight.VerifyCanInstallAsync(request, release, cancellationToken)
+                        .ConfigureAwait(false);
+                }
                 await _machineOperations
                     .PrepareAsync(request, release, disposition, cancellationToken)
                     .ConfigureAwait(false);
@@ -227,6 +258,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
         var certificateMutation = new WindowsInstallerCertificateMutations(userMutation, machineMutation, persistence);
         return new WindowsMachineHelperOperationExecutor(
             new WindowsInstallerReleaseVerifier(embeddedManifestBytes),
+            certificateMutation,
             certificateMutation,
             certificateMutation,
             new WindowsTargetUserPackageCommitInspector(

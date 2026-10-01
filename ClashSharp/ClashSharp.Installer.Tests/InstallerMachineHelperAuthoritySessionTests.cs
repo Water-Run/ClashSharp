@@ -7,6 +7,131 @@ namespace ClashSharp.Installer.Tests;
 public sealed class InstallerMachineHelperAuthoritySessionTests
 {
     [Fact]
+    public async Task InitialPreflightConflictLeavesNoRecoveryIntentOrOperation()
+    {
+        List<string> events = [];
+        var store = new MemoryInstallerTransactionStore(events, initialJournal: null);
+        InstallerMachineHelperCommand command = Command(InstallerMachineHelperVerb.Prepare,
+            StateAt(InstallerOperation.Install, InstallerTransactionPhase.Prepared));
+        var operations = new RecordingOperations(events)
+        {
+            Preflight = _ => throw new InstallerProtocolException("installer.machine_certificate.ownership_conflict"),
+        };
+        InstallerMachineHelperAuthoritySession session = await InstallerMachineHelperAuthoritySession.CreateAsync(
+            command.ToInvocation(), store, operations, CancellationToken.None);
+
+        InstallerMachineHelperResult result = await session.ExecuteAsync(command, CancellationToken.None);
+
+        Assert.Equal(InstallerMachineHelperOutcome.Failed, result.Outcome);
+        Assert.Equal("installer.machine_certificate.ownership_conflict", result.DiagnosticCode);
+        Assert.Equal(command.ToDurableState(), result.ValidateAgainst(command));
+        Assert.Null(store.Current);
+        Assert.Equal(["journal.load", "journal.load", "preflight", "journal.load"], events);
+    }
+
+    [Fact]
+    public async Task PreflightCancellationLeavesNoIntentAndReconcilesTheSession()
+    {
+        List<string> events = [];
+        var store = new MemoryInstallerTransactionStore(events, initialJournal: null);
+        InstallerMachineHelperCommand command = Command(InstallerMachineHelperVerb.Prepare,
+            StateAt(InstallerOperation.Repair, InstallerTransactionPhase.Prepared));
+        using var cancellation = new CancellationTokenSource();
+        var operations = new RecordingOperations(events)
+        {
+            Preflight = token =>
+            {
+                cancellation.Cancel();
+                token.ThrowIfCancellationRequested();
+                return Task.CompletedTask;
+            },
+        };
+        InstallerMachineHelperAuthoritySession session = await InstallerMachineHelperAuthoritySession.CreateAsync(
+            command.ToInvocation(), store, operations, CancellationToken.None);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.ExecuteAsync(command, cancellation.Token));
+
+        Assert.Null(store.Current);
+        Assert.Equal(["journal.load", "journal.load", "preflight", "journal.load"], events);
+    }
+
+    [Fact]
+    public async Task RejectedPreflightCanRetryTheExactCommandWithoutAnOrphanedJournal()
+    {
+        List<string> events = [];
+        var store = new MemoryInstallerTransactionStore(events, initialJournal: null);
+        InstallerMachineHelperCommand command = Command(InstallerMachineHelperVerb.Prepare,
+            StateAt(InstallerOperation.Install, InstallerTransactionPhase.Prepared));
+        int inspections = 0;
+        var operations = new RecordingOperations(events)
+        {
+            Preflight = _ => ++inspections == 1
+                ? throw new InstallerProtocolException("installer.release.certificate_payload_missing")
+                : Task.CompletedTask,
+        };
+        InstallerMachineHelperAuthoritySession session = await InstallerMachineHelperAuthoritySession.CreateAsync(
+            command.ToInvocation(), store, operations, CancellationToken.None);
+
+        InstallerMachineHelperResult failed = await session.ExecuteAsync(command, CancellationToken.None);
+        Assert.Equal(InstallerMachineHelperOutcome.Failed, failed.Outcome);
+        Assert.Null(store.Current);
+        InstallerMachineHelperResult succeeded = await session.ExecuteAsync(command, CancellationToken.None);
+
+        Assert.Equal(InstallerMachineHelperOutcome.Succeeded, succeeded.Outcome);
+        Assert.Equal(command.GetExpectedSuccessfulState(), store.Current);
+        Assert.Equal(2, inspections);
+        Assert.Single(events, value => value == "journal.save:Prepared");
+        Assert.Single(events, value => value == "operation:Prepare:Execute");
+    }
+
+    [Fact]
+    public async Task ExistingPreparedRecoveryDoesNotPretendNoMaintenanceHasStarted()
+    {
+        List<string> events = [];
+        InstallerTransactionSnapshot prepared = StateAt(InstallerOperation.Install, InstallerTransactionPhase.Prepared);
+        var store = new MemoryInstallerTransactionStore(events, prepared.Journal);
+        InstallerMachineHelperCommand command = Command(InstallerMachineHelperVerb.Prepare, prepared);
+        var operations = new RecordingOperations(events,
+            static (_, _, _) => throw new InstallerProtocolException("installer.machine.prepare_failed"))
+        {
+            Preflight = _ => throw new InvalidOperationException("Initial preflight must not discard recovery evidence."),
+        };
+        InstallerMachineHelperAuthoritySession session = await InstallerMachineHelperAuthoritySession.CreateAsync(
+            command.ToInvocation(), store, operations, CancellationToken.None);
+
+        InstallerMachineHelperResult result = await session.ExecuteAsync(command, CancellationToken.None);
+
+        Assert.Equal(InstallerMachineHelperOutcome.Failed, result.Outcome);
+        Assert.Equal(prepared, store.Current);
+        Assert.DoesNotContain("preflight", events);
+        Assert.DoesNotContain(events, value => value.StartsWith("journal.save:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task MissingPreflightCapabilityCannotCreateInstallIntent()
+    {
+        List<string> events = [];
+        var store = new MemoryInstallerTransactionStore(events, initialJournal: null);
+        InstallerMachineHelperCommand command = Command(InstallerMachineHelperVerb.Prepare,
+            StateAt(InstallerOperation.Install, InstallerTransactionPhase.Prepared));
+        InstallerMachineHelperAuthoritySession session = await InstallerMachineHelperAuthoritySession.CreateAsync(
+            command.ToInvocation(), store, new ExecutionOnlyOperations(), CancellationToken.None);
+
+        InstallerMachineHelperResult result = await session.ExecuteAsync(command, CancellationToken.None);
+
+        Assert.Equal("installer.machine_helper.preflight_unavailable", result.DiagnosticCode);
+        Assert.Null(store.Current);
+        Assert.DoesNotContain(events, value => value.StartsWith("journal.save:", StringComparison.Ordinal));
+    }
+
+    private sealed class ExecutionOnlyOperations : IInstallerMachineHelperOperationExecutor
+    {
+        public Task ExecuteAsync(InstallerMachineHelperCommand command,
+            InstallerMachineHelperSessionDisposition disposition, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Missing preflight must reject before execution.");
+    }
+
+    [Fact]
     public async Task ParentBoundSessionRejectsDifferentTargetBeforeProtectedMutation()
     {
         List<string> events = [];
@@ -39,7 +164,7 @@ public sealed class InstallerMachineHelperAuthoritySessionTests
     }
 
     [Fact]
-    public async Task InitialPrepareIsDurableBeforeAnyPrivilegedOperation()
+    public async Task InitialPrepareIsDurableBeforeAnyPrivilegedMutation()
     {
         List<string> events = [];
         var store = new MemoryInstallerTransactionStore(events, initialJournal: null);
@@ -67,6 +192,7 @@ public sealed class InstallerMachineHelperAuthoritySessionTests
             [
                 "journal.load",
                 "journal.load",
+                "preflight",
                 "journal.save:Prepared",
                 "operation:Prepare:Execute",
                 "journal.save:MachineReserved",
@@ -353,9 +479,11 @@ public sealed class InstallerMachineHelperAuthoritySessionTests
         return InstallerTransactionSnapshot.Create(journal);
     }
 
-    private sealed class RecordingOperations : IInstallerMachineHelperOperationExecutor
+    private sealed class RecordingOperations : IInstallerMachineHelperOperationExecutor, IInstallerMachineHelperPreparationPreflight
     {
         private readonly List<string> _events;
+
+        internal Func<CancellationToken, Task>? Preflight { get; init; }
         private readonly Func<
             InstallerMachineHelperCommand,
             InstallerMachineHelperSessionDisposition,
@@ -372,6 +500,14 @@ public sealed class InstallerMachineHelperAuthoritySessionTests
         {
             _events = events;
             _action = action;
+        }
+
+        public Task VerifyPreparationAsync(InstallerMachineHelperCommand command, CancellationToken cancellationToken)
+        {
+            command.Validate();
+            cancellationToken.ThrowIfCancellationRequested();
+            _events.Add("preflight");
+            return Preflight?.Invoke(cancellationToken) ?? Task.CompletedTask;
         }
 
         public Task ExecuteAsync(

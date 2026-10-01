@@ -398,6 +398,28 @@ public sealed class InstallerCoordinatorFaultMatrixTests
         Assert.DoesNotContain("secret-user-path-and-token", result.DiagnosticCode, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(InstallerOperation.Install)]
+    [InlineData(InstallerOperation.Repair)]
+    public async Task HelperPreflightConflictDoesNotInventARecoveryTransaction(InstallerOperation operation)
+    {
+        InstallerScenario scenario = ScenarioFor(operation);
+        scenario.MachinePrepareAdmissionAction = _ =>
+            throw new InstallerProtocolException("installer.machine_certificate.ownership_conflict");
+        using InstallerCoordinator coordinator = scenario.CreateCoordinator();
+
+        InstallerExecutionResult result = await coordinator.ExecuteAsync(RequestFor(operation), null, CancellationToken.None);
+
+        Assert.Equal(InstallerExecutionOutcome.Blocked, result.Outcome);
+        Assert.Equal("installer.machine_certificate.ownership_conflict", result.DiagnosticCode);
+        Assert.False(result.RecoveryPending);
+        Assert.Null(result.LastDurablePhase);
+        Assert.Null(scenario.Store.Current);
+        Assert.DoesNotContain(scenario.Events, value => value.StartsWith("journal.save:", StringComparison.Ordinal));
+        Assert.DoesNotContain(scenario.Events, value => value.StartsWith("certificate.apply:", StringComparison.Ordinal));
+        Assert.DoesNotContain(scenario.Events, value => value.StartsWith("package.apply:", StringComparison.Ordinal));
+    }
+
     private static InstallerScenario ScenarioFor(
         InstallerOperation operation,
         InstallerTransactionJournal? initialJournal = null) =>

@@ -7,7 +7,7 @@ namespace ClashSharp.Installer.Windows.Certificates;
 /// Retains legacy account ownership while adding independently journaled machine MSIX trust.
 /// Each capability reconciles its own cut points; the helper verifies both before advancing.
 /// </summary>
-internal sealed class WindowsInstallerCertificateMutations : IInstallerCertificateMutation, IInstallerCertificateMutationVerifier, IDisposable
+internal sealed class WindowsInstallerCertificateMutations : IInstallerCertificateMutation, IInstallerCertificateMutationVerifier, IInstallerCertificatePreflight, IDisposable
 {
     private readonly DurableInstallerCertificateMutation _user;
     private readonly DurableInstallerMachineCertificateMutation _machine;
@@ -22,6 +22,12 @@ internal sealed class WindowsInstallerCertificateMutations : IInstallerCertifica
         _user = user;
         _machine = machine;
         _lifetime = lifetime;
+    }
+
+    public async Task VerifyCanInstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)
+    {
+        await _machine.VerifyCanInstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+        await _user.VerifyCanInstallAsync(request, release, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task ApplyAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)

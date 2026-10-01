@@ -6,6 +6,69 @@ namespace ClashSharp.Installer.Tests;
 
 public sealed class DurableInstallerMachineCertificateMutationTests
 {
+    [Theory]
+    [InlineData(InstallerCertificatePresence.Missing, false)]
+    [InlineData(InstallerCertificatePresence.ExactMatch, false)]
+    [InlineData(InstallerCertificatePresence.Missing, true)]
+    [InlineData(InstallerCertificatePresence.ExactMatch, true)]
+    public async Task PreflightPreservesTrustAndOwnership(InstallerCertificatePresence presence, bool hasOwnership)
+    {
+        await using var lease = InstallerTestData.Lease();
+        var state = new State { Presence = presence, CutPoint = "write.before" };
+        if (hasOwnership)
+        {
+            state.Bytes = InstallerMachineCertificateOwnership.Create(lease.Manifest, certificateWasPresent: true).Serialize();
+        }
+        byte[]? before = state.Bytes?.ToArray();
+
+        await new DurableInstallerMachineCertificateMutation(state, state, state)
+            .VerifyCanInstallAsync(InstallerTestData.Request(), lease, CancellationToken.None);
+
+        Assert.Equal(before, state.Bytes);
+        Assert.Equal(presence, state.Presence);
+        Assert.Equal(0, state.Imports);
+        Assert.Equal(0, state.Removals);
+        Assert.Equal(0, state.ReferenceQueries);
+        Assert.Equal("write.before", state.CutPoint);
+    }
+
+    [Fact]
+    public async Task PreflightRejectsAnotherSignerWithoutChangingItsOwnership()
+    {
+        await using var lease = InstallerTestData.Lease();
+        InstallerMachineCertificateOwnership ownership = InstallerMachineCertificateOwnership.Create(lease.Manifest, true) with
+        { CertificateSha256 = InstallerTestData.OtherHash };
+        var state = new State { Bytes = ownership.Serialize(), Presence = InstallerCertificatePresence.ExactMatch };
+        byte[] before = state.Bytes.ToArray();
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            new DurableInstallerMachineCertificateMutation(state, state, state)
+                .VerifyCanInstallAsync(InstallerTestData.Request(InstallerOperation.Repair), lease, CancellationToken.None));
+
+        Assert.Equal("installer.machine_certificate.ownership_conflict", failure.DiagnosticCode);
+        Assert.Equal(before, state.Bytes);
+        Assert.Equal(0, state.Imports);
+        Assert.Equal(0, state.Removals);
+    }
+
+    [Theory]
+    [InlineData(InstallerCertificatePresence.IdentityConflict, true, "installer.machine_certificate.identity_conflict")]
+    [InlineData(InstallerCertificatePresence.Missing, false, "installer.release.certificate_payload_missing")]
+    public async Task PreflightRejectsUnavailableTrustWithoutWriting(
+        InstallerCertificatePresence presence, bool payloadAvailable, string diagnostic)
+    {
+        await using var lease = InstallerTestData.Lease(InstallerTestData.Release(certificatePayloadAvailable: payloadAvailable));
+        var state = new State { Presence = presence };
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            new DurableInstallerMachineCertificateMutation(state, state, state)
+                .VerifyCanInstallAsync(InstallerTestData.Request(), lease, CancellationToken.None));
+
+        Assert.Equal(diagnostic, failure.DiagnosticCode);
+        Assert.Null(state.Bytes);
+        Assert.Equal(0, state.Imports);
+    }
+
     [Fact]
     public async Task InstallationRecordsOwnershipBeforeImportAndUninstallClearsItAfterRemoval()
     {

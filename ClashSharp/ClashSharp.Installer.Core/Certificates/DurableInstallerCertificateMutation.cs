@@ -8,7 +8,8 @@ namespace ClashSharp.Installer.Certificates;
 /// </summary>
 public sealed class DurableInstallerCertificateMutation :
     IInstallerCertificateMutation,
-    IInstallerCertificateMutationVerifier
+    IInstallerCertificateMutationVerifier,
+    IInstallerCertificatePreflight
 {
     private readonly IInstallerCertificateOwnershipStore _ownershipStore;
     private readonly IInstallerCertificateStoreAdapter _certificateStore;
@@ -22,6 +23,43 @@ public sealed class DurableInstallerCertificateMutation :
         ArgumentNullException.ThrowIfNull(certificateStore);
         _ownershipStore = ownershipStore;
         _certificateStore = certificateStore;
+    }
+
+    /// <inheritdoc />
+    public async Task VerifyCanInstallAsync(
+        InstallerRequest request,
+        IInstallerReleaseLease release,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(release);
+        request.Validate();
+        release.Release.Validate();
+        release.Manifest.Validate();
+        if (request.Operation is not (InstallerOperation.Install or InstallerOperation.Repair)
+            || !release.Manifest.Matches(release.Release)
+            || request.ExpectedPackageVersion != release.Release.ExpectedPackageVersion
+            || request.InstallerPayloadSha256 != release.Release.InstallerPayloadSha256)
+        {
+            throw new InstallerProtocolException("installer.release.identity_mismatch");
+        }
+
+        await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
+        InstallerCertificateOwnershipSnapshot? ownership = await _ownershipStore
+            .LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (ownership is not null)
+        {
+            ValidateActiveOwnership(ownership.Ledger, request, release);
+        }
+
+        InstallerCertificatePresence presence = await InspectExactAsync(
+            request, release, cancellationToken).ConfigureAwait(false);
+        if (presence == InstallerCertificatePresence.Missing && !release.Release.CertificatePayloadAvailable)
+        {
+            throw new InstallerProtocolException("installer.release.certificate_payload_missing");
+        }
+
+        await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

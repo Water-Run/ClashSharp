@@ -13,6 +13,53 @@ public sealed class WindowsMachineHelperOperationExecutorTests
     private const string TargetSid = "S-1-5-21-100-200-300-1001";
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CertificateConflictIsRejectedBeforeMachinePreparation(bool initialInspection)
+    {
+        using var fixture = Fixture();
+        InstallerRequest request = fixture.Request(targetSid: TargetSid);
+        var release = new RecordingReleaseVerifier(fixture.Manifest);
+        var machine = new RecordingMachineOperations();
+        WindowsMachineHelperOperationExecutor executor = Executor(release,
+            new RecordingCertificateStore(InstallerCertificatePresence.ExactMatch),
+            new RecordingPackageInspector(), machine, out RecordingCertificateMutation certificates);
+        certificates.PreflightFailure = new InstallerProtocolException("installer.machine_certificate.ownership_conflict");
+        InstallerMachineHelperCommand command = Command(request, InstallerMachineHelperVerb.Prepare);
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() => initialInspection
+            ? executor.VerifyPreparationAsync(command, CancellationToken.None)
+            : executor.ExecuteAsync(command, InstallerMachineHelperSessionDisposition.Execute, CancellationToken.None));
+
+        Assert.Equal("installer.machine_certificate.ownership_conflict", failure.DiagnosticCode);
+        Assert.Empty(machine.Calls);
+        Assert.Equal(1, certificates.PreflightCalls);
+        Assert.Equal(0, certificates.ApplyCalls);
+        Assert.Equal(0, certificates.VerifyCalls);
+        Assert.Equal(1, release.Lease!.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task InitialInspectionOnlyReadsTrustAndReleasesItsCandidateLease()
+    {
+        using var fixture = Fixture();
+        InstallerRequest request = fixture.Request(targetSid: TargetSid);
+        var release = new RecordingReleaseVerifier(fixture.Manifest);
+        var machine = new RecordingMachineOperations();
+        WindowsMachineHelperOperationExecutor executor = Executor(release,
+            new RecordingCertificateStore(InstallerCertificatePresence.Missing),
+            new RecordingPackageInspector(), machine, out RecordingCertificateMutation certificates);
+
+        await executor.VerifyPreparationAsync(Command(request, InstallerMachineHelperVerb.Prepare), CancellationToken.None);
+
+        Assert.Equal(1, certificates.PreflightCalls);
+        Assert.Equal(0, certificates.ApplyCalls);
+        Assert.Empty(machine.Calls);
+        Assert.Equal(1, release.Lease!.ReverifyCalls);
+        Assert.Equal(1, release.Lease.DisposeCalls);
+    }
+
+    [Theory]
     [InlineData(InstallerOperation.Install)]
     [InlineData(InstallerOperation.Repair)]
     public async Task PackageCommitVerifiesExactTargetPackageAndCertificate(
@@ -361,6 +408,7 @@ public sealed class WindowsMachineHelperOperationExecutorTests
             releaseVerifier,
             certificateMutation,
             certificateMutation,
+            certificateMutation,
             packageInspector,
             machineOperations);
     }
@@ -542,7 +590,8 @@ public sealed class WindowsMachineHelperOperationExecutorTests
 
     private sealed class RecordingCertificateMutation :
         IInstallerCertificateMutation,
-        IInstallerCertificateMutationVerifier
+        IInstallerCertificateMutationVerifier,
+        IInstallerCertificatePreflight
     {
         private readonly RecordingCertificateStore _store;
 
@@ -555,7 +604,29 @@ public sealed class WindowsMachineHelperOperationExecutorTests
 
         internal int VerifyCalls { get; private set; }
 
+        internal int PreflightCalls { get; private set; }
+
+        internal Exception? PreflightFailure { get; set; }
+
         internal Action? ApplyObserver { get; set; }
+
+        public async Task VerifyCanInstallAsync(
+            InstallerRequest request,
+            IInstallerReleaseLease release,
+            CancellationToken cancellationToken)
+        {
+            PreflightCalls++;
+            if (PreflightFailure is not null)
+            {
+                throw PreflightFailure;
+            }
+
+            InstallerCertificatePresence presence = await _store.InspectAsync(request, release, cancellationToken);
+            if (presence == InstallerCertificatePresence.IdentityConflict)
+            {
+                throw new InstallerProtocolException("installer.certificate.identity_conflict");
+            }
+        }
 
         public Task ApplyAsync(
             InstallerRequest request,

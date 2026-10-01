@@ -7,6 +7,33 @@ namespace ClashSharp.Installer.Presentation.Tests;
 public sealed class InstallerShellViewModelTests
 {
     [Theory]
+    [InlineData("installer.machine_certificate.ownership_conflict", false)]
+    [InlineData("installer.machine_certificate.ownership_conflict", true)]
+    [InlineData("installer.certificate.ownership_conflict", false)]
+    [InlineData("installer.certificate.ownership_conflict", true)]
+    public async Task CertificateConflictDistinguishesPreflightFromStartedRecovery(string diagnostic, bool recoveryPending)
+    {
+        var runtime = new ScriptedInstallerRuntime
+        {
+            Execute = (_, _, _) => Task.FromResult(new InstallerExecutionResult(
+                recoveryPending ? InstallerExecutionOutcome.Failed : InstallerExecutionOutcome.Blocked,
+                diagnostic,
+                recoveryPending ? InstallerTransactionPhase.Prepared : null,
+                RecoveryPending: recoveryPending)),
+        };
+        using var viewModel = new InstallerShellViewModel(runtime);
+        await viewModel.InitializeAsync();
+
+        await viewModel.PrimaryActionCommand.ExecuteAsync();
+
+        Assert.Equal("安装证书归属冲突", viewModel.StatusTitle);
+        Assert.Contains("直接重试无法解决", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.Contains(recoveryPending ? "现有操作尚未完成" : "维护开始前停止", viewModel.StatusDetail, StringComparison.Ordinal);
+        Assert.Equal(recoveryPending ? "需要恢复或诊断。" : "操作未开始。", viewModel.ProgressStatus);
+        Assert.False(viewModel.CanExecuteMutations);
+    }
+
+    [Theory]
     [InlineData("installer.machine_helper.session_unavailable", "无法建立安装会话", false)]
     [InlineData("installer.machine_helper.session_unavailable", "无法建立安装会话", true)]
     [InlineData("installer.concurrent_action_rejected", "已有安装操作正在执行", false)]

@@ -6,6 +6,69 @@ namespace ClashSharp.Installer.Tests;
 
 public sealed class DurableInstallerCertificateMutationTests
 {
+    [Theory]
+    [InlineData(false, InstallerCertificatePresence.Missing)]
+    [InlineData(false, InstallerCertificatePresence.ExactMatch)]
+    [InlineData(true, InstallerCertificatePresence.Missing)]
+    [InlineData(true, InstallerCertificatePresence.ExactMatch)]
+    public async Task PreflightPreservesUserTrustAndOwnership(bool hasOwnership, InstallerCertificatePresence presence)
+    {
+        List<string> events = [];
+        MemoryOwnershipStore ownership = new(events, hasOwnership ? InstallerTestData.CertificateLedger() : null);
+        RecordingCertificateStore certificates = new(events, presence);
+        InstallerCertificateOwnershipSnapshot? before = ownership.Current;
+        await using var lease = InstallerTestData.Lease();
+
+        await new DurableInstallerCertificateMutation(ownership, certificates)
+            .VerifyCanInstallAsync(InstallerTestData.Request(), lease, CancellationToken.None);
+
+        Assert.Equal(before, ownership.Current);
+        Assert.Equal(["ownership.load", $"certificate.inspect:{presence}"], events);
+        Assert.Equal(0, certificates.ImportCount);
+        Assert.Equal(0, certificates.RemoveCount);
+    }
+
+    [Fact]
+    public async Task PreflightRejectsReleasedUserOwnershipWithoutImporting()
+    {
+        List<string> events = [];
+        MemoryOwnershipStore ownership = new(events,
+            InstallerTestData.CertificateLedger(managedReferenceCount: 0, generation: 2));
+        RecordingCertificateStore certificates = new(events, InstallerCertificatePresence.Missing);
+        InstallerCertificateOwnershipSnapshot? before = ownership.Current;
+        await using var lease = InstallerTestData.Lease();
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            new DurableInstallerCertificateMutation(ownership, certificates)
+                .VerifyCanInstallAsync(InstallerTestData.Request(), lease, CancellationToken.None));
+
+        Assert.Equal("installer.certificate.ownership_conflict", failure.DiagnosticCode);
+        Assert.Equal(before, ownership.Current);
+        Assert.Equal(["ownership.load"], events);
+        Assert.Equal(0, certificates.ImportCount);
+    }
+
+    [Theory]
+    [InlineData(InstallerCertificatePresence.IdentityConflict, true, "installer.certificate.identity_conflict")]
+    [InlineData(InstallerCertificatePresence.Missing, false, "installer.release.certificate_payload_missing")]
+    public async Task UserPreflightRejectsUnavailableTrustWithoutWriting(
+        InstallerCertificatePresence presence, bool payloadAvailable, string diagnostic)
+    {
+        List<string> events = [];
+        MemoryOwnershipStore ownership = new(events);
+        RecordingCertificateStore certificates = new(events, presence);
+        await using var lease = InstallerTestData.Lease(InstallerTestData.Release(certificatePayloadAvailable: payloadAvailable));
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            new DurableInstallerCertificateMutation(ownership, certificates)
+                .VerifyCanInstallAsync(InstallerTestData.Request(), lease, CancellationToken.None));
+
+        Assert.Equal(diagnostic, failure.DiagnosticCode);
+        Assert.Null(ownership.Current);
+        Assert.Equal(["ownership.load", $"certificate.inspect:{presence}"], events);
+        Assert.Equal(0, certificates.ImportCount);
+    }
+
     [Fact]
     public async Task MissingCertificateIsOwnedDurablyBeforeImport()
     {

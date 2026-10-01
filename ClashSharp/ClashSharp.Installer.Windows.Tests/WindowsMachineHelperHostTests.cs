@@ -888,8 +888,15 @@ public sealed partial class WindowsMachineHelperHostTests
         }
     }
 
-    private sealed class RecordingOperations : IInstallerMachineHelperOperationExecutor
+    private sealed class RecordingOperations : IInstallerMachineHelperOperationExecutor, IInstallerMachineHelperPreparationPreflight
     {
+        public Task VerifyPreparationAsync(InstallerMachineHelperCommand command, CancellationToken cancellationToken)
+        {
+            command.Validate();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         private readonly List<string> _events;
 
         internal RecordingOperations(List<string> events)

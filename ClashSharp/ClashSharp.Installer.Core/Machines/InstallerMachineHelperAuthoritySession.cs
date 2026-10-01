@@ -115,6 +115,24 @@ public sealed class InstallerMachineHelperAuthoritySession
             if (disposition == InstallerMachineHelperSessionDisposition.Execute
                 && protectedBefore is null)
             {
+                if (requestState.Journal.Operation is InstallerOperation.Install or InstallerOperation.Repair)
+                {
+                    try
+                    {
+                        if (_operations is not IInstallerMachineHelperPreparationPreflight preflight)
+                        {
+                            throw new InstallerProtocolException("installer.machine_helper.preflight_unavailable");
+                        }
+
+                        await preflight.VerifyPreparationAsync(command, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (InstallerProtocolException exception)
+                    {
+                        return await CompleteStableFailureAsync(command, disposition,
+                            exception.DiagnosticCode, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
                 InstallerTransactionSnapshot persistedIntent = await _transactionStore
                     .SaveAsync(
                         requestState.Journal,

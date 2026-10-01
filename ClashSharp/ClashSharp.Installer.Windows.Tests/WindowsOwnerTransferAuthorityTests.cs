@@ -552,8 +552,15 @@ public sealed partial class WindowsOwnerTransferAuthorityTests
             fixture.Close("ordinary");
         }
     }
-    private sealed class NormalOperations(Fixture fixture) : IInstallerMachineHelperOperationExecutor
+    private sealed class NormalOperations(Fixture fixture) : IInstallerMachineHelperOperationExecutor, IInstallerMachineHelperPreparationPreflight
     {
+        public Task VerifyPreparationAsync(InstallerMachineHelperCommand command, CancellationToken cancellationToken)
+        {
+            command.Validate();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         public Task ExecuteAsync(InstallerMachineHelperCommand command,
             InstallerMachineHelperSessionDisposition disposition, CancellationToken cancellationToken)
         {

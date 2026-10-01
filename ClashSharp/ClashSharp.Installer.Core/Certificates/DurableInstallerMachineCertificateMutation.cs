@@ -8,7 +8,7 @@ namespace ClashSharp.Installer.Certificates;
 /// are preserved; owned certificates remain recorded while any package still references the publisher.
 /// Writes and certificate mutations reconcile their postconditions before returning from failures.
 /// </summary>
-public sealed class DurableInstallerMachineCertificateMutation : IInstallerCertificateMutation, IInstallerCertificateMutationVerifier
+public sealed class DurableInstallerMachineCertificateMutation : IInstallerCertificateMutation, IInstallerCertificateMutationVerifier, IInstallerCertificatePreflight
 {
     private readonly IInstallerMachineCertificatePersistence _persistence;
     private readonly IInstallerCertificateStoreAdapter _certificates;
@@ -25,6 +25,33 @@ public sealed class DurableInstallerMachineCertificateMutation : IInstallerCerti
         _persistence = persistence;
         _certificates = certificates;
         _references = references;
+    }
+
+    /// <inheritdoc />
+    public async Task VerifyCanInstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)
+    {
+        Enter();
+        try
+        {
+            await ReverifyAsync(request, release, cancellationToken).ConfigureAwait(false);
+            if (request.Operation is not (InstallerOperation.Install or InstallerOperation.Repair))
+            {
+                throw new InstallerProtocolException("installer.machine_certificate.operation_invalid");
+            }
+
+            _ = await ReadAsync(release, cancellationToken).ConfigureAwait(false);
+            InstallerCertificatePresence presence = await InspectAsync(request, release, cancellationToken).ConfigureAwait(false);
+            if (presence == InstallerCertificatePresence.Missing && !release.Release.CertificatePayloadAvailable)
+            {
+                throw new InstallerProtocolException("installer.release.certificate_payload_missing");
+            }
+
+            await ReverifyAsync(request, release, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Volatile.Write(ref _active, 0);
+        }
     }
 
     /// <inheritdoc />

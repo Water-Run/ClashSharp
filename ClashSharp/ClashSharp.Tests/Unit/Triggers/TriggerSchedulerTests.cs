@@ -733,27 +733,22 @@ public sealed class TriggerSchedulerTests
         public Task WaitForNextTickAsync(CancellationToken cancellationToken)
         {
             int ordinal = Interlocked.Increment(ref _waitCount);
-            _registrations.GetOrAdd(ordinal, static _ => Signal()).TrySetResult(null);
             if (ordinal <= FailuresRemaining)
             {
+                _registrations.GetOrAdd(ordinal, static _ => Signal()).TrySetResult(null);
                 return Task.FromException(
                     Failure ?? new IOException("clock unavailable"));
             }
 
             TaskCompletionSource<object?> waiter = Signal();
             _waiters[ordinal] = waiter;
+            // Readiness must publish the waiter, not merely the ordinal allocated for it.
+            _registrations.GetOrAdd(ordinal, static _ => Signal()).TrySetResult(null);
             return waiter.Task.WaitAsync(cancellationToken);
         }
 
-        public Task WaitUntilWaitingAsync(int ordinal)
-        {
-            if (Volatile.Read(ref _waitCount) >= ordinal)
-            {
-                return Task.CompletedTask;
-            }
-
-            return _registrations.GetOrAdd(ordinal, static _ => Signal()).Task;
-        }
+        public Task WaitUntilWaitingAsync(int ordinal) =>
+            _registrations.GetOrAdd(ordinal, static _ => Signal()).Task;
 
         public async Task TickAndWaitForNextAsync()
         {
