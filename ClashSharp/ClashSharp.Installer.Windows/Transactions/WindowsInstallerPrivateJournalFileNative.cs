@@ -9,6 +9,7 @@ using ClashSharp.Installer.Retirement;
 using ClashSharp.Installer.Transactions;
 using ClashSharp.Installer.Windows.Certificates;
 using ClashSharp.Installer.Windows.Files;
+using ClashSharp.Installer.Windows.Machines;
 using ClashSharp.Windows.FileSecurity;
 using Microsoft.Win32.SafeHandles;
 
@@ -31,7 +32,8 @@ internal interface IWindowsInstallerPrivateJournalPresenceNative
 /// <summary>
 /// Accesses one factory-bound private leaf under a caller-pinned directory chain. The ordinary
 /// instance still accepts only the transfer journal; separate factories bind an account archive,
-/// retirement journal, or machine-trust document. Every handle requires one ordinary private file.
+/// retirement journal, machine-trust document, or service recovery baseline. Every handle requires
+/// one ordinary private file.
 /// </summary>
 internal sealed class WindowsInstallerPrivateJournalFileNative :
     IWindowsInstallerPrivateJournalFileNative,
@@ -65,6 +67,10 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
     internal static WindowsInstallerPrivateJournalFileNative CreateForMachineCertificate() =>
         new(InstallerMachineCertificateOwnership.FileName, InstallerMachineCertificateOwnership.MaximumDocumentBytes,
             "installer.machine_certificate");
+
+    internal static WindowsInstallerPrivateJournalFileNative CreateForServicePreparationBaseline() =>
+        new(WindowsServicePreparationBaseline.FileName, WindowsServicePreparationBaseline.MaximumDocumentBytes,
+            "installer.recovery.service_baseline");
 
     public bool IsPresent(string path, CancellationToken cancellationToken)
     {

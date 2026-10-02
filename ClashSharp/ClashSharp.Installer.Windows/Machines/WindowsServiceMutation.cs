@@ -3,6 +3,7 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using ClashSharp.Installer.Contracts;
+using ClashSharp.Installer.Transactions;
 
 namespace ClashSharp.Installer.Windows.Machines;
 
@@ -22,6 +23,17 @@ internal interface IWindowsServiceMutationNative : IWindowsServiceConfigurationN
 internal interface IWindowsServiceMutationDelay
 {
     Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Held private recovery authority that independently rechecks the original registered package,
+/// unchanged payload files, association and certificate ownership before SCM restoration.
+/// It must reject a committed package, substituted baseline or expired recovery decision.
+/// </summary>
+internal interface IWindowsServiceRestorationGuard
+{
+    Task VerifyOriginalStateAsync(WindowsMachineDeploymentPlan plan, WindowsServicePreparationBaseline baseline,
+        CancellationToken cancellationToken);
 }
 
 internal sealed record WindowsServiceMutationLimits(
@@ -190,6 +202,73 @@ internal sealed class WindowsServiceMutation
             .ConfigureAwait(false);
         _verifier.VerifyAbsent(cancellationToken);
     }
+
+    /// <summary>
+    /// Restores a verified owned service after preparation fencing. This capability is deliberately
+    /// not exposed by the production helper until its private write-ahead recovery coordinator and
+    /// terminal journal protocol are integrated. Reconciliation completes without abandoning an
+    /// acknowledged-late SCM write when the caller cancels after mutation admission.
+    /// </summary>
+    internal async Task RestorePreparedBaselineAsync(WindowsMachineDeploymentPlan plan,
+        WindowsServicePreparationBaseline baseline, IWindowsServiceRestorationGuard guard,
+        InstallerTransactionJournal current, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(baseline);
+        ArgumentNullException.ThrowIfNull(guard);
+        baseline.RequireBoundary(plan, current);
+        cancellationToken.ThrowIfCancellationRequested();
+        await guard.VerifyOriginalStateAsync(plan, baseline, cancellationToken).ConfigureAwait(false);
+        WindowsServiceSnapshot actual = InspectBeforeMutation(cancellationToken)
+            ?? throw new InstallerProtocolException("installer.recovery.original_service_missing");
+        if (MatchesBaseline(actual, baseline.Service))
+        {
+            await guard.VerifyOriginalStateAsync(plan, baseline, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+        RequireSafeExistingService(actual);
+        RequireOwnedExistingService(plan, actual);
+        bool configured = WindowsServiceConfigurationVerifier.ConfigurationMatches(actual.Configuration, baseline.Service.Configuration)
+            && actual.DaclSddl == baseline.Service.DaclSddl;
+        if (!configured)
+        {
+            RequirePreparedExistingService(actual);
+        }
+        else if (actual.RuntimeState != WindowsServiceRuntimeState.Stopped)
+        {
+            throw new InstallerProtocolException("installer.recovery.service_state_changed");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // The coordinator retains recovery authority until this bounded reconciliation finishes.
+        // Its verification reads must remain available after the UI's cancellation token fires.
+        if (!configured)
+        {
+            Exception? configurationFailure = TryMutation(() =>
+                _native.EnsureConfigured(baseline.Service.Configuration, baseline.Service.DaclSddl));
+            await ReconcileAsync(snapshot => snapshot is not null
+                    && WindowsServiceConfigurationVerifier.ConfigurationMatches(snapshot.Configuration, baseline.Service.Configuration)
+                    && snapshot.DaclSddl == baseline.Service.DaclSddl
+                    && snapshot.RuntimeState == WindowsServiceRuntimeState.Stopped,
+                configurationFailure, CancellationToken.None).ConfigureAwait(false);
+        }
+        await guard.VerifyOriginalStateAsync(plan, baseline, CancellationToken.None).ConfigureAwait(false);
+        if (baseline.Service.RuntimeState == WindowsServiceRuntimeState.Running)
+        {
+            Exception? startFailure = TryMutation(() => _native.Start(WindowsMachineDeploymentPlan.ServiceName));
+            await ReconcileAsync(snapshot => snapshot is not null && MatchesBaseline(snapshot, baseline.Service),
+                startFailure, CancellationToken.None).ConfigureAwait(false);
+        }
+        WindowsServiceSnapshot observed = _verifier.Inspect(CancellationToken.None);
+        if (!MatchesBaseline(observed, baseline.Service))
+        {
+            throw new InstallerStateUncertainException("installer.recovery.service_restoration_unverified");
+        }
+        await guard.VerifyOriginalStateAsync(plan, baseline, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static bool MatchesBaseline(WindowsServiceSnapshot actual, WindowsServiceSnapshot baseline) =>
+        WindowsServiceConfigurationVerifier.ConfigurationMatches(actual.Configuration, baseline.Configuration)
+        && actual.DaclSddl == baseline.DaclSddl && actual.RuntimeState == baseline.RuntimeState;
 
     private WindowsServiceSnapshot? InspectBeforeMutation(
         CancellationToken cancellationToken)

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Machines;
+using ClashSharp.Installer.Transactions;
 using ClashSharp.Installer.Windows.Machines;
 
 namespace ClashSharp.Installer.Windows.Tests;
@@ -10,6 +11,143 @@ public sealed class WindowsServiceMutationTests
     private const string TargetSid = "S-1-5-21-100-200-300-1001";
     private const string Token =
         "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PreparedServiceRestoresItsOriginalConfigurationAndRuntimeState(bool wasRunning)
+    {
+        using var fixture = Fixture();
+        WindowsMachineDeploymentPlan repair = Plan(fixture, InstallerOperation.Repair);
+        InstallerTransactionJournal intent = InstallerTransactionJournal.Create(repair.Request);
+        WindowsServiceRuntimeState originalState = wasRunning ? WindowsServiceRuntimeState.Running : WindowsServiceRuntimeState.Stopped;
+        WindowsServiceSnapshot original = Installed(repair) with { RuntimeState = originalState };
+        WindowsServicePreparationBaseline baseline = WindowsServicePreparationBaseline.Capture(repair, intent, original);
+        var native = new FakeMutationNative(original);
+        WindowsServiceMutation mutation = Mutation(native);
+        await mutation.StopDisableAndFenceAsync(repair, CancellationToken.None);
+        var guard = new RestorationGuard();
+
+        await mutation.RestorePreparedBaselineAsync(repair, baseline, guard,
+            intent.TransitionTo(InstallerTransactionPhase.MachineReserved), CancellationToken.None);
+
+        WindowsServiceSnapshot restored = Assert.IsType<WindowsServiceSnapshot>(native.Snapshot);
+        Assert.Equal(originalState, restored.RuntimeState);
+        Assert.True(WindowsServiceConfigurationVerifier.ConfigurationMatches(original.Configuration, restored.Configuration));
+        Assert.Equal(original.DaclSddl, restored.DaclSddl);
+        Assert.Equal(originalState == WindowsServiceRuntimeState.Running ? 1 : 0, native.StartCalls);
+        Assert.Equal(3, guard.Calls);
+        await mutation.RestorePreparedBaselineAsync(repair, baseline, guard, intent, CancellationToken.None);
+        Assert.Equal(1, native.EnsureCalls);
+    }
+
+    [Fact]
+    public async Task RestorationDoesNotTouchScmWhenOriginalStateCannotBeVerified()
+    {
+        using var fixture = Fixture();
+        WindowsMachineDeploymentPlan plan = Plan(fixture, InstallerOperation.Repair);
+        InstallerTransactionJournal intent = InstallerTransactionJournal.Create(plan.Request);
+        WindowsServicePreparationBaseline baseline = WindowsServicePreparationBaseline.Capture(plan, intent, Installed(plan));
+        var native = new FakeMutationNative(Installed(plan));
+
+        await Assert.ThrowsAsync<InstallerProtocolException>(() => Mutation(native).RestorePreparedBaselineAsync(plan, baseline,
+            new RestorationGuard { FailAt = 1 }, intent, CancellationToken.None));
+
+        Assert.Equal(0, native.MutationCalls);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LostConfigurationOrStartReceiptIsReconciledBeforeRestorationReturns(bool configurationFailure)
+    {
+        using var fixture = Fixture();
+        WindowsMachineDeploymentPlan plan = Plan(fixture, InstallerOperation.Repair);
+        InstallerTransactionJournal intent = InstallerTransactionJournal.Create(plan.Request);
+        WindowsServicePreparationBaseline baseline = WindowsServicePreparationBaseline.Capture(plan, intent, Installed(plan));
+        var native = new FakeMutationNative(Installed(plan))
+        {
+            EnsureFailure = configurationFailure ? new IOException("lost receipt") : null,
+            StartFailure = configurationFailure ? null : new IOException("lost receipt"),
+        };
+        WindowsServiceMutation mutation = Mutation(native);
+        await mutation.StopDisableAndFenceAsync(plan, CancellationToken.None);
+
+        await mutation.RestorePreparedBaselineAsync(plan, baseline, new RestorationGuard(), intent, CancellationToken.None);
+
+        Assert.Equal(WindowsServiceRuntimeState.Running, native.Snapshot!.RuntimeState);
+        Assert.Equal(baseline.Service.DaclSddl, native.Snapshot.DaclSddl);
+    }
+
+    private sealed class RestorationGuard : IWindowsServiceRestorationGuard
+    {
+        internal int Calls { get; private set; }
+        internal int? FailAt { get; init; }
+
+        public Task VerifyOriginalStateAsync(WindowsMachineDeploymentPlan plan, WindowsServicePreparationBaseline baseline, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Calls++;
+            if (Calls == FailAt) { throw new InstallerProtocolException("installer.recovery.original_state_changed"); }
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task CancellationAfterConfigurationAdmissionDoesNotAbandonScmReconciliation()
+    {
+        using var fixture = Fixture();
+        using var cancellation = new CancellationTokenSource();
+        WindowsMachineDeploymentPlan plan = Plan(fixture, InstallerOperation.Repair);
+        InstallerTransactionJournal intent = InstallerTransactionJournal.Create(plan.Request);
+        WindowsServicePreparationBaseline baseline = WindowsServicePreparationBaseline.Capture(plan, intent, Installed(plan));
+        var native = new FakeMutationNative(Installed(plan)) { EnsureObserver = cancellation.Cancel };
+        WindowsServiceMutation mutation = Mutation(native);
+        await mutation.StopDisableAndFenceAsync(plan, CancellationToken.None);
+
+        await mutation.RestorePreparedBaselineAsync(plan, baseline, new RestorationGuard(), intent, cancellation.Token);
+
+        Assert.True(cancellation.IsCancellationRequested);
+        Assert.Equal(WindowsServiceRuntimeState.Running, native.Snapshot!.RuntimeState);
+        Assert.Equal(baseline.Service.DaclSddl, native.Snapshot.DaclSddl);
+    }
+
+    [Fact]
+    public async Task ChangedOriginalEvidenceAfterConfigurationPreventsServiceStart()
+    {
+        using var fixture = Fixture();
+        WindowsMachineDeploymentPlan plan = Plan(fixture, InstallerOperation.Repair);
+        InstallerTransactionJournal intent = InstallerTransactionJournal.Create(plan.Request);
+        WindowsServicePreparationBaseline baseline = WindowsServicePreparationBaseline.Capture(plan, intent, Installed(plan));
+        var native = new FakeMutationNative(Installed(plan));
+        WindowsServiceMutation mutation = Mutation(native);
+        await mutation.StopDisableAndFenceAsync(plan, CancellationToken.None);
+
+        await Assert.ThrowsAsync<InstallerProtocolException>(() => mutation.RestorePreparedBaselineAsync(plan, baseline,
+            new RestorationGuard { FailAt = 2 }, intent, CancellationToken.None));
+
+        Assert.Equal(WindowsServiceRuntimeState.Stopped, native.Snapshot!.RuntimeState);
+        Assert.Equal(0, native.StartCalls);
+        Assert.Equal(1, native.EnsureCalls);
+    }
+
+    [Fact]
+    public async Task ConfigurationThatCannotReachTheOriginalTupleKeepsRecoveryUncertain()
+    {
+        using var fixture = Fixture();
+        WindowsMachineDeploymentPlan plan = Plan(fixture, InstallerOperation.Repair);
+        InstallerTransactionJournal intent = InstallerTransactionJournal.Create(plan.Request);
+        WindowsServicePreparationBaseline baseline = WindowsServicePreparationBaseline.Capture(plan, intent, Installed(plan));
+        var native = new FakeMutationNative(Installed(plan)) { ApplyEnsure = false };
+        WindowsServiceMutation mutation = Mutation(native);
+        await mutation.StopDisableAndFenceAsync(plan, CancellationToken.None);
+
+        await Assert.ThrowsAsync<InstallerStateUncertainException>(() => mutation.RestorePreparedBaselineAsync(plan, baseline,
+            new RestorationGuard(), intent, CancellationToken.None));
+
+        Assert.Equal(0, native.StartCalls);
+        Assert.Equal(WindowsServiceStartMode.Disabled, native.Snapshot!.Configuration.StartMode);
+    }
 
     [Fact]
     public async Task StopDisableAndFenceReachesExactPreparedState()
@@ -344,9 +482,9 @@ public sealed class WindowsServiceMutationTests
             createPayload: false,
             removeCurrentUserCertificateOnDispose: false);
 
-    private static WindowsMachineDeploymentPlan Plan(WindowsPayloadFixture fixture) =>
+    private static WindowsMachineDeploymentPlan Plan(WindowsPayloadFixture fixture, InstallerOperation operation = InstallerOperation.Install) =>
         WindowsMachineDeploymentPlan.Create(
-            fixture.Request(targetSid: TargetSid),
+            fixture.Request(operation, TargetSid),
             fixture.Manifest,
             InstallerMachineAssociation.Create(TargetSid, Token),
             @"C:\Program Files",
@@ -400,6 +538,8 @@ public sealed class WindowsServiceMutationTests
         internal Exception? DeleteFailure { get; init; }
 
         internal bool ApplyEnsure { get; init; } = true;
+
+        internal Action? EnsureObserver { get; init; }
 
         internal int InspectCalls { get; private set; }
 
@@ -460,6 +600,7 @@ public sealed class WindowsServiceMutationTests
             {
                 throw EnsureFailure;
             }
+            EnsureObserver?.Invoke();
         }
 
         public void Start(string serviceName)
