@@ -75,6 +75,7 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<ILogStorage>().AppendLog,
                 provider.GetRequiredService<LocalizationService>().GetString));
             services.AddSingleton<RuntimeLifetimeRegistry>();
+            services.AddSingleton<IWindowPlacementStore>(_ => new JsonWindowPlacementStore(dataRoot.Value));
             services.AddSingleton<GenerationSamplingRuntime>();
             services.AddSingleton<IConnectionSamplingRuntime>(provider => provider.GetRequiredService<GenerationSamplingRuntime>());
             services.AddSingleton<IProfileCatalog, GenerationProfileCatalog>();

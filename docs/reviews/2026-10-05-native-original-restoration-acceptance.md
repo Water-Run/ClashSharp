@@ -41,7 +41,7 @@
 
 6 项回归在原代码上全部失败，修正后全部通过。18 项目构建和格式通过，Core 1,093、Presentation 182、Windows 安全集 1,284，共 2,559 项通过。此修正尚未加入本轮服务器上绑定 `47ae35f` 的签名包，须随下一候选复验。
 
-`47ae35f` 的[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37261940118)成功，下载核对四份原始 TRX，共 6,506 项全部通过。上述新修正的 CI 另行绑定。
+`47ae35f` 的[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37261940118)成功，下载核对四份原始 TRX，共 6,506 项全部通过。取消收尾修正 `4f7193c5839e6e910edf7f7ae329b601a34e6f82` 的[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37267929810)也成功，四份原始 TRX 共 6,512 项全部通过；新签名候选的该边界仍需复验。
 
 ## 仍需完成
 

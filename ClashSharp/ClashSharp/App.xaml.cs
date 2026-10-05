@@ -608,6 +608,10 @@ public partial class App : Microsoft.UI.Xaml.Application
     {
         string? executablePath = restart ? ResolveExecutablePath() : null;
         IApplicationLifetimeMaintenance? maintenance = lifetimeRequest?.Maintenance;
+        if (_mainWindow is MainWindow placementWindow)
+        {
+            await placementWindow.PrepareWindowPlacementShutdownAsync(save: maintenance is null);
+        }
         string? maintenanceTitle = maintenance is null ? null : LocalizationService.Instance.GetString("Settings.ClearAllData.Title");
         string? maintenanceMessage = maintenance is null ? null : LocalizationService.Instance.GetString("Maintenance.ClearIncomplete");
         string? maintenanceClose = maintenance is null ? null : LocalizationService.Instance.GetString("Command.Close");

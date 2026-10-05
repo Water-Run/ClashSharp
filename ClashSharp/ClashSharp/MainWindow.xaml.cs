@@ -87,6 +87,9 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     /// <summary>Current app window used for close interception.</summary>
     private AppWindow? _appWindow;
+    private IWindowPlacementView? _windowPlacementView;
+    private WindowPlacementSession? _windowPlacement;
+    private Task? _windowPlacementInitialization;
 
     /// <summary>Native system tray integration.</summary>
     private MainWindowComposition.ITray? _trayService;
@@ -157,6 +160,11 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _trayCommandService = trayCommandService ?? throw new ArgumentNullException(nameof(trayCommandService));
         _startupConflicts = startupConflicts ?? throw new ArgumentNullException(nameof(startupConflicts));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        if (_windowPlacementView is not null)
+        {
+            _windowPlacement = runtime.CreateWindowPlacementSession(_windowPlacementView);
+            _windowPlacementInitialization = _windowPlacement.InitializeAsync(_windowLifetime.Token);
+        }
         _runtime.Navigation.NavigationRequested += OnNavigationRequested;
         _runtime.TrayStateChanged += OnTrayStateChanged;
         _runtime.ApplyTheme((FrameworkElement)Content);
@@ -265,6 +273,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
         _appWindow.Title = "Clash#";
         _appWindow.Closing += OnAppWindowClosing;
+        _windowPlacementView = _composition.CreateWindowPlacementView(_appWindow, windowHandle);
+        _appWindow.Changed += OnWindowPlacementChanged;
         SetTitleBar(AppTitleBar);
         UpdateTitleBarTheme();
     }
@@ -273,6 +283,21 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     {
         _nativeCapabilities.TryRunWindowHandleFeature(_ => UpdateTitleBarTheme());
     }
+
+    private async void OnWindowPlacementChanged(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        MainWindowComposition.Runtime? runtime = _runtime;
+        try { _windowPlacementView?.Observe(); }
+        catch (Exception exception) when (!ExceptionGraphClassifier.IsProcessFatal(exception))
+        {
+            if (runtime is not null) { await ReportShellOperationFailureAsync(runtime.ErrorSink, "window-placement-observe", exception); }
+            else { Debug.WriteLine($"Window placement is unavailable ({exception.GetType().Name})."); }
+        }
+    }
+
+    /// <summary>Drains placement work before host disposal; data-clearing exits do not rewrite local state.</summary>
+    internal Task PrepareWindowPlacementShutdownAsync(bool save) =>
+        _windowPlacement?.PrepareShutdownAsync(save, CancellationToken.None) ?? Task.CompletedTask;
 
     /// <summary>Keeps native caption buttons aligned with the effective in-app theme.</summary>
     private void UpdateTitleBarTheme()
@@ -493,6 +518,10 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _hiddenToTray = false;
         AppWindow? appWindow = _appWindow;
         _appWindow = null;
+        Task? placementInitialization = _windowPlacementInitialization;
+        _windowPlacementInitialization = null;
+        _windowPlacement = null;
+        _windowPlacementView = null;
         MainWindowComposition.Runtime? runtime = _runtime;
         _runtime = null;
         _settingsApplicationSubscription?.Dispose();
@@ -514,6 +543,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
                     {
                         _ = StartupShellSetupPolicy.TryRun(
                             () => appWindow.Closing -= OnAppWindowClosing);
+                        _ = StartupShellSetupPolicy.TryRun(
+                            () => appWindow.Changed -= OnWindowPlacementChanged);
                     }
 
                     if (trayService is not null)
@@ -549,6 +580,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             {
                 await statusMonitorTask;
             }
+            if (placementInitialization is not null) { await placementInitialization; }
         }
         finally
         {
@@ -750,6 +782,9 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         if (closeDisposition is WindowCloseDisposition.HideToTray)
         {
             args.Cancel = true;
+            if (_windowPlacement is not null) { await _windowPlacement.CheckpointAsync(true, CancellationToken.None); }
+            if (_appWindow != sender || _windowLifetime.IsCancellationRequested || _applicationExitApproved
+                || _dataMaintenanceActive || _exitRequested || _windowPlacement?.IsStopping == true) { return; }
             sender.Hide();
             _hiddenToTray = true;
             return;
@@ -1002,6 +1037,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <summary>Re-enables window and tray exit commands after outer shutdown could not prepare disposal.</summary>
     internal void NotifyExitRequestFailed()
     {
+        _windowPlacement?.ResumeAfterShutdownFailure();
         if (_dataMaintenanceActive)
         {
             _dataMaintenanceActive = false;
@@ -1050,9 +1086,13 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         if (uMsg == WmGetminmaxinfo)
         {
             uint dpi = GetDpiForWindow(hWnd);
+            if (dpi == 0) { dpi = 96; }
             MINMAXINFO info = Marshal.PtrToStructure<MINMAXINFO>(lParam);
-            info.ptMinTrackSize.x = (MinWindowWidth * (int)dpi + 48) / 96;
-            info.ptMinTrackSize.y = (MinWindowHeight * (int)dpi + 48) / 96;
+            int width = (MinWindowWidth * (int)dpi + 48) / 96;
+            int height = (MinWindowHeight * (int)dpi + 48) / 96;
+            (int Width, int Height) minimum = _windowPlacementView?.ConstrainMinimumSize(width, height) ?? (width, height);
+            info.ptMinTrackSize.x = minimum.Width;
+            info.ptMinTrackSize.y = minimum.Height;
             Marshal.StructureToPtr(info, lParam, true);
         }
 

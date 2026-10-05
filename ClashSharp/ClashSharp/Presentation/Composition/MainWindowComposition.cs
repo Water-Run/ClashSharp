@@ -13,6 +13,7 @@ using ClashSharp.Presentation.Navigation;
 using ClashSharp.Service;
 using ClashSharp.Settings;
 using ClashSharp.ViewModel;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
 namespace ClashSharp.Presentation.Composition;
@@ -42,6 +43,9 @@ internal sealed class MainWindowComposition
     {
         return new MainWindowComposition(settings, localization);
     }
+
+    /// <summary>Creates UI-only placement tracking without accessing application data.</summary>
+    public IWindowPlacementView CreateWindowPlacementView(AppWindow window, nint handle) => new WinUiWindowPlacementView(window, handle);
 
     /// <summary>Applies the persisted accent configuration before the window becomes interactive.</summary>
     public void ApplyStartupAccentColor()
@@ -110,6 +114,7 @@ internal sealed class MainWindowComposition
         private readonly TrayStatusService _trayStatus;
         private readonly IStartupGuidePresenter _startupGuide;
         private readonly ShellNavigationService _navigation;
+        private readonly IWindowPlacementStore _windowPlacementStore;
         private int _disposed;
 
         public Runtime(
@@ -124,7 +129,8 @@ internal sealed class MainWindowComposition
             IApplicationErrorSink errorSink,
             StartupGuideComposition startupGuideComposition,
             IPageFactory pageFactory,
-            ShellNavigationService navigation)
+            ShellNavigationService navigation,
+            IWindowPlacementStore windowPlacementStore)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _localization = localization ?? throw new ArgumentNullException(nameof(localization));
@@ -138,6 +144,7 @@ internal sealed class MainWindowComposition
             ArgumentNullException.ThrowIfNull(startupGuideComposition);
             PageFactory = pageFactory ?? throw new ArgumentNullException(nameof(pageFactory));
             _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+            _windowPlacementStore = windowPlacementStore ?? throw new ArgumentNullException(nameof(windowPlacementStore));
             _startupGuide = startupGuideComposition.Create(errorSink, tag =>
             {
                 if (ShellRouteCatalog.TryParse(tag, out ShellRoute route)) { _navigation.Navigate(route); }
@@ -164,6 +171,10 @@ internal sealed class MainWindowComposition
 
         /// <summary>Application diagnostic sink used by shell-owned asynchronous UI boundaries.</summary>
         public IApplicationErrorSink ErrorSink { get; }
+
+        /// <summary>Creates the window-owned placement load/checkpoint session after startup admission.</summary>
+        public WindowPlacementSession CreateWindowPlacementSession(IWindowPlacementView view) =>
+            new(_windowPlacementStore, view, ErrorSink);
 
         /// <summary>Raised after a relevant persisted setting or verified network state changes.</summary>
         public event EventHandler? TrayStateChanged;
