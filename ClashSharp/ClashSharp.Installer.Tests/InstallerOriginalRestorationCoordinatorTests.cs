@@ -9,6 +9,26 @@ public sealed class InstallerOriginalRestorationCoordinatorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task LateCancellationStillObservesTheOriginalClearReceipt(bool journalRemains)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var ports = new Ports(true)
+        {
+            Failure = journalRemains ? "clear-not-observed" : null,
+            AfterClear = cancellation.Cancel,
+        };
+        using InstallerCoordinator coordinator = ports.Coordinator();
+
+        InstallerExecutionResult result = await coordinator.RestoreOriginalAsync(ports.Request, null, cancellation.Token);
+
+        Assert.True(cancellation.IsCancellationRequested);
+        Assert.Equal(journalRemains ? InstallerExecutionOutcome.Failed : InstallerExecutionOutcome.Succeeded, result.Outcome);
+        Assert.Equal(journalRemains, result.RecoveryPending);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task CandidateContinuationMustBeAcknowledgedBeforeAnyCertificateOrPackageMutation(bool failContinuation)
     {
         var ports = new Ports(true) { AllowCandidateExecution = true, FailContinuation = failContinuation };
@@ -154,6 +174,7 @@ public sealed class InstallerOriginalRestorationCoordinatorTests
         internal int RestoreEffects { get; private set; }
         internal int ClearCalls { get; private set; }
         internal Action? AfterRestore { get; set; }
+        internal Action? AfterClear { get; init; }
         internal Func<Task>? BeforeRestore { get; set; }
         internal string? Failure { get; init; }
         internal bool AllowCandidateExecution { get; init; }
@@ -197,6 +218,7 @@ public sealed class InstallerOriginalRestorationCoordinatorTests
             cancellationToken.ThrowIfCancellationRequested();
             ClearCalls++;
             if (Failure != "clear-not-observed") { Current = null; }
+            AfterClear?.Invoke();
             if (Failure == "clear-reply") { throw new InstallerStateUncertainException("installer.machine_helper.response_unconfirmed"); }
             return Task.FromResult(Failure == "wrong-clear-receipt"
                 ? InstallerTransactionSnapshot.Create(restoredState.Journal with { TransactionId = new string('b', 64) }) : restoredState);

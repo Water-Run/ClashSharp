@@ -171,7 +171,9 @@ public sealed partial class InstallerCoordinator : IDisposable
                 .ClearVerifiedAsync(request, releaseLease, durable, cancellationToken)
                 .ConfigureAwait(false);
             ValidateClearReceipt(durable, clearReceipt);
-            await ConfirmHelperClearAsync(durable, cancellationToken).ConfigureAwait(false);
+            // The helper has acknowledged terminal cleanup. Finish its independent observation
+            // even after a late UI cancellation so committed success is not reported as cancelled.
+            await ConfirmHelperClearAsync(durable, CancellationToken.None).ConfigureAwait(false);
             ReportSafely(progress, InstallerTransactionPhase.Verified, 100, "installer.progress.completed");
             return Result(
                 InstallerExecutionOutcome.Succeeded,

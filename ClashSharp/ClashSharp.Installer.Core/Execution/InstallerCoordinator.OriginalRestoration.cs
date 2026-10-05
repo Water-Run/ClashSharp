@@ -100,7 +100,9 @@ public sealed partial class InstallerCoordinator
         InstallerTransactionSnapshot receipt = await restoration.ClearOriginalRestoredAsync(request, release, durable, cancellationToken).ConfigureAwait(false);
         if (receipt != durable) { throw new InstallerProtocolException("installer.recovery.clear_receipt_mismatch"); }
         receipt.Validate();
-        await ConfirmHelperClearAsync(durable, cancellationToken).ConfigureAwait(false);
+        // Once the exact terminal clear is acknowledged, cancellation cannot replace observation
+        // of its real outcome. Missing or unreadable state still fails the completion checks.
+        await ConfirmHelperClearAsync(durable, CancellationToken.None).ConfigureAwait(false);
         ReportSafely(progress, InstallerTransactionPhase.OriginalRestored, 100, "installer.progress.original_restored");
         return Result(InstallerExecutionOutcome.Succeeded, "installer.recovery.original_restored", InstallerTransactionPhase.OriginalRestored, false);
     }
