@@ -82,6 +82,7 @@ internal sealed class WindowsServicePreparationBaseline
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(this, Options);
         if (bytes.Length > MaximumDocumentBytes)
         {
+            CryptographicOperations.ZeroMemory(bytes);
             throw new InstallerProtocolException("installer.recovery.service_baseline_size_invalid");
         }
         return bytes;

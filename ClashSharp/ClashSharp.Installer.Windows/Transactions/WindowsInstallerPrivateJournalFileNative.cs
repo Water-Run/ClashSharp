@@ -32,7 +32,7 @@ internal interface IWindowsInstallerPrivateJournalPresenceNative
 /// <summary>
 /// Accesses one factory-bound private leaf under a caller-pinned directory chain. The ordinary
 /// instance still accepts only the transfer journal; separate factories bind an account archive,
-/// retirement journal, machine-trust document, or service recovery baseline. Every handle requires
+/// retirement journal, machine-trust document, or maintenance recovery baseline. Every handle requires
 /// one ordinary private file.
 /// </summary>
 internal sealed class WindowsInstallerPrivateJournalFileNative :
@@ -71,6 +71,10 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
     internal static WindowsInstallerPrivateJournalFileNative CreateForServicePreparationBaseline() =>
         new(WindowsServicePreparationBaseline.FileName, WindowsServicePreparationBaseline.MaximumDocumentBytes,
             "installer.recovery.service_baseline");
+
+    internal static WindowsInstallerPrivateJournalFileNative CreateForOriginalInstallationBaseline() =>
+        new(WindowsMaintenanceOriginalBaseline.FileName, WindowsMaintenanceOriginalBaseline.MaximumDocumentBytes,
+            "installer.recovery.original_baseline");
 
     public bool IsPresent(string path, CancellationToken cancellationToken)
     {
