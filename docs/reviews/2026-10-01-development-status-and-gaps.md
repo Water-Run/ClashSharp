@@ -1,6 +1,6 @@
 # ClashSharp 开发状态与实施缺口
 
-10 月 5 日窗口接续：G03 的保存/恢复已接入；准确 `e218d85` 的 `1.0.0.0` 内部候选通过 Server 单屏 96 DPI 下托盘返回、退出重开、最大化后最小化退出、应用内重启及清除数据，恢复备份后数据与网络基线核对通过。[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37271350455)及原始报告 6,534 项全部通过。跨显示器/DPI、较小工作区和 Windows 11 仍待验，见[窗口实机记录](2026-10-05-window-native-acceptance.md)与[实现](2026-10-05-window-placement.md)。
+10 月 5 日窗口接续：G03 的保存/恢复已接入；准确 `e218d85` 的 `1.0.0.0` 内部候选通过 Server 单屏托盘返回、退出重开、最大化后最小化退出、应用内重启及清除数据，恢复备份后数据与网络基线核对通过。较小工作区及 100%、125%、150%、200% 的启动恢复也通过。[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37271350455)及原始报告 6,534 项全部通过。同一进程跨显示器/混合 DPI、热拔插和 Windows 11 仍待验，见[窗口实机记录](2026-10-05-window-native-acceptance.md)与[实现](2026-10-05-window-placement.md)。
 
 10 月 5 日实机接续：`47ae35f` 的 `1.0.0.0` 内部候选通过 Server 同包修复准备中断、原安装恢复、再次维护和应用启动，且用户文件、服务权限及代理状态均独立核对。完成后取消误报已修正，完整升级、重启、两平台及其他功能矩阵继续推进，见[实机证据](2026-10-05-native-original-restoration-acceptance.md)。
 
