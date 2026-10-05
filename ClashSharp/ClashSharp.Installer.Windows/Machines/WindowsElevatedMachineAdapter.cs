@@ -11,7 +11,8 @@ namespace ClashSharp.Installer.Windows.Machines;
 /// </summary>
 public sealed class WindowsElevatedMachineAdapter :
     IInstallerMachineMutation,
-    IInstallerFinalVerifier
+    IInstallerFinalVerifier,
+    IInstallerOriginalRestorationMutation
 {
     private readonly IWindowsMachineHelperBroker _broker;
     private readonly Func<string?> _currentSid;
@@ -113,6 +114,16 @@ public sealed class WindowsElevatedMachineAdapter :
         CancellationToken cancellationToken) =>
         (await ExecuteResultAsync(verb, request, release, durableState, cancellationToken)
             .ConfigureAwait(false)).ToResultDurableState();
+
+    /// <inheritdoc />
+    public Task<InstallerTransactionSnapshot> RestoreOriginalAsync(InstallerRequest request, IInstallerReleaseLease release,
+        InstallerTransactionSnapshot durableState, CancellationToken cancellationToken) =>
+        ExecuteAsync(InstallerMachineHelperVerb.RestoreOriginal, request, release, durableState, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<InstallerTransactionSnapshot> ClearOriginalRestoredAsync(InstallerRequest request, IInstallerReleaseLease release,
+        InstallerTransactionSnapshot restoredState, CancellationToken cancellationToken) =>
+        ExecuteAsync(InstallerMachineHelperVerb.ClearOriginal, request, release, restoredState, cancellationToken);
 
     private async Task<InstallerMachineHelperResult> ExecuteResultAsync(
         InstallerMachineHelperVerb verb,

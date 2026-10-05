@@ -25,6 +25,12 @@ public enum InstallerMachineHelperVerb
 
     /// <summary>Deletes only the exact verified journal and proves its absence.</summary>
     Clear,
+
+    /// <summary>Restores or independently verifies the original installation of an exact pending repair.</summary>
+    RestoreOriginal,
+
+    /// <summary>Reverifies original preservation and clears only its exact restoration terminal journal.</summary>
+    ClearOriginal,
 }
 
 /// <summary>
@@ -165,6 +171,11 @@ public sealed record InstallerMachineHelperInvocation(
             (InstallerMachineHelperVerb.Clear,
                 InstallerOperation.Install or InstallerOperation.Repair or InstallerOperation.Uninstall,
                 InstallerTransactionPhase.Verified) => true,
+            (InstallerMachineHelperVerb.RestoreOriginal, InstallerOperation.Repair,
+                InstallerTransactionPhase.Prepared or InstallerTransactionPhase.MachineReserved
+                    or InstallerTransactionPhase.OriginalRestored) => !durableState.Journal.AllowReassociation,
+            (InstallerMachineHelperVerb.ClearOriginal, InstallerOperation.Repair,
+                InstallerTransactionPhase.OriginalRestored) => !durableState.Journal.AllowReassociation,
             _ => false,
         };
         if (!allowed)
@@ -220,6 +231,8 @@ public sealed record InstallerMachineHelperInvocation(
             "remove" => InstallerMachineHelperVerb.Remove,
             "verify" => InstallerMachineHelperVerb.Verify,
             "clear" => InstallerMachineHelperVerb.Clear,
+            "restore-original" => InstallerMachineHelperVerb.RestoreOriginal,
+            "clear-original" => InstallerMachineHelperVerb.ClearOriginal,
             _ => (InstallerMachineHelperVerb)(-1),
         };
         return Enum.IsDefined(verb);
@@ -233,6 +246,8 @@ public sealed record InstallerMachineHelperInvocation(
         InstallerMachineHelperVerb.Remove => "remove",
         InstallerMachineHelperVerb.Verify => "verify",
         InstallerMachineHelperVerb.Clear => "clear",
+        InstallerMachineHelperVerb.RestoreOriginal => "restore-original",
+        InstallerMachineHelperVerb.ClearOriginal => "clear-original",
         _ => throw new InstallerProtocolException("installer.machine_helper.verb_invalid"),
     };
 }

@@ -23,6 +23,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             ["installer.progress.certificate_remove"] = "正在安全释放安装器拥有的证书…",
             ["installer.progress.verifying"] = "正在检查完成状态…",
             ["installer.progress.completed"] = "操作完成。",
+            ["installer.progress.restoring_original"] = "正在恢复原安装…",
+            ["installer.progress.verifying_original"] = "正在核验原安装与服务状态…",
+            ["installer.progress.original_restored"] = "原安装已保留。",
         };
 
     private readonly IInstallerRuntime _runtime;
@@ -702,6 +705,12 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         if (result.Outcome == InstallerExecutionOutcome.Succeeded)
         {
             ProgressValue = 100;
+            if (result.LastDurablePhase == InstallerTransactionPhase.OriginalRestored)
+            {
+                StatusTitle = "已保留原安装";
+                StatusDetail = "原应用、文件和服务状态已核验，可以关闭安装器并继续使用原版本。";
+                ProgressStatus = "原安装已恢复。";
+            }
             if (result.DirectoryCleanupReport is { } cleanup)
             {
                 ApplyDirectoryCleanupReport(cleanup);
@@ -916,13 +925,22 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private static void ValidateExecutionResult(InstallerExecutionResult result, InstallerOperation? ordinaryOperation)
     {
+        bool originalRestored = result is
+        {
+            Outcome: InstallerExecutionOutcome.Succeeded,
+            LastDurablePhase: InstallerTransactionPhase.OriginalRestored,
+            DiagnosticCode: "installer.recovery.original_restored", DirectoryCleanupReport: null
+        }
+            && ordinaryOperation == InstallerOperation.Repair;
         if (result is null
             || !Enum.IsDefined(result.Outcome)
             || !IsValidDiagnosticCode(result.DiagnosticCode)
             || (result.LastDurablePhase is { } phase && !Enum.IsDefined(phase))
             || (result.Outcome == InstallerExecutionOutcome.Succeeded
                 && (result.RecoveryPending
-                    || result.LastDurablePhase != InstallerTransactionPhase.Verified)))
+                    || !originalRestored && result.LastDurablePhase != InstallerTransactionPhase.Verified))
+            || (result.LastDurablePhase == InstallerTransactionPhase.OriginalRestored && ordinaryOperation != InstallerOperation.Repair)
+            || (result.DiagnosticCode == "installer.recovery.original_restored" && !originalRestored))
         {
             throw new InstallerProtocolException("installer.runtime.result_invalid");
         }

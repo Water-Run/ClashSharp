@@ -148,9 +148,20 @@ public sealed class InstallerMachineHelperAuthoritySession
 
             try
             {
-                await _operations
-                    .ExecuteAsync(command, disposition, cancellationToken)
-                    .ConfigureAwait(false);
+                if (command.Verb is InstallerMachineHelperVerb.RestoreOriginal or InstallerMachineHelperVerb.ClearOriginal)
+                {
+                    if (_operations is not IInstallerMachineHelperOriginalRestoration recovery
+                        || command.Verb == InstallerMachineHelperVerb.ClearOriginal
+                            && _transactionStore is not IInstallerOriginalRestorationStore)
+                    {
+                        throw new InstallerProtocolException("installer.recovery.capability_unavailable");
+                    }
+                    await recovery.ExecuteOriginalRestorationAsync(command, disposition, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _operations.ExecuteAsync(command, disposition, cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (InstallerProtocolException exception)
             {
@@ -169,14 +180,18 @@ public sealed class InstallerMachineHelperAuthoritySession
                     command,
                     command.GetExpectedSuccessfulState());
             }
-            else if (command.Verb == InstallerMachineHelperVerb.Clear)
+            else if (command.ClearsTerminal)
             {
-                await _transactionStore
-                    .ClearVerifiedAsync(
-                        requestState.Journal.TransactionId,
-                        requestState.ContentHash,
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                if (command.Verb == InstallerMachineHelperVerb.ClearOriginal)
+                {
+                    await ((IInstallerOriginalRestorationStore)_transactionStore).ClearOriginalRestoredAsync(
+                        requestState.Journal.TransactionId, requestState.ContentHash, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _transactionStore.ClearVerifiedAsync(requestState.Journal.TransactionId,
+                        requestState.ContentHash, cancellationToken).ConfigureAwait(false);
+                }
                 result = InstallerMachineHelperResult.Succeeded(command, requestState);
             }
             else

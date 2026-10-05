@@ -12,6 +12,30 @@ public sealed class WindowsElevatedMachineAdapterTests
         "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
     [Theory]
+    [InlineData(InstallerTransactionPhase.Prepared)]
+    [InlineData(InstallerTransactionPhase.MachineReserved)]
+    public async Task OriginalRestorationUsesDedicatedBoundCommandsAndReceipts(InstallerTransactionPhase phase)
+    {
+        using var fixture = new WindowsPayloadFixture(removeCurrentUserCertificateOnDispose: false);
+        InstallerRequest request = fixture.Request(InstallerOperation.Repair);
+        await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
+        var broker = RecordingBroker.Succeeding();
+        var adapter = new WindowsElevatedMachineAdapter(broker, () => request.TargetSid);
+        InstallerTransactionSnapshot before = Snapshot(request, phase);
+
+        InstallerTransactionSnapshot restored = await adapter.RestoreOriginalAsync(request, lease, before, CancellationToken.None);
+        InstallerTransactionSnapshot receipt = await adapter.ClearOriginalRestoredAsync(request, lease, restored, CancellationToken.None);
+
+        Assert.Equal(InstallerTransactionPhase.OriginalRestored, restored.Journal.Phase);
+        Assert.Equal(before.Journal.Generation + 1, restored.Journal.Generation);
+        Assert.Equal(restored, receipt);
+        Assert.Equal([InstallerMachineHelperVerb.RestoreOriginal, InstallerMachineHelperVerb.ClearOriginal],
+            broker.Invocations.Select(invocation => invocation.Verb));
+        broker.Invocations[0].ValidateAgainst(before);
+        broker.Invocations[1].ValidateAgainst(restored);
+    }
+
+    [Theory]
     [InlineData(InstallerOperation.Install)]
     [InlineData(InstallerOperation.Repair)]
     [InlineData(InstallerOperation.Uninstall)]
@@ -492,6 +516,7 @@ public sealed class WindowsElevatedMachineAdapterTests
                 InstallerTransactionPhase.MachineCommitted,
             InstallerMachineHelperVerb.Verify => InstallerTransactionPhase.Verified,
             InstallerMachineHelperVerb.Clear => InstallerTransactionPhase.Verified,
+            InstallerMachineHelperVerb.RestoreOriginal or InstallerMachineHelperVerb.ClearOriginal => InstallerTransactionPhase.OriginalRestored,
             _ => throw new InvalidOperationException(),
         };
         return requestState.Journal.Phase == committedPhase

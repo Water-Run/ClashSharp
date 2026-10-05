@@ -7,7 +7,7 @@ namespace ClashSharp.Installer.Windows.Transactions;
 /// Keeps the exact verified uninstall recoverable while its ordinary journal and owned directories
 /// are finalized. The helper's existing authority lease serializes this session; neither store is owned.
 /// </summary>
-internal sealed class WindowsInstallerCleanupTransactionStore : IInstallerTransactionStore
+internal sealed class WindowsInstallerCleanupTransactionStore : IInstallerTransactionStore, IInstallerOriginalRestorationStore
 {
     private readonly IInstallerTransactionStore _inner;
     private readonly IWindowsInstallerDirectoryLedgerPersistence _ledger;
@@ -98,6 +98,23 @@ internal sealed class WindowsInstallerCleanupTransactionStore : IInstallerTransa
         await RequireTerminalAsync(pending, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         _clearedTerminal = current;
+    }
+
+    public async Task ClearOriginalRestoredAsync(string transactionId, string expectedCurrentHash, CancellationToken cancellationToken)
+    {
+        InstallerProtocolValidation.ValidateLowerHex256(transactionId, "installer.transaction.id_invalid");
+        InstallerProtocolValidation.ValidateLowerHex256(expectedCurrentHash, "installer.transaction.content_hash_invalid");
+        (InstallerTransactionSnapshot? active, WindowsInstallerDirectoryLedger? ledger) =
+            await ReadAsync(cancellationToken).ConfigureAwait(false);
+        if (_inner is not IInstallerOriginalRestorationStore restoration || _clearedTerminal is not null
+            || ledger?.Terminal is not null || active is null
+            || active.Journal.Phase != InstallerTransactionPhase.OriginalRestored
+            || active.Journal.TransactionId != transactionId || active.ContentHash != expectedCurrentHash)
+        {
+            throw new InstallerProtocolException("installer.transaction.clear_conflict");
+        }
+        // Original preservation owns no uninstall directory-cleanup authority or ledger mutation.
+        await restoration.ClearOriginalRestoredAsync(transactionId, expectedCurrentHash, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<(InstallerTransactionSnapshot? Active, WindowsInstallerDirectoryLedger? Ledger)> ReadAsync(

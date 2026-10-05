@@ -112,6 +112,8 @@ public sealed record InstallerMachineHelperCommand(
                 InstallerTransactionPhase.MachineCommitted,
             InstallerMachineHelperVerb.Verify => InstallerTransactionPhase.Verified,
             InstallerMachineHelperVerb.Clear => InstallerTransactionPhase.Verified,
+            InstallerMachineHelperVerb.RestoreOriginal or InstallerMachineHelperVerb.ClearOriginal =>
+                InstallerTransactionPhase.OriginalRestored,
             _ => throw new InstallerProtocolException(
                 "installer.machine_helper.verb_invalid"),
         };
@@ -120,4 +122,7 @@ public sealed record InstallerMachineHelperCommand(
             : journal.TransitionTo(next);
         return InstallerTransactionSnapshot.Create(committed);
     }
+
+    /// <summary>Gets whether this command clears an independently verified terminal transaction.</summary>
+    public bool ClearsTerminal => Verb is InstallerMachineHelperVerb.Clear or InstallerMachineHelperVerb.ClearOriginal;
 }

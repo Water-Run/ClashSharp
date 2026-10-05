@@ -79,7 +79,7 @@ public static class InstallerMachineHelperAuthorityLoop
                 .WriteResultAsync(authenticatedStream, result, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (command.Verb == InstallerMachineHelperVerb.Clear
+            if (command.ClearsTerminal
                 && result.Outcome == InstallerMachineHelperOutcome.Succeeded)
             {
                 return;

@@ -7,6 +7,51 @@ namespace ClashSharp.Installer.Windows.Tests;
 
 public sealed class WindowsInstallerCleanupTransactionStoreTests
 {
+    [Fact]
+    public async Task OriginalRestorationClearPreservesEveryDirectoryOwnershipRecord()
+    {
+        List<string> events = [];
+        InstallerTransactionSnapshot restored = OriginalRestored();
+        var inner = new MemoryStore(events, restored);
+        WindowsInstallerDirectoryLedger ownership = OwnedLedger();
+        var ledger = new MemoryLedger(events, ownership);
+        var store = new WindowsInstallerCleanupTransactionStore(inner, ledger);
+
+        await store.ClearOriginalRestoredAsync(restored.Journal.TransactionId, restored.ContentHash, CancellationToken.None);
+
+        Assert.Null(inner.Current);
+        Assert.Same(ownership, ledger.Current);
+        Assert.Equal(0, ledger.SaveCalls);
+        Assert.Equal(0, ledger.DeleteCalls);
+        Assert.Contains("inner.clear-original", events);
+        Assert.DoesNotContain("inner.clear", events);
+    }
+
+    [Theory]
+    [InlineData("hash")]
+    [InlineData("candidate-terminal")]
+    [InlineData("uninstall-terminal")]
+    public async Task OriginalClearCannotConsumeAnotherTerminalOrOwnershipRecord(string scenario)
+    {
+        List<string> events = [];
+        InstallerTransactionSnapshot restored = OriginalRestored();
+        var inner = new MemoryStore(events, scenario == "candidate-terminal" ? Verified(InstallerOperation.Repair) : restored);
+        var ledger = new MemoryLedger(events, scenario == "uninstall-terminal" ? OwnedLedger().BeginTerminal(Verified()) : OwnedLedger());
+        var store = new WindowsInstallerCleanupTransactionStore(inner, ledger);
+        InstallerTransactionSnapshot? before = inner.Current;
+
+        await Assert.ThrowsAsync<InstallerProtocolException>(() => store.ClearOriginalRestoredAsync(restored.Journal.TransactionId,
+            scenario == "hash" ? new string('f', 64) : restored.ContentHash, CancellationToken.None));
+
+        Assert.Equal(before, inner.Current);
+        Assert.Equal(0, inner.ClearCalls);
+        Assert.Equal(0, ledger.SaveCalls);
+        Assert.Equal(0, ledger.DeleteCalls);
+    }
+
+    private static InstallerTransactionSnapshot OriginalRestored() => InstallerTransactionSnapshot.Create(
+        InstallerTransactionJournal.Create(new InstallerRequest(InstallerOperation.Repair, "S-1-5-21-100-200-300-1001",
+            false, "1.0.0.0", new string('b', 64))).TransitionTo(InstallerTransactionPhase.OriginalRestored));
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -321,7 +366,7 @@ public sealed class WindowsInstallerCleanupTransactionStoreTests
     private static WindowsInstallerDirectoryLedger OwnedLedger() => WindowsInstallerDirectoryLedger.Empty.RecordCreated(
         InstallerDirectoryRole.InstallerVersion, new WindowsFileIdentity(11, 22));
 
-    private sealed class MemoryStore(List<string> events, InstallerTransactionSnapshot? initial) : IInstallerTransactionStore
+    private sealed class MemoryStore(List<string> events, InstallerTransactionSnapshot? initial) : IInstallerTransactionStore, IInstallerOriginalRestorationStore
     {
         internal InstallerTransactionSnapshot? Current { get; set; } = initial;
         internal int SaveCalls { get; private set; }
@@ -361,6 +406,19 @@ public sealed class WindowsInstallerCleanupTransactionStoreTests
             BeforeClear?.Invoke();
             Current = null;
             AfterClear?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public Task ClearOriginalRestoredAsync(string transactionId, string expectedCurrentHash, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.NotNull(Current);
+            Assert.Equal(InstallerTransactionPhase.OriginalRestored, Current.Journal.Phase);
+            Assert.Equal(Current.Journal.TransactionId, transactionId);
+            Assert.Equal(Current.ContentHash, expectedCurrentHash);
+            events.Add("inner.clear-original");
+            ClearCalls++;
+            Current = null;
             return Task.CompletedTask;
         }
 

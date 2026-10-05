@@ -20,4 +20,7 @@ public enum InstallerTransactionPhase
 
     /// <summary>The complete requested final state has been independently verified.</summary>
     Verified,
+
+    /// <summary>The original installation and service state were independently restored and verified.</summary>
+    OriginalRestored,
 }

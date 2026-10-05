@@ -5,7 +5,7 @@ using ClashSharp.Installer.Transactions;
 namespace ClashSharp.Installer.Execution;
 
 /// <summary>Coordinates one fail-closed, durable package-and-machine transaction at a time.</summary>
-public sealed class InstallerCoordinator : IDisposable
+public sealed partial class InstallerCoordinator : IDisposable
 {
     private readonly IInstallerEnvironment _environment;
     private readonly IInstallerReleaseVerifier _releaseVerifier;
@@ -118,6 +118,11 @@ public sealed class InstallerCoordinator : IDisposable
             }
 
             ReportSafely(progress, durable.Journal.Phase, 15, "installer.progress.prepared");
+            if (durable.Journal.Phase == InstallerTransactionPhase.OriginalRestored)
+            {
+                return await CompleteOriginalRestorationAsync(request, releaseLease, durable, progress, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             durable = request.Operation == InstallerOperation.Uninstall
                 ? await ExecuteUninstallAsync(
                         request,

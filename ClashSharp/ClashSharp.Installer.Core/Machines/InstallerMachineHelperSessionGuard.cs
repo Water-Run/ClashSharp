@@ -111,8 +111,7 @@ public sealed class InstallerMachineHelperSessionGuard
                     && command.Verb == InstallerMachineHelperVerb.Prepare
                     && requestState.Journal.Phase == InstallerTransactionPhase.Prepared;
                 bool committedClearReplay = _latestProtectedState is null
-                    && command.Verb == InstallerMachineHelperVerb.Clear
-                    && requestState.Journal.Phase == InstallerTransactionPhase.Verified;
+                    && command.ClearsTerminal;
                 if (!initialPrepare && !committedClearReplay)
                 {
                     throw new InstallerProtocolException(
@@ -134,7 +133,7 @@ public sealed class InstallerMachineHelperSessionGuard
                 }
 
                 bool exactRequest = requestState == protectedState;
-                bool committedReplay = command.Verb != InstallerMachineHelperVerb.Clear
+                bool committedReplay = !command.ClearsTerminal
                     && expectedResult == protectedState;
                 if (!exactRequest && !committedReplay)
                 {
@@ -189,7 +188,7 @@ public sealed class InstallerMachineHelperSessionGuard
             bool protectedStateMatches = result.Outcome switch
             {
                 InstallerMachineHelperOutcome.Succeeded
-                    when pending.Command.Verb == InstallerMachineHelperVerb.Clear =>
+                    when pending.Command.ClearsTerminal =>
                     protectedState is null
                     && resultState == pending.Command.ToDurableState(),
                 InstallerMachineHelperOutcome.Succeeded =>
@@ -204,7 +203,7 @@ public sealed class InstallerMachineHelperSessionGuard
                 InstallerMachineHelperOutcome.PostconditionFailed
                     when pending.Disposition
                         == InstallerMachineHelperSessionDisposition.VerifyCommittedReplay
-                    && pending.Command.Verb == InstallerMachineHelperVerb.Clear =>
+                    && pending.Command.ClearsTerminal =>
                     protectedState is null
                     && resultState == pending.Command.ToDurableState(),
                 InstallerMachineHelperOutcome.PostconditionFailed
@@ -249,7 +248,7 @@ public sealed class InstallerMachineHelperSessionGuard
                     "installer.machine_helper.session_identity_mismatch");
             }
 
-            bool allowed = pending.Command.Verb == InstallerMachineHelperVerb.Clear
+            bool allowed = pending.Command.ClearsTerminal
                 ? protectedState is null
                     || protectedState == pending.ProtectedStateBefore
                 : pending.ProtectedStateBefore is null

@@ -10,6 +10,6 @@
 
 18 项目 Release x64 构建和完整格式检查通过。新增 11 项回归，相关维护/权限集 109 项、完整 Windows 安全集 1,249 项全部通过，零失败、零跳过。日志与 TRX 位于 `artifacts/verification/original-installation-evidence-20261005/` 的 `targeted-authority`、`windows-authority-safe` 和对应构建/格式日志。其余项目本轮没有逻辑修改，原安装证据检查点的主程序 Insider 监听状态失败及 Server 正常观察继续保留。
 
-此前 `a0a6ab6` 的[完整 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37252131922)两项成功，原始 TRX 共 6,410 项全部通过；本次权限增强的准确提交 CI 另行验证。
+此前 `a0a6ab6` 的[完整 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37252131922)两项成功，原始 TRX 共 6,410 项全部通过。本次权限增强 `0a975de1262ec602ef3f307464975b808f8af966` 的[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37253350344)也成功；下载核对原始报告，主程序 3,940、Core 1,053、Presentation 166、Windows 1,262，共 6,421 项通过、零失败及跳过。
 
 下一步将完整基线与保留权限接入首次准备及恢复协调器，增加恢复决定和可重启私有阶段，以及独立的公共“原安装已恢复”终结收据。候选安装的 `Verified` 不代表旧安装已恢复；没有完整后置条件时不能清除事务或报告成功。正常同候选继续、账户迁移和旧账户卸载边界继续保留。

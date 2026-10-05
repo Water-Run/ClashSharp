@@ -82,15 +82,17 @@ public sealed class WindowsMachineHelperBrokerTests
         process.SignalExit();
     }
 
-    [Fact]
-    public async Task SuccessfulClearWaitsForHelperExitAndClosesTheBroker()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SuccessfulClearWaitsForHelperExitAndClosesTheBroker(bool originalRestored)
     {
-        InstallerRequest request = Request();
-        InstallerTransactionSnapshot verified = Snapshot(
-            request,
-            InstallerTransactionPhase.Verified);
+        InstallerRequest request = originalRestored ? Request() with { Operation = InstallerOperation.Repair } : Request();
+        InstallerTransactionSnapshot verified = originalRestored
+            ? InstallerTransactionSnapshot.Create(InstallerTransactionJournal.Create(request).TransitionTo(InstallerTransactionPhase.OriginalRestored))
+            : Snapshot(request, InstallerTransactionPhase.Verified);
         InstallerMachineHelperCommand clear = Command(
-            InstallerMachineHelperVerb.Clear,
+            originalRestored ? InstallerMachineHelperVerb.ClearOriginal : InstallerMachineHelperVerb.Clear,
             verified);
         using MemoryStream responses = await ResponsesAsync(
             InstallerMachineHelperResult.Succeeded(clear, verified));

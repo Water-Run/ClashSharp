@@ -77,9 +77,11 @@ public sealed record InstallerTransactionJournal(
             (InstallerOperation.Install or InstallerOperation.Repair,
                 InstallerTransactionPhase.Verified) => 5,
             (InstallerOperation.Uninstall, InstallerTransactionPhase.Verified) => 5,
+            (InstallerOperation.Repair, InstallerTransactionPhase.OriginalRestored)
+                when !AllowReassociation && Generation is 2 or 3 => Generation,
             _ => 0,
         };
-        if (Generation != expectedGeneration)
+        if (expectedGeneration < 1 || Generation != expectedGeneration)
         {
             throw new InstallerProtocolException("installer.transaction.generation_invalid");
         }
@@ -111,7 +113,10 @@ public sealed record InstallerTransactionJournal(
             return this;
         }
 
-        bool allowed = Operation switch
+        bool restoringOriginal = Operation == InstallerOperation.Repair && !AllowReassociation
+            && Phase is InstallerTransactionPhase.Prepared or InstallerTransactionPhase.MachineReserved
+            && next == InstallerTransactionPhase.OriginalRestored;
+        bool allowed = restoringOriginal || Operation switch
         {
             InstallerOperation.Install or InstallerOperation.Repair =>
                 Phase == InstallerTransactionPhase.Prepared && next == InstallerTransactionPhase.MachineReserved

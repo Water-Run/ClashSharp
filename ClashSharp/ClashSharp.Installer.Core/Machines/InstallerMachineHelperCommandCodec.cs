@@ -131,6 +131,8 @@ public static class InstallerMachineHelperCommandCodec
         InstallerMachineHelperVerb.Remove => "remove",
         InstallerMachineHelperVerb.Verify => "verify",
         InstallerMachineHelperVerb.Clear => "clear",
+        InstallerMachineHelperVerb.RestoreOriginal => "restore-original",
+        InstallerMachineHelperVerb.ClearOriginal => "clear-original",
         _ => throw new InstallerProtocolException(
             "installer.machine_helper.verb_invalid"),
     };
@@ -143,6 +145,8 @@ public static class InstallerMachineHelperCommandCodec
         "remove" => InstallerMachineHelperVerb.Remove,
         "verify" => InstallerMachineHelperVerb.Verify,
         "clear" => InstallerMachineHelperVerb.Clear,
+        "restore-original" => InstallerMachineHelperVerb.RestoreOriginal,
+        "clear-original" => InstallerMachineHelperVerb.ClearOriginal,
         _ => throw new JsonException("The helper command verb is invalid."),
     };
 }

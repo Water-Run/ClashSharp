@@ -164,7 +164,7 @@ internal sealed class WindowsMachineHelperBroker :
                     "installer.machine_helper.response_unconfirmed");
             }
 
-            if (command.Verb == InstallerMachineHelperVerb.Clear
+            if (command.ClearsTerminal
                 && result.Outcome == InstallerMachineHelperOutcome.Succeeded)
             {
                 await CompleteSessionAsync().ConfigureAwait(false);

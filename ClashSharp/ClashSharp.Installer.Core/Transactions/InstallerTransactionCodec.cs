@@ -167,6 +167,7 @@ public static class InstallerTransactionCodec
         "packageCommitted" => InstallerTransactionPhase.PackageCommitted,
         "machineCommitted" => InstallerTransactionPhase.MachineCommitted,
         "verified" => InstallerTransactionPhase.Verified,
+        "originalRestored" => InstallerTransactionPhase.OriginalRestored,
         _ => throw new JsonException("The installer transaction phase is invalid."),
     };
 
@@ -178,6 +179,7 @@ public static class InstallerTransactionCodec
         InstallerTransactionPhase.PackageCommitted => "packageCommitted",
         InstallerTransactionPhase.MachineCommitted => "machineCommitted",
         InstallerTransactionPhase.Verified => "verified",
+        InstallerTransactionPhase.OriginalRestored => "originalRestored",
         _ => throw new InstallerProtocolException("installer.transaction.phase_invalid"),
     };
 

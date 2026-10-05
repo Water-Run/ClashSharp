@@ -9,7 +9,7 @@ namespace ClashSharp.Installer.Transactions;
 /// transaction session. This store's I/O gate only serializes calls on this instance; it does not
 /// provide interprocess exclusion for the read/compare/replace sequence.
 /// </remarks>
-public sealed class FileInstallerTransactionStore : IInstallerTransactionStore, IDisposable
+public sealed class FileInstallerTransactionStore : IInstallerTransactionStore, IInstallerOriginalRestorationStore, IDisposable
 {
     /// <summary>Gets the fixed journal filename below the protected root.</summary>
     public const string JournalFileName = InstallerStateLayout.JournalFileName;
@@ -101,10 +101,18 @@ public sealed class FileInstallerTransactionStore : IInstallerTransactionStore, 
     }
 
     /// <inheritdoc />
-    public async Task ClearVerifiedAsync(
+    public Task ClearVerifiedAsync(
         string transactionId,
         string expectedCurrentHash,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        ClearTerminalAsync(transactionId, expectedCurrentHash, InstallerTransactionPhase.Verified, cancellationToken);
+
+    /// <inheritdoc />
+    public Task ClearOriginalRestoredAsync(string transactionId, string expectedCurrentHash, CancellationToken cancellationToken) =>
+        ClearTerminalAsync(transactionId, expectedCurrentHash, InstallerTransactionPhase.OriginalRestored, cancellationToken);
+
+    private async Task ClearTerminalAsync(string transactionId, string expectedCurrentHash,
+        InstallerTransactionPhase requiredPhase, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         InstallerProtocolValidation.ValidateLowerHex256(
@@ -119,7 +127,7 @@ public sealed class FileInstallerTransactionStore : IInstallerTransactionStore, 
             await _rootGuard.EnsureProtectedAsync(_rootPath, cancellationToken).ConfigureAwait(false);
             InstallerTransactionSnapshot? current = await LoadCoreAsync(cancellationToken).ConfigureAwait(false);
             if (current is null
-                || current.Journal.Phase != InstallerTransactionPhase.Verified
+                || current.Journal.Phase != requiredPhase
                 || !string.Equals(current.Journal.TransactionId, transactionId, StringComparison.Ordinal)
                 || !string.Equals(current.ContentHash, expectedCurrentHash, StringComparison.Ordinal))
             {
