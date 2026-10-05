@@ -11,6 +11,13 @@ internal interface IWindowsInstallerApplicationLock
     IDisposable Acquire(string targetSid, CancellationToken cancellationToken);
 }
 
+/// <summary>A target-user App barrier retained by the authenticated helper's outer lifetime.</summary>
+internal interface IWindowsInstallerApplicationLease : IDisposable
+{
+    string TargetSid { get; }
+    void Reverify(CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Holds read-only coordination handles that exclude the App's exclusive lifetime lock. The parent
 /// may create its own empty lock; the elevated helper can only open an existing target-user lock.
@@ -97,7 +104,15 @@ internal sealed class WindowsInstallerApplicationLock : IWindowsInstallerApplica
                 throw new InstallerProtocolException("installer.application_running", exception);
             }
             cancellationToken.ThrowIfCancellationRequested();
-            return new ApplicationLockLease(handles);
+            var identities = new WindowsFileIdentity[handles.Count];
+            for (int index = 0; index < handles.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                identities[index] = index == handles.Count - 1
+                    ? WindowsFileSystemNative.GetOrdinaryFileIdentity(handles[index])
+                    : WindowsFileSystemNative.GetOrdinaryDirectoryIdentity(handles[index]);
+            }
+            return new ApplicationLockLease(targetSid, handles, identities);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
         {
@@ -144,9 +159,29 @@ internal sealed class WindowsInstallerApplicationLock : IWindowsInstallerApplica
         }
     }
 
-    private sealed class ApplicationLockLease(List<SafeFileHandle> handles) : IDisposable
+    private sealed class ApplicationLockLease(string targetSid, List<SafeFileHandle> handles,
+        WindowsFileIdentity[] identities) : IWindowsInstallerApplicationLease
     {
         private List<SafeFileHandle>? _handles = handles;
+        public string TargetSid { get; } = targetSid;
+
+        public void Reverify(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            List<SafeFileHandle> owned = _handles
+                ?? throw new InstallerProtocolException("installer.application_lock.lease_expired");
+            for (int index = 0; index < owned.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                WindowsFileIdentity identity = index == owned.Count - 1
+                    ? WindowsFileSystemNative.GetOrdinaryFileIdentity(owned[index])
+                    : WindowsFileSystemNative.GetOrdinaryDirectoryIdentity(owned[index]);
+                if (identity != identities[index])
+                {
+                    throw new InstallerProtocolException("installer.application_lock.lease_changed");
+                }
+            }
+        }
 
         public void Dispose()
         {

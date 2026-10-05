@@ -10,6 +10,25 @@ public sealed class WindowsInstallerApplicationLockTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "ClashSharp-AppLockTests", Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public void BorrowedBarrierReverifiesTheExactTargetAndRetainedHandlesUntilDisposal()
+    {
+        using IDisposable owned = CreateLock(currentUser: true).Acquire(TargetSid, CancellationToken.None);
+        IWindowsInstallerApplicationLease lease = Assert.IsAssignableFrom<IWindowsInstallerApplicationLease>(owned);
+        Assert.Equal(TargetSid, lease.TargetSid);
+        lease.Reverify(CancellationToken.None);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => lease.Reverify(cancellation.Token));
+        Assert.Throws<IOException>(() => OpenAppLock().Dispose());
+        lease.Reverify(CancellationToken.None);
+        owned.Dispose();
+
+        InstallerProtocolException failure = Assert.Throws<InstallerProtocolException>(() => lease.Reverify(CancellationToken.None));
+        Assert.Equal("installer.application_lock.lease_expired", failure.DiagnosticCode);
+    }
+
+    [Fact]
     public void ParentAndHelperIndependentlyExcludeAppUntilBothRelease()
     {
         using IDisposable parent = CreateLock(currentUser: true).Acquire(TargetSid, CancellationToken.None);

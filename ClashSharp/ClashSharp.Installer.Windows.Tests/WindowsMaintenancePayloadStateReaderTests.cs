@@ -11,6 +11,61 @@ public sealed class WindowsMaintenancePayloadStateReaderTests
     private const string Token = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
     [Fact]
+    public void RetainedLeaseProtectsEveryOriginalAndDeployedFileUntilExplicitDisposal()
+    {
+        using var fixture = new WindowsPayloadFixture(removeCurrentUserCertificateOnDispose: false);
+        (WindowsMachineDeploymentPlan plan, string package) = Prepare(fixture);
+        using WindowsMaintenancePayloadStateLease lease = new WindowsMaintenancePayloadStateReader()
+            .Acquire(plan, package, CancellationToken.None);
+
+        lease.Reverify(CancellationToken.None);
+        foreach (WindowsMachinePayloadTarget target in plan.PayloadTargets)
+        {
+            string source = Path.Combine(package, target.Source.Path.Replace('/', Path.DirectorySeparatorChar));
+            Assert.Throws<IOException>(() => File.WriteAllBytes(source, [1]));
+            Assert.Throws<IOException>(() => File.Delete(target.DestinationPath));
+        }
+        Assert.Throws<IOException>(() => Directory.Move(plan.CurrentRoot, plan.PreviousRoot));
+
+        lease.Dispose();
+        foreach (WindowsMachinePayloadTarget target in plan.PayloadTargets)
+        {
+            using var exclusive = new FileStream(target.DestinationPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        }
+        Directory.Move(plan.CurrentRoot, plan.PreviousRoot);
+        Assert.Throws<ObjectDisposedException>(() => lease.Reverify(CancellationToken.None));
+    }
+
+    [Fact]
+    public void CancelledVerificationKeepsTheRetainedFilePinsUntilTheOwnerFinishes()
+    {
+        using var fixture = new WindowsPayloadFixture(removeCurrentUserCertificateOnDispose: false);
+        (WindowsMachineDeploymentPlan plan, string package) = Prepare(fixture);
+        using WindowsMaintenancePayloadStateLease lease = new WindowsMaintenancePayloadStateReader()
+            .Acquire(plan, package, CancellationToken.None);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => lease.Reverify(cancellation.Token));
+        Assert.Throws<IOException>(() => File.Delete(plan.PayloadTargets[0].DestinationPath));
+
+        lease.Reverify(CancellationToken.None);
+    }
+
+    [Fact]
+    public void AddedMachineEntriesRejectBeforeRestorationWhileOriginalPinsRemainOwned()
+    {
+        using var fixture = new WindowsPayloadFixture(removeCurrentUserCertificateOnDispose: false);
+        (WindowsMachineDeploymentPlan plan, string package) = Prepare(fixture);
+        using WindowsMaintenancePayloadStateLease lease = new WindowsMaintenancePayloadStateReader()
+            .Acquire(plan, package, CancellationToken.None);
+        File.WriteAllText(Path.Combine(plan.CurrentRoot, "unexpected.txt"), "preserve");
+
+        Assert.Throws<InstallerProtocolException>(() => lease.Reverify(CancellationToken.None));
+        Assert.Throws<IOException>(() => File.Delete(plan.PayloadTargets[0].DestinationPath));
+    }
+
+    [Fact]
     public void ExactOriginalPackageAndDeployedFilesProduceIndependentFingerprintsAndReleaseHandles()
     {
         using var fixture = new WindowsPayloadFixture(removeCurrentUserCertificateOnDispose: false);

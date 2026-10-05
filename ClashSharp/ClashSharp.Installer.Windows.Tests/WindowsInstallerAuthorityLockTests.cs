@@ -6,6 +6,25 @@ namespace ClashSharp.Installer.Windows.Tests;
 public sealed class WindowsInstallerAuthorityLockTests
 {
     [Fact]
+    public async Task RetainedAuthorityCanBeReverifiedAfterCancellationButNeverAfterDisposal()
+    {
+        using var cancellation = new CancellationTokenSource();
+        IAsyncDisposable owned = await CreateLock(TemporaryName()).AcquireAsync(cancellation.Token);
+        IWindowsInstallerAuthorityLease lease = Assert.IsAssignableFrom<IWindowsInstallerAuthorityLease>(owned);
+        try
+        {
+            await lease.ReverifyAsync(CancellationToken.None);
+            cancellation.Cancel();
+            await Assert.ThrowsAsync<OperationCanceledException>(() => lease.ReverifyAsync(cancellation.Token));
+            await lease.ReverifyAsync(CancellationToken.None);
+        }
+        finally { await owned.DisposeAsync(); }
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() => lease.ReverifyAsync(CancellationToken.None));
+        Assert.Equal("installer.machine_helper.authority_expired", failure.DiagnosticCode);
+    }
+
+    [Fact]
     public async Task IndependentFactoriesExcludeEachOtherUntilAsynchronousDisposalFinishes()
     {
         string name = TemporaryName();

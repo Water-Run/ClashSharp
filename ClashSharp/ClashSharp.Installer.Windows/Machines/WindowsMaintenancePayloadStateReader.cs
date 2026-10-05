@@ -18,6 +18,13 @@ internal sealed class WindowsMaintenancePayloadStateReader : IWindowsMaintenance
     public IReadOnlyList<WindowsMaintenanceFileFingerprint> Read(WindowsMachineDeploymentPlan plan,
         string originalPackageRoot, CancellationToken cancellationToken)
     {
+        using WindowsMaintenancePayloadStateLease lease = Acquire(plan, originalPackageRoot, cancellationToken);
+        return lease.Fingerprints;
+    }
+
+    internal WindowsMaintenancePayloadStateLease Acquire(WindowsMachineDeploymentPlan plan,
+        string originalPackageRoot, CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentException.ThrowIfNullOrWhiteSpace(originalPackageRoot);
         plan.Validate();
@@ -30,6 +37,7 @@ internal sealed class WindowsMaintenancePayloadStateReader : IWindowsMaintenance
         var pinnedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var handles = new List<SafeFileHandle>();
         var fingerprints = new List<WindowsMaintenanceFileFingerprint>();
+        bool returned = false;
         try
         {
             PinAncestors(packageRoot, directories, pinnedPaths, cancellationToken);
@@ -67,7 +75,10 @@ internal sealed class WindowsMaintenancePayloadStateReader : IWindowsMaintenance
                 cancellationToken.ThrowIfCancellationRequested();
                 directory.Reverify();
             }
-            return Array.AsReadOnly(fingerprints.ToArray());
+            var lease = new WindowsMaintenancePayloadStateLease(plan, packageRoot,
+                directories, handles, Array.AsReadOnly(fingerprints.ToArray()));
+            returned = true;
+            return lease;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Win32Exception)
         {
@@ -75,8 +86,11 @@ internal sealed class WindowsMaintenancePayloadStateReader : IWindowsMaintenance
         }
         finally
         {
-            for (int index = handles.Count - 1; index >= 0; index--) { handles[index].Dispose(); }
-            for (int index = directories.Count - 1; index >= 0; index--) { directories[index].Dispose(); }
+            if (!returned)
+            {
+                for (int index = handles.Count - 1; index >= 0; index--) { handles[index].Dispose(); }
+                for (int index = directories.Count - 1; index >= 0; index--) { directories[index].Dispose(); }
+            }
         }
     }
 

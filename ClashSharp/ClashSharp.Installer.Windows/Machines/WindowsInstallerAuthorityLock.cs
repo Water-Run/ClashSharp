@@ -14,6 +14,12 @@ internal interface IWindowsInstallerAuthorityMutex : IDisposable
     void Release();
 }
 
+/// <summary>A borrowed machine exclusion capability whose owner outlives all recovery effects.</summary>
+internal interface IWindowsInstallerAuthorityLease : IAsyncDisposable
+{
+    Task ReverifyAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Holds one machine-wide mutex for an entire authenticated helper session. A dedicated owned
 /// thread preserves native mutex thread affinity while the caller performs asynchronous work.
@@ -39,7 +45,7 @@ internal sealed class WindowsInstallerAuthorityLock : IWindowsInstallerAuthority
         return AuthorityLease.AcquireAsync(_openMutex, cancellationToken);
     }
 
-    private sealed class AuthorityLease : IAsyncDisposable
+    private sealed class AuthorityLease : IWindowsInstallerAuthorityLease
     {
         private readonly TaskCompletionSource<IAsyncDisposable> _admitted = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -99,6 +105,19 @@ internal sealed class WindowsInstallerAuthorityLock : IWindowsInstallerAuthority
             }
 
             await _stopped.Task.ConfigureAwait(false);
+        }
+
+        public Task ReverifyAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // The dedicated worker acquired the native mutex before admission and keeps it until
+            // the resource owner requests release. Token cancellation never revokes that authority.
+            if (!_admitted.Task.IsCompletedSuccessfully || _stopped.Task.IsCompleted
+                || Volatile.Read(ref _releaseRequested) != 0)
+            {
+                throw new InstallerProtocolException("installer.machine_helper.authority_expired");
+            }
+            return Task.CompletedTask;
         }
 
         private void Run()

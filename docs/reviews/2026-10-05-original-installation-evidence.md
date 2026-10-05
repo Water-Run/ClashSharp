@@ -20,7 +20,9 @@
 - 开发机 Windows 11 Insider 26220 对本进程新建回环监听返回状态 `0`。源代码要求官方定义的 `LISTEN=2`，所以拒绝确认归属。未修改生产认证条件、测试筛选或超时来掩盖失败。[Windows 原生接口定义](https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_pid)
 - 同一份未改变的 TCP 校验源在 Server 2025 26100 返回状态 `2`；准确监听/连接 PID 通过，错误 PID 和移除后的监听均拒绝。此只读隔离回环验证不修改产品服务、证书、注册包或系统代理，不能代替全部主程序回归。源摘要为 `c4a841d4eff4d39205ace3d0f1b11bada15577477335f54771a20ce391ec4ef6`。
 
-原始日志、TRX 及原生观察收据位于被 Git 忽略的 `artifacts/verification/original-installation-evidence-20261005/`。针对当前提交的完整 CI 结果另行核对。
+`a0a6ab69549e1a21e930fe8301e16e2dc4e56275` 的[两项 CI 均成功](https://github.com/Water-Run/ClashSharp/actions/runs/37252131922)。下载核对四份原始 TRX，主程序 3,940、Core 1,053、Presentation 166、Windows 1,251，共 6,410 项全部通过，零失败、零跳过；Windows 包含本地保留到隔离环境的 13 项原生修改测试。完整离线开发包构建通过；该开发归档不表示最终内部签名安装器或完整产品验收已完成。
+
+原始日志、TRX 及原生观察收据位于被 Git 忽略的 `artifacts/verification/original-installation-evidence-20261005/`，CI 报告位于 `ci-a0a6ab6`。后续[权限增强](2026-10-05-maintenance-recovery-authority.md)的验证单独记录。
 
 ## 当前服务器与版本边界
 
@@ -30,6 +32,6 @@
 
 ## 必须继续完成
 
-完整证据存储和恢复 guard 尚未接入生产 helper；实际跨进程/App 排他与机器载荷文件租约的恢复组合、首次准备捕获、恢复决定及可重启阶段、公共终结收据和“保留原安装”入口仍待实现。包目录租约已经是真实原生能力，但不能代替这些剩余权限和事务环节。
+完整证据存储和恢复 guard 尚未接入生产 helper。后续检查点已补齐真实跨进程/App 排他与机器载荷文件租约的恢复组合；首次准备捕获、恢复决定及可重启阶段、公共终结收据和“保留原安装”入口仍待实现。原生租约不能代替这些剩余事务环节。
 
 继续按[维护恢复设计](../design/2026-10-01-installer-maintenance-recovery.md)和[完整缺口清单](2026-10-01-development-status-and-gaps.md)实施。证书轮换、窗口状态、活动网络下维护、启动/退出故障、74 项磁贴和八语言/DPI、Windows 11/Server 安装器矩阵、发行对应源与依赖材料仍分别验收。内部候选完成后再配置正式签名并构建、验证最终发行包。
