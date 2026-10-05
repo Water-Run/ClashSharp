@@ -385,6 +385,17 @@ internal sealed class WindowsMachineHelperMachineOperations
         _backend.VerifyRootsAbsent(plan, cancellationToken);
     }
 
+    internal Task<ObservedContext> OpenOriginalRecoveryContextAsync(InstallerRequest request,
+        IInstallerReleaseLease release, CancellationToken cancellationToken)
+    {
+        ValidateBoundary(request, release, InstallerMachineHelperSessionDisposition.Execute, cancellationToken);
+        if (request.Operation != InstallerOperation.Repair || request.AllowReassociation)
+        {
+            throw new InstallerProtocolException("installer.recovery.operation_invalid");
+        }
+        return OpenExactAssociationContextAsync(request, release.Manifest, removalPlan: false, createMissingRoots: false, cancellationToken);
+    }
+
     private async Task<ObservedContext> OpenProvisionContextAsync(
         InstallerRequest request,
         InstallerReleaseManifest manifest,
@@ -795,7 +806,7 @@ internal sealed class WindowsMachineHelperMachineOperations
         }
     }
 
-    private sealed class ObservedContext : IDisposable
+    internal sealed class ObservedContext : IDisposable
     {
         private bool _disposed;
 

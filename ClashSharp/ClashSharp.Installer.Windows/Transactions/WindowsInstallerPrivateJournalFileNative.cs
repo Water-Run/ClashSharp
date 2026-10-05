@@ -76,6 +76,10 @@ internal sealed class WindowsInstallerPrivateJournalFileNative :
         new(WindowsMaintenanceOriginalBaseline.FileName, WindowsMaintenanceOriginalBaseline.MaximumDocumentBytes,
             "installer.recovery.original_baseline");
 
+    internal static WindowsInstallerPrivateJournalFileNative CreateForMaintenanceRecovery() =>
+        new(WindowsMaintenanceRecoveryRecord.FileName, WindowsMaintenanceRecoveryRecord.MaximumDocumentBytes,
+            "installer.recovery.record");
+
     public bool IsPresent(string path, CancellationToken cancellationToken)
     {
         ValidateJournalPath(path);

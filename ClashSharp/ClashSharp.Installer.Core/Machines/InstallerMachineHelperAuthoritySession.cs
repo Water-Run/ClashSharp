@@ -115,9 +115,9 @@ public sealed class InstallerMachineHelperAuthoritySession
             if (disposition == InstallerMachineHelperSessionDisposition.Execute
                 && protectedBefore is null)
             {
-                if (requestState.Journal.Operation is InstallerOperation.Install or InstallerOperation.Repair)
+                try
                 {
-                    try
+                    if (requestState.Journal.Operation is InstallerOperation.Install or InstallerOperation.Repair)
                     {
                         if (_operations is not IInstallerMachineHelperPreparationPreflight preflight)
                         {
@@ -126,11 +126,15 @@ public sealed class InstallerMachineHelperAuthoritySession
 
                         await preflight.VerifyPreparationAsync(command, cancellationToken).ConfigureAwait(false);
                     }
-                    catch (InstallerProtocolException exception)
+                    if (_operations is IInstallerMachineHelperPreparationEvidence evidence)
                     {
-                        return await CompleteStableFailureAsync(command, disposition,
-                            exception.DiagnosticCode, cancellationToken).ConfigureAwait(false);
+                        await evidence.CapturePreparationEvidenceAsync(command, cancellationToken).ConfigureAwait(false);
                     }
+                }
+                catch (InstallerProtocolException exception)
+                {
+                    return await CompleteStableFailureAsync(command, disposition,
+                        exception.DiagnosticCode, cancellationToken).ConfigureAwait(false);
                 }
 
                 InstallerTransactionSnapshot persistedIntent = await _transactionStore

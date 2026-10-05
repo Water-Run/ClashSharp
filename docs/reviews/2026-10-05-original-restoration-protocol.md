@@ -20,6 +20,6 @@
 - 18 项目 Release x64 构建零警告、零错误，完整格式检查通过。Core 1,084、Presentation 173、Windows 安全集 1,256 项全部通过，零失败、零跳过。
 - Core 行覆盖率 93.58%、分支覆盖率 86.44%，高于仓库 90%/80% 的门槛。
 - 原始日志及 TRX 位于被 Git 忽略的 `artifacts/verification/original-restoration-protocol-20261005/`。初始协调器测试遗漏了候选锁定文件集合，被正式校验拒绝；改用已有完整租约夹具后通过，没有放宽生产校验。一次覆盖率命令引用了不存在的设置文件，随后按 CI 的实际命令完成覆盖率采集。
-- 此前 `0a975de` 的[两项 CI 成功](https://github.com/Water-Run/ClashSharp/actions/runs/37253350344)，四份原始 TRX 共 6,421 项全部通过；本次协议提交的 CI 另行绑定。
+- 此前 `0a975de` 的[两项 CI 成功](https://github.com/Water-Run/ClashSharp/actions/runs/37253350344)，四份原始 TRX 共 6,421 项全部通过；本次协议提交 `b45aeae067a4c0b1169644dfa72b1a3c8714478c` 的[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37255633282)成功，四份原始 TRX 共 6,466 项全部通过。
 
 接下来实现私有恢复决定与可重启阶段，再装配首次准备捕获、原生恢复执行器及 UI 入口。首次捕获必须区分完整可恢复的原安装和原安装已损坏的正常修复；重放不能把已准备的服务重新当作原服务。正常继续完成候选和保留原安装都需要完成私有记录的终结，避免首次记录残留阻止下一次维护。全部完成后执行原生故障和跨进程验收；本检查点不关闭完整生产目标。

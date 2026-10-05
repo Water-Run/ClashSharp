@@ -29,6 +29,16 @@ internal interface IWindowsInstallerExecutionSessionFactory
         CancellationToken cancellationToken);
 }
 
+internal interface IWindowsInstallerOriginalRestorationSessionFactory : IWindowsInstallerExecutionSessionFactory
+{
+}
+
+internal interface IWindowsInstallerOriginalRestorationSession
+{
+    Task<InstallerExecutionResult> RestoreOriginalAsync(InstallerRequest request,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken);
+}
+
 internal interface IWindowsInstallerOwnerTransferSessionFactory
 {
     Task<InstallerExecutionResult> TransferAndExecuteAsync(
@@ -54,7 +64,7 @@ internal interface IWindowsInstallerParentInspector
 /// coordinator/helper session per operation.
 /// </summary>
 public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IInstallerOwnerTransferRuntimeBackend,
-    IInstallerRetiredUninstallRuntimeBackend
+    IInstallerRetiredUninstallRuntimeBackend, IInstallerOriginalRestorationRuntimeBackend
 {
     private readonly object _lifetimeSync = new();
     private readonly InstallerReleaseManifest _manifest;
@@ -131,6 +141,33 @@ public sealed class WindowsInstallerParentEngine : IInstallerRuntimeBackend, IIn
 
     /// <inheritdoc />
     public bool SupportsRetiredUninstall => _sessionFactory is IWindowsInstallerRetiredUninstallSessionFactory;
+
+    /// <inheritdoc />
+    public bool SupportsOriginalRestoration => _sessionFactory is IWindowsInstallerOriginalRestorationSessionFactory;
+
+    /// <inheritdoc />
+    public async Task<InstallerExecutionResult> RestoreOriginalAsync(IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
+    {
+        if (!SupportsOriginalRestoration) { throw new InstallerProtocolException("installer.recovery.capability_unavailable"); }
+        if (!TryEnter()) { return new(InstallerExecutionOutcome.Blocked, "installer.concurrent_action_rejected", null, false); }
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var request = new InstallerRequest(InstallerOperation.Repair, _targetSid, false,
+                _manifest.ExpectedPackageVersion, _manifest.InstallerPayloadSha256);
+            request.Validate();
+            using IDisposable applicationLease = _applicationLock.Acquire(_targetSid, cancellationToken)
+                ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
+            await using IWindowsInstallerExecutionSession session = await _sessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw new InstallerProtocolException("installer.runtime.execution_session_missing");
+            if (session is not IWindowsInstallerOriginalRestorationSession recovery)
+            {
+                throw new InstallerProtocolException("installer.recovery.capability_unavailable");
+            }
+            return await recovery.RestoreOriginalAsync(request, progress, cancellationToken).ConfigureAwait(false);
+        }
+        finally { Exit(); }
+    }
 
     /// <inheritdoc />
     public async Task<InstallerExecutionResult> UninstallRetiredAccountAsync(
@@ -448,7 +485,8 @@ internal sealed class UnavailableWindowsInstallerParentInspector
 }
 
 internal sealed class WindowsInstallerExecutionSessionFactory
-    : IWindowsInstallerExecutionSessionFactory, IWindowsInstallerOwnerTransferSessionFactory, IWindowsInstallerRetiredUninstallSessionFactory
+    : IWindowsInstallerExecutionSessionFactory, IWindowsInstallerOwnerTransferSessionFactory, IWindowsInstallerRetiredUninstallSessionFactory,
+        IWindowsInstallerOriginalRestorationSessionFactory
 {
     private readonly byte[] _embeddedManifestBytes;
     private readonly InstallerReleaseManifest _manifest;
@@ -581,7 +619,7 @@ internal sealed class WindowsInstallerExecutionSessionFactory
     }
 }
 
-internal sealed class WindowsInstallerExecutionSession : IWindowsInstallerExecutionSession
+internal sealed class WindowsInstallerExecutionSession : IWindowsInstallerExecutionSession, IWindowsInstallerOriginalRestorationSession
 {
     private readonly InstallerCoordinator _coordinator;
     private readonly WindowsInstallerProtectedTransactionReader _transactionReader;
@@ -608,6 +646,13 @@ internal sealed class WindowsInstallerExecutionSession : IWindowsInstallerExecut
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _coordinator.ExecuteAsync(request, progress, cancellationToken);
+    }
+
+    public Task<InstallerExecutionResult> RestoreOriginalAsync(InstallerRequest request,
+        IProgress<InstallerProgress>? progress, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _coordinator.RestoreOriginalAsync(request, progress, cancellationToken);
     }
 
     public async ValueTask DisposeAsync()

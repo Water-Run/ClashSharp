@@ -79,7 +79,13 @@ internal sealed class WindowsMachineHelperAuthorityFactory
             cancellationToken.ThrowIfCancellationRequested();
             applicationLease = _applicationLock.Acquire(targetSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing");
-            resources = _resourcesFactory.Create(targetSid)
+            resources = (_resourcesFactory is IWindowsMachineHelperRecoveryResourcesFactory recoveryFactory
+                ? recoveryFactory.Create(targetSid,
+                    exclusiveAuthority as IWindowsInstallerAuthorityLease
+                        ?? throw new InstallerProtocolException("installer.recovery.authority_required"),
+                    applicationLease as IWindowsInstallerApplicationLease
+                        ?? throw new InstallerProtocolException("installer.recovery.authority_required"))
+                : _resourcesFactory.Create(targetSid))
                 ?? throw new InstallerProtocolException(
                     "installer.machine_helper.authority_resources_missing");
             InstallerMachineHelperAuthoritySession session = await
@@ -244,19 +250,17 @@ internal sealed class WindowsMachineHelperHost
         string installerExecutablePath,
         InstallerReleaseManifest manifest,
         ReadOnlyMemory<byte> embeddedManifestBytes) =>
-        CreateDefault(
-            installerExecutablePath,
-            manifest,
-            certificateOwnershipStore =>
-                WindowsMachineHelperOperationExecutor.CreateDefault(
-                    embeddedManifestBytes,
-                    certificateOwnershipStore));
+        CreateDefaultCore(installerExecutablePath, manifest, new WindowsMachineHelperRecoveryResourcesFactory(embeddedManifestBytes));
 
     internal static WindowsMachineHelperHost CreateDefault(
         string installerExecutablePath,
         InstallerReleaseManifest manifest,
         Func<IInstallerCertificateOwnershipStore, IInstallerMachineHelperOperationExecutor>
             operationsFactory)
+        => CreateDefaultCore(installerExecutablePath, manifest, new WindowsMachineHelperAuthorityResourcesFactory(operationsFactory));
+
+    private static WindowsMachineHelperHost CreateDefaultCore(string installerExecutablePath,
+        InstallerReleaseManifest manifest, IWindowsMachineHelperAuthorityResourcesFactory resourcesFactory)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         manifest.Validate();
@@ -267,7 +271,7 @@ internal sealed class WindowsMachineHelperHost
             new WindowsMachineHelperParentProcessVerifier(),
             new WindowsMachineHelperClientFactory(),
             new WindowsMachineHelperAuthorityFactory(
-                new WindowsMachineHelperAuthorityResourcesFactory(operationsFactory),
+                resourcesFactory,
                 new WindowsInstallerAuthorityLock(),
                 WindowsInstallerApplicationLock.CreateHelper(),
                 WindowsInstallerOwnerTransferAdmission.CreateDefault(),

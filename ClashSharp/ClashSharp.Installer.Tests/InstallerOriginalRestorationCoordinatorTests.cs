@@ -9,6 +9,22 @@ public sealed class InstallerOriginalRestorationCoordinatorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task CandidateContinuationMustBeAcknowledgedBeforeAnyCertificateOrPackageMutation(bool failContinuation)
+    {
+        var ports = new Ports(true) { AllowCandidateExecution = true, FailContinuation = failContinuation };
+        using InstallerCoordinator coordinator = ports.Coordinator();
+
+        InstallerExecutionResult result = await coordinator.ExecuteAsync(ports.Request, null, CancellationToken.None);
+
+        Assert.Equal(InstallerExecutionOutcome.Failed, result.Outcome);
+        Assert.Equal(failContinuation ? "installer.test.continuation_failed" : "installer.test.package_boundary", result.DiagnosticCode);
+        Assert.Equal(failContinuation ? 0 : 2, ports.CandidateMutations);
+        Assert.Equal(InstallerTransactionPhase.MachineReserved, ports.Current?.Journal.Phase);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task OriginalRestorationUsesOnlyTheDedicatedHelperAndObservedTerminal(bool reserved)
     {
         var ports = new Ports(reserved);
@@ -140,6 +156,10 @@ public sealed class InstallerOriginalRestorationCoordinatorTests
         internal Action? AfterRestore { get; set; }
         internal Func<Task>? BeforeRestore { get; set; }
         internal string? Failure { get; init; }
+        internal bool AllowCandidateExecution { get; init; }
+        internal bool FailContinuation { get; init; }
+        internal bool ContinuationAcknowledged { get; private set; }
+        internal int CandidateMutations { get; private set; }
         internal InstallerCoordinator Coordinator() => new(this, this, this, this, this, this, this);
         public Task<InstallerEnvironmentSnapshot> InspectAsync(InstallerRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new InstallerEnvironmentSnapshot(true, "1.2.3.3", false, null));
@@ -162,6 +182,15 @@ public sealed class InstallerOriginalRestorationCoordinatorTests
             if (Failure == "restore-reply") { throw new InstallerStateUncertainException("installer.machine_helper.response_unconfirmed"); }
             return Current;
         }
+        public Task<InstallerTransactionSnapshot> ContinueCandidateAsync(InstallerRequest request, IInstallerReleaseLease release,
+            InstallerTransactionSnapshot reservedState, CancellationToken cancellationToken)
+        {
+            Assert.True(AllowCandidateExecution);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (FailContinuation) { throw new InstallerProtocolException("installer.test.continuation_failed"); }
+            ContinuationAcknowledged = true;
+            return Task.FromResult(reservedState);
+        }
         public Task<InstallerTransactionSnapshot> ClearOriginalRestoredAsync(InstallerRequest request, IInstallerReleaseLease release,
             InstallerTransactionSnapshot restoredState, CancellationToken cancellationToken)
         {
@@ -172,7 +201,14 @@ public sealed class InstallerOriginalRestorationCoordinatorTests
             return Task.FromResult(Failure == "wrong-clear-receipt"
                 ? InstallerTransactionSnapshot.Create(restoredState.Journal with { TransactionId = new string('b', 64) }) : restoredState);
         }
-        public Task ApplyAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken) => throw new InvalidOperationException("Preservation must not mutate the candidate package or certificates.");
+        public Task ApplyAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)
+        {
+            Assert.True(AllowCandidateExecution);
+            Assert.True(ContinuationAcknowledged);
+            CandidateMutations++;
+            if (CandidateMutations == 2) { throw new InstallerProtocolException("installer.test.package_boundary"); }
+            return Task.CompletedTask;
+        }
         public Task<InstallerTransactionSnapshot> PrepareAsync(InstallerRequest request, IInstallerReleaseLease release, InstallerTransactionSnapshot durableIntent, CancellationToken cancellationToken) => throw new InvalidOperationException();
         public Task<InstallerTransactionSnapshot> CommitPackageAsync(InstallerRequest request, IInstallerReleaseLease release, InstallerTransactionSnapshot durableIntent, CancellationToken cancellationToken) => throw new InvalidOperationException();
         public Task<InstallerTransactionSnapshot> ApplyAsync(InstallerRequest request, IInstallerReleaseLease release, InstallerTransactionSnapshot durableIntent, CancellationToken cancellationToken) => throw new InvalidOperationException();

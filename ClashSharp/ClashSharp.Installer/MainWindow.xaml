@@ -154,6 +154,11 @@
             Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
             BorderBrush="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderThickness="0,1,0,0">
       <WrapPanel HorizontalAlignment="Right" AutomationProperties.Name="安装操作">
+        <Button Margin="0,0,8,0" Content="保留原安装(_K)"
+                Command="{Binding RestoreOriginalCommand}"
+                Visibility="{Binding IsOriginalRestoreActionVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                ToolTip="检查原安装后恢复；原包已更改时需继续完成安装。"
+                AutomationProperties.Name="尝试恢复并保留原安装" />
         <Button Margin="0,0,8,0" Content="{Binding SecondaryActionText, Mode=OneWay}"
                 Command="{Binding SecondaryActionCommand}"
                 Visibility="{Binding IsSecondaryActionVisible, Converter={StaticResource BooleanToVisibilityConverter}}"

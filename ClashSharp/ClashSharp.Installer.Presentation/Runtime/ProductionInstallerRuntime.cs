@@ -6,7 +6,8 @@ namespace ClashSharp.Installer.Runtime;
 /// Maps a trusted platform backend into the fixed single-product presentation state without ever
 /// constructing a target SID, release hash, package identity, or privileged command.
 /// </summary>
-public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IInstallerRetiredUninstallRuntime, IDisposable
+public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOwnerTransferRuntime, IInstallerRetiredUninstallRuntime,
+    IInstallerOriginalRestorationRuntime, IDisposable
 {
     private readonly IInstallerRuntimeBackend _backend;
     private bool _disposed;
@@ -71,6 +72,12 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
         {
             IsUpgrade = canExecute && product.ProductState == InstallerProductState.Installed
                 && allowedOperations.Contains(InstallerOperation.Repair) && IsNewerRelease(inspection),
+            CanRestoreOriginal = canExecute && SupportsOriginalRestoration
+                && inspection.DurableTransaction?.Journal is
+                {
+                    Operation: InstallerOperation.Repair, AllowReassociation: false,
+                    Phase: InstallerTransactionPhase.Prepared or InstallerTransactionPhase.MachineReserved
+                },
         };
     }
 
@@ -99,6 +106,22 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
 
     /// <inheritdoc />
     public bool SupportsRetiredUninstall => _backend is IInstallerRetiredUninstallRuntimeBackend { SupportsRetiredUninstall: true };
+
+    /// <inheritdoc />
+    public bool SupportsOriginalRestoration => _backend is IInstallerOriginalRestorationRuntimeBackend { SupportsOriginalRestoration: true };
+
+    /// <inheritdoc />
+    public Task<InstallerExecutionResult> RestoreOriginalAsync(IProgress<InstallerProgress> progress, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(progress);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_backend is not IInstallerOriginalRestorationRuntimeBackend { SupportsOriginalRestoration: true } recovery)
+        {
+            throw new InstallerProtocolException("installer.recovery.capability_unavailable");
+        }
+        return Task.Run(() => recovery.RestoreOriginalAsync(progress, cancellationToken), cancellationToken);
+    }
 
     /// <inheritdoc />
     public Task<InstallerExecutionResult> UninstallRetiredAccountAsync(
@@ -184,6 +207,8 @@ public sealed class ProductionInstallerRuntime : IInstallerRuntime, IInstallerOw
             InstallerProductState.Installed => (
                 "已安装",
                 "可修复当前安装，或从此电脑移除 ClashSharp。"),
+            InstallerProductState.RecoveryRequired when inspection.DurableTransaction?.Journal.Phase == InstallerTransactionPhase.OriginalRestored => (
+                "原安装恢复待收尾", "原安装已经恢复。请选择“继续”核验结果并完成收尾。"),
             InstallerProductState.RecoveryRequired => (
                 "需要继续未完成的操作",
                 "上次操作尚未完成。请使用此安装器继续，完成后再执行其他操作。"),

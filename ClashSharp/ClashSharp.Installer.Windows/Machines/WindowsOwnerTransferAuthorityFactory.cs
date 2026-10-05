@@ -97,8 +97,7 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
         return new(new WindowsInstallerAuthorityLock(), WindowsInstallerApplicationLock.CreateHelper(),
             new WindowsInstallerReleaseVerifier(manifestBytes, installerExecutablePath), backend,
             new WindowsOwnerTransferAuthorityResourcesFactory(backend),
-            new WindowsMachineHelperAuthorityResourcesFactory(store =>
-                WindowsMachineHelperOperationExecutor.CreateDefault(manifestBytes, store)),
+            new WindowsMachineHelperRecoveryResourcesFactory(manifestBytes),
             WindowsInstallerRetiredUninstallAdmission.CreateDefault());
     }
 
@@ -113,7 +112,7 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
         var scope = new WindowsInstallerAuthorityScope();
         try
         {
-            _ = scope.RetainAsync(await _authorityLock.AcquireAsync(cancellationToken).ConfigureAwait(false)
+            IAsyncDisposable machineAuthority = scope.RetainAsync(await _authorityLock.AcquireAsync(cancellationToken).ConfigureAwait(false)
                 ?? throw new InstallerProtocolException("installer.owner_transfer.authority_missing"));
             await _retiredUninstallAdmission.EnsureNoRetiredUninstallAsync(cancellationToken).ConfigureAwait(false);
             IInstallerReleaseLease release = scope.RetainAsync(await _releaseVerifier.VerifyAsync(request, cancellationToken).ConfigureAwait(false)
@@ -127,7 +126,7 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
                 journal, release.Manifest, _backend, cancellationToken);
             _ = scope.Retain(_applicationLock.Acquire(journal.PreviousOwner.Association.OwnerSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing"));
-            _ = scope.Retain(_applicationLock.Acquire(authenticatedTargetSid, cancellationToken)
+            IDisposable targetApplication = scope.Retain(_applicationLock.Acquire(authenticatedTargetSid, cancellationToken)
                 ?? throw new InstallerProtocolException("installer.application_lock.lease_missing"));
             // Acquiring the App barriers may wait. Re-resolve both identities before opening
             // writable private state so a changed profile cannot publish a stranded Prepared.
@@ -161,7 +160,11 @@ internal sealed class WindowsOwnerTransferAuthorityFactory : IWindowsOwnerTransf
             }
             // The private journal is now absent and ordinary Prepared is still present. Construct
             // next-owner stores without invoking the ordinary factory's lock/admission acquisition.
-            IWindowsMachineHelperAuthorityResources ordinary = scope.RetainAsync(_ordinaryFactory.Create(authenticatedTargetSid)
+            IWindowsMachineHelperAuthorityResources ordinary = scope.RetainAsync((_ordinaryFactory is IWindowsMachineHelperRecoveryResourcesFactory recoveryFactory
+                ? recoveryFactory.Create(authenticatedTargetSid,
+                    machineAuthority as IWindowsInstallerAuthorityLease ?? throw new InstallerProtocolException("installer.recovery.authority_required"),
+                    targetApplication as IWindowsInstallerApplicationLease ?? throw new InstallerProtocolException("installer.recovery.authority_required"))
+                : _ordinaryFactory.Create(authenticatedTargetSid))
                 ?? throw new InstallerProtocolException("installer.machine_helper.authority_resources_missing"));
             if (await ordinary.TransactionStore.LoadAsync(cancellationToken).ConfigureAwait(false) != continuation)
             {

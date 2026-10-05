@@ -66,4 +66,7 @@ public sealed record InstallerRuntimeReadiness(
 {
     /// <summary>Whether the verified maintenance action installs a newer package version.</summary>
     public bool IsUpgrade { get; init; }
+
+    /// <summary>Whether this exact pending repair permits an independently checked preservation attempt.</summary>
+    public bool CanRestoreOriginal { get; init; }
 }

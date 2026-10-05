@@ -134,6 +134,7 @@ public sealed class InstallerMachineHelperSessionGuard
 
                 bool exactRequest = requestState == protectedState;
                 bool committedReplay = !command.ClearsTerminal
+                    && command.Verb != InstallerMachineHelperVerb.ContinueCandidate
                     && expectedResult == protectedState;
                 if (!exactRequest && !committedReplay)
                 {

@@ -299,6 +299,13 @@ public sealed partial class InstallerCoordinator : IDisposable
         {
             ReportSafely(progress, durable.Journal.Phase, 30, "installer.progress.certificate");
             await ReverifyReleaseAsync(request, release, cancellationToken).ConfigureAwait(false);
+            if (request.Operation == InstallerOperation.Repair && !request.AllowReassociation
+                && _machineMutation is IInstallerOriginalRestorationMutation continuation)
+            {
+                InstallerTransactionSnapshot continued = await continuation.ContinueCandidateAsync(request, release, durable, cancellationToken).ConfigureAwait(false);
+                durable = ValidateHelperState(durable, continued, InstallerTransactionPhase.MachineReserved);
+                durable = await ConfirmHelperStateAsync(durable, cancellationToken).ConfigureAwait(false);
+            }
             await _certificateMutation.ApplyAsync(request, release, cancellationToken)
                 .ConfigureAwait(false);
             ReportSafely(progress, durable.Journal.Phase, 46, "installer.progress.package");

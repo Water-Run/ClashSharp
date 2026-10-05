@@ -116,6 +116,11 @@ public sealed class WindowsElevatedMachineAdapter :
             .ConfigureAwait(false)).ToResultDurableState();
 
     /// <inheritdoc />
+    public Task<InstallerTransactionSnapshot> ContinueCandidateAsync(InstallerRequest request, IInstallerReleaseLease release,
+        InstallerTransactionSnapshot reservedState, CancellationToken cancellationToken) =>
+        ExecuteAsync(InstallerMachineHelperVerb.ContinueCandidate, request, release, reservedState, cancellationToken);
+
+    /// <inheritdoc />
     public Task<InstallerTransactionSnapshot> RestoreOriginalAsync(InstallerRequest request, IInstallerReleaseLease release,
         InstallerTransactionSnapshot durableState, CancellationToken cancellationToken) =>
         ExecuteAsync(InstallerMachineHelperVerb.RestoreOriginal, request, release, durableState, cancellationToken);

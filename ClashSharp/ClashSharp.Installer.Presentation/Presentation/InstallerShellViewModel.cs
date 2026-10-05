@@ -29,6 +29,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         };
 
     private readonly IInstallerRuntime _runtime;
+    private bool _canRestoreOriginal;
     private readonly object _operationSync = new();
     private CancellationTokenSource? _activeCancellation;
     private long _generation;
@@ -73,6 +74,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             ExecuteSecondaryOperationAsync,
             () => !IsBusy && CanExecuteMutations && HasSecondaryAction,
             SetUnhandledCommandFailure);
+        RestoreOriginalCommand = new AsyncDelegateCommand(
+            () => ExecuteOperationAsync(InstallerOperation.Repair, originalRestore: true),
+            () => IsOriginalRestoreActionVisible, SetUnhandledCommandFailure);
         CancelCommand = new DelegateCommand(CancelActiveOperation, () => IsBusy && !IsCancellationRequested);
         OwnerTransferCommand = new AsyncDelegateCommand(
             () => ExecuteOperationAsync(null, ownerTransfer: true), () => IsOwnerTransferActionVisible, SetUnhandledCommandFailure);
@@ -99,6 +103,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     /// <summary>Gets the optional second operation authorized for the same product card.</summary>
     public AsyncDelegateCommand SecondaryActionCommand { get; }
+
+    /// <summary>Gets the independently verified original-installation preservation action.</summary>
+    public AsyncDelegateCommand RestoreOriginalCommand { get; }
 
     /// <summary>Gets the command that cooperatively cancels the active generation.</summary>
     public DelegateCommand CancelCommand { get; }
@@ -156,6 +163,10 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     /// <summary>Gets whether the trusted installed state exposes its secondary mutation.</summary>
     public bool IsSecondaryActionVisible => IsPrimaryActionVisible && HasSecondaryAction;
+
+    /// <summary>Gets whether this exact pending repair can attempt original preservation.</summary>
+    public bool IsOriginalRestoreActionVisible => !IsBusy && CanExecuteMutations && _canRestoreOriginal
+        && _runtime is IInstallerOriginalRestorationRuntime { SupportsOriginalRestoration: true };
 
     /// <summary>Gets whether the single active generation exposes cancellation as its only action.</summary>
     public bool IsCancelActionVisible => IsBusy && !IsOwnerTransferConfirmationVisible && !IsRetiredUninstallConfirmationVisible;
@@ -356,6 +367,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             }
 
             ValidateReadiness(readiness);
+            _canRestoreOriginal = readiness.CanRestoreOriginal;
             CanExecuteMutations = readiness.CanExecute;
             DiagnosticCode = readiness.DiagnosticCode;
             StatusTitle = readiness.StatusTitle;
@@ -401,11 +413,13 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private Task ExecuteSecondaryOperationAsync() => ExecuteOperationAsync(_secondaryOperation);
 
-    private async Task ExecuteOperationAsync(InstallerOperation? requestedOperation, bool ownerTransfer = false, bool retiredUninstall = false)
+    private async Task ExecuteOperationAsync(InstallerOperation? requestedOperation, bool ownerTransfer = false,
+        bool retiredUninstall = false, bool originalRestore = false)
     {
         IInstallerOwnerTransferRuntime? transfer = ownerTransfer ? _runtime as IInstallerOwnerTransferRuntime : null;
         IInstallerRetiredUninstallRuntime? retired = retiredUninstall ? _runtime as IInstallerRetiredUninstallRuntime : null;
-        if (ownerTransfer ? transfer?.SupportsOwnerTransfer != true
+        IInstallerOriginalRestorationRuntime? restoration = originalRestore ? _runtime as IInstallerOriginalRestorationRuntime : null;
+        if (originalRestore ? !IsOriginalRestoreActionVisible : ownerTransfer ? transfer?.SupportsOwnerTransfer != true
             : retiredUninstall ? retired?.SupportsRetiredUninstall != true : !CanExecuteMutations || requestedOperation is null)
         {
             StatusBadge = "已阻止";
@@ -425,7 +439,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
         IsCancellationRequested = false;
         IsBusy = true;
-        string operationLabel = requestedOperation is { } selected ? GetOperationLabel(selected, _isUpgrade) : string.Empty;
+        string operationLabel = originalRestore ? "恢复原安装"
+            : requestedOperation is { } selected ? GetOperationLabel(selected, _isUpgrade) : string.Empty;
         InvalidateReadiness();
         IsProgressIndeterminate = ownerTransfer || retiredUninstall;
         ProgressValue = 0;
@@ -472,7 +487,9 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
                     progress, generation.Cancellation.Token)
                 : retiredUninstall
                     ? await retired!.UninstallRetiredAccountAsync(progress, generation.Cancellation.Token)
-                    : await _runtime.ExecuteAsync(requestedOperation!.Value, progress, generation.Cancellation.Token);
+                    : originalRestore
+                        ? await restoration!.RestoreOriginalAsync(progress, generation.Cancellation.Token)
+                        : await _runtime.ExecuteAsync(requestedOperation!.Value, progress, generation.Cancellation.Token);
             Interlocked.Exchange(ref acceptProgress, 0);
             if (!IsCurrent(generation))
             {
@@ -480,6 +497,11 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             }
 
             ValidateExecutionResult(result, ownerTransfer || retiredUninstall ? null : requestedOperation);
+            if (originalRestore && result.Outcome == InstallerExecutionOutcome.Succeeded
+                && result.LastDurablePhase != InstallerTransactionPhase.OriginalRestored)
+            {
+                throw new InstallerProtocolException("installer.runtime.result_invalid");
+            }
             ApplyExecutionResult(result);
             if (retiredUninstall)
             {
@@ -720,7 +742,13 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private void ApplyFailureGuidance(string diagnosticCode)
     {
-        if (diagnosticCode == "installer.release.locked_file_hash_mismatch")
+        if (diagnosticCode.StartsWith("installer.recovery.original_", StringComparison.Ordinal)
+            || diagnosticCode is "installer.recovery.phase_invalid" or "installer.recovery.capability_unavailable")
+        {
+            StatusTitle = "无法确认原安装可恢复";
+            StatusDetail = "原包、文件或服务状态已改变，或恢复记录不完整。请使用此安装器重新检查并继续完成安装。";
+        }
+        else if (diagnosticCode == "installer.release.locked_file_hash_mismatch")
         {
             StatusTitle = "安装文件校验失败";
             StatusDetail = "文件可能已损坏或与此安装器不匹配。请重新获取同一版本的完整安装包，"
@@ -794,6 +822,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
 
     private void InvalidateReadiness()
     {
+        _canRestoreOriginal = false;
         Capabilities = Array.Empty<InstallerCapabilityStatus>();
         CanExecuteMutations = false;
         _isUpgrade = false;
@@ -807,6 +836,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
         RefreshCommand.NotifyCanExecuteChanged();
         PrimaryActionCommand.NotifyCanExecuteChanged();
         SecondaryActionCommand.NotifyCanExecuteChanged();
+        RestoreOriginalCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         OwnerTransferCommand.NotifyCanExecuteChanged();
         RetiredUninstallCommand.NotifyCanExecuteChanged();
@@ -816,6 +846,7 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
     {
         OnPropertyChanged(nameof(IsPrimaryActionVisible));
         OnPropertyChanged(nameof(IsSecondaryActionVisible));
+        OnPropertyChanged(nameof(IsOriginalRestoreActionVisible));
         OnPropertyChanged(nameof(IsCancelActionVisible));
         OnPropertyChanged(nameof(IsOwnerTransferActionVisible));
         OnPropertyChanged(nameof(IsRetiredUninstallActionVisible));
@@ -864,6 +895,8 @@ public sealed partial class InstallerShellViewModel : INotifyPropertyChanged, ID
             || !HasValidAllowedOperations(readiness)
             || readiness.IsUpgrade && (!readiness.CanExecute || readiness.ProductState != InstallerProductState.Installed
                 || !readiness.AllowedOperations.Contains(InstallerOperation.Repair))
+            || readiness.CanRestoreOriginal && (!readiness.CanExecute || readiness.ProductState != InstallerProductState.RecoveryRequired
+                || readiness.RecoveryOperation != InstallerOperation.Repair)
             || !IsValidDiagnosticCode(readiness.DiagnosticCode)
             || !IsValidDisplayText(readiness.StatusTitle, 160)
             || !IsValidDisplayText(readiness.StatusDetail, 1_024)

@@ -80,6 +80,13 @@ internal sealed class WindowsMachineHelperAuthorityResources
         Func<IInstallerCertificateOwnershipStore, IInstallerMachineHelperOperationExecutor>
             operationsFactory)
     {
+        ArgumentNullException.ThrowIfNull(operationsFactory);
+        return CreateDefault(targetSid, (certificates, _) => operationsFactory(certificates));
+    }
+
+    internal static WindowsMachineHelperAuthorityResources CreateDefault(string targetSid,
+        Func<IInstallerCertificateOwnershipStore, IInstallerTransactionReader, IInstallerMachineHelperOperationExecutor> operationsFactory)
+    {
         InstallerProtocolValidation.ValidateTargetSid(targetSid);
         ArgumentNullException.ThrowIfNull(operationsFactory);
         WindowsInstallerProtectedStateStores stores =
@@ -87,7 +94,7 @@ internal sealed class WindowsMachineHelperAuthorityResources
         try
         {
             IInstallerMachineHelperOperationExecutor operations =
-                operationsFactory(stores.CertificateOwnership)
+                operationsFactory(stores.CertificateOwnership, stores.TransactionReader)
                 ?? throw new InstallerProtocolException(
                     "installer.machine_helper.operations_missing");
             return new WindowsMachineHelperAuthorityResources(stores, operations,

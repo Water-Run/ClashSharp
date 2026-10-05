@@ -6,6 +6,21 @@ namespace ClashSharp.Installer.Tests;
 
 public sealed class InstallerOriginalRestorationProtocolTests
 {
+    [Fact]
+    public void CandidateContinuationReexecutesItsPrivateDecisionEvenThoughThePublicPhaseDoesNotAdvance()
+    {
+        var state = InstallerTransactionSnapshot.Create(Initial().TransitionTo(InstallerTransactionPhase.MachineReserved));
+        var command = Command(InstallerMachineHelperVerb.ContinueCandidate, state);
+        var guard = new InstallerMachineHelperSessionGuard(command.ToInvocation(), state);
+        Assert.Equal(command, InstallerMachineHelperCommandCodec.Parse(InstallerMachineHelperCommandCodec.Serialize(command)));
+        Assert.Equal(command.ToInvocation(), InstallerMachineHelperInvocation.Parse(command.ToInvocation().ToArguments()));
+        Assert.Equal(state, command.GetExpectedSuccessfulState());
+
+        Assert.Equal(InstallerMachineHelperSessionDisposition.Execute, guard.Begin(command, state));
+        guard.Complete(InstallerMachineHelperResult.Succeeded(command, state), state);
+        Assert.Equal(InstallerMachineHelperSessionDisposition.Execute, guard.Begin(command, state));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

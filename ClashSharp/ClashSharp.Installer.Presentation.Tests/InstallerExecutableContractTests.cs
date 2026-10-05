@@ -123,7 +123,14 @@ public sealed class InstallerExecutableContractTests
             static element => (string?)element.Attribute("AutomationProperties.Name") == "安装操作");
         Assert.DoesNotContain(actions.Ancestors(), element => element.Name == presentation + "ScrollViewer");
         XElement[] buttons = actions.Descendants(presentation + "Button").ToArray();
-        Assert.Equal(4, buttons.Length);
+        Assert.Equal(5, buttons.Length);
+
+        XElement preservation = Assert.Single(buttons,
+            static button => (string?)button.Attribute("Command") == "{Binding RestoreOriginalCommand}");
+        Assert.Equal("{Binding IsOriginalRestoreActionVisible, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)preservation.Attribute("Visibility"));
+        Assert.Equal("尝试恢复并保留原安装", (string?)preservation.Attribute("AutomationProperties.Name"));
+        Assert.NotEqual("True", (string?)preservation.Attribute("IsDefault"));
 
         XElement secondary = Assert.Single(
             buttons,

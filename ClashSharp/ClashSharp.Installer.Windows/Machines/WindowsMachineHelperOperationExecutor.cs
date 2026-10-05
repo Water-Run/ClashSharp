@@ -41,7 +41,8 @@ internal interface IWindowsMachineHelperMachineOperations
 /// new journal intent and again before service maintenance; committed replays stay observation-only.
 /// </summary>
 internal sealed class WindowsMachineHelperOperationExecutor
-    : IInstallerMachineHelperOperationExecutor, IInstallerMachineHelperPreparationPreflight, IDisposable
+    : IInstallerMachineHelperOperationExecutor, IInstallerMachineHelperPreparationPreflight,
+        IInstallerMachineHelperPreparationEvidence, IInstallerMachineHelperOriginalRestoration, IDisposable
 {
     private readonly IInstallerReleaseVerifier _releaseVerifier;
     private readonly IInstallerCertificateMutation _certificateMutation;
@@ -50,6 +51,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
     private readonly IWindowsPackageDeploymentPreflight _packagePreflight;
     private readonly IWindowsTargetUserPackageCommitInspector _packageInspector;
     private readonly IWindowsMachineHelperMachineOperations _machineOperations;
+    private readonly WindowsMaintenanceRecoveryCoordinator? _recovery;
     private bool _disposed;
 
     internal WindowsMachineHelperOperationExecutor(
@@ -59,7 +61,8 @@ internal sealed class WindowsMachineHelperOperationExecutor
         IInstallerCertificatePreflight certificatePreflight,
         IWindowsPackageDeploymentPreflight packagePreflight,
         IWindowsTargetUserPackageCommitInspector packageInspector,
-        IWindowsMachineHelperMachineOperations machineOperations)
+        IWindowsMachineHelperMachineOperations machineOperations,
+        WindowsMaintenanceRecoveryCoordinator? recovery = null)
     {
         ArgumentNullException.ThrowIfNull(releaseVerifier);
         ArgumentNullException.ThrowIfNull(certificateMutation);
@@ -75,6 +78,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
         _packagePreflight = packagePreflight;
         _packageInspector = packageInspector;
         _machineOperations = machineOperations;
+        _recovery = recovery;
     }
 
     internal static WindowsMachineHelperOperationExecutor CreateDefault(
@@ -116,6 +120,32 @@ internal sealed class WindowsMachineHelperOperationExecutor
         await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task CapturePreparationEvidenceAsync(InstallerMachineHelperCommand command, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_recovery is null) { return; }
+        InstallerRequest request = RequestFrom(command.ToDurableState().Journal);
+        await using IInstallerReleaseLease release = await _releaseVerifier.VerifyAsync(request, cancellationToken).ConfigureAwait(false)
+            ?? throw new InstallerProtocolException("installer.release.lease_missing");
+        ValidateRelease(request, release);
+        await _recovery.CaptureInitialAsync(command, release, cancellationToken).ConfigureAwait(false);
+        await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ExecuteOriginalRestorationAsync(InstallerMachineHelperCommand command,
+        InstallerMachineHelperSessionDisposition disposition, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!Enum.IsDefined(disposition)) { throw new InstallerProtocolException("installer.machine_helper.disposition_invalid"); }
+        if (_recovery is null) { throw new InstallerProtocolException("installer.recovery.capability_unavailable"); }
+        InstallerRequest request = RequestFrom(command.ToDurableState().Journal);
+        await using IInstallerReleaseLease release = await _releaseVerifier.VerifyAsync(request, cancellationToken).ConfigureAwait(false)
+            ?? throw new InstallerProtocolException("installer.release.lease_missing");
+        ValidateRelease(request, release);
+        await _recovery.ExecuteOriginalAsync(command, release, disposition, cancellationToken).ConfigureAwait(false);
+        await release.ReverifyAsync(request, CancellationToken.None).ConfigureAwait(false);
+    }
+
     public async Task ExecuteAsync(
         InstallerMachineHelperCommand command,
         InstallerMachineHelperSessionDisposition disposition,
@@ -141,6 +171,15 @@ internal sealed class WindowsMachineHelperOperationExecutor
 
         switch (command.Verb)
         {
+            case InstallerMachineHelperVerb.ContinueCandidate:
+                await _certificatePreflight.VerifyCanInstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+                await _packagePreflight.VerifyCanDeployAsync(request, release, cancellationToken).ConfigureAwait(false);
+                if (_recovery is not null) { await _recovery.BeforeOrdinaryAsync(command, disposition, cancellationToken).ConfigureAwait(false); }
+                // An interrupted preservation may already have restored the service while the
+                // public journal is still MachineReserved. Re-establish preparation before the
+                // parent receives permission to deploy the candidate package.
+                await _machineOperations.PrepareAsync(request, release, InstallerMachineHelperSessionDisposition.Execute, cancellationToken).ConfigureAwait(false);
+                break;
             case InstallerMachineHelperVerb.Prepare:
                 if (request.Operation is InstallerOperation.Install or InstallerOperation.Repair
                     && disposition == InstallerMachineHelperSessionDisposition.Execute)
@@ -149,6 +188,10 @@ internal sealed class WindowsMachineHelperOperationExecutor
                         .ConfigureAwait(false);
                     await _packagePreflight.VerifyCanDeployAsync(request, release, cancellationToken)
                         .ConfigureAwait(false);
+                }
+                if (_recovery is not null)
+                {
+                    await _recovery.BeforeOrdinaryAsync(command, disposition, cancellationToken).ConfigureAwait(false);
                 }
                 await _machineOperations
                     .PrepareAsync(request, release, disposition, cancellationToken)
@@ -164,6 +207,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
                 }
                 break;
             case InstallerMachineHelperVerb.CommitPackage:
+                if (_recovery is not null) { await _recovery.BeforeOrdinaryAsync(command, disposition, cancellationToken).ConfigureAwait(false); }
                 await VerifyPackageCommitAsync(
                         request,
                         release,
@@ -172,11 +216,13 @@ internal sealed class WindowsMachineHelperOperationExecutor
                     .ConfigureAwait(false);
                 break;
             case InstallerMachineHelperVerb.Apply:
+                if (_recovery is not null) { await _recovery.BeforeOrdinaryAsync(command, disposition, cancellationToken).ConfigureAwait(false); }
                 await _machineOperations
                     .ApplyAsync(request, release, disposition, cancellationToken)
                     .ConfigureAwait(false);
                 break;
             case InstallerMachineHelperVerb.Remove:
+                if (_recovery is not null) { await _recovery.BeforeOrdinaryAsync(command, disposition, cancellationToken).ConfigureAwait(false); }
                 await _machineOperations
                     .RemoveAsync(request, release, disposition, cancellationToken)
                     .ConfigureAwait(false);
@@ -185,6 +231,10 @@ internal sealed class WindowsMachineHelperOperationExecutor
             case InstallerMachineHelperVerb.Clear:
                 await VerifyFinalStateAsync(request, release, cancellationToken)
                     .ConfigureAwait(false);
+                if (command.Verb == InstallerMachineHelperVerb.Clear && _recovery is not null)
+                {
+                    await _recovery.BeforeCandidateClearAsync(command, cancellationToken).ConfigureAwait(false);
+                }
                 break;
             default:
                 throw new InstallerProtocolException(
@@ -249,10 +299,15 @@ internal sealed class WindowsMachineHelperOperationExecutor
             .ConfigureAwait(false);
     }
 
+    internal static WindowsMachineHelperOperationExecutor CreateWithRecovery(ReadOnlyMemory<byte> embeddedManifestBytes,
+        IInstallerCertificateOwnershipStore certificateOwnershipStore, WindowsMachineHelperRecoveryAuthority authority) =>
+        CreateDefaultCore(embeddedManifestBytes, certificateOwnershipStore, new WindowsMachineHelperMachineOperations(), authority);
+
     private static WindowsMachineHelperOperationExecutor CreateDefaultCore(
         ReadOnlyMemory<byte> embeddedManifestBytes,
         IInstallerCertificateOwnershipStore certificateOwnershipStore,
-        IWindowsMachineHelperMachineOperations machineOperations)
+        IWindowsMachineHelperMachineOperations machineOperations,
+        WindowsMachineHelperRecoveryAuthority? authority = null)
     {
         ArgumentNullException.ThrowIfNull(certificateOwnershipStore);
         var certificateStore = new WindowsTargetUserCertificateStoreAdapter();
@@ -263,15 +318,35 @@ internal sealed class WindowsMachineHelperOperationExecutor
         var machineMutation = new DurableInstallerMachineCertificateMutation(persistence,
             new WindowsMachineCertificateStoreAdapter(), new WindowsMachineCertificateReferences());
         var certificateMutation = new WindowsInstallerCertificateMutations(userMutation, machineMutation, persistence);
-        return new WindowsMachineHelperOperationExecutor(
-            new WindowsInstallerReleaseVerifier(embeddedManifestBytes),
-            certificateMutation,
-            certificateMutation,
-            certificateMutation,
-            new WindowsPackageDeploymentPreflight(new WindowsInstalledPackageFootprintCatalog(), new WindowsPackageFootprintReader()),
-            new WindowsTargetUserPackageCommitInspector(
-                new WindowsPackageManagerFacade()),
-            machineOperations);
+        WindowsMaintenanceRecoveryCoordinator? recovery = null;
+        try
+        {
+            if (authority is not null)
+            {
+                var originalTrust = new WindowsMaintenanceTrustStateReader(certificateOwnershipStore, persistence,
+                    certificateStore, new WindowsMachineCertificateStoreAdapter());
+                var originalSessions = new WindowsMaintenanceOriginalSessionFactory(
+                    (WindowsMachineHelperMachineOperations)machineOperations, originalTrust, authority.Machine, authority.Application, authority.Transactions);
+                recovery = new WindowsMaintenanceRecoveryCoordinator(
+                    WindowsMaintenanceRecoveryStore.CreateDefault(authority.Machine, authority.Application, authority.Transactions),
+                    authority.Transactions, originalSessions);
+            }
+            return new WindowsMachineHelperOperationExecutor(
+                new WindowsInstallerReleaseVerifier(embeddedManifestBytes),
+                certificateMutation,
+                certificateMutation,
+                certificateMutation,
+                new WindowsPackageDeploymentPreflight(new WindowsInstalledPackageFootprintCatalog(), new WindowsPackageFootprintReader()),
+                new WindowsTargetUserPackageCommitInspector(
+                    new WindowsPackageManagerFacade()),
+                machineOperations, recovery);
+        }
+        catch
+        {
+            try { recovery?.Dispose(); }
+            finally { certificateMutation.Dispose(); }
+            throw;
+        }
     }
 
     public void Dispose()
@@ -279,7 +354,8 @@ internal sealed class WindowsMachineHelperOperationExecutor
         if (!_disposed)
         {
             _disposed = true;
-            (_certificateMutation as IDisposable)?.Dispose();
+            try { _recovery?.Dispose(); }
+            finally { (_certificateMutation as IDisposable)?.Dispose(); }
         }
     }
 

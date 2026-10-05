@@ -31,6 +31,9 @@ public enum InstallerMachineHelperVerb
 
     /// <summary>Reverifies original preservation and clears only its exact restoration terminal journal.</summary>
     ClearOriginal,
+
+    /// <summary>Records explicit candidate continuation and releases recovery pins before deployment.</summary>
+    ContinueCandidate,
 }
 
 /// <summary>
@@ -176,6 +179,8 @@ public sealed record InstallerMachineHelperInvocation(
                     or InstallerTransactionPhase.OriginalRestored) => !durableState.Journal.AllowReassociation,
             (InstallerMachineHelperVerb.ClearOriginal, InstallerOperation.Repair,
                 InstallerTransactionPhase.OriginalRestored) => !durableState.Journal.AllowReassociation,
+            (InstallerMachineHelperVerb.ContinueCandidate, InstallerOperation.Repair,
+                InstallerTransactionPhase.MachineReserved) => !durableState.Journal.AllowReassociation,
             _ => false,
         };
         if (!allowed)
@@ -233,6 +238,7 @@ public sealed record InstallerMachineHelperInvocation(
             "clear" => InstallerMachineHelperVerb.Clear,
             "restore-original" => InstallerMachineHelperVerb.RestoreOriginal,
             "clear-original" => InstallerMachineHelperVerb.ClearOriginal,
+            "continue-candidate" => InstallerMachineHelperVerb.ContinueCandidate,
             _ => (InstallerMachineHelperVerb)(-1),
         };
         return Enum.IsDefined(verb);
@@ -248,6 +254,7 @@ public sealed record InstallerMachineHelperInvocation(
         InstallerMachineHelperVerb.Clear => "clear",
         InstallerMachineHelperVerb.RestoreOriginal => "restore-original",
         InstallerMachineHelperVerb.ClearOriginal => "clear-original",
+        InstallerMachineHelperVerb.ContinueCandidate => "continue-candidate",
         _ => throw new InstallerProtocolException("installer.machine_helper.verb_invalid"),
     };
 }

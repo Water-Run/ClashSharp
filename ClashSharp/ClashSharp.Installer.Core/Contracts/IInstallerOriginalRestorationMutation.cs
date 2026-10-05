@@ -5,6 +5,10 @@ namespace ClashSharp.Installer.Contracts;
 /// <summary>Restores a pending repair's original installation through independently verified elevated authority.</summary>
 public interface IInstallerOriginalRestorationMutation
 {
+    /// <summary>Commits candidate continuation and releases original recovery pins before package deployment.</summary>
+    Task<InstallerTransactionSnapshot> ContinueCandidateAsync(InstallerRequest request, IInstallerReleaseLease release,
+        InstallerTransactionSnapshot reservedState, CancellationToken cancellationToken);
+
     /// <summary>Restores the original installation or verifies an existing original-restored terminal.</summary>
     Task<InstallerTransactionSnapshot> RestoreOriginalAsync(InstallerRequest request, IInstallerReleaseLease release,
         InstallerTransactionSnapshot durableState, CancellationToken cancellationToken);
