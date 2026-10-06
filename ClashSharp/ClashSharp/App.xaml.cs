@@ -118,6 +118,7 @@ public partial class App : Microsoft.UI.Xaml.Application
 
             if (result.Disposition == ApplicationLaunchDisposition.Fatal)
             {
+                await PrepareStartupFailurePresentationAsync();
                 ShowStartupFailure(result.StartupResult?.DiagnosticCode ?? "startup-fatal");
             }
 
@@ -142,6 +143,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                 return;
             }
 
+            await PrepareStartupFailurePresentationAsync();
             if (_mainWindow is null)
             {
                 MainWindow window = CreateMainWindow();
@@ -259,6 +261,42 @@ public partial class App : Microsoft.UI.Xaml.Application
         if (_mainWindow is MainWindow window)
         {
             window.ShowStartupFailure(diagnostic);
+        }
+    }
+
+    /// <summary>Restores failed-startup network ownership before leaving an error window open, without revoking its exit protection.</summary>
+    private async Task PrepareStartupFailurePresentationAsync()
+    {
+        if (!_startupPipelineFailed || _recoveryWatchdog is not { } watchdog)
+        {
+            return;
+        }
+
+        _startupCompletion.Abandon();
+        try
+        {
+            await watchdog.PrepareStartupFailureAsync(async () =>
+            {
+                try
+                {
+                    await _lifetimeRunner.StopAsync(CancellationToken.None);
+                }
+                catch (ApplicationHostDisposalException exception) when (
+                    StartupCompletionFailurePolicy.IsRecoverable(exception))
+                {
+                    // This host has crossed its terminal boundary; preserve its diagnostic and
+                    // continue the independent proxy cleanup without retrying disposed services.
+                    TryLogTerminalHostDisposalFailure(exception, request: null);
+                }
+            });
+        }
+        catch (Exception exception) when (
+            StartupCompletionFailurePolicy.IsRecoverable(exception))
+        {
+            // The window remains available for exit retry. The coordinator still owns its
+            // locks and lease, so a failed preparation cannot revoke emergency recovery.
+            Debug.WriteLine(StartupExceptionDiagnostics.FormatDebugMessage(exception));
+            TryLogShutdownFailure(exception, request: null);
         }
     }
 

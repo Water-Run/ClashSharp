@@ -142,6 +142,17 @@ internal sealed class RecoveryWatchdogCoordinator : IDisposable
         _lease = null;
     }
 
+    /// <summary>Quiesces failed startup and restores its proven proxy while the diagnostic window retains recovery ownership.</summary>
+    /// <param name="stopRuntime">Stops and disposes host-owned work before proxy restoration.</param>
+    /// <remarks>Neither success nor failure disarms the watchdog or releases process locks. Closing the window completes retirement.</remarks>
+    internal async Task PrepareStartupFailureAsync(Func<Task> stopRuntime)
+    {
+        ArgumentNullException.ThrowIfNull(stopRuntime);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await stopRuntime().ConfigureAwait(false);
+        _restoreOwnedProxy();
+    }
+
     /// <summary>Retires failed-startup proxy ownership before revoking emergency recovery and releasing its locks.</summary>
     /// <remarks>
     /// The caller has finished host shutdown. A failed startup may precede network cleanup
