@@ -84,6 +84,64 @@ public sealed class WindowsTcpOwnerVerifierTests
     }
 
     [Fact]
+    public void NativeVerifier_BoundSocketWithoutListen_IsNotAListener()
+    {
+        using Socket bound = new(
+            AddressFamily.InterNetwork,
+            SocketType.Stream,
+            ProtocolType.Tcp);
+        bound.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        int port = ((IPEndPoint)bound.LocalEndPoint!).Port;
+
+        Assert.False(WindowsTcpOwnerVerifier.Instance.IsLoopbackListenerOwnedBy(
+            port,
+            Environment.ProcessId));
+    }
+
+    [Fact]
+    public async Task NativeVerifier_ClosedListenerWithEstablishedConnection_IsNotAListener()
+    {
+        TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            using Socket client = new(
+                AddressFamily.InterNetwork,
+                SocketType.Stream,
+                ProtocolType.Tcp);
+            Task<Socket> acceptTask = listener.AcceptSocketAsync();
+            await client.ConnectAsync(IPAddress.Loopback, port, CancellationToken.None)
+                .AsTask()
+                .WaitAsync(TestTimeout);
+            using Socket server = await acceptTask.WaitAsync(TestTimeout);
+
+            Assert.True(await WaitForResultAsync(
+                () => WindowsTcpOwnerVerifier.Instance.IsLoopbackListenerOwnedBy(
+                    port,
+                    Environment.ProcessId)));
+
+            listener.Stop();
+
+            Assert.True(await WaitForResultAsync(
+                () => !WindowsTcpOwnerVerifier.Instance.IsLoopbackListenerOwnedBy(
+                    port,
+                    Environment.ProcessId)));
+            Assert.True(await WaitForResultAsync(
+                () => WindowsTcpOwnerVerifier.Instance.IsConnectedServerOwnedBy(
+                    client,
+                    Environment.ProcessId)));
+            Assert.False(WindowsTcpOwnerVerifier.Instance.IsConnectedServerOwnedBy(
+                client,
+                DifferentPid));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
     public void NativeVerifier_InvalidOrMissingEndpoints_FailClosed()
     {
         using Socket disconnected = new(

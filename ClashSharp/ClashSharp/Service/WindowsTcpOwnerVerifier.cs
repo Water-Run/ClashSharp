@@ -26,8 +26,8 @@ internal sealed class WindowsTcpOwnerVerifier : IWindowsTcpOwnerVerifier
     private const int MaximumTableBytes = 8 * 1024 * 1024;
     private const int MaximumTableRows = 262_144;
     private const int MaximumSnapshotAttempts = 3;
-    private const uint TcpStateListen = 2;
     private const uint TcpStateEstablished = 5;
+    private const int TcpTableOwnerPidListener = 3;
     private const int TcpTableOwnerPidAll = 5;
 
     internal static WindowsTcpOwnerVerifier Instance { get; } = new();
@@ -53,7 +53,7 @@ internal sealed class WindowsTcpOwnerVerifier : IWindowsTcpOwnerVerifier
             return false;
         }
 
-        if (!TryReadRows(out IReadOnlyList<TcpOwnerRow> rows))
+        if (!TryReadRows(TcpTableOwnerPidAll, out IReadOnlyList<TcpOwnerRow> rows))
         {
             return false;
         }
@@ -76,15 +76,18 @@ internal sealed class WindowsTcpOwnerVerifier : IWindowsTcpOwnerVerifier
             return false;
         }
 
-        if (!TryReadRows(out IReadOnlyList<TcpOwnerRow> rows))
+        if (!TryReadRows(TcpTableOwnerPidListener, out IReadOnlyList<TcpOwnerRow> rows))
         {
             return false;
         }
 
+        // The OS filters TCP_TABLE_OWNER_PID_LISTENER to listening endpoints. Use that
+        // positive classification: some Windows builds return zero in a listener's State
+        // field, even in this table. Never treat an ALL-table row with State zero as a
+        // listener; bound sockets and established connections must not grant this authority.
         return HasOneExactOwner(
             rows,
-            row => row.State == TcpStateListen
-                && AddressEquals(row.LocalAddress, IPAddress.Loopback)
+            row => AddressEquals(row.LocalAddress, IPAddress.Loopback)
                 && DecodePort(row.LocalPort) == port,
             expectedPid);
     }
@@ -121,7 +124,7 @@ internal sealed class WindowsTcpOwnerVerifier : IWindowsTcpOwnerVerifier
         return expectedAddress.Equals(new IPAddress(addressBytes));
     }
 
-    private static bool TryReadRows(out IReadOnlyList<TcpOwnerRow> rows)
+    private static bool TryReadRows(int tableClass, out IReadOnlyList<TcpOwnerRow> rows)
     {
         rows = Array.Empty<TcpOwnerRow>();
         uint requiredBytes = 0;
@@ -130,7 +133,7 @@ internal sealed class WindowsTcpOwnerVerifier : IWindowsTcpOwnerVerifier
             ref requiredBytes,
             sort: false,
             AddressFamilyInternet,
-            TcpTableOwnerPidAll,
+            tableClass,
             reserved: 0);
         if (result != ErrorInsufficientBuffer || !IsValidTableSize(requiredBytes))
         {
@@ -148,7 +151,7 @@ internal sealed class WindowsTcpOwnerVerifier : IWindowsTcpOwnerVerifier
                     ref returnedBytes,
                     sort: false,
                     AddressFamilyInternet,
-                    TcpTableOwnerPidAll,
+                    tableClass,
                     reserved: 0);
                 if (result == ErrorInsufficientBuffer)
                 {
