@@ -108,6 +108,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     /// <summary>Whether the bundled core was available during the latest status refresh.</summary>
     private bool _isCoreAvailable = true;
 
+    /// <summary>Whether the latest runtime observation or verified mode result confirmed a running core.</summary>
+    private bool _isCoreRunning;
+
     /// <summary>Latest runtime snapshot backing count and storage tiles.</summary>
     private MasterControlRuntimeSnapshot _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
 
@@ -358,7 +361,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     {
         get
         {
-            if (!_isCoreAvailable || SelectedMode == ClashSharpMode.Faulted)
+            if (!_isCoreAvailable || SelectedMode == ClashSharpMode.Faulted
+                || (SelectedMode is ClashSharpMode.Standby or ClashSharpMode.RuleTakeover or ClashSharpMode.FullTakeover
+                    && !_isCoreRunning))
             {
                 return _localization.GetString("Master.BasicStatus.Unavailable");
             }
@@ -595,6 +600,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         _downloadHistory.Clear();
         _lastHistoryAt = null;
         _isCoreAvailable = false;
+        _isCoreRunning = false;
         _mihomoVersionText = string.Empty;
         CoreStatusText = _localization.GetString("Master.Status.Unavailable");
         SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
@@ -602,6 +608,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         CurrentNodeText = _localization.GetString("Master.Status.CurrentNodeUnavailable");
         LatencySummaryText = _localization.GetString("Master.Status.LatencyUnavailable");
         OperationErrorText = string.Empty;
+        OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
     }
 
@@ -676,7 +683,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     /// </remarks>
     public async Task ApplyModeAsync(ClashSharpMode mode, CancellationToken cancellationToken)
     {
-        if (IsApplyingMode || (mode == SelectedMode && mode == _settings.CurrentMode))
+        if (IsApplyingMode
+            || (mode == ClashSharpMode.Disabled && mode == SelectedMode && mode == _settings.CurrentMode))
         {
             return;
         }
@@ -706,6 +714,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             _log.Append("Info", "MasterControl", result.Message, null);
             await _modeApplied(result.Mode);
             _isCoreAvailable = true;
+            _isCoreRunning = result.CoreRunning;
         }
         catch (Exception exception) when (
             exception is FileNotFoundException or InvalidOperationException or Win32Exception or UnauthorizedAccessException
@@ -912,6 +921,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             }
 
             _runtimeSnapshot = snapshot.IsAvailable ? snapshot : MasterControlRuntimeSnapshot.Unavailable;
+            _isCoreRunning = snapshot.IsAvailable && snapshot.RuntimeOwnershipKnown
+                && snapshot.EffectiveOwner is MihomoCoreOwner.App or MihomoCoreOwner.Service;
             TransparentProxyStatusText = snapshot.IsAvailable && snapshot.RuntimeOwnershipKnown
                 ? ResolveTransparentProxyStatus(snapshot.TunEffective, snapshot.TunRequested)
                 : _localization.GetString("Master.Status.Unavailable");
@@ -933,6 +944,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             }
 
             _runtimeSnapshot = MasterControlRuntimeSnapshot.Unavailable;
+            _isCoreRunning = false;
             TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
         }
     }

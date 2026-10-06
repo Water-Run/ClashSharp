@@ -63,6 +63,27 @@ public sealed partial class GenerationSettingsAuthorityTests
     }
 
     [Fact]
+    public async Task ProductionNetworkAction_ReappliesTheDesiredModeAfterObservedRuntimeLoss()
+    {
+        await using Fixture fixture = await Fixture.CreateAsync();
+        _ = await fixture.Authority.OpenAsync(CancellationToken.None);
+        Actions actions = CreateActions(fixture, new ActionObserver(fixture));
+        _ = await actions.ApplyNetworkModeAsync(ClashSharpMode.RuleTakeover, CancellationToken.None);
+        int priorApplies = fixture.Participants[SettingApplicationKind.Network].Applies;
+        fixture.Participants[SettingApplicationKind.Network].SetObserved(
+            SettingsRegistry.Keys.CurrentMode, Change("CurrentMode", "Disabled").Value);
+
+        NetworkTakeoverResult result = await actions.ApplyNetworkModeAsync(ClashSharpMode.RuleTakeover, CancellationToken.None);
+
+        Assert.True(result.CoreRunning);
+        Assert.Equal(ClashSharpMode.RuleTakeover, result.Mode);
+        Assert.Equal(priorApplies + 1, fixture.Participants[SettingApplicationKind.Network].Applies);
+        Assert.Equal("RuleTakeover", fixture.Participants[SettingApplicationKind.Network].GetObserved(SettingsRegistry.Keys.CurrentMode).CanonicalText);
+        Assert.Equal("RuleTakeover", fixture.Session.Snapshot.Applied[SettingsRegistry.Keys.CurrentMode].Value!.CanonicalText);
+        Assert.Empty(fixture.Session.Snapshot.PendingApplications);
+    }
+
+    [Fact]
     public async Task ProductionNetworkAction_RetainsAdmissionThroughItsFinalNativeRead()
     {
         using CancellationTokenSource cancellation = new();

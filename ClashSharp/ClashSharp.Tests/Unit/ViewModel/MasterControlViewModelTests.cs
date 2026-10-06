@@ -486,9 +486,9 @@ public sealed partial class MasterControlViewModelTests
         Assert.Equal(ClashSharpMode.Standby, notifiedMode);
     }
 
-    /// <summary>Verifies clicking the already-active mode leaves runtime services untouched.</summary>
+    /// <summary>Verifies selecting Disabled again leaves runtime services untouched.</summary>
     [Fact]
-    public async Task ApplyModeAsync_WhenModeAlreadySelected_DoesNotApplyOrNotify()
+    public async Task ApplyModeAsync_WhenDisabledAlreadySelected_DoesNotApplyOrNotify()
     {
         FakeMasterSettings settings = new() { CurrentMode = ClashSharpMode.Disabled };
         FakeMasterTakeover takeover = new();
