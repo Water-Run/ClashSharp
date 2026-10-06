@@ -34,10 +34,15 @@ internal static class WindowsProxyOwnershipRestorer
         WindowsProxyRegistrySnapshot applied = journal.Applied;
         WindowsProxyRegistrySnapshot? pending = journal.PendingApplied;
 
+        // The enabled switch selects the current manual server. A matching Boolean alone
+        // cannot prove ownership after another application installs a different server.
+        // During a partial apply, either journaled server still proves our switch ownership.
+        bool ownsManualServer = current.ProxyServer == applied.ProxyServer || current.ProxyServer == pending?.ProxyServer;
+        bool ownsEnable = ownsManualServer
+            && (current.ProxyEnable == applied.ProxyEnable || current.ProxyEnable == pending?.ProxyEnable);
+
         return new WindowsProxyRegistrySnapshot(
-            current.ProxyEnable == applied.ProxyEnable || current.ProxyEnable == pending?.ProxyEnable
-                ? baseline.ProxyEnable
-                : current.ProxyEnable,
+            ownsEnable ? baseline.ProxyEnable : current.ProxyEnable,
             current.ProxyServer == applied.ProxyServer || current.ProxyServer == pending?.ProxyServer
                 ? baseline.ProxyServer
                 : current.ProxyServer,

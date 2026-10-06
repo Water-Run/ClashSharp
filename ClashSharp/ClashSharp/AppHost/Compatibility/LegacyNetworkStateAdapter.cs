@@ -377,7 +377,8 @@ internal sealed class LegacyNetworkStateAdapter : INetworkStateAdapter, INetwork
 
     private bool ShouldReleaseProxy(NetworkIntent intent, WindowsProxyState current) =>
         intent.Kind == NetworkIntentKind.ProxyConflictRepair
-        || (_settings.CheckStaleProxyOnStartup && _proxyRecovery.IsStaleClashProxy(current, intent.MixedPort));
+        || (_settings.CheckStaleProxyOnStartup && _proxyRecovery.RequiresStartupRecovery(current, intent.MixedPort,
+            _windowsProxy.ObserveOwnership().Journal is not null));
 
     private ObservedNetworkState Observe(MihomoServiceStatus serviceStatus)
     {

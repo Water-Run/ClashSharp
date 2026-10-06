@@ -25,6 +25,13 @@ public sealed partial class ProxyRecoveryService
         return IsStaleClashProxy(state, mixedPort, hasRunningOwnedProxy: false);
     }
 
+    /// <summary>Decides whether startup must retire proven ownership even after an external proxy change.</summary>
+    internal bool RequiresStartupRecovery(WindowsProxyState state, int mixedPort, bool hasOwnershipJournal)
+    {
+        bool legacyResidue = IsStaleClashProxy(state, mixedPort);
+        return hasOwnershipJournal || legacyResidue;
+    }
+
     /// <summary>Excludes a live, owned proxy when checking residue after startup mode restoration.</summary>
     internal bool IsStaleClashProxy(WindowsProxyState state, int mixedPort, bool hasRunningOwnedProxy)
     {

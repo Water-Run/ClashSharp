@@ -60,4 +60,18 @@ public sealed class ProxyRecoveryServiceTests
 
         Assert.Equal(expectedStale, stale);
     }
+
+    [Theory]
+    [InlineData(false, "", true, true)]
+    [InlineData(true, "corporate.example:8080", true, true)]
+    [InlineData(true, "127.0.0.1:18080", true, true)]
+    [InlineData(false, "", false, false)]
+    [InlineData(true, "corporate.example:8080", false, false)]
+    [InlineData(true, "127.0.0.1:19090", false, true)]
+    public void StartupRecovery_RetiresProvenJournalAfterExternalChangesWithoutClaimingAnUnownedProxy(
+        bool enabled, string server, bool journal, bool expectedRecovery)
+    {
+        var service = CreateService();
+        Assert.Equal(expectedRecovery, service.RequiresStartupRecovery(new(enabled, server), 19090, journal));
+    }
 }

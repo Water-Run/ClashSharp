@@ -7,6 +7,66 @@ public sealed class WindowsProxyServiceTests
 {
     [Theory]
     [InlineData(false, null)]
+    [InlineData(true, "corporate.example:8080")]
+    public void StartupRecovery_WhenProxyWasReplacedExternally_RetiresJournalAndPreservesTheCompleteExternalTuple(bool enabled, string? server)
+    {
+        var baseline = Snapshot(false, null, null, null);
+        FakeWindowsProxyRegistryStore registry = new(baseline);
+        FakeWindowsProxyMutationJournalStore journal = new();
+        WindowsProxyService proxy = new(registry, journal);
+        proxy.EnableProxy("127.0.0.1:19090");
+        var external = Snapshot(enabled, server, "external-bypass", "https://external.example/proxy.pac");
+        registry.Current = external;
+        ProxyRecoveryService recovery = new();
+
+        if (recovery.RequiresStartupRecovery(proxy.GetCurrentState(), 19090, proxy.ObserveOwnership().Journal is not null))
+        {
+            proxy.DisableProxy();
+        }
+
+        Assert.Equal(external, registry.Current);
+        Assert.Null(journal.Current);
+        Assert.True(proxy.ObserveOwnership().HasReleasedOwnership);
+    }
+
+    [Fact]
+    public void EnableProxy_AfterAnEnabledExternalServerReplacement_RestoresTheNewExternalBaselineOnExit()
+    {
+        FakeWindowsProxyRegistryStore registry = new(Snapshot(false, null, null, null));
+        WindowsProxyService proxy = new(registry, new FakeWindowsProxyMutationJournalStore());
+        proxy.EnableProxy("127.0.0.1:19090");
+        var external = Snapshot(true, "corporate.example:8080", "corp-bypass", "https://external.example/proxy.pac");
+        registry.Current = external;
+
+        proxy.EnableProxy("127.0.0.1:20000");
+        proxy.DisableProxy();
+
+        Assert.Equal(external, registry.Current);
+    }
+
+    [Fact]
+    public void RestoreOwnedProxy_AfterCrashBeforeTheManualServerWrite_RestoresThePendingEnableSwitch()
+    {
+        var baseline = Snapshot(false, "corporate.example:8080", "corp-bypass", null);
+        var pending = baseline with
+        {
+            ProxyEnable = new WindowsProxyDwordValue(true, 1),
+            ProxyServer = StringValue("127.0.0.1:19090"),
+        };
+        FakeWindowsProxyRegistryStore registry = new(baseline with { ProxyEnable = pending.ProxyEnable });
+        FakeWindowsProxyMutationJournalStore journal = new();
+        journal.Write(new(WindowsProxyMutationJournal.CurrentSchemaVersion, baseline, baseline, WindowsProxyMutationPhase.Applying, pending));
+        WindowsProxyService proxy = new(registry, journal);
+
+        proxy.RestoreOwnedProxy();
+
+        Assert.Equal(baseline, registry.Current);
+        Assert.Null(journal.Current);
+    }
+
+
+    [Theory]
+    [InlineData(false, null)]
     [InlineData(false, "corporate:8080")]
     [InlineData(true, "corporate:8080")]
     public void PreviewDisabledState_PredictsOwnedReleaseWithoutChangingOwnership(bool enabled, string? server)
