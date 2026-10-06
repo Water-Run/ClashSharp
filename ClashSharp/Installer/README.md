@@ -31,6 +31,7 @@ Windows 管理的 WinUI 3 应用包，代理服务使用系统目录；这里的
     $assets = @('Country.mmdb', 'GeoIP.dat', 'GeoSite.dat', 'ASN.mmdb') |
         ForEach-Object { Join-Path $inputRoot $_ }
     ./Tools/Prepare-GeoData.ps1 -AssetPath $assets
+    ./Tools/Get-MihomoSourceMaterials.ps1
     ./ClashSharp/Installer/build.ps1 -Development
 
 开发构建会在构建用户的 My 证书存储创建开发 MSIX 签名证书，不执行安装、不信任证书，
@@ -52,6 +53,16 @@ NuGet 构建/运行输入与 SDK 下载依赖。生成器用 SDK 自带的 NuGet
 最终 MSIX 确认其内部副本的摘要和文档引用。payload-provenance.json 记录它的
 摘要、长度和输入数量。说明包中的 inventory.json 区分依赖来源并记录对应项目，
 不包含构建机的 NuGet 缓存或用户目录路径。
+
+source-materials.json 将内置 mihomo 的精确程序摘要绑定到源码提交、原始源码/vendor/工具链
+归档及编译时使用的公开 CA 输入。Get-MihomoSourceMaterials.ps1 只取得固定摘要的输入，
+公开 CA 从已核验的内置程序提取；已有缓存须匹配，构建过程只读取缓存并生成
+MIHOMO-SOURCE-MATERIALS.zip。该材料包随完整发行目录提供，payload-provenance.json
+记录它的摘要和对应内核；晋升到 release 目录前再次核验八项材料及元数据。
+
+材料内的 BUILD-OFFLINE.py 可在 Linux x86_64、Python 3.12+ 上使用随附工具链进行离线
+交叉编译，明确禁用 Go 下载，不执行生成的 Windows 程序。原始许可、vendor 与公开 CA
+字节保持；固定编译输入及已完成的离线编译证据不代表原程序逐字节复现。
 
 MSIX 内携带 .NET 10 运行时；WinUI 使用随安装器携带的独立微软
 Windows App Runtime framework MSIX。构建直接检查最终主包中的 runtimeconfig、

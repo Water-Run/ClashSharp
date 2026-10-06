@@ -14,5 +14,11 @@ source archive links, and source-related assets such as vendor.tar.gz and
 toolchain.tar.gz. Clash# redistributes the unmodified Windows amd64 mihomo core
 as a bundled runtime dependency.
 
+Clash# release materials include MIHOMO-SOURCE-MATERIALS.zip, bound to the above
+binary digest and source commit 5184081ac327394d9e15fa5d5f9f4a61e723fd94.
+It preserves the source, vendor, patched toolchain and observed public CA input,
+with an offline compilation script and original license documents. This fixed
+input archive does not claim byte-identical reproduction of the upstream binary.
+
 Trademark/naming note: Clash# is not affiliated with MetaCubeX and does not use
 "mihomo" in the application name.

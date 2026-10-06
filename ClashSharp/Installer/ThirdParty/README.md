@@ -22,6 +22,9 @@ distributed. Test-only project dependencies are not included.
 GeoData evidence currently covers the pinned generator README, license, workflow, and released
 data hashes. Its moving upstream input revisions have not been reconstructed. The inventory
 states this explicitly; the generator license does not replace individual upstream terms.
-Likewise, preserving the mihomo release URL and GPL text does not itself create a complete
-corresponding-source archive. These remaining source-distribution tasks remain part of release
-preparation.
+The build additionally emits MIHOMO-SOURCE-MATERIALS.zip from the fixed source-materials.json
+contract. It preserves the exact mihomo source commit, vendor and toolchain archives, observed
+public CA input, original GPL text and offline compilation script. The package is independently
+verified and bound to the bundled executable in payload-provenance.json. This is a pinned
+compilation-input archive; it does not claim byte-identical reproduction. GeoData input
+reconstruction and final release/platform acceptance remain part of release preparation.

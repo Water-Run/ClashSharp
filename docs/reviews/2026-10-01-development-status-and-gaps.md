@@ -126,7 +126,7 @@
 
 **G09，P0，准备正式签名候选与发行材料。** 固定输入、锁文件、签名校验、时间戳校验、离线安装包和依赖说明已存在。还需要正式的发布者与签名材料、证书生命周期决策、最终候选的完整平台验收、发行版本与发布说明。CI 的开发包以及服务器的临时签名均不完成此项。当前没有公开 Releases。
 
-[第三方输入说明](../../ClashSharp/Installer/ThirdParty/README.md)明确记录：GeoData 上游输入版本尚未完整重建，mihomo 发布链接与许可文本没有构成完整对应源代码归档。这些是现有仓库自行列出的发行材料缺口，应纳入最终候选清单。本页没有对许可作额外法律判断。
+[第三方输入说明](../../ClashSharp/Installer/ThirdParty/README.md)明确记录：GeoData 上游输入版本尚未完整重建。10 月 6 日工作区已将 mihomo 的固定源码、vendor、工具链、公开 CA 与离线编译脚本接入源码材料生成及发行资产，24 场景/46 断言和真实输入验证通过；尚需提交后的新 CI、完整重新打包和 Linux 编译复验，见[接入记录](2026-10-06-source-materials-integration.md)。这些材料不声明上游程序逐字节复现，最终发行缺口仍须核对。本页没有对许可作额外法律判断。
 
 **G10，P2，决定统计精度和 DNS 诊断的产品范围。** [ConnectionSamplingService](../../ClashSharp/ClashSharp/Service/ConnectionSamplingService.cs)按间隔持久化活动连接快照；[真实统计验收](2026-09-30-statistics-row-labels-and-rule-hits.md)观察到未跨过采样周期的短连接不增加规则命中。若希望“所有连接/规则命中”精确计数，应先核对内核提供的信息，再设计采集、去重、重启延续和存储成本；否则明确显示采样口径。六个 DNS 磁贴展示已应用配置，没有执行 DNS 可达性或泄漏探测，增加这种诊断属于新功能。
 

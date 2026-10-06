@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "1.0.0",
+  "repository": "MetaCubeX/mihomo",
+  "version": "v1.19.27",
+  "sourceCommit": "5184081ac327394d9e15fa5d5f9f4a61e723fd94",
+  "goVersion": "go1.26.4",
+  "bundledBinary": {
+    "length": 47213056,
+    "sha256": "842fa17493a82c97148e76e3c523f5058e3cf386fba611cab86b6681e75f2f77",
+    "releaseAssetId": 440046622,
+    "releaseAssetSha256": "0f67ea6452545a5bbd192def9456ab970aedcbeea27161a04b764eb680927af2",
+    "vcsModified": true
+  },
+  "files": [
+    {
+      "role": "source",
+      "file": "mihomo-source-5184081.tar.gz",
+      "archivePath": "source.tar.gz",
+      "length": 975399,
+      "sha256": "bf3a188a83475000df235178edf61cd70fda22b884b19a539d0cfd9b89a51e6a",
+      "sourceUrl": "https://codeload.github.com/MetaCubeX/mihomo/tar.gz/5184081ac327394d9e15fa5d5f9f4a61e723fd94"
+    },
+    {
+      "role": "vendor",
+      "file": "vendor.tar.gz",
+      "archivePath": "vendor.tar.gz",
+      "length": 13069902,
+      "sha256": "9e570d47209c1e7f2578d8d83004f3e8eeb393bba7b3e8bb096c3ca0a2582403",
+      "sourceUrl": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.27/vendor.tar.gz"
+    },
+    {
+      "role": "toolchain",
+      "file": "toolchain.tar.gz",
+      "archivePath": "toolchain.tar.gz",
+      "length": 67656412,
+      "sha256": "8250d606febf9d42bec63040bcdf9399f4c310c05076df870eea9829669ec19d",
+      "sourceUrl": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.27/toolchain.tar.gz"
+    },
+    {
+      "role": "public-ca",
+      "file": "embedded-ca-observation.crt",
+      "archivePath": "ca-certificates.crt",
+      "length": 219342,
+      "sha256": "6d84ab71cb726c0641b0af84303c316e3fa50db941dc8507d09045eb2fa5d238",
+      "binaryOffset": 45152288
+    }
+  ]
+}

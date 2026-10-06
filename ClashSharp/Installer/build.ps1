@@ -490,6 +490,13 @@ $thirdPartyNoticesPath = Join-Path $packagingRunRoot 'THIRD-PARTY-NOTICES.zip'
 $thirdPartyNotices = New-ClashSharpThirdPartyNotices -RepositoryRoot $repoRoot -OutputPath $thirdPartyNoticesPath
 $null = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $thirdPartyNoticesPath
 Write-Host "Third-party notices: $($thirdPartyNotices.PackageCount) NuGet inputs, $($thirdPartyNotices.DocumentCount) original documents."
+
+$sourceMaterialsModule = Assert-ClashSharpOrdinaryPath -LiteralPath (Join-Path $installerRoot 'SourceMaterials.psm1') -RequireFile
+Import-Module -Name $sourceMaterialsModule -Force
+$sourceMaterialsPath = Join-Path $packagingRunRoot 'MIHOMO-SOURCE-MATERIALS.zip'
+$sourceMaterials = New-ClashSharpMihomoSourceMaterials -RepositoryRoot $repoRoot `
+    -InputRoot (Join-Path $repoRoot 'artifacts/release-inputs/1.0.0/source-materials') -OutputPath $sourceMaterialsPath
+Write-Host "Pinned mihomo source materials: $($sourceMaterials.FileCount) files, commit $($sourceMaterials.SourceCommit)."
 Set-Location $installerRoot
 $null = New-Item -ItemType Directory -Path $componentStagingRoot
 dotnet publish $serviceProject `
@@ -719,6 +726,14 @@ $provenance = [ordered]@{
         documentCount = $thirdPartyNotices.DocumentCount
         geoDataUpstreamInputRevisionsRecorded = $thirdPartyNotices.GeoDataUpstreamInputRevisionsRecorded
     }
+    mihomoSourceMaterials = [ordered]@{
+        path = 'MIHOMO-SOURCE-MATERIALS.zip'
+        length = $sourceMaterials.Length
+        sha256 = $sourceMaterials.Sha256
+        sourceCommit = $sourceMaterials.SourceCommit
+        bundledBinarySha256 = $sourceMaterials.BinarySha256
+        scope = 'Pinned offline compilation inputs; byte-identical reproduction is not claimed.'
+    }
     releaseInputs = [ordered]@{
         sha256 = (Get-FileHash -LiteralPath $releaseInputFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
         dotnetSdkVersion = $sdkVersion.Trim()
@@ -901,6 +916,12 @@ Write-Host 'WPF Installer passed its isolated single-file build contract.'
     $promotedNotices = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $promotedNoticesPath
     if ($promotedNotices.Sha256 -cne $thirdPartyNotices.Sha256) {
         throw 'Promoted third-party notices differ from the verified MSIX input.'
+    }
+    $promotedSourcePath = Join-Path $promotionStagingRoot 'MIHOMO-SOURCE-MATERIALS.zip'
+    Copy-Item -LiteralPath $sourceMaterialsPath -Destination $promotedSourcePath
+    $promotedSource = Get-ClashSharpMihomoSourceMaterialsContract -RepositoryRoot $repoRoot -LiteralPath $promotedSourcePath
+    if ($promotedSource.Sha256 -cne $sourceMaterials.Sha256 -or $promotedSource.BinarySha256 -cne $sourceMaterials.BinarySha256) {
+        throw 'Promoted source materials differ from the verified core inputs.'
     }
     $promotionPayloadDir = Join-Path $promotionStagingRoot "payload"
     $null = Copy-ClashSharpVerifiedDirectory `

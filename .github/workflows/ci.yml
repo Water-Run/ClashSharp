@@ -53,6 +53,10 @@ jobs:
         shell: pwsh
         run: ./ClashSharp/Installer/Test-ThirdPartyNoticesContract.ps1
 
+      - name: Verify pinned source-materials contract
+        shell: pwsh
+        run: ./ClashSharp/Installer/Test-SourceMaterialsContract.ps1
+
       - name: Verify formatting
         env:
           Platform: x64
@@ -196,6 +200,7 @@ jobs:
           $assets = @('Country.mmdb', 'GeoIP.dat', 'GeoSite.dat', 'ASN.mmdb') |
             ForEach-Object { Join-Path $inputRoot $_ }
           ./Tools/Prepare-GeoData.ps1 -AssetPath $assets
+          ./Tools/Get-MihomoSourceMaterials.ps1
 
       - name: Build complete development Installer payload
         shell: pwsh
