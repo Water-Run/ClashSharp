@@ -1,5 +1,105 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'SandboxInputContract.psm1') -Scope Local
+
+function Read-SandboxStartupMetadata {
+    <#
+    .SYNOPSIS
+        Reads bounded generation metadata after rejecting observed reparse points.
+    .DESCRIPTION
+        Checks every existing ancestor, bounds strict UTF-8 bytes, and returns the text and digest.
+        The shared read handle permits the application's atomic manifest replacement.
+    .PARAMETER LiteralPath
+        Exact generation manifest or immutable identity marker path.
+    #>
+    param([Parameter(Mandatory)][string]$LiteralPath)
+    $ancestor = [IO.Path]::GetFullPath($LiteralPath)
+    while ($ancestor) {
+        $item = Get-Item -LiteralPath $ancestor -Force -ErrorAction Stop
+        if ($item.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) { throw 'sandbox.startup.reparse_path' }
+        $ancestor = [IO.Path]::GetDirectoryName($ancestor)
+    }
+    $share = [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
+    $stream = [IO.File]::Open($LiteralPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, $share)
+    try {
+        if ($stream.Length -lt 2 -or $stream.Length -gt 4096) { throw 'sandbox.startup.metadata_length' }
+        $bytes = [byte[]]::new([int]$stream.Length)
+        $offset = 0
+        while ($offset -lt $bytes.Length) {
+            $count = $stream.Read($bytes, $offset, $bytes.Length - $offset)
+            if ($count -eq 0) { throw 'sandbox.startup.metadata_truncated' }
+            $offset += $count
+        }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $digest = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+        return [pscustomobject]@{ Text = [Text.UTF8Encoding]::new($false, $true).GetString($bytes); Hash = $digest }
+    } finally { $stream.Dispose() }
+}
+
+function Resolve-SandboxStartupGeneration {
+    <#
+    .SYNOPSIS
+        Resolves the startup log only through the application's verified current generation.
+    .DESCRIPTION
+        Checks the manifest shape, digest, canonical descriptor and matching immutable marker.
+        Never scans directories or falls back to a legacy log that could contain stale evidence.
+    .PARAMETER LocalStatePath
+        Existing LocalState directory of the exact candidate in the owned guest.
+    #>
+    param([Parameter(Mandatory)][string]$LocalStatePath)
+    if (-not [IO.Path]::IsPathRooted($LocalStatePath)) { throw 'sandbox.startup.local_state_path' }
+    $dataRoot = Join-Path ([IO.Path]::GetFullPath($LocalStatePath)) 'Data\v1'
+    $manifestPath = Join-Path $dataRoot 'current-generation.json'
+    $metadata = Read-SandboxStartupMetadata $manifestPath
+    $envelope = $metadata.Text | ConvertFrom-Json
+    Assert-SandboxObject $envelope @('schemaVersion', 'payload', 'contentHash')
+    if ($envelope.schemaVersion -isnot [int] -and $envelope.schemaVersion -isnot [long]) { throw 'sandbox.startup.manifest_schema' }
+    if ($envelope.schemaVersion -ne 1 -or $envelope.payload -isnot [string] -or
+        $envelope.contentHash -isnot [string] -or $envelope.contentHash -cnotmatch '^[0-9a-f]{64}$') {
+        throw 'sandbox.startup.manifest_shape'
+    }
+    $payloadBytes = [Convert]::FromBase64String($envelope.payload)
+    if ([Convert]::ToBase64String($payloadBytes) -cne $envelope.payload) { throw 'sandbox.startup.manifest_base64' }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $payloadHash = ([BitConverter]::ToString($sha.ComputeHash($payloadBytes))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    if ($payloadHash -cne $envelope.contentHash) { throw 'sandbox.startup.manifest_hash' }
+    $canonicalEnvelope = '{"schemaVersion":1,"payload":"' + $envelope.payload + '","contentHash":"' + $payloadHash + '"}'
+    # System.Text.Json escapes '+' in strings; PowerShell's fixture serializer does not.
+    if ($metadata.Text -cne $canonicalEnvelope -and $metadata.Text -cne $canonicalEnvelope.Replace('+', '\u002B')) {
+        throw 'sandbox.startup.manifest_encoding'
+    }
+    $payloadText = [Text.UTF8Encoding]::new($false, $true).GetString($payloadBytes)
+    $descriptor = $payloadText | ConvertFrom-Json
+    Assert-SandboxObject $descriptor @('schemaVersion', 'manifestRevision', 'generationId',
+        'generationNumber', 'highestGenerationNumber', 'rootRelativePath')
+    foreach ($name in @('schemaVersion', 'manifestRevision', 'generationNumber', 'highestGenerationNumber')) {
+        if (($descriptor.$name -isnot [int] -and $descriptor.$name -isnot [long]) -or $descriptor.$name -lt 1) {
+            throw 'sandbox.startup.generation_number'
+        }
+    }
+    $generationId = [Guid]::Empty
+    if ($descriptor.schemaVersion -ne 1 -or $descriptor.generationId -isnot [string] -or
+        -not [Guid]::TryParseExact($descriptor.generationId, 'D', [ref]$generationId) -or
+        $generationId -eq [Guid]::Empty -or $generationId.ToString('D') -cne $descriptor.generationId -or
+        $descriptor.highestGenerationNumber -lt $descriptor.generationNumber -or $descriptor.rootRelativePath -isnot [string] -or
+        $descriptor.rootRelativePath -cne ('generations/' + $generationId.ToString('N'))) {
+        throw 'sandbox.startup.generation_descriptor'
+    }
+    $canonicalDescriptor = [ordered]@{ schemaVersion = 1; manifestRevision = $descriptor.manifestRevision
+        generationId = $generationId.ToString('D'); generationNumber = $descriptor.generationNumber
+        highestGenerationNumber = $descriptor.highestGenerationNumber; rootRelativePath = $descriptor.rootRelativePath }
+    if (($canonicalDescriptor | ConvertTo-Json -Compress) -cne $payloadText) { throw 'sandbox.startup.generation_encoding' }
+    $generationRoot = Join-Path $dataRoot $descriptor.rootRelativePath
+    $marker = Read-SandboxStartupMetadata (Join-Path $generationRoot '.generation-identity.json')
+    $canonicalMarker = [ordered]@{ schemaVersion = 1; generationId = $generationId.ToString('D'); generationNumber = $descriptor.generationNumber }
+    if (($canonicalMarker | ConvertTo-Json -Compress) -cne $marker.Text) { throw 'sandbox.startup.generation_identity' }
+    $logPath = Join-Path $generationRoot 'ClashSharpLogs.sqlite3'
+    $log = Get-Item -LiteralPath $logPath -Force -ErrorAction Stop
+    if ($log.PSIsContainer -or $log.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) { throw 'sandbox.startup.log_path' }
+    return [pscustomobject]@{ LogPath = $logPath; ManifestHash = $metadata.Hash; MarkerHash = $marker.Hash }
+}
 
 function Assert-SandboxStartupEvidence {
     <#
@@ -33,16 +133,26 @@ function Get-SandboxStartupEvidence {
         Reads only aggregate startup evidence from the newly launched candidate's SQLite log.
     .DESCRIPTION
         Opens the existing database read-only with the Windows system SQLite library. Never reads
-        credential values or returns log text. Native resources are closed on every result.
+        credential values or returns log text. With LocalStatePath, validates the active generation
+        before and after querying it. Native resources are closed on every result.
         See https://learn.microsoft.com/dotnet/standard/data/sqlite/custom-versions and
         https://sqlite.org/c3ref/open.html for the system provider and read-only open contract.
     .PARAMETER LiteralPath
-        Exact existing log database in the owned guest's candidate LocalState directory.
+        Exact existing database for isolated reader fixtures.
+    .PARAMETER LocalStatePath
+        Exact candidate LocalState directory whose current generation owns the startup log.
     .PARAMETER StartedAtUnixTime
         UTC seconds captured immediately before starting this candidate process.
     #>
-    param([Parameter(Mandatory)][string]$LiteralPath,
+    [CmdletBinding(DefaultParameterSetName = 'Database')]
+    param([Parameter(Mandatory, ParameterSetName = 'Database')][string]$LiteralPath,
+        [Parameter(Mandatory, ParameterSetName = 'Generation')][string]$LocalStatePath,
         [Parameter(Mandatory)][ValidateRange(1, [long]::MaxValue)][long]$StartedAtUnixTime)
+    $generation = $null
+    if ($PSCmdlet.ParameterSetName -ceq 'Generation') {
+        $generation = Resolve-SandboxStartupGeneration $LocalStatePath
+        $LiteralPath = $generation.LogPath
+    }
     if (-not [IO.Path]::IsPathRooted($LiteralPath) -or -not (Test-Path -LiteralPath $LiteralPath -PathType Leaf)) {
         throw 'sandbox.startup.database_missing'
     }
@@ -107,6 +217,11 @@ public static class ClashSharpSandboxStartupReader {
 '@
     }
     $counts = [ClashSharpSandboxStartupReader]::Read($LiteralPath, $StartedAtUnixTime)
+    if ($null -ne $generation) {
+        $current = Resolve-SandboxStartupGeneration $LocalStatePath
+        if ($current.ManifestHash -cne $generation.ManifestHash -or $current.MarkerHash -cne $generation.MarkerHash -or
+            $current.LogPath -cne $generation.LogPath) { throw 'sandbox.startup.generation_changed' }
+    }
     $evidence = [pscustomobject]@{ credentialCompletions = $counts[0]; windowCompletions = $counts[1]
         pipelineCompletions = $counts[2]; failures = $counts[3]; startedAtUnixTime = $StartedAtUnixTime }
     Assert-SandboxStartupEvidence $evidence

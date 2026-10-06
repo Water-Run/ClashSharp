@@ -54,6 +54,18 @@ WinINet proxy values after cleanup.
 as passing. In particular, direct MSIX removal does not validate the WPF
 installer's complete uninstall, application data deletion, or recovery journal.
 
+The current production candidate requires the Installer-owned service association before its
+first data generation can initialize. The package-only `launch-no-proxy` setup does not create
+that association and currently fails with `service.provisioning.association_missing`. Full
+Installer provisioning in the Windows 11 fixture remains required; window presence alone does
+not satisfy startup acceptance. Failed runs retain their failure status and cleanup evidence.
+
+Startup evidence now resolves the log through `Data/v1/current-generation.json`, verifies its
+payload hash and matching immutable generation marker, and rechecks the pointer after the
+read-only query. It rejects stale legacy logs, invalid descriptors and redirected paths.
+On launch failure, `startup-diagnostic.json` records only structural presence, stable step/code
+tokens and exception type names. Raw log lines, exception messages and credentials are omitted.
+
 ## Isolation and reports
 
 - Each run gets a new run ID and explicitly reserved Sandbox ID. An exclusive

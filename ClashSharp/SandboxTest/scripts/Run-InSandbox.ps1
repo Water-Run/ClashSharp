@@ -62,6 +62,51 @@ function Invoke-SandboxStep {
     try { $null = & $Action }
     catch {
         $errorCode = '{0}:{1}:0x{2:X8}' -f $Name, $_.Exception.GetType().Name, $_.Exception.HResult
+        if ($Name -ceq 'launch-package') {
+            # Preserve bounded structural evidence before cleanup destroys this owned guest.
+            # Raw exceptions, paths, log text and credential values never enter this receipt.
+            try {
+                $diagnosticRoots = [ordered]@{
+                    package = (Join-Path $env:LOCALAPPDATA ('Packages\' + $candidate.familyName + '\LocalState'))
+                    unpackagedFallback = (Join-Path $env:LOCALAPPDATA 'ClashSharp')
+                }
+                $layout = @(foreach ($entry in $diagnosticRoots.GetEnumerator()) {
+                    $fallbackPath = Join-Path $entry.Value 'StartupDiagnostics.log'
+                    $fallbackSteps = @()
+                    if (Test-Path -LiteralPath $fallbackPath -PathType Leaf) {
+                        $fallbackFile = Get-Item -LiteralPath $fallbackPath -Force
+                        if ($fallbackFile.Length -le 131072 -and -not $fallbackFile.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+                            $fallbackSteps = @(foreach ($line in [IO.File]::ReadAllLines($fallbackPath)) {
+                                $fields = $line.Split([char]9)
+                                if ($fields.Length -ge 5 -and $fields[2] -ceq 'StartupPipeline' -and
+                                    $fields[3] -cmatch "^Startup step '([a-z0-9-]{1,80})' (started|completed|failed)\.$") {
+                                    $stepName = $Matches[1]
+                                    $stepState = $Matches[2]
+                                    $code = $null
+                                    if ($fields[4] -cmatch '(?:^|; )code=([a-z][a-z0-9._-]{0,159})(?:;|$)') { $code = $Matches[1] }
+                                    $exceptionType = $null
+                                    if ($fields[4] -cmatch '(?:^|; )exceptionType=([A-Za-z][A-Za-z0-9_.+]{0,159})(?:;|$)') { $exceptionType = $Matches[1] }
+                                    [ordered]@{ step = $stepName; state = $stepState; diagnostic = $code
+                                        exceptionType = $exceptionType
+                                        transitionOutcomes = @([regex]::Matches($fields[4], "outcome '([A-Za-z]{1,32})'") | ForEach-Object { $_.Groups[1].Value })
+                                        transitionCodes = @([regex]::Matches($fields[4], "code '((?:service|installer|network|mutation|settings|runtime|controller|data-generation)\.[a-z0-9._-]{1,120})'") | ForEach-Object { $_.Groups[1].Value }) }
+                                }
+                            })
+                        }
+                    }
+                    [ordered]@{ root = $entry.Key; exists = (Test-Path -LiteralPath $entry.Value -PathType Container)
+                        currentGenerationPresent = (Test-Path -LiteralPath (Join-Path $entry.Value 'Data\v1\current-generation.json') -PathType Leaf)
+                        legacyLogPresent = (Test-Path -LiteralPath (Join-Path $entry.Value 'ClashSharpLogs.sqlite3') -PathType Leaf)
+                        fallbackLogPresent = (Test-Path -LiteralPath $fallbackPath -PathType Leaf); fallbackSteps = $fallbackSteps }
+                })
+                $launched.Refresh()
+                $diagnostic = [ordered]@{ runId = $plan.runId; errorType = $_.Exception.GetType().Name
+                    sourceFile = [IO.Path]::GetFileName($_.InvocationInfo.ScriptName); sourceLine = $_.InvocationInfo.ScriptLineNumber
+                    processAlive = (-not $launched.HasExited); windowPresent = ($launched.MainWindowHandle -ne [IntPtr]::Zero); roots = $layout }
+                [IO.File]::WriteAllText('C:\ClashSharpTestResults\startup-diagnostic.json',
+                    ($diagnostic | ConvertTo-Json -Depth 7), [Text.UTF8Encoding]::new($false))
+            } catch { }
+        }
         $deploymentCodes = @([regex]::Matches($_.Exception.Message, '(?i)\b0x[0-9a-f]{8}\b') |
             ForEach-Object { $_.Value.ToUpperInvariant() } | Sort-Object -Unique | Select-Object -First 4)
         if ($deploymentCodes.Count -gt 0) { $errorCode += ':' + ($deploymentCodes -join ':') }
@@ -241,8 +286,8 @@ public static class SandboxProcessIdentity {
                 }
             }
             Import-Module 'C:\ClashSharpTestInput\SandboxStartupEvidence.psm1' -Force -ErrorAction Stop
-            $logPath = Join-Path $env:LOCALAPPDATA ('Packages\' + $candidate.familyName + '\LocalState\ClashSharpLogs.sqlite3')
-            $startup = Get-SandboxStartupEvidence -LiteralPath $logPath -StartedAtUnixTime $launchStartedAt
+            $localStatePath = Join-Path $env:LOCALAPPDATA ('Packages\' + $candidate.familyName + '\LocalState')
+            $startup = Get-SandboxStartupEvidence -LocalStatePath $localStatePath -StartedAtUnixTime $launchStartedAt
             $launched.Refresh()
             if ($launched.HasExited -or $launched.MainWindowHandle -eq [IntPtr]::Zero) {
                 throw 'sandbox.window.unstable'
