@@ -20,17 +20,20 @@ internal sealed class RecoveryWatchdogCoordinator : IDisposable
     private readonly FileStream _installerMutationLock;
     private readonly FileStream _recoveryLock;
     private readonly RecoveryWatchdogLeaseFileStore _leaseStore;
+    private readonly Action _restoreOwnedProxy;
     private RecoveryWatchdogLease? _lease;
     private bool _disposed;
 
-    private RecoveryWatchdogCoordinator(
+    internal RecoveryWatchdogCoordinator(
         FileStream installerMutationLock,
         FileStream recoveryLock,
-        RecoveryWatchdogLeaseFileStore leaseStore)
+        RecoveryWatchdogLeaseFileStore leaseStore,
+        Action restoreOwnedProxy)
     {
-        _installerMutationLock = installerMutationLock;
-        _recoveryLock = recoveryLock;
-        _leaseStore = leaseStore;
+        _installerMutationLock = installerMutationLock ?? throw new ArgumentNullException(nameof(installerMutationLock));
+        _recoveryLock = recoveryLock ?? throw new ArgumentNullException(nameof(recoveryLock));
+        _leaseStore = leaseStore ?? throw new ArgumentNullException(nameof(leaseStore));
+        _restoreOwnedProxy = restoreOwnedProxy ?? throw new ArgumentNullException(nameof(restoreOwnedProxy));
     }
 
     /// <summary>Returns no coordinator immediately when Installer ownership is unavailable.</summary>
@@ -71,7 +74,8 @@ internal sealed class RecoveryWatchdogCoordinator : IDisposable
             installerMutationLock,
             recoveryLock,
             new RecoveryWatchdogLeaseFileStore(
-                Path.Combine(localData, RecoveryWatchdogPaths.LeaseFileName)));
+                Path.Combine(localData, RecoveryWatchdogPaths.LeaseFileName)),
+            () => WindowsProxyService.Instance.RestoreOwnedProxy());
     }
 
     /// <summary>Arms and launches the non-elevated one-shot helper for this exact process creation.</summary>
@@ -136,6 +140,24 @@ internal sealed class RecoveryWatchdogCoordinator : IDisposable
 
         _leaseStore.ClearIfMatches(lease);
         _lease = null;
+    }
+
+    /// <summary>Retires failed-startup proxy ownership before revoking emergency recovery and releasing its locks.</summary>
+    /// <remarks>
+    /// The caller has finished host shutdown. A failed startup may precede network cleanup
+    /// registration, so only the independent durable proxy journal can prove restoration.
+    /// Failure preserves locks and the lease for bounded retry or the emergency helper.
+    /// Successful ordinary startup retains its configured shutdown policy.
+    /// </remarks>
+    internal void CompleteNormalExit(bool startupFailed)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (startupFailed)
+        {
+            _restoreOwnedProxy();
+        }
+        Disarm();
+        Dispose();
     }
 
     public void Dispose()

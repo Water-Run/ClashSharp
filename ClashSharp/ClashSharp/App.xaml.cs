@@ -60,6 +60,8 @@ public partial class App : Microsoft.UI.Xaml.Application
     private bool _activationPending;
     private bool _primaryOwnershipConfirmed;
     private bool _startupShellSuppressed;
+    private bool _startupPipelineCompleted;
+    private bool _startupPipelineFailed;
     private InstallerTransactionState _installerTransactionState =
         InstallerTransactionState.Invalid;
 
@@ -99,6 +101,8 @@ public partial class App : Microsoft.UI.Xaml.Application
             ApplicationLaunchResult result = await bootstrapper.LaunchAsync(
                 launchRequest,
                 CancellationToken.None);
+            _startupPipelineFailed = result.Disposition == ApplicationLaunchDisposition.Fatal;
+            _startupPipelineCompleted = result.Disposition == ApplicationLaunchDisposition.Running;
             if (result.Disposition is ApplicationLaunchDisposition.Redirected
                 or ApplicationLaunchDisposition.ExitRequested)
             {
@@ -122,6 +126,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         catch (Exception exception) when (
             StartupCompletionFailurePolicy.IsRecoverable(exception))
         {
+            _startupPipelineFailed |= !_startupPipelineCompleted;
             Debug.WriteLine(StartupExceptionDiagnostics.FormatDebugMessage(exception));
             _startupDiagnostics.RecordUnhandled(exception);
             DispatcherQueue? dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -805,8 +810,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             return;
         }
 
-        watchdog.Disarm();
-        watchdog.Dispose();
+        watchdog.CompleteNormalExit(_startupPipelineFailed);
         _recoveryWatchdog = null;
     }
 
