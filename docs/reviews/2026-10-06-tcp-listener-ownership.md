@@ -26,4 +26,6 @@
 
 本机完整主程序集 3,964 项通过、0 失败、0 跳过，没有排除原生监听测试。18 项目 Release/x64 构建零警告、零错误，完整 `dotnet format --verify-no-changes --no-restore` 检查通过。修正前的失败 TRX 与修正后的完整结果分别保留，避免把单项重复计入全量通过数。
 
-原始表对照、失败与通过 TRX、两台机器的探针收据和格式日志位于被 Git 忽略的 `artifacts/verification/tcp-compatibility-20261006/`。该记录区分源码探针验证与安装包验收：服务器上已安装的旧候选尚未包含本次修正，后续需构建并验证准确新候选。
+提交 `908947b1f26e2b850a9030638983f91e95057b72` 的[两项 CI](https://github.com/Water-Run/ClashSharp/actions/runs/37398154086)均成功。下载四份原始 TRX，主程序 3,964、Installer Core 1,093、展示层 182、Windows 适配层 1,297，共 6,536 项通过，0 失败、0 跳过。汇总及逐文件摘要位于 `artifacts/verification/tcp-runtime-20261006/ci-summary.json`。
+
+原始表对照、失败与通过 TRX、两台机器的探针收据和格式日志位于被 Git 忽略的 `artifacts/verification/tcp-compatibility-20261006/`。该记录区分源码探针验证与安装包验收：服务器上已安装的旧候选尚未包含本次修正，新候选正在由准确提交归档构建，后续需验证安装与实际运行。
