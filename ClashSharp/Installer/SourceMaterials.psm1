@@ -3,11 +3,29 @@ Set-StrictMode -Version Latest
 Import-Module -Name (Join-Path $PSScriptRoot 'PackagingContract.psm1')
 
 function Get-ClashSharpSourceHash {
+    <#
+    .SYNOPSIS
+        Computes the canonical digest of a source-materials document.
+    .DESCRIPTION
+        Returns lowercase SHA-256 without changing the supplied original bytes.
+    .PARAMETER Bytes
+        Complete document bytes to hash.
+    #>
     param([byte[]] $Bytes)
     return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($Bytes)).ToLowerInvariant()
 }
 
 function Read-ClashSharpSourceDocument {
+    <#
+    .SYNOPSIS
+        Reads one bounded ordinary source-materials document.
+    .DESCRIPTION
+        Rejects unsafe paths, empty documents and oversized input while holding a read lock.
+    .PARAMETER LiteralPath
+        Exact ordinary document path.
+    .PARAMETER MaximumLength
+        Maximum accepted byte count.
+    #>
     param([string] $LiteralPath, [int] $MaximumLength = 65536)
     $path = Assert-ClashSharpOrdinaryPath -LiteralPath $LiteralPath -RequireFile
     $stream = [IO.File]::Open($path, 'Open', 'Read', 'Read')
@@ -20,6 +38,16 @@ function Read-ClashSharpSourceDocument {
 }
 
 function Get-ClashSharpSourceStreamHash {
+    <#
+    .SYNOPSIS
+        Hashes one source stream under its exact byte budget.
+    .DESCRIPTION
+        Streams the complete input and rejects truncation or extra bytes without buffering it.
+    .PARAMETER Stream
+        Caller-owned readable stream at its initial position.
+    .PARAMETER ExpectedLength
+        Exact number of bytes authorized by the maintained pin.
+    #>
     param([IO.Stream] $Stream, [long] $ExpectedLength)
     $hash = [Security.Cryptography.IncrementalHash]::CreateHash([Security.Cryptography.HashAlgorithmName]::SHA256)
     try {
@@ -87,6 +115,14 @@ function Get-ClashSharpMihomoSourceManifest {
 }
 
 function Get-ClashSharpSourceTemplates {
+    <#
+    .SYNOPSIS
+        Reads the maintained support files for a source-materials archive.
+    .DESCRIPTION
+        Returns exact script, README and license bytes from validated ordinary repository files.
+    .PARAMETER RepositoryRoot
+        Repository owning the support-file contract.
+    #>
     param([string] $RepositoryRoot)
     $root = Join-Path $RepositoryRoot 'ClashSharp/Installer'
     return [ordered]@{
