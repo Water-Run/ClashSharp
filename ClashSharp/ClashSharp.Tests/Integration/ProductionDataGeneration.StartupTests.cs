@@ -150,12 +150,13 @@ public sealed partial class ProductionDataGenerationTests
         Assert.False(current.Sampling.IsRunning);
     }
 
-    private static void ConfigureRealRuntime(Fixture fixture, StartupPlatform platform, AppearanceSurface appearance, NetworkSurface network)
+    private static void ConfigureRealRuntime(Fixture fixture, StartupPlatform platform, IAppearanceNativeSettings appearance,
+        NetworkSurface network, Func<OwnedUiDispatcher>? createDispatcher = null)
     {
         _ = ConfigureSelections(fixture);
         StartupService startup = new(platform, platform, key => key);
         Composer composer = new(fixture.Admission, fixture.Manager, fixture.Authority,
-            () => new OwnedUiDispatcher(() => true, action => { action(); return true; }, CancellationToken.None),
+            createDispatcher ?? (() => new OwnedUiDispatcher(() => true, action => { action(); return true; }, CancellationToken.None)),
             appearance, startup, UnusedNative<Connections>(), UnusedNative<Traffic>(), CreateUnusedTakeover(),
             UnusedNative<Proxy>(), UnusedNative<ServiceManager>(), UnusedNative<Notifications>(), new EventHub(),
             new ApplicationLifetimeRequestChannel(), () => false, TimeProvider.System, Guid.NewGuid(), key => key,

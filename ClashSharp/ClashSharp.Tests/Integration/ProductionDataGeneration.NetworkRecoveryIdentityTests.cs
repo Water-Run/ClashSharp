@@ -66,6 +66,42 @@ public sealed partial class ProductionDataGenerationTests
     }
 
     [Fact]
+    public async Task LoginRecovery_OpensTheExistingGenerationWithNoWindowAndPreservesSettingsAndProducerState()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        DataGenerationManifestSnapshot original;
+        byte[] savedSettings;
+        await using (Fixture initial = new(directory))
+        {
+            initial.LegacyValues[SettingsRegistry.Keys.MixedPort.Value] = 23456;
+            initial.LegacyValues[SettingsRegistry.Keys.CurrentMode.Value] = (int)ClashSharpMode.RuleTakeover;
+            original = await initial.StartAsync();
+            savedSettings = File.ReadAllBytes(Path.Combine(original.Descriptor.RootPath, "Settings", "v1", "settings-envelope.json"));
+        }
+        await using Fixture fixture = new(directory);
+        var presentation = UiData.GenerationRuntimePresentation.Select(true,
+            () => throw new InvalidOperationException("The generation startup window is unavailable."), () => false);
+        ConfigureRealRuntime(fixture, new StartupPlatform(), presentation.Appearance,
+            new NetworkSurface { BeforeApply = (_, _) => throw new InvalidOperationException("Recovery must not activate network.") },
+            presentation.CreateDispatcher);
+        UiService.AppSettingsService settings = new(new Dictionary<string, object> { ["MixedPort"] = 34567 });
+        var data = fixture.CreateDataOpenStep(new RuntimeLifetimeRegistry(), new UiData.GenerationSamplingRuntime(fixture.Manager), settings);
+        var step = new UiStartup.GenerationRecoveryDataStartupStep(directory.Store, data);
+
+        var result = await step.ExecuteAsync(new AppLaunchRequest(UiService.StartupRestoreFallbackService.HelperArgument), CancellationToken.None);
+
+        Assert.Equal(StartupStepOutcome.Succeeded, result.Outcome);
+        Assert.Equal(original.ContentHash, (await directory.Store.LoadCurrentAsync(CancellationToken.None))!.ContentHash);
+        Assert.Equal(original.Descriptor.GenerationId, settings.GetBoundDataGenerationId());
+        Assert.Equal(23456, settings.MixedPort);
+        Assert.Equal(ClashSharpMode.RuleTakeover, settings.CurrentMode);
+        Assert.Equal(savedSettings, File.ReadAllBytes(Path.Combine(original.Descriptor.RootPath, "Settings", "v1", "settings-envelope.json")));
+        Assert.False(RuntimeOf(fixture).IsExecutionPublished);
+        Assert.False(RuntimeOf(fixture).Sampling.IsRunning);
+        Assert.False(RuntimeOf(fixture).TriggerSettings.Scheduler.IsRunning);
+    }
+
+    [Fact]
     public async Task NetworkDataIdentity_MissingPointerWithReplacementRecoveryCannotEnterTheLegacyHelper()
     {
         await using DataGenerationTestDirectory directory = new();

@@ -33,7 +33,7 @@ internal static class ClashSharpAppHostFactory
     public static AppHost Build(
         AppLaunchRequest launchRequest,
         Action<MainWindowStartupContext> completeWindow,
-        IApplicationLifetimeRequestSink lifetimeRequests,
+        ApplicationLifetimeRequestChannel lifetimeRequests,
         IStartupDiagnosticSink startupDiagnostics,
         InstallerTransactionState installerTransactionState,
         AppGenerationUi? generationUi = null)
@@ -51,7 +51,7 @@ internal static class ClashSharpAppHostFactory
         return AppHost.Build(services =>
         {
             services.AddSingleton(completeWindow);
-            services.AddSingleton(lifetimeRequests);
+            services.AddSingleton<IApplicationLifetimeRequestSink>(lifetimeRequests);
             services.AddSingleton(startupDiagnostics);
             services.AddSingleton(TimeProvider.System);
             services.AddSingleton(_ =>
@@ -171,16 +171,20 @@ internal static class ClashSharpAppHostFactory
                 provider.GetRequiredService<DataGenerationManager>(), mutationAdmission, dataRoot.Value));
             services.AddSingleton<IDataGenerationBootstrapFactory>(provider =>
             {
-                AppGenerationUi ui = generationUi ?? throw new InvalidOperationException("The generation startup window is unavailable.");
+                var localization = provider.GetRequiredService<LocalizationService>();
+                GenerationRuntimePresentation presentation = GenerationRuntimePresentation.Select(isStartupRestoreFallback, () =>
+                {
+                    AppGenerationUi ui = generationUi ?? throw new InvalidOperationException("The generation startup window is unavailable.");
+                    return new(ui.CreateDispatcher, ui.CreateAppearance(localization), ui.ExitRequested);
+                }, () => lifetimeRequests.HasAcceptedRequest);
                 var authority = provider.GetRequiredService<GenerationSettingsAuthority>();
                 var takeover = provider.GetRequiredService<NetworkTakeoverService>();
-                var localization = provider.GetRequiredService<LocalizationService>();
-                AppDataGenerationRuntimeComposer runtime = new(mutationAdmission, provider.GetRequiredService<DataGenerationManager>(), authority, ui.CreateDispatcher,
-                    ui.CreateAppearance(localization), provider.GetRequiredService<StartupLaunchService>(),
+                AppDataGenerationRuntimeComposer runtime = new(mutationAdmission, provider.GetRequiredService<DataGenerationManager>(), authority, presentation.CreateDispatcher,
+                    presentation.Appearance, provider.GetRequiredService<StartupLaunchService>(),
                     provider.GetRequiredService<MihomoConnectionService>(), provider.GetRequiredService<RuntimeTrafficRateService>(),
                     takeover, provider.GetRequiredService<WindowsProxyService>(), provider.GetRequiredService<MihomoServiceManager>(),
                     provider.GetRequiredService<NotificationService>(), provider.GetRequiredService<ITriggerRuntimeEventSource>(),
-                    lifetimeRequests, ui.ExitRequested, provider.GetRequiredService<TimeProvider>(), triggerProcessEpoch, localization.GetString);
+                    lifetimeRequests, presentation.ExitRequested, provider.GetRequiredService<TimeProvider>(), triggerProcessEpoch, localization.GetString);
                 return new AppDataGenerationFactory(dataRoot.Value, mutationAdmission, new WindowsLegacySettingsSource(SettingsRegistry.Default),
                     async (lease, token) =>
                     {
