@@ -9,6 +9,9 @@ public sealed class AsyncDelegateCommand : ICommand
     private readonly Func<Task> _execute;
     private readonly Func<bool>? _canExecute;
     private readonly Action _onUnhandledFailure;
+    // The UI owns the pending task even when its native completion source does not root the
+    // managed await chain. A caller may discard ExecuteAsync's task (as ICommand hosts do).
+    private Task? _activeExecution;
     private int _executing;
 
     /// <summary>Initializes a single-flight asynchronous command.</summary>
@@ -46,7 +49,9 @@ public sealed class AsyncDelegateCommand : ICommand
         NotifyCanExecuteChanged();
         try
         {
-            await _execute();
+            Task execution = _execute();
+            Volatile.Write(ref _activeExecution, execution);
+            await execution;
         }
         catch (Exception exception)
             when (InstallerPresentationExceptionPolicy.IsRecoverable(exception))
@@ -56,6 +61,7 @@ public sealed class AsyncDelegateCommand : ICommand
         }
         finally
         {
+            Volatile.Write(ref _activeExecution, null);
             Interlocked.Exchange(ref _executing, 0);
             NotifyCanExecuteChanged();
         }
