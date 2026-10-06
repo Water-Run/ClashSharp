@@ -52,6 +52,7 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
         bool checkpointAttempted = false;
         bool checkpointReady = false;
         string? quiescingProducer = null;
+        Exception? candidateCleanupFailure = null;
         try
         {
             lease = await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken).ConfigureAwait(false);
@@ -202,6 +203,19 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
                         }
                     }
                 }
+                if (transition is { IsAborted: true, StagedDescriptor: not null })
+                {
+                    try
+                    {
+                        await preparer.DiscardAbortedCandidateAdmittedAsync(transition, journal, lease, CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception cleanupFailure) when (!ExceptionGraphClassifier.IsProcessFatal(cleanupFailure))
+                    {
+                        // Native compensation and resource retirement are complete. A file
+                        // held by another process must not reopen an already resolved decision.
+                        candidateCleanupFailure = cleanupFailure;
+                    }
+                }
                 if (paused.Count > 0 || publicationWasOpen)
                 {
                     await generations.ExecuteAsync<AppDataGenerationRuntime>(async (runtime, descriptor, token) =>
@@ -235,7 +249,9 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
                 }
                 throw new GenerationReplacementRecoveryException(failure, recoveryFailure, committed: false);
             }
-            ExceptionDispatchInfo.Capture(failure).Throw();
+            ExceptionDispatchInfo.Capture(candidateCleanupFailure is null ? failure
+                : new AggregateException("The original data was restored, but its discarded candidate could not be fully removed.",
+                    failure, candidateCleanupFailure)).Throw();
             throw;
         }
         finally

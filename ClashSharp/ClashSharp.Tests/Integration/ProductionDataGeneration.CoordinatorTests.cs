@@ -264,13 +264,15 @@ public sealed partial class ProductionDataGenerationTests
             new(Manager, Admission, store ?? _directory.Store, CreateCandidatePreparer(), Authority, journal ?? new UiData.FileGenerationReplacementJournal(_directory.RootPath));
     }
 
-    private sealed class FailingPromotionStore(IDataGenerationStore inner, bool afterPromotion) : IDataGenerationStore
+    private sealed class FailingPromotionStore(IDataGenerationStore inner, bool afterPromotion,
+        Action<DataGenerationDescriptor>? beforePromotion = null) : IDataGenerationStore
     {
         public int Promotions { get; private set; }
         public Task<DataGenerationManifestSnapshot?> LoadCurrentAsync(CancellationToken token) => inner.LoadCurrentAsync(token);
         public async Task<DataGenerationManifestSnapshot> PromoteAsync(DataGenerationDescriptor descriptor, string? expectedHash, CancellationToken token)
         {
             ++Promotions;
+            beforePromotion?.Invoke(descriptor);
             if (afterPromotion) { _ = await inner.PromoteAsync(descriptor, expectedHash, token); }
             throw new IOException("promotion reply unavailable");
         }

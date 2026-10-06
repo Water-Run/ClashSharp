@@ -20,6 +20,11 @@ internal sealed class GenerationDataCandidatePreparer(
 {
     private readonly DataGenerationPathPolicy _paths = new(applicationDataRoot);
 
+    internal Task DiscardAbortedCandidateAdmittedAsync(DataGenerationTransition transition,
+        IGenerationReplacementJournal journal, MutationAdmissionLease admissionLease, CancellationToken cancellationToken) =>
+        new GenerationCandidateDirectoryCleanup(applicationDataRoot, admission)
+            .DeleteAbortedAsync(transition, journal, admissionLease, cancellationToken);
+
     public Task<DataPackageImportPlan> ReadImportAdmittedAsync(string packagePath, SettingsEnvelope baseline,
         DataGenerationDescriptor source, MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
     {

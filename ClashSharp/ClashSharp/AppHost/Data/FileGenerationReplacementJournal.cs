@@ -13,6 +13,7 @@ namespace ClashSharp.Hosting.Data;
 /// <summary>Persists one bounded, hashed replacement checkpoint with atomic publication and retained completion.</summary>
 internal sealed class FileGenerationReplacementJournal : IGenerationReplacementJournal
 {
+    internal const string FileName = "replacement-transaction.json";
     private const int MaximumBytes = 64 * 1024;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly DataGenerationPathPolicy _paths;
@@ -28,7 +29,7 @@ internal sealed class FileGenerationReplacementJournal : IGenerationReplacementJ
     public FileGenerationReplacementJournal(string applicationDataRoot, Action<string>? checkpoint = null)
     {
         _paths = new(applicationDataRoot);
-        Path = System.IO.Path.Combine(_paths.DataRootPath, "replacement-transaction.json");
+        Path = System.IO.Path.Combine(_paths.DataRootPath, FileName);
         _checkpoint = checkpoint;
     }
 
@@ -61,9 +62,15 @@ internal sealed class FileGenerationReplacementJournal : IGenerationReplacementJ
     public Task CompleteAsync(Guid operationId, CancellationToken cancellationToken) =>
         WriteAsync(current =>
         {
-            if (current is { Completed: true } && current.OperationId == operationId) { return current; }
+            if (current is { Completed: true } && current.OperationId == operationId)
+            {
+                return current.Candidate is null ? current
+                    : current with { Revision = checked(current.Revision + 1), Candidate = null };
+            }
             GenerationReplacementCheckpoint owned = RequireActive(current, operationId);
-            return owned with { Revision = checked(owned.Revision + 1), Completed = true };
+            // Completion ends recovery ownership of the candidate. Keeping its descriptor
+            // would require an aborted directory to survive every subsequent journal read.
+            return owned with { Revision = checked(owned.Revision + 1), Completed = true, Candidate = null };
         }, cancellationToken);
 
     private async Task WriteAsync(Func<GenerationReplacementCheckpoint?, GenerationReplacementCheckpoint> update, CancellationToken cancellationToken)

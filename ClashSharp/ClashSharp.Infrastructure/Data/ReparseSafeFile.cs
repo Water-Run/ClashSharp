@@ -14,6 +14,7 @@ internal static class ReparseSafeFile
     private const uint OpenAlways = 4;
     private const uint FileAttributeNormal = 0x00000080;
     private const uint FileFlagOpenReparsePoint = 0x00200000;
+    private const uint FileFlagBackupSemantics = 0x02000000;
     private const uint FileFlagRandomAccess = 0x10000000;
     private const uint FileFlagOverlapped = 0x40000000;
     private const uint FileFlagWriteThrough = 0x80000000;
@@ -32,6 +33,33 @@ internal static class ReparseSafeFile
                     ? FileOptions.Asynchronous
                     : FileOptions.None),
             requireExactPath: false);
+
+    internal static SafeFileHandle OpenDirectoryReadLock(string path)
+    {
+        if (!OperatingSystem.IsWindows()) { throw new PlatformNotSupportedException("Pinned directory cleanup requires Windows."); }
+        SafeFileHandle handle = CreateFile(path, GenericRead, (uint)FileShare.Read, 0, OpenExisting,
+            FileFlagBackupSemantics | FileFlagOpenReparsePoint, 0);
+        if (handle.IsInvalid)
+        {
+            int error = Marshal.GetLastPInvokeError();
+            handle.Dispose();
+            throw new IOException("The data-generation directory could not be pinned.", new Win32Exception(error));
+        }
+        try
+        {
+            ValidateOpenedHandle(handle, path, requireExactPath: true);
+            if ((File.GetAttributes(handle) & FileAttributes.Directory) == 0)
+            {
+                throw CreateUnsafePathException("Directory cleanup requires an ordinary directory handle.");
+            }
+            return handle;
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
+    }
 
     public static SafeFileHandle OpenWriteLock(string path) =>
         Open(

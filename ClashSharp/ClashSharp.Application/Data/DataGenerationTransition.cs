@@ -31,6 +31,9 @@ public sealed partial class DataGenerationTransition : IAsyncDisposable
     public DataGenerationDescriptor? StagedDescriptor =>
         Volatile.Read(ref _stagedScope)?.Descriptor;
 
+    /// <summary>Gets the candidate resource state, or null before a scope has been staged.</summary>
+    public DataGenerationScopeState? StagedScopeState => Volatile.Read(ref _stagedScope)?.State;
+
     /// <summary>Gets whether durable manifest promotion has been acknowledged.</summary>
     public bool IsManifestPromoted => Volatile.Read(ref _promotedManifest) is not null;
 
@@ -52,7 +55,8 @@ public sealed partial class DataGenerationTransition : IAsyncDisposable
 
     internal bool IsRolledBack => Volatile.Read(ref _resolution) == ResolutionRolledBack;
 
-    internal bool IsAborted => Volatile.Read(ref _resolution) == ResolutionAborted;
+    /// <summary>Gets whether the unpromoted candidate was aborted and the baseline retained.</summary>
+    public bool IsAborted => Volatile.Read(ref _resolution) == ResolutionAborted;
 
     internal DataGenerationManifestSnapshot? RestoredManifest => _restoredManifest;
 
