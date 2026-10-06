@@ -78,8 +78,8 @@ public readonly record struct MihomoServiceStatus(bool IsInstalled, bool IsRunni
 
     /// <summary>
     /// Gets whether the service-owned child has conclusively released runtime ownership.
-    /// An idle Installer-managed host may remain running; in that case only a coherent,
-    /// authenticated stopped snapshot is sufficient proof.
+    /// An Installer-managed host may remain running. A coherent authenticated stopped snapshot,
+    /// or restart exhaustion emitted only after confirmed Job cleanup, proves released ownership.
     /// </summary>
     public bool HasReleasedChildOwnership =>
         IsKnown
@@ -88,11 +88,22 @@ public readonly record struct MihomoServiceStatus(bool IsInstalled, bool IsRunni
                 && ProtocolVersion == MihomoServiceIpcProtocol.CurrentVersion
                 && ServiceSessionId is Guid sessionId
                 && sessionId != Guid.Empty
-                && ChildState == MihomoServiceChildState.Stopped
                 && ChildProcessId is null
-                && ActiveGeneration is null
-                && ActiveDataGenerationId is null
-                && ActiveConfigurationHash is null));
+                && (ChildState == MihomoServiceChildState.Stopped
+                    && ActiveGeneration is null
+                    && ActiveDataGenerationId is null
+                    && ActiveConfigurationHash is null
+                    || HasConfirmedRestartExhaustion)));
+
+    private bool HasConfirmedRestartExhaustion =>
+        IsInstalled
+        && ChildState == MihomoServiceChildState.Faulted
+        && IpcFailureCode == "service.child.restart_exhausted"
+        && CleanupFailureCode is null
+        && ProvisioningFailureCode is null
+        && ActiveGeneration is > 0
+        && ActiveDataGenerationId != Guid.Empty
+        && MihomoServiceIpcProtocol.IsCanonicalSha256(ActiveConfigurationHash);
 
     /// <summary>Creates a status for an unobserved or inconclusive service state.</summary>
     /// <param name="message">User-facing status message; must not be null.</param>

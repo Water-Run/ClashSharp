@@ -59,6 +59,40 @@ public sealed class NetworkSettingsRuntimeTests
         Assert.Equal(0, ports.Writes);
     }
 
+    [Theory]
+    [InlineData(ClashSharpMode.RuleTakeover)]
+    [InlineData(ClashSharpMode.FullTakeover)]
+    [InlineData(ClashSharpMode.Disabled)]
+    public async Task ExhaustedServiceRuntime_CanBeReobservedAndExplicitlyRecoveredOrDisabled(ClashSharpMode mode)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        NativePorts ports = new() { ServiceStatus = new(true, false, "deployed") };
+        var configuration = CreateConfiguration(directory.RootPath);
+        NetworkSettingsConfiguration original = new(ClashSharpMode.RuleTakeover, "builtin-direct", true, 18385);
+        await ports.Takeover.ApplyNetworkSettingsConfigurationAsync(configuration, original, CancellationToken.None);
+        ports.ServiceStatus = ports.ServiceStatus with
+        {
+            IsRunning = false,
+            IsScmRunning = true,
+            ProtocolVersion = ClashSharp.ServiceProtocol.MihomoServiceIpcProtocol.CurrentVersion,
+            ChildState = ClashSharp.ServiceProtocol.MihomoServiceChildState.Faulted,
+            ChildProcessId = null,
+            IpcFailureCode = "service.child.restart_exhausted",
+        };
+        int writes = ports.Writes;
+        Host.Hosting.Settings.NetworkSettingsRuntime runtime = new(configuration, ports.Takeover, ports.WindowsProxy);
+
+        NetworkSettingsConfiguration inactive = await runtime.ReadConfigurationAsync(CancellationToken.None);
+
+        Assert.Equal(ClashSharpMode.Disabled, inactive.Mode);
+        Assert.Equal(writes, ports.Writes);
+        NetworkSettingsConfiguration target = new(mode, original.ProfileId, true, original.MixedPort);
+        await runtime.ApplyConfigurationAsync(target, CancellationToken.None);
+        Assert.Equal(target, await runtime.ReadConfigurationAsync(CancellationToken.None));
+        Assert.Equal(mode != ClashSharpMode.Disabled, ports.ServiceStatus.HasRunningChild);
+        Assert.False(ports.CoreRunning);
+    }
+
     [Fact]
     public async Task Restore_UsesTheOriginalConfigurationStoreAfterAnotherDirectoryTakesOver()
     {

@@ -489,6 +489,9 @@ public sealed class MihomoChildSupervisorTests
         Assert.Equal(40, snapshot.ActiveGeneration);
         Assert.Equal(hash, snapshot.ActiveConfigurationHash);
         Assert.Equal(3, context.Launcher.Requests.Count);
+        Assert.True(first.IsDisposed);
+        Assert.True(second.IsDisposed);
+        Assert.True(third.IsDisposed);
         Assert.Null(snapshot.Validate());
     }
 
