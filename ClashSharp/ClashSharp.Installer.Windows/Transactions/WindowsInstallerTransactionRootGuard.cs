@@ -435,7 +435,7 @@ public sealed class WindowsInstallerTransactionRootGuard :
         else
         {
             WindowsInstallerDirectorySecurityPolicy.ValidateRenameAnchor(
-                observation.Security);
+                observation.Security, observation.IsPhysicalVolumeRoot);
         }
     }
 
@@ -550,9 +550,9 @@ internal static class WindowsInstallerDirectorySecurityPolicy
         }
     }
 
-    internal static void ValidateRenameAnchor(WindowsDirectorySecuritySnapshot security)
+    internal static void ValidateRenameAnchor(WindowsDirectorySecuritySnapshot security, bool isPhysicalVolumeRoot = false)
     {
-        if (!WindowsDirectoryAccessPolicy.IsTrustedRenameAnchor(security))
+        if (!WindowsDirectoryAccessPolicy.IsTrustedAncestor(security, isPhysicalVolumeRoot))
         {
             throw new InstallerProtocolException("installer.transaction.root_ancestor_acl_invalid");
         }

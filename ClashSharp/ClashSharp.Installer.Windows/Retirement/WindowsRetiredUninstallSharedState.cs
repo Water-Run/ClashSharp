@@ -255,7 +255,7 @@ internal sealed class WindowsRetiredUninstallSharedState : IWindowsRetiredUninst
         }
         else
         {
-            WindowsInstallerDirectorySecurityPolicy.ValidateRenameAnchor(observation.Security);
+            WindowsInstallerDirectorySecurityPolicy.ValidateRenameAnchor(observation.Security, observation.IsPhysicalVolumeRoot);
         }
     }
 

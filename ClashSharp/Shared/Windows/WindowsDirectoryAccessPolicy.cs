@@ -57,13 +57,24 @@ internal static class WindowsDirectoryAccessPolicy
         && HasExactRule(security.AccessEntries, targetSid, OwnerReadOnlyRights);
 
     internal static bool IsTrustedRenameAnchor(WindowsDirectorySecuritySnapshot security) =>
+        IsTrustedAncestor(security, isPhysicalVolumeRoot: false);
+
+    /// <summary>Validates a held ancestor while distinguishing an unrenameable physical volume root from ordinary directory entries.</summary>
+    /// <remarks>
+    /// Root proof comes only from the already-pinned handle. Root DELETE cannot remove its volume;
+    /// child deletion, descriptor/owner changes and GenericAll remain unsafe on every ancestor.
+    /// Owned directory creation and deletion continue to require the stricter renameable policy.
+    /// </remarks>
+    internal static bool IsTrustedAncestor(WindowsDirectorySecuritySnapshot security, bool isPhysicalVolumeRoot) =>
         security.HasDacl && IsTrustedAuthority(security.OwnerSid)
         && security.AccessEntries.All(entry =>
             entry.Kind != WindowsDirectoryAceKind.Unsupported
             && !(entry.Kind == WindowsDirectoryAceKind.Allow
                 && (entry.Flags & AceFlags.InheritOnly) == 0
                 && !IsTrustedAuthority(entry.Sid)
-                && (entry.AccessMask & ((int)DangerousAnchorRights | GenericAll)) != 0));
+                && (entry.AccessMask & ((int)(isPhysicalVolumeRoot
+                    ? DangerousAnchorRights & ~FileSystemRights.Delete
+                    : DangerousAnchorRights) | GenericAll)) != 0));
 
     private static bool HasExactRule(IReadOnlyList<WindowsDirectoryAce> entries, string sid, FileSystemRights rights)
     {

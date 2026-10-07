@@ -10,6 +10,27 @@ namespace ClashSharp.Installer.Windows.Tests;
 public sealed class WindowsMachineRootGuardTests
 {
     private const string TargetSid = "S-1-5-21-100-200-300-1001";
+
+    [Fact]
+    public async Task PhysicalVolumeModifyGrantSupportsMachineDeploymentAndIsRechecked()
+    {
+        using var fixture = Fixture();
+        WindowsMachineDeploymentPlan plan = Plan(fixture);
+        var native = new FakeDirectoryNative(TargetSid);
+        string volume = Path.GetPathRoot(plan.CommonApplicationDataRoot)!;
+        native.Set(volume, Anchor(Ace("S-1-5-11", FileSystemRights.Modify, AceFlags.None))
+            with
+        { IsPhysicalVolumeRoot = true });
+        using var guard = WindowsMachineRootGuard.CreateForTesting(plan, native);
+
+        await guard.EnsureProtectedAsync(plan, CancellationToken.None);
+        Assert.True(native.ActiveLeaseCount > 0);
+        native.Set(volume, Anchor(Ace("S-1-5-11", FileSystemRights.Modify, AceFlags.None)));
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(
+            () => guard.EnsureProtectedAsync(plan, CancellationToken.None));
+        Assert.Equal("installer.machine.root_ancestor_acl_invalid", failure.DiagnosticCode);
+    }
     private const string OtherSid = "S-1-5-21-100-200-300-1002";
     private const string UsersSid = "S-1-5-32-545";
     private const string Token =

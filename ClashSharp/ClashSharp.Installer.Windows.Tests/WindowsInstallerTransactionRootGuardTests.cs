@@ -15,6 +15,65 @@ public sealed class WindowsInstallerTransactionRootGuardTests
     private const string UsersSid = "S-1-5-32-545";
 
     [Fact]
+    public async Task ProvenPhysicalVolumeRootAcceptsCapturedSandboxModifyAclWithoutChangingRenameableAnchors()
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        var native = new FakeDirectoryNative(TargetSid);
+        native.Set(@"C:\", Anchor(Ace("S-1-5-11", FileSystemRights.Modify, AceFlags.None))
+            with
+        { IsPhysicalVolumeRoot = true });
+        native.Set(ProgramDataPath, Anchor(Ace(UsersSid,
+            FileSystemRights.CreateDirectories | FileSystemRights.CreateFiles | FileSystemRights.WriteAttributes,
+            AceFlags.ContainerInherit)));
+        using var guard = WindowsInstallerTransactionRootGuard.CreateForTesting(ProgramDataPath, TargetSid, native);
+
+        await guard.EnsureProtectedAsync(guard.RootPath, CancellationToken.None);
+
+        Assert.True(guard.IsProtectedRootPresent);
+        Assert.Equal(5, native.ActiveLeaseCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OrdinaryAncestorOrUnprovenDriveRootStillRejectsUntrustedDelete(bool ordinaryAncestor)
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        var native = new FakeDirectoryNative(TargetSid);
+        native.Set(@"C:\", Anchor());
+        native.Set(ProgramDataPath, Anchor());
+        native.Set(ordinaryAncestor ? ProgramDataPath : @"C:\",
+            Anchor(Ace("S-1-5-11", FileSystemRights.Modify, AceFlags.None)));
+        using var guard = WindowsInstallerTransactionRootGuard.CreateForTesting(ProgramDataPath, TargetSid, native);
+
+        await AssertDiagnosticAsync(() => guard.EnsureProtectedAsync(guard.RootPath, CancellationToken.None),
+            "installer.transaction.root_ancestor_acl_invalid");
+
+        Assert.Empty(native.CreatedPaths);
+        Assert.Equal(0, native.ActiveLeaseCount);
+    }
+
+    [Theory]
+    [InlineData(FileSystemRights.DeleteSubdirectoriesAndFiles)]
+    [InlineData(FileSystemRights.ChangePermissions)]
+    [InlineData(FileSystemRights.TakeOwnership)]
+    [InlineData((FileSystemRights)0x10000000)]
+    public async Task PhysicalVolumeRootNeverAcceptsUntrustedChildDeletionOrAuthorityChange(FileSystemRights rights)
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        var native = new FakeDirectoryNative(TargetSid);
+        native.Set(@"C:\", Anchor(Ace(UsersSid, rights, AceFlags.None)) with { IsPhysicalVolumeRoot = true });
+        native.Set(ProgramDataPath, Anchor());
+        using var guard = WindowsInstallerTransactionRootGuard.CreateForTesting(ProgramDataPath, TargetSid, native);
+
+        await AssertDiagnosticAsync(() => guard.EnsureProtectedAsync(guard.RootPath, CancellationToken.None),
+            "installer.transaction.root_ancestor_acl_invalid");
+
+        Assert.Empty(native.CreatedPaths);
+        Assert.Equal(0, native.ActiveLeaseCount);
+    }
+
+    [Fact]
     public async Task MissingProtectedChainIsCreatedPinnedAndRevalidated()
     {
         WindowsPayloadFixture.AssertWindows11X64();

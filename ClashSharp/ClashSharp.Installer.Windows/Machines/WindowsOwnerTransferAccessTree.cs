@@ -394,7 +394,7 @@ internal sealed class WindowsOwnerTransferAccessTree : IDisposable, IWindowsOwne
         WindowsDirectorySecuritySnapshot security = observation.Security;
         bool accepted = node.Spec.Role switch
         {
-            Role.Anchor => WindowsDirectoryAccessPolicy.IsTrustedRenameAnchor(security),
+            Role.Anchor => WindowsDirectoryAccessPolicy.IsTrustedAncestor(security, observation.IsPhysicalVolumeRoot),
             Role.InstallerBoundary or Role.ContinuationDirectory or Role.ContinuationFile or Role.ActiveCertificateFile =>
                 HasInstallerAccess(node.Spec, security, requireTransferred),
             Role.AuthorityBoundary or Role.CertificateArchiveDirectory =>

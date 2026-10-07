@@ -251,7 +251,7 @@ internal sealed class WindowsMachineRootGuard : IWindowsMachineRootGuard
             else
             {
                 WindowsInstallerDirectorySecurityPolicy.ValidateRenameAnchor(
-                    observation.Security);
+                    observation.Security, observation.IsPhysicalVolumeRoot);
             }
         }
         catch (InstallerProtocolException exception)

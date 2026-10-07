@@ -8,6 +8,31 @@ namespace ClashSharp.Tests.Unit.MihomoService;
 /// <summary>Verifies that service preparation preserves the Installer-owned directory contract.</summary>
 public sealed class MihomoServiceSharedDirectoryGuardTests
 {
+    [Fact]
+    public void CapturedSandboxVolumeAclKeepsProtectedServiceRootsReadable()
+    {
+        var native = new FakeDirectories();
+        WindowsDirectoryObservation root = native.Values[@"C:\"];
+        native.Values[@"C:\"] = root with
+        {
+            IsPhysicalVolumeRoot = true,
+            Security = root.Security with
+            {
+                OwnerSid = WindowsDirectoryAccessPolicy.LocalSystemSid,
+                AccessEntries = [.. root.Security.AccessEntries.Take(2),
+                    new("S-1-5-11", WindowsDirectoryAceKind.Allow, (int)FileSystemRights.Modify, AceFlags.None, false)],
+            },
+        };
+        var guard = new MihomoServiceSharedDirectoryGuard(@"C:\ProgramData", TargetSid, native.Open);
+
+        using (guard.Acquire())
+        {
+            Assert.Equal(4, native.LiveLeases);
+        }
+
+        Assert.Equal(0, native.LiveLeases);
+    }
+
     private const string TargetSid = "S-1-5-21-100-200-300-1001";
     private const string OtherSid = "S-1-5-21-100-200-300-1002";
     private const string Product = @"C:\ProgramData\ClashSharp";

@@ -20,6 +20,7 @@ internal sealed class WindowsDirectoryReadLease : IWindowsDirectoryReadLease
     private const uint OwnerSecurityInformation = 0x0000_0001;
     private const uint DaclSecurityInformation = 0x0000_0004;
     private const int SeFileObject = 1;
+    private const uint VolumeNameGuid = 1;
 
     private readonly SafeFileHandle _handle;
     private bool _disposed;
@@ -64,8 +65,25 @@ internal sealed class WindowsDirectoryReadLease : IWindowsDirectoryReadLease
         return new WindowsDirectoryObservation(
             IsDirectory: (information.FileAttributes & FileAttributeDirectory) != 0,
             IsReparsePoint: (information.FileAttributes & FileAttributeReparsePoint) != 0,
-            security);
+            security,
+            IsPhysicalVolumeRoot: (information.FileAttributes & (FileAttributeDirectory | FileAttributeReparsePoint)) == FileAttributeDirectory
+                && IsPhysicalVolumeRoot(_handle));
     }
+
+    /// <summary>Proves a physical volume root from the existing object's final GUID path, never from a drive-letter alias.</summary>
+    /// <remarks>Unsupported or unavailable final-name evidence gives no exception to the ordinary ancestor policy.</remarks>
+    internal static bool IsPhysicalVolumeRoot(SafeFileHandle handle)
+    {
+        char[] name = new char[64];
+        uint length = GetFinalPathNameByHandle(handle, name, checked((uint)name.Length), VolumeNameGuid);
+        return length is > 0 and < 64 && IsPhysicalVolumeRootGuidPath(new string(name, 0, checked((int)length)));
+    }
+
+    /// <summary>Accepts only a complete volume GUID root; child paths, DOS paths and mapped directory roots provide no root proof.</summary>
+    internal static bool IsPhysicalVolumeRootGuidPath(string path) =>
+        path.Length == 49 && path.StartsWith(@"\\?\Volume{", StringComparison.OrdinalIgnoreCase)
+        && path[47] == '}' && path[48] == '\\'
+        && Guid.TryParseExact(path.AsSpan(11, 36), "D", out _);
 
     public void Dispose()
     {
@@ -181,6 +199,12 @@ internal sealed class WindowsDirectoryReadLease : IWindowsDirectoryReadLease
     private static extern bool GetFileInformationByHandle(
         SafeFileHandle file,
         out ByHandleFileInformation information);
+
+    [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle file,
+        [Out, MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U2, SizeParamIndex = 2)] char[] path,
+        uint characterCount, uint flags);
 
     [DllImport("advapi32.dll")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

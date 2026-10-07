@@ -119,7 +119,7 @@ internal sealed class WindowsInstallerDirectoryAnchor : IDisposable
         _leases.Add(lease);
         WindowsDirectoryObservation observation = lease.Observe();
         if (!observation.IsDirectory || observation.IsReparsePoint
-            || !WindowsDirectoryAccessPolicy.IsTrustedRenameAnchor(observation.Security))
+            || !WindowsDirectoryAccessPolicy.IsTrustedAncestor(observation.Security, observation.IsPhysicalVolumeRoot))
         {
             throw WindowsInstallerDirectoryLedger.Failure("anchor_unsafe");
         }

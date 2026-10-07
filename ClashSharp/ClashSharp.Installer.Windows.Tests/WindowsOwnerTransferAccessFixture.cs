@@ -118,6 +118,7 @@ internal sealed class WindowsOwnerTransferAccessFixture : IWindowsOwnerTransferA
         internal bool Inherited { get; } = inherited;
         internal WindowsDirectorySecuritySnapshot Security { get; set; } = security;
         internal bool Reparse { get; set; }
+        internal bool PhysicalVolumeRoot { get; set; }
         internal uint Links { get; set; } = 1;
         internal byte[] Bytes { get; set; } = [1, 2, 3];
     }
@@ -131,7 +132,7 @@ internal sealed class WindowsOwnerTransferAccessFixture : IWindowsOwnerTransferA
         {
             Assert.False(_disposed);
             owner.BeforeObserve?.Invoke(path);
-            return new(entry.Directory, entry.Reparse, entry.Links, entry.Security);
+            return new(entry.Directory, entry.Reparse, entry.Links, entry.Security, entry.PhysicalVolumeRoot);
         }
 
         public byte[] ReadFileBytes(int maximumBytes)

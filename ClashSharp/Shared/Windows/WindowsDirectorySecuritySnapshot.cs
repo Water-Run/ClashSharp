@@ -10,7 +10,8 @@ internal interface IWindowsDirectoryReadLease : IDisposable
 internal sealed record WindowsDirectoryObservation(
     bool IsDirectory,
     bool IsReparsePoint,
-    WindowsDirectorySecuritySnapshot Security);
+    WindowsDirectorySecuritySnapshot Security,
+    bool IsPhysicalVolumeRoot = false);
 
 internal sealed record WindowsDirectorySecuritySnapshot(
     string? OwnerSid,

@@ -8,7 +8,8 @@ using Microsoft.Win32.SafeHandles;
 namespace ClashSharp.Installer.Windows.Machines;
 
 internal sealed record WindowsOwnerTransferAccessObservation(
-    bool IsDirectory, bool IsReparsePoint, uint LinkCount, WindowsDirectorySecuritySnapshot Security);
+    bool IsDirectory, bool IsReparsePoint, uint LinkCount, WindowsDirectorySecuritySnapshot Security,
+    bool IsPhysicalVolumeRoot = false);
 
 internal sealed record WindowsOwnerTransferAccessEntry(string Path, bool IsDirectory);
 
@@ -106,7 +107,8 @@ internal sealed class WindowsOwnerTransferAccessNative : IWindowsOwnerTransferAc
                 throw new InstallerProtocolException("installer.owner_transfer.access_object_invalid");
             }
             return new WindowsOwnerTransferAccessObservation(
-                directory, reparse, information.LinkCount, WindowsDirectoryReadLease.ReadSecuritySnapshot(_handle));
+                directory, reparse, information.LinkCount, WindowsDirectoryReadLease.ReadSecuritySnapshot(_handle),
+                IsPhysicalVolumeRoot: directory && WindowsDirectoryReadLease.IsPhysicalVolumeRoot(_handle));
         }
 
         public byte[] ReadFileBytes(int maximumBytes)

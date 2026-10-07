@@ -87,7 +87,7 @@ internal sealed class MihomoServiceSharedDirectoryGuard
         if (!observation.IsDirectory || observation.IsReparsePoint
             || !(exact
                 ? WindowsDirectoryAccessPolicy.HasExactOwnerReadOnlyAccess(observation.Security, _targetSid)
-                : WindowsDirectoryAccessPolicy.IsTrustedRenameAnchor(observation.Security)))
+                : WindowsDirectoryAccessPolicy.IsTrustedAncestor(observation.Security, observation.IsPhysicalVolumeRoot)))
         {
             throw new MihomoServiceConfigurationTrustException(
                 "The Installer-owned shared service directory does not match its owner.");

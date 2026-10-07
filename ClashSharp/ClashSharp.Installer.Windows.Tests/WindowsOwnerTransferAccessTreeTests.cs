@@ -7,6 +7,30 @@ namespace ClashSharp.Installer.Windows.Tests;
 
 public sealed class WindowsOwnerTransferAccessTreeTests
 {
+    [Fact]
+    public void ProvenPhysicalVolumeRootSupportsOwnerTransferWithoutChangingItsAcl()
+    {
+        var native = new WindowsOwnerTransferAccessFixture();
+        WindowsOwnerTransferAccessFixture.Entry root = native.Entries[@"C:\"];
+        root.PhysicalVolumeRoot = true;
+        root.Security = root.Security with
+        {
+            OwnerSid = WindowsDirectoryAccessPolicy.LocalSystemSid,
+            AccessEntries = [.. root.Security.AccessEntries.Take(2),
+                new("S-1-5-11", WindowsDirectoryAceKind.Allow, (int)FileSystemRights.Modify, AceFlags.None, false)],
+        };
+        WindowsDirectorySecuritySnapshot before = root.Security;
+
+        using (WindowsOwnerTransferAccessTree tree = native.Acquire())
+        {
+            tree.ApplyAndVerify(CancellationToken.None);
+            Assert.Equal(before, root.Security);
+            Assert.DoesNotContain(@"C:\", native.Writes);
+        }
+
+        Assert.Equal(0, native.LiveLeases);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
