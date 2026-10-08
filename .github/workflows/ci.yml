@@ -29,6 +29,14 @@ jobs:
         shell: pwsh
         run: ./eng/Test-PowerShellSyntax.ps1
 
+      - name: Verify .NET evidence contract (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./eng/Test-DotNetResultsContract.ps1
+
+      - name: Verify .NET evidence contract (PowerShell 7)
+        shell: pwsh
+        run: ./eng/Test-DotNetResultsContract.ps1
+
       - name: Verify installer vector icon bytes
         shell: powershell
         run: ./eng/Generate-InstallerIcon.ps1 -Verify
@@ -120,31 +128,9 @@ jobs:
           --results-directory ClashSharp/ClashSharp.Installer.Windows.Tests/TestResults
           --logger "trx;LogFileName=installer-windows-tests.trx"
 
-      - name: Reject empty or skipped .NET test results
+      - name: Verify actual .NET test results and save evidence
         shell: pwsh
-        run: |
-          $expectedResults = @(
-            'ClashSharp/ClashSharp.Tests/TestResults/tests.trx',
-            'ClashSharp/ClashSharp.Installer.Tests/TestResults/installer-core-tests.trx',
-            'ClashSharp/ClashSharp.Installer.Presentation.Tests/TestResults/installer-presentation-tests.trx',
-            'ClashSharp/ClashSharp.Installer.Windows.Tests/TestResults/installer-windows-tests.trx'
-          )
-          foreach ($resultPath in $expectedResults) {
-            if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
-              throw "Expected TRX result is missing: $resultPath"
-            }
-            [xml]$result = Get-Content -LiteralPath $resultPath -Raw
-            $counters = $result.TestRun.ResultSummary.Counters
-            $total = [int]$counters.total
-            $executed = [int]$counters.executed
-            $notExecuted = [int]$counters.notExecuted
-            if ($total -le 0 -or $executed -le 0) {
-              throw "Test result contains no executed tests: $resultPath"
-            }
-            if ($notExecuted -ne 0) {
-              throw "Test result contains $notExecuted skipped/not-executed test(s): $resultPath"
-            }
-          }
+        run: ./eng/Test-DotNetResults.ps1 -SummaryPath ./artifacts/validation/dotnet-test-evidence.json
 
       - name: Enforce Installer Core coverage floor
         shell: pwsh
@@ -169,6 +155,7 @@ jobs:
         with:
           name: dotnet-test-results
           path: |
+            artifacts/validation/dotnet-test-evidence.json
             ClashSharp/ClashSharp.Tests/TestResults/**/*.trx
             ClashSharp/ClashSharp.Installer.Tests/TestResults/**/*.trx
             ClashSharp/ClashSharp.Installer.Tests/TestResults/**/coverage.cobertura.xml
