@@ -19,17 +19,15 @@ internal sealed class WindowsPackageManagerFacade : IWindowsPackageManagerFacade
     public async Task DeployAsync(WindowsPackageDeploymentRequest request)
     {
         AddPackageOptions options = CreateOptions(request);
-        _ = await _packageManager
-            .AddPackageByUriAsync(request.PrimaryPackageUri, options)
-            .AsTask()
+        _ = await WindowsPackageOperationLifetime
+            .AwaitAsync(_packageManager.AddPackageByUriAsync(request.PrimaryPackageUri, options))
             .ConfigureAwait(false);
     }
 
     public async Task RemoveAsync(string packageFullName)
     {
-        _ = await _packageManager
-            .RemovePackageAsync(packageFullName)
-            .AsTask()
+        _ = await WindowsPackageOperationLifetime
+            .AwaitAsync(_packageManager.RemovePackageAsync(packageFullName))
             .ConfigureAwait(false);
     }
 
