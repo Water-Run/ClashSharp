@@ -43,8 +43,9 @@ public sealed partial class NetworkTakeoverServiceTests
         ScopeConfiguration secondStore = new();
         TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        ManualDeadlineTimeProvider clock = new();
         NetworkTakeoverService first = root.BindDataScope(firstStore, new ScopeSelections(), _ => Task.CompletedTask,
-            async token => { entered.TrySetResult(); await release.Task.WaitAsync(token); }, logs.Store);
+            async token => { entered.TrySetResult(); await release.Task.WaitAsync(token); }, logs.Store, clock);
         NetworkTakeoverService second = root.BindDataScope(secondStore, new ScopeSelections(), _ => Task.CompletedTask, _ => Task.CompletedTask, logs.Store);
         Task firstOperation = first.ApplyModeAsync(ClashSharpMode.Disabled, false, 12345, CancellationToken.None);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -62,12 +63,16 @@ public sealed partial class NetworkTakeoverServiceTests
         Assert.Single(firstStore.Configuration.Requests);
         Assert.Single(secondStore.Configuration.Requests);
         Assert.Single(rootConfiguration.Requests);
+        Assert.True(Assert.Single(clock.Timers).IsDisposed);
     }
 
     [Theory]
     [InlineData("failure")]
     [InlineData("timeout")]
     [InlineData("cancel")]
+    [InlineData("timeout-sampling")]
+    [InlineData("cancel-sampling")]
+    [InlineData("success")]
     public async Task BoundFinalSample_UsesOwnedDiagnosticsAndPreservesCallerCancellation(string outcome)
     {
         await using ScopedLogDatabase logs = new();
@@ -75,26 +80,99 @@ public sealed partial class NetworkTakeoverServiceTests
         FakeNetworkTakeoverCore core = new();
         NetworkTakeoverService root = CreateService(core: core);
         ScopeConfiguration store = new();
-        NetworkTakeoverService scoped = root.BindDataScope(store, new ScopeSelections(), async token =>
+        ManualDeadlineTimeProvider clock = new();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int samplingCalls = 0;
+        bool failsDuringSampling = outcome.EndsWith("-sampling", StringComparison.Ordinal);
+        bool callerCancels = outcome.StartsWith("cancel", StringComparison.Ordinal);
+        bool timesOut = outcome.StartsWith("timeout", StringComparison.Ordinal);
+
+        async Task CompleteStageAsync(CancellationToken token)
         {
-            if (outcome == "cancel") { cancellation.Cancel(); token.ThrowIfCancellationRequested(); }
-            if (outcome == "timeout") { await Task.Delay(Timeout.InfiniteTimeSpan, token); }
-            throw new IOException("sample unavailable");
-        }, _ => throw new InvalidOperationException("sampling must not follow a failed refresh"), logs.Store);
-        Task operation = scoped.ApplyModeAsync(ClashSharpMode.Disabled, false, 12345, cancellation.Token);
-        if (outcome == "cancel")
-        {
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
-            Assert.False(core.Stopped);
-            Assert.Single(store.Configuration.Requests);
-            Assert.Empty(logs.Store.GetRecentLogs(5));
+            entered.TrySetResult();
+            if (callerCancels) { cancellation.Cancel(); token.ThrowIfCancellationRequested(); }
+            if (timesOut) { await Task.Delay(Timeout.InfiniteTimeSpan, token); }
+            if (outcome == "failure") { throw new IOException("sample unavailable"); }
         }
-        else
+
+        NetworkTakeoverService scoped = root.BindDataScope(store, new ScopeSelections(),
+            token => failsDuringSampling ? Task.CompletedTask : CompleteStageAsync(token),
+            token =>
+            {
+                ++samplingCalls;
+                return failsDuringSampling ? CompleteStageAsync(token) : Task.CompletedTask;
+            }, logs.Store, clock);
+        Task operation = scoped.ApplyModeAsync(ClashSharpMode.Disabled, false, 12345, cancellation.Token);
+        try
         {
-            await operation.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.True(core.Stopped);
-            Assert.Single(store.Configuration.Requests);
-            Assert.Equal("traffic.final_sample_unavailable", Assert.Single(logs.Store.GetRecentLogs(5)).Detail);
+            if (timesOut)
+            {
+                await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.False(operation.IsCompleted);
+                Assert.False(core.Stopped);
+                // Fire the production deadline explicitly instead of racing two wall-clock timers under CI load.
+                Assert.Single(clock.Timers).Fire();
+            }
+            if (callerCancels)
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+                Assert.False(core.Stopped);
+                Assert.Single(store.Configuration.Requests);
+                Assert.Empty(logs.Store.GetRecentLogs(5));
+            }
+            else
+            {
+                await operation.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.True(core.Stopped);
+                Assert.Single(store.Configuration.Requests);
+                if (outcome == "success") { Assert.Empty(logs.Store.GetRecentLogs(5)); }
+                else { Assert.Equal("traffic.final_sample_unavailable", Assert.Single(logs.Store.GetRecentLogs(5)).Detail); }
+            }
+            Assert.Equal(failsDuringSampling || outcome == "success" ? 1 : 0, samplingCalls);
+            ManualDeadlineTimer timer = Assert.Single(clock.Timers);
+            Assert.Equal(TimeSpan.FromSeconds(2), timer.DueTime);
+            Assert.Equal(Timeout.InfiniteTimeSpan, timer.Period);
+            Assert.True(timer.IsDisposed);
+        }
+        finally
+        {
+            cancellation.Cancel();
+            try { await operation.WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        }
+    }
+
+    private sealed class ManualDeadlineTimeProvider : TimeProvider
+    {
+        public List<ManualDeadlineTimer> Timers { get; } = [];
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            ManualDeadlineTimer timer = new(callback, state, dueTime, period);
+            Timers.Add(timer);
+            return timer;
+        }
+    }
+
+    private sealed class ManualDeadlineTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) : ITimer
+    {
+        private int _disposed;
+        public TimeSpan DueTime { get; } = dueTime;
+        public TimeSpan Period { get; } = period;
+        public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
+        public void Fire()
+        {
+            Assert.False(IsDisposed);
+            callback(state);
+        }
+
+        public bool Change(TimeSpan dueTime, TimeSpan period) => throw new NotSupportedException();
+        public void Dispose() => Interlocked.Exchange(ref _disposed, 1);
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 

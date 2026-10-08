@@ -13,22 +13,25 @@ public sealed partial class NetworkTakeoverService
     /// <summary>Binds native capabilities to one owned repository set while sharing native transition ordering.</summary>
     internal NetworkTakeoverService BindDataScope(ICoreConfigurationStore configuration,
         INetworkTakeoverProxySelections selections, Func<CancellationToken, Task> refreshTraffic,
-        Func<CancellationToken, Task> flushSampling, ILogStorage logs)
+        Func<CancellationToken, Task> flushSampling, ILogStorage logs, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(selections);
         ArgumentNullException.ThrowIfNull(refreshTraffic);
         ArgumentNullException.ThrowIfNull(flushSampling);
         ArgumentNullException.ThrowIfNull(logs);
+        // The owned clock controls only the final-sample deadline; production uses the system clock.
+        TimeProvider clock = timeProvider ?? TimeProvider.System;
         return new(new ScopedConfiguration(configuration), _core, _windowsProxy, _mihomoService, _proxyRecovery,
-            _readiness, _getString, selections, token => FlushOwnedTrafficAsync(refreshTraffic, flushSampling, logs, token), _transitionGate);
+            _readiness, _getString, selections, token => FlushOwnedTrafficAsync(refreshTraffic, flushSampling, logs, clock, token), _transitionGate);
     }
 
     private async Task FlushOwnedTrafficAsync(Func<CancellationToken, Task> refreshTraffic,
-        Func<CancellationToken, Task> flushSampling, ILogStorage logs, CancellationToken cancellationToken)
+        Func<CancellationToken, Task> flushSampling, ILogStorage logs, TimeProvider timeProvider,
+        CancellationToken cancellationToken)
     {
-        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(TimeSpan.FromSeconds(2));
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2), timeProvider);
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         try
         {
             if (!_core.IsRunning && !(await _mihomoService.GetStatusAsync(deadline.Token).ConfigureAwait(false)).HasRunningChild) { return; }
