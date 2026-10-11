@@ -16,8 +16,8 @@
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <StackPanel x:Name="TextPanel" VerticalAlignment="Center">
-            <TextBlock Text="{Binding Title, ElementName=Root}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+        <StackPanel x:Name="TextPanel" Spacing="4" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Title, ElementName=Root}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
             <TextBlock
                 Text="{Binding Description, ElementName=Root}"
                 Style="{ThemeResource CaptionTextBlockStyle}"

@@ -1884,7 +1884,7 @@ public sealed class AppResourcePackagingTests
         string settingsXaml = File.ReadAllText(settingsXamlPath);
 
         Assert.Contains("Padding=\"{StaticResource ClashPagePadding}\"", settingsXaml, StringComparison.Ordinal);
-        Assert.Contains("<StackPanel x:Name=\"SettingsContentPanel\" Spacing=\"6\" HorizontalAlignment=\"Stretch\">", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource ClashReadingPagePanelStyle}\"", settingsXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"PageTitleText\" Text=\"{Binding PageTitleText}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("x:Name=\"DescriptionText\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Padding=\"32,32,20,32\"", settingsXaml, StringComparison.Ordinal);
@@ -1899,7 +1899,8 @@ public sealed class AppResourcePackagingTests
 
         string settingsXaml = File.ReadAllText(settingsXamlPath);
 
-        Assert.Contains("<StackPanel x:Name=\"SettingsContentPanel\" Spacing=\"6\" HorizontalAlignment=\"Stretch\">", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalContentAlignment=\"Stretch\"", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource ClashReadingPagePanelStyle}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"{Binding ViewportWidth, ElementName=SettingsScrollViewer}\"", settingsXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Margin=\"0,0,360,0\"", settingsXaml, StringComparison.Ordinal);
     }
@@ -2180,8 +2181,20 @@ public sealed class AppResourcePackagingTests
 
         string aboutXaml = File.ReadAllText(aboutXamlPath);
 
-        Assert.Contains("HorizontalAlignment=\"Left\"", aboutXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth=\"900\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("HorizontalContentAlignment=\"Stretch\"", aboutXaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource ClashReadingPagePanelStyle}\"", aboutXaml, StringComparison.Ordinal);
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement panelStyle = XDocument.Load(FindSourceFile("ClashSharp", "ClashSharp", "App.xaml"))
+            .Descendants(presentation + "Style")
+            .Single(style => (string?)style.Attribute(xaml + "Key") == "ClashReadingPagePanelStyle");
+        Assert.Contains(panelStyle.Elements(presentation + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "MaxWidth"
+            && double.TryParse((string?)setter.Attribute("Value"), out double width)
+            && width is >= 800 and <= 1200);
+        Assert.Contains(panelStyle.Elements(presentation + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "HorizontalAlignment"
+            && (string?)setter.Attribute("Value") == "Stretch");
         Assert.Contains("Text=\"{Binding VersionSummaryText}\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding RuntimeValueText}\"", aboutXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding VersionSummaryText}\" Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", aboutXaml, StringComparison.Ordinal);

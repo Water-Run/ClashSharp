@@ -20,8 +20,9 @@
         IsEnabled="{Binding IsPreferenceInputEnabled}"
         Padding="{StaticResource ClashPagePadding}"
         VerticalScrollBarVisibility="Auto"
-        HorizontalScrollBarVisibility="Disabled">
-        <StackPanel x:Name="SettingsContentPanel" Spacing="6" HorizontalAlignment="Stretch">
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalContentAlignment="Stretch">
+        <StackPanel x:Name="SettingsContentPanel" Spacing="8" Style="{StaticResource ClashReadingPagePanelStyle}">
             <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}"
                        Style="{ThemeResource TitleTextBlockStyle}" Margin="0,0,0,18" />
             <StackPanel x:Name="ApplicationRecoveryPanel" Spacing="6"

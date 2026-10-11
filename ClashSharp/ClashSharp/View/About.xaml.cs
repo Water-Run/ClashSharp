@@ -27,6 +27,8 @@ public sealed partial class About : Page
 
     private readonly PageLoadSession _loadSession = new();
 
+    private int _cardColumnCount = 1;
+
     /// <summary>Initializes the page from an explicit composition contract.</summary>
     internal About(AboutPageComposition.Dependencies dependencies)
     {
@@ -38,6 +40,34 @@ public sealed partial class About : Page
         DataContext = _viewModel;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    /// <summary>Reflows cards using the page's available width, including navigation and display scaling.</summary>
+    private void AboutCards_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        int columns = e.NewSize.Width >= 760 ? 2 : 1;
+        if (columns == _cardColumnCount)
+        {
+            return;
+        }
+
+        _cardColumnCount = columns;
+        AboutCards.ColumnDefinitions[1].Width = columns == 2
+            ? new GridLength(1, GridUnitType.Star)
+            : new GridLength(0);
+        AboutCards.ColumnSpacing = columns == 2 ? 16 : 0;
+        AboutCards.RowDefinitions.Clear();
+        for (int row = 0; row < 4 / columns; row++)
+        {
+            AboutCards.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
+        Grid[] cards = [GitHubCard, UpdateCard, MihomoCard, ProxyInformationCard];
+        for (int index = 0; index < cards.Length; index++)
+        {
+            Grid.SetRow(cards[index], index / columns);
+            Grid.SetColumn(cards[index], index % columns);
+        }
     }
 
     /// <summary>Starts mihomo status loading when the page enters the visual tree.</summary>
