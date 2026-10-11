@@ -25,7 +25,9 @@ public sealed class WindowsOwnerTransferServiceRemovalTests
         await fixture.Step.ApplyAndVerifyAsync(fixture.Journal, CancellationToken.None);
 
         Assert.False(fixture.Backend.ServicePresent);
+        Assert.False(fixture.Backend.RuntimePresent);
         Assert.Equal(servicePresent ? 1 : 0, fixture.Backend.RemovalCount);
+        Assert.Equal(1, fixture.Backend.RuntimeRemovalCount);
         Assert.Equal(fixture.Journal.PreviousOwner.Association, fixture.Backend.Association);
         Assert.Equal(InstallerOperation.Uninstall, fixture.Backend.Plan!.Request.Operation);
         Assert.Equal(PreviousSid, fixture.Backend.Plan.Request.TargetSid);
@@ -34,6 +36,7 @@ public sealed class WindowsOwnerTransferServiceRemovalTests
         Assert.Equal(
             ["release", "barrier", "profile", "plan", "roots-open", "roots-verify", "association-open",
                 "association-verify", "service-remove", "service-verify", "association-verify",
+                "runtime-remove", "association-verify",
                 "association-dispose", "roots-dispose"], fixture.Events);
         Assert.Equal(0, fixture.Backend.LiveLeases);
         Assert.False(fixture.Release.Disposed);
@@ -78,6 +81,8 @@ public sealed class WindowsOwnerTransferServiceRemovalTests
 
         Assert.True(fixture.Backend.ServicePresent);
         Assert.Equal(0, fixture.Backend.RemovalCount);
+        Assert.Equal(0, fixture.Backend.RuntimeRemovalCount);
+        Assert.True(fixture.Backend.RuntimePresent);
         Assert.Equal(original, fixture.Backend.Association);
         Assert.Equal(0, fixture.Backend.LiveLeases);
         Assert.False(fixture.Release.Disposed);
@@ -98,6 +103,8 @@ public sealed class WindowsOwnerTransferServiceRemovalTests
         await Assert.ThrowsAsync<InstallerProtocolException>(() => fixture.Step.ApplyAndVerifyAsync(fixture.Journal, CancellationToken.None));
 
         Assert.Equal(1, fixture.Backend.RemovalCount);
+        Assert.Equal(0, fixture.Backend.RuntimeRemovalCount);
+        Assert.True(fixture.Backend.RuntimePresent);
         Assert.Equal(fixture.Journal.PreviousOwner.Association, fixture.Backend.Association);
         Assert.Equal(0, fixture.Backend.LiveLeases);
         Assert.Equal(["association-dispose", "roots-dispose"], fixture.Events.TakeLast(2));
@@ -146,6 +153,57 @@ public sealed class WindowsOwnerTransferServiceRemovalTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Step.ApplyAndVerifyAsync(fixture.Journal, cancellation.Token));
 
         Assert.Empty(fixture.Events);
+    }
+
+    [Theory]
+    [InlineData("runtime-cleanup", true)]
+    [InlineData("runtime-cleanup-response", false)]
+    public async Task RuntimeCleanupFailureRetainsAssociationAndCanResumeAfterServiceRemoval(
+        string failurePoint, bool runtimeRemains)
+    {
+        using var fixture = new Fixture();
+        fixture.Failure = failurePoint;
+
+        await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            fixture.Step.ApplyAndVerifyAsync(fixture.Journal, CancellationToken.None));
+
+        Assert.False(fixture.Backend.ServicePresent);
+        Assert.Equal(runtimeRemains, fixture.Backend.RuntimePresent);
+        Assert.Equal(fixture.Journal.PreviousOwner.Association, fixture.Backend.Association);
+        Assert.Equal(0, fixture.Backend.LiveLeases);
+
+        fixture.Failure = null;
+        await fixture.Step.ApplyAndVerifyAsync(fixture.Journal, CancellationToken.None);
+
+        Assert.False(fixture.Backend.RuntimePresent);
+        Assert.Equal(1, fixture.Backend.RemovalCount);
+        Assert.Equal(1, fixture.Backend.RuntimeRemovalCount);
+        Assert.Equal(fixture.Journal.PreviousOwner.Association, fixture.Backend.Association);
+    }
+
+    [Fact]
+    public async Task RuntimeCleanupCancellationKeepsProtectionUntilItReturnsAndRemainsReplayable()
+    {
+        using var fixture = new Fixture();
+        using var cancellation = new CancellationTokenSource();
+        fixture.Backend.BeforeRuntimeRemoval = () =>
+        {
+            Assert.Equal(2, fixture.Backend.LiveLeases);
+            Assert.False(fixture.Backend.ServicePresent);
+            cancellation.Cancel();
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            fixture.Step.ApplyAndVerifyAsync(fixture.Journal, cancellation.Token));
+
+        Assert.True(fixture.Backend.RuntimePresent);
+        Assert.Equal(0, fixture.Backend.LiveLeases);
+        fixture.Backend.BeforeRuntimeRemoval = null;
+        await fixture.Step.ApplyAndVerifyAsync(fixture.Journal, CancellationToken.None);
+
+        Assert.False(fixture.Backend.RuntimePresent);
+        Assert.Equal(1, fixture.Backend.RemovalCount);
+        Assert.Equal(1, fixture.Backend.RuntimeRemovalCount);
     }
 
     private sealed class Fixture : IDisposable
@@ -222,6 +280,9 @@ public sealed class WindowsOwnerTransferServiceRemovalTests
     {
         internal bool ServicePresent { get; set; } = true;
         internal int RemovalCount { get; private set; }
+        internal bool RuntimePresent { get; private set; } = true;
+        internal int RuntimeRemovalCount { get; private set; }
+        internal Action? BeforeRuntimeRemoval { get; set; }
         internal int LiveLeases { get; private set; }
         internal InstallerMachineAssociation Association { get; } = fixture.Journal.PreviousOwner.Association;
         internal WindowsMachineDeploymentPlan? Plan { get; private set; }
@@ -287,6 +348,25 @@ public sealed class WindowsOwnerTransferServiceRemovalTests
             fixture.Events.Add("service-verify");
             fixture.FailIf("service-postcondition");
             Assert.False(ServicePresent);
+        }
+
+        public void RemoveServiceRuntime(WindowsMachineDeploymentPlan plan, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(2, LiveLeases);
+            Assert.Same(Plan, plan);
+            Assert.Equal(fixture.Journal.PreviousOwner.Association, plan.Association);
+            Assert.False(ServicePresent);
+            fixture.Events.Add("runtime-remove");
+            fixture.FailIf("runtime-cleanup");
+            BeforeRuntimeRemoval?.Invoke();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (RuntimePresent)
+            {
+                RuntimePresent = false;
+                RuntimeRemovalCount++;
+            }
+            fixture.FailIf("runtime-cleanup-response");
         }
 
         private sealed class RootLease(FakeBackend owner, Fixture fixture) : IWindowsMachineRootGuard

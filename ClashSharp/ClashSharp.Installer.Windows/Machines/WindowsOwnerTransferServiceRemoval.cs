@@ -12,12 +12,16 @@ internal interface IWindowsOwnerTransferServiceBackend : IWindowsOwnerTransferSt
     IWindowsMachineAssociationStore CreateAssociationStore(WindowsMachineDeploymentPlan plan, IWindowsMachineRootGuard rootGuard);
 
     Task StopDeleteServiceAsync(WindowsMachineDeploymentPlan plan, CancellationToken cancellationToken);
+
+    /// <summary>Removes only the plan's authenticated runtime after service absence, under the retained root lease.</summary>
+    void RemoveServiceRuntime(WindowsMachineDeploymentPlan plan, CancellationToken cancellationToken);
 }
 
 /// <summary>
 /// Removes only the service bound to the recorded previous owner after the ordinary startup
 /// barrier is observed. The dedicated transfer authority owns the candidate, both App barriers
-/// and machine exclusion; this step preserves association and payload evidence for later phases.
+/// and machine exclusion; this step removes the previous private runtime while retaining its
+/// authenticated association and payload evidence for replay and later phases.
 /// </summary>
 internal sealed class WindowsOwnerTransferServiceRemoval
 {
@@ -77,6 +81,10 @@ internal sealed class WindowsOwnerTransferServiceRemoval
 
         await _backend.StopDeleteServiceAsync(plan, cancellationToken).ConfigureAwait(false);
         _backend.VerifyServiceAbsent(cancellationToken);
+        await association.VerifyExactAsync(cancellationToken).ConfigureAwait(false);
+        // A new association uses a different runtime directory. Remove the old scratch tree
+        // before losing its authenticated identity; replay also finishes a partial cleanup.
+        _backend.RemoveServiceRuntime(plan, cancellationToken);
         await association.VerifyExactAsync(cancellationToken).ConfigureAwait(false);
     }
 }

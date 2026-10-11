@@ -37,7 +37,10 @@ public sealed class WindowsOwnerTransferPhaseExecutorTests
         Assert.Equal(Enum.GetValues<InstallerOwnerTransferPhase>(), persistence.Phases);
         Assert.Equal("ordinary-prepared", fixture.Mutations[0]);
         Assert.Equal("service-removed", fixture.Mutations[1]);
-        Assert.Equal("association-transferred", fixture.Mutations[2]);
+        Assert.Equal("runtime-removed", fixture.Mutations[2]);
+        Assert.Equal("association-transferred", fixture.Mutations[3]);
+        Assert.DoesNotContain(fixture.Native.Entries.Keys, path =>
+            path.StartsWith(WindowsOwnerTransferAccessFixture.PrivateService, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(1, persistence.Deletes);
         Assert.Equal(0, fixture.Native.LiveLeases);
         Assert.False(fixture.State.Machine.Release.Disposed);
@@ -76,6 +79,7 @@ public sealed class WindowsOwnerTransferPhaseExecutorTests
         Assert.Null(await resumedStore.LoadAsync(CancellationToken.None));
         Assert.Equal(1, fixture.Ordinary.Saves);
         Assert.Equal(1, fixture.Mutations.Count(value => value == "service-removed"));
+        Assert.Equal(1, fixture.Mutations.Count(value => value == "runtime-removed"));
         Assert.Equal(1, fixture.Mutations.Count(value => value == "association-transferred"));
         Assert.Equal(fixture.Native.Writes.Count, fixture.Native.Writes.Distinct().Count());
         Assert.Equal(0, fixture.Native.LiveLeases);

@@ -216,6 +216,13 @@ internal sealed class WindowsMachineHelperMachineBackend
         CancellationToken cancellationToken) =>
         _serviceMutation.StopDeleteAndVerifyAsync(plan, cancellationToken);
 
+    /// <summary>Rechecks SCM absence before removing the retained association's private runtime.</summary>
+    public void RemoveServiceRuntime(WindowsMachineDeploymentPlan plan, CancellationToken cancellationToken)
+    {
+        _serviceVerifier.VerifyAbsent(cancellationToken);
+        _runtimeCleanup.RemoveAndVerify(plan, cancellationToken);
+    }
+
     public void VerifyServicePrepared(CancellationToken cancellationToken) =>
         _serviceVerifier.VerifyPrepared(cancellationToken);
 

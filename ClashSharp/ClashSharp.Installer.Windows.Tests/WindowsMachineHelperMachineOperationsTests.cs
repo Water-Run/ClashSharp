@@ -1070,6 +1070,9 @@ public sealed class WindowsMachineHelperMachineOperationsTests
             return Task.CompletedTask;
         }
 
+        public void RemoveServiceRuntime(WindowsMachineDeploymentPlan plan, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Owner-transfer-only runtime cleanup is outside this ordinary mutation fixture.");
+
         public void VerifyServicePrepared(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();

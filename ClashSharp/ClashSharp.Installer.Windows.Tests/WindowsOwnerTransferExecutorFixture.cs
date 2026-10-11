@@ -149,6 +149,26 @@ internal sealed class WindowsOwnerTransferExecutorFixture : IDisposable
             return Task.CompletedTask;
         }
 
+        public void RemoveServiceRuntime(WindowsMachineDeploymentPlan plan, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Assert.Equal(1, _live);
+            Assert.False(Present);
+            Assert.Equal(fixture.Journal.PreviousOwner.Association, plan.Association);
+            string root = Path.Combine(plan.ServiceDataRoot, plan.Association.BuildServicePipeName());
+            string[] paths = fixture.Native.Entries.Keys.Where(path =>
+                string.Equals(path, root, StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)).ToArray();
+            foreach (string path in paths)
+            {
+                fixture.Native.Entries.Remove(path);
+            }
+            if (paths.Length > 0)
+            {
+                fixture.Mutations.Add("runtime-removed");
+            }
+        }
+
         private sealed class Roots(ServiceBackend owner) : IWindowsMachineRootGuard
         {
             public Task EnsureProtectedAsync(WindowsMachineDeploymentPlan plan, CancellationToken cancellationToken) => Task.CompletedTask;
