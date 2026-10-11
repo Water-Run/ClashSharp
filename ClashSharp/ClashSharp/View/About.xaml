@@ -26,82 +26,87 @@
         VerticalScrollBarVisibility="Auto"
         HorizontalScrollBarVisibility="Disabled"
         HorizontalContentAlignment="Stretch">
-        <StackPanel Spacing="24" Style="{StaticResource ClashReadingPagePanelStyle}">
-            <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="1040" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="24" Style="{StaticResource ClashReadingPagePanelStyle}">
+                <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
 
-            <Grid Style="{StaticResource AboutCardStyle}" ColumnSpacing="24" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
-                <Image Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="96" Height="96" Stretch="Uniform" VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" />
-                    <TextBlock Text="{Binding VersionSummaryText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding RuntimeValueText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding AppDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
-                </StackPanel>
-                <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,*" ColumnSpacing="24"
-                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="0,16,0,0">
-                    <StackPanel Spacing="4">
-                        <TextBlock x:Name="AuthorTitleText" Text="{Binding AuthorTitleText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
-                        <TextBlock x:Name="AuthorValueText" Text="{Binding AuthorValueText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
-                    </StackPanel>
+                <Grid Style="{StaticResource AboutCardStyle}" ColumnSpacing="24" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                    <Image Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="96" Height="96" Stretch="Uniform" VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" Spacing="4">
-                        <TextBlock x:Name="LicenseTitleText" Text="{Binding LicenseTitleText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
-                        <TextBlock x:Name="LicenseValueText" Text="{Binding LicenseValueText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
+                        <TextBlock Text="{Binding VersionSummaryText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding RuntimeValueText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding AppDescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
                     </StackPanel>
-                </Grid>
-            </Grid>
-
-            <Grid x:Name="AboutCards" ColumnSpacing="0" RowSpacing="16" SizeChanged="AboutCards_SizeChanged"
-                  ColumnDefinitions="*,0" RowDefinitions="Auto,Auto,Auto,Auto">
-                <Grid x:Name="GitHubCard" Style="{StaticResource AboutCardStyle}" RowDefinitions="Auto,*,Auto">
-                    <TextBlock x:Name="GitHubTitleText" Text="{Binding GitHubTitleText}" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
-                    <TextBlock x:Name="GitHubDescriptionText" Grid.Row="1" Text="{Binding GitHubDescriptionText}" Style="{StaticResource AboutDescriptionStyle}" />
-                    <Button x:Name="GitHubButton" Grid.Row="2" Command="{Binding OpenGitHubCommand}" HorizontalAlignment="Left">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE774;" FontSize="14" />
-                            <TextBlock x:Name="GitHubButtonText" Text="{Binding GitHubButtonText}" />
+                    <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,*" ColumnSpacing="24"
+                          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="0,16,0,0">
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="AuthorTitleText" Text="{Binding AuthorTitleText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="AuthorValueText" Text="{Binding AuthorValueText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
                         </StackPanel>
-                    </Button>
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock x:Name="LicenseTitleText" Text="{Binding LicenseTitleText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="LicenseValueText" Text="{Binding LicenseValueText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
                 </Grid>
 
-                <Grid x:Name="UpdateCard" Grid.Row="1" Style="{StaticResource AboutCardStyle}" RowDefinitions="Auto,*,Auto">
-                    <TextBlock Text="{Binding UpdateTitleText}" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
-                    <StackPanel Grid.Row="1" Spacing="8">
-                        <TextBlock Text="{Binding UpdateDescriptionText}" Style="{StaticResource AboutDescriptionStyle}" />
-                        <TextBlock Text="{Binding UpdateStatusText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
-                    </StackPanel>
-                    <Button Grid.Row="2" Command="{Binding OpenReleasesCommand}" HorizontalAlignment="Left">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE895;" FontSize="14" />
-                            <TextBlock Text="{Binding OpenReleasesButtonText}" />
-                        </StackPanel>
-                    </Button>
-                </Grid>
+                <Grid x:Name="AboutCards" ColumnSpacing="0" RowSpacing="16" SizeChanged="AboutCards_SizeChanged"
+                      ColumnDefinitions="*,0" RowDefinitions="Auto,Auto,Auto,Auto">
+                    <Grid x:Name="GitHubCard" Style="{StaticResource AboutCardStyle}" RowDefinitions="Auto,*,Auto">
+                        <TextBlock x:Name="GitHubTitleText" Text="{Binding GitHubTitleText}" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="GitHubDescriptionText" Grid.Row="1" Text="{Binding GitHubDescriptionText}" Style="{StaticResource AboutDescriptionStyle}" />
+                        <Button x:Name="GitHubButton" Grid.Row="2" Command="{Binding OpenGitHubCommand}" HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE774;" FontSize="14" />
+                                <TextBlock x:Name="GitHubButtonText" Text="{Binding GitHubButtonText}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
 
-                <Grid x:Name="MihomoCard" Grid.Row="2" Style="{StaticResource AboutCardStyle}" RowDefinitions="Auto,*,Auto">
-                    <TextBlock x:Name="MihomoTitleText" Text="{Binding MihomoTitleText}" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
-                    <StackPanel Grid.Row="1" Spacing="8">
-                        <TextBlock x:Name="MihomoDescriptionText" Text="{Binding MihomoDescriptionText}" Style="{StaticResource AboutDescriptionStyle}" />
-                        <TextBlock x:Name="MihomoStatusText" Text="{Binding MihomoStatusText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
-                    </StackPanel>
-                    <Button x:Name="MihomoButton" Grid.Row="2" Command="{Binding OpenMihomoCommand}" HorizontalAlignment="Left">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8A7;" FontSize="14" />
-                            <TextBlock x:Name="MihomoButtonText" Text="{Binding MihomoButtonText}" />
+                    <Grid x:Name="UpdateCard" Grid.Row="1" Style="{StaticResource AboutCardStyle}" RowDefinitions="Auto,*,Auto">
+                        <TextBlock Text="{Binding UpdateTitleText}" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
+                        <StackPanel Grid.Row="1" Spacing="8">
+                            <TextBlock Text="{Binding UpdateDescriptionText}" Style="{StaticResource AboutDescriptionStyle}" />
+                            <TextBlock Text="{Binding UpdateStatusText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
                         </StackPanel>
-                    </Button>
-                </Grid>
+                        <Button Grid.Row="2" Command="{Binding OpenReleasesCommand}" HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE895;" FontSize="14" />
+                                <TextBlock Text="{Binding OpenReleasesButtonText}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
 
-                <Grid x:Name="ProxyInformationCard" Grid.Row="3" Style="{StaticResource AboutCardStyle}" RowDefinitions="Auto,*,Auto">
-                    <TextBlock x:Name="ProxyInformationTitleText" Text="{Binding ProxyInformationTitleText}" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
-                    <TextBlock x:Name="ProxyInformationDescriptionText" Grid.Row="1" Text="{Binding ProxyInformationDescriptionText}" Style="{StaticResource AboutDescriptionStyle}" />
-                    <Button x:Name="ProxyInformationButton" Grid.Row="2" Click="OpenProxyInformationButton_Click" HorizontalAlignment="Left">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE946;" FontSize="14" />
-                            <TextBlock x:Name="ProxyInformationButtonText" Text="{Binding ProxyInformationButtonText}" />
+                    <Grid x:Name="MihomoCard" Grid.Row="2" Style="{StaticResource AboutCardStyle}" RowDefinitions="Auto,*,Auto">
+                        <TextBlock x:Name="MihomoTitleText" Text="{Binding MihomoTitleText}" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
+                        <StackPanel Grid.Row="1" Spacing="8">
+                            <TextBlock x:Name="MihomoDescriptionText" Text="{Binding MihomoDescriptionText}" Style="{StaticResource AboutDescriptionStyle}" />
+                            <TextBlock x:Name="MihomoStatusText" Text="{Binding MihomoStatusText}" Style="{StaticResource ClashSecondaryCaptionTextBlockStyle}" TextWrapping="Wrap" />
                         </StackPanel>
-                    </Button>
+                        <Button x:Name="MihomoButton" Grid.Row="2" Command="{Binding OpenMihomoCommand}" HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8A7;" FontSize="14" />
+                                <TextBlock x:Name="MihomoButtonText" Text="{Binding MihomoButtonText}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <Grid x:Name="ProxyInformationCard" Grid.Row="3" Style="{StaticResource AboutCardStyle}" RowDefinitions="Auto,*,Auto">
+                        <TextBlock x:Name="ProxyInformationTitleText" Text="{Binding ProxyInformationTitleText}" Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="ProxyInformationDescriptionText" Grid.Row="1" Text="{Binding ProxyInformationDescriptionText}" Style="{StaticResource AboutDescriptionStyle}" />
+                        <Button x:Name="ProxyInformationButton" Grid.Row="2" Click="OpenProxyInformationButton_Click" HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE946;" FontSize="14" />
+                                <TextBlock x:Name="ProxyInformationButtonText" Text="{Binding ProxyInformationButtonText}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
                 </Grid>
-            </Grid>
-        </StackPanel>
+            </StackPanel>
+        </Grid>
     </ScrollViewer>
 </Page>

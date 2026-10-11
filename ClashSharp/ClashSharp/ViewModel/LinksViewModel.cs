@@ -113,6 +113,9 @@ internal sealed class LinksViewModel : ObservableObject
 
     public bool HasNoLinks => SubscriptionLinks.Count == 0;
 
+    /// <summary>Gets whether the subscription list has rows to display.</summary>
+    public bool HasLinks => !HasNoLinks;
+
     public bool HasStatusText => StatusText.Length > 0;
 
     public string StatusText
@@ -148,7 +151,11 @@ internal sealed class LinksViewModel : ObservableObject
         get => _subscriptionLinks;
         private set
         {
-            if (SetProperty(ref _subscriptionLinks, value)) { OnPropertyChanged(nameof(HasNoLinks)); }
+            if (SetProperty(ref _subscriptionLinks, value))
+            {
+                OnPropertyChanged(nameof(HasNoLinks));
+                OnPropertyChanged(nameof(HasLinks));
+            }
         }
     }
 

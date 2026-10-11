@@ -21,7 +21,7 @@
             </Grid.RowDefinitions>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
                 <TextBlock
                     Text="{Binding DescriptionText}"
                     Style="{ThemeResource BodyTextBlockStyle}"
@@ -130,12 +130,13 @@
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
-                    <Button
+                    <Button x:Name="AddTriggerButton"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
                         Padding="0"
                         Background="Transparent"
                         BorderThickness="0"
+                        AutomationProperties.Name="{Binding AddTriggerText}"
                         Click="AddTriggerCardButton_Click"
                         IsEnabled="{Binding CanEditTriggers}">
                         <Grid Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="12" MinHeight="76">
@@ -170,7 +171,7 @@
                 </Grid.ColumnDefinitions>
                 <Button Click="BackToTriggerListButton_Click" VerticalAlignment="Top" IsEnabled="{Binding CurrentEditor.CanCancel}" AutomationProperties.Name="{Binding CancelText}" ToolTipService.ToolTip="{Binding CancelText}"><FontIcon Glyph="&#xE72B;" FontSize="14" /></Button>
                 <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="{Binding CurrentEditor.Title}" Style="{ThemeResource TitleTextBlockStyle}" />
+                    <TextBlock Text="{Binding CurrentEditor.Title}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
                     <TextBlock Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                 </StackPanel>
             </Grid>

@@ -229,7 +229,7 @@ public sealed class InstallerExecutableContractTests
     }
 
     [Fact]
-    public void ShellUsesSystemColorsAndNativeButtonRendering()
+    public void ShellUsesSystemFluentThemeAndNativeButtonRendering()
     {
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -241,12 +241,12 @@ public sealed class InstallerExecutableContractTests
 
         XElement windowStyle = Assert.Single(theme.Descendants(presentation + "Style"),
             style => (string?)style.Attribute(x + "Key") == "InstallerWindowStyle");
-        Assert.Contains(windowStyle.Elements(presentation + "Setter"),
-            setter => (string?)setter.Attribute("Property") == "Background"
-                && (string?)setter.Attribute("Value") == "{DynamicResource {x:Static SystemColors.WindowBrushKey}}");
-        Assert.Contains(windowStyle.Elements(presentation + "Setter"),
-            setter => (string?)setter.Attribute("Property") == "Foreground"
-                && (string?)setter.Attribute("Value") == "{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}");
+        Assert.Equal("{StaticResource DefaultWindowStyle}", (string?)windowStyle.Attribute("BasedOn"));
+        XDocument application = XDocument.Load(SourcePath("ClashSharp.Installer", "App.xaml"));
+        Assert.Contains(application.Descendants(presentation + "ResourceDictionary"), dictionary =>
+            (string?)dictionary.Attribute("Source") == "pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml");
+        Assert.DoesNotContain(windowStyle.Elements(presentation + "Setter"),
+            setter => (string?)setter.Attribute("Property") is "Background" or "Foreground");
         XElement[] buttonStyles = theme.Descendants(presentation + "Style")
             .Where(style => (string?)style.Attribute("TargetType") == "Button").ToArray();
         Assert.NotEmpty(buttonStyles);

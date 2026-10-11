@@ -30,8 +30,8 @@
                 <VisualState x:Name="PointerOver">
                     <Storyboard>
                         <DoubleAnimation Storyboard.TargetName="HoverOverlay" Storyboard.TargetProperty="Opacity" To="0.08" Duration="0:0:0.12" />
-                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleX" To="1.015" Duration="0:0:0.12" />
-                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleY" To="1.015" Duration="0:0:0.12" />
+                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.12" />
+                        <DoubleAnimation Storyboard.TargetName="TileScaleTransform" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.12" />
                     </Storyboard>
                 </VisualState>
                 <VisualState x:Name="Pressed">
@@ -75,14 +75,14 @@
             x:Name="SelectedOverlay"
             Grid.RowSpan="2"
             Margin="-16"
-            CornerRadius="4"
+            CornerRadius="8"
             Background="{ThemeResource AccentFillColorDefaultBrush}"
             Opacity="0" />
         <Border
             x:Name="HoverOverlay"
             Grid.RowSpan="2"
             Margin="-16"
-            CornerRadius="4"
+            CornerRadius="8"
             Background="{ThemeResource ControlFillColorSecondaryBrush}"
             Opacity="0" />
 

@@ -21,15 +21,16 @@
         Background="Transparent"
         Padding="{StaticResource ClashPagePadding}"
         VerticalScrollBarVisibility="Auto"
-        HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="18">
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalContentAlignment="Stretch">
+        <StackPanel Spacing="16">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="4">
-                    <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+                    <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
                     <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button x:Name="RefreshStatisticsButton" Grid.Column="1" VerticalAlignment="Top"
@@ -54,7 +55,8 @@
                               AutomationProperties.Name="{Binding LoadingText}" />
             </Grid>
 
-            <Grid ColumnSpacing="12" Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid x:Name="SummaryCards" ColumnSpacing="12" RowDefinitions="Auto" SizeChanged="StatisticsCards_SizeChanged"
+                  Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
@@ -83,7 +85,8 @@
                 </Grid>
             </Grid>
 
-            <Grid ColumnSpacing="12" Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid x:Name="BreakdownCards" ColumnSpacing="12" RowDefinitions="Auto" SizeChanged="StatisticsCards_SizeChanged"
+                  Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />

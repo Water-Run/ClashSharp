@@ -13,7 +13,7 @@
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Page.Resources>
-    <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
+    <Grid Padding="{StaticResource ClashPagePadding}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -21,11 +21,11 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <StackPanel Spacing="4">
-            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
             <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
         </StackPanel>
 
-        <CommandBar x:Name="LinkCommands" Grid.Row="1" DefaultLabelPosition="Right" Background="Transparent">
+        <CommandBar Style="{StaticResource ClashPageCommandBarStyle}" x:Name="LinkCommands" Grid.Row="1" Margin="0,12,0,0" DefaultLabelPosition="Right" Background="Transparent">
             <AppBarButton x:Name="AddLinkButton" Label="{Binding AddLinkText}" Click="AddLinkButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE710;" />
@@ -53,13 +53,11 @@
             </AppBarButton>
         </CommandBar>
 
-        <InfoBar Grid.Row="2" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
+        <InfoBar Grid.Row="2" Margin="0,12,0,0" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
                  Severity="Informational" Message="{Binding StatusText}"
                  Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}" />
-        <TextBlock Grid.Row="3" Text="{Binding EmptyStateText}" TextWrapping="Wrap"
-                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                   Visibility="{Binding HasNoLinks, Converter={StaticResource BooleanToVisibilityConverter}}" />
-        <ListView Grid.Row="3" x:Name="SubscriptionLinksList" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single">
+        <ListView Grid.Row="3" Margin="0,16,0,0" x:Name="SubscriptionLinksList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single"
+                  Visibility="{Binding HasLinks, Converter={StaticResource BooleanToVisibilityConverter}}">
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <StackPanel Padding="4,10" Spacing="6">
@@ -84,5 +82,16 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+        <Grid Grid.Row="3" Margin="0,16,0,0" Style="{StaticResource ClashCardGridStyle}" Padding="32" VerticalAlignment="Top"
+              Visibility="{Binding HasNoLinks, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel Spacing="16" MaxWidth="480" HorizontalAlignment="Left">
+                <FontIcon Glyph="&#xE71B;" FontSize="32" HorizontalAlignment="Left"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}" AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock Text="{Binding EmptyStateText}" TextWrapping="Wrap" Style="{ThemeResource BodyTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Button x:Name="EmptyAddLinkButton" Content="{Binding AddLinkText}" Click="AddLinkButton_Click"
+                        Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Left" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Page>

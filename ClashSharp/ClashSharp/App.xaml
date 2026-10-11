@@ -19,13 +19,34 @@
 
             <Style x:Key="ClashSecondaryCaptionTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <Style x:Key="ClashPageCommandBarStyle" TargetType="CommandBar">
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="IsDynamicOverflowEnabled" Value="True" />
+            </Style>
+
+            <Style x:Key="ClashDataListItemStyle" TargetType="ListViewItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="MinHeight" Value="44" />
+                <Setter Property="Padding" Value="16,0" />
+            </Style>
+
+            <Style x:Key="ClashDataListStyle" TargetType="ListView">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="0,8" />
+                <Setter Property="ItemContainerStyle" Value="{StaticResource ClashDataListItemStyle}" />
             </Style>
 
             <Style x:Key="ClashCardGridStyle" TargetType="Grid">
                 <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="16" />
             </Style>
         </ResourceDictionary>

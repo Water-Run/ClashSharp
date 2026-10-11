@@ -14,7 +14,7 @@
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <converters:PageStatusSeverityConverter x:Key="PageStatusSeverityConverter" />
     </Page.Resources>
-    <Grid Padding="{StaticResource ClashPagePadding}" RowSpacing="18">
+    <Grid Padding="{StaticResource ClashPagePadding}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -23,11 +23,11 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <StackPanel Spacing="4">
-            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" />
+            <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
             <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
         </StackPanel>
 
-        <CommandBar x:Name="ProfileCommands" Grid.Row="1" DefaultLabelPosition="Right" Background="Transparent">
+        <CommandBar Style="{StaticResource ClashPageCommandBarStyle}" x:Name="ProfileCommands" Grid.Row="1" Margin="0,12,0,0" DefaultLabelPosition="Right" Background="Transparent">
             <AppBarButton x:Name="ImportProfileButton" Label="{Binding ImportProfileText}" Click="ImportProfileButton_Click">
                 <AppBarButton.Icon>
                     <FontIcon Glyph="&#xE8E5;" />
@@ -61,17 +61,17 @@
             </AppBarButton>
         </CommandBar>
 
-        <InfoBar Grid.Row="2" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
+        <InfoBar Grid.Row="2" Margin="0,12,0,0" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
                  Severity="{Binding StatusSeverity, Converter={StaticResource PageStatusSeverityConverter}}" Message="{Binding StatusText}"
                  Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}" />
-        <Grid Grid.Row="3" Style="{StaticResource ClashCardGridStyle}">
+        <Grid Grid.Row="3" Margin="0,16,0,0" Style="{StaticResource ClashCardGridStyle}">
             <StackPanel Spacing="4">
                 <TextBlock x:Name="CurrentProfileTitleText" Text="{Binding CurrentProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                 <TextBlock x:Name="ActiveProfileText" Text="{Binding ActiveProfileText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             </StackPanel>
         </Grid>
 
-        <ListView Grid.Row="4" x:Name="ProfilesList" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
+        <ListView Grid.Row="4" Margin="0,16,0,0" x:Name="ProfilesList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" SelectionMode="Single">
             <ListView.Header>
                 <Grid Padding="20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>

@@ -50,6 +50,7 @@ public sealed partial class Logs : Page
     private bool _isLoaded;
     private bool _cleanupPending;
     private bool _synchronizingFilters;
+    private bool _compactFilters;
     private int _visit;
 
     /// <summary>Initializes the page from an explicit composition contract.</summary>
@@ -68,6 +69,24 @@ public sealed partial class Logs : Page
         _viewModel.SetSourceFilter(dependencies.InitialSourceFilter);
         InitializeComponent();
         DataContext = _viewModel;
+    }
+
+    /// <summary>Keeps search and localized filter choices readable when the navigation leaves a narrow content area.</summary>
+    private void LogFiltersPanel_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        bool compact = e.NewSize.Width < 820;
+        if (_compactFilters == compact) { return; }
+        _compactFilters = compact;
+        Grid.SetColumnSpan(LogSearchBox, compact ? 4 : 1);
+        Grid.SetRow(LevelFilterBox, compact ? 1 : 0);
+        Grid.SetColumn(LevelFilterBox, compact ? 0 : 1);
+        Grid.SetRow(CategoryFilterBox, compact ? 1 : 0);
+        Grid.SetColumn(CategoryFilterBox, compact ? 1 : 2);
+        Grid.SetColumnSpan(CategoryFilterBox, compact ? 2 : 1);
+        Grid.SetRow(RefreshLogsButton, compact ? 1 : 0);
+        LogFiltersPanel.ColumnDefinitions[1].Width = compact ? new GridLength(1, GridUnitType.Star) : new GridLength(160);
+        LogFiltersPanel.ColumnDefinitions[2].Width = compact ? new GridLength(0) : new GridLength(180);
+        LogFiltersPanel.RowSpacing = compact ? 12 : 0;
     }
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)

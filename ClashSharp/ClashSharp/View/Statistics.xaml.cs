@@ -34,6 +34,29 @@ public sealed partial class Statistics : Page
         DataContext = _viewModel;
     }
 
+    /// <summary>Reflows summary and breakdown cards when their content area is too narrow for three readable columns.</summary>
+    private void StatisticsCards_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not Grid panel || e.NewSize.Width <= 0) { return; }
+        bool compact = e.NewSize.Width < 820;
+        if ((panel.ColumnDefinitions[1].Width.Value == 0) == compact) { return; }
+        panel.ColumnDefinitions[1].Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        panel.ColumnDefinitions[2].Width = panel.ColumnDefinitions[1].Width;
+        panel.ColumnSpacing = compact ? 0 : 12;
+        panel.RowSpacing = compact ? 12 : 0;
+        panel.RowDefinitions.Clear();
+        for (int row = 0; row < (compact ? 3 : 1); row++)
+        {
+            panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+        for (int index = 0; index < panel.Children.Count; index++)
+        {
+            FrameworkElement card = (FrameworkElement)panel.Children[index];
+            Grid.SetRow(card, compact ? index : 0);
+            Grid.SetColumn(card, compact ? 0 : index);
+        }
+    }
+
     private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
         _dataChanges.Start();

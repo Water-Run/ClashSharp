@@ -51,7 +51,7 @@
                 x:Name="SelectedOverlay"
                 Grid.ColumnSpan="2"
                 Margin="-12"
-                CornerRadius="4"
+                CornerRadius="8"
                 Background="{ThemeResource AccentFillColorDefaultBrush}"
                 Opacity="0" />
 

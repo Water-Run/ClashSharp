@@ -29,12 +29,12 @@
                         ToolTipService.ToolTip="{Binding BackText}">
                     <FontIcon Glyph="&#xE72B;" FontSize="14" />
                 </Button>
-                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" VerticalAlignment="Center" />
+                <TextBlock x:Name="PageTitleText" Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" VerticalAlignment="Center" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
             </StackPanel>
             <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
         </StackPanel>
 
-        <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" Margin="0,18,0,18">
+        <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" Margin="0,16,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -46,7 +46,8 @@
             <HyperlinkButton x:Name="CleanupButton" Grid.Column="1" Content="{Binding CleanupText}" Click="CleanupButton_Click" />
         </Grid>
 
-        <Grid Grid.Row="2" Style="{StaticResource ClashCardGridStyle}" Margin="0,0,0,18" ColumnSpacing="12">
+        <Grid x:Name="LogFiltersPanel" Grid.Row="2" Style="{StaticResource ClashCardGridStyle}" Margin="0,0,0,16" ColumnSpacing="12"
+              RowDefinitions="Auto,Auto" SizeChanged="LogFiltersPanel_SizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="160" />
@@ -84,7 +85,7 @@
             </Button>
         </Grid>
 
-        <ListView x:Name="RecentLogsList" ItemsSource="{Binding RecentLogs}" Grid.Row="3">
+        <ListView x:Name="RecentLogsList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding RecentLogs}" Grid.Row="3">
             <ListView.Header>
                 <Grid Padding="20,0,20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
