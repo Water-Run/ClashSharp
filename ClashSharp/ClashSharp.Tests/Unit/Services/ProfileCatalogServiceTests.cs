@@ -573,6 +573,94 @@ public sealed class ProfileCatalogServiceTests
         Assert.Single(service.GetDueSubscriptionLinks(succeededAt.AddHours(24)));
     }
 
+    /// <summary>History previews use current parsing without rewriting the immutable rollback entry or source.</summary>
+    [Fact]
+    public async Task HistoryPreview_RecountsVerifiedSourceWithoutChangingRollbackIdentity()
+    {
+        using TempFile file = new();
+        const string Content = "proxies:\n-\n  name: HK One\n  type: trojan\n  server: example.invalid\n  port: 443\nrules:\n- MATCH,DIRECT\n";
+        await File.WriteAllTextAsync(file.Path, Content);
+        string catalogPath = file.Path + ".catalog";
+        FakeProfileCatalogCoreConfiguration core = new();
+        ProfileCatalogService service = CreateService(catalogPath, new FakeProfileCatalogSettings(), core);
+        ProfileImportResult imported = await service.ImportLocalProfileAsync(file.Path, CancellationToken.None);
+        ProfileHistoryEntry original = Assert.Single(service.GetProfileHistory(imported.ProfileId));
+        Assert.Equal(2, original.NodeCount);
+        Assert.Equal(3, original.RuleCount);
+        byte[] catalog = await File.ReadAllBytesAsync(catalogPath);
+        string historyPath = HistoryPath(file.Path, original);
+        byte[] history = await File.ReadAllBytesAsync(historyPath);
+
+        ProfileHistoryPreview preview = Assert.Single(await service.GetProfileHistoryPreviewsAsync(imported.ProfileId, CancellationToken.None));
+
+        Assert.True(preview.CanRestore);
+        Assert.Equal(1, preview.NodeCount);
+        Assert.Equal(1, preview.RuleCount);
+        Assert.Equal(original, preview.Entry);
+        Assert.Equal(catalog, await File.ReadAllBytesAsync(catalogPath));
+        Assert.Equal(history, await File.ReadAllBytesAsync(historyPath));
+        Assert.Single(core.Imports);
+        await service.RollbackProfileAsync(preview.Entry, CancellationToken.None);
+        Assert.Equal(Content, core.Imports[1].ConfigurationText);
+    }
+
+    /// <summary>One unavailable retained file does not hide or disable other verified versions.</summary>
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("changed")]
+    [InlineData("oversized")]
+    [InlineData("invalid-utf8")]
+    public async Task HistoryPreview_SeparatesUnavailableVersionsFromValidOnes(string failure)
+    {
+        using TempFile file = new();
+        await File.WriteAllTextAsync(file.Path, "proxies: []\nrules:\n- MATCH,DIRECT\n");
+        ProfileCatalogService service = CreateService(file.Path + ".catalog", new FakeProfileCatalogSettings());
+        ProfileImportResult imported = await service.ImportLocalProfileAsync(file.Path, CancellationToken.None);
+        ProfileHistoryEntry original = Assert.Single(service.GetProfileHistory(imported.ProfileId));
+        await service.RollbackProfileAsync(original, CancellationToken.None);
+        string path = HistoryPath(file.Path, original);
+        switch (failure)
+        {
+            case "missing": File.Delete(path); break;
+            case "changed": await File.WriteAllTextAsync(path, "changed source"); break;
+            case "oversized":
+                using (FileStream stream = File.OpenWrite(path)) { stream.SetLength(4 * 1024 * 1024 + 1); }
+                break;
+            case "invalid-utf8": await File.WriteAllBytesAsync(path, [0xFF, 0xFE, 0xFF]); break;
+        }
+        byte[] catalog = await File.ReadAllBytesAsync(file.Path + ".catalog");
+
+        IReadOnlyList<ProfileHistoryPreview> previews = await service.GetProfileHistoryPreviewsAsync(imported.ProfileId, CancellationToken.None);
+
+        Assert.Equal(2, previews.Count);
+        ProfileHistoryPreview unavailable = Assert.Single(previews, item => item.Entry.VersionId == original.VersionId);
+        Assert.False(unavailable.CanRestore);
+        Assert.Null(unavailable.NodeCount);
+        Assert.Null(unavailable.RuleCount);
+        Assert.Equal(original, unavailable.Entry);
+        ProfileHistoryPreview available = Assert.Single(previews, item => item.CanRestore);
+        Assert.Equal(0, available.NodeCount);
+        Assert.Equal(1, available.RuleCount);
+        Assert.Equal(catalog, await File.ReadAllBytesAsync(file.Path + ".catalog"));
+    }
+
+    [Fact]
+    public async Task HistoryPreview_PropagatesCancellationAndReturnsAnEmptySnapshotForNoHistory()
+    {
+        using TempFile file = new();
+        ProfileCatalogService service = CreateService(file.Path, new FakeProfileCatalogSettings());
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetProfileHistoryPreviewsAsync("absent", cancellation.Token));
+        Assert.Empty(await service.GetProfileHistoryPreviewsAsync("absent", CancellationToken.None));
+    }
+
+    private static string HistoryPath(string sourcePath, ProfileHistoryEntry entry)
+    {
+        string directory = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(entry.ProfileId)));
+        return Path.Combine(Path.GetDirectoryName(sourcePath)!, "mihomo", "history", directory, entry.VersionId + ".yaml");
+    }
+
     /// <summary>Verifies successful imports create rollback versions and rollback creates a new linear version.</summary>
     [Fact]
     public async Task ImportAndRollback_CreateImmutableProfileHistory()

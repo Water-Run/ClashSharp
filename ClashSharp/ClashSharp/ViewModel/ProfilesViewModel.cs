@@ -50,6 +50,7 @@ internal sealed class ProfilesViewModel : ObservableObject
 
     private string _statusText = string.Empty;
     private PageStatusSeverity _statusSeverity;
+    private int _dataRevision;
 
     /// <summary>Initializes a profiles view model.</summary>
     /// <param name="getString">Localization resolver. Must not be null.</param>
@@ -170,11 +171,13 @@ internal sealed class ProfilesViewModel : ObservableObject
     }
 
     /// <summary>Formats a retained version with explicit node and rule labels.</summary>
-    /// <param name="entry">Retained profile version to describe.</param>
+    /// <param name="preview">Verified current preview, or the unavailable retained version to describe.</param>
     /// <returns>Localized multiline history description.</returns>
-    public string GetHistoryEntryText(ProfileHistoryEntry entry) => string.Format(
-        CultureInfo.CurrentCulture, _getString("Profiles.History.Entry"),
-        entry.CreatedAt.ToLocalTime(), entry.SourceName, entry.NodeCount, entry.RuleCount);
+    public string GetHistoryEntryText(ProfileHistoryPreview preview) => preview.CanRestore
+        ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.History.Entry"),
+            preview.Entry.CreatedAt.ToLocalTime(), preview.Entry.SourceName, preview.NodeCount, preview.RuleCount)
+        : string.Format(CultureInfo.CurrentCulture, _getString("Profiles.History.UnavailableEntry"),
+            preview.Entry.CreatedAt.ToLocalTime(), preview.Entry.SourceName);
 
     /// <summary>Gets the current-profile label.</summary>
     /// <value>Localized label text.</value>
@@ -257,20 +260,23 @@ internal sealed class ProfilesViewModel : ObservableObject
     /// <returns>A task that completes after the snapshot is applied or the failure is reported.</returns>
     public Task LoadAsync(CancellationToken cancellationToken)
     {
+        int revision = _dataRevision;
         return ViewModelLoadExecutor.ExecuteAsync(
             ReadLoadSnapshot,
             ApplyLoadSnapshot,
             _errorSink,
             "profiles-load",
-            cancellationToken);
+            cancellationToken, () => revision == _dataRevision);
     }
 
     /// <summary>Discards references to old profile rows before loading a replacement data directory.</summary>
     public Task ReloadForDataChangeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ++_dataRevision;
         SelectedProfile = null;
         _profilesRows.Clear();
+        ClearStatus();
         return LoadAsync(cancellationToken);
     }
 
@@ -396,13 +402,17 @@ internal sealed class ProfilesViewModel : ObservableObject
         }
     }
 
-    /// <summary>Returns retained versions for one profile, or an empty snapshot when history cannot be read.</summary>
-    public IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId)
+    /// <summary>Returns current history previews, or null when the request failed or its data scope changed.</summary>
+    public async Task<IReadOnlyList<ProfileHistoryPreview>?> GetProfileHistoryPreviewsAsync(
+        string profileId, CancellationToken cancellationToken)
     {
+        int revision = _dataRevision;
         ClearStatus();
         try
         {
-            return _profiles.GetProfileHistory(profileId);
+            IReadOnlyList<ProfileHistoryPreview> result = await _profiles.GetProfileHistoryPreviewsAsync(profileId, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return revision == _dataRevision ? result : null;
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -410,11 +420,17 @@ internal sealed class ProfilesViewModel : ObservableObject
                 or UnauthorizedAccessException
                 or SecurityException
                 or InvalidOperationException
-            && !ExceptionGraphClassifier.IsProcessFatal(exception))
+                or OperationCanceledException
+            && !ExceptionGraphClassifier.IsProcessFatal(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            _log.Append("Warning", "Profiles", "Profile history could not be loaded.", exception.Message);
-            SetStatus("Profiles.Status.HistoryFailed", PageStatusSeverity.Error);
-            return [];
+            cancellationToken.ThrowIfCancellationRequested();
+            if (revision == _dataRevision)
+            {
+                _log.Append("Warning", "Profiles", "Profile history could not be loaded.", exception.Message);
+                SetStatus("Profiles.Status.HistoryFailed", PageStatusSeverity.Error);
+            }
+            return null;
         }
     }
 

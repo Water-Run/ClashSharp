@@ -10,7 +10,7 @@ internal interface IProfileManagementCatalog
 {
     IReadOnlyList<ConfigurationProfile> GetProfiles();
 
-    IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId);
+    Task<IReadOnlyList<ProfileHistoryPreview>> GetProfileHistoryPreviewsAsync(string profileId, CancellationToken cancellationToken);
 
     Task<ProfileImportResult> ImportLocalProfileAsync(
         string filePath,

@@ -150,6 +150,7 @@ public sealed partial class Profiles : Page
                 Content = content,
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             dialog.PrimaryButtonClick += (_, args) =>
@@ -209,8 +210,10 @@ public sealed partial class Profiles : Page
 
         await RunPageOperationAsync(async cancellationToken =>
         {
-            IReadOnlyList<ProfileHistoryEntry> historyEntries =
-                _viewModel.GetProfileHistory(selectedProfile.Model.Id);
+            IReadOnlyList<ProfileHistoryPreview>? historyEntries =
+                await _viewModel.GetProfileHistoryPreviewsAsync(selectedProfile.Model.Id, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (historyEntries is null) { return; }
             ComboBox versionBox = new()
             {
                 Header = _getString("Profiles.Dialog.HistoryVersion"),
@@ -218,17 +221,17 @@ public sealed partial class Profiles : Page
                 MaxWidth = 420,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
-            foreach (ProfileHistoryEntry entry in historyEntries)
+            foreach (ProfileHistoryPreview preview in historyEntries)
             {
                 versionBox.Items.Add(new ComboBoxItem
                 {
                     Content = new TextBlock
                     {
-                        Text = _viewModel.GetHistoryEntryText(entry),
+                        Text = _viewModel.GetHistoryEntryText(preview),
                         TextWrapping = TextWrapping.Wrap,
                         MaxWidth = 390,
                     },
-                    Tag = entry,
+                    Tag = preview,
                 });
             }
 
@@ -246,17 +249,19 @@ public sealed partial class Profiles : Page
                 Content = content,
                 PrimaryButtonText = _getString("Command.Rollback"),
                 CloseButtonText = _getString("Command.Close"),
-                IsPrimaryButtonEnabled = versionBox.Items.Count > 0,
+                IsPrimaryButtonEnabled = versionBox.SelectedItem is ComboBoxItem { Tag: ProfileHistoryPreview { CanRestore: true } },
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
             };
+            versionBox.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled =
+                versionBox.SelectedItem is ComboBoxItem { Tag: ProfileHistoryPreview { CanRestore: true } };
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (result == ContentDialogResult.Primary
-                && versionBox.SelectedItem is ComboBoxItem { Tag: ProfileHistoryEntry historyEntry })
+                && versionBox.SelectedItem is ComboBoxItem { Tag: ProfileHistoryPreview { CanRestore: true } selectedPreview })
             {
                 await _viewModel.RollbackProfileCommand.ExecuteObservedAsync(
-                    historyEntry,
+                    selectedPreview.Entry,
                     cancellationToken);
             }
         });

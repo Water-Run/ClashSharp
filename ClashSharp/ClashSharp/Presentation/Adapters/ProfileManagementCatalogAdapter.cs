@@ -23,9 +23,9 @@ internal sealed class ProfileManagementCatalogAdapter : IProfileManagementCatalo
         return _catalog.GetProfiles();
     }
 
-    public IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId)
+    public Task<IReadOnlyList<ProfileHistoryPreview>> GetProfileHistoryPreviewsAsync(string profileId, CancellationToken cancellationToken)
     {
-        return _catalog.GetProfileHistory(profileId);
+        return _catalog.GetProfileHistoryPreviewsAsync(profileId, cancellationToken);
     }
 
     public Task<ProfileImportResult> ImportLocalProfileAsync(

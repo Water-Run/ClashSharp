@@ -107,6 +107,7 @@ public sealed partial class Links : Page
                 Content = content,
                 PrimaryButtonText = _getString("Command.Add"),
                 CloseButtonText = _getString("Command.Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
 
@@ -185,6 +186,7 @@ public sealed partial class Links : Page
                 Content = content,
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             AttachInputValidation(dialog, content, nameBox, uriBox, intervalBox);

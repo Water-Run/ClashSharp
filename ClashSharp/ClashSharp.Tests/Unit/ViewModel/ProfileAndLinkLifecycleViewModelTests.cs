@@ -546,6 +546,45 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
             new ModelDisplayMapper(static text => text));
     }
 
+    [Fact]
+    public async Task HistoryPreview_IgnoresAnOldDataScopeCompletion()
+    {
+        TaskCompletionSource<IReadOnlyList<ProfileHistoryPreview>> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeProfileManagementCatalog catalog = new() { ReadHistory = (_, _) => completion.Task };
+        ProfilesViewModel viewModel = CreateProfilesViewModel(catalog, new RecordingPageLog());
+        Task<IReadOnlyList<ProfileHistoryPreview>?> history = viewModel.GetProfileHistoryPreviewsAsync("old", CancellationToken.None);
+
+        await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
+        completion.SetResult([]);
+
+        Assert.Null(await history);
+        Assert.False(viewModel.HasStatusText);
+    }
+
+    [Fact]
+    public async Task HistoryPreview_ReportsReadFailureInsteadOfAnEmptyHistory()
+    {
+        FakeProfileManagementCatalog catalog = new() { ReadHistory = (_, _) => throw new IOException("private history path") };
+        ProfilesViewModel viewModel = CreateProfilesViewModel(catalog, new RecordingPageLog());
+
+        Assert.Null(await viewModel.GetProfileHistoryPreviewsAsync("profile", CancellationToken.None));
+
+        Assert.Equal("Profiles.Status.HistoryFailed", viewModel.StatusText);
+    }
+
+    [Fact]
+    public async Task HistoryPreview_PropagatesCallerCancellation()
+    {
+        FakeProfileManagementCatalog catalog = new();
+        ProfilesViewModel viewModel = CreateProfilesViewModel(catalog, new RecordingPageLog());
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => viewModel.GetProfileHistoryPreviewsAsync("profile", cancellation.Token));
+
+        Assert.False(viewModel.HasStatusText);
+    }
+
     private static LinksViewModel CreateLinksViewModel(
         ISubscriptionLinkCatalog catalog,
         IPageLog log,
@@ -625,10 +664,11 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
             return Profiles;
         }
 
-        public IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId)
-        {
-            return [];
-        }
+        public Func<string, CancellationToken, Task<IReadOnlyList<ProfileHistoryPreview>>> ReadHistory { get; set; } =
+            static (_, _) => Task.FromResult<IReadOnlyList<ProfileHistoryPreview>>([]);
+
+        public Task<IReadOnlyList<ProfileHistoryPreview>> GetProfileHistoryPreviewsAsync(string profileId, CancellationToken cancellationToken) =>
+            ReadHistory(profileId, cancellationToken);
 
         public Task<ProfileImportResult> ImportLocalProfileAsync(
             string filePath,

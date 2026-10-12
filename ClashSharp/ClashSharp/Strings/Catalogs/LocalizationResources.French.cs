@@ -129,6 +129,7 @@ internal static partial class LocalizationResources
             ["Profiles.Status.RestoreFailed"] = "Impossible de restaurer la version sélectionnée. Vérifiez la configuration et réessayez.",
             ["Profiles.Status.HistoryFailed"] = "Impossible de charger l’historique. Actualisez la page et réessayez.",
             ["Profiles.History.Entry"] = "{0:g}\n{1}\nNœuds : {2} · Règles : {3}",
+            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\nLe fichier source est manquant ou a été modifié. Cette version ne peut pas être restaurée.",
             ["Links.Schedule.Automatic.Format"] = "Mise à jour automatique : toutes les {0} h",
             ["Links.Schedule.Manual"] = "Mise à jour automatique : désactivée",
             ["Links.Updated.Format"] = "Dernière mise à jour : {0}",

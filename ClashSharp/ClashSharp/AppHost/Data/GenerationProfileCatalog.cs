@@ -33,6 +33,12 @@ internal sealed class GenerationProfileCatalog(DataGenerationManager generations
         return _generations.Execute<IProfileCatalog, IReadOnlyList<ProfileHistoryEntry>>((storage, _) => storage.GetProfileHistory(profileId));
     }
 
+    public Task<IReadOnlyList<ProfileHistoryPreview>> GetProfileHistoryPreviewsAsync(string profileId, CancellationToken cancellationToken)
+    {
+        return _generations.ExecuteAsync<IProfileCatalog, IReadOnlyList<ProfileHistoryPreview>>(
+            (storage, _, token) => storage.GetProfileHistoryPreviewsAsync(profileId, token), cancellationToken);
+    }
+
     public IReadOnlyList<ProfileSubscriptionLink> GetDueSubscriptionLinks(DateTimeOffset now)
     {
         return _generations.Execute<IProfileCatalog, IReadOnlyList<ProfileSubscriptionLink>>((storage, _) => storage.GetDueSubscriptionLinks(now));

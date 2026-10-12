@@ -16,6 +16,8 @@ internal interface IProfileCatalog
 
     IReadOnlyList<ProfileHistoryEntry> GetProfileHistory(string profileId);
 
+    Task<IReadOnlyList<ProfileHistoryPreview>> GetProfileHistoryPreviewsAsync(string profileId, CancellationToken cancellationToken);
+
     IReadOnlyList<ProfileSubscriptionLink> GetDueSubscriptionLinks(DateTimeOffset now);
 
     Task RecordSubscriptionUpdateOutcomeAsync(string linkId, bool succeeded, DateTimeOffset attemptedAt, CancellationToken cancellationToken);

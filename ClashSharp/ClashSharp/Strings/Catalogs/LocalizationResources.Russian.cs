@@ -129,6 +129,7 @@ internal static partial class LocalizationResources
             ["Profiles.Status.RestoreFailed"] = "Не удалось восстановить версию. Проверьте конфигурацию и повторите попытку.",
             ["Profiles.Status.HistoryFailed"] = "Не удалось загрузить историю. Обновите страницу и повторите попытку.",
             ["Profiles.History.Entry"] = "{0:g}\n{1}\nУзлы: {2} · Правила: {3}",
+            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\nИсходный файл отсутствует или изменён. Эту версию нельзя восстановить.",
             ["Links.Schedule.Automatic.Format"] = "Автообновление: каждые {0} ч",
             ["Links.Schedule.Manual"] = "Автообновление: выключено",
             ["Links.Updated.Format"] = "Последнее обновление: {0}",
