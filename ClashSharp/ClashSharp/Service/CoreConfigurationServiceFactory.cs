@@ -54,20 +54,40 @@ internal sealed class CoreConfigurationProfileMetricsAdapter : ICoreConfiguratio
 
 internal sealed class CoreConfigurationValidator : ICoreConfigurationValidator
 {
+    private readonly string _binaryPath;
+    private readonly string _geoDataDirectory;
+
+    internal CoreConfigurationValidator()
+        : this(MihomoCoreService.Instance.BinaryPath, Path.Combine(AppContext.BaseDirectory, "Binaries", "GeoData"))
+    {
+    }
+
+    /// <summary>Uses fixed core and bundled asset roots without reading configuration during construction.</summary>
+    internal CoreConfigurationValidator(string binaryPath, string geoDataDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(binaryPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(geoDataDirectory);
+        _binaryPath = Path.GetFullPath(binaryPath);
+        _geoDataDirectory = Path.GetFullPath(geoDataDirectory);
+    }
+
     public async Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(workingDirectory);
         ArgumentNullException.ThrowIfNull(configurationPath);
 
-        MihomoCoreService coreService = MihomoCoreService.Instance;
-        if (!coreService.IsBinaryAvailable)
+        if (!File.Exists(_binaryPath))
         {
             return;
         }
 
+        using CoreConfigurationGeoDataLease assets = await CoreConfigurationGeoDataLease.AcquireAsync(
+            _geoDataDirectory, workingDirectory, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
         ProcessStartInfo startInfo = new()
         {
-            FileName = coreService.BinaryPath,
+            FileName = _binaryPath,
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -124,8 +144,12 @@ internal sealed class CoreConfigurationValidator : ICoreConfigurationValidator
             {
                 process.Kill(entireProcessTree: true);
             }
+            if (!process.WaitForExit(5000))
+            {
+                throw new InvalidOperationException("Native configuration validation did not terminate.");
+            }
         }
-        catch (Exception exception) when (IsExpectedProcessTerminationException(exception))
+        catch (Exception exception) when (IsExpectedProcessTerminationException(exception) && process.HasExited)
         {
         }
     }

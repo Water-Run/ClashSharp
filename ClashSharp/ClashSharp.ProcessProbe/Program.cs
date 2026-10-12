@@ -19,6 +19,7 @@ internal static class ProcessProbeProgram
             "emit" => await EmitAsync(args),
             "arguments" => await WriteArgumentsAsync(args),
             "environment" => await WriteEnvironmentAsync(args),
+            "-t" => await ValidateAssetsAsync(args),
             "-d" => await RunCoreProbeAsync(args),
             "-v" => await SpawnChildAsync(),
             "spawn-child" => await SpawnChildAsync(),
@@ -26,6 +27,38 @@ internal static class ProcessProbeProgram
             "hang" => await HangAsync("root-ready"),
             _ => 64,
         };
+    }
+
+    private static async Task<int> ValidateAssetsAsync(IReadOnlyList<string> args)
+    {
+        if (args.Count != 5 || args[1] != "-d" || args[3] != "-f")
+        {
+            return 64;
+        }
+
+        foreach (string name in new[] { "Country.mmdb", "GeoIP.dat", "GeoSite.dat", "ASN.mmdb" })
+        {
+            if (!File.Exists(Path.Combine(args[2], name)))
+            {
+                await Console.Error.WriteLineAsync("Validation probe lacks GeoData.");
+                return 23;
+            }
+            _ = await File.ReadAllBytesAsync(Path.Combine(args[2], name));
+        }
+
+        string marker = Path.Combine(args[2], "validation.pid");
+        await File.WriteAllTextAsync(marker + ".tmp", Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
+        File.Move(marker + ".tmp", marker, overwrite: true);
+        string configuration = await File.ReadAllTextAsync(args[4]);
+        if (configuration.Contains("process-probe: validation-hang", StringComparison.Ordinal))
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan);
+        }
+        if (configuration.Contains("process-probe: validation-failure", StringComparison.Ordinal))
+        {
+            return 23;
+        }
+        return 0;
     }
 
     private static async Task<int> EmitAsync(IReadOnlyList<string> args)

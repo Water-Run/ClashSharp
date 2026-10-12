@@ -110,6 +110,7 @@
     <Compile Include="..\ClashSharp\Service\RuntimeDataServices.cs" Link="Service\RuntimeDataServices.cs" />
     <Compile Include="..\ClashSharp\Service\IProxySelectionService.cs" Link="Service\IProxySelectionService.cs" />
     <Compile Include="..\ClashSharp\Service\CoreConfigurationServiceFactory.cs" Link="Service\CoreConfigurationServiceFactory.cs" />
+    <Compile Include="..\ClashSharp\Service\CoreConfigurationGeoDataLease.cs" Link="Service\CoreConfigurationGeoDataLease.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageFootprint.cs" Link="Service\LogStorageFootprint.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageMaintenance.cs" Link="Service\LogStorageMaintenance.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageSchema.cs" Link="Service\LogStorageSchema.cs" />
