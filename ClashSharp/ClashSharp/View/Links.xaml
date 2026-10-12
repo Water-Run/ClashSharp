@@ -12,6 +12,7 @@
 
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:PageStatusSeverityConverter x:Key="PageStatusSeverityConverter" />
     </Page.Resources>
     <Grid Padding="{StaticResource ClashPagePadding}">
         <Grid.RowDefinitions>
@@ -54,7 +55,7 @@
         </CommandBar>
 
         <InfoBar Grid.Row="2" Margin="0,12,0,0" IsOpen="{Binding HasStatusText, Mode=OneWay}" IsClosable="False"
-                 Severity="Informational" Message="{Binding StatusText}"
+                 Severity="{Binding StatusSeverity, Converter={StaticResource PageStatusSeverityConverter}}" Message="{Binding StatusText}"
                  Visibility="{Binding HasStatusText, Converter={StaticResource BooleanToVisibilityConverter}}" />
         <ListView Grid.Row="3" Margin="0,16,0,0" x:Name="SubscriptionLinksList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding SubscriptionLinks}" SelectedItem="{Binding SelectedLink, Mode=TwoWay}" SelectionMode="Single"
                   Visibility="{Binding HasLinks, Converter={StaticResource BooleanToVisibilityConverter}}">

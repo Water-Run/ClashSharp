@@ -13,6 +13,46 @@ namespace ClashSharp.Tests.Unit.Services;
 /// </remarks>
 public sealed class MihomoProfilePreviewParserTests
 {
+    /// <summary>Recognizes localized labels and flags without overriding a more specific named location.</summary>
+    [Theory]
+    [InlineData("中国香港 01", "HK")]
+    [InlineData("香港IPLC", "HK")]
+    [InlineData("🇭🇰 节点 01", "HK")]
+    [InlineData("中國澳門 02", "MO")]
+    [InlineData("🇲🇴 Node", "MO")]
+    [InlineData("🇨🇳 中国台湾 01", "TW")]
+    [InlineData("中國臺灣 02", "TW")]
+    [InlineData("台灣 03", "TW")]
+    [InlineData("🇹🇼 Node", "TW")]
+    [InlineData("日本专线", "JP")]
+    [InlineData("🇯🇵 Node", "JP")]
+    [InlineData("韓國 01", "KR")]
+    [InlineData("🇰🇷 Node", "KR")]
+    [InlineData("新加坡Premium", "SG")]
+    [InlineData("🇸🇬 Node", "SG")]
+    [InlineData("美国 01", "US")]
+    [InlineData("🇺🇸 Node", "US")]
+    [InlineData("英國 01", "GB")]
+    [InlineData("🇬🇧 Node", "GB")]
+    [InlineData("德国 01", "DE")]
+    [InlineData("🇩🇪 Node", "DE")]
+    [InlineData("法國 01", "FR")]
+    [InlineData("🇫🇷 Node", "FR")]
+    [InlineData("中国内地 01", "CN")]
+    [InlineData("中國大陸 02", "CN")]
+    [InlineData("🇨🇳 Node", "CN")]
+    [InlineData("🇺🇸 Hong Kong 01", "HK")]
+    [InlineData("🇭🇰 Japan 01", "JP")]
+    public void ParseNodes_LocalizedRegionHints_ReturnExpectedRegion(string name, string expectedRegion)
+    {
+        string configuration = $"proxies:\n  - {{name: '{name}', type: trojan, server: edge.example.invalid, port: 443}}";
+
+        ProxyNode node = Assert.Single(MihomoProfilePreviewParser.ParseNodes(configuration, ResolveRegion));
+
+        Assert.Equal(expectedRegion, node.Region.RegionCode);
+        Assert.Equal(name, node.Name);
+    }
+
     /// <summary>Accepts a sequence marker on its own line, as emitted by common subscription serializers.</summary>
     [Theory]
     [InlineData("", "\n")]

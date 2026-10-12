@@ -42,6 +42,7 @@ internal sealed class LinksViewModel : ObservableObject
     private ProfileSubscriptionLinkDisplay? _selectedLink;
 
     private string _statusText = string.Empty;
+    private PageStatusSeverity _statusSeverity;
     private int _dataRevision;
 
     /// <summary>Initializes a links view model.</summary>
@@ -125,6 +126,19 @@ internal sealed class LinksViewModel : ObservableObject
         {
             if (SetProperty(ref _statusText, value)) { OnPropertyChanged(nameof(HasStatusText)); }
         }
+    }
+
+    /// <summary>Gets the semantic severity used by the native page feedback control.</summary>
+    public PageStatusSeverity StatusSeverity
+    {
+        get => _statusSeverity;
+        private set => SetProperty(ref _statusSeverity, value);
+    }
+
+    private void SetStatus(string key, PageStatusSeverity severity)
+    {
+        StatusSeverity = severity;
+        StatusText = _getString(key);
     }
 
     /// <summary>Validates editor input without closing the dialog or contacting a subscription.</summary>
@@ -215,6 +229,7 @@ internal sealed class LinksViewModel : ObservableObject
         SelectedLink = null;
         SubscriptionLinks = [];
         StatusText = string.Empty;
+        StatusSeverity = PageStatusSeverity.Informational;
         return LoadAsync(cancellationToken);
     }
 
@@ -241,7 +256,7 @@ internal sealed class LinksViewModel : ObservableObject
             await LoadAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             SelectedLink = SubscriptionLinks.FirstOrDefault(row => row.Model.Id == link.Id);
-            StatusText = _getString("Links.Status.Added");
+            SetStatus("Links.Status.Added", PageStatusSeverity.Success);
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -255,7 +270,7 @@ internal sealed class LinksViewModel : ObservableObject
         {
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription link could not be added.", exception.Message);
-            StatusText = _getString("Links.Status.AddFailed");
+            SetStatus("Links.Status.AddFailed", PageStatusSeverity.Error);
         }
     }
 
@@ -280,6 +295,7 @@ internal sealed class LinksViewModel : ObservableObject
             string status = await _profiles.CheckSubscriptionLinkAsync(link, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Links", $"Subscription link check completed: {status}.", link.Name);
+            StatusSeverity = PageStatusSeverity.Success;
             StatusText = _displayMapper.MapText(status);
         }
         catch (Exception exception) when (
@@ -295,7 +311,7 @@ internal sealed class LinksViewModel : ObservableObject
         {
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription link check failed.", exception.Message);
-            StatusText = _getString("Links.Status.CheckFailed");
+            SetStatus("Links.Status.CheckFailed", PageStatusSeverity.Error);
         }
 
         await LoadAsync(cancellationToken);
@@ -322,7 +338,7 @@ internal sealed class LinksViewModel : ObservableObject
             ProfileImportResult result = await _profiles.ImportSubscriptionLinkAsync(link, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Links", $"Subscription profile imported: {result.ProfileName}.", result.ConfigPath);
-            StatusText = _getString("Links.Status.Updated");
+            SetStatus("Links.Status.Updated", PageStatusSeverity.Success);
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -337,7 +353,7 @@ internal sealed class LinksViewModel : ObservableObject
         {
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription profile import failed.", exception.Message);
-            StatusText = _getString("Links.Status.UpdateFailed");
+            SetStatus("Links.Status.UpdateFailed", PageStatusSeverity.Error);
         }
 
         await LoadAsync(cancellationToken);
@@ -357,9 +373,9 @@ internal sealed class LinksViewModel : ObservableObject
                 _log.Append("Info", "Links", "Subscription link updated.", request.LinkId);
                 await LoadAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                StatusText = _getString("Links.Status.Saved");
+                SetStatus("Links.Status.Saved", PageStatusSeverity.Success);
             }
-            else { StatusText = _getString("Links.Status.EditFailed"); }
+            else { SetStatus("Links.Status.EditFailed", PageStatusSeverity.Error); }
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -373,7 +389,7 @@ internal sealed class LinksViewModel : ObservableObject
         {
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription link could not be edited.", exception.Message);
-            StatusText = _getString("Links.Status.EditFailed");
+            SetStatus("Links.Status.EditFailed", PageStatusSeverity.Error);
         }
     }
 
@@ -404,9 +420,9 @@ internal sealed class LinksViewModel : ObservableObject
                 _log.Append("Info", "Links", "Subscription link deleted.", selectedLink.Model.Id);
                 await LoadAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                StatusText = _getString("Links.Status.Deleted");
+                SetStatus("Links.Status.Deleted", PageStatusSeverity.Success);
             }
-            else { StatusText = _getString("Links.Status.DeleteFailed"); }
+            else { SetStatus("Links.Status.DeleteFailed", PageStatusSeverity.Error); }
         }
         catch (Exception exception) when (
             exception is ArgumentException
@@ -420,7 +436,7 @@ internal sealed class LinksViewModel : ObservableObject
         {
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Warning", "Links", "Subscription link could not be deleted.", exception.Message);
-            StatusText = _getString("Links.Status.DeleteFailed");
+            SetStatus("Links.Status.DeleteFailed", PageStatusSeverity.Error);
         }
     }
 

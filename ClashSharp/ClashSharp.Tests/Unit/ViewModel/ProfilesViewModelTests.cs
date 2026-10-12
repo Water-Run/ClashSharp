@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Presentation.Adapters;
 using ClashSharp.Service;
@@ -149,16 +150,23 @@ public sealed class ProfilesViewModelTests
         Assert.False(viewModel.HasSelectedLink);
         Assert.True(viewModel.HasStatusText);
         Assert.Equal("Links.Status.AddFailed", viewModel.StatusText);
+        Assert.Equal(PageStatusSeverity.Error, viewModel.StatusSeverity);
 
         await viewModel.AddSubscriptionLinkAsync("Example", "https://example.com/profile.yaml", CancellationToken.None);
         Assert.Same(Assert.Single(viewModel.SubscriptionLinks), viewModel.SelectedLink);
         Assert.Equal("Links.Status.Added", viewModel.StatusText);
+        Assert.Equal(PageStatusSeverity.Success, viewModel.StatusSeverity);
         await viewModel.LoadAsync(CancellationToken.None);
         Assert.Same(Assert.Single(viewModel.SubscriptionLinks), viewModel.SelectedLink);
         await viewModel.DeleteSelectedLinkAsync(CancellationToken.None);
         Assert.True(viewModel.HasNoLinks);
         Assert.False(viewModel.HasSelectedLink);
         Assert.Equal("Links.Status.Deleted", viewModel.StatusText);
+        Assert.Equal(PageStatusSeverity.Success, viewModel.StatusSeverity);
+
+        await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
+        Assert.False(viewModel.HasStatusText);
+        Assert.Equal(PageStatusSeverity.Informational, viewModel.StatusSeverity);
     }
 
     /// <summary>Verifies malformed editor values remain distinguishable from valid input.</summary>
