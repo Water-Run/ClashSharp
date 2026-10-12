@@ -52,7 +52,7 @@
                      Style="{StaticResource MutedTextStyle}" AutomationProperties.LiveSetting="Polite" />
           <StackPanel Margin="0,20,0,0"
                       Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <ProgressBar Value="{Binding ProgressValue, Mode=OneWay}"
+            <ProgressBar Style="{StaticResource InstallerProgressBarStyle}" Value="{Binding ProgressValue, Mode=OneWay}"
                          IsIndeterminate="{Binding IsProgressIndeterminate, Mode=OneWay}"
                          AutomationProperties.Name="操作进度"
                          AutomationProperties.HelpText="{Binding ProgressStatus, Mode=OneWay}" />

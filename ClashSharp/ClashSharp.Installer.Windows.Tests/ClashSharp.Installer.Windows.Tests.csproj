@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <UseWPF>true</UseWPF>
     <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <PlatformTarget>x64</PlatformTarget>
@@ -21,6 +22,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Preserve the adapter tests' imports when enabling native WPF resource checks. -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>

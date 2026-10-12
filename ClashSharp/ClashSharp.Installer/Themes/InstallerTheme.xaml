@@ -69,7 +69,8 @@
     </Style.Triggers>
   </Style>
 
-  <Style TargetType="ProgressBar" BasedOn="{StaticResource DefaultProgressBarStyle}">
+  <Style x:Key="InstallerProgressBarStyle" TargetType="ProgressBar"
+         BasedOn="{StaticResource {x:Type ProgressBar}}">
     <Setter Property="Height" Value="4" />
     <Setter Property="Minimum" Value="0" />
     <Setter Property="Maximum" Value="100" />
