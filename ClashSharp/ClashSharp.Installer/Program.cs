@@ -26,6 +26,7 @@ internal static class Program
             runMachineHelper: RunMachineHelper,
             runUserInterface: static () =>
             {
+                InstallerBackdropBootstrap.Configure();
                 var application = new App();
                 application.InitializeComponent();
                 return application.Run();

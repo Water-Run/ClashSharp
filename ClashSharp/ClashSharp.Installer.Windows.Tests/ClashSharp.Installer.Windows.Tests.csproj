@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\ClashSharp.Installer\InstallerBackdropBootstrap.cs" Link="Installer\InstallerBackdropBootstrap.cs" />
     <ProjectReference Include="..\ClashSharp.Installer.Core\ClashSharp.Installer.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Installer.Windows\ClashSharp.Installer.Windows.csproj" />
   </ItemGroup>

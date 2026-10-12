@@ -22,6 +22,7 @@ public sealed class InstallerWpfResourceTests
         {
             try
             {
+                InstallerBackdropBootstrap.Configure();
                 Application application = new();
                 try
                 {
@@ -58,6 +59,18 @@ public sealed class InstallerWpfResourceTests
                         control.Arrange(new Rect(0, 0, 480, 96));
                         control.ApplyTemplate();
                     }
+                    Window window = new()
+                    {
+                        Style = Assert.IsType<Style>(application.TryFindResource("InstallerWindowStyle")),
+                        ShowActivated = false,
+                        ShowInTaskbar = false,
+                        Left = -10000,
+                        Top = -10000,
+                        Width = 320,
+                        Height = 180,
+                    };
+                    try { window.Show(); }
+                    finally { window.Close(); }
                 }
                 finally
                 {
