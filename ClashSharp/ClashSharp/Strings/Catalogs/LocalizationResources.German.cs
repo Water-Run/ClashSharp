@@ -129,7 +129,7 @@ internal static partial class LocalizationResources
             ["Profiles.Status.RestoreFailed"] = "Version konnte nicht wiederhergestellt werden. Konfiguration prüfen und erneut versuchen.",
             ["Profiles.Status.HistoryFailed"] = "Profilverlauf konnte nicht geladen werden. Seite aktualisieren und erneut versuchen.",
             ["Profiles.History.Entry"] = "{0:g}\n{1}\nKnoten: {2} · Regeln: {3}",
-            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\nDie Quelldatei fehlt oder wurde geändert. Diese Version kann nicht wiederhergestellt werden.",
+            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\nDie Quelldatei kann derzeit nicht gelesen oder überprüft werden. Diese Version kann nicht wiederhergestellt werden.",
             ["Links.Schedule.Automatic.Format"] = "Automatische Aktualisierung: alle {0} Std.",
             ["Links.Schedule.Manual"] = "Automatische Aktualisierung: aus",
             ["Links.Updated.Format"] = "Zuletzt aktualisiert: {0}",

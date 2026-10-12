@@ -129,7 +129,7 @@ internal static partial class LocalizationResources
             ["Profiles.Status.RestoreFailed"] = "선택한 버전으로 복원하지 못했습니다. 구성을 확인한 뒤 다시 시도하세요.",
             ["Profiles.Status.HistoryFailed"] = "프로필 기록을 읽지 못했습니다. 페이지를 새로 고친 뒤 다시 시도하세요.",
             ["Profiles.History.Entry"] = "{0:g}\n{1}\n노드: {2} · 규칙: {3}",
-            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\n원본 파일이 없거나 변경되었습니다. 이 버전을 복원할 수 없습니다.",
+            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\n현재 원본 파일을 읽거나 검증할 수 없습니다. 이 버전을 복원할 수 없습니다.",
             ["Links.Schedule.Automatic.Format"] = "자동 업데이트: {0}시간마다",
             ["Links.Schedule.Manual"] = "자동 업데이트: 꺼짐",
             ["Links.Updated.Format"] = "마지막 업데이트: {0}",

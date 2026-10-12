@@ -6,6 +6,23 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for durable mihomo runtime configuration transactions.</summary>
 public sealed partial class RuntimeConfigurationTransactionTests
 {
+    [Fact]
+    public async Task RuntimePreparation_RetainsRuntimeAssetsBeforeApplyingTheCandidate()
+    {
+        using TempDirectory directory = new();
+        RecordingValidator validator = new();
+        CoreConfigurationService service = CreateService(directory.Path, validator);
+        RecordingRuntime runtime = new()
+        {
+            Applying = (_, _, _) => Assert.Equal(1, validator.RuntimeValidations),
+        };
+
+        await service.ApplyRuntimeConfigurationAsync(ClashSharpMode.Standby, false, 17890, runtime, CancellationToken.None);
+
+        Assert.Equal(1, validator.RuntimeValidations);
+        Assert.Equal(0, validator.TemporaryValidations);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -744,12 +761,27 @@ public sealed partial class RuntimeConfigurationTransactionTests
 
     private sealed class RecordingValidator(Exception? failure = null) : ICoreConfigurationValidator
     {
+        public int RuntimeValidations { get; private set; }
+        public int TemporaryValidations { get; private set; }
+
+        public Task ValidateRuntimeAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken)
+        {
+            ++RuntimeValidations;
+            return RecordValidation(configurationPath);
+        }
+
         public List<string> Paths { get; } = [];
 
         public Task ValidateAsync(
             string workingDirectory,
             string configurationPath,
             CancellationToken cancellationToken)
+        {
+            ++TemporaryValidations;
+            return RecordValidation(configurationPath);
+        }
+
+        private Task RecordValidation(string configurationPath)
         {
             Paths.Add(configurationPath);
             return failure is null

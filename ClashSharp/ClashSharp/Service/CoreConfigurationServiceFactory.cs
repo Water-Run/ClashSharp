@@ -71,7 +71,13 @@ internal sealed class CoreConfigurationValidator : ICoreConfigurationValidator
         _geoDataDirectory = Path.GetFullPath(geoDataDirectory);
     }
 
-    public async Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken)
+    public Task ValidateRuntimeAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
+        ValidateCoreAsync(workingDirectory, configurationPath, retainRuntimeAssets: true, cancellationToken);
+
+    public Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
+        ValidateCoreAsync(workingDirectory, configurationPath, retainRuntimeAssets: false, cancellationToken);
+
+    private async Task ValidateCoreAsync(string workingDirectory, string configurationPath, bool retainRuntimeAssets, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(workingDirectory);
         ArgumentNullException.ThrowIfNull(configurationPath);
@@ -125,6 +131,11 @@ internal sealed class CoreConfigurationValidator : ICoreConfigurationValidator
             {
                 string detail = string.IsNullOrWhiteSpace(error) ? output : error;
                 throw new InvalidOperationException($"mihomo rejected the imported configuration: {detail}");
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            if (retainRuntimeAssets)
+            {
+                assets.RetainForRuntime();
             }
         }
         catch (OperationCanceledException)

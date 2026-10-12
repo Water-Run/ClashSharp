@@ -129,7 +129,7 @@ internal static partial class LocalizationResources
             ["Profiles.Status.RestoreFailed"] = "Could not restore the selected version. Check the configuration and try again.",
             ["Profiles.Status.HistoryFailed"] = "Could not load profile history. Refresh the page and try again.",
             ["Profiles.History.Entry"] = "{0:g}\n{1}\nNodes: {2} · Rules: {3}",
-            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\nSource file is missing or has changed. This version cannot be restored.",
+            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\nThe source file cannot currently be read or verified. This version cannot be restored.",
             ["Links.Schedule.Automatic.Format"] = "Automatic updates: every {0} h",
             ["Links.Schedule.Manual"] = "Automatic updates: off",
             ["Links.Updated.Format"] = "Last updated: {0}",

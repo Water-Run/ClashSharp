@@ -129,7 +129,7 @@ internal static partial class LocalizationResources
             ["Profiles.Status.RestoreFailed"] = "无法恢复所选版本，请检查配置后重试。",
             ["Profiles.Status.HistoryFailed"] = "无法读取配置历史，请刷新页面后重试。",
             ["Profiles.History.Entry"] = "{0:g}\n{1}\n节点：{2} · 规则：{3}",
-            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\n源文件缺失或已变更，无法恢复此版本。",
+            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\n源文件当前不可读取或无法通过校验，不能恢复此版本。",
             ["Links.Schedule.Automatic.Format"] = "自动更新：每 {0} 小时",
             ["Links.Schedule.Manual"] = "自动更新：已关闭",
             ["Links.Updated.Format"] = "最后更新：{0}",

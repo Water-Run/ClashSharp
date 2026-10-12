@@ -499,6 +499,9 @@ public sealed class NetworkSettingsRuntimeTests
     }
     private sealed class Validator : Host.Service.ICoreConfigurationValidator
     {
+        public Task ValidateRuntimeAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
+            ValidateAsync(workingDirectory, configurationPath, cancellationToken);
+
         public Exception? Failure { get; set; }
         public Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
             Failure is null ? Task.CompletedTask : Task.FromException(Failure);

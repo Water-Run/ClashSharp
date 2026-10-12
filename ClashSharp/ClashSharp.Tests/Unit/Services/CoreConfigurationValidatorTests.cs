@@ -11,6 +11,39 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class CoreConfigurationValidatorTests
 {
     [Fact]
+    public async Task ValidateRuntimeAsync_RetainsVerifiedAssetsAndReleasesHandlesForTheCore()
+    {
+        using Fixture fixture = new();
+        string cached = Path.Combine(fixture.Working, "GeoIP.dat");
+        await File.WriteAllTextAsync(cached, "newer-user-cache");
+        CoreConfigurationValidator validator = new(FindProbeExecutable(), fixture.Assets);
+
+        await validator.ValidateRuntimeAsync(fixture.Working, fixture.Configuration, CancellationToken.None);
+
+        foreach (string name in Fixture.Names)
+        {
+            string path = Path.Combine(fixture.Working, name);
+            Assert.True(File.Exists(path), "The long-running core needs its GeoData after validation returns.");
+            byte[] expected = name == "GeoIP.dat" ? Encoding.UTF8.GetBytes("newer-user-cache") : Fixture.AssetBytes(name);
+            Assert.Equal(expected, await File.ReadAllBytesAsync(path));
+            using FileStream exclusive = new(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            Assert.Equal(expected.Length, exclusive.Length);
+        }
+        await validator.ValidateAsync(fixture.Working, fixture.Configuration, CancellationToken.None);
+        Assert.All(Fixture.Names, name => Assert.True(File.Exists(Path.Combine(fixture.Working, name))));
+    }
+
+    [Fact]
+    public async Task ValidateRuntimeAsync_RejectionDoesNotPromoteTemporaryCopies()
+    {
+        using Fixture fixture = new();
+        await File.AppendAllTextAsync(fixture.Configuration, "# process-probe: validation-failure\n");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new CoreConfigurationValidator(FindProbeExecutable(), fixture.Assets)
+            .ValidateRuntimeAsync(fixture.Working, fixture.Configuration, CancellationToken.None));
+        AssertNoTemporaryAssets(fixture);
+    }
+
+    [Fact]
     public async Task ValidateAsync_MakesBundledGeoDataAvailableOnlyForNativeValidation()
     {
         using Fixture fixture = new();
@@ -55,14 +88,18 @@ public sealed class CoreConfigurationValidatorTests
         Assert.Equal(before, await File.ReadAllTextAsync(fixture.Configuration));
     }
 
-    [Fact]
-    public async Task ValidateAsync_CancellationWaitsForNativeExitBeforeRemovingAssets()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Validation_CancellationWaitsForNativeExitBeforeRemovingAssets(bool runtime)
     {
         using Fixture fixture = new();
         await File.AppendAllTextAsync(fixture.Configuration, "# process-probe: validation-hang\n");
         using CancellationTokenSource cancellation = new();
-        Task validation = new CoreConfigurationValidator(FindProbeExecutable(), fixture.Assets)
-            .ValidateAsync(fixture.Working, fixture.Configuration, cancellation.Token);
+        CoreConfigurationValidator validator = new(FindProbeExecutable(), fixture.Assets);
+        Task validation = runtime
+            ? validator.ValidateRuntimeAsync(fixture.Working, fixture.Configuration, cancellation.Token)
+            : validator.ValidateAsync(fixture.Working, fixture.Configuration, cancellation.Token);
         string marker = Path.Combine(fixture.Working, "validation.pid");
         Stopwatch watch = Stopwatch.StartNew();
         while (!File.Exists(marker) && !validation.IsCompleted && watch.Elapsed < TimeSpan.FromSeconds(10))

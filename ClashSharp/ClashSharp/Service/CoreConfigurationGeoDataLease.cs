@@ -10,10 +10,11 @@ using System.Threading.Tasks;
 
 namespace ClashSharp.Service;
 
-/// <summary>Holds verified bundled GeoData in a profile directory until native validation exits.</summary>
+/// <summary>Holds verified bundled GeoData until validation either releases it or retains it for runtime use.</summary>
 /// <remarks>
 /// Existing caches are read-locked, never replaced; mihomo validates their contents. New copies
-/// match the bundled manifest and only these copies are removed. The directory gate covers the lifetime.
+/// match the bundled manifest. Temporary copies are removed unless successful runtime validation retains
+/// them as writable caches for the subsequent core. The directory gate covers preparation and release.
 /// </remarks>
 internal sealed class CoreConfigurationGeoDataLease : IDisposable
 {
@@ -125,7 +126,15 @@ internal sealed class CoreConfigurationGeoDataLease : IDisposable
         }
     }
 
-    /// <summary>Releases native readers before deleting this lease's files and admitting another validator.</summary>
+    /// <summary>Retains verified copies for a subsequent runtime; disposal still releases every handle and the gate.</summary>
+    /// <remarks>Only a successfully completed runtime validation may choose this; ordinary profile previews stay temporary.</remarks>
+    internal void RetainForRuntime()
+    {
+        ObjectDisposedException.ThrowIf(_directoryLease is null, this);
+        _createdFiles.Clear();
+    }
+
+    /// <summary>Releases readers, removes uncommitted temporary copies, and admits another validator.</summary>
     public void Dispose()
     {
         IDisposable? directoryLease = Interlocked.Exchange(ref _directoryLease, null);

@@ -37,6 +37,9 @@ internal interface ICoreConfigurationValidator
 {
     /// <summary>Validates <paramref name="configurationPath"/> using <paramref name="workingDirectory"/>.</summary>
     Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken);
+
+    /// <summary>Validates a runtime candidate and retains required cached assets for the subsequent core process.</summary>
+    Task ValidateRuntimeAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken);
 }
 
 /// <summary>Manages local mihomo configuration paths and default configuration generation.</summary>

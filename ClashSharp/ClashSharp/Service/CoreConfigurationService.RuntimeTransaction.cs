@@ -295,7 +295,7 @@ public sealed partial class CoreConfigurationService
                     transparentProxyEnabled,
                     _controllerCredentials.GetSecret());
                 await _validator
-                    .ValidateAsync(_configurationDirectoryPath, stagingPath, cancellationToken)
+                    .ValidateRuntimeAsync(_configurationDirectoryPath, stagingPath, cancellationToken)
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }

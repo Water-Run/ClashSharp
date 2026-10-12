@@ -129,7 +129,7 @@ internal static partial class LocalizationResources
             ["Profiles.Status.RestoreFailed"] = "بازیابی نسخه ممکن نشد. پیکربندی را بررسی و دوباره تلاش کنید.",
             ["Profiles.Status.HistoryFailed"] = "بارگیری تاریخچه ممکن نشد. صفحه را تازه‌سازی و دوباره تلاش کنید.",
             ["Profiles.History.Entry"] = "{0:g}\n{1}\nگره‌ها: {2} · قوانین: {3}",
-            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\nفایل منبع موجود نیست یا تغییر کرده است. بازیابی این نسخه ممکن نیست.",
+            ["Profiles.History.UnavailableEntry"] = "{0:g}\n{1}\nدر حال حاضر خواندن یا تأیید فایل منبع ممکن نیست. این نسخه قابل بازیابی نیست.",
             ["Links.Schedule.Automatic.Format"] = "به‌روزرسانی خودکار: هر {0} ساعت",
             ["Links.Schedule.Manual"] = "به‌روزرسانی خودکار: خاموش",
             ["Links.Updated.Format"] = "آخرین به‌روزرسانی: {0}",

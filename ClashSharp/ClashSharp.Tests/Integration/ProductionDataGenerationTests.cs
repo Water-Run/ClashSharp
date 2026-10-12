@@ -330,6 +330,9 @@ public sealed partial class ProductionDataGenerationTests
 
     private sealed class ConfigurationValidator : Validator
     {
+        public Task ValidateRuntimeAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
+            ValidateAsync(workingDirectory, configurationPath, cancellationToken);
+
         public Func<CancellationToken, Task>? OnValidate { get; set; }
         public Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
             OnValidate?.Invoke(cancellationToken) ?? Task.CompletedTask;

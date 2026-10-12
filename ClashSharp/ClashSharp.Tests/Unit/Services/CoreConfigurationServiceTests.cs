@@ -534,6 +534,9 @@ public sealed class CoreConfigurationServiceTests
 
     private sealed class FakeCoreConfigurationValidator : ICoreConfigurationValidator
     {
+        public Task ValidateRuntimeAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
+            ValidateAsync(workingDirectory, configurationPath, cancellationToken);
+
         public List<CoreValidationRequest> Requests { get; } = [];
 
         public Task ValidateAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken)
@@ -545,6 +548,9 @@ public sealed class CoreConfigurationServiceTests
 
     private sealed class CoordinatedImportValidator : ICoreConfigurationValidator
     {
+        public Task ValidateRuntimeAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
+            ValidateAsync(workingDirectory, configurationPath, cancellationToken);
+
         private readonly ConcurrentDictionary<string, ValidationStep> _steps =
             new(StringComparer.Ordinal);
         private readonly ConcurrentQueue<CoreValidationRequest> _requests = new();
@@ -601,6 +607,9 @@ public sealed class CoreConfigurationServiceTests
 
     private sealed class ImportThenValidateValidator : ICoreConfigurationValidator
     {
+        public Task ValidateRuntimeAsync(string workingDirectory, string configurationPath, CancellationToken cancellationToken) =>
+            ValidateAsync(workingDirectory, configurationPath, cancellationToken);
+
         private readonly TaskCompletionSource _releaseImport =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _validationCount;
