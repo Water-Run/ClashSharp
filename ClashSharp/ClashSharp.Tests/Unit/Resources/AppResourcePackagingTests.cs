@@ -812,13 +812,13 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("RunConnectionTestAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("BuildConnectionTestResultPanel(report)", settingsCode, StringComparison.Ordinal);
         Assert.Contains("CenteredDialogOverlay.ShowAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("GetConnectionTestSummaryBrush(report.SummaryState)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("GetConnectionTestSummaryStyle(report.SummaryState)", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ConnectionTestSummaryState.AllPassed", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("SystemFillColorSuccessBrush", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ClashSuccessTextBlockStyle", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ConnectionTestSummaryState.PartialFailed", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("SystemFillColorCautionBrush", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ClashCautionTextBlockStyle", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ConnectionTestSummaryState.AllFailed", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("SystemFillColorCriticalBrush", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ClashCriticalTextBlockStyle", settingsCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings code-behind delegates data-maintenance actions to the view model.</summary>

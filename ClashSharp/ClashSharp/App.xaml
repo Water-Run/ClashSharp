@@ -22,6 +22,31 @@
                 <Setter Property="TextWrapping" Value="Wrap" />
             </Style>
 
+            <Style x:Key="ClashSecondaryBodyTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <Style x:Key="ClashSuccessTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+            </Style>
+
+            <Style x:Key="ClashCautionTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+            </Style>
+
+            <Style x:Key="ClashCriticalTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+            </Style>
+
+            <Style x:Key="ClashSuccessIndicatorStyle" TargetType="Ellipse">
+                <Setter Property="Fill" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+            </Style>
+
+            <Style x:Key="ClashCriticalIndicatorStyle" TargetType="Ellipse">
+                <Setter Property="Fill" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+            </Style>
+
             <Style x:Key="ClashPageCommandBarStyle" TargetType="CommandBar">
                 <Setter Property="HorizontalAlignment" Value="Left" />
                 <Setter Property="IsDynamicOverflowEnabled" Value="True" />

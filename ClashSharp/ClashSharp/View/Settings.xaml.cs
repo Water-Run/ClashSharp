@@ -369,8 +369,7 @@ public sealed partial class Settings : Page
         panel.Children.Add(new TextBlock
         {
             Text = report.SummaryText,
-            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
-            Foreground = GetConnectionTestSummaryBrush(report.SummaryState),
+            Style = GetConnectionTestSummaryStyle(report.SummaryState),
             TextWrapping = TextWrapping.WrapWholeWords,
         });
         return panel;
@@ -401,13 +400,14 @@ public sealed partial class Settings : Page
         {
             Width = 10,
             Height = 10,
-            Fill = new SolidColorBrush(result.Succeeded ? Windows.UI.Color.FromArgb(255, 16, 124, 16) : Windows.UI.Color.FromArgb(255, 196, 43, 28)),
+            Style = (Style)Application.Current.Resources[result.Succeeded
+                ? "ClashSuccessIndicatorStyle"
+                : "ClashCriticalIndicatorStyle"],
         });
         statusPanel.Children.Add(new TextBlock
         {
             Text = result.StatusText,
             Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
         });
         Grid.SetRow(statusPanel, rowIndex);
         Grid.SetColumn(statusPanel, 1);
@@ -416,21 +416,17 @@ public sealed partial class Settings : Page
         AddConnectionTestText(table, rowIndex, 2, result.LatencyText, "BodyTextBlockStyle");
     }
 
-    private static Brush GetConnectionTestSummaryBrush(ConnectionTestSummaryState summaryState)
+    /// <summary>Keeps status colors as theme references until the dialog joins its actual visual tree.</summary>
+    private static Style GetConnectionTestSummaryStyle(ConnectionTestSummaryState summaryState)
     {
-        return summaryState switch
+        string styleKey = summaryState switch
         {
-            ConnectionTestSummaryState.AllPassed => ResourceBrush(
-                "SystemFillColorSuccessBrush",
-                new SolidColorBrush(Windows.UI.Color.FromArgb(255, 16, 124, 16))),
-            ConnectionTestSummaryState.PartialFailed => ResourceBrush(
-                "SystemFillColorCautionBrush",
-                new SolidColorBrush(Windows.UI.Color.FromArgb(255, 157, 93, 0))),
-            ConnectionTestSummaryState.AllFailed => ResourceBrush(
-                "SystemFillColorCriticalBrush",
-                new SolidColorBrush(Windows.UI.Color.FromArgb(255, 196, 43, 28))),
-            _ => (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+            ConnectionTestSummaryState.AllPassed => "ClashSuccessTextBlockStyle",
+            ConnectionTestSummaryState.PartialFailed => "ClashCautionTextBlockStyle",
+            ConnectionTestSummaryState.AllFailed => "ClashCriticalTextBlockStyle",
+            _ => "BodyStrongTextBlockStyle",
         };
+        return (Style)Application.Current.Resources[styleKey];
     }
 
     private static void AddConnectionTestText(Grid table, int rowIndex, int columnIndex, string text, string styleKey)
@@ -446,13 +442,6 @@ public sealed partial class Settings : Page
         Grid.SetRow(textBlock, rowIndex);
         Grid.SetColumn(textBlock, columnIndex);
         table.Children.Add(textBlock);
-    }
-
-    private static Brush ResourceBrush(string key, Brush fallback)
-    {
-        return Application.Current.Resources.TryGetValue(key, out object value) && value is Brush brush
-            ? brush
-            : fallback;
     }
 
     /// <summary>Opens the Windows-native network repair dialog.</summary>
@@ -931,8 +920,7 @@ public sealed partial class Settings : Page
 
         TextBlock statusText = new()
         {
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Style = (Style)Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
         };
         statusText.SetBinding(TextBlock.TextProperty, new Binding { Path = new PropertyPath(statusPropertyName) });
         textPanel.Children.Add(statusText);

@@ -6,7 +6,6 @@ using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace ClashSharp.View;
 
@@ -136,8 +135,8 @@ public sealed partial class About : Page
         {
             Text = text,
             TextWrapping = TextWrapping.Wrap,
-            Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Style = (Style)Application.Current.Resources["ClashSecondaryBodyTextBlockStyle"],
+            IsTextSelectionEnabled = true,
         });
     }
 }
