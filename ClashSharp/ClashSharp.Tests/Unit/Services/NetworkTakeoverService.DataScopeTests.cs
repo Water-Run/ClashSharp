@@ -75,6 +75,8 @@ public sealed partial class NetworkTakeoverServiceTests
     [InlineData("success")]
     public async Task BoundFinalSample_UsesOwnedDiagnosticsAndPreservesCallerCancellation(string outcome)
     {
+        // This bounds a hung harness under CI load; the production two-second deadline is fired manually below.
+        TimeSpan completionWatchdog = TimeSpan.FromSeconds(30);
         await using ScopedLogDatabase logs = new();
         using CancellationTokenSource cancellation = new();
         FakeNetworkTakeoverCore core = new();
@@ -107,7 +109,7 @@ public sealed partial class NetworkTakeoverServiceTests
         {
             if (timesOut)
             {
-                await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                await entered.Task.WaitAsync(completionWatchdog);
                 Assert.False(operation.IsCompleted);
                 Assert.False(core.Stopped);
                 // Fire the production deadline explicitly instead of racing two wall-clock timers under CI load.
@@ -122,7 +124,7 @@ public sealed partial class NetworkTakeoverServiceTests
             }
             else
             {
-                await operation.WaitAsync(TimeSpan.FromSeconds(5));
+                await operation.WaitAsync(completionWatchdog);
                 Assert.True(core.Stopped);
                 Assert.Single(store.Configuration.Requests);
                 if (outcome == "success") { Assert.Empty(logs.Store.GetRecentLogs(5)); }
@@ -137,7 +139,7 @@ public sealed partial class NetworkTakeoverServiceTests
         finally
         {
             cancellation.Cancel();
-            try { await operation.WaitAsync(TimeSpan.FromSeconds(5)); }
+            try { await operation.WaitAsync(completionWatchdog); }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         }
     }
