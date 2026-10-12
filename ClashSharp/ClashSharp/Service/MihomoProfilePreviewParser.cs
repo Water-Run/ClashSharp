@@ -160,7 +160,7 @@ internal static class MihomoProfilePreviewParser
             }
 
             string trimmed = line.TrimStart();
-            if (!trimmed.StartsWith("- ", StringComparison.Ordinal))
+            if (!IsSequenceItemStart(trimmed))
             {
                 if (currentItem is not null)
                 {
@@ -175,7 +175,7 @@ internal static class MihomoProfilePreviewParser
                 yield return currentItem;
             }
 
-            currentItem = new YamlListItem(trimmed[2..].Trim());
+            currentItem = new YamlListItem(trimmed[1..].Trim());
         }
 
         if (currentItem is not null)
@@ -230,7 +230,7 @@ internal static class MihomoProfilePreviewParser
 
             int indent = CountLeadingSpaces(line);
             string trimmed = line.TrimStart();
-            if (trimmed.StartsWith("- ", StringComparison.Ordinal))
+            if (IsSequenceItemStart(trimmed))
             {
                 continue;
             }
@@ -297,7 +297,14 @@ internal static class MihomoProfilePreviewParser
         }
 
         int indent = CountLeadingSpaces(line);
-        return indent <= sectionIndent && !line.TrimStart().StartsWith("- ", StringComparison.Ordinal);
+        return indent <= sectionIndent && !IsSequenceItemStart(line.TrimStart());
+    }
+
+    /// <summary>Recognizes both compact list entries and a dash followed by a block value on later lines.</summary>
+    private static bool IsSequenceItemStart(string text)
+    {
+        return text.Length > 0 && text[0] == '-'
+            && (text.Length == 1 || char.IsWhiteSpace(text[1]));
     }
 
     /// <summary>Attempts to add a key-value line to a parsed YAML list item.</summary>

@@ -13,6 +13,42 @@ namespace ClashSharp.Tests.Unit.Services;
 /// </remarks>
 public sealed class MihomoProfilePreviewParserTests
 {
+    /// <summary>Accepts a sequence marker on its own line, as emitted by common subscription serializers.</summary>
+    [Theory]
+    [InlineData("", "\n")]
+    [InlineData("  ", "\n")]
+    [InlineData("", "\r\n")]
+    [InlineData("  ", "\r\n")]
+    public void ParseNodes_StandaloneSequenceMarkers_ReturnsEveryNode(string indentation, string newline)
+    {
+        string configuration = string.Join(newline,
+            "proxies:",
+            indentation + "-",
+            indentation + "  name: HK Primary",
+            indentation + "  type: trojan",
+            indentation + "  server: hk.example.invalid",
+            indentation + "  port: 443",
+            indentation + "-",
+            indentation + "  name: JP Secondary",
+            indentation + "  type: ss",
+            indentation + "  server: jp.example.invalid",
+            indentation + "  port: 8443",
+            "proxy-groups:",
+            "  - name: GLOBAL",
+            "    type: select",
+            "    proxies: [HK Primary, JP Secondary]",
+            "rules:",
+            "  - MATCH,GLOBAL");
+
+        ProxyNode[] nodes = MihomoProfilePreviewParser.ParseNodes(configuration, ResolveRegion).ToArray();
+
+        Assert.Equal(["HK Primary", "JP Secondary"], nodes.Select(node => node.Name));
+        Assert.Equal(["TROJAN", "SS"], nodes.Select(node => node.Protocol));
+        Assert.Equal([443, 8443], nodes.Select(node => node.ServerPort));
+        Assert.Equal(["HK", "JP"], nodes.Select(node => node.Region.RegionCode));
+        Assert.Single(MihomoProfilePreviewParser.ParseRules(configuration, key => key));
+    }
+
     /// <summary>Verifies English words do not accidentally imply a country, while common labels still work.</summary>
     [Theory]
     [InlineData("Long node - 完整结果可读性 - long-name", "UN")]

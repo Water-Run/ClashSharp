@@ -79,13 +79,26 @@ public sealed class CoreConfigurationValidatorTests
         AssertNoTemporaryAssets(fixture);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task AcquireAsync_RejectsChangedAssetsAndRollsBackEarlierCopies(bool changeExistingProfileAsset)
+    [Fact]
+    public async Task ValidateAsync_PreservesAnExistingCacheThatDiffersFromTheBundle()
     {
         using Fixture fixture = new();
-        string changed = Path.Combine(changeExistingProfileAsset ? fixture.Working : fixture.Assets, "ASN.mmdb");
+        string cached = Path.Combine(fixture.Working, "GeoIP.dat");
+        await File.WriteAllTextAsync(cached, "newer-user-cache");
+
+        await new CoreConfigurationValidator(FindProbeExecutable(), fixture.Assets)
+            .ValidateAsync(fixture.Working, fixture.Configuration, CancellationToken.None);
+
+        Assert.Equal("newer-user-cache", await File.ReadAllTextAsync(cached));
+        Assert.False(File.Exists(Path.Combine(fixture.Working, "GeoSite.dat")));
+        Assert.True(File.Exists(Path.Combine(fixture.Working, "validation.pid")));
+    }
+
+    [Fact]
+    public async Task AcquireAsync_RejectsChangedBundleAndRollsBackEarlierCopies()
+    {
+        using Fixture fixture = new();
+        string changed = Path.Combine(fixture.Assets, "ASN.mmdb");
         await File.WriteAllTextAsync(changed, "user-content-must-remain");
 
         await Assert.ThrowsAsync<InvalidDataException>(() => CoreConfigurationGeoDataLease.AcquireAsync(

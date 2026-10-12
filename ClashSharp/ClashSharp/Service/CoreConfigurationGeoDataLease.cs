@@ -12,8 +12,8 @@ namespace ClashSharp.Service;
 
 /// <summary>Holds verified bundled GeoData in a profile directory until native validation exits.</summary>
 /// <remarks>
-/// Existing files are read-locked and verified, never replaced. Only files created by this lease
-/// are removed. The per-directory gate covers preparation, native use, and cleanup across validators.
+/// Existing caches are read-locked, never replaced; mihomo validates their contents. New copies
+/// match the bundled manifest and only these copies are removed. The directory gate covers the lifetime.
 /// </remarks>
 internal sealed class CoreConfigurationGeoDataLease : IDisposable
 {
@@ -94,7 +94,8 @@ internal sealed class CoreConfigurationGeoDataLease : IDisposable
                 {
                     FileStream existing = OpenOrdinaryFile(targetPath, MaximumAssetBytes);
                     lease._files.Add(existing);
-                    await VerifyAsync(existing, entry, cancellationToken).ConfigureAwait(false);
+                    // A native auto-update may have produced a newer valid database than the bundle.
+                    // Preserve it and let mihomo validate it instead of treating a different hash as damage.
                     continue;
                 }
 
