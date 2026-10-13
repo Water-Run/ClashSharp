@@ -59,7 +59,11 @@ public sealed partial class StartupGuideDialog : ContentDialog
         ChecksList.IsEnabled = !refreshing;
     }
 
-    internal void ShowRefreshFailure() => RefreshError.IsOpen = true;
+    internal void ShowRefreshFailure()
+    {
+        RefreshError.Visibility = Visibility.Visible;
+        RefreshError.IsOpen = true;
+    }
 
     internal void UpdateSnapshot(IReadOnlyList<StartupCheckItem> checks)
     {
@@ -77,6 +81,7 @@ public sealed partial class StartupGuideDialog : ContentDialog
             _getString(optional > 0 ? "StartupPrompt.Summary.Optional.Format" : "StartupPrompt.Summary.Checked.Format"),
             optional > 0 ? optional : snapshot.Length);
         RefreshError.IsOpen = false;
+        RefreshError.Visibility = Visibility.Collapsed;
     }
 
     private void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
@@ -107,7 +112,7 @@ public sealed partial class StartupGuideDialog : ContentDialog
             // A preferred reading width avoids the narrow, content-sized column of stacked diagnostics.
             // Reserve room for native dialog chrome and status text while the check rows alone scroll.
             GuideContent.Width = Math.Clamp(_layoutRoot.Size.Width - 96, 240, 640);
-            ChecksScroll.MaxHeight = Math.Clamp(_layoutRoot.Size.Height - 320, 100, 400);
+            ChecksScroll.MaxHeight = Math.Clamp(_layoutRoot.Size.Height - 280, 100, 400);
         }
     }
 

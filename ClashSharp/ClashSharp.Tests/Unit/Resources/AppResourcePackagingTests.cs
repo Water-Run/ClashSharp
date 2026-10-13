@@ -2959,7 +2959,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("HorizontalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("GuideContent.Width = Math.Clamp(_layoutRoot.Size.Width - 96, 240, 640)", guideCode, StringComparison.Ordinal);
-        Assert.Contains("ChecksScroll.MaxHeight = Math.Clamp(_layoutRoot.Size.Height - 320, 100, 400)", guideCode, StringComparison.Ordinal);
+        Assert.Contains("ChecksScroll.MaxHeight = Math.Clamp(_layoutRoot.Size.Height - 280, 100, 400)", guideCode, StringComparison.Ordinal);
         Assert.Contains("_layoutRoot.Changed += OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.Contains("_layoutRoot.Changed -= OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"520\"", guideXaml, StringComparison.Ordinal);

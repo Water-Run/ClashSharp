@@ -29,48 +29,27 @@
                     TextWrapping="WrapWholeWords" />
             </StackPanel>
 
-            <Grid Grid.Row="1" Style="{StaticResource ClashSectionGridStyle}" ColumnSpacing="10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Spacing="4">
-                    <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                    <TextBlock
-                        Text="{Binding DisabledNoticeText}"
-                        Style="{ThemeResource CaptionTextBlockStyle}"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        TextWrapping="WrapWholeWords"
-                        Visibility="{Binding IsDisabledNoticeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <TextBlock
-                        Text="{Binding ErrorMessage}"
-                        Style="{ThemeResource CaptionTextBlockStyle}"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        TextWrapping="WrapWholeWords"
-                        Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                </StackPanel>
-                <Button Grid.Column="1" Click="EnableAllTriggersButton_Click" IsEnabled="{Binding CanEnableAllTriggers}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE73E;" FontSize="14" />
-                        <TextBlock Text="{Binding EnableAllText}" />
-                    </StackPanel>
-                </Button>
-                <Button Grid.Column="2" Click="DisableAllTriggersButton_Click" IsEnabled="{Binding CanDisableAllTriggers}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE711;" FontSize="14" />
-                        <TextBlock Text="{Binding DisableAllText}" />
-                    </StackPanel>
-                </Button>
-                <Button Grid.Column="3" Click="OpenTriggerLogsButton_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE8A5;" FontSize="14" />
-                        <TextBlock Text="{Binding OpenTriggerLogsText}" />
-                    </StackPanel>
-                </Button>
-            </Grid>
-
+            <StackPanel Grid.Row="1" Spacing="8">
+                <CommandBar Style="{StaticResource ClashPageCommandBarStyle}" DefaultLabelPosition="Right" Background="Transparent">
+                    <AppBarButton x:Name="EnableAllTriggersButton" Label="{Binding EnableAllText}"
+                                  Click="EnableAllTriggersButton_Click" IsEnabled="{Binding CanEnableAllTriggers}">
+                        <AppBarButton.Icon><FontIcon Glyph="&#xE73E;" /></AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton x:Name="DisableAllTriggersButton" Label="{Binding DisableAllText}"
+                                  Click="DisableAllTriggersButton_Click" IsEnabled="{Binding CanDisableAllTriggers}">
+                        <AppBarButton.Icon><FontIcon Glyph="&#xE711;" /></AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton x:Name="OpenTriggerLogsButton" Label="{Binding OpenTriggerLogsText}" Click="OpenTriggerLogsButton_Click">
+                        <AppBarButton.Icon><FontIcon Glyph="&#xE8A5;" /></AppBarButton.Icon>
+                    </AppBarButton>
+                </CommandBar>
+                <TextBlock Text="{Binding DisabledNoticeText}" Style="{ThemeResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords"
+                           Visibility="{Binding IsDisabledNoticeVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <TextBlock Text="{Binding ErrorMessage}" Style="{ThemeResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="WrapWholeWords"
+                           Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </StackPanel>
             <ScrollViewer Grid.Row="2" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="10">
                     <ProgressRing

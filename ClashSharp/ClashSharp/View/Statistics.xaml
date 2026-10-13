@@ -110,6 +110,26 @@
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
+                        <Grid Style="{StaticResource ClashSectionGridStyle}" Margin="0,16,0,0" Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="{Binding ByRuleTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding NoRuleHitsText}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                                           Visibility="{Binding HasNoRuleHits, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <ListView x:Name="RuleHitList" ItemsSource="{Binding RuleHitRows}" MaxHeight="320" SelectionMode="None"
+                                          ItemContainerStyle="{StaticResource StatisticsRowStyle}">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Padding="2,6" Spacing="2">
+                                                <TextBlock Text="{Binding Label}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding Label}" />
+                                                <TextBlock Text="{Binding HitCountDisplay}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </Grid>
 
@@ -141,12 +161,16 @@
                         <ListView x:Name="NodeTrafficList" ItemsSource="{Binding NodeTrafficRows}" MaxHeight="320" SelectionMode="None" ItemContainerStyle="{StaticResource StatisticsRowStyle}">
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Padding="2,6" Spacing="2">
-                                        <TextBlock Text="{Binding Label}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Label}" />
-                                        <TextBlock Text="{Binding TotalDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding TransferDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding UpdatedAtDisplay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                    </StackPanel>
+                                    <Grid Padding="2,8" ColumnSpacing="12" RowSpacing="4"
+                                          ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"
+                                          ToolTipService.ToolTip="{Binding UpdatedAtDisplay}" AutomationProperties.HelpText="{Binding UpdatedAtDisplay}">
+                                        <TextBlock Text="{Binding Label}" Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Label}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding TotalDisplay}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding TransferDisplay}" Style="{ThemeResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                    </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
@@ -154,26 +178,6 @@
                 </Grid>
             </Grid>
 
-            <Grid Style="{StaticResource ClashSectionGridStyle}" Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="{Binding ByRuleTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding NoRuleHitsText}" Style="{ThemeResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
-                               Visibility="{Binding HasNoRuleHits, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <ListView x:Name="RuleHitList" ItemsSource="{Binding RuleHitRows}" MaxHeight="320" SelectionMode="None"
-                              ItemContainerStyle="{StaticResource StatisticsRowStyle}">
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Padding="2,6" Spacing="2">
-                                    <TextBlock Text="{Binding Label}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding Label}" />
-                                    <TextBlock Text="{Binding HitCountDisplay}" Style="{ThemeResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </StackPanel>
-            </Grid>
 
             <Grid Style="{StaticResource ClashSectionGridStyle}">
                 <Grid.ColumnDefinitions>
