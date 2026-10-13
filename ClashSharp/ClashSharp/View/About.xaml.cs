@@ -54,7 +54,7 @@ public sealed partial class About : Page
         AboutCards.ColumnDefinitions[1].Width = columns == 2
             ? new GridLength(1, GridUnitType.Star)
             : new GridLength(0);
-        AboutCards.ColumnSpacing = columns == 2 ? 16 : 0;
+        AboutCards.ColumnSpacing = columns == 2 ? 32 : 0;
         AboutCards.RowDefinitions.Clear();
         for (int row = 0; row < 4 / columns; row++)
         {

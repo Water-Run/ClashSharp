@@ -44,11 +44,11 @@
                     </AppBarButton>
                 </CommandBar>
 
-                <Grid Style="{StaticResource ClashCardGridStyle}">
+                <Grid Style="{StaticResource ClashSectionGridStyle}">
                     <StackPanel Spacing="8">
-                        <TextBlock x:Name="ProxyGroupsSectionTitleText" Text="{Binding ProxyGroupsSectionTitleText}" AutomationProperties.HeadingLevel="Level2" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="ProxyGroupsSectionTitleText" Text="{Binding ProxyGroupsSectionTitleText}" AutomationProperties.HeadingLevel="Level2" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Text="{Binding EmptyGroupsText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="{Binding HasNoProxyGroups, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        <ListView x:Name="ProxyGroupsList" ItemsSource="{Binding ProxyGroups}" MaxHeight="220" GotFocus="List_GotFocus" AutomationProperties.Name="{Binding ProxyGroupsSectionTitleText}" Visibility="{Binding HasProxyGroups, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <ListView x:Name="ProxyGroupsList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding ProxyGroups}" MaxHeight="220" GotFocus="List_GotFocus" AutomationProperties.Name="{Binding ProxyGroupsSectionTitleText}" Visibility="{Binding HasProxyGroups, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <ListView.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Padding="4,8" ColumnSpacing="12">
@@ -73,11 +73,11 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Style="{StaticResource ClashCardGridStyle}">
+                <Grid Style="{StaticResource ClashSectionGridStyle}">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="{Binding PageTitleText}" AutomationProperties.HeadingLevel="Level2" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Text="{Binding PageTitleText}" AutomationProperties.HeadingLevel="Level2" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Text="{Binding EmptyNodesText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="{Binding HasNoProxyNodes, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        <ListView x:Name="ProxyNodesList" ItemsSource="{Binding ProxyNodes}" MaxHeight="360" GotFocus="List_GotFocus" AutomationProperties.Name="{Binding PageTitleText}" Visibility="{Binding HasProxyNodes, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <ListView x:Name="ProxyNodesList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding ProxyNodes}" MaxHeight="360" GotFocus="List_GotFocus" AutomationProperties.Name="{Binding PageTitleText}" Visibility="{Binding HasProxyNodes, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <ListView.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Padding="4,8" ColumnSpacing="12">
@@ -107,11 +107,11 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Style="{StaticResource ClashCardGridStyle}">
+                <Grid Style="{StaticResource ClashSectionGridStyle}">
                     <StackPanel Spacing="8">
-                        <TextBlock x:Name="ProviderResourcesSectionTitleText" Text="{Binding ProviderResourcesSectionTitleText}" AutomationProperties.HeadingLevel="Level2" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="ProviderResourcesSectionTitleText" Text="{Binding ProviderResourcesSectionTitleText}" AutomationProperties.HeadingLevel="Level2" Style="{ThemeResource SubtitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Text="{Binding EmptyResourcesText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="{Binding HasNoProviderResources, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        <ListView x:Name="ProviderResourcesList" ItemsSource="{Binding ProviderResources}" MaxHeight="220" GotFocus="List_GotFocus" AutomationProperties.Name="{Binding ProviderResourcesSectionTitleText}" Visibility="{Binding HasProviderResources, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <ListView x:Name="ProviderResourcesList" Style="{StaticResource ClashDataListStyle}" ItemsSource="{Binding ProviderResources}" MaxHeight="220" GotFocus="List_GotFocus" AutomationProperties.Name="{Binding ProviderResourcesSectionTitleText}" Visibility="{Binding HasProviderResources, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <ListView.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Padding="4,8" ColumnSpacing="12">

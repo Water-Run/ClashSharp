@@ -74,6 +74,17 @@
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="16" />
             </Style>
+
+            <Style x:Key="ClashSectionGridStyle" TargetType="Grid">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="0" />
+            </Style>
+
+            <Style x:Key="ClashSectionRowStyle" TargetType="Grid" BasedOn="{StaticResource ClashSectionGridStyle}">
+                <Setter Property="Padding" Value="0,16" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="0,0,0,1" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

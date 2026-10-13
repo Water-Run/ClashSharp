@@ -29,7 +29,7 @@
                     TextWrapping="WrapWholeWords" />
             </StackPanel>
 
-            <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="10">
+            <Grid Grid.Row="1" Style="{StaticResource ClashSectionGridStyle}" ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -85,7 +85,7 @@
                     <ListView ItemsSource="{Binding TriggerTasks}" SelectionMode="None" IsEnabled="{Binding CanEditTriggers}">
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <Grid Style="{StaticResource ClashCardGridStyle}" Margin="0,0,0,10" ColumnSpacing="12">
+                                <Grid Style="{StaticResource ClashSectionRowStyle}" Margin="0,0,0,10" ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
@@ -133,13 +133,12 @@
                     <Button x:Name="AddTriggerButton"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
-                        Padding="0"
-                        Background="Transparent"
-                        BorderThickness="0"
+                        Padding="16"
+                        CornerRadius="8"
                         AutomationProperties.Name="{Binding AddTriggerText}"
                         Click="AddTriggerCardButton_Click"
                         IsEnabled="{Binding CanEditTriggers}">
-                        <Grid Style="{StaticResource ClashCardGridStyle}" ColumnSpacing="12" MinHeight="76">
+                        <Grid ColumnSpacing="12" MinHeight="44">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -176,9 +175,9 @@
                 </StackPanel>
             </Grid>
 
-            <ScrollViewer Grid.Row="1" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsEnabled="{Binding CurrentEditor.CanEdit}">
-                <StackPanel Spacing="14">
-                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
+            <ScrollViewer x:Name="TriggerEditorScrollViewer" Grid.Row="1" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsEnabled="{Binding CurrentEditor.CanEdit}">
+                <StackPanel Spacing="28">
+                    <Grid Style="{StaticResource ClashSectionGridStyle}" RowSpacing="10">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -195,7 +194,7 @@
                             Visibility="{Binding CurrentEditor.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </Grid>
 
-                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
+                    <Grid Style="{StaticResource ClashSectionGridStyle}" RowSpacing="10">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -207,7 +206,7 @@
                                 <TextBlock Text="{Binding ConditionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                                 <TextBlock Text="{Binding ConditionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                             </StackPanel>
-                            <Button Grid.Column="1" Click="ChooseTriggerConditionButton_Click" AutomationProperties.Name="{Binding AddText}" ToolTipService.ToolTip="{Binding AddText}"><FontIcon Glyph="&#xE710;" FontSize="14" /></Button>
+                            <Button Grid.Column="1" x:Name="ChooseConditionButton" Click="ChooseTriggerConditionButton_Click" AutomationProperties.Name="{Binding ChooseConditionsText}" ToolTipService.ToolTip="{Binding ChooseConditionsText}"><FontIcon Glyph="&#xE710;" FontSize="14" /></Button>
                         </Grid>
                         <ListView
                             Grid.Row="1"
@@ -294,7 +293,7 @@
                         </StackPanel>
                     </Grid>
 
-                    <Grid Style="{StaticResource ClashCardGridStyle}" RowSpacing="10">
+                    <Grid Style="{StaticResource ClashSectionGridStyle}" RowSpacing="10">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -302,7 +301,7 @@
                                 <TextBlock Text="{Binding ActionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
                                 <TextBlock Text="{Binding ActionDescriptionText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
                             </StackPanel>
-                            <Button Grid.Column="1" Click="ChooseTriggerActionButton_Click" AutomationProperties.Name="{Binding AddText}" ToolTipService.ToolTip="{Binding AddText}"><FontIcon Glyph="&#xE710;" FontSize="14" /></Button>
+                            <Button Grid.Column="1" x:Name="ChooseActionButton" Click="ChooseTriggerActionButton_Click" AutomationProperties.Name="{Binding ChooseActionsText}" ToolTipService.ToolTip="{Binding ChooseActionsText}"><FontIcon Glyph="&#xE710;" FontSize="14" /></Button>
                         </Grid>
                         <ListView
                             Grid.Row="1"
@@ -361,8 +360,8 @@
             <Grid Grid.Row="2">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                     <ProgressRing IsActive="{Binding CurrentEditor.IsBusy}" Visibility="{Binding CurrentEditor.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Click="CancelTriggerEditButton_Click" IsEnabled="{Binding CurrentEditor.CanCancel}"><TextBlock Text="{Binding CancelText}" /></Button>
-                    <Button Click="SaveTriggerButton_Click" IsEnabled="{Binding CurrentEditor.CanSave}"><TextBlock Text="{Binding SaveText}" /></Button>
+                    <Button x:Name="CancelTriggerEditButton" Click="CancelTriggerEditButton_Click" IsEnabled="{Binding CurrentEditor.CanCancel}"><TextBlock Text="{Binding CancelText}" /></Button>
+                    <Button x:Name="SaveTriggerButton" Style="{StaticResource AccentButtonStyle}" Click="SaveTriggerButton_Click" IsEnabled="{Binding CurrentEditor.CanSave}"><TextBlock Text="{Binding SaveText}" /></Button>
                 </StackPanel>
             </Grid>
         </Grid>

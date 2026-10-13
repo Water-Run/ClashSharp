@@ -93,7 +93,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Style="{StaticResource ClashCardGridStyle}">
+                <Grid Style="{StaticResource ClashSectionGridStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock x:Name="ByProfileTitleText" Text="{Binding ByProfileTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding NoProfileTrafficText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -113,7 +113,7 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Grid.Column="1" Style="{StaticResource ClashCardGridStyle}">
+                <Grid Grid.Column="1" Style="{StaticResource ClashSectionGridStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock x:Name="ByDateTitleText" Text="{Binding ByDateTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding NoDailyTrafficText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -133,7 +133,7 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Grid.Column="2" Style="{StaticResource ClashCardGridStyle}">
+                <Grid Grid.Column="2" Style="{StaticResource ClashSectionGridStyle}">
                     <StackPanel Spacing="10">
                         <TextBlock x:Name="ByNodeTitleText" Text="{Binding ByNodeTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding NoNodeTrafficText}" TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -154,7 +154,7 @@
                 </Grid>
             </Grid>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}" Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid Style="{StaticResource ClashSectionGridStyle}" Visibility="{Binding HasSnapshot, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel Spacing="10">
                     <TextBlock Text="{Binding ByRuleTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding NoRuleHitsText}" Style="{ThemeResource CaptionTextBlockStyle}"
@@ -175,7 +175,7 @@
                 </StackPanel>
             </Grid>
 
-            <Grid Style="{StaticResource ClashCardGridStyle}">
+            <Grid Style="{StaticResource ClashSectionGridStyle}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />

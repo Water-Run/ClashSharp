@@ -34,7 +34,7 @@
             <TextBlock x:Name="DescriptionText" Text="{Binding DescriptionText}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
         </StackPanel>
 
-        <Grid Grid.Row="1" Style="{StaticResource ClashCardGridStyle}" Margin="0,16,0,16">
+        <Grid Grid.Row="1" Style="{StaticResource ClashSectionGridStyle}" Margin="0,16,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -46,7 +46,7 @@
             <HyperlinkButton x:Name="CleanupButton" Grid.Column="1" Content="{Binding CleanupText}" Click="CleanupButton_Click" />
         </Grid>
 
-        <Grid x:Name="LogFiltersPanel" Grid.Row="2" Style="{StaticResource ClashCardGridStyle}" Margin="0,0,0,16" ColumnSpacing="12"
+        <Grid x:Name="LogFiltersPanel" Grid.Row="2" Style="{StaticResource ClashSectionGridStyle}" Margin="0,0,0,16" ColumnSpacing="12"
               RowDefinitions="Auto,Auto" SizeChanged="LogFiltersPanel_SizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />

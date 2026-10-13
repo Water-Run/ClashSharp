@@ -1829,9 +1829,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("Width=\"520\"", dialogXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxWidth=\"520\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("MinWidth=\"0\"", dialogXaml, StringComparison.Ordinal);
-        Assert.Contains("MinWidth=\"360\"", dialogXaml, StringComparison.Ordinal);
-        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">560</x:Double>", dialogXaml, StringComparison.Ordinal);
-        Assert.Contains("MaxWidth=\"512\"", dialogXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"GuideContent\"", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMinWidth", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("ContentDialogMaxWidth", dialogXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ChecksScroll\"", dialogXaml, StringComparison.Ordinal);
@@ -2960,12 +2958,13 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("XamlRoot = GetDialogXamlRoot()", settingsCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
-        Assert.Contains("ChecksScroll.MaxHeight = Math.Max(120, _layoutRoot.Size.Height - 380)", guideCode, StringComparison.Ordinal);
+        Assert.Contains("GuideContent.Width = Math.Clamp(_layoutRoot.Size.Width - 96, 240, 640)", guideCode, StringComparison.Ordinal);
+        Assert.Contains("ChecksScroll.MaxHeight = Math.Clamp(_layoutRoot.Size.Height - 320, 100, 400)", guideCode, StringComparison.Ordinal);
         Assert.Contains("_layoutRoot.Changed += OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.Contains("_layoutRoot.Changed -= OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"520\"", guideXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxWidth=\"520\"", guideXaml, StringComparison.Ordinal);
-        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">560</x:Double>", guideXaml, StringComparison.Ordinal);
+        Assert.Contains("<x:Double x:Key=\"ContentDialogMaxWidth\">688</x:Double>", guideXaml, StringComparison.Ordinal);
         Assert.Contains(
             "await _startupGuide.ShowAsync(GetDialogXamlRoot(), cancellationToken)",
             masterControlCode,

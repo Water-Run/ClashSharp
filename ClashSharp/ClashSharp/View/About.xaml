@@ -8,10 +8,11 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <Style x:Key="AboutCardStyle" TargetType="Grid" BasedOn="{StaticResource ClashCardGridStyle}">
-            <Setter Property="Padding" Value="24" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="RowSpacing" Value="16" />
+        <Style x:Key="AboutCardStyle" TargetType="Grid" BasedOn="{StaticResource ClashSectionGridStyle}">
+            <Setter Property="Padding" Value="0,20" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="RowSpacing" Value="12" />
         </Style>
         <Style x:Key="AboutDescriptionStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -33,7 +34,7 @@
             <StackPanel Spacing="24" Style="{StaticResource ClashReadingPagePanelStyle}">
                 <TextBlock Text="{Binding PageTitleText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />
 
-                <Grid Style="{StaticResource AboutCardStyle}" ColumnSpacing="24" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                <Grid Style="{StaticResource ClashSectionGridStyle}" Padding="0,8" RowSpacing="20" ColumnSpacing="24" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
                     <Image Source="ms-appx:///Assets/Square150x150Logo.scale-200.png" Width="96" Height="96" Stretch="Uniform" VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" Spacing="4">
                         <TextBlock Text="{Binding AppNameText}" Style="{ThemeResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level1" />

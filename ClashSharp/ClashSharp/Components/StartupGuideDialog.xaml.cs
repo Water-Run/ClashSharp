@@ -85,7 +85,7 @@ public sealed partial class StartupGuideDialog : ContentDialog
         if (_layoutRoot is not null)
         {
             _layoutRoot.Changed += OnRootChanged;
-            UpdateChecksHeight();
+            UpdateContentBounds();
         }
     }
 
@@ -98,13 +98,16 @@ public sealed partial class StartupGuideDialog : ContentDialog
         }
     }
 
-    private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateChecksHeight();
+    private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateContentBounds();
 
-    private void UpdateChecksHeight()
+    private void UpdateContentBounds()
     {
         if (_layoutRoot is not null)
         {
-            ChecksScroll.MaxHeight = Math.Max(120, _layoutRoot.Size.Height - 380);
+            // A preferred reading width avoids the narrow, content-sized column of stacked diagnostics.
+            // Reserve room for native dialog chrome and status text while the check rows alone scroll.
+            GuideContent.Width = Math.Clamp(_layoutRoot.Size.Width - 96, 240, 640);
+            ChecksScroll.MaxHeight = Math.Clamp(_layoutRoot.Size.Height - 320, 100, 400);
         }
     }
 

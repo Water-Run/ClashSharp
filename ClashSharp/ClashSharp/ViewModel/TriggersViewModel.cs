@@ -93,6 +93,10 @@ internal sealed class TriggersViewModel : ObservableObject
 
     public string AddText => _getString("Command.Add");
 
+    public string ChooseConditionsText => _getString("Triggers.Add.ConditionStep");
+
+    public string ChooseActionsText => _getString("Triggers.Add.ActionStep");
+
     public string DeleteText => _getString("Command.Delete");
 
     public string SearchConditionsText => _getString("Triggers.SearchConditions");
