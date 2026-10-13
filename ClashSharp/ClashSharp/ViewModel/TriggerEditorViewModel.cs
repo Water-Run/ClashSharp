@@ -20,6 +20,7 @@ internal sealed class TriggerEditorViewModel : ObservableObject
     internal const int MaxNameLength = 48;
 
     private readonly Func<string, string> _getString;
+    private readonly DisplayFormatter _formatter;
     private readonly HashSet<string> _existingNames;
     private readonly Func<
         TriggerTaskDefinition,
@@ -44,9 +45,11 @@ internal sealed class TriggerEditorViewModel : ObservableObject
         IEnumerable<string> existingNames,
         Func<TriggerTaskDefinition, CancellationToken, Task<TriggerEditorSaveResult>> saveAsync,
         IApplicationErrorSink errorSink,
-        string? newId = null)
+        string? newId = null,
+        DisplayFormatter? formatter = null)
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        _formatter = formatter ?? new();
         ArgumentNullException.ThrowIfNull(existingNames);
         _saveAsync = saveAsync ?? throw new ArgumentNullException(nameof(saveAsync));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
@@ -72,7 +75,7 @@ internal sealed class TriggerEditorViewModel : ObservableObject
         {
             foreach (TriggerCondition condition in original.Conditions)
             {
-                Conditions.Add(new TriggerConditionEditorViewModel(condition, _getString));
+                Conditions.Add(new TriggerConditionEditorViewModel(condition, _getString, _formatter));
             }
 
             foreach (TriggerAction action in original.Actions)
@@ -337,7 +340,7 @@ internal sealed class TriggerEditorViewModel : ObservableObject
 
     public TriggerConditionEditorViewModel AddCondition(TriggerConditionTemplate template)
     {
-        TriggerConditionEditorViewModel condition = TriggerConditionEditorViewModel.Create(template, _getString);
+        TriggerConditionEditorViewModel condition = TriggerConditionEditorViewModel.Create(template, _getString, formatter: _formatter);
         Conditions.Add(condition);
         SelectedCondition = condition;
         ClearError();
@@ -607,7 +610,7 @@ internal sealed class TriggerEditorViewModel : ObservableObject
         return Array.AsReadOnly(Enum.GetValues<TriggerConditionTemplate>()
             .Select(template =>
             {
-                TriggerConditionEditorViewModel draft = TriggerConditionEditorViewModel.Create(template, _getString);
+                TriggerConditionEditorViewModel draft = TriggerConditionEditorViewModel.Create(template, _getString, formatter: _formatter);
                 return new TriggerEditorOption<TriggerConditionTemplate>(
                     template,
                     draft.Title,

@@ -22,6 +22,10 @@ internal interface IClashDataPackageSettings
 
     AppLanguage DisplayLanguage { get; set; }
 
+    DataUnitStyle DataUnitStyle { get; set; }
+    RateUnit RateUnit { get; set; }
+    ClockFormat ClockFormat { get; set; }
+
     AppThemeMode AppThemeMode { get; set; }
 
     AppAccentColorMode AppAccentColorMode { get; set; }
@@ -125,6 +129,9 @@ internal sealed partial class ClashDataPackageService
     private static readonly SettingDescriptor[] SettingDescriptors =
     [
         EnumSetting(nameof(IClashDataPackageSettings.DisplayLanguage), settings => settings.DisplayLanguage, (settings, value) => settings.DisplayLanguage = value),
+        EnumSetting(nameof(IClashDataPackageSettings.DataUnitStyle), settings => settings.DataUnitStyle, (settings, value) => settings.DataUnitStyle = value),
+        EnumSetting(nameof(IClashDataPackageSettings.RateUnit), settings => settings.RateUnit, (settings, value) => settings.RateUnit = value),
+        EnumSetting(nameof(IClashDataPackageSettings.ClockFormat), settings => settings.ClockFormat, (settings, value) => settings.ClockFormat = value),
         EnumSetting(nameof(IClashDataPackageSettings.AppThemeMode), settings => settings.AppThemeMode, (settings, value) => settings.AppThemeMode = value),
         EnumSetting(nameof(IClashDataPackageSettings.AppAccentColorMode), settings => settings.AppAccentColorMode, (settings, value) => settings.AppAccentColorMode = value),
         StringSetting(nameof(IClashDataPackageSettings.AppAccentColorValue), settings => settings.AppAccentColorValue, (settings, value) => settings.AppAccentColorValue = value),

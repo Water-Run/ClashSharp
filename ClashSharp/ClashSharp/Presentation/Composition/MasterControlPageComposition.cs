@@ -92,7 +92,7 @@ internal static class MasterControlPageComposition
             return new HttpClient(handler);
         });
         MasterControlViewModel viewModel = new(
-            new MasterControlLocalizationAdapter(localization),
+            new MasterControlLocalizationAdapter(localization, context.CreateDisplayFormatter()),
             new MasterControlCoreAdapter(mihomoCore),
             new MasterControlWindowsProxyAdapter(context.WindowsProxy),
             new MasterControlSettingsAdapter(settings),

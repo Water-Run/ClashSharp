@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <Compile Include="..\Shared\Windows\WindowsDirectorySecuritySnapshot.cs" Link="Shared\WindowsDirectorySecuritySnapshot.cs" />
+    <Compile Include="..\Shared\Windows\WindowsRegionalDefaults.cs" Link="Shared\WindowsRegionalDefaults.cs" />
     <Compile Include="..\Shared\Windows\WindowsDirectoryReadLease.cs" Link="Shared\WindowsDirectoryReadLease.cs" />
     <Compile Include="..\Shared\Windows\WindowsDirectoryAccessPolicy.cs" Link="Shared\WindowsDirectoryAccessPolicy.cs" />
   </ItemGroup>

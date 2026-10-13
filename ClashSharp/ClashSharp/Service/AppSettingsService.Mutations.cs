@@ -44,6 +44,9 @@ public sealed partial class AppSettingsService
             {
                 object value = key.Value switch
                 {
+                    nameof(DataUnitStyle) => DataUnitStyle,
+                    nameof(RateUnit) => RateUnit,
+                    nameof(ClockFormat) => ClockFormat,
                     nameof(DisplayLanguage) => DisplayLanguage,
                     nameof(AppThemeMode) => AppThemeMode,
                     nameof(AppAccentColorMode) => AppAccentColorMode,
@@ -251,6 +254,10 @@ public sealed partial class AppSettingsService
             get => _owner.DisplayLanguage;
             set => StageEnum(KeyDisplayLanguage, value);
         }
+
+        public DataUnitStyle DataUnitStyle { get => _owner.DataUnitStyle; set => StageEnum("DataUnitStyle", value); }
+        public RateUnit RateUnit { get => _owner.RateUnit; set => StageEnum("RateUnit", value); }
+        public ClockFormat ClockFormat { get => _owner.ClockFormat; set => StageEnum("ClockFormat", value); }
 
         public AppThemeMode AppThemeMode
         {

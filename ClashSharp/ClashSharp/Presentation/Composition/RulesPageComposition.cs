@@ -13,10 +13,10 @@ internal static class RulesPageComposition
     {
         ArgumentNullException.ThrowIfNull(context);
         RulesViewModel viewModel = new(
-            new DisplayPageLocalizationAdapter(context.Localization),
+            new DisplayPageLocalizationAdapter(context.Localization, context.CreateDisplayFormatter()),
             new RuleCatalogAdapter(context.Rules),
             context.ErrorSink,
-            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter()));
         return new Dependencies(viewModel, context.ErrorSink,
             changed => new DataGenerationSubscription(context.Settings, changed));
     }

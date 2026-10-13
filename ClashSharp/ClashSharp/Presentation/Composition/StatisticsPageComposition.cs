@@ -14,7 +14,7 @@ internal static class StatisticsPageComposition
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(openLogs);
         DisplayPageLocalizationAdapter localization =
-            new(context.Localization);
+            new(context.Localization, context.CreateDisplayFormatter());
         StatisticsStoreAdapter statistics =
             new(context.LogStorage);
         StatisticsProfilesAdapter profiles =
@@ -26,7 +26,7 @@ internal static class StatisticsPageComposition
             profiles,
             openLogs,
             context.ErrorSink,
-            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply)), context.ErrorSink,
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter())), context.ErrorSink,
             changed => new DataGenerationSubscription(context.Settings, changed));
     }
 

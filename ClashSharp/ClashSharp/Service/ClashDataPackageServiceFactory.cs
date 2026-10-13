@@ -26,6 +26,10 @@ internal sealed class ClashDataPackageSettingsAdapter :
 {
     private readonly AppSettingsService _settings;
 
+    public DataUnitStyle DataUnitStyle { get => _settings.DataUnitStyle; set => _settings.DataUnitStyle = value; }
+    public RateUnit RateUnit { get => _settings.RateUnit; set => _settings.RateUnit = value; }
+    public ClockFormat ClockFormat { get => _settings.ClockFormat; set => _settings.ClockFormat = value; }
+
     public ClashDataPackageSettingsAdapter(AppSettingsService settings)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));

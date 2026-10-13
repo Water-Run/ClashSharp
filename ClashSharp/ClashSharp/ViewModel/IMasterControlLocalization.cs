@@ -6,8 +6,6 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Determined by the concrete implementation.
 /// Side effects: None required by the contract.
 /// </remarks>
-internal interface IMasterControlLocalization
+internal interface IMasterControlLocalization : IDisplayPageLocalization
 {
-    /// <summary>Gets a localized string for the supplied key.</summary>
-    string GetString(string key);
 }

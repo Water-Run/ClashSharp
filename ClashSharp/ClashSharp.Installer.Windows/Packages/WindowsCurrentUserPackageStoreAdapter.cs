@@ -3,6 +3,7 @@ using ClashSharp.Installer.Contracts;
 using ClashSharp.Installer.Packages;
 using ClashSharp.Installer.Payloads;
 using ClashSharp.Installer.Windows.Files;
+using ClashSharp.Platform.Regional;
 
 namespace ClashSharp.Installer.Windows.Packages;
 
@@ -13,21 +14,24 @@ public sealed class WindowsCurrentUserPackageStoreAdapter : IInstallerPackageSto
 {
     private readonly IWindowsPackageManagerFacade _packageManager;
     private readonly Func<string?> _currentSid;
+    private readonly Action<string> _initializeRegionalDefaults;
 
     /// <summary>Initializes the adapter over the Windows deployment service.</summary>
     public WindowsCurrentUserPackageStoreAdapter()
-        : this(new WindowsPackageManagerFacade(), GetCurrentSid)
+        : this(new WindowsPackageManagerFacade(), GetCurrentSid, WindowsRegionalDefaults.Initialize)
     {
     }
 
     internal WindowsCurrentUserPackageStoreAdapter(
         IWindowsPackageManagerFacade packageManager,
-        Func<string?> currentSid)
+        Func<string?> currentSid,
+        Action<string>? initializeRegionalDefaults = null)
     {
         ArgumentNullException.ThrowIfNull(packageManager);
         ArgumentNullException.ThrowIfNull(currentSid);
         _packageManager = packageManager;
         _currentSid = currentSid;
+        _initializeRegionalDefaults = initializeRegionalDefaults ?? (_ => { });
     }
 
     /// <inheritdoc />
@@ -108,6 +112,10 @@ public sealed class WindowsCurrentUserPackageStoreAdapter : IInstallerPackageSto
             // PackageManager cannot reliably cancel an operation already handed to AppXSVC.
             // Await its terminal state so the caller cannot release the file lease too early.
             await _packageManager.DeployAsync(deployment).ConfigureAwait(false);
+            if (request.Operation == InstallerOperation.Install)
+            {
+                _initializeRegionalDefaults(release.Manifest.PackageIdentity.PackageFamilyName);
+            }
         }
         catch (Exception exception) when (IsRecoverable(exception))
         {

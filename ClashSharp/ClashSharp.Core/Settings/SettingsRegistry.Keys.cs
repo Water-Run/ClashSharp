@@ -5,6 +5,15 @@ public sealed partial class SettingsRegistry
     /// <summary>Provides typed stable keys without duplicating persisted key text in consumers.</summary>
     public static class Keys
     {
+        /// <summary>Byte quantity scale and unit labels.</summary>
+        public static SettingKey DataUnitStyle { get; } = new("DataUnitStyle");
+
+        /// <summary>Byte or bit transfer-rate display.</summary>
+        public static SettingKey RateUnit { get; } = new("RateUnit");
+
+        /// <summary>System, twelve-hour or twenty-four-hour display clock.</summary>
+        public static SettingKey ClockFormat { get; } = new("ClockFormat");
+
         /// <summary>Selected display language.</summary>
         public static SettingKey DisplayLanguage { get; } = new("DisplayLanguage");
 

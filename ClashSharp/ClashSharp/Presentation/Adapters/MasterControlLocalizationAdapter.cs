@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Service;
 using ClashSharp.ViewModel;
 
@@ -17,11 +18,15 @@ internal sealed class MasterControlLocalizationAdapter : IMasterControlLocalizat
 
     /// <summary>Initializes a master-control localization adapter.</summary>
     /// <param name="localization">Localization service. Must not be null.</param>
+    /// <param name="formatter">Optional presentation formatter.</param>
     /// <exception cref="ArgumentNullException"><paramref name="localization"/> is null.</exception>
-    public MasterControlLocalizationAdapter(LocalizationService localization)
+    public MasterControlLocalizationAdapter(LocalizationService localization, DisplayFormatter? formatter = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
+        Formatter = formatter ?? new();
     }
+
+    public DisplayFormatter Formatter { get; }
 
     /// <summary>Gets a localized string for the supplied key.</summary>
     /// <param name="key">Localization key. Must not be null.</param>

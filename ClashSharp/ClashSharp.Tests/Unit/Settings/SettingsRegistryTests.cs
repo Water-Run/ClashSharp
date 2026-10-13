@@ -10,6 +10,9 @@ public sealed class SettingsRegistryTests
     private static readonly IReadOnlyDictionary<string, string> ExpectedDefaults =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
+            ["DataUnitStyle"] = "BinaryWithDecimalLabels",
+            ["RateUnit"] = "Bytes",
+            ["ClockFormat"] = "FollowSystem",
             ["DisplayLanguage"] = "AutoDetect",
             ["AppThemeMode"] = "FollowSystem",
             ["AppAccentColorMode"] = "FollowSystem",
@@ -266,6 +269,9 @@ public sealed class SettingsRegistryTests
     {
         IReadOnlyDictionary<string, string[]> expectedOptions = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
+            ["DataUnitStyle"] = ["Si", "Binary", "BinaryWithDecimalLabels"],
+            ["RateUnit"] = ["Bytes", "Bits"],
+            ["ClockFormat"] = ["FollowSystem", "TwelveHour", "TwentyFourHour"],
             ["DisplayLanguage"] =
             [
                 "AutoDetect",
@@ -344,6 +350,9 @@ public sealed class SettingsRegistryTests
 
         Assert.Equal(
             [
+                "DataUnitStyle",
+                "RateUnit",
+                "ClockFormat",
                 "DisplayLanguage",
                 "AppThemeMode",
                 "AppAccentColorMode",
@@ -550,6 +559,9 @@ public sealed class SettingsRegistryTests
         {
             SettingsResetScope.Basic,
             [
+                "DataUnitStyle",
+                "RateUnit",
+                "ClockFormat",
                 "DisplayLanguage",
                 "AppThemeMode",
                 "AppAccentColorMode",

@@ -32,6 +32,7 @@ internal sealed class LogsViewModel : ObservableObject
 
     /// <summary>Localization resolver used by visible labels.</summary>
     private readonly Func<string, string> _getString;
+    private readonly DisplayFormatter _formatter;
 
     /// <summary>Log storage boundary used by this view model.</summary>
     private readonly ILogManagementStore _logStorage;
@@ -82,14 +83,17 @@ internal sealed class LogsViewModel : ObservableObject
     /// Optional bounded snapshot reader for LocalSystem service-host diagnostics.
     /// </param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
+    /// <param name="formatter">Optional presentation formatter.</param>
     public LogsViewModel(
         Func<string, string> getString,
         ILogManagementStore logStorage,
         IApplicationErrorSink errorSink,
         Func<CancellationToken, IAsyncEnumerable<(string Level, string Message)>>? streamRuntimeLogs = null,
-        Func<CancellationToken, Task<IReadOnlyList<string>>>? readServiceHostLogs = null)
+        Func<CancellationToken, Task<IReadOnlyList<string>>>? readServiceHostLogs = null,
+        DisplayFormatter? formatter = null)
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        _formatter = formatter ?? new();
         _logStorage = logStorage ?? throw new ArgumentNullException(nameof(logStorage));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _streamRuntimeLogs = streamRuntimeLogs;
@@ -115,6 +119,9 @@ internal sealed class LogsViewModel : ObservableObject
     /// <summary>Gets the cleanup command label.</summary>
     /// <value>Localized command label.</value>
     public string CleanupText => _getString("Command.Cleanup");
+
+    public string CleanupSizeParameterText => string.Format(CultureInfo.CurrentCulture,
+        _getString("Logs.Cleanup.Parameter.TargetSize"), _formatter.MegaUnitLabel);
 
     /// <summary>Gets the text displayed while a cleanup preview is being calculated.</summary>
     public string CleanupPreviewPlaceholderText => _getString("Logs.Cleanup.Preview.Loading");
@@ -579,7 +586,7 @@ internal sealed class LogsViewModel : ObservableObject
                 _logStorage.CleanupBefore(DateTimeOffset.UtcNow.AddDays(-keepDays));
                 break;
             case 1:
-                long targetSizeBytes = CoercePositiveInteger(parameterValue, 10, 102400) * 1024L * 1024L;
+                long targetSizeBytes = _formatter.FromMegaUnits(CoercePositiveInteger(parameterValue, 10, 102400));
                 _logStorage.CleanupToSize(targetSizeBytes);
                 break;
             case 2:
@@ -602,7 +609,7 @@ internal sealed class LogsViewModel : ObservableObject
     {
         if (selectedIndex == 1)
         {
-            long targetSize = CoercePositiveInteger(parameterValue, 10, 102400) * 1024L * 1024L;
+            long targetSize = _formatter.FromMegaUnits(CoercePositiveInteger(parameterValue, 10, 102400));
             long currentSize = _logStorage.GetStorageSummary().DatabaseSizeBytes;
             return string.Format(
                 CultureInfo.CurrentCulture,
@@ -646,19 +653,7 @@ internal sealed class LogsViewModel : ObservableObject
     /// <summary>Formats a byte count for compact storage display.</summary>
     /// <param name="bytes">Byte count.</param>
     /// <returns>Formatted byte count.</returns>
-    private static string FormatByteCount(long bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        double value = Math.Max(0, bytes);
-        int unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.Length - 1)
-        {
-            value /= 1024;
-            unitIndex++;
-        }
-
-        return $"{value:N2} {units[unitIndex]}";
-    }
+    private string FormatByteCount(long bytes) => _formatter.Bytes(bytes, "N2");
 
     private string AllLevelsText => _getString("Logs.Filter.AllLevels");
 
@@ -810,7 +805,7 @@ internal sealed class LogsViewModel : ObservableObject
 
     private LogRecordDisplay CreateDisplayRow(LogRecord record)
     {
-        return new LogRecordDisplay(record, FormatLogLevel(record.Level), FormatLogCategory(record.Source));
+        return new LogRecordDisplay(record, FormatLogLevel(record.Level), FormatLogCategory(record.Source)) { Formatter = _formatter };
     }
 
     private string FormatLogLevel(string level)

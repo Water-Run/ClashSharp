@@ -35,6 +35,12 @@ public sealed class SettingsRegistryMetadataTests
 
     private static readonly IReadOnlyList<ExpectedDefinition> ExpectedDefinitions =
     [
+        Internal("DataUnitStyle", typeof(DataUnitStyle), "BinaryWithDecimalLabels", SettingCategory.Regional,
+            SettingsResetScope.Basic, SettingApplicationKind.Appearance, "Settings.Basic"),
+        Internal("RateUnit", typeof(RateUnit), "Bytes", SettingCategory.Regional,
+            SettingsResetScope.Basic, SettingApplicationKind.Appearance, "Settings.Basic"),
+        Internal("ClockFormat", typeof(ClockFormat), "FollowSystem", SettingCategory.Regional,
+            SettingsResetScope.Basic, SettingApplicationKind.Appearance, "Settings.Basic"),
         Internal(
             "DisplayLanguage",
             typeof(AppLanguage),

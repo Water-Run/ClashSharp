@@ -74,7 +74,7 @@ internal sealed partial class MasterControlViewModel
     public string PublicIpDetails => _publicIp is PublicIpInformation ip
         ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Master.Ip.Details.Format"),
             ip.Address, IpField(ip.Location), IpField(ip.Asn), IpField(ip.Isp), IpField(ip.Organization), IpField(ip.Timezone),
-            _ipCheckedAt?.ToLocalTime().ToString("G", CultureInfo.CurrentCulture))
+            _localization.Formatter.Timestamp(_ipCheckedAt))
         : _localization.GetString(_ipFailure ?? "Master.Diagnostics.NotTested");
 
     private string IpField(string value) => string.IsNullOrWhiteSpace(value)

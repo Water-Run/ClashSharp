@@ -597,7 +597,7 @@ public sealed partial class Logs : Page
                 break;
             case 1:
                 parameterBox.IsEnabled = true;
-                parameterBox.Header = _getString("Logs.Cleanup.Parameter.TargetSize");
+                parameterBox.Header = _viewModel.CleanupSizeParameterText;
                 parameterBox.Minimum = 1;
                 parameterBox.Maximum = 102400;
                 parameterBox.Value = double.IsNaN(parameterBox.Value) ? 10 : Math.Clamp(parameterBox.Value, 1, 102400);

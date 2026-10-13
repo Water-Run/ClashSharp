@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -10,17 +11,19 @@ public sealed class ActiveConnectionDisplayRow
     /// <summary>Creates sanitized, culture-aware display values for one connection snapshot.</summary>
     /// <param name="connection">Immutable connection data represented by this row.</param>
     /// <param name="displayTextFilter">Boundary filter applied to externally sourced text.</param>
-    public ActiveConnectionDisplayRow(ActiveConnection connection, Func<string, string> displayTextFilter)
+    /// <param name="formatter">Optional presentation formatter.</param>
+    public ActiveConnectionDisplayRow(ActiveConnection connection, Func<string, string> displayTextFilter, DisplayFormatter? formatter = null)
     {
         ArgumentNullException.ThrowIfNull(displayTextFilter);
+        formatter ??= new();
 
         Connection = connection;
         ProcessNameDisplay = displayTextFilter(connection.ProcessName);
         HostDisplay = displayTextFilter(connection.Host);
         RuleDisplay = displayTextFilter(connection.RawRuleDisplay);
         ProxyNameDisplay = displayTextFilter(connection.ProxyName);
-        UploadDisplay = FormatByteCount(connection.UploadBytes);
-        DownloadDisplay = FormatByteCount(connection.DownloadBytes);
+        UploadDisplay = formatter.Bytes(connection.UploadBytes, "N1");
+        DownloadDisplay = formatter.Bytes(connection.DownloadBytes, "N1");
     }
 
     /// <summary>Gets the immutable connection snapshot represented by this row.</summary>
@@ -44,17 +47,5 @@ public sealed class ActiveConnectionDisplayRow
     /// <summary>Gets the culture-formatted downloaded byte count.</summary>
     public string DownloadDisplay { get; }
 
-    private static string FormatByteCount(long bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        double value = Math.Max(0, bytes);
-        int unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.Length - 1)
-        {
-            value /= 1024;
-            unitIndex++;
-        }
 
-        return value.ToString("N1", CultureInfo.CurrentCulture) + " " + units[unitIndex];
-    }
 }

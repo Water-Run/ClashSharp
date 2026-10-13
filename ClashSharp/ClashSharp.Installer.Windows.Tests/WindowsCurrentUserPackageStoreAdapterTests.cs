@@ -7,6 +7,41 @@ namespace ClashSharp.Installer.Windows.Tests;
 
 public sealed class WindowsCurrentUserPackageStoreAdapterTests
 {
+    [Theory]
+    [InlineData(InstallerOperation.Install, 1)]
+    [InlineData(InstallerOperation.Repair, 0)]
+    public async Task RegionalInitializationRunsAfterSuccessfulDeploymentForInstallOnly(InstallerOperation operation, int expectedCalls)
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using var fixture = new WindowsPayloadFixture();
+        InstallerRequest request = fixture.Request(operation);
+        await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
+        var facade = new FakePackageManagerFacade();
+        int calls = 0;
+        var adapter = new WindowsCurrentUserPackageStoreAdapter(facade, () => request.TargetSid, family =>
+        {
+            Assert.Equal(1, facade.DeployCalls);
+            Assert.Equal(fixture.Manifest.PackageIdentity.PackageFamilyName, family);
+            calls++;
+        });
+        await adapter.DeployAsync(request, lease, CancellationToken.None);
+        Assert.Equal(expectedCalls, calls);
+    }
+
+    [Fact]
+    public async Task FailedDeploymentNeverInitializesPreferences()
+    {
+        WindowsPayloadFixture.AssertWindows11X64();
+        using var fixture = new WindowsPayloadFixture();
+        InstallerRequest request = fixture.Request();
+        await using WindowsInstallerReleaseLease lease = fixture.Lock(request);
+        var facade = new FakePackageManagerFacade { DeploymentException = new IOException() };
+        int calls = 0;
+        var adapter = new WindowsCurrentUserPackageStoreAdapter(facade, () => request.TargetSid, _ => calls++);
+        await Assert.ThrowsAsync<InstallerProtocolException>(() => adapter.DeployAsync(request, lease, CancellationToken.None));
+        Assert.Equal(0, calls);
+    }
+
     [Fact]
     public async Task InspectQueriesOnlyTheExactCurrentUserFamilyAndMapsAllIdentityFields()
     {

@@ -27,7 +27,7 @@ public sealed class AppearanceSettingsParticipantTests
         IAppearanceSettingsReader reader = participant;
         AppearanceSettingsSnapshot snapshot = reader.CaptureSnapshot();
         Assert.Same(generation, snapshot.Generation);
-        Assert.Equal(6, snapshot.Values.Count);
+        Assert.Equal(9, snapshot.Values.Count);
         Assert.False(snapshot.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
         Assert.Throws<KeyNotFoundException>(() => snapshot.Get<AppThemeMode>(SettingsRegistry.Keys.AppThemeMode));
         Assert.Throws<NotSupportedException>(() => ((IDictionary<SettingKey, SettingValue>)snapshot.Values).Clear());
@@ -38,7 +38,7 @@ public sealed class AppearanceSettingsParticipantTests
     }
 
     [Fact]
-    public async Task CompleteBatch_InstallsAllTenKeysAfterRunningIsDurableAndPreservesHistoricalPolicies()
+    public async Task CompleteBatch_InstallsAllAppearanceKeysAfterRunningIsDurableAndPreservesHistoricalPolicies()
     {
         await using Fixture fixture = await Fixture.CreateAsync();
         AppearanceSettingsSnapshot before = fixture.Current();
@@ -47,7 +47,8 @@ public sealed class AppearanceSettingsParticipantTests
             Change("AppAccentColorValue", "#804477AA"), Change("TrayUseMonochromeInactiveIcon", "true"),
             Change("TrayVisibleFeatureIds", "settings,safe-exit"), Change("MainlandChinaFeatureMode", "Disabled"),
             Change("MainlandChinaUrlBlockingEnabled", "true"), Change("MasterHeroStatusLayout", ReverseDefault("MasterHeroStatusLayout")),
-            Change("MasterInfoTileLayout", ReverseDefault("MasterInfoTileLayout"))];
+            Change("MasterInfoTileLayout", ReverseDefault("MasterInfoTileLayout")),
+            Change("DataUnitStyle", "Binary"), Change("RateUnit", "Bits"), Change("ClockFormat", "TwentyFourHour")];
         Assert.Equal(SettingsRegistry.Default.Definitions.Where(definition => definition.ApplicationKind == SettingApplicationKind.Appearance)
             .Select(definition => definition.Key).OrderBy(key => key.Value), changes.Select(change => change.Key).OrderBy(key => key.Value));
         Assert.True((await fixture.ChangeAsync(changes)).IsSucceeded);

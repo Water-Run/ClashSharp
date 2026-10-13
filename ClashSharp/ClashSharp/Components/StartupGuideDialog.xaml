@@ -31,8 +31,9 @@
         </StackPanel>
         <InfoBar x:Name="RefreshError" IsOpen="False" IsClosable="False" Severity="Error" Visibility="Collapsed" />
         <ScrollViewer x:Name="ChecksScroll" Background="Transparent" VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch" Padding="0,0,12,0">
-            <ItemsControl x:Name="ChecksList" HorizontalAlignment="Stretch">
+                      HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
+                      HorizontalContentAlignment="Stretch" Padding="0,0,12,0">
+            <ItemsControl x:Name="ChecksList" Width="612" HorizontalAlignment="Left" HorizontalContentAlignment="Stretch">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid Padding="0,12" ColumnSpacing="16" BorderThickness="0,1,0,0"

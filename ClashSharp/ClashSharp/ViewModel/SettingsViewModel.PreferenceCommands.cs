@@ -13,6 +13,7 @@ internal sealed partial class SettingsViewModel
 {
     private static readonly HashSet<SettingKey> AsyncPreferenceKeys =
     [
+        SettingsRegistry.Keys.DataUnitStyle, SettingsRegistry.Keys.RateUnit, SettingsRegistry.Keys.ClockFormat,
         SettingsRegistry.Keys.DisplayLanguage, SettingsRegistry.Keys.AppThemeMode,
         SettingsRegistry.Keys.AppAccentColorMode, SettingsRegistry.Keys.AppAccentColorValue,
         SettingsRegistry.Keys.StartupConflictCheckEnabled, SettingsRegistry.Keys.StartupBehaviorMode,
@@ -142,6 +143,15 @@ internal sealed partial class SettingsViewModel
         {
             switch (change.Key.Value)
             {
+                case nameof(DataUnitStyle):
+                    Stage(ref _dataUnitStyle, change.Value, nameof(DataUnitStyle), nameof(DataUnitStyleIndex));
+                    break;
+                case nameof(RateUnit):
+                    Stage(ref _rateUnit, change.Value, nameof(RateUnit), nameof(RateUnitIndex));
+                    break;
+                case nameof(ClockFormat):
+                    Stage(ref _clockFormat, change.Value, nameof(ClockFormat), nameof(ClockFormatIndex));
+                    break;
                 case nameof(DisplayLanguage):
                     Stage(ref _displayLanguage, change.Value, nameof(DisplayLanguage), nameof(DisplayLanguageIndex));
                     break;

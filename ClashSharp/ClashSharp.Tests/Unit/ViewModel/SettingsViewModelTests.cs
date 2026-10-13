@@ -2281,6 +2281,9 @@ public sealed partial class SettingsViewModelTests
         public Func<SettingsResetScope, CancellationToken, Task>? BeforePreferenceReset { get; set; }
 
         public Func<Task>? AfterPreferenceCommit { get; set; }
+        public DataUnitStyle DataUnitStyle { get; set; } = DataUnitStyle.BinaryWithDecimalLabels;
+        public RateUnit RateUnit { get; set; }
+        public ClockFormat ClockFormat { get; set; }
 
         public IReadOnlyList<SettingValueChange> ReadPreferenceChanges(IReadOnlyList<SettingKey> keys) => keys.Select(key =>
             new SettingValueChange(key, SettingsRegistry.Default.Get(key.Value)
@@ -2341,6 +2344,9 @@ public sealed partial class SettingsViewModelTests
             switch (scope)
             {
                 case SettingsResetScope.Basic:
+                    DataUnitStyle = DataUnitStyle.BinaryWithDecimalLabels;
+                    RateUnit = RateUnit.Bytes;
+                    ClockFormat = ClockFormat.FollowSystem;
                     DisplayLanguage = AppLanguage.AutoDetect;
                     AppThemeMode = AppThemeMode.FollowSystem;
                     AppAccentColorMode = AppAccentColorMode.FollowSystem;

@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -9,6 +10,7 @@ internal sealed class MihomoProviderResourceDisplay(
     MihomoProviderResource model,
     string nameDisplay) : ObservableObject
 {
+    internal DisplayFormatter Formatter { get; init; } = new();
     public MihomoProviderResource Model { get; private set; } = model;
 
     public string NameDisplay { get; private set; } = nameDisplay;
@@ -53,6 +55,6 @@ internal sealed class MihomoProviderResourceDisplay(
 
     public string UpdatedAtDisplay =>
         Model.UpdatedAt is DateTimeOffset updatedAt && updatedAt > DateTimeOffset.MinValue
-            ? updatedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+            ? Formatter.Timestamp(updatedAt, includeSeconds: false)
             : "-";
 }

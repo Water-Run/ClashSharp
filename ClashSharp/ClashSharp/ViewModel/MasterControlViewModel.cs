@@ -1094,7 +1094,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             _localization.GetString("Master.Tile.Description.CoreMemory"));
         SetTile("core-uptime", RuntimeTraffic.CoreStartedAt is DateTimeOffset startedAt && _getNow() >= startedAt
                 ? (_getNow() - startedAt).ToString(@"d\.hh\:mm\:ss", CultureInfo.InvariantCulture) : unavailable,
-            RuntimeTraffic.CoreStartedAt?.ToLocalTime().ToString("G", CultureInfo.CurrentCulture) ?? string.Empty);
+            _localization.Formatter.Timestamp(RuntimeTraffic.CoreStartedAt) ?? string.Empty);
         SetTile("core-owner", _localization.GetString(!_runtimeSnapshot.RuntimeOwnershipKnown
                 ? "Master.Status.Unavailable" : $"Master.Runtime.Owner.{_runtimeSnapshot.EffectiveOwner}"),
             GetMihomoServiceStatusText());
@@ -1121,7 +1121,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         SetTile("active-profile", GetActiveProfileDisplayName(), string.Empty);
         SetTile("port", _settings.MixedPort.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
         RefreshNetworkDiagnosticTiles();
-        SetTile("app-update", UpdateStatus, _updateCheckedAt?.ToLocalTime().ToString("G", CultureInfo.CurrentCulture)
+        SetTile("app-update", UpdateStatus, _localization.Formatter.Timestamp(_updateCheckedAt)
             ?? string.Empty);
         SetTile("startup-prompt", _localization.GetString("Settings.StartupGuide.ShowNow"), string.Empty);
         SetTile("startup-conflicts", _localization.GetString("Settings.CheckStartupConflicts.Now"), string.Empty);
@@ -1234,8 +1234,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         string expiry = usage?.ExpireUnixSeconds switch
         {
             0 => _localization.GetString("Links.Metadata.NoExpiry"),
-            > 0 and <= 253402300799 => DateTimeOffset.FromUnixTimeSeconds(usage.ExpireUnixSeconds.Value)
-                .ToLocalTime().ToString("g", CultureInfo.CurrentCulture),
+            > 0 and <= 253402300799 => _localization.Formatter.Timestamp(DateTimeOffset.FromUnixTimeSeconds(usage.ExpireUnixSeconds.Value), includeSeconds: false),
             _ => missing,
         };
         string usageDetail = subscription?.Name ?? GetActiveProfileDisplayName();
@@ -1268,7 +1267,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         SetTile("subscription-usage", subscription is null ? missing : $"{used} / {quota}", usageDetail);
         SetTile("subscription-expiry", expiry, expiryDetail);
         string updated = _runtimeSnapshot.ActiveProfileUpdatedAt is DateTimeOffset date && date > DateTimeOffset.UnixEpoch
-            ? date.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : _localization.GetString("Links.Metadata.NotProvided");
+            ? _localization.Formatter.Timestamp(date, includeSeconds: false) : _localization.GetString("Links.Metadata.NotProvided");
         string schedule = subscription is ProfileSubscriptionLink link
             ? link.IsEnabled
                 ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Links.Schedule.Automatic.Format"), link.UpdateIntervalHours)
@@ -1625,24 +1624,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             $"{Math.Max(0, enabledCount):N0}/{Math.Max(0, totalCount):N0}");
     }
 
-    private static string FormatBytes(decimal bytes)
-    {
-        decimal value = Math.Max(0, bytes);
-        string[] units = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
-        int unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.Length - 1)
-        {
-            value /= 1024;
-            unitIndex++;
-        }
+    private string FormatBytes(decimal bytes) => _localization.Formatter.Bytes(bytes);
 
-        return string.Format(CultureInfo.CurrentCulture, "{0:0.##} {1}", value, units[unitIndex]);
-    }
-
-    private static string FormatBytesPerSecond(long bytes)
-    {
-        return string.Format(CultureInfo.CurrentCulture, "{0}/s", FormatBytes(bytes));
-    }
+    private string FormatBytesPerSecond(long bytes) => _localization.Formatter.Rate(bytes);
 
     private static string CompactPath(string value)
     {

@@ -15,6 +15,7 @@ namespace ClashSharp.ViewModel;
 internal sealed class TriggersViewModel : ObservableObject
 {
     private readonly Func<string, string> _getString;
+    private readonly DisplayFormatter _formatter;
     private readonly ITriggerDefinitionStore _store;
     private readonly ITriggerPresentationSettings _settings;
     private readonly IApplicationErrorSink _errorSink;
@@ -46,9 +47,11 @@ internal sealed class TriggersViewModel : ObservableObject
         Func<string, string> getString,
         ITriggerDefinitionStore store,
         ITriggerPresentationSettings settings,
-        IApplicationErrorSink errorSink)
+        IApplicationErrorSink errorSink,
+        DisplayFormatter? formatter = null)
     {
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
+        _formatter = formatter ?? new();
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
@@ -253,7 +256,7 @@ internal sealed class TriggersViewModel : ObservableObject
             TriggerTasks.Select(static task => task.Name),
             (definition, cancellationToken) =>
                 SaveDefinitionAsync(expectedVersion, definition, cancellationToken),
-            _errorSink);
+            _errorSink, formatter: _formatter);
         return CurrentEditor;
     }
 
@@ -278,7 +281,7 @@ internal sealed class TriggersViewModel : ObservableObject
                 .Select(static task => task.Name),
             (definition, cancellationToken) =>
                 SaveDefinitionAsync(expectedVersion, definition, cancellationToken),
-            _errorSink);
+            _errorSink, formatter: _formatter);
         return CurrentEditor;
     }
 
@@ -531,7 +534,7 @@ internal sealed class TriggersViewModel : ObservableObject
                 TriggerTasks.Insert(targetIndex, new TriggerTaskItemViewModel(
                     task.Definition,
                     task.LastTriggeredAt,
-                    _getString));
+                    _getString, _formatter));
             }
 
             targetIndex++;

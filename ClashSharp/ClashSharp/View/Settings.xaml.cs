@@ -238,6 +238,12 @@ public sealed partial class Settings : Page
                 token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.DisplayLanguage, index == 0 ? AppLanguage.AutoDetect : (AppLanguage)(index - 1), token),
             "AppThemeModeBox" when index != _viewModel.AppThemeModeIndex && Enum.IsDefined((AppThemeMode)index) =>
                 token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.AppThemeMode, (AppThemeMode)index, token),
+            "DataUnitStyleBox" when index != _viewModel.DataUnitStyleIndex && Enum.IsDefined((DataUnitStyle)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.DataUnitStyle, (DataUnitStyle)index, token),
+            "RateUnitBox" when index != _viewModel.RateUnitIndex && Enum.IsDefined((RateUnit)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.RateUnit, (RateUnit)index, token),
+            "ClockFormatBox" when index != _viewModel.ClockFormatIndex && Enum.IsDefined((ClockFormat)index) =>
+                token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.ClockFormat, (ClockFormat)index, token),
             "AppAccentColorModeBox" when index != _viewModel.AppAccentColorModeIndex && Enum.IsDefined((AppAccentColorMode)index) =>
                 token => _viewModel.ApplyPreferenceAsync(SettingsRegistry.Keys.AppAccentColorMode, (AppAccentColorMode)index, token),
             "CloseBehaviorModeBox" when index != _viewModel.CloseBehaviorModeIndex && Enum.IsDefined((CloseBehaviorMode)index) =>
@@ -288,6 +294,9 @@ public sealed partial class Settings : Page
             RebindPreference(TriggerNotificationsEnabledToggle, ToggleSwitch.IsOnProperty, nameof(SettingsViewModel.TriggerNotificationsEnabled));
             RebindPreference(LanguageBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.DisplayLanguageIndex));
             RebindPreference(AppThemeModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.AppThemeModeIndex));
+            RebindPreference(DataUnitStyleBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.DataUnitStyleIndex));
+            RebindPreference(RateUnitBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.RateUnitIndex));
+            RebindPreference(ClockFormatBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.ClockFormatIndex));
             RebindPreference(AppAccentColorModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.AppAccentColorModeIndex));
             RebindPreference(CloseBehaviorModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.CloseBehaviorModeIndex));
             RebindPreference(StartupBehaviorModeBox, ComboBox.SelectedIndexProperty, nameof(SettingsViewModel.StartupBehaviorModeIndex));

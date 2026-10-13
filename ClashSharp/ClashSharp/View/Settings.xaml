@@ -88,6 +88,22 @@
                     </components:SettingRow.ActionContent>
                 </components:SettingRow>
 
+                <components:SettingRow Title="{Binding DataUnitStyleTitleText}" Description="{Binding DataUnitStyleDescriptionText}">
+                    <components:SettingRow.ActionContent>
+                        <ComboBox x:Name="DataUnitStyleBox" Width="240" ItemsSource="{Binding DataUnitStyleOptions}" SelectedIndex="{Binding DataUnitStyleIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
+                    </components:SettingRow.ActionContent>
+                </components:SettingRow>
+                <components:SettingRow Title="{Binding RateUnitTitleText}" Description="{Binding RateUnitDescriptionText}">
+                    <components:SettingRow.ActionContent>
+                        <ComboBox x:Name="RateUnitBox" Width="240" ItemsSource="{Binding RateUnitOptions}" SelectedIndex="{Binding RateUnitIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
+                    </components:SettingRow.ActionContent>
+                </components:SettingRow>
+                <components:SettingRow Title="{Binding ClockFormatTitleText}" Description="{Binding ClockFormatDescriptionText}">
+                    <components:SettingRow.ActionContent>
+                        <ComboBox x:Name="ClockFormatBox" Width="240" ItemsSource="{Binding ClockFormatOptions}" SelectedIndex="{Binding ClockFormatIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />
+                    </components:SettingRow.ActionContent>
+                </components:SettingRow>
+
                 <components:SettingRow x:Name="AppThemeModeRow" Title="{Binding AppThemeModeTitleText}" Description="{Binding AppThemeModeDescriptionText}">
                     <components:SettingRow.ActionContent>
                         <ComboBox x:Name="AppThemeModeBox" Width="180" ItemsSource="{Binding AppThemeModeOptions}" SelectedIndex="{Binding AppThemeModeIndex, Mode=OneWay}" SelectionChanged="PreferenceCombo_SelectionChanged" />

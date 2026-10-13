@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -7,11 +8,14 @@ namespace ClashSharp.ViewModel;
 internal sealed class ModelDisplayMapper : IModelDisplayMapper
 {
     private readonly Func<string, string> _displayTextFilter;
+    private readonly DisplayFormatter _formatter;
+    public DisplayFormatter Formatter => _formatter;
 
-    public ModelDisplayMapper(Func<string, string> displayTextFilter)
+    public ModelDisplayMapper(Func<string, string> displayTextFilter, DisplayFormatter? formatter = null)
     {
         _displayTextFilter = displayTextFilter
             ?? throw new ArgumentNullException(nameof(displayTextFilter));
+        _formatter = formatter ?? new();
     }
 
     public string MapText(string text)
@@ -26,7 +30,8 @@ internal sealed class ModelDisplayMapper : IModelDisplayMapper
             profile,
             MapText(profile.Name),
             MapText(profile.SourceName),
-            MapText(profile.Status));
+            MapText(profile.Status))
+        { Formatter = _formatter };
     }
 
     public ProfileSubscriptionLinkDisplay Map(ProfileSubscriptionLink link)
@@ -35,7 +40,8 @@ internal sealed class ModelDisplayMapper : IModelDisplayMapper
             link,
             MapText(link.Name),
             MapText(link.Uri),
-            MapText(link.Status));
+            MapText(link.Status))
+        { Formatter = _formatter };
     }
 
     public ProxyNodeDisplay Map(ProxyNode node)
@@ -53,7 +59,7 @@ internal sealed class ModelDisplayMapper : IModelDisplayMapper
 
     public MihomoProviderResourceDisplay Map(MihomoProviderResource provider)
     {
-        return new MihomoProviderResourceDisplay(provider, MapText(provider.Name));
+        return new MihomoProviderResourceDisplay(provider, MapText(provider.Name)) { Formatter = _formatter };
     }
 
     public RulePreviewDisplay Map(RulePreview rule)

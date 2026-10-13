@@ -24,6 +24,11 @@ internal static partial class SettingsEnvelopeCodec
                 first.Path);
         }
 
+        return EncodeCanonical(envelope);
+    }
+
+    private static EncodedSettingsEnvelope EncodeCanonical(SettingsEnvelope envelope)
+    {
         byte[] payload = WritePayload(envelope);
         string contentHash =
             Convert.ToHexStringLower(SHA256.HashData(payload));
@@ -77,7 +82,11 @@ internal static partial class SettingsEnvelopeCodec
             }
 
             SettingsEnvelope envelope = ReadPayload(payload, registry);
-            EncodedSettingsEnvelope canonical = Encode(envelope, registry);
+            SettingsEnvelope upgraded = envelope.SchemaVersion == 1
+                ? UpgradeVersionOne(envelope, registry, contentHash)
+                : envelope;
+            _ = Encode(upgraded, registry);
+            EncodedSettingsEnvelope canonical = EncodeCanonical(envelope);
             if (!bytes.Span.SequenceEqual(canonical.Bytes))
             {
                 throw Error(
@@ -85,7 +94,7 @@ internal static partial class SettingsEnvelopeCodec
                     "$");
             }
 
-            return envelope;
+            return upgraded;
         }
         catch (SettingsEnvelopeCodecException)
         {

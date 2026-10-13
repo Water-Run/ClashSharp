@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Linq;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model.Triggers;
 
 namespace ClashSharp.ViewModel;
@@ -9,6 +10,7 @@ namespace ClashSharp.ViewModel;
 internal sealed class TriggerTaskItemViewModel : ObservableObject
 {
     private readonly Func<string, string> _getString;
+    private readonly DisplayFormatter _formatter;
     private bool _canMoveUp;
     private bool _canMoveDown;
 
@@ -19,9 +21,11 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
     public TriggerTaskItemViewModel(
         TriggerTaskDefinition definition,
         DateTimeOffset? lastTriggeredAt,
-        Func<string, string> getString)
+        Func<string, string> getString,
+        DisplayFormatter? formatter = null)
     {
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
+        _formatter = formatter ?? new();
         LastTriggeredAt = lastTriggeredAt;
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
     }
@@ -85,7 +89,7 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
     public string EnabledText => _getString("Triggers.Enabled.Title");
 
     public string LastTriggeredSummary => LastTriggeredAt is DateTimeOffset lastTriggered
-        ? lastTriggered.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+        ? _formatter.Timestamp(lastTriggered, includeSeconds: false)
         : _getString("Triggers.NeverTriggered");
 
     private string FormatCondition(TriggerCondition condition)
@@ -100,13 +104,13 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
             RateConditionParameters rate =>
                 $"{_getString(rate.Direction == TriggerTrafficDirection.Upload
                     ? "Triggers.Condition.UploadRate"
-                    : "Triggers.Condition.DownloadRate")} >= {FormatBytes(rate.ThresholdBytesPerSecond)}/s",
+                    : "Triggers.Condition.DownloadRate")} >= {_formatter.Rate(rate.ThresholdBytesPerSecond)}",
             ActiveConnectionsConditionParameters connections =>
                 $"{_getString("Triggers.Condition.ActiveConnections")} >= {connections.Threshold:N0}",
             RuntimeConditionParameters runtime =>
                 $"{_getString("Triggers.Condition.Runtime")} >= {runtime.Threshold:g}",
             SystemTimeConditionParameters time =>
-                $"{_getString("Triggers.Condition.SystemTime")} >= {time.TargetTime.ToString("HH:mm:ss.fffffff", CultureInfo.InvariantCulture).TrimEnd('0').TrimEnd('.')}",
+                $"{_getString("Triggers.Condition.SystemTime")} >= {_formatter.Time(time.TargetTime)}",
             _ => _getString("Triggers.Validation.InvalidCondition"),
         };
     }
@@ -134,17 +138,5 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
             : summary;
     }
 
-    private static string FormatBytes(long bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        double value = Math.Max(0, bytes);
-        int unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.Length - 1)
-        {
-            value /= 1024;
-            unitIndex++;
-        }
-
-        return $"{value:N1} {units[unitIndex]}";
-    }
+    private string FormatBytes(long bytes) => _formatter.Bytes(bytes);
 }

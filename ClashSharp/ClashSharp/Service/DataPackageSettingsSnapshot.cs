@@ -11,6 +11,10 @@ internal sealed class DataPackageSettingsSnapshot(SettingsEnvelope envelope) : I
     private T Read<T>(string key) where T : notnull => _envelope.Desired[SettingsRegistry.Default.Get(key).Key].Value.Get<T>();
     private static InvalidOperationException ReadOnly() => new("A package snapshot cannot change application settings.");
 
+    public DataUnitStyle DataUnitStyle { get => Read<DataUnitStyle>(nameof(DataUnitStyle)); set => throw ReadOnly(); }
+    public RateUnit RateUnit { get => Read<RateUnit>(nameof(RateUnit)); set => throw ReadOnly(); }
+    public ClockFormat ClockFormat { get => Read<ClockFormat>(nameof(ClockFormat)); set => throw ReadOnly(); }
+
     public void ResetAllSettings() => throw ReadOnly();
     public AppLanguage DisplayLanguage { get => Read<AppLanguage>(nameof(DisplayLanguage)); set => throw ReadOnly(); }
     public AppThemeMode AppThemeMode { get => Read<AppThemeMode>(nameof(AppThemeMode)); set => throw ReadOnly(); }

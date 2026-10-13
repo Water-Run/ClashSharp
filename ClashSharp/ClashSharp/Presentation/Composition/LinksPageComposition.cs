@@ -17,7 +17,7 @@ internal static class LinksPageComposition
             new SubscriptionLinkCatalogAdapter(context.Profiles),
             new PageLogAdapter(context.LogStorage),
             context.ErrorSink,
-            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply));
+            new ModelDisplayMapper(context.MainlandChinaTextDisplay.Apply, context.CreateDisplayFormatter()));
 
         return new Dependencies(viewModel, context.Localization.GetString, context.ErrorSink,
             changed => new DataGenerationSubscription(context.Settings, changed));

@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Presentation;
 
 namespace ClashSharp.ViewModel;
 
@@ -10,6 +11,9 @@ namespace ClashSharp.ViewModel;
 /// </remarks>
 internal interface IDisplayPageLocalization
 {
+    /// <summary>Formats quantities and timestamps using the current applied regional preferences.</summary>
+    DisplayFormatter Formatter => new();
+
     /// <summary>Gets a localized string for the supplied key.</summary>
     /// <param name="key">Localization key. Must not be null.</param>
     /// <returns>Localized string or fallback text.</returns>

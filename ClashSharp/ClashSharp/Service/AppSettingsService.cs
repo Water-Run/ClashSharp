@@ -148,6 +148,9 @@ public sealed partial class AppSettingsService :
     /// <summary>Settings keys owned by this service.</summary>
     private static readonly string[] KnownKeys =
     [
+        "DataUnitStyle",
+        "RateUnit",
+        "ClockFormat",
         KeyDisplayLanguage,
         KeyAppThemeMode,
         KeyAppAccentColorMode,

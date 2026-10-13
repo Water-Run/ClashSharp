@@ -263,7 +263,7 @@ internal sealed class StatisticsViewModel : ObservableObject
         ? _localization.GetString(HasSnapshot ? "Statistics.RefreshFailed" : "Statistics.LoadFailed") : string.Empty;
 
     public string StatusText => IsLoading ? LoadingText : _lastUpdated is DateTimeOffset updated
-        ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Updated.Format"), updated.ToLocalTime().ToString("G", CultureInfo.CurrentCulture))
+        ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Updated.Format"), _localization.Formatter.Timestamp(updated))
         : string.Empty;
 
     public bool HasNoProfileTraffic => HasSnapshot && !IsLoading && !HasLoadError && ProfileTrafficRows.Count == 0;
@@ -406,19 +406,7 @@ internal sealed class StatisticsViewModel : ObservableObject
     /// <summary>Formats a byte count for compact UI display.</summary>
     /// <param name="bytes">Byte count.</param>
     /// <returns>Formatted byte count.</returns>
-    private static string FormatByteCount(long bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        double value = Math.Max(0, bytes);
-        int unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.Length - 1)
-        {
-            value /= 1024;
-            unitIndex++;
-        }
-
-        return $"{value:N1} {units[unitIndex]}";
-    }
+    private string FormatByteCount(decimal bytes) => _localization.Formatter.Bytes(bytes, "N1");
 
     private IReadOnlyList<StatisticsTrafficRowDisplay> FormatTrafficRows(
         IReadOnlyList<TrafficStatisticRow> rows,
@@ -437,11 +425,11 @@ internal sealed class StatisticsViewModel : ObservableObject
                 ? date.ToString("d", CultureInfo.CurrentCulture)
                 : _displayMapper.MapText(rawLabel);
             resolvedRows.Add(new StatisticsTrafficRowDisplay(row, label,
-                string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Total.Format"), row.TotalDisplay),
-                string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.TotalTraffic.Format"), row.UploadDisplay, row.DownloadDisplay),
+                string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Total.Format"), FormatByteCount((decimal)row.UploadBytes + row.DownloadBytes)),
+                string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.TotalTraffic.Format"), FormatByteCount(row.UploadBytes), FormatByteCount(row.DownloadBytes)),
                 string.Format(CultureInfo.CurrentCulture, _localization.GetString(countFormat), row.SampleCount),
                 string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.Updated.Format"),
-                    row.UpdatedAt.ToLocalTime().ToString("G", CultureInfo.CurrentCulture))));
+                    _localization.Formatter.Timestamp(row.UpdatedAt))));
         }
 
         return resolvedRows;

@@ -32,7 +32,7 @@ internal sealed class TriggerPresentationFactory
             getString,
             _store,
             new PresentationSettings(_settings),
-            errorSink);
+            errorSink, new DisplayFormatter(_settings.ReadDisplayFormatting));
     }
 
     public TriggerPresentationSummary GetSummary()

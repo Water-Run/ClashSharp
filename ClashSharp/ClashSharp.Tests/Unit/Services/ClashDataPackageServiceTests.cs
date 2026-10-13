@@ -72,6 +72,9 @@ public sealed partial class ClashDataPackageServiceTests
         FakeClashDataPackageSettings settings = new()
         {
             DisplayLanguage = AppLanguage.English,
+            DataUnitStyle = DataUnitStyle.Binary,
+            RateUnit = RateUnit.Bits,
+            ClockFormat = ClockFormat.TwelveHour,
             AppThemeMode = AppThemeMode.Dark,
             AppAccentColorMode = AppAccentColorMode.Custom,
             AppAccentColorValue = "#FF00AA00",
@@ -87,6 +90,9 @@ public sealed partial class ClashDataPackageServiceTests
         XDocument document = XDocument.Load(packagePath);
         XElement root = AssertRoot(document, ClashDataPackageScope.Settings);
         Assert.Equal("English", SettingValue(root, nameof(IClashDataPackageSettings.DisplayLanguage)));
+        Assert.Equal("Binary", SettingValue(root, nameof(IClashDataPackageSettings.DataUnitStyle)));
+        Assert.Equal("Bits", SettingValue(root, nameof(IClashDataPackageSettings.RateUnit)));
+        Assert.Equal("TwelveHour", SettingValue(root, nameof(IClashDataPackageSettings.ClockFormat)));
         Assert.Equal("Dark", SettingValue(root, nameof(IClashDataPackageSettings.AppThemeMode)));
         Assert.Equal("Custom", SettingValue(root, nameof(IClashDataPackageSettings.AppAccentColorMode)));
         Assert.Equal("#FF00AA00", SettingValue(root, nameof(IClashDataPackageSettings.AppAccentColorValue)));
@@ -1237,6 +1243,9 @@ public sealed partial class ClashDataPackageServiceTests
 
         public AppLanguage DisplayLanguage { get; set; } = AppLanguage.AutoDetect;
 
+        public DataUnitStyle DataUnitStyle { get; set; } = DataUnitStyle.BinaryWithDecimalLabels;
+        public RateUnit RateUnit { get; set; }
+        public ClockFormat ClockFormat { get; set; }
         public AppThemeMode AppThemeMode { get; set; } = AppThemeMode.FollowSystem;
 
         public AppAccentColorMode AppAccentColorMode { get; set; } = AppAccentColorMode.FollowSystem;
@@ -1316,6 +1325,9 @@ public sealed partial class ClashDataPackageServiceTests
 
         public AppLanguage DisplayLanguage { get; set; } = AppLanguage.AutoDetect;
 
+        public DataUnitStyle DataUnitStyle { get; set; } = DataUnitStyle.BinaryWithDecimalLabels;
+        public RateUnit RateUnit { get; set; }
+        public ClockFormat ClockFormat { get; set; }
         public AppThemeMode AppThemeMode { get; set; } = AppThemeMode.FollowSystem;
 
         public AppAccentColorMode AppAccentColorMode { get; set; } = AppAccentColorMode.FollowSystem;

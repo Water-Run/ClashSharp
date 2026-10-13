@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -5,6 +6,8 @@ namespace ClashSharp.ViewModel;
 /// <summary>Maps persisted and runtime models to presentation-owned bindable rows.</summary>
 internal interface IModelDisplayMapper
 {
+    DisplayFormatter Formatter => new();
+
     string MapText(string text);
 
     ConfigurationProfileDisplay Map(ConfigurationProfile profile);

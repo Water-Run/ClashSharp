@@ -107,7 +107,7 @@
                         <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding StatusDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Grid.Column="2" Text="{Binding NodeCount}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding NodeCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="3" Text="{Binding RuleCount}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding RuleCount}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="4" Text="{Binding UpdatedAt}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding UpdatedAt}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="4" Text="{Binding UpdatedAtDisplay}" TextWrapping="Wrap" ToolTipService.ToolTip="{Binding UpdatedAtDisplay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

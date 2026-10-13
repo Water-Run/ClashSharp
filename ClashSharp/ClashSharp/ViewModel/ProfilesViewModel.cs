@@ -175,9 +175,9 @@ internal sealed class ProfilesViewModel : ObservableObject
     /// <returns>Localized multiline history description.</returns>
     public string GetHistoryEntryText(ProfileHistoryPreview preview) => preview.CanRestore
         ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.History.Entry"),
-            preview.Entry.CreatedAt.ToLocalTime(), preview.Entry.SourceName, preview.NodeCount, preview.RuleCount)
+            _displayMapper.Formatter.Timestamp(preview.Entry.CreatedAt, includeSeconds: false), preview.Entry.SourceName, preview.NodeCount, preview.RuleCount)
         : string.Format(CultureInfo.CurrentCulture, _getString("Profiles.History.UnavailableEntry"),
-            preview.Entry.CreatedAt.ToLocalTime(), preview.Entry.SourceName);
+            _displayMapper.Formatter.Timestamp(preview.Entry.CreatedAt, includeSeconds: false), preview.Entry.SourceName);
 
     /// <summary>Gets the current-profile label.</summary>
     /// <value>Localized label text.</value>

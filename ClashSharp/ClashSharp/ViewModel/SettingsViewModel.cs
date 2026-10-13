@@ -1498,6 +1498,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Loads the latest persisted settings into the view model properties.</summary>
     public void Load()
     {
+        LoadFormattingPreferences();
         _loadedDisplayLanguage = _settings.DisplayLanguage;
         DisplayLanguage = _loadedDisplayLanguage;
         AppThemeMode = _settings.AppThemeMode;
@@ -1609,6 +1610,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Refreshes stable selector option collections without replacing ComboBox item sources.</summary>
     private void RefreshSelectorOptions()
     {
+        RefreshFormattingOptions();
         List<string> languageOptions = [];
         foreach ((AppLanguage language, string displayName) in _supportedLanguages)
         {
@@ -1690,6 +1692,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
         [
             nameof(DisplayLanguageOptions),
             nameof(DisplayLanguageIndex),
+            nameof(DataUnitStyleOptions), nameof(DataUnitStyleIndex),
+            nameof(RateUnitOptions), nameof(RateUnitIndex),
+            nameof(ClockFormatOptions), nameof(ClockFormatIndex),
+            nameof(DataUnitStyleTitleText), nameof(DataUnitStyleDescriptionText),
+            nameof(RateUnitTitleText), nameof(RateUnitDescriptionText),
+            nameof(ClockFormatTitleText), nameof(ClockFormatDescriptionText),
             nameof(AppThemeModeOptions),
             nameof(AppThemeModeIndex),
             nameof(AppAccentColorModeOptions),
@@ -1726,6 +1734,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
             nameof(AppThemeFollowSystemText),
             nameof(AppThemeLightText),
             nameof(AppThemeDarkText),
+            nameof(DataUnitStyleOptions), nameof(DataUnitStyleIndex),
+            nameof(RateUnitOptions), nameof(RateUnitIndex),
+            nameof(ClockFormatOptions), nameof(ClockFormatIndex),
+            nameof(DataUnitStyleTitleText), nameof(DataUnitStyleDescriptionText),
+            nameof(RateUnitTitleText), nameof(RateUnitDescriptionText),
+            nameof(ClockFormatTitleText), nameof(ClockFormatDescriptionText),
             nameof(AppThemeModeOptions),
             nameof(AppAccentColorTitleText),
             nameof(AppAccentColorDescriptionText),

@@ -1,4 +1,5 @@
 using ClashSharp.ApplicationModel.Settings;
+using ClashSharp.Platform.Regional;
 using ClashSharp.Settings;
 using Windows.Storage;
 
@@ -19,7 +20,8 @@ public sealed class WindowsLegacySettingsSource : ILegacySettingsSource
     public Task<LegacySettingsSnapshot> ReadSnapshotAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var values = ApplicationData.Current.LocalSettings.Values;
+        ApplicationData data = ApplicationData.Current;
+        var values = data.LocalSettings.Values;
         Dictionary<string, object?> snapshot = new(StringComparer.Ordinal);
         foreach (string key in _registry.Definitions.SelectMany(
                      definition => new[] { definition.Key.Value }.Concat(definition.Aliases.Select(alias => alias.Value))))
@@ -28,6 +30,10 @@ public sealed class WindowsLegacySettingsSource : ILegacySettingsSource
             if (values.TryGetValue(key, out object? value)) { snapshot.Add(key, value); }
         }
 
+        if (snapshot.Count == 0)
+        {
+            foreach ((string key, object value) in WindowsRegionalDefaults.ReadSeed(data)) { snapshot.Add(key, value); }
+        }
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(new LegacySettingsSnapshot(_registry, snapshot));
     }

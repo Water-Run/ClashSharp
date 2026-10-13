@@ -21,7 +21,7 @@ internal static class LogsPageComposition
             new LogManagementStoreAdapter(context.LogStorage),
             context.ErrorSink,
             context.MihomoController.StreamLogsAsync,
-            context.MihomoService.ReadHostLogsAsync);
+            context.MihomoService.ReadHostLogsAsync, context.CreateDisplayFormatter());
         return new Dependencies(
             viewModel,
             context.Localization.GetString,

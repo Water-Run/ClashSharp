@@ -112,6 +112,9 @@ public sealed partial class StartupGuideDialog : ContentDialog
             // A preferred reading width avoids the narrow, content-sized column of stacked diagnostics.
             // Reserve room for native dialog chrome and status text while the check rows alone scroll.
             GuideContent.Width = Math.Clamp(_layoutRoot.Size.Width - 96, 240, 640);
+            // ItemsControl templates can otherwise measure Auto columns beyond the scroll viewport.
+            // Constrain the entire row, including its status, before text is measured; reserve the scrollbar.
+            ChecksList.Width = Math.Max(0, GuideContent.Width - ChecksScroll.Padding.Right - 16);
             ChecksScroll.MaxHeight = Math.Clamp(_layoutRoot.Size.Height - 280, 100, 400);
         }
     }

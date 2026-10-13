@@ -18,7 +18,7 @@ internal static class AboutPageComposition
         ArgumentNullException.ThrowIfNull(context);
         string applicationVersion = ApplicationVersion.Current;
         AboutViewModel viewModel = new(
-            new DisplayPageLocalizationAdapter(context.Localization),
+            new DisplayPageLocalizationAdapter(context.Localization, context.CreateDisplayFormatter()),
             new AboutCoreAdapter(context.MihomoCore),
             new GitHubReleaseUpdateChecker(ReleaseHttpClient, applicationVersion),
             new WindowsUriLauncher(),

@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model.Triggers;
 
 namespace ClashSharp.ViewModel;
@@ -26,7 +27,8 @@ internal sealed class TriggerConditionEditorViewModel : ObservableObject
     /// <summary>Initializes a draft that preserves every typed parameter from an existing condition.</summary>
     public TriggerConditionEditorViewModel(
         TriggerCondition condition,
-        Func<string, string> getString)
+        Func<string, string> getString,
+        DisplayFormatter? formatter = null)
     {
         ArgumentNullException.ThrowIfNull(condition);
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
@@ -69,9 +71,7 @@ internal sealed class TriggerConditionEditorViewModel : ObservableObject
                 _runtimeSecondsText = FormatSeconds(parameters.Threshold);
                 break;
             case SystemTimeConditionParameters parameters:
-                _targetTimeText = parameters.TargetTime.ToString("HH:mm:ss.fffffff", CultureInfo.InvariantCulture)
-                    .TrimEnd('0')
-                    .TrimEnd('.');
+                _targetTimeText = (formatter ?? new()).Time(parameters.TargetTime);
                 break;
             default:
                 throw new ArgumentException(
@@ -257,7 +257,8 @@ internal sealed class TriggerConditionEditorViewModel : ObservableObject
     public static TriggerConditionEditorViewModel Create(
         TriggerConditionTemplate template,
         Func<string, string> getString,
-        string? id = null)
+        string? id = null,
+        DisplayFormatter? formatter = null)
     {
         ArgumentNullException.ThrowIfNull(getString);
         if (!Enum.IsDefined(template))
@@ -317,7 +318,7 @@ internal sealed class TriggerConditionEditorViewModel : ObservableObject
                 new SystemTimeConditionParameters(new TimeOnly(23, 0))),
             _ => throw new InvalidOperationException("Undefined trigger condition template."),
         };
-        return new TriggerConditionEditorViewModel(condition, getString);
+        return new TriggerConditionEditorViewModel(condition, getString, formatter);
     }
 
     private TriggerConditionParameters? BuildEvent()

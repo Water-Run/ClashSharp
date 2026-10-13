@@ -212,6 +212,15 @@ public sealed partial class SettingsRegistry
     private static IEnumerable<SettingDefinition> CreateDefaultDefinitions()
     {
         yield return SettingDefinition.CreateEnum(
+            Keys.DataUnitStyle, DataUnitStyle.BinaryWithDecimalLabels, DataUnitStyle.BinaryWithDecimalLabels,
+            Metadata(SettingCategory.Regional, SettingsResetScope.Basic, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Basic"));
+        yield return SettingDefinition.CreateEnum(
+            Keys.RateUnit, RateUnit.Bytes, RateUnit.Bytes,
+            Metadata(SettingCategory.Regional, SettingsResetScope.Basic, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Basic"));
+        yield return SettingDefinition.CreateEnum(
+            Keys.ClockFormat, ClockFormat.FollowSystem, ClockFormat.FollowSystem,
+            Metadata(SettingCategory.Regional, SettingsResetScope.Basic, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Basic"));
+        yield return SettingDefinition.CreateEnum(
             Keys.DisplayLanguage,
             AppLanguage.AutoDetect,
             AppLanguage.AutoDetect,

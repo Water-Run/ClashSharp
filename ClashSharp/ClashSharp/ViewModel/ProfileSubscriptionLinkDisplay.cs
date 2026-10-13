@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -11,6 +12,7 @@ internal sealed record ProfileSubscriptionLinkDisplay(
     string UriDisplay,
     string StatusDisplay)
 {
+    internal DisplayFormatter Formatter { get; init; } = new();
     public bool IsEnabled => Model.IsEnabled;
 
     public int UpdateIntervalHours => Model.UpdateIntervalHours;
@@ -19,7 +21,7 @@ internal sealed record ProfileSubscriptionLinkDisplay(
 
     public string LastUpdatedDisplay => Model.LastUpdatedAt <= DateTimeOffset.UnixEpoch
         ? "—"
-        : Model.LastUpdatedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+        : Formatter.Timestamp(Model.LastUpdatedAt, includeSeconds: false);
 
     public string ScheduleDisplay { get; init; } = string.Empty;
 
@@ -41,8 +43,7 @@ internal sealed record ProfileSubscriptionLinkDisplay(
         string expiry = usage?.ExpireUnixSeconds switch
         {
             0 => getString("Links.Metadata.NoExpiry"),
-            > 0 and <= 253402300799 => DateTimeOffset.FromUnixTimeSeconds(usage.ExpireUnixSeconds.Value)
-                .ToLocalTime().ToString("g", CultureInfo.CurrentCulture),
+            > 0 and <= 253402300799 => Formatter.Timestamp(DateTimeOffset.FromUnixTimeSeconds(usage.ExpireUnixSeconds.Value), includeSeconds: false),
             _ => missing,
         };
         return this with
@@ -56,15 +57,5 @@ internal sealed record ProfileSubscriptionLinkDisplay(
         };
     }
 
-    private static string FormatBytes(decimal bytes)
-    {
-        string[] units = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
-        int unit = 0;
-        while (bytes >= 1024 && unit < units.Length - 1)
-        {
-            bytes /= 1024;
-            unit++;
-        }
-        return string.Format(CultureInfo.CurrentCulture, "{0:0.##} {1}", bytes, units[unit]);
-    }
+    private string FormatBytes(decimal bytes) => Formatter.Bytes(bytes);
 }

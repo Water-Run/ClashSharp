@@ -1,4 +1,5 @@
 using System;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
@@ -42,10 +43,15 @@ internal sealed class ConfigurationProfileDisplay(
         OnPropertyChanged(nameof(SourceNameDisplay));
         OnPropertyChanged(nameof(StatusDisplay));
         OnPropertyChanged(nameof(UpdatedAt));
+        OnPropertyChanged(nameof(UpdatedAtDisplay));
         OnPropertyChanged(nameof(NodeCount));
         OnPropertyChanged(nameof(RuleCount));
         OnPropertyChanged(nameof(IsActive));
     }
+
+    internal DisplayFormatter Formatter { get; init; } = new();
+
+    public string UpdatedAtDisplay => Formatter.Timestamp(Model.UpdatedAt, includeSeconds: false);
 
     public string Id => Model.Id;
 

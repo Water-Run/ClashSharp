@@ -42,4 +42,7 @@ internal sealed record PageCompositionContext(
     SettingsExportCoordinator SettingsExports,
     ISettingsDataReplacement DataReplacement,
     ISettingsRuntimeGroupReset RuntimeGroupReset,
-    ISettingsApplicationRecovery SettingsApplicationRecovery);
+    ISettingsApplicationRecovery SettingsApplicationRecovery)
+{
+    internal DisplayFormatter CreateDisplayFormatter() => new(Settings.ReadDisplayFormatting);
+}
