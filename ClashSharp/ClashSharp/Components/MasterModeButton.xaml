@@ -28,7 +28,7 @@
 
         <Button
             x:Name="ModeButton"
-            MinHeight="78"
+            MinHeight="68"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
             HorizontalContentAlignment="Stretch"
@@ -41,7 +41,7 @@
             AutomationProperties.HelpText="{Binding Description, ElementName=Root}"
             ToolTipService.ToolTip="{Binding Description, ElementName=Root}"
             Click="ModeButton_Click">
-            <Grid Style="{StaticResource ClashCardGridStyle}" Padding="12" ColumnSpacing="10" MinHeight="78">
+            <Grid Style="{StaticResource ClashCardGridStyle}" Padding="12" ColumnSpacing="10" MinHeight="68">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -72,8 +72,8 @@
                     Text="{Binding Description, ElementName=Root}"
                     TextWrapping="WrapWholeWords"
                     MaxLines="2"
+                    TextTrimming="CharacterEllipsis"
                     Style="{ThemeResource CaptionTextBlockStyle}"
-                    Opacity="0.78"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
             </Grid>

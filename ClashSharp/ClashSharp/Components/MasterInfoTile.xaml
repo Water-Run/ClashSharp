@@ -189,7 +189,7 @@
             Background="Transparent"
             ToolTipService.ToolTip="{Binding ReorderHint, ElementName=Root}"
             AutomationProperties.Name="{Binding ReorderHint, ElementName=Root}">
-            <FontIcon Glyph="&#xE784;" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsHitTestVisible="False" />
+            <FontIcon Glyph="&#xE784;" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" IsHitTestVisible="False" />
         </Border>
         <ProgressRing
             x:Name="ExecutionProgress"

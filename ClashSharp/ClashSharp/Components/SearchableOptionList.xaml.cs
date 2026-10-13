@@ -13,6 +13,11 @@ namespace ClashSharp.Components;
 /// <summary>Reusable searchable dialog list for selectable option rows.</summary>
 public sealed partial class SearchableOptionList : UserControl
 {
+    /// <summary>Identifies optional controls placed alongside the search input.</summary>
+    public static readonly DependencyProperty SearchLeadingContentProperty = DependencyProperty.Register(
+        nameof(SearchLeadingContent), typeof(UIElement), typeof(SearchableOptionList),
+        new PropertyMetadata(null, OnSearchLeadingContentChanged));
+
     /// <summary>Identifies the optional <see cref="SearchHeader"/> dependency property.</summary>
     public static readonly DependencyProperty SearchHeaderProperty = DependencyProperty.Register(
         nameof(SearchHeader),
@@ -56,6 +61,21 @@ public sealed partial class SearchableOptionList : UserControl
 
     /// <summary>Occurs after the selected option set changes.</summary>
     public event EventHandler? SelectionChanged;
+
+    /// <summary>Gets or sets an optional view-owned control beside the search input.</summary>
+    public UIElement? SearchLeadingContent
+    {
+        get => (UIElement?)GetValue(SearchLeadingContentProperty);
+        set => SetValue(SearchLeadingContentProperty, value);
+    }
+
+    private static void OnSearchLeadingContentChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        SearchableOptionList list = (SearchableOptionList)sender;
+        bool visible = args.NewValue is UIElement;
+        list.SearchLeadingPresenter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        list.SearchRow.ColumnSpacing = visible ? 12 : 0;
+    }
 
     /// <summary>Gets the observable options that match the current search text.</summary>
     public ObservableCollection<SearchableOptionItem> FilteredOptions { get; } = [];
@@ -176,6 +196,7 @@ public sealed partial class SearchableOptionList : UserControl
         SearchableOptionItem? option = e.InRecycleQueue ? null : e.Item as SearchableOptionItem;
         AutomationProperties.SetName(e.ItemContainer, option?.Title ?? string.Empty);
         AutomationProperties.SetHelpText(e.ItemContainer, option?.Description ?? string.Empty);
+        ToolTipService.SetToolTip(e.ItemContainer, option?.Description);
         e.ItemContainer.ContextFlyout = option is not null && AllowReorder
             ? CreateReorderMenu(option)
             : null;

@@ -14,6 +14,7 @@ using ClashSharp.Presentation.Layout;
 using ClashSharp.Presentation.Lifecycle;
 using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
@@ -24,11 +25,10 @@ namespace ClashSharp.View;
 /// <remarks>
 /// Invariants: The page has a non-null <see cref="MasterControlViewModel"/> after construction.
 /// Thread safety: Must be accessed from the UI thread only.
-/// Side effects: Creates singleton-backed service adapters for the view model and starts status loading on page load.
+/// Side effects: Starts page-scoped loading and forwards commands to injected application services.
 /// </remarks>
 public sealed partial class MasterControl : Page
 {
-    private const int HeroStatusColumnCount = 2;
     private const double HeroStatusHorizontalMargin = 10;
     private const double MinHeroStatusItemWidth = 120;
     private const double PreferredHeroStatusItemWidth = 220;
@@ -45,7 +45,7 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorMinListHeight = 80;
     private const double InfoTileEditorMaxListHeight = 420;
     private const double InfoTileEditorMaxDialogHeight = 756;
-    private const double InfoTileEditorVerticalChrome = 470;
+    private const double InfoTileEditorVerticalChrome = 360;
 
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
@@ -686,8 +686,10 @@ public sealed partial class MasterControl : Page
         {
             Header = _getString("Master.Preset.Label"),
             PlaceholderText = _getString("Master.Preset.Custom"),
+            Width = 220,
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
+        AutomationProperties.SetAutomationId(templatePicker, "InfoTilePresetPicker");
         foreach (MasterInfoTilePreset preset in presets)
         {
             ComboBoxItem item = new() { Content = preset.Title, Tag = preset };
@@ -698,6 +700,7 @@ public sealed partial class MasterControl : Page
                 templatePicker.SelectedItem = item;
             }
         }
+        optionList.SearchLeadingContent = templatePicker;
 
         StackPanel panel = new()
         {
@@ -711,7 +714,6 @@ public sealed partial class MasterControl : Page
             Opacity = 0.72,
             TextWrapping = TextWrapping.WrapWholeWords,
         });
-        panel.Children.Add(templatePicker);
         panel.Children.Add(optionList);
 
         TextBlock selectionCount = new()
@@ -772,27 +774,32 @@ public sealed partial class MasterControl : Page
         };
         Button showAll = new() { Content = _getString("Master.Tile.ShowAll") };
         Button hideAll = new() { Content = _getString("Master.Tile.HideAll") };
+        AutomationProperties.SetAutomationId(showAll, "ShowAllTilesButton");
+        AutomationProperties.SetAutomationId(hideAll, "HideAllTilesButton");
         showAll.Click += (_, _) => SetAllChecked(true);
         hideAll.Click += (_, _) => SetAllChecked(false);
+        HyperlinkButton restoreLayout = new()
+        {
+            Content = _getString("Master.Tile.RestoreRecommended"),
+            Padding = new Thickness(0),
+        };
+        AutomationProperties.SetAutomationId(restoreLayout, "RestoreRecommendedTilesButton");
+        restoreLayout.Click += (_, _) => ApplyTemplate(_viewModel.RecommendedInfoTileIds);
         Grid selectionActions = new() { ColumnSpacing = 10 };
+        selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         Grid.SetColumn(hideAll, 1);
-        Grid.SetColumn(selectionCount, 2);
+        Grid.SetColumn(restoreLayout, 2);
+        Grid.SetColumn(selectionCount, 3);
+        selectionCount.HorizontalAlignment = HorizontalAlignment.Right;
         selectionActions.Children.Add(showAll);
         selectionActions.Children.Add(hideAll);
+        selectionActions.Children.Add(restoreLayout);
         selectionActions.Children.Add(selectionCount);
         panel.Children.Add(selectionActions);
         RefreshSelectionCount();
-
-        HyperlinkButton restoreLayout = new()
-        {
-            Content = _getString("Master.Tile.RestoreRecommended"),
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-        restoreLayout.Click += (_, _) => ApplyTemplate(_viewModel.RecommendedInfoTileIds);
-        panel.Children.Add(restoreLayout);
 
         ThemedContentDialog dialog = new()
         {
@@ -867,14 +874,19 @@ public sealed partial class MasterControl : Page
 
     private void UpdateHeroStatusItemWidths(double availableWidth)
     {
-        if (availableWidth <= 0)
+        if (!double.IsFinite(availableWidth) || availableWidth <= 0)
         {
             return;
         }
 
-        _heroStatusItemWidth = Math.Max(
+        int columns = MasterControlLayoutPolicy.Resolve(availableWidth).StatusColumns;
+        if (HeroStatusItemGrid.ItemsPanelRoot is ItemsWrapGrid panel)
+        {
+            panel.MaximumRowsOrColumns = columns;
+        }
+        _heroStatusItemWidth = Math.Min(availableWidth, Math.Max(
             MinHeroStatusItemWidth,
-            CalculateHeroStatusItemWidth(availableWidth));
+            CalculateHeroStatusItemWidth(availableWidth, columns)));
         foreach (MasterHeroStatusItemViewModel itemViewModel in _viewModel.HeroStatusItems)
         {
             if (HeroStatusItemGrid.ContainerFromItem(itemViewModel) is FrameworkElement item)
@@ -889,10 +901,10 @@ public sealed partial class MasterControl : Page
         item.Width = _heroStatusItemWidth;
     }
 
-    private static double CalculateHeroStatusItemWidth(double availableWidth)
+    private static double CalculateHeroStatusItemWidth(double availableWidth, int columns)
     {
         return Math.Floor(
-            (availableWidth / HeroStatusColumnCount) - HeroStatusHorizontalMargin);
+            (availableWidth / columns) - HeroStatusHorizontalMargin);
     }
 
     private void InfoTileGrid_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -1001,51 +1013,32 @@ public sealed partial class MasterControl : Page
     private void UpdateMasterLayout(double contentWidth)
     {
         MasterControlLayout layout = MasterControlLayoutPolicy.Resolve(contentWidth);
-        ModeColumn.Width = layout.IsSideBySide
-            ? new GridLength(layout.ModeColumnWidth)
-            : new GridLength(0);
-
-        Grid.SetRow(HeroStatusCard, 0);
-        Grid.SetColumn(HeroStatusCard, 0);
-        Grid.SetColumnSpan(HeroStatusCard, layout.IsSideBySide ? 1 : 2);
-
-        Grid.SetRow(ModeButtonGrid, layout.IsSideBySide ? 0 : 1);
-        Grid.SetColumn(ModeButtonGrid, layout.IsSideBySide ? 1 : 0);
-        Grid.SetColumnSpan(ModeButtonGrid, layout.IsSideBySide ? 1 : 2);
-        ModeButtonGrid.Margin = layout.IsSideBySide
-            ? new Thickness(0)
-            : new Thickness(0, 2, 0, 0);
-        ArrangeModeButtons(layout.IsSideBySide);
+        ArrangeModeButtons(layout.ModeColumns);
     }
 
-    private void ArrangeModeButtons(bool isSideBySide)
+    private void ArrangeModeButtons(int columns)
     {
-        ModeButtonGrid.RowSpacing = isSideBySide ? 10 : 0;
-        foreach (RowDefinition row in ModeButtonGrid.RowDefinitions)
+        if (ModeButtonGrid.ColumnDefinitions.Count == columns)
         {
-            row.Height = isSideBySide ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
-        }
-        Thickness narrowSecondRowMargin = isSideBySide
-            ? new Thickness(0)
-            : new Thickness(0, 10, 0, 0);
-        DisabledModeButton.Margin = new Thickness(0);
-        StandbyModeButton.Margin = new Thickness(0);
-        RuleTakeoverModeButton.Margin = narrowSecondRowMargin;
-        FullTakeoverModeButton.Margin = narrowSecondRowMargin;
-
-        if (isSideBySide)
-        {
-            SetModeButtonLayout(DisabledModeButton, row: 0, column: 0, columnSpan: 2);
-            SetModeButtonLayout(StandbyModeButton, row: 1, column: 0, columnSpan: 2);
-            SetModeButtonLayout(RuleTakeoverModeButton, row: 2, column: 0, columnSpan: 2);
-            SetModeButtonLayout(FullTakeoverModeButton, row: 3, column: 0, columnSpan: 2);
             return;
         }
 
-        SetModeButtonLayout(DisabledModeButton, row: 0, column: 0, columnSpan: 1);
-        SetModeButtonLayout(StandbyModeButton, row: 0, column: 1, columnSpan: 1);
-        SetModeButtonLayout(RuleTakeoverModeButton, row: 1, column: 0, columnSpan: 1);
-        SetModeButtonLayout(FullTakeoverModeButton, row: 1, column: 1, columnSpan: 1);
+        ModeButtonGrid.ColumnDefinitions.Clear();
+        ModeButtonGrid.RowDefinitions.Clear();
+        for (int column = 0; column < columns; column++)
+        {
+            ModeButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        FrameworkElement[] buttons = [DisabledModeButton, StandbyModeButton, RuleTakeoverModeButton, FullTakeoverModeButton];
+        for (int row = 0; row < (buttons.Length + columns - 1) / columns; row++)
+        {
+            ModeButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+        for (int index = 0; index < buttons.Length; index++)
+        {
+            SetModeButtonLayout(buttons[index], index / columns, index % columns, columnSpan: 1);
+        }
     }
 
     private static void SetModeButtonLayout(

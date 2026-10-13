@@ -1,44 +1,32 @@
-using System;
-
 namespace ClashSharp.Presentation.Layout;
 
-/// <summary>Resolved visual layout for the master-control hero and mode selector.</summary>
-/// <param name="IsSideBySide">Whether the hero and mode selector share one row.</param>
-/// <param name="ModeColumnWidth">Width reserved for the mode selector when side by side.</param>
+/// <summary>Resolved column counts for the compact status summary and mode selector.</summary>
+/// <param name="ModeColumns">Number of mode controls displayed in one row.</param>
+/// <param name="StatusColumns">Number of summary values displayed in one row.</param>
 internal readonly record struct MasterControlLayout(
-    bool IsSideBySide,
-    double ModeColumnWidth);
+    int ModeColumns,
+    int StatusColumns);
 
 /// <summary>Calculates the master-control layout without depending on WinUI controls.</summary>
 /// <remarks>
-/// Invariants: Invalid and narrow widths resolve to the vertically stacked safe layout.
+/// Invariants: Invalid widths resolve to one column; each region uses at most four columns.
 /// Thread safety: Stateless and thread-safe.
 /// Side effects: None.
 /// </remarks>
 internal static class MasterControlLayoutPolicy
 {
-    private const double SideBySideMinimumWidth = 620;
-    private const double MinimumModeColumnWidth = 280;
-    private const double MaximumModeColumnWidth = 360;
-    private const double ModeColumnWidthRatio = 0.42;
-
     /// <summary>Resolves a compact layout for the available content width.</summary>
     /// <param name="contentWidth">Usable width after scroll-view padding and scrollbar allowance.</param>
     /// <returns>A deterministic layout value.</returns>
     public static MasterControlLayout Resolve(double contentWidth)
     {
-        if (!double.IsFinite(contentWidth) || contentWidth < SideBySideMinimumWidth)
+        if (!double.IsFinite(contentWidth) || contentWidth <= 0)
         {
-            return new MasterControlLayout(
-                IsSideBySide: false,
-                ModeColumnWidth: 0);
+            return new MasterControlLayout(ModeColumns: 1, StatusColumns: 1);
         }
 
         return new MasterControlLayout(
-            IsSideBySide: true,
-            ModeColumnWidth: Math.Clamp(
-                contentWidth * ModeColumnWidthRatio,
-                MinimumModeColumnWidth,
-                MaximumModeColumnWidth));
+            ModeColumns: contentWidth >= 840 ? 4 : contentWidth >= 520 ? 2 : 1,
+            StatusColumns: contentWidth >= 620 ? 4 : contentWidth >= 300 ? 2 : 1);
     }
 }

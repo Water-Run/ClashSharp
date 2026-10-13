@@ -32,12 +32,18 @@
     </UserControl.Resources>
 
     <StackPanel Spacing="10">
-        <TextBox
-            x:Name="SearchBox"
-            Header="{Binding SearchHeader, ElementName=Root}"
-            PlaceholderText="{Binding SearchPlaceholder, ElementName=Root}"
-            HorizontalAlignment="Stretch"
-            TextChanged="SearchBox_TextChanged" />
+        <Grid x:Name="SearchRow" ColumnDefinitions="Auto,*">
+            <ContentPresenter x:Name="SearchLeadingPresenter" Visibility="Collapsed"
+                              Content="{Binding SearchLeadingContent, ElementName=Root}" VerticalAlignment="Bottom" />
+            <TextBox
+                x:Name="SearchBox"
+                Grid.Column="1"
+                Header="{Binding SearchHeader, ElementName=Root}"
+                PlaceholderText="{Binding SearchPlaceholder, ElementName=Root}"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Bottom"
+                TextChanged="SearchBox_TextChanged" />
+        </Grid>
 
         <TextBlock
             x:Name="ReorderHintText"
@@ -62,9 +68,9 @@
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="Padding" Value="10,8" />
-                        <Setter Property="MinHeight" Value="72" />
-                        <Setter Property="Margin" Value="0,0,0,8" />
+                        <Setter Property="Padding" Value="10,6" />
+                        <Setter Property="MinHeight" Value="52" />
+                        <Setter Property="Margin" Value="0,0,0,4" />
                     </Style>
                 </ListView.ItemContainerStyle>
             </ListView>
