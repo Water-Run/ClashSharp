@@ -2079,9 +2079,9 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("<Setter Property=\"Width\" Value=\"250\" />", masterControlXaml, StringComparison.Ordinal);
     }
 
-    /// <summary>Verifies summary values and mode controls occupy separate compact rows in the same viewport.</summary>
+    /// <summary>Verifies the master header stays horizontal with dense mode controls and a compact narrow fallback.</summary>
     [Fact]
-    public void MasterControlXaml_UsesCompactSummaryAndResponsiveModeRows()
+    public void MasterControlXaml_UsesHorizontalHeroAndResponsiveModeGrid()
     {
         string masterControlXamlPath = Path.Combine(AppContext.BaseDirectory, "View", "MasterControl.xaml");
         string masterControlCodePath = FindSourceFile("ClashSharp", "ClashSharp", "View", "MasterControl.xaml.cs");
@@ -2102,13 +2102,14 @@ public sealed class AppResourcePackagingTests
         XElement heroAndModeGrid = NamedElement("HeroAndModeGrid");
         XElement heroStatusCard = NamedElement("HeroStatusCard");
         XElement modeButtonGrid = NamedElement("ModeButtonGrid");
+        XElement modeColumn = NamedElement("ModeColumn");
         XElement heroStatusItemGrid = NamedElement("HeroStatusItemGrid");
         XElement heroItemsPanel = heroStatusItemGrid
             .Descendants(presentation + "ItemsWrapGrid")
             .Single();
 
         Assert.Equal("Stretch", (string?)rootScrollViewer.Attribute("HorizontalContentAlignment"));
-        Assert.Equal("1", (string?)modeButtonGrid.Attribute("Grid.Row"));
+        Assert.Equal("360", (string?)modeColumn.Attribute("Width"));
         Assert.Equal("Stretch", (string?)modeButtonGrid.Attribute("VerticalAlignment"));
         Assert.Same(heroAndModeGrid, heroStatusCard.Parent);
         Assert.Same(heroAndModeGrid, modeButtonGrid.Parent);
@@ -2116,14 +2117,19 @@ public sealed class AppResourcePackagingTests
             .Element(presentation + "Grid.RowDefinitions")!
             .Elements(presentation + "RowDefinition")
             .ToArray();
-        Assert.Equal(2, modeRows.Length);
-        Assert.All(modeRows, static row => Assert.Equal("Auto", (string?)row.Attribute("Height")));
+        Assert.Equal(4, modeRows.Length);
+        Assert.All(modeRows, static row => Assert.Equal("*", (string?)row.Attribute("Height")));
         Assert.Equal("Horizontal", (string?)heroItemsPanel.Attribute("Orientation"));
-        Assert.Equal("4", (string?)heroItemsPanel.Attribute("MaximumRowsOrColumns"));
+        Assert.Equal("2", (string?)heroItemsPanel.Attribute("MaximumRowsOrColumns"));
         Assert.Contains("x:Name=\"StandbyModeButton\"", masterControlXaml, StringComparison.Ordinal);
-        Assert.Contains("ArrangeModeButtons(layout.ModeColumns)", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("ModeButtonGrid.ColumnDefinitions.Clear()", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("SetModeButtonLayout(buttons[index], index / columns, index % columns, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("Grid.Row=\"2\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Row=\"3\"", masterControlXaml, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(masterControlXaml, "Grid.ColumnSpan=\"2\""));
+        Assert.Contains("ArrangeModeButtons(layout.IsSideBySide)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("ModeButtonGrid.RowSpacing = isSideBySide ? 10 : 0", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SetModeButtonLayout(StandbyModeButton, row: 0, column: 1, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SetModeButtonLayout(RuleTakeoverModeButton, row: 1, column: 0, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("SetModeButtonLayout(FullTakeoverModeButton, row: 1, column: 1, columnSpan: 1)", masterControlCode, StringComparison.Ordinal);
         Assert.Equal("RootScrollViewer_SizeChanged", (string?)rootScrollViewer.Attribute("SizeChanged"));
         Assert.Null(NamedElement("ContentHost").Attribute("SizeChanged"));
         Assert.Contains("e.NewSize.Width - RootScrollViewer.Padding.Left - RootScrollViewer.Padding.Right", masterControlCode, StringComparison.Ordinal);

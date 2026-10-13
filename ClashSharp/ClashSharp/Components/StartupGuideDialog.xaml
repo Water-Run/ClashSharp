@@ -30,8 +30,9 @@
             <TextBlock x:Name="BusyText" VerticalAlignment="Center" Style="{ThemeResource CaptionTextBlockStyle}" />
         </StackPanel>
         <InfoBar x:Name="RefreshError" IsOpen="False" IsClosable="False" Severity="Error" Visibility="Collapsed" />
-        <ScrollViewer x:Name="ChecksScroll" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl x:Name="ChecksList">
+        <ScrollViewer x:Name="ChecksScroll" Background="Transparent" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch" Padding="0,0,12,0">
+            <ItemsControl x:Name="ChecksList" HorizontalAlignment="Stretch">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid Padding="0,12" ColumnSpacing="16" BorderThickness="0,1,0,0"
@@ -39,23 +40,28 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <FontIcon Width="24" FontSize="18" Margin="0,2,0,0" VerticalAlignment="Top"
                                       Loaded="StatusIcon_Loaded"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Spacing="4">
-                                <TextBlock Text="{Binding Title}" TextWrapping="WrapWholeWords"
-                                           Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" MaxWidth="96" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Title}" TextWrapping="WrapWholeWords"
+                                               Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                    <TextBlock Grid.Column="1" Loaded="StatusText_Loaded" TextWrapping="Wrap"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center" TextAlignment="Right" />
+                                </Grid>
                                 <TextBlock Text="{Binding Description}" TextWrapping="WrapWholeWords"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" Spacing="6" HorizontalAlignment="Right">
-                                <TextBlock Loaded="StatusText_Loaded" Style="{ThemeResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Right" />
-                                <HyperlinkButton Padding="0" HorizontalAlignment="Right" Loaded="CheckAction_Loaded" Click="CheckAction_Click" />
+                                <HyperlinkButton Padding="0" HorizontalAlignment="Left" Loaded="CheckAction_Loaded" Click="CheckAction_Click" />
                             </StackPanel>
                         </Grid>
                     </DataTemplate>

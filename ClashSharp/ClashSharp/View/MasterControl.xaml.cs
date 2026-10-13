@@ -29,6 +29,7 @@ namespace ClashSharp.View;
 /// </remarks>
 public sealed partial class MasterControl : Page
 {
+    private const int HeroStatusColumnCount = 2;
     private const double HeroStatusHorizontalMargin = 10;
     private const double MinHeroStatusItemWidth = 120;
     private const double PreferredHeroStatusItemWidth = 220;
@@ -879,14 +880,9 @@ public sealed partial class MasterControl : Page
             return;
         }
 
-        int columns = MasterControlLayoutPolicy.Resolve(availableWidth).StatusColumns;
-        if (HeroStatusItemGrid.ItemsPanelRoot is ItemsWrapGrid panel)
-        {
-            panel.MaximumRowsOrColumns = columns;
-        }
         _heroStatusItemWidth = Math.Min(availableWidth, Math.Max(
             MinHeroStatusItemWidth,
-            CalculateHeroStatusItemWidth(availableWidth, columns)));
+            CalculateHeroStatusItemWidth(availableWidth)));
         foreach (MasterHeroStatusItemViewModel itemViewModel in _viewModel.HeroStatusItems)
         {
             if (HeroStatusItemGrid.ContainerFromItem(itemViewModel) is FrameworkElement item)
@@ -901,10 +897,10 @@ public sealed partial class MasterControl : Page
         item.Width = _heroStatusItemWidth;
     }
 
-    private static double CalculateHeroStatusItemWidth(double availableWidth, int columns)
+    private static double CalculateHeroStatusItemWidth(double availableWidth)
     {
         return Math.Floor(
-            (availableWidth / columns) - HeroStatusHorizontalMargin);
+            (availableWidth / HeroStatusColumnCount) - HeroStatusHorizontalMargin);
     }
 
     private void InfoTileGrid_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -1013,32 +1009,51 @@ public sealed partial class MasterControl : Page
     private void UpdateMasterLayout(double contentWidth)
     {
         MasterControlLayout layout = MasterControlLayoutPolicy.Resolve(contentWidth);
-        ArrangeModeButtons(layout.ModeColumns);
+        ModeColumn.Width = layout.IsSideBySide
+            ? new GridLength(layout.ModeColumnWidth)
+            : new GridLength(0);
+
+        Grid.SetRow(HeroStatusCard, 0);
+        Grid.SetColumn(HeroStatusCard, 0);
+        Grid.SetColumnSpan(HeroStatusCard, layout.IsSideBySide ? 1 : 2);
+
+        Grid.SetRow(ModeButtonGrid, layout.IsSideBySide ? 0 : 1);
+        Grid.SetColumn(ModeButtonGrid, layout.IsSideBySide ? 1 : 0);
+        Grid.SetColumnSpan(ModeButtonGrid, layout.IsSideBySide ? 1 : 2);
+        ModeButtonGrid.Margin = layout.IsSideBySide
+            ? new Thickness(0)
+            : new Thickness(0, 2, 0, 0);
+        ArrangeModeButtons(layout.IsSideBySide);
     }
 
-    private void ArrangeModeButtons(int columns)
+    private void ArrangeModeButtons(bool isSideBySide)
     {
-        if (ModeButtonGrid.ColumnDefinitions.Count == columns)
+        ModeButtonGrid.RowSpacing = isSideBySide ? 10 : 0;
+        foreach (RowDefinition row in ModeButtonGrid.RowDefinitions)
         {
+            row.Height = isSideBySide ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        }
+        Thickness narrowSecondRowMargin = isSideBySide
+            ? new Thickness(0)
+            : new Thickness(0, 10, 0, 0);
+        DisabledModeButton.Margin = new Thickness(0);
+        StandbyModeButton.Margin = new Thickness(0);
+        RuleTakeoverModeButton.Margin = narrowSecondRowMargin;
+        FullTakeoverModeButton.Margin = narrowSecondRowMargin;
+
+        if (isSideBySide)
+        {
+            SetModeButtonLayout(DisabledModeButton, row: 0, column: 0, columnSpan: 2);
+            SetModeButtonLayout(StandbyModeButton, row: 1, column: 0, columnSpan: 2);
+            SetModeButtonLayout(RuleTakeoverModeButton, row: 2, column: 0, columnSpan: 2);
+            SetModeButtonLayout(FullTakeoverModeButton, row: 3, column: 0, columnSpan: 2);
             return;
         }
 
-        ModeButtonGrid.ColumnDefinitions.Clear();
-        ModeButtonGrid.RowDefinitions.Clear();
-        for (int column = 0; column < columns; column++)
-        {
-            ModeButtonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        }
-
-        FrameworkElement[] buttons = [DisabledModeButton, StandbyModeButton, RuleTakeoverModeButton, FullTakeoverModeButton];
-        for (int row = 0; row < (buttons.Length + columns - 1) / columns; row++)
-        {
-            ModeButtonGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        }
-        for (int index = 0; index < buttons.Length; index++)
-        {
-            SetModeButtonLayout(buttons[index], index / columns, index % columns, columnSpan: 1);
-        }
+        SetModeButtonLayout(DisabledModeButton, row: 0, column: 0, columnSpan: 1);
+        SetModeButtonLayout(StandbyModeButton, row: 0, column: 1, columnSpan: 1);
+        SetModeButtonLayout(RuleTakeoverModeButton, row: 1, column: 0, columnSpan: 1);
+        SetModeButtonLayout(FullTakeoverModeButton, row: 1, column: 1, columnSpan: 1);
     }
 
     private static void SetModeButtonLayout(

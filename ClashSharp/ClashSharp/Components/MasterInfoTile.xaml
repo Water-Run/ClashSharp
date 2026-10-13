@@ -75,14 +75,14 @@
             x:Name="SelectedOverlay"
             Grid.RowSpan="2"
             Margin="-16"
-            CornerRadius="8"
+            CornerRadius="0"
             Background="{ThemeResource AccentFillColorDefaultBrush}"
             Opacity="0" />
         <Border
             x:Name="HoverOverlay"
             Grid.RowSpan="2"
             Margin="-16"
-            CornerRadius="8"
+            CornerRadius="0"
             Background="{ThemeResource ControlFillColorSecondaryBrush}"
             Opacity="0" />
 
@@ -162,6 +162,7 @@
             VerticalAlignment="Stretch"
             Background="Transparent"
             BorderThickness="0"
+            CornerRadius="0"
             UseSystemFocusVisuals="True"
             AutomationProperties.Name="{Binding Title, ElementName=Root}"
             AutomationProperties.HelpText="{Binding Value, ElementName=Root}"
@@ -175,7 +176,7 @@
             </ToolTipService.ToolTip>
             <Button.Template>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="4" />
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" />
                 </ControlTemplate>
             </Button.Template>
         </Button>

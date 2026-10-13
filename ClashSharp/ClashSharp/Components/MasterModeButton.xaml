@@ -36,6 +36,7 @@
             Padding="0"
             Background="Transparent"
             BorderThickness="0"
+            CornerRadius="0"
             UseSystemFocusVisuals="True"
             AutomationProperties.Name="{Binding Title, ElementName=Root}"
             AutomationProperties.HelpText="{Binding Description, ElementName=Root}"
@@ -51,7 +52,7 @@
                 x:Name="SelectedOverlay"
                 Grid.ColumnSpan="2"
                 Margin="-12"
-                CornerRadius="8"
+                CornerRadius="0"
                 Background="{ThemeResource AccentFillColorDefaultBrush}"
                 Opacity="0" />
 
