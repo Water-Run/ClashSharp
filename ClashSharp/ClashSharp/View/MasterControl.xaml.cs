@@ -725,11 +725,18 @@ public sealed partial class MasterControl : Page
         };
         void RefreshSelectionCount()
         {
-            selectionCount.Text = string.Format(
+            string description = string.Format(
                 CultureInfo.CurrentCulture,
                 _getString("Master.Tile.SelectedCount.Format"),
                 optionList.SelectedOptions.Count,
                 optionList.Options.Count);
+            selectionCount.Text = string.Format(
+                CultureInfo.CurrentCulture,
+                "{0} / {1}",
+                optionList.SelectedOptions.Count,
+                optionList.Options.Count);
+            AutomationProperties.SetName(selectionCount, description);
+            ToolTipService.SetToolTip(selectionCount, description);
         }
         void SetAllChecked(bool isChecked)
         {

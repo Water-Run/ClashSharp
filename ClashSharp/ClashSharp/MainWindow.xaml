@@ -21,6 +21,7 @@
 
         <TitleBar
             x:Name="AppTitleBar"
+            FlowDirection="LeftToRight"
             Title="Clash#"
             IsPaneToggleButtonVisible="True"
             ActualThemeChanged="AppTitleBar_ActualThemeChanged"
