@@ -732,7 +732,7 @@ public sealed partial class MasterControl : Page
                 optionList.Options.Count);
             selectionCount.Text = string.Format(
                 CultureInfo.CurrentCulture,
-                "{0} / {1}",
+                "\u2066{0} / {1}\u2069",
                 optionList.SelectedOptions.Count,
                 optionList.Options.Count);
             AutomationProperties.SetName(selectionCount, description);
