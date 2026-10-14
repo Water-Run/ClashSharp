@@ -219,7 +219,13 @@ internal sealed partial class SettingsViewModel
             }
         }
         foreach (string property in notifications) { OnPropertyChanged(property); }
-        if (notifications.Contains(nameof(DisplayLanguage))) { RaiseDisplayLanguageRestartStateChanged(); }
+        if (notifications.Contains(nameof(DisplayLanguage)))
+        {
+            // The appearance participant has already selected the active resources. Refresh
+            // this page without reloading unrelated edits or rebasing pending restart settings.
+            RaiseLocalizedTextChanges();
+            RaiseDisplayLanguageRestartStateChanged();
+        }
         if (notifications.Contains(nameof(AppAccentColorMode)) || notifications.Contains(nameof(AppAccentColorValue)))
         {
             RaiseAppAccentColorRestartStateChanged();

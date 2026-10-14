@@ -665,7 +665,7 @@ internal static partial class LocalizationResources
             ["ConnectionSampling.RecoveredDetail.Format"] = "已寫入 {0:N0} 筆。",
             ["Settings.Section.Language"] = "基礎",
             ["Settings.Language.Title"] = "介面語言",
-            ["Settings.Language.Description"] = "選擇 Clash# 的顯示語言，重新啟動應用程式後生效。",
+            ["Settings.Language.Description"] = "選擇 Clash# 的顯示語言。",
             ["Settings.Language.AutoDetect"] = "自動偵測",
             ["Settings.AppTheme.Title"] = "應用程式佈景主題",
             ["Settings.AppTheme.Description"] = "選擇介面跟隨系統、淺色或深色顯示。",

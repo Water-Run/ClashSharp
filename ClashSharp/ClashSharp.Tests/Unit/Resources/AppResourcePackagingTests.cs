@@ -2058,7 +2058,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("Id == \"edit-tiles\"", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionList", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText", masterControlCode, StringComparison.Ordinal);
-        Assert.Contains("MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot)", masterControlCode, StringComparison.Ordinal);
+        Assert.Contains("MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot, panel, optionList)", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("SearchableOptionItem", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("tile.IsVisible)));", masterControlCode, StringComparison.Ordinal);
         Assert.Contains("Text = _viewModel.InfoTileSelectionDescriptionText", masterControlCode, StringComparison.Ordinal);

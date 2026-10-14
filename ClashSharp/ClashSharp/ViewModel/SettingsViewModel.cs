@@ -1727,7 +1727,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
             nameof(LanguageSectionTitleText),
             nameof(LanguageTitleText),
             nameof(LanguageDescriptionText),
-            nameof(DisplayLanguageOptions),
+            // The existing observable language source updates its automatic label in place.
+            // Rebinding it during selection would interrupt the open native ComboBox.
             nameof(DisplayLanguageIndex),
             nameof(AppThemeModeTitleText),
             nameof(AppThemeModeDescriptionText),

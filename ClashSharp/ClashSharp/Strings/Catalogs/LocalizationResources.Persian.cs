@@ -665,7 +665,7 @@ internal static partial class LocalizationResources
             ["ConnectionSampling.RecoveredDetail.Format"] = "{0:N0} ردیف.",
             ["Settings.Section.Language"] = "پایه",
             ["Settings.Language.Title"] = "زبان رابط",
-            ["Settings.Language.Description"] = "زبان Clash# را انتخاب کنید. برای اعمال، برنامه را دوباره راه‌اندازی کنید.",
+            ["Settings.Language.Description"] = "زبان Clash# را انتخاب کنید.",
             ["Settings.Language.AutoDetect"] = "تشخیص خودکار",
             ["Settings.AppTheme.Title"] = "پوستهٔ برنامه",
             ["Settings.AppTheme.Description"] = "انتخاب کنید که رابط از سیستم پیروی کند، روشن باشد یا تیره.",

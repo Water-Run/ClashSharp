@@ -665,7 +665,7 @@ internal static partial class LocalizationResources
             ["ConnectionSampling.RecoveredDetail.Format"] = "{0:N0}행을 기록했습니다.",
             ["Settings.Section.Language"] = "기본",
             ["Settings.Language.Title"] = "표시 언어",
-            ["Settings.Language.Description"] = "Clash#의 표시 언어를 선택합니다. 적용하려면 앱을 다시 시작하세요.",
+            ["Settings.Language.Description"] = "Clash#의 표시 언어를 선택합니다.",
             ["Settings.Language.AutoDetect"] = "자동 감지",
             ["Settings.AppTheme.Title"] = "앱 테마",
             ["Settings.AppTheme.Description"] = "인터페이스를 시스템 설정에 맞출지, 밝게 또는 어둡게 표시할지 고릅니다.",

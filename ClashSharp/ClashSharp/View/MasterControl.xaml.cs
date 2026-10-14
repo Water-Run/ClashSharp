@@ -18,6 +18,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
+using Windows.Foundation;
 
 namespace ClashSharp.View;
 
@@ -46,7 +47,7 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorMinListHeight = 80;
     private const double InfoTileEditorMaxListHeight = 420;
     private const double InfoTileEditorMaxDialogHeight = 756;
-    private const double InfoTileEditorVerticalChrome = 384;
+    private const double InfoTileEditorWindowChrome = 272;
 
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
@@ -668,7 +669,7 @@ public sealed partial class MasterControl : Page
             SearchPlaceholder = _viewModel.SearchInfoTilesPlaceholderText,
             EmptyText = _getString("Common.NoMatchingOptions"),
             AllowMultiple = true,
-            MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot),
+            MaxListHeight = InfoTileEditorMinListHeight,
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         optionList.SetOptions(_viewModel.InfoTiles.Select(tile => new SearchableOptionItem(
@@ -813,7 +814,7 @@ public sealed partial class MasterControl : Page
         };
         dialog.Resources["ContentDialogMaxWidth"] = editorWidth + 48d;
 
-        void ResizeEditor(XamlRoot sender, XamlRootChangedEventArgs args)
+        void UpdateEditorBounds()
         {
             // Virtualized rows and filtered results must not move the dialog or its controls.
             double width = CalculateInfoTilesEditorWidth(dialogRoot);
@@ -822,10 +823,16 @@ public sealed partial class MasterControl : Page
                 panel.Width = width;
                 dialog.Resources["ContentDialogMaxWidth"] = width + 48d;
             }
-            optionList.MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot);
+            optionList.MaxListHeight = CalculateInfoTilesEditorListHeight(dialogRoot, panel, optionList);
         }
+        void ResizeEditor(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateEditorBounds();
+        void EditorLoaded(object sender, RoutedEventArgs args) => UpdateEditorBounds();
+        void ActionsSizeChanged(object sender, SizeChangedEventArgs args) => UpdateEditorBounds();
 
         ContentDialogResult result;
+        UpdateEditorBounds();
+        dialog.Loaded += EditorLoaded;
+        selectionActions.SizeChanged += ActionsSizeChanged;
         dialogRoot.Changed += ResizeEditor;
         try
         {
@@ -833,6 +840,8 @@ public sealed partial class MasterControl : Page
         }
         finally
         {
+            dialog.Loaded -= EditorLoaded;
+            selectionActions.SizeChanged -= ActionsSizeChanged;
             dialogRoot.Changed -= ResizeEditor;
         }
 
@@ -971,12 +980,17 @@ public sealed partial class MasterControl : Page
         return Math.Clamp(availableWidth, InfoTileEditorMinWidth, InfoTileEditorPreferredWidth);
     }
 
-    private static double CalculateInfoTilesEditorListHeight(XamlRoot dialogRoot)
+    private static double CalculateInfoTilesEditorListHeight(
+        XamlRoot dialogRoot,
+        FrameworkElement content,
+        SearchableOptionList optionList)
     {
-        // The native ContentDialog caps its outer height even on a tall desktop.
-        // Reserve its title, template selector and action rows before sizing the list.
+        // Measure translated descriptions and action rows at the actual width. Their wrapping
+        // must reduce the scrolling list, rather than push the dialog into the title bar.
+        content.Measure(new Size(content.Width, double.PositiveInfinity));
+        double contentChrome = Math.Max(0, content.DesiredSize.Height - optionList.MaxListHeight);
         double availableHeight = dialogRoot.Size.Height > 0
-            ? Math.Min(dialogRoot.Size.Height, InfoTileEditorMaxDialogHeight) - InfoTileEditorVerticalChrome
+            ? Math.Min(dialogRoot.Size.Height, InfoTileEditorMaxDialogHeight) - InfoTileEditorWindowChrome - contentChrome
             : InfoTileEditorMinListHeight;
         return Math.Clamp(availableHeight, InfoTileEditorMinListHeight, InfoTileEditorMaxListHeight);
     }

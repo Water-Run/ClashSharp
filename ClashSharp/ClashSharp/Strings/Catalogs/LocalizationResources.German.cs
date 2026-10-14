@@ -665,7 +665,7 @@ internal static partial class LocalizationResources
             ["ConnectionSampling.RecoveredDetail.Format"] = "{0:N0} Zeilen geschrieben.",
             ["Settings.Section.Language"] = "Basis",
             ["Settings.Language.Title"] = "Anzeigesprache",
-            ["Settings.Language.Description"] = "Anzeigesprache für Clash# auswählen. Zum Übernehmen die App neu starten.",
+            ["Settings.Language.Description"] = "Anzeigesprache für Clash# auswählen.",
             ["Settings.Language.AutoDetect"] = "Automatisch erkennen",
             ["Settings.AppTheme.Title"] = "App-Design",
             ["Settings.AppTheme.Description"] = "Wählen, ob die Oberfläche dem System folgt oder hell bzw. dunkel angezeigt wird.",

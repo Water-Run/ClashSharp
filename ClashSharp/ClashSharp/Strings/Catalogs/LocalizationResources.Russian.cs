@@ -665,7 +665,7 @@ internal static partial class LocalizationResources
             ["ConnectionSampling.RecoveredDetail.Format"] = "Записано строк: {0:N0}.",
             ["Settings.Section.Language"] = "Основное",
             ["Settings.Language.Title"] = "Язык интерфейса",
-            ["Settings.Language.Description"] = "Выберите язык Clash#. Перезапустите приложение, чтобы применить его.",
+            ["Settings.Language.Description"] = "Выберите язык Clash#.",
             ["Settings.Language.AutoDetect"] = "Автоопределение",
             ["Settings.AppTheme.Title"] = "Тема приложения",
             ["Settings.AppTheme.Description"] = "Выберите системную, светлую или темную тему интерфейса.",
