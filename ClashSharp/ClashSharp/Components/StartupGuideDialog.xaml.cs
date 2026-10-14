@@ -44,6 +44,7 @@ public sealed partial class StartupGuideDialog : ContentDialog
         BusyText.Text = getString("StartupPrompt.Checking");
         RefreshError.Message = getString("StartupPrompt.RefreshFailed");
         UpdateSnapshot(checks);
+        Loaded += OnLoaded;
         Opened += OnOpened;
         Closed += OnClosed;
     }
@@ -84,6 +85,8 @@ public sealed partial class StartupGuideDialog : ContentDialog
         RefreshError.Visibility = Visibility.Collapsed;
     }
 
+    private void OnLoaded(object sender, RoutedEventArgs args) => UpdateContentBounds();
+
     private void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
     {
         _layoutRoot = XamlRoot;
@@ -107,15 +110,15 @@ public sealed partial class StartupGuideDialog : ContentDialog
 
     private void UpdateContentBounds()
     {
-        if (_layoutRoot is not null)
+        if (XamlRoot is { } root)
         {
             // A preferred reading width avoids the narrow, content-sized column of stacked diagnostics.
             // Reserve room for native dialog chrome and status text while the check rows alone scroll.
-            GuideContent.Width = Math.Clamp(_layoutRoot.Size.Width - 96, 240, 640);
+            GuideContent.Width = Math.Clamp(root.Size.Width - 96, 240, 640);
             // ItemsControl templates can otherwise measure Auto columns beyond the scroll viewport.
             // Constrain the entire row, including its status, before text is measured; reserve the scrollbar.
             ChecksList.Width = Math.Max(0, GuideContent.Width - ChecksScroll.Padding.Right - 16);
-            ChecksScroll.MaxHeight = Math.Clamp(_layoutRoot.Size.Height - 280, 100, 400);
+            ChecksScroll.MaxHeight = Math.Clamp(root.Size.Height - 352, 100, 400);
         }
     }
 

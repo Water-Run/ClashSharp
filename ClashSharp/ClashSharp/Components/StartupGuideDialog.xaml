@@ -36,33 +36,35 @@
             <ItemsControl x:Name="ChecksList" Width="612" HorizontalAlignment="Left" HorizontalContentAlignment="Stretch">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Grid Padding="0,12" ColumnSpacing="16" BorderThickness="0,1,0,0"
+                        <Grid Padding="0,8" ColumnSpacing="16" BorderThickness="0,1,0,0"
                               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <FontIcon Width="24" FontSize="18" Margin="0,2,0,0" VerticalAlignment="Top"
                                       Loaded="StatusIcon_Loaded"
                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Spacing="4">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" MaxWidth="96" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding Title}" TextWrapping="WrapWholeWords"
-                                               Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                    <TextBlock Grid.Column="1" Loaded="StatusText_Loaded" TextWrapping="Wrap"
-                                               Style="{ThemeResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                               VerticalAlignment="Center" TextAlignment="Right" />
-                                </Grid>
+                                <TextBlock Text="{Binding Title}" TextWrapping="WrapWholeWords"
+                                           Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                                 <TextBlock Text="{Binding Description}" TextWrapping="WrapWholeWords"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <HyperlinkButton Padding="0" HorizontalAlignment="Left" Loaded="CheckAction_Loaded" Click="CheckAction_Click" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" MaxWidth="136" Spacing="4" HorizontalAlignment="Right">
+                                <TextBlock TextWrapping="Wrap" Loaded="StatusText_Loaded" Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Right" />
+                                <HyperlinkButton MaxWidth="136" Padding="0" HorizontalAlignment="Right" Loaded="CheckAction_Loaded" Click="CheckAction_Click">
+                                    <HyperlinkButton.ContentTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Right"
+                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}" />
+                                        </DataTemplate>
+                                    </HyperlinkButton.ContentTemplate>
+                                </HyperlinkButton>
                             </StackPanel>
                         </Grid>
                     </DataTemplate>
