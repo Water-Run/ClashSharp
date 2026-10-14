@@ -46,7 +46,7 @@ public sealed partial class MasterControl : Page
     private const double InfoTileEditorMinListHeight = 80;
     private const double InfoTileEditorMaxListHeight = 420;
     private const double InfoTileEditorMaxDialogHeight = 756;
-    private const double InfoTileEditorVerticalChrome = 360;
+    private const double InfoTileEditorVerticalChrome = 384;
 
     /// <summary>Bindable view model for this page.</summary>
     private readonly MasterControlViewModel _viewModel;
