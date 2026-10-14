@@ -141,8 +141,8 @@ public sealed partial class JsonSettingsRepository
                     cancellationToken)
                 .ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            Promote(candidate, PrimaryPath);
-            FlushPromotedFile(PrimaryPath);
+            await RetrySharingViolationAsync(() => Promote(candidate, PrimaryPath), cancellationToken).ConfigureAwait(false);
+            await FlushPromotedFileAsync(PrimaryPath).ConfigureAwait(false);
             await _faultInjector
                 .InjectAsync(
                     SettingsPersistenceFaultPoint.AfterEnvelopePromotion,

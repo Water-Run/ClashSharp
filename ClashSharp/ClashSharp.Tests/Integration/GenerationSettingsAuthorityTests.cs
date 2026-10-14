@@ -234,7 +234,7 @@ public sealed partial class GenerationSettingsAuthorityTests
         public Dictionary<SettingApplicationKind, Participant> Participants { get; } = Enum.GetValues<SettingApplicationKind>().ToDictionary(kind => kind, kind => new Participant(kind));
         public object? GetService(Type serviceType) => serviceType == typeof(SettingsGenerationContext) ? _context : null;
 
-        public static async Task<Fixture> CreateAsync(PublicationHook? hook = null, bool misbind = false)
+        public static async Task<Fixture> CreateAsync(ISettingsPersistenceFaultInjector? hook = null, bool misbind = false)
         {
             Fixture fixture = new();
             try

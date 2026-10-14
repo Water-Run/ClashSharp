@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Infrastructure.Data;
 using ClashSharp.Settings;
@@ -86,8 +87,8 @@ public sealed partial class JsonSettingsRepository
                 .InjectAsync(beforePromotion, cancellationToken)
                 .ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            Promote(candidate, targetPath);
-            FlushPromotedFile(targetPath);
+            await RetrySharingViolationAsync(() => Promote(candidate, targetPath), cancellationToken).ConfigureAwait(false);
+            await FlushPromotedFileAsync(targetPath).ConfigureAwait(false);
             await _faultInjector
                 .InjectAsync(afterPromotion, CancellationToken.None)
                 .ConfigureAwait(false);
@@ -140,6 +141,31 @@ public sealed partial class JsonSettingsRepository
             bufferSize: 1,
             isAsync: false);
         stream.Flush(flushToDisk: true);
+    }
+
+    /// <summary>Flushes an already promoted envelope through bounded sharing waits; publication has passed the cancellation boundary.</summary>
+    internal static Task FlushPromotedFileAsync(string path) =>
+        RetrySharingViolationAsync(() => FlushPromotedFile(path), CancellationToken.None);
+
+    private static async Task RetrySharingViolationAsync(Action operation, CancellationToken cancellationToken)
+    {
+        const int maximumRetries = 10;
+        ExceptionDispatchInfo? firstFailure = null;
+        for (int retries = 0; ; retries++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                operation();
+                return;
+            }
+            catch (IOException failure) when (IsSharingViolation(failure))
+            {
+                firstFailure ??= ExceptionDispatchInfo.Capture(failure);
+                if (retries == maximumRetries) { firstFailure.Throw(); }
+                await Task.Delay(TimeSpan.FromMilliseconds(20), cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     private static string CreateCandidatePath(string targetPath) =>

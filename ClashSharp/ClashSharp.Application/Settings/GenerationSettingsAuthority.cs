@@ -185,6 +185,17 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
             {
                 _ = RequireSession(context, generation);
                 SettingsAuthorityResult result = await command(context, lease, token).ConfigureAwait(false);
+                if (result.Status == SettingsAuthorityStatus.PersistenceFailed
+                    && result.PersistenceStatus == SettingsPersistenceStatus.Unavailable && result.Envelope is null)
+                {
+                    // Storage may have committed before its acknowledgement failed. Publish only a
+                    // fresh verified reread, retaining the failed outcome and any pending application.
+                    SettingsAuthorityResult observed = await context.Session.ReopenUncertainCommitAdmittedAsync(lease).ConfigureAwait(false);
+                    if (observed.IsSucceeded && observed.Envelope is not null)
+                    {
+                        result = new(result.Status, observed.Envelope, result.Code, result.PersistenceStatus);
+                    }
+                }
                 if (result.Envelope is not null)
                 {
                     try { PublishState(new SettingsAuthoritySnapshot(generation, result.Envelope)); }

@@ -56,6 +56,11 @@ public sealed partial class SettingsAuthoritySession : IAsyncDisposable
     public Task<SettingsAuthorityResult> OpenAdmittedAsync(MutationAdmissionLease admissionLease, CancellationToken cancellationToken) =>
         ExecuteAdmittedAsync(admissionLease, ReadCoreAsync, cancellationToken);
 
+    /// <summary>Rereads uncertain storage before the facade releases its generation pin, without replaying an edit or runtime effect.</summary>
+    /// <remarks>The accepted command still owns admission; cancellation after its attempted commit cannot skip observation.</remarks>
+    internal Task<SettingsAuthorityResult> ReopenUncertainCommitAdmittedAsync(MutationAdmissionLease admissionLease) =>
+        ExecuteAdmittedAsync(admissionLease, ReadCoreAsync, honorRevocation: false, CancellationToken.None);
+
     /// <summary>Replaces previous-process evidence with pending observation while preserving blocked probes and existing attempt identities.</summary>
     /// <param name="startupId">Fresh identity of the exclusively owned startup.</param>
     /// <param name="admissionLease">Exclusive startup lease held until reconciliation finishes.</param>
