@@ -102,6 +102,8 @@ public sealed class ModelDisplayMapperTests
         Assert.Equal(group, groupDisplay.Model);
         Assert.Equal("display:group-name", groupDisplay.NameDisplay);
         Assert.Equal("display:selected-node", groupDisplay.CurrentSelectionDisplay);
+        Assert.Equal("display:Selector", groupDisplay.TypeDisplay);
+        Assert.Equal("Selector", groupDisplay.Type);
 
         Assert.Equal(provider, providerDisplay.Model);
         Assert.Equal("display:provider-name", providerDisplay.NameDisplay);

@@ -58,7 +58,7 @@
                                             <ColumnDefinition Width="2*" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="{Binding NameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding NameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Type}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Type}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding TypeDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding TypeDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                         <ComboBox
                                             Grid.Column="2"
                                             MinWidth="0"

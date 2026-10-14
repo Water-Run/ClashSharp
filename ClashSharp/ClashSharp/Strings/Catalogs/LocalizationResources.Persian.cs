@@ -10,6 +10,13 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ProxyNodes.GroupType.Selector"] = "انتخاب دستی",
+            ["ProxyNodes.GroupType.UrlTest"] = "آزمون تأخیر",
+            ["ProxyNodes.GroupType.Fallback"] = "جابه‌جایی هنگام خرابی",
+            ["ProxyNodes.GroupType.LoadBalance"] = "توازن بار",
+            ["ProxyNodes.GroupType.Relay"] = "زنجیرهٔ پروکسی",
+            ["ProxyNodes.GroupType.Unknown"] = "نوع نامشخص",
+            ["Connections.Process.Unknown"] = "فرایند نامشخص",
             ["Settings.DataUnitStyle.Title"] = "واحد داده",
             ["Settings.DataUnitStyle.Description"] = "مبنای محاسبه و برچسب را انتخاب کنید؛ ترافیک ذخیره‌شده تغییر نمی‌کند.",
             ["Settings.DataUnitStyle.Si"] = "KB · مبنای 1000",

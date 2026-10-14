@@ -6,6 +6,32 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the proxies view model.</summary>
 public sealed class ProxiesViewModelTests
 {
+    [Theory]
+    [InlineData("Selector", "ProxyNodes.GroupType.Selector")]
+    [InlineData("URLTest", "ProxyNodes.GroupType.UrlTest")]
+    [InlineData("Fallback", "ProxyNodes.GroupType.Fallback")]
+    [InlineData("LoadBalance", "ProxyNodes.GroupType.LoadBalance")]
+    [InlineData("Relay", "ProxyNodes.GroupType.Relay")]
+    [InlineData("Unknown", "ProxyNodes.GroupType.Unknown")]
+    [InlineData("", "ProxyNodes.GroupType.Unknown")]
+    [InlineData("FutureGroup", "display:FutureGroup")]
+    public async Task StrategyTypeDisplay_DoesNotChangeRawSelectionIdentity(string type, string expected)
+    {
+        MihomoProxyGroup group = new("raw-group", type, "Node A", ["Node A", "Node B"]);
+        FakeProxyRuntimeController runtime = new() { ProxyGroups = [group] };
+        ProxiesViewModel page = new(new FakeProxiesLocalization(), new FakeProxyCatalog(), new FakeProxyLatency(),
+            runtime, new FakeProxiesLog(), new TestApplicationErrorSink(), new ModelDisplayMapper(text => "display:" + text));
+
+        await page.RefreshRuntimeAsync(CancellationToken.None);
+
+        MihomoProxyGroupDisplay row = Assert.Single(page.ProxyGroups);
+        Assert.Equal(expected, row.TypeDisplay);
+        Assert.Equal(type, row.Model.Type);
+        Assert.Equal("display:raw-group", row.NameDisplay);
+        await page.SelectProxyAsync(row.Model, "Node B", CancellationToken.None);
+        Assert.Equal(("raw-group", "Node B"), runtime.LastSelection);
+    }
+
     [Fact]
     public async Task PageDataChange_ProxyReloadDoesNotReuseOldNodeObjects()
     {
@@ -612,7 +638,7 @@ public sealed class ProxiesViewModelTests
     {
         /// <summary>Gets fake strategy groups.</summary>
         /// <value>Configured fake strategy groups.</value>
-        public IReadOnlyList<MihomoProxyGroup> ProxyGroups { get; } =
+        public IReadOnlyList<MihomoProxyGroup> ProxyGroups { get; init; } =
         [
             new("Proxy", "Selector", "Node A", ["Node A", "Node B", "DIRECT"]),
         ];

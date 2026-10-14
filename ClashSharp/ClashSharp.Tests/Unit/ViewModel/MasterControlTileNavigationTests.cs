@@ -16,6 +16,16 @@ public sealed partial class MasterControlViewModelTests
     [InlineData("system-log-count", "Logs")]
     [InlineData("traffic-total", "Statistics")]
     [InlineData("system-info", "About")]
+    [InlineData("port", "Settings")]
+    [InlineData("notification-enabled", "Settings")]
+    [InlineData("triggers-enabled", "Settings")]
+    [InlineData("trigger-notifications", "Settings")]
+    [InlineData("mihomo-version", "About")]
+    [InlineData("app-name", "About")]
+    [InlineData("app-runtime", "About")]
+    [InlineData("upload-rate", "Statistics")]
+    [InlineData("download-rate", "Statistics")]
+    [InlineData("session-traffic", "Statistics")]
     public async Task InformationTile_OnlyExplicitDetailLinkNavigatesWithoutReplacingItsDetails(string tileId, string expectedPage)
     {
         List<string> visited = [];

@@ -10,6 +10,13 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ProxyNodes.GroupType.Selector"] = "Manuelle Auswahl",
+            ["ProxyNodes.GroupType.UrlTest"] = "Latenztest",
+            ["ProxyNodes.GroupType.Fallback"] = "Ausfallsicherung",
+            ["ProxyNodes.GroupType.LoadBalance"] = "Lastverteilung",
+            ["ProxyNodes.GroupType.Relay"] = "Proxy-Kette",
+            ["ProxyNodes.GroupType.Unknown"] = "Unbekannter Typ",
+            ["Connections.Process.Unknown"] = "Unbekannter Prozess",
             ["Settings.DataUnitStyle.Title"] = "Dateneinheiten",
             ["Settings.DataUnitStyle.Description"] = "Basis und Beschriftung wählen; gespeicherte Datenmengen bleiben gleich.",
             ["Settings.DataUnitStyle.Si"] = "KB · Basis 1000",

@@ -9,6 +9,37 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the active connections view model.</summary>
 public sealed class ConnectionsViewModelTests
 {
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task MissingProcess_IsLocalizedAndSearchableWithoutChangingTheRawConnection(string processName)
+    {
+        ActiveConnection connection = new("raw-id", processName, "example.com", "MATCH", "", "DIRECT", 10, 20, DateTimeOffset.UnixEpoch);
+        FakeConnectionClient client = new() { Connections = [connection] };
+        ConnectionsViewModel page = new(new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink());
+
+        await page.RefreshConnectionsAsync(CancellationToken.None);
+
+        ActiveConnectionDisplayRow row = Assert.Single(page.Connections);
+        Assert.Equal("Unknown process", row.ProcessNameDisplay);
+        Assert.Equal(connection, row.Connection);
+        page.SearchText = "Unknown process";
+        Assert.Single(page.Connections);
+        await page.CloseConnectionAsync(row.Connection, CancellationToken.None);
+        Assert.Equal("raw-id", client.ClosedConnectionId);
+        Assert.Equal(processName, connection.ProcessName);
+    }
+
+    [Fact]
+    public void NamedProcess_StillPassesThroughTheDisplayFilter()
+    {
+        ActiveConnection connection = new("id", "unknown.exe", "example.com", "MATCH", "", "DIRECT", 0, 0, DateTimeOffset.UnixEpoch);
+        ActiveConnectionDisplayRow row = new(connection, text => "safe:" + text, getString: _ => "Unknown process");
+        Assert.Equal("safe:unknown.exe", row.ProcessNameDisplay);
+        Assert.Equal(connection, row.Connection);
+    }
+
     [Fact]
     public async Task PageDataChange_ConnectionResetDropsThePreviousControllerRows()
     {
@@ -638,6 +669,7 @@ public sealed class ConnectionsViewModelTests
                 "Connections.Empty" => "No active connections",
                 "Connections.NoMatches" => "No matches",
                 "Connections.FilterCount.Format" => "{0} of {1}",
+                "Connections.Process.Unknown" => "Unknown process",
                 _ => key,
             };
         }

@@ -301,7 +301,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         _hasObservation = true;
         _isAvailable = true;
         _allConnections = connections
-            .Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter, _localization.Formatter))
+            .Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter, _localization.Formatter, _localization.GetString))
             .ToArray();
         ApplyFilter();
         ConnectionStatusText = string.Format(

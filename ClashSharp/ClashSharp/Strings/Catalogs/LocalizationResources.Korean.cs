@@ -10,6 +10,13 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ProxyNodes.GroupType.Selector"] = "수동 선택",
+            ["ProxyNodes.GroupType.UrlTest"] = "지연 시간 검사",
+            ["ProxyNodes.GroupType.Fallback"] = "장애 조치",
+            ["ProxyNodes.GroupType.LoadBalance"] = "부하 분산",
+            ["ProxyNodes.GroupType.Relay"] = "프록시 체인",
+            ["ProxyNodes.GroupType.Unknown"] = "알 수 없는 유형",
+            ["Connections.Process.Unknown"] = "알 수 없는 프로세스",
             ["Settings.DataUnitStyle.Title"] = "데이터 단위",
             ["Settings.DataUnitStyle.Description"] = "진법과 단위 표기를 선택합니다. 기록된 트래픽은 변경되지 않습니다.",
             ["Settings.DataUnitStyle.Si"] = "KB · 1000진법",

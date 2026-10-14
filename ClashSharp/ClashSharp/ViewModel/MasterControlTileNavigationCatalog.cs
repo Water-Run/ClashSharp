@@ -19,14 +19,16 @@ internal static class MasterControlTileNavigationCatalog
         "active-connections" => new("Connections", "Nav.Connections"),
         "system-log-count" => new("Logs", "Statistics.LogsShortcut.Title"),
         "connection-records" or "traffic-total" or "traffic-snapshots" or "node-health-records"
+            or "upload-rate" or "download-rate" or "session-traffic"
             => new("Statistics", "Nav.Statistics"),
-        "app-version" or "system-info" => new("About", "Nav.About"),
+        "app-version" or "system-info" or "app-name" or "app-runtime" or "mihomo-version"
+            => new("About", "Nav.About"),
         "core" or "core-owner" or "proxy-address" or "system-proxy" or "current-mode"
-            or "tray-status" or "tray-visible-features" or "tray-monochrome-icon" or "close-behavior"
+            or "tray-visible-features" or "tray-monochrome-icon" or "close-behavior"
             or "startup-behavior" or "app-theme" or "display-language" or "sampling-interval"
             or "app-accent" or "mainland-feature-mode" or "startup-restore-fallback" or "mihomo-service"
-            or "mixed-port" or "proxy-test-timeout" or "proxy-test-url" or "log-storage-limit"
-            or "notification-level"
+            or "port" or "notification-enabled" or "notification-level"
+            or "triggers-enabled" or "trigger-notifications"
             => new("Settings", "Nav.Settings"),
         _ => null,
     };

@@ -494,7 +494,18 @@ internal sealed class ProxiesViewModel : ObservableObject
         List<MihomoProxyGroupDisplay> rows = new(groups.Count);
         foreach (MihomoProxyGroup group in groups)
         {
-            rows.Add(_displayMapper.Map(group));
+            MihomoProxyGroupDisplay row = _displayMapper.Map(group);
+            string? typeKey = group.Type switch
+            {
+                "Selector" => "ProxyNodes.GroupType.Selector",
+                "URLTest" => "ProxyNodes.GroupType.UrlTest",
+                "Fallback" => "ProxyNodes.GroupType.Fallback",
+                "LoadBalance" => "ProxyNodes.GroupType.LoadBalance",
+                "Relay" => "ProxyNodes.GroupType.Relay",
+                "Unknown" or "" => "ProxyNodes.GroupType.Unknown",
+                _ => null,
+            };
+            rows.Add(typeKey is null ? row : row with { TypeDisplay = _localization.GetString(typeKey) });
         }
 
         return rows;

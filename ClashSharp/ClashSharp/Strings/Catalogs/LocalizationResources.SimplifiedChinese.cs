@@ -10,6 +10,13 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ProxyNodes.GroupType.Selector"] = "手动选择",
+            ["ProxyNodes.GroupType.UrlTest"] = "自动测速",
+            ["ProxyNodes.GroupType.Fallback"] = "故障切换",
+            ["ProxyNodes.GroupType.LoadBalance"] = "负载均衡",
+            ["ProxyNodes.GroupType.Relay"] = "链式代理",
+            ["ProxyNodes.GroupType.Unknown"] = "未知类型",
+            ["Connections.Process.Unknown"] = "未知进程",
             ["Settings.DataUnitStyle.Title"] = "容量单位",
             ["Settings.DataUnitStyle.Description"] = "选择计量进制和单位标签；不改变实际流量数据。",
             ["Settings.DataUnitStyle.Si"] = "KB · 1000 进制",

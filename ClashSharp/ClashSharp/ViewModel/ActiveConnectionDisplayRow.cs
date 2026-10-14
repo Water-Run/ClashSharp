@@ -12,13 +12,23 @@ public sealed class ActiveConnectionDisplayRow
     /// <param name="connection">Immutable connection data represented by this row.</param>
     /// <param name="displayTextFilter">Boundary filter applied to externally sourced text.</param>
     /// <param name="formatter">Optional presentation formatter.</param>
-    public ActiveConnectionDisplayRow(ActiveConnection connection, Func<string, string> displayTextFilter, DisplayFormatter? formatter = null)
+    /// <param name="getString">Optional localization resolver for missing process information.</param>
+    public ActiveConnectionDisplayRow(
+        ActiveConnection connection,
+        Func<string, string> displayTextFilter,
+        DisplayFormatter? formatter = null,
+        Func<string, string>? getString = null)
     {
         ArgumentNullException.ThrowIfNull(displayTextFilter);
         formatter ??= new();
 
         Connection = connection;
-        ProcessNameDisplay = displayTextFilter(connection.ProcessName);
+        // The controller uses the literal sentinel "unknown" when no process metadata is
+        // available. Localize only its presentation; persistence and close commands retain the raw row.
+        ProcessNameDisplay = getString is not null && (string.IsNullOrWhiteSpace(connection.ProcessName)
+            || StringComparer.Ordinal.Equals(connection.ProcessName, "unknown"))
+            ? getString("Connections.Process.Unknown")
+            : displayTextFilter(connection.ProcessName);
         HostDisplay = displayTextFilter(connection.Host);
         RuleDisplay = displayTextFilter(connection.RawRuleDisplay);
         ProxyNameDisplay = displayTextFilter(connection.ProxyName);

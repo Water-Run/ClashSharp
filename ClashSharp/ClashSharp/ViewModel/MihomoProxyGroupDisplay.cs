@@ -11,6 +11,8 @@ internal sealed record MihomoProxyGroupDisplay(
 {
     public string Type => Model.Type;
 
+    public string TypeDisplay { get; init; } = Model.Type;
+
     public string CurrentSelection => Model.CurrentSelection;
 
     public IReadOnlyList<string> Candidates => Model.Candidates;

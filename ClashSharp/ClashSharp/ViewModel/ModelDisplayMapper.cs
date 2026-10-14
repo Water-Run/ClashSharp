@@ -54,7 +54,8 @@ internal sealed class ModelDisplayMapper : IModelDisplayMapper
         return new MihomoProxyGroupDisplay(
             group,
             MapText(group.Name),
-            MapText(group.CurrentSelection));
+            MapText(group.CurrentSelection))
+        { TypeDisplay = MapText(group.Type) };
     }
 
     public MihomoProviderResourceDisplay Map(MihomoProviderResource provider)
