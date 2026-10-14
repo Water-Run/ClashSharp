@@ -720,7 +720,14 @@ public sealed partial class MasterControl : Page
 
         TextBlock selectionCount = new()
         {
+            FlowDirection = FlowDirection.LeftToRight,
             TextWrapping = TextWrapping.WrapWholeWords,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ContentPresenter selectionCountHost = new()
+        {
+            Content = selectionCount,
+            HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
         };
         void RefreshSelectionCount()
@@ -732,7 +739,7 @@ public sealed partial class MasterControl : Page
                 optionList.Options.Count);
             selectionCount.Text = string.Format(
                 CultureInfo.CurrentCulture,
-                "\u2066{0} / {1}\u2069",
+                "{0} / {1}",
                 optionList.SelectedOptions.Count,
                 optionList.Options.Count);
             AutomationProperties.SetName(selectionCount, description);
@@ -801,12 +808,11 @@ public sealed partial class MasterControl : Page
         selectionActions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         Grid.SetColumn(hideAll, 1);
         Grid.SetColumn(restoreLayout, 2);
-        Grid.SetColumn(selectionCount, 3);
-        selectionCount.HorizontalAlignment = HorizontalAlignment.Right;
+        Grid.SetColumn(selectionCountHost, 3);
         selectionActions.Children.Add(showAll);
         selectionActions.Children.Add(hideAll);
         selectionActions.Children.Add(restoreLayout);
-        selectionActions.Children.Add(selectionCount);
+        selectionActions.Children.Add(selectionCountHost);
         panel.Children.Add(selectionActions);
         RefreshSelectionCount();
 
