@@ -16,7 +16,7 @@ public sealed class AccentColorRuntime
 
     /// <summary>Creates an owner with a declared default policy that still requires a real resource observation.</summary>
     /// <param name="resources">The actual application dictionary boundary.</param>
-    /// <param name="ownedKeys">Every primary resource key this owner can change.</param>
+    /// <param name="ownedKeys">Every normal-theme resource key this owner can change.</param>
     /// <param name="buildPalette">Pure complete-palette construction; follow-system selections produce no overrides.</param>
     public AccentColorRuntime(IAccentResourceStore resources, IEnumerable<string> ownedKeys,
         Func<AccentColorConfiguration, IReadOnlyDictionary<string, AccentResourceValue>> buildPalette)

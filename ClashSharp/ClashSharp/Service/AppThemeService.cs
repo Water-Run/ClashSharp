@@ -104,9 +104,17 @@ internal static class AppThemeService
     public static void ApplyAccentColor(AppAccentColorMode mode, string colorValue)
     {
         AccentRuntime.Apply(new(mode, NormalizeAccentColorValue(colorValue)));
+        if (App.MainWindow?.Content is FrameworkElement root)
+        {
+            // ThemeResource expressions retain resolved brushes until a theme transition.
+            // Refresh existing controls in this dispatcher turn without changing the preference.
+            ElementTheme requested = root.RequestedTheme;
+            try { root.RequestedTheme = root.ActualTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark; }
+            finally { root.RequestedTheme = requested; }
+        }
     }
 
-    /// <summary>Reads accent configuration after verifying the complete primary-dictionary resource set.</summary>
+    /// <summary>Reads accent configuration after verifying the complete normal-theme resource pairs.</summary>
     public static AccentColorConfiguration ReadAccentConfiguration() => AccentRuntime.CaptureConfiguration();
 
     /// <summary>Builds a complete palette before any application resource is changed.</summary>
@@ -116,6 +124,18 @@ internal static class AppThemeService
         if (configuration.Mode == AppAccentColorMode.FollowSystem) { return resources; }
         static AccentResourceValue Brush(Color color) => new(WinUiAccentResourceStore.ToArgb(color), true);
         static AccentResourceValue ColorValue(Color color) => new(WinUiAccentResourceStore.ToArgb(color), false);
+        static AccentResourceValue PairBrush(Color dark, Color light)
+        {
+            uint first = WinUiAccentResourceStore.ToArgb(dark), second = WinUiAccentResourceStore.ToArgb(light);
+            return new(first, true, first == second ? null : second);
+        }
+        static AccentResourceValue Foreground(Color fill) => PairBrush(
+            AccentContrast.ForegroundFor(fill, lightTheme: false), AccentContrast.ForegroundFor(fill, lightTheme: true));
+        static AccentResourceValue Disabled(AccentResourceValue value) => value with
+        {
+            Argb = (value.Argb & 0x00FFFFFF) | 0x5C000000,
+            LightArgb = value.LightArgb is uint light ? (light & 0x00FFFFFF) | 0x5C000000 : null,
+        };
         Color accentColor = ParseAccentColorOrDefault(configuration.ColorValue);
         Color white = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
         Color black = Color.FromArgb(0xFF, 0, 0, 0);
@@ -126,10 +146,17 @@ internal static class AppThemeService
         Color dark2 = Blend(accentColor, black, 0.45);
         Color dark3 = Blend(accentColor, black, 0.65);
         AccentResourceValue accentBrush = Brush(accentColor);
-        AccentResourceValue light1Brush = Brush(light1);
-        AccentResourceValue light2Brush = Brush(light2);
+        // Built-in check marks and switch knobs share TextOnAccentFillColorPrimaryBrush
+        // across interaction states, so every fill variant must remain readable with it.
+        AccentResourceValue InteractionBrush(double amount) => PairBrush(
+            AccentContrast.InteractionFillFor(accentColor, lightTheme: false, amount),
+            AccentContrast.InteractionFillFor(accentColor, lightTheme: true, amount));
+        AccentResourceValue hoverBrush = InteractionBrush(0.12);
+        AccentResourceValue pressedBrush = InteractionBrush(0.24);
         AccentResourceValue disabledAccentBrush = Brush(Color.FromArgb(0x5C, accentColor.R, accentColor.G, accentColor.B));
-        AccentResourceValue whiteBrush = Brush(white);
+        AccentResourceValue foreground = Foreground(accentColor);
+        AccentResourceValue accentText = PairBrush(
+            AccentContrast.TextFor(accentColor, lightTheme: false), AccentContrast.TextFor(accentColor, lightTheme: true));
         AccentResourceValue transparentBrush = Brush(Color.FromArgb(0, 0xFF, 0xFF, 0xFF));
 
         resources["SystemAccentColor"] = ColorValue(accentColor);
@@ -141,46 +168,46 @@ internal static class AppThemeService
         resources["SystemAccentColorDark3"] = ColorValue(dark3);
 
         resources["AccentFillColorDefaultBrush"] = accentBrush;
-        resources["AccentFillColorSecondaryBrush"] = light1Brush;
-        resources["AccentFillColorTertiaryBrush"] = light2Brush;
+        resources["AccentFillColorSecondaryBrush"] = hoverBrush;
+        resources["AccentFillColorTertiaryBrush"] = pressedBrush;
         resources["AccentFillColorDisabledBrush"] = disabledAccentBrush;
-        resources["AccentTextFillColorPrimaryBrush"] = whiteBrush;
-        resources["AccentTextFillColorSecondaryBrush"] = whiteBrush;
-        resources["AccentTextFillColorTertiaryBrush"] = Brush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
-        resources["AccentTextFillColorDisabledBrush"] = Brush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
+        resources["AccentTextFillColorPrimaryBrush"] = accentText;
+        resources["AccentTextFillColorSecondaryBrush"] = accentText;
+        resources["AccentTextFillColorTertiaryBrush"] = accentText;
+        resources["AccentTextFillColorDisabledBrush"] = Disabled(accentText);
         resources["AccentButtonBackground"] = accentBrush;
-        resources["AccentButtonBackgroundPointerOver"] = light1Brush;
-        resources["AccentButtonBackgroundPressed"] = Brush(dark1);
+        resources["AccentButtonBackgroundPointerOver"] = hoverBrush;
+        resources["AccentButtonBackgroundPressed"] = pressedBrush;
         resources["AccentButtonBackgroundDisabled"] = disabledAccentBrush;
         resources["AccentButtonBorderBrush"] = transparentBrush;
         resources["AccentButtonBorderBrushPointerOver"] = transparentBrush;
         resources["AccentButtonBorderBrushPressed"] = transparentBrush;
         resources["AccentButtonBorderBrushDisabled"] = transparentBrush;
-        resources["AccentButtonForeground"] = whiteBrush;
-        resources["AccentButtonForegroundPointerOver"] = whiteBrush;
-        resources["AccentButtonForegroundPressed"] = whiteBrush;
-        resources["AccentButtonForegroundDisabled"] = Brush(Color.FromArgb(0x5C, 0xFF, 0xFF, 0xFF));
+        resources["AccentButtonForeground"] = foreground;
+        resources["AccentButtonForegroundPointerOver"] = foreground;
+        resources["AccentButtonForegroundPressed"] = foreground;
+        resources["AccentButtonForegroundDisabled"] = Disabled(foreground);
         resources["SystemControlBackgroundAccentBrush"] = accentBrush;
         resources["SystemControlDisabledAccentBrush"] = disabledAccentBrush;
-        resources["SystemControlForegroundAccentBrush"] = accentBrush;
+        resources["SystemControlForegroundAccentBrush"] = accentText;
         resources["SystemControlHighlightAccentBrush"] = accentBrush;
         resources["SystemControlHighlightAltAccentBrush"] = accentBrush;
-        resources["SystemControlHyperlinkTextBrush"] = accentBrush;
+        resources["SystemControlHyperlinkTextBrush"] = accentText;
         resources["ToggleSwitchFillOn"] = accentBrush;
-        resources["ToggleSwitchFillOnPointerOver"] = light1Brush;
-        resources["ToggleSwitchFillOnPressed"] = light2Brush;
+        resources["ToggleSwitchFillOnPointerOver"] = hoverBrush;
+        resources["ToggleSwitchFillOnPressed"] = pressedBrush;
         resources["ToggleSwitchFillOnDisabled"] = disabledAccentBrush;
         resources["ToggleSwitchStrokeOn"] = accentBrush;
-        resources["ToggleSwitchStrokeOnPointerOver"] = light1Brush;
-        resources["ToggleSwitchStrokeOnPressed"] = light2Brush;
+        resources["ToggleSwitchStrokeOnPointerOver"] = hoverBrush;
+        resources["ToggleSwitchStrokeOnPressed"] = pressedBrush;
         resources["ToggleSwitchStrokeOnDisabled"] = disabledAccentBrush;
         resources["ToggleButtonBackgroundChecked"] = accentBrush;
-        resources["ToggleButtonBackgroundCheckedPointerOver"] = light1Brush;
-        resources["ToggleButtonBackgroundCheckedPressed"] = light2Brush;
-        resources["ToggleButtonForegroundChecked"] = whiteBrush;
-        resources["ToggleButtonForegroundCheckedPointerOver"] = whiteBrush;
-        resources["ToggleButtonForegroundCheckedPressed"] = whiteBrush;
-        resources["TextOnAccentFillColorPrimaryBrush"] = whiteBrush;
+        resources["ToggleButtonBackgroundCheckedPointerOver"] = hoverBrush;
+        resources["ToggleButtonBackgroundCheckedPressed"] = pressedBrush;
+        resources["ToggleButtonForegroundChecked"] = foreground;
+        resources["ToggleButtonForegroundCheckedPointerOver"] = foreground;
+        resources["ToggleButtonForegroundCheckedPressed"] = foreground;
+        resources["TextOnAccentFillColorPrimaryBrush"] = foreground;
         return resources;
     }
 

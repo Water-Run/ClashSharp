@@ -26,6 +26,7 @@ public sealed record AccentColorConfiguration
 }
 
 /// <summary>Describes one color or fully opaque solid-brush resource independently of WinUI objects.</summary>
-/// <param name="Argb">The exact ARGB channels; color alpha is independent of brush opacity.</param>
+/// <param name="Argb">The exact dark-theme ARGB channels; color alpha is independent of brush opacity.</param>
 /// <param name="IsBrush">Whether the resource must be a solid brush instead of a color value.</param>
-public readonly record struct AccentResourceValue(uint Argb, bool IsBrush);
+/// <param name="LightArgb">Light-theme channels when different; null shares the dark-theme value.</param>
+public readonly record struct AccentResourceValue(uint Argb, bool IsBrush, uint? LightArgb = null);
