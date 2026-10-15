@@ -496,7 +496,8 @@ function Get-ClashSharpMsixDotNetRuntimeContract {
         Verifies that the final main MSIX carries its own .NET 10 x64 runtime.
     .DESCRIPTION
         Reads bounded runtime metadata directly from the ZIP and requires the CLR, host, and
-        base library alongside the application. Rejects shared-framework requirements, wrong
+        base library alongside the application. MCP additionally requires its protocol assemblies
+        and matching embedded ASP.NET runtime. Rejects shared-framework requirements, wrong
         runtime identifiers, duplicate entries, missing files, and non-x64 native hosts.
         Package signature verification remains a separate packaging step.
     .PARAMETER LiteralPath
@@ -555,11 +556,40 @@ function Get-ClashSharpMsixDotNetRuntimeContract {
         if ($options -isnot [Collections.IDictionary] -or
             $options.Contains('framework') -or $options.Contains('frameworks') -or
             $options.tfm -cne 'net10.0' -or
-            @($options.includedFrameworks).Count -ne 1 -or
-            $options.includedFrameworks[0].name -cne 'Microsoft.NETCore.App' -or
-            [string]$options.includedFrameworks[0].version -cnotmatch '^10\.0\.(0|[1-9][0-9]*)$' -or
             $metadata['ClashSharp.deps.json'].runtimeTarget.name -cne '.NETCoreApp,Version=v10.0/win-x64') {
             throw 'Primary MSIX must carry a self-contained .NET 10 win-x64 runtime.'
+        }
+        $frameworks = @($options.includedFrameworks)
+        $frameworkVersions = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+        if ($frameworks.Count -lt 1 -or $frameworks.Count -gt 2) { throw 'Primary MSIX has an unsupported embedded framework set.' }
+        foreach ($framework in $frameworks) {
+            if ($framework -isnot [Collections.IDictionary] -or
+                $framework.name -cnotin @('Microsoft.NETCore.App', 'Microsoft.AspNetCore.App') -or
+                [string]$framework.version -cnotmatch '^10\.0\.(0|[1-9][0-9]*)$' -or
+                -not $frameworkVersions.TryAdd([string]$framework.name, [string]$framework.version)) {
+                throw 'Primary MSIX has an unknown, duplicate, or invalid embedded framework.'
+            }
+        }
+        if (-not $frameworkVersions.ContainsKey('Microsoft.NETCore.App')) { throw 'Primary MSIX has no embedded .NET runtime.' }
+        $mcpNames = @('ClashSharp.Infrastructure.Mcp.dll', 'ModelContextProtocol.dll',
+            'ModelContextProtocol.Core.dll', 'ModelContextProtocol.AspNetCore.dll')
+        $hasMcp = @($mcpNames | Where-Object { $entries.ContainsKey($_) }).Count -gt 0
+        if ($hasMcp -and -not $frameworkVersions.ContainsKey('Microsoft.AspNetCore.App')) {
+            throw 'Primary MSIX MCP requires an embedded ASP.NET runtime.'
+        }
+        if ($frameworkVersions.ContainsKey('Microsoft.AspNetCore.App')) {
+            if ($frameworkVersions['Microsoft.AspNetCore.App'] -cne $frameworkVersions['Microsoft.NETCore.App']) {
+                throw 'Primary MSIX embedded .NET and ASP.NET runtime versions differ.'
+            }
+            $requiredNames += @('Microsoft.AspNetCore.dll', 'Microsoft.AspNetCore.Hosting.dll',
+                'Microsoft.AspNetCore.Server.Kestrel.Core.dll')
+        }
+        if ($hasMcp) { $requiredNames += $mcpNames }
+        foreach ($name in $requiredNames) {
+            if (-not $entries.ContainsKey($name) -or $entries[$name].FullName -cne $name -or
+                $entries[$name].Length -lt 1 -or $entries[$name].Length -gt 134217728) {
+                throw "Primary MSIX is missing a canonical bounded offline runtime dependency: $name"
+            }
         }
 
         foreach ($name in @('ClashSharp.exe', 'coreclr.dll', 'hostfxr.dll', 'hostpolicy.dll')) {
@@ -585,10 +615,12 @@ function Get-ClashSharpMsixDotNetRuntimeContract {
         }
         return [PSCustomObject]@{
             framework = 'Microsoft.NETCore.App'
-            version = [string]$options.includedFrameworks[0].version
+            version = $frameworkVersions['Microsoft.NETCore.App']
             runtimeIdentifier = 'win-x64'
             selfContained = $true
             requiredFiles = $requiredNames
+            includedFrameworks = $frameworks
+            mcpIncluded = $hasMcp
         }
     } finally {
         $archive.Dispose()

@@ -502,6 +502,13 @@
       "document": "dotnet-license.txt"
     },
     {
+      "id": "System.Security.Cryptography.ProtectedData",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
       "id": "System.ServiceProcess.ServiceController",
       "version": "10.0.0",
       "licenseType": "expression",

@@ -74,7 +74,36 @@ try {
         throw 'Valid self-contained package returned an incorrect runtime receipt.'
     }
 
+    $mcp = $valid.Clone()
+    $mcpRuntime = '{"runtimeOptions":{"tfm":"net10.0","includedFrameworks":[{"name":"Microsoft.NETCore.App","version":"10.0.5"},{"name":"Microsoft.AspNetCore.App","version":"10.0.5"}]}}'
+    $mcp['ClashSharp.runtimeconfig.json'] = [Text.Encoding]::UTF8.GetBytes($mcpRuntime)
+    $mcpNames = @('ClashSharp.Infrastructure.Mcp.dll', 'ModelContextProtocol.dll', 'ModelContextProtocol.Core.dll',
+        'ModelContextProtocol.AspNetCore.dll', 'Microsoft.AspNetCore.dll', 'Microsoft.AspNetCore.Hosting.dll',
+        'Microsoft.AspNetCore.Server.Kestrel.Core.dll')
+    foreach ($name in $mcpNames) { $mcp[$name] = [byte[]]@(1) }
+    $mcpPath = Join-Path $testRoot 'valid-mcp.msix'
+    New-RuntimePackageFixture -LiteralPath $mcpPath -Entries $mcp
+    $mcpContract = Get-ClashSharpMsixDotNetRuntimeContract -LiteralPath $mcpPath
+    if (-not $mcpContract.mcpIncluded -or $mcpContract.includedFrameworks.Count -ne 2 -or $mcpContract.requiredFiles.Count -ne 15) {
+        throw 'Valid embedded MCP runtime returned an incorrect receipt.'
+    }
+
     $cases = [Collections.Generic.List[object]]::new()
+    foreach ($name in $mcpNames) {
+        $entries = $mcp.Clone()
+        $entries.Remove($name)
+        $cases.Add(@{ Name = "missing MCP runtime dependency $name"; Entries = $entries })
+    }
+    foreach ($runtime in @(
+        $runtimeJson,
+        $mcpRuntime.Replace('Microsoft.AspNetCore.App', 'Microsoft.WindowsDesktop.App'),
+        $mcpRuntime.Replace('Microsoft.AspNetCore.App', 'Microsoft.NETCore.App'),
+        $mcpRuntime.Replace('Microsoft.AspNetCore.App","version":"10.0.5', 'Microsoft.AspNetCore.App","version":"10.0.6')
+    )) {
+        $entries = $mcp.Clone()
+        $entries['ClashSharp.runtimeconfig.json'] = [Text.Encoding]::UTF8.GetBytes($runtime)
+        $cases.Add(@{ Name = 'invalid MCP embedded framework set'; Entries = $entries })
+    }
     foreach ($missingName in $valid.Keys) {
         $entries = $valid.Clone()
         $entries.Remove($missingName)
@@ -130,7 +159,7 @@ try {
         if (-not $rejected) { throw "Runtime contract accepted $($case.Name)." }
         $index++
     }
-    Write-Output "Packaging runtime contract passed: 1 valid package and $index rejected packages."
+    Write-Output "Packaging runtime contract passed: 2 valid packages and $index rejected packages."
 } finally {
     $resolvedRoot = [IO.Path]::GetFullPath($testRoot)
     if (-not [IO.Path]::GetDirectoryName($resolvedRoot).Equals(
