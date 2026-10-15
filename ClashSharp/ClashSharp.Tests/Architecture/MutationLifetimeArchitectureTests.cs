@@ -110,6 +110,7 @@ public sealed class MutationLifetimeArchitectureTests
             "ClashSharp/ClashSharp.Application",
             "ClashSharp/ClashSharp.Core",
             "ClashSharp/ClashSharp.Infrastructure",
+            "ClashSharp/ClashSharp.Infrastructure.Mcp",
             "ClashSharp/ClashSharp.MihomoService",
             "ClashSharp/ClashSharp.ProcessProbe",
             "ClashSharp/ClashSharp.StartupProbe",

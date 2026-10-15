@@ -25,12 +25,14 @@ public sealed class LayerDependencyDirectionTests
     }
 
     /// <summary>Verifies infrastructure points inward and never references the WinUI presentation project.</summary>
-    [Fact]
-    public void InfrastructureProject_DependsOnlyOnApplicationAndCore()
+    [Theory]
+    [InlineData("ClashSharp.Infrastructure")]
+    [InlineData("ClashSharp.Infrastructure.Mcp")]
+    public void InfrastructureProject_DependsOnlyOnApplicationAndCore(string projectName)
     {
         Assert.Equal(
             ["ClashSharp.Application", "ClashSharp.Core"],
-            ReadProjectReferences("ClashSharp.Infrastructure"));
+            ReadProjectReferences(projectName));
     }
 
     /// <summary>Verifies the WinUI composition root references all inward layers.</summary>
@@ -42,6 +44,7 @@ public sealed class LayerDependencyDirectionTests
         Assert.Contains("ClashSharp.Core", references);
         Assert.Contains("ClashSharp.Application", references);
         Assert.Contains("ClashSharp.Infrastructure", references);
+        Assert.Contains("ClashSharp.Infrastructure.Mcp", references);
     }
 
     private static string[] ReadProjectReferences(string projectName)

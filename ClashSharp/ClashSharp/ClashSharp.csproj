@@ -122,6 +122,7 @@
     <ProjectReference Include="..\ClashSharp.Application\ClashSharp.Application.csproj" />
     <ProjectReference Include="..\ClashSharp.Core\ClashSharp.Core.csproj" />
     <ProjectReference Include="..\ClashSharp.Infrastructure\ClashSharp.Infrastructure.csproj" />
+    <ProjectReference Include="..\ClashSharp.Infrastructure.Mcp\ClashSharp.Infrastructure.Mcp.csproj" />
     <!-- Formal packaging consumes only separately verified component staging. These references
          establish development build order and must not leak apphosts into the MSIX publish. -->
     <ProjectReference Include="..\ClashSharp.MihomoService\ClashSharp.MihomoService.csproj"
