@@ -1,6 +1,6 @@
 namespace ClashSharp.Installer.Machines;
 
-/// <summary>Inspects install or repair prerequisites within authenticated helper authority.</summary>
+/// <summary>Inspects install, repair or uninstall prerequisites within authenticated helper authority.</summary>
 public interface IInstallerMachineHelperPreparationPreflight
 {
     /// <summary>
@@ -8,7 +8,7 @@ public interface IInstallerMachineHelperPreparationPreflight
     /// The authority session invokes this before persisting a new Prepared intent; execution
     /// must revalidate external state before performing its effects.
     /// </summary>
-    /// <param name="command">Validated Prepare command for installation or repair.</param>
+    /// <param name="command">Validated Prepare command for installation, repair or removal authorization.</param>
     /// <param name="cancellationToken">Cancels read-only preflight.</param>
     Task VerifyPreparationAsync(
         InstallerMachineHelperCommand command,

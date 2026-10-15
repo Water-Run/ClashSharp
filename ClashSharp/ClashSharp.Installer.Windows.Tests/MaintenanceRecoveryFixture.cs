@@ -196,6 +196,8 @@ internal sealed class MaintenanceRecoveryFixture : IDisposable
         public Task VerifyAppliedAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task VerifyCanInstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken) =>
             owner.CertificateConflict ? throw new InstallerProtocolException("installer.machine_certificate.ownership_conflict") : Task.CompletedTask;
+        public Task VerifyCanUninstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("This fixture only exercises maintenance of an installed candidate.");
         public Task VerifyCanDeployAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken) => Task.CompletedTask;
         public void Verify(InstallerRequest request, InstallerReleaseManifest manifest, CancellationToken cancellationToken) => Assert.True(owner.CandidateInstalled);
         public Task PrepareAsync(InstallerRequest request, IInstallerReleaseLease release, InstallerMachineHelperSessionDisposition disposition, CancellationToken cancellationToken)

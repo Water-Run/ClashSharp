@@ -117,15 +117,12 @@ public sealed class InstallerMachineHelperAuthoritySession
             {
                 try
                 {
-                    if (requestState.Journal.Operation is InstallerOperation.Install or InstallerOperation.Repair)
+                    if (_operations is not IInstallerMachineHelperPreparationPreflight preflight)
                     {
-                        if (_operations is not IInstallerMachineHelperPreparationPreflight preflight)
-                        {
-                            throw new InstallerProtocolException("installer.machine_helper.preflight_unavailable");
-                        }
-
-                        await preflight.VerifyPreparationAsync(command, cancellationToken).ConfigureAwait(false);
+                        throw new InstallerProtocolException("installer.machine_helper.preflight_unavailable");
                     }
+
+                    await preflight.VerifyPreparationAsync(command, cancellationToken).ConfigureAwait(false);
                     if (_operations is IInstallerMachineHelperPreparationEvidence evidence)
                     {
                         await evidence.CapturePreparationEvidenceAsync(command, cancellationToken).ConfigureAwait(false);

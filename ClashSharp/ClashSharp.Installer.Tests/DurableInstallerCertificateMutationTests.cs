@@ -7,6 +7,60 @@ namespace ClashSharp.Installer.Tests;
 public sealed class DurableInstallerCertificateMutationTests
 {
     [Theory]
+    [InlineData(0, InstallerCertificatePresence.Missing)]
+    [InlineData(0, InstallerCertificatePresence.ExactMatch)]
+    [InlineData(1, InstallerCertificatePresence.Missing)]
+    [InlineData(1, InstallerCertificatePresence.ExactMatch)]
+    [InlineData(2, InstallerCertificatePresence.Missing)]
+    [InlineData(2, InstallerCertificatePresence.ExactMatch)]
+    public async Task UninstallPreflightPreservesActiveReleasedOrAbsentOwnershipWithoutPayload(
+        int ownershipState, InstallerCertificatePresence presence)
+    {
+        List<string> events = [];
+        InstallerCertificateOwnershipLedger? ledger = ownershipState switch
+        {
+            1 => InstallerTestData.CertificateLedger(),
+            2 => InstallerTestData.CertificateLedger(managedReferenceCount: 0, generation: 2),
+            _ => null,
+        };
+        MemoryOwnershipStore ownership = new(events, ledger);
+        RecordingCertificateStore certificates = new(events, presence);
+        InstallerCertificateOwnershipSnapshot? before = ownership.Current;
+        await using var lease = InstallerTestData.Lease(InstallerTestData.Release(certificatePayloadAvailable: false));
+
+        await new DurableInstallerCertificateMutation(ownership, certificates)
+            .VerifyCanUninstallAsync(InstallerTestData.Request(InstallerOperation.Uninstall), lease, CancellationToken.None);
+
+        Assert.Equal(before, ownership.Current);
+        Assert.Equal(["ownership.load", $"certificate.inspect:{presence}"], events);
+        Assert.Equal(0, certificates.ImportCount);
+        Assert.Equal(0, certificates.RemoveCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UninstallPreflightRejectsForeignAccountOrCertificateBeforeStoreAccess(bool foreignAccount)
+    {
+        List<string> events = [];
+        var ledger = InstallerTestData.CertificateLedger();
+        ledger = foreignAccount ? ledger with { TargetSid = "S-1-5-21-100-200-300-9999" }
+            : ledger with { CertificateSha256 = InstallerTestData.OtherHash };
+        MemoryOwnershipStore ownership = new(events, ledger);
+        RecordingCertificateStore certificates = new(events, InstallerCertificatePresence.ExactMatch);
+        InstallerCertificateOwnershipSnapshot? before = ownership.Current;
+        await using var lease = InstallerTestData.Lease();
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            new DurableInstallerCertificateMutation(ownership, certificates)
+                .VerifyCanUninstallAsync(InstallerTestData.Request(InstallerOperation.Uninstall), lease, CancellationToken.None));
+
+        Assert.Equal("installer.certificate.ownership_conflict", failure.DiagnosticCode);
+        Assert.Equal(before, ownership.Current);
+        Assert.Equal(["ownership.load"], events);
+    }
+
+    [Theory]
     [InlineData(false, InstallerCertificatePresence.Missing)]
     [InlineData(false, InstallerCertificatePresence.ExactMatch)]
     [InlineData(true, InstallerCertificatePresence.Missing)]

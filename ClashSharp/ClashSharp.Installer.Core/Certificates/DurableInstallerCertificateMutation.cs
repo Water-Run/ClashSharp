@@ -26,17 +26,27 @@ public sealed class DurableInstallerCertificateMutation :
     }
 
     /// <inheritdoc />
-    public async Task VerifyCanInstallAsync(
+    public Task VerifyCanInstallAsync(
         InstallerRequest request,
         IInstallerReleaseLease release,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) => VerifyPreflightAsync(request, release, uninstall: false, cancellationToken);
+
+    /// <inheritdoc />
+    public Task VerifyCanUninstallAsync(
+        InstallerRequest request,
+        IInstallerReleaseLease release,
+        CancellationToken cancellationToken) => VerifyPreflightAsync(request, release, uninstall: true, cancellationToken);
+
+    private async Task VerifyPreflightAsync(InstallerRequest request, IInstallerReleaseLease release,
+        bool uninstall, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(release);
         request.Validate();
         release.Release.Validate();
         release.Manifest.Validate();
-        if (request.Operation is not (InstallerOperation.Install or InstallerOperation.Repair)
+        if ((uninstall ? request.Operation != InstallerOperation.Uninstall
+                : request.Operation is not (InstallerOperation.Install or InstallerOperation.Repair))
             || !release.Manifest.Matches(release.Release)
             || request.ExpectedPackageVersion != release.Release.ExpectedPackageVersion
             || request.InstallerPayloadSha256 != release.Release.InstallerPayloadSha256)
@@ -49,12 +59,13 @@ public sealed class DurableInstallerCertificateMutation :
             .LoadAsync(cancellationToken).ConfigureAwait(false);
         if (ownership is not null)
         {
-            ValidateActiveOwnership(ownership.Ledger, request, release);
+            if (uninstall) { ValidateMatchingOwnership(ownership.Ledger, request, release); }
+            else { ValidateActiveOwnership(ownership.Ledger, request, release); }
         }
 
         InstallerCertificatePresence presence = await InspectExactAsync(
             request, release, cancellationToken).ConfigureAwait(false);
-        if (presence == InstallerCertificatePresence.Missing && !release.Release.CertificatePayloadAvailable)
+        if (!uninstall && presence == InstallerCertificatePresence.Missing && !release.Release.CertificatePayloadAvailable)
         {
             throw new InstallerProtocolException("installer.release.certificate_payload_missing");
         }

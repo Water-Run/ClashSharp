@@ -105,8 +105,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(command);
         InstallerRequest request = RequestFrom(command.ToDurableState().Journal);
-        if (command.Verb != InstallerMachineHelperVerb.Prepare
-            || request.Operation is not (InstallerOperation.Install or InstallerOperation.Repair))
+        if (command.Verb != InstallerMachineHelperVerb.Prepare)
         {
             throw new InstallerProtocolException("installer.machine_helper.preflight_command_invalid");
         }
@@ -115,8 +114,15 @@ internal sealed class WindowsMachineHelperOperationExecutor
             .VerifyAsync(request, cancellationToken).ConfigureAwait(false)
             ?? throw new InstallerProtocolException("installer.release.lease_missing");
         ValidateRelease(request, release);
-        await _certificatePreflight.VerifyCanInstallAsync(request, release, cancellationToken).ConfigureAwait(false);
-        await _packagePreflight.VerifyCanDeployAsync(request, release, cancellationToken).ConfigureAwait(false);
+        if (request.Operation == InstallerOperation.Uninstall)
+        {
+            await _certificatePreflight.VerifyCanUninstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await _certificatePreflight.VerifyCanInstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+            await _packagePreflight.VerifyCanDeployAsync(request, release, cancellationToken).ConfigureAwait(false);
+        }
         await release.ReverifyAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
@@ -181,7 +187,12 @@ internal sealed class WindowsMachineHelperOperationExecutor
                 await _machineOperations.PrepareAsync(request, release, InstallerMachineHelperSessionDisposition.Execute, cancellationToken).ConfigureAwait(false);
                 break;
             case InstallerMachineHelperVerb.Prepare:
-                if (request.Operation is InstallerOperation.Install or InstallerOperation.Repair
+                if (request.Operation == InstallerOperation.Uninstall)
+                {
+                    // Re-read ownership even when resuming an already-authorized removal.
+                    await _certificatePreflight.VerifyCanUninstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+                }
+                else if (request.Operation is InstallerOperation.Install or InstallerOperation.Repair
                     && disposition == InstallerMachineHelperSessionDisposition.Execute)
                 {
                     await _certificatePreflight.VerifyCanInstallAsync(request, release, cancellationToken)
@@ -222,6 +233,7 @@ internal sealed class WindowsMachineHelperOperationExecutor
                     .ConfigureAwait(false);
                 break;
             case InstallerMachineHelperVerb.Remove:
+                await _certificatePreflight.VerifyCanUninstallAsync(request, release, cancellationToken).ConfigureAwait(false);
                 if (_recovery is not null) { await _recovery.BeforeOrdinaryAsync(command, disposition, cancellationToken).ConfigureAwait(false); }
                 await _machineOperations
                     .RemoveAsync(request, release, disposition, cancellationToken)

@@ -28,20 +28,29 @@ public sealed class DurableInstallerMachineCertificateMutation : IInstallerCerti
     }
 
     /// <inheritdoc />
-    public async Task VerifyCanInstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)
+    public Task VerifyCanInstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken) =>
+        VerifyPreflightAsync(request, release, uninstall: false, cancellationToken);
+
+    /// <inheritdoc />
+    public Task VerifyCanUninstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken) =>
+        VerifyPreflightAsync(request, release, uninstall: true, cancellationToken);
+
+    private async Task VerifyPreflightAsync(InstallerRequest request, IInstallerReleaseLease release,
+        bool uninstall, CancellationToken cancellationToken)
     {
         Enter();
         try
         {
             await ReverifyAsync(request, release, cancellationToken).ConfigureAwait(false);
-            if (request.Operation is not (InstallerOperation.Install or InstallerOperation.Repair))
+            if (uninstall ? request.Operation != InstallerOperation.Uninstall
+                : request.Operation is not (InstallerOperation.Install or InstallerOperation.Repair))
             {
                 throw new InstallerProtocolException("installer.machine_certificate.operation_invalid");
             }
 
             _ = await ReadAsync(release, cancellationToken).ConfigureAwait(false);
             InstallerCertificatePresence presence = await InspectAsync(request, release, cancellationToken).ConfigureAwait(false);
-            if (presence == InstallerCertificatePresence.Missing && !release.Release.CertificatePayloadAvailable)
+            if (!uninstall && presence == InstallerCertificatePresence.Missing && !release.Release.CertificatePayloadAvailable)
             {
                 throw new InstallerProtocolException("installer.release.certificate_payload_missing");
             }

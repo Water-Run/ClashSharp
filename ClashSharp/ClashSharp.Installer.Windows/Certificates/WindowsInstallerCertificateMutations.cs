@@ -36,6 +36,12 @@ internal sealed class WindowsInstallerCertificateMutations : IInstallerCertifica
         await _user.ApplyAsync(request, release, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task VerifyCanUninstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)
+    {
+        await _machine.VerifyCanUninstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+        await _user.VerifyCanUninstallAsync(request, release, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task VerifyAppliedAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)
     {
         await _machine.VerifyAppliedAsync(request, release, cancellationToken).ConfigureAwait(false);

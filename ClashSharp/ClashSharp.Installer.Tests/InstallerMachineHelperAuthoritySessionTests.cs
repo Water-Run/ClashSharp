@@ -7,14 +7,16 @@ namespace ClashSharp.Installer.Tests;
 public sealed class InstallerMachineHelperAuthoritySessionTests
 {
     [Theory]
-    [InlineData("installer.machine_certificate.ownership_conflict")]
-    [InlineData("installer.package.content_conflict")]
-    public async Task InitialPreflightConflictLeavesNoRecoveryIntentOrOperation(string diagnostic)
+    [InlineData("installer.machine_certificate.ownership_conflict", InstallerOperation.Install)]
+    [InlineData("installer.package.content_conflict", InstallerOperation.Install)]
+    [InlineData("installer.machine_certificate.ownership_conflict", InstallerOperation.Uninstall)]
+    [InlineData("installer.certificate.ownership_conflict", InstallerOperation.Uninstall)]
+    public async Task InitialPreflightConflictLeavesNoRecoveryIntentOrOperation(string diagnostic, InstallerOperation operation)
     {
         List<string> events = [];
         var store = new MemoryInstallerTransactionStore(events, initialJournal: null);
         InstallerMachineHelperCommand command = Command(InstallerMachineHelperVerb.Prepare,
-            StateAt(InstallerOperation.Install, InstallerTransactionPhase.Prepared));
+            StateAt(operation, InstallerTransactionPhase.Prepared));
         var operations = new RecordingOperations(events)
         {
             Preflight = _ => throw new InstallerProtocolException(diagnostic),
@@ -109,13 +111,15 @@ public sealed class InstallerMachineHelperAuthoritySessionTests
         Assert.DoesNotContain(events, value => value.StartsWith("journal.save:", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task MissingPreflightCapabilityCannotCreateInstallIntent()
+    [Theory]
+    [InlineData(InstallerOperation.Install)]
+    [InlineData(InstallerOperation.Uninstall)]
+    public async Task MissingPreflightCapabilityCannotCreateInstallIntent(InstallerOperation operation)
     {
         List<string> events = [];
         var store = new MemoryInstallerTransactionStore(events, initialJournal: null);
         InstallerMachineHelperCommand command = Command(InstallerMachineHelperVerb.Prepare,
-            StateAt(InstallerOperation.Install, InstallerTransactionPhase.Prepared));
+            StateAt(operation, InstallerTransactionPhase.Prepared));
         InstallerMachineHelperAuthoritySession session = await InstallerMachineHelperAuthoritySession.CreateAsync(
             command.ToInvocation(), store, new ExecutionOnlyOperations(), CancellationToken.None);
 

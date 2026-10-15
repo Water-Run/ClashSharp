@@ -13,6 +13,61 @@ public sealed class WindowsMachineHelperOperationExecutorTests
     private const string TargetSid = "S-1-5-21-100-200-300-1001";
 
     [Theory]
+    [InlineData(InstallerMachineHelperVerb.Prepare, InstallerMachineHelperSessionDisposition.Execute)]
+    [InlineData(InstallerMachineHelperVerb.Prepare, InstallerMachineHelperSessionDisposition.VerifyCommittedReplay)]
+    [InlineData(InstallerMachineHelperVerb.Remove, InstallerMachineHelperSessionDisposition.Execute)]
+    [InlineData(InstallerMachineHelperVerb.Remove, InstallerMachineHelperSessionDisposition.VerifyCommittedReplay)]
+    public async Task UninstallSignerConflictPreventsMachineRemovalAndAuthorization(
+        InstallerMachineHelperVerb verb, InstallerMachineHelperSessionDisposition disposition)
+    {
+        using var fixture = Fixture();
+        InstallerRequest request = fixture.Request(InstallerOperation.Uninstall, TargetSid);
+        var release = new RecordingReleaseVerifier(fixture.Manifest);
+        var machine = new RecordingMachineOperations();
+        var package = new RecordingPackageInspector();
+        using WindowsMachineHelperOperationExecutor executor = Executor(release,
+            new RecordingCertificateStore(InstallerCertificatePresence.ExactMatch), package, machine,
+            out RecordingCertificateMutation certificates);
+        certificates.PreflightFailure = new InstallerProtocolException("installer.machine_certificate.ownership_conflict");
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            executor.ExecuteAsync(Command(request, verb), disposition, CancellationToken.None));
+
+        Assert.Equal("installer.machine_certificate.ownership_conflict", failure.DiagnosticCode);
+        Assert.Empty(machine.Calls);
+        Assert.Equal(1, certificates.PreflightCalls);
+        Assert.Equal(0, certificates.ApplyCalls);
+        Assert.Equal(0, certificates.VerifyCalls);
+        Assert.Equal(0, package.PreflightCalls);
+        Assert.Equal(0, package.VerifyCalls);
+        Assert.Equal(1, release.Lease!.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task InitialUninstallInspectionRejectsTheSignerWithoutRequiringInstallPayload()
+    {
+        using var fixture = Fixture();
+        InstallerRequest request = fixture.Request(InstallerOperation.Uninstall, TargetSid);
+        var release = new RecordingReleaseVerifier(fixture.Manifest);
+        var machine = new RecordingMachineOperations();
+        var package = new RecordingPackageInspector();
+        using WindowsMachineHelperOperationExecutor executor = Executor(release,
+            new RecordingCertificateStore(InstallerCertificatePresence.ExactMatch), package, machine,
+            out RecordingCertificateMutation certificates);
+        certificates.PreflightFailure = new InstallerProtocolException("installer.machine_certificate.ownership_conflict");
+
+        InstallerProtocolException failure = await Assert.ThrowsAsync<InstallerProtocolException>(() =>
+            executor.VerifyPreparationAsync(Command(request, InstallerMachineHelperVerb.Prepare), CancellationToken.None));
+
+        Assert.Equal("installer.machine_certificate.ownership_conflict", failure.DiagnosticCode);
+        Assert.Equal(1, certificates.PreflightCalls);
+        Assert.Empty(machine.Calls);
+        Assert.Equal(0, package.PreflightCalls);
+        Assert.False(release.Lease!.Release.CertificatePayloadAvailable);
+        Assert.Equal(1, release.Lease.DisposeCalls);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task PackageConflictIsRejectedBeforeMachinePreparationOrCertificateImport(bool initialInspection)
@@ -640,6 +695,12 @@ public sealed class WindowsMachineHelperOperationExecutorTests
         internal Exception? PreflightFailure { get; set; }
 
         internal Action? ApplyObserver { get; set; }
+
+        public Task VerifyCanUninstallAsync(InstallerRequest request, IInstallerReleaseLease release, CancellationToken cancellationToken)
+        {
+            Assert.Equal(InstallerOperation.Uninstall, request.Operation);
+            return VerifyCanInstallAsync(request, release, cancellationToken);
+        }
 
         public async Task VerifyCanInstallAsync(
             InstallerRequest request,
