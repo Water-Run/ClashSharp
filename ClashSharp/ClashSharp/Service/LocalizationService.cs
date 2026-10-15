@@ -54,7 +54,7 @@ public sealed class LocalizationService
     public event EventHandler? LanguageChanged;
 
     /// <summary>Initializes a new instance and selects the default language.</summary>
-    private LocalizationService()
+    internal LocalizationService()
     {
     }
 
@@ -146,6 +146,24 @@ public sealed class LocalizationService
             _ => AppLanguage.SimplifiedChinese,
         };
     }
+
+    /// <summary>Resolves the same catalog choice to a language tag supported by native framework resources.</summary>
+    /// <param name="language">Configured language, including automatic detection.</param>
+    /// <param name="culture">Operating-system UI culture used for automatic detection.</param>
+    /// <returns>A canonical BCP-47 tag declared in the application package.</returns>
+    internal static string ResolveResourceLanguageTag(AppLanguage language, CultureInfo culture) =>
+        ResolveEffectiveLanguage(language, culture) switch
+        {
+            AppLanguage.SimplifiedChinese => "zh-CN",
+            AppLanguage.TraditionalChinese => "zh-TW",
+            AppLanguage.English => "en-US",
+            AppLanguage.Russian => "ru-RU",
+            AppLanguage.French => "fr-FR",
+            AppLanguage.German => "de-DE",
+            AppLanguage.Persian => "fa-IR",
+            AppLanguage.Korean => "ko-KR",
+            _ => throw new ArgumentOutOfRangeException(nameof(language)),
+        };
 
     /// <summary>Returns whether the effective language requires a right-to-left layout.</summary>
     /// <param name="language">Configured language value.</param>

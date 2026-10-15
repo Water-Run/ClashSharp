@@ -32,7 +32,7 @@ internal sealed class SettingsImportOperationAdapter(
 
     public void InvalidateProfiles() => profiles.InvalidateCache();
 
-    public void ApplyLanguage(AppLanguage language) => localization.CurrentLanguage = language;
+    public void ApplyLanguage(AppLanguage language) => WinUiLanguageResources.Apply(localization, language);
 
     public void ApplyTheme(AppThemeMode theme) => AppThemeService.Apply(theme);
 

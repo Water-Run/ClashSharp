@@ -75,7 +75,7 @@ internal static class SettingsPageComposition
             localization.GetString);
         SettingsViewModel viewModel = new(
             new AppSettingsStore(settings),
-            language => localization.CurrentLanguage = language,
+            language => WinUiLanguageResources.Apply(localization, language),
             AppThemeService.Apply,
             () => { },
             _ => { },

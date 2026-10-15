@@ -17,7 +17,7 @@ internal sealed class ConfigureLocalizationStartupStep(
     public Task<StartupStepResult> ExecuteAsync(AppLaunchRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        localization.CurrentLanguage = settings.DisplayLanguage;
+        WinUiLanguageResources.Apply(localization, settings.DisplayLanguage);
         return Task.FromResult(StartupStepResult.Succeeded());
     }
 }

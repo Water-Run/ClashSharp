@@ -1,5 +1,15 @@
 # Windows 11 全界面审查与优化
 
+## 10 月 15 日原生控件语言一致性
+
+中文颜色选择器的 Red/Green/Blue 与页面文案不一致。SSH 读取已安装包的实际 `AppxManifest.xml`，仅有 `EN-US`；原源码使用 `x-generate`，但八种应用翻译位于 C# 目录中，未形成八语言资源声明。同时，原语言切换没有设置 Windows App SDK 的资源语言。现按现有八语言目录显式声明包语言，统一启动、正常设置与导入的语言应用入口；先写入并读回框架资源覆盖，再通知应用绑定。失败时恢复原资源语言和目录选择，恢复失败保留原始及恢复异常，不能将两者不一致的状态确认为已应用。窗口与独立弹窗同时继承语言和阅读方向，数字/单位格式仍走既有区域设置。
+
+固定 Windows App SDK 1.8、框架包 `8000.994.2142.0` 上，独立命令行探针直接编译生产语言适配器、协调器和翻译目录；八种显式语言及 `zh-HK`、`de-DE` 两种自动检测均通过，复用旧资源上下文仍取得相应颜色标签和辅助名称。探针的数字文化未被修改，43 个现有产品文件摘要保持；它未创建产品窗口或替换已安装包。最终服务器完整重建零警告/错误，161 项相关检查及作用域格式通过，新增 10 项协调器失败/恢复用例和 1 项语言清单契约。证据位于 `native-language-20261015/validation-final`、`production-probe-result.json` 与 `production-probe-verification.json`。
+
+此前用于探测空覆盖值的独立辅助进程失败记录保留：固定运行时拒绝空字符串，返回包装后的 COM 异常。因此自动检测每次从应用实际使用的 UI culture 解析，初次应用失败时恢复为此前目录的有效语言，不向该 API 提交空值，也不把旧覆盖值当作用户设置。打包应用中原生覆盖会持久化，仍作为权威设置的派生值，在启动时重新同步。[Windows App SDK 语言 API](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.windows.globalization.applicationlanguages.primarylanguageoverride?view=windows-app-sdk-1.8)与[应用语言声明规则](https://learn.microsoft.com/en-us/windows/apps/design/globalizing/manage-language-and-region)为接口依据，原生探针为固定版本行为证据。
+
+完整 CI、准确新签名包、打包应用重新启动和已有控件/新弹窗的实图验证仍需接续。命令行资源读取不能证明所有已加载控件的标签或多语言布局即时刷新。
+
 ## 10 月 15 日强调色、开关轮廓与颜色选择器
 
 修复自定义白色强调色的按钮文字消失、浅色背景下标记对比不足，以及 WinUI 合并字典优先于主题字典导致自定义颜色被系统值替代的问题。普通明暗主题分别提供可读资源，高对比主题回退系统配色，保留用户原始颜色值。准确候选已经观察白色/黄色、明暗主题及普通/最小窗口；`ae4ec1b` 的完整 CI 6,817 项通过，800×600 DIP 颜色选择器实际滚动到尾部后，RGB 字段与底部按钮完整可见。

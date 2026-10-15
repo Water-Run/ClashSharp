@@ -125,6 +125,7 @@
     <Compile Include="..\ClashSharp\Service\RuntimeTrafficRateService.cs" Link="Service\RuntimeTrafficRateService.cs" />
     <Compile Include="..\ClashSharp\Service\IApplicationActionDispatcher.cs" Link="Service\IApplicationActionDispatcher.cs" />
     <Compile Include="..\ClashSharp\Service\LocalizationService.cs" Link="Service\LocalizationService.cs" />
+    <Compile Include="..\ClashSharp\Service\LanguageResourceCoordinator.cs" Link="Service\LanguageResourceCoordinator.cs" />
     <Compile Include="..\ClashSharp\Service\GitHubReleaseUpdateChecker.cs" Link="Service\GitHubReleaseUpdateChecker.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayService.cs" Link="Service\MainlandChinaTextDisplayService.cs" />
     <Compile Include="..\ClashSharp\Service\MainlandChinaTextDisplayServiceFactory.cs" Link="Service\MainlandChinaTextDisplayServiceFactory.cs" />

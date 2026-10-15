@@ -55,7 +55,10 @@ internal sealed class MainWindowComposition
             _settings.AppAccentColorValue);
     }
 
-    /// <summary>Keeps the window reading direction aligned with the active display language.</summary>
+    /// <summary>Synchronizes native resource language before the shell creates framework controls.</summary>
+    public void ApplyStartupLanguage() => WinUiLanguageResources.Apply(_localization, _settings.DisplayLanguage);
+
+    /// <summary>Keeps the window text language and reading direction aligned with the active display language.</summary>
     /// <param name="root">Window content root. Must not be null.</param>
     /// <returns>A subscription that stops updating the root when disposed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="root"/> is null.</exception>
@@ -70,6 +73,7 @@ internal sealed class MainWindowComposition
 
     private void ApplyLayoutDirection(FrameworkElement root)
     {
+        root.Language = LocalizationService.ResolveResourceLanguageTag(_localization.CurrentLanguage, CultureInfo.CurrentUICulture);
         root.FlowDirection = LocalizationService.IsRightToLeft(_localization.CurrentLanguage, CultureInfo.CurrentUICulture)
             ? FlowDirection.RightToLeft
             : FlowDirection.LeftToRight;

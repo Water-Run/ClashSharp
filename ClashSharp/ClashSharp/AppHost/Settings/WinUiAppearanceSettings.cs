@@ -32,10 +32,10 @@ internal sealed class WinUiAppearanceSettings(Func<FrameworkElement?> getRoot, L
             ElementTheme.Dark => AppThemeMode.Dark,
             _ => throw new InvalidOperationException("The window requested an unsupported theme."),
         };
-        return new(_localization.CurrentLanguage, theme, AppThemeService.ReadAccentConfiguration());
+        return new(WinUiLanguageResources.CaptureLanguage(_localization), theme, AppThemeService.ReadAccentConfiguration());
     }
 
-    public void ApplyLanguage(AppLanguage language) { _ = RequireRoot(); _localization.CurrentLanguage = language; }
+    public void ApplyLanguage(AppLanguage language) { _ = RequireRoot(); WinUiLanguageResources.Apply(_localization, language); }
     public void ApplyTheme(AppThemeMode theme) => AppThemeService.Apply(RequireRoot(), theme);
     public void ApplyAccent(AccentColorConfiguration accent)
     {

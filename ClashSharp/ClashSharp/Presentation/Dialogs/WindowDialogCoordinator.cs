@@ -43,6 +43,7 @@ internal static class WindowDialogCoordinator
             if (xamlRoot.Content is FrameworkElement root)
             {
                 dialog.RequestedTheme = root.ActualTheme;
+                dialog.Language = root.Language;
                 dialog.FlowDirection = root.FlowDirection;
             }
 

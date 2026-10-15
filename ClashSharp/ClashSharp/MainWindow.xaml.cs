@@ -131,6 +131,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _startupLifetimeRequests = startupLifetimeRequests
             ?? throw new ArgumentNullException(nameof(startupLifetimeRequests));
         _composition = composition ?? throw new ArgumentNullException(nameof(composition));
+        StartupShellSetupPolicy.TryRun(_composition.ApplyStartupLanguage);
         StartupShellSetupPolicy.TryRun(_composition.ApplyStartupAccentColor);
         InitializeComponent();
         _layoutDirection = _composition.BindLayoutDirection((FrameworkElement)Content);

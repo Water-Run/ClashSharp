@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -6,6 +7,8 @@ using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 using ClashSharp.Installer.Contracts;
+using ClashSharp.Model;
+using ClashSharp.Service;
 
 namespace ClashSharp.Tests.Unit.Resources;
 
@@ -97,6 +100,9 @@ public sealed class AppResourcePackagingTests
         string mainWindowCodePath = FindSourceFile("ClashSharp", "ClashSharp", "MainWindow.xaml.cs");
 
         string mainWindowCode = File.ReadAllText(mainWindowCodePath);
+        int applyLanguageIndex = mainWindowCode.IndexOf(
+            "StartupShellSetupPolicy.TryRun(_composition.ApplyStartupLanguage);",
+            StringComparison.Ordinal);
         int applyAccentIndex = mainWindowCode.IndexOf(
             "StartupShellSetupPolicy.TryRun(_composition.ApplyStartupAccentColor);",
             StringComparison.Ordinal);
@@ -121,6 +127,8 @@ public sealed class AppResourcePackagingTests
             StringComparison.Ordinal);
 
         Assert.True(applyAccentIndex >= 0, "Contained accent color application is missing.");
+        Assert.True(applyLanguageIndex >= 0 && applyLanguageIndex < initializeIndex,
+            "Native language resources must be synchronized before framework controls are created.");
         Assert.True(initializeIndex >= 0, "InitializeComponent call is missing.");
         Assert.True(
             applyAccentIndex < initializeIndex,
@@ -627,6 +635,7 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("BindLayoutDirection((FrameworkElement)Content)", windowCode, StringComparison.Ordinal);
         Assert.Contains("FlowDirection.RightToLeft", compositionCode, StringComparison.Ordinal);
         Assert.Contains("LocalizationService.IsRightToLeft", compositionCode, StringComparison.Ordinal);
+        Assert.Contains("root.Language = LocalizationService.ResolveResourceLanguageTag", compositionCode, StringComparison.Ordinal);
     }
 
     /// <summary>Verifies settings language options are sourced from the centralized language catalog.</summary>
@@ -3144,6 +3153,28 @@ public sealed class AppResourcePackagingTests
 
         Assert.Contains("<WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>", projectXml, StringComparison.Ordinal);
         Assert.Contains("<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>", projectXml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Every authored catalog must be available to native framework resource language resolution.</summary>
+    [Fact]
+    public void PackageManifest_DeclaresAllSupportedNativeResourceLanguages()
+    {
+        XDocument manifest = XDocument.Load(FindSourceFile("ClashSharp", "ClashSharp", "Package.appxmanifest"));
+        XNamespace package = "http://schemas.microsoft.com/appx/manifest/foundation/windows10";
+        string[] declared = manifest.Root!.Element(package + "Resources")!.Elements(package + "Resource")
+            .Select(element => (string)element.Attribute("Language")!).ToArray();
+        AppLanguage[] languages = LocalizationService.GetSupportedLanguages().Select(item => item.Language)
+            .Where(language => language != AppLanguage.AutoDetect).ToArray();
+        string[] expected = languages.Select(language =>
+            LocalizationService.ResolveResourceLanguageTag(language, CultureInfo.InvariantCulture)).ToArray();
+
+        Assert.Equal(languages.Length, declared.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(expected.Order(StringComparer.OrdinalIgnoreCase), declared.Order(StringComparer.OrdinalIgnoreCase));
+        foreach (AppLanguage language in languages)
+        {
+            CultureInfo culture = CultureInfo.GetCultureInfo(LocalizationService.ResolveResourceLanguageTag(language, CultureInfo.InvariantCulture));
+            Assert.Equal(language, LocalizationService.ResolveEffectiveLanguage(AppLanguage.AutoDetect, culture));
+        }
     }
 
     /// <summary>Verifies the single application has separate normal-launch and proxy-restore startup tasks.</summary>
