@@ -32,6 +32,9 @@ public sealed class AppThemePaletteTests
             ("TextOnAccentFillColorPrimaryBrush", "AccentFillColorDefaultBrush"),
             ("TextOnAccentFillColorPrimaryBrush", "AccentFillColorSecondaryBrush"),
             ("TextOnAccentFillColorPrimaryBrush", "AccentFillColorTertiaryBrush"),
+            ("ToggleSwitchKnobFillOn", "ToggleSwitchFillOn"),
+            ("ToggleSwitchKnobFillOnPointerOver", "ToggleSwitchFillOnPointerOver"),
+            ("ToggleSwitchKnobFillOnPressed", "ToggleSwitchFillOnPressed"),
         ];
         foreach ((string foreground, string background) in pairs)
         {
@@ -57,7 +60,8 @@ public sealed class AppThemePaletteTests
         ResourceStore resources = new();
         AppThemeService.CreateAccentRuntime(resources).Apply(new(AppAccentColorMode.Custom, color));
         foreach (string key in new[] { "AccentTextFillColorPrimaryBrush", "AccentTextFillColorSecondaryBrush",
-            "AccentTextFillColorTertiaryBrush", "SystemControlForegroundAccentBrush", "SystemControlHyperlinkTextBrush" })
+            "AccentTextFillColorTertiaryBrush", "SystemControlForegroundAccentBrush", "SystemControlHyperlinkTextBrush",
+            "NavigationViewSelectionIndicatorForeground", "ProgressBarForeground", "ProgressRingForegroundThemeBrush" })
         {
             foreach (bool light in new[] { false, true })
             {
@@ -119,10 +123,10 @@ public sealed class AppThemePaletteTests
         runtime.Apply(custom);
 
         Assert.Equal(custom, runtime.CaptureConfiguration());
-        Assert.Equal(48, resources.Local.Count);
-        Assert.Equal(48, resources.WriteCount);
+        Assert.Equal(55, resources.Local.Count);
+        Assert.Equal(55, resources.WriteCount);
         Assert.Equal(7, resources.Local.Count(pair => !pair.Value.IsBrush));
-        Assert.Equal(41, resources.Local.Count(pair => pair.Value.IsBrush));
+        Assert.Equal(48, resources.Local.Count(pair => pair.Value.IsBrush));
         Assert.Equal(new(0x804477AA, false), resources.Local["SystemAccentColor"]);
         Assert.Equal(new(0x807CA0C4, false), resources.Local["SystemAccentColorLight1"]);
         Assert.Equal(new(0x80A2BBD4, false), resources.Local["SystemAccentColorLight2"]);
@@ -158,8 +162,8 @@ public sealed class AppThemePaletteTests
         Assert.Equal(followSystem, runtime.CaptureConfiguration());
         Assert.Equal(new KeyValuePair<string, AccentResourceValue>("UnrelatedResource", unrelated), Assert.Single(resources.Local));
         Assert.Equal(new KeyValuePair<string, AccentResourceValue>("SystemAccentColor", systemAccent), Assert.Single(resources.Merged));
-        Assert.Equal(48, resources.Removed.Count);
-        Assert.Equal(48, resources.Removed.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(55, resources.Removed.Count);
+        Assert.Equal(55, resources.Removed.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain("UnrelatedResource", resources.Removed);
     }
 

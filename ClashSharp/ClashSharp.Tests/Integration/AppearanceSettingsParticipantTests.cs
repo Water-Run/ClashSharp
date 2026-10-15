@@ -71,7 +71,7 @@ public sealed class AppearanceSettingsParticipantTests
         Assert.Equal(AppLanguage.English, actual.Language);
         Assert.Equal(AppThemeMode.Dark, actual.Theme);
         Assert.Equal(new(AppAccentColorMode.Custom, "#804477AA"), actual.Accent);
-        Assert.Equal(48, fixture.Native.Resources.Values.Count);
+        Assert.Equal(55, fixture.Native.Resources.Values.Count);
         Assert.Equal(0x804477AAu, fixture.Native.Resources.Values["SystemAccentColor"].Argb);
         Assert.True(fixture.Current().Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
         Assert.False(before.Get<bool>(SettingsRegistry.Keys.TrayUseMonochromeInactiveIcon));
@@ -191,7 +191,7 @@ public sealed class AppearanceSettingsParticipantTests
         Assert.Same(fatal, observed);
         Assert.Same(before, fixture.Current());
         Assert.Equal(2, fixture.Native.Writes);
-        Assert.Equal(48, fixture.Native.Resources.Values.Count);
+        Assert.Equal(55, fixture.Native.Resources.Values.Count);
         Assert.Equal(SettingsApplicationBatchState.Running, Assert.Single((await fixture.Repository.OpenAsync(CancellationToken.None)).Envelope!.PendingApplications).State);
     }
 
@@ -288,7 +288,7 @@ public sealed class AppearanceSettingsParticipantTests
             SettingsApplicationPhase.Startup, startup, CancellationToken.None);
         Assert.True(result.IsSucceeded, result.Code);
         Assert.Equal("safe-exit", reopened.CaptureSnapshot().Get<string>(SettingsRegistry.Keys.TrayVisibleFeatureIds));
-        Assert.Equal(48, newWindow.Resources.Values.Count);
+        Assert.Equal(55, newWindow.Resources.Values.Count);
         Assert.Equal(SettingAppliedValueSource.StartupReconciliation, result.Envelope!.Applied[SettingsRegistry.Keys.AppThemeMode].Source);
         await startup.DisposeAsync();
         using MutationAdmissionLease ordinary = fixture.Admission.AcquireOrdinary();

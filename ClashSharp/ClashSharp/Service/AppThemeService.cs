@@ -61,6 +61,10 @@ internal static class AppThemeService
         "ToggleSwitchStrokeOnPointerOver",
         "ToggleSwitchStrokeOnPressed",
         "ToggleSwitchStrokeOnDisabled",
+        "ToggleSwitchKnobFillOn",
+        "ToggleSwitchKnobFillOnPointerOver",
+        "ToggleSwitchKnobFillOnPressed",
+        "ToggleSwitchKnobFillOnDisabled",
         "ToggleButtonBackgroundChecked",
         "ToggleButtonBackgroundCheckedPointerOver",
         "ToggleButtonBackgroundCheckedPressed",
@@ -68,6 +72,9 @@ internal static class AppThemeService
         "ToggleButtonForegroundCheckedPointerOver",
         "ToggleButtonForegroundCheckedPressed",
         "TextOnAccentFillColorPrimaryBrush",
+        "NavigationViewSelectionIndicatorForeground",
+        "ProgressBarForeground",
+        "ProgressRingForegroundThemeBrush",
     ];
 
     private static readonly AccentColorRuntime AccentRuntime = CreateAccentRuntime(new WinUiAccentResourceStore());
@@ -201,6 +208,10 @@ internal static class AppThemeService
         resources["ToggleSwitchStrokeOnPointerOver"] = hoverBrush;
         resources["ToggleSwitchStrokeOnPressed"] = pressedBrush;
         resources["ToggleSwitchStrokeOnDisabled"] = disabledAccentBrush;
+        resources["ToggleSwitchKnobFillOn"] = foreground;
+        resources["ToggleSwitchKnobFillOnPointerOver"] = foreground;
+        resources["ToggleSwitchKnobFillOnPressed"] = foreground;
+        resources["ToggleSwitchKnobFillOnDisabled"] = Disabled(foreground);
         resources["ToggleButtonBackgroundChecked"] = accentBrush;
         resources["ToggleButtonBackgroundCheckedPointerOver"] = hoverBrush;
         resources["ToggleButtonBackgroundCheckedPressed"] = pressedBrush;
@@ -208,6 +219,10 @@ internal static class AppThemeService
         resources["ToggleButtonForegroundCheckedPointerOver"] = foreground;
         resources["ToggleButtonForegroundCheckedPressed"] = foreground;
         resources["TextOnAccentFillColorPrimaryBrush"] = foreground;
+        // Indicators are drawn directly on page/card surfaces rather than on accent fills.
+        resources["NavigationViewSelectionIndicatorForeground"] = accentText;
+        resources["ProgressBarForeground"] = accentText;
+        resources["ProgressRingForegroundThemeBrush"] = accentText;
         return resources;
     }
 
