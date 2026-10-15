@@ -39,8 +39,22 @@ internal sealed class AppMcpAgentBackend(AppDataGenerationRepositories repositor
 
     public async Task<McpToolResponse> ExecuteAsync(McpClientIdentity identity, McpToolRequest request, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(request);
         McpToolDefinition definition = McpToolCatalog.All.Single(tool => tool.Id == request.Tool);
         if (!McpToolArgumentValidator.IsValid(definition, request.Arguments)) { return McpToolResponse.Error("mcp.invalid_arguments"); }
+        if (!access.IsCurrentIdentity(identity) || !access.Policy.Allows(definition.RequiredScopes)) { return McpToolResponse.Error("mcp.access_denied"); }
+        try { return await ExecuteAdmittedAsync(identity, request, definition, cancellationToken).ConfigureAwait(false); }
+        catch (MutationAdmissionRejectedException) { return McpToolResponse.Error("mcp.busy"); }
+        catch (DataGenerationManagerException failure) when (failure.Error == DataGenerationManagerError.Draining)
+        {
+            return McpToolResponse.Error("mcp.busy");
+        }
+    }
+
+    private async Task<McpToolResponse> ExecuteAdmittedAsync(McpClientIdentity identity, McpToolRequest request,
+        McpToolDefinition definition, CancellationToken cancellationToken)
+    {
         JsonElement args = request.Arguments;
         bool exclusive = request.Tool == McpToolId.UpdateSettings && args.GetProperty("changes")
             .EnumerateObject().Any(change => change.Name == SettingsRegistry.Keys.TriggerNotificationsEnabled.Value);
@@ -49,6 +63,19 @@ internal sealed class AppMcpAgentBackend(AppDataGenerationRepositories repositor
             : await admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
         using CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.RevocationToken);
         CancellationToken token = lifetime.Token;
+        try { return await ExecutePinnedAsync(identity, request, definition, lease, token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Revocation is an expected product decision. The lease and generation remain owned
+            // until rollback finishes; a completed transaction still returns its verified receipt.
+            return McpToolResponse.Error("mcp.cancelled");
+        }
+    }
+
+    private async Task<McpToolResponse> ExecutePinnedAsync(McpClientIdentity identity, McpToolRequest request,
+        McpToolDefinition definition, MutationAdmissionLease lease, CancellationToken token)
+    {
+        JsonElement args = request.Arguments;
         await using DataGenerationLease pin = await generations.AcquireAsync(token).ConfigureAwait(false);
         if (!pin.Descriptor.IsSameGeneration(repositories.Generation)) { return McpToolResponse.Error("mcp.generation_changed"); }
         if (!access.IsCurrentIdentity(identity) || !access.Policy.Allows(definition.RequiredScopes)) { return McpToolResponse.Error("mcp.access_denied"); }
@@ -72,9 +99,15 @@ internal sealed class AppMcpAgentBackend(AppDataGenerationRepositories repositor
             }
             McpToolResponse result = await ExecuteWriteAsync(request.Tool, args, operation, lease, token).ConfigureAwait(false);
             Audit(definition, identity, result);
-            _receipts.Add(operation, (hash, result));
-            _receiptOrder.Enqueue(operation);
-            if (_receiptOrder.Count > 128) { _receipts.Remove(_receiptOrder.Dequeue()); }
+            // A permission or input refusal has not accepted a product write. Do not consume its
+            // operation ID: the user can grant access and retry the unchanged request. Preserve
+            // successful receipts and observed settings outcomes, including committed failures.
+            if (!result.IsError || result.Content.TryGetProperty("status", out _))
+            {
+                _receipts.Add(operation, (hash, result));
+                _receiptOrder.Enqueue(operation);
+                if (_receiptOrder.Count > 128) { _receipts.Remove(_receiptOrder.Dequeue()); }
+            }
             return result;
         }
         finally { _writes.Release(); }
@@ -219,13 +252,33 @@ internal sealed class AppMcpAgentBackend(AppDataGenerationRepositories repositor
                 await repositories.ProxySelections.SelectAsync(args.GetProperty("group").GetString()!, args.GetProperty("node").GetString()!, token).ConfigureAwait(false);
                 return Success(new { applied = true });
             case McpToolId.SaveProfile:
-                ProfileImportResult saved = await repositories.Profiles.SaveAgentSourceAsync(operation,
+                return await SaveProfileAsync(args, operation, token).ConfigureAwait(false);
+            default: return McpToolResponse.Error("mcp.operation_unavailable");
+        }
+    }
+
+    private async Task<McpToolResponse> SaveProfileAsync(JsonElement args, Guid operation, CancellationToken token)
+    {
+        bool liveWriteDenied = false;
+        try
+        {
+            ProfileImportResult saved = await repositories.Profiles.SaveAgentSourceAsync(operation,
                     args.TryGetProperty("profile_id", out JsonElement id) ? id.GetString() : null,
                     args.GetProperty("name").GetString()!, args.GetProperty("content").GetString()!,
                     args.TryGetProperty("expected_sha256", out JsonElement hash) ? hash.GetString() : null,
-                    () => access.Policy.Allows(McpAccessRules.RequiredScopes(McpOperation.ModifyLiveConfiguration)), token).ConfigureAwait(false);
-                return Success(new { profile_id = saved.ProfileId, name = saved.ProfileName, node_count = saved.NodeCount, rule_count = saved.RuleCount });
-            default: return McpToolResponse.Error("mcp.operation_unavailable");
+                    () =>
+                    {
+                        bool allowed = access.Policy.Allows(McpAccessRules.RequiredScopes(McpOperation.ModifyLiveConfiguration));
+                        liveWriteDenied = !allowed;
+                        return allowed;
+                    }, token).ConfigureAwait(false);
+            return Success(new { profile_id = saved.ProfileId, name = saved.ProfileName, node_count = saved.NodeCount, rule_count = saved.RuleCount });
+        }
+        catch (UnauthorizedAccessException) when (liveWriteDenied)
+        {
+            // Only the policy decision made inside the catalog mutation gate is a normal denial.
+            // Filesystem access failures still reach the sanitized unexpected-error boundary.
+            return McpToolResponse.Error("mcp.access_denied");
         }
     }
 

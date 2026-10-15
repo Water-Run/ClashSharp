@@ -154,6 +154,7 @@ public sealed partial class ProductionDataGenerationTests
 
     private sealed class AgentErrors : IApplicationErrorSink
     {
-        public Task ReportAsync(ApplicationError error, CancellationToken cancellationToken) => Task.CompletedTask;
+        public List<ApplicationError> Records { get; } = [];
+        public Task ReportAsync(ApplicationError error, CancellationToken cancellationToken) { Records.Add(error); return Task.CompletedTask; }
     }
 }
