@@ -5,7 +5,7 @@ public interface IAccentResourceStore
 {
     /// <summary>Captures both normal-theme values; absent keys are omitted and incomplete or incompatible pairs are represented by null.</summary>
     /// <param name="ownedKeys">The complete set of keys owned by accent application.</param>
-    /// <returns>A stable snapshot that excludes inherited and merged resources.</returns>
+    /// <returns>A stable snapshot of owned entries, excluding fallback framework resources.</returns>
     IReadOnlyDictionary<string, AccentResourceValue?> CaptureLocalOverrides(IReadOnlyCollection<string> ownedKeys);
 
     /// <summary>Installs both theme values of one exact owned color or solid-brush resource without changing contrast-theme resources.</summary>

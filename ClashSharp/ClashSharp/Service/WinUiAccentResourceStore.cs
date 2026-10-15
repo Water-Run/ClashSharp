@@ -11,6 +11,9 @@ namespace ClashSharp.Service;
 /// <summary>Keeps custom accent resources in normal theme dictionaries so Windows contrast themes retain their own color pairs.</summary>
 internal sealed class WinUiAccentResourceStore : IAccentResourceStore
 {
+    private ResourceDictionary? _applicationResources;
+    private ResourceDictionary? _overrides;
+
     public IReadOnlyDictionary<string, AccentResourceValue?> CaptureLocalOverrides(IReadOnlyCollection<string> ownedKeys)
     {
         ResourceDictionary resources = GetResources();
@@ -21,8 +24,10 @@ internal sealed class WinUiAccentResourceStore : IAccentResourceStore
         {
             throw new InvalidOperationException("A primary resource overrides the theme-aware accent palette.");
         }
-        Dictionary<string, AccentResourceValue?> dark = ReadLocal(GetTheme(resources, "Dark"), keys);
-        Dictionary<string, AccentResourceValue?> light = ReadLocal(GetTheme(resources, "Light"), keys);
+        ResourceDictionary? overrides = GetOverrides(resources, create: false);
+        if (overrides is null) { return new Dictionary<string, AccentResourceValue?>(StringComparer.Ordinal); }
+        Dictionary<string, AccentResourceValue?> dark = ReadLocal(GetTheme(overrides, "Dark"), keys);
+        Dictionary<string, AccentResourceValue?> light = ReadLocal(GetTheme(overrides, "Light"), keys);
         Dictionary<string, AccentResourceValue?> snapshot = new(StringComparer.Ordinal);
         foreach (string key in dark.Keys.Union(light.Keys, StringComparer.Ordinal))
         {
@@ -38,18 +43,47 @@ internal sealed class WinUiAccentResourceStore : IAccentResourceStore
     public void WriteOverride(string key, AccentResourceValue value)
     {
         ResourceDictionary resources = GetResources();
+        ResourceDictionary overrides = GetOverrides(resources, create: true)!;
         // An explicit HighContrast dictionary prevents a normal-theme fallback. It remains
         // empty of our overrides, allowing the built-in controls' system resources to resolve.
-        _ = GetOrCreateTheme(resources, "HighContrast");
-        GetOrCreateTheme(resources, "Dark")[key] = Materialize(value.Argb, value.IsBrush);
-        GetOrCreateTheme(resources, "Light")[key] = Materialize(value.LightArgb ?? value.Argb, value.IsBrush);
+        _ = GetOrCreateTheme(overrides, "HighContrast");
+        GetOrCreateTheme(overrides, "Dark")[key] = Materialize(value.Argb, value.IsBrush);
+        GetOrCreateTheme(overrides, "Light")[key] = Materialize(value.LightArgb ?? value.Argb, value.IsBrush);
     }
 
     public void RemoveOverride(string key)
     {
         ResourceDictionary resources = GetResources();
-        GetTheme(resources, "Dark")?.Remove(key);
-        GetTheme(resources, "Light")?.Remove(key);
+        ResourceDictionary? overrides = GetOverrides(resources, create: false);
+        if (overrides is null) { return; }
+        GetTheme(overrides, "Dark")?.Remove(key);
+        GetTheme(overrides, "Light")?.Remove(key);
+    }
+
+    private ResourceDictionary? GetOverrides(ResourceDictionary resources, bool create)
+    {
+        if (_overrides is not null)
+        {
+            if (!ReferenceEquals(resources, _applicationResources)
+                || resources.MergedDictionaries.Count == 0
+                || !ReferenceEquals(resources.MergedDictionaries[^1], _overrides))
+            {
+                throw new InvalidOperationException("The owned accent dictionary no longer has verified precedence.");
+            }
+            return _overrides;
+        }
+        if (!create) { return null; }
+
+        // WinUI searches a dictionary's merged entries before its ThemeDictionaries. Putting
+        // our themes directly on Application.Resources lets XamlControlsResources win first.
+        // A last merged dictionary supplies our normal-theme values before the framework,
+        // while its empty HighContrast dictionary deliberately falls through to the system.
+        ResourceDictionary overrides = new();
+        overrides.ThemeDictionaries["HighContrast"] = new ResourceDictionary();
+        resources.MergedDictionaries.Add(overrides);
+        _applicationResources = resources;
+        _overrides = overrides;
+        return overrides;
     }
 
     private static Dictionary<string, AccentResourceValue?> ReadLocal(ResourceDictionary? resources, HashSet<string> keys)
