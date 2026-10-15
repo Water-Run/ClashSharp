@@ -76,6 +76,9 @@ internal sealed class TriggerTaskItemViewModel : ObservableObject
     /// <summary>Gets the localized accessible label for editing this trigger.</summary>
     public string EditText => _getString("Command.Edit");
 
+    /// <summary>Gets the localized accessible label for this row's contextual actions.</summary>
+    public string MoreActionsText => _getString("Command.MoreActions");
+
     /// <summary>Gets the localized accessible label for moving this trigger earlier.</summary>
     public string MoveUpText => _getString("Command.MoveUp");
 

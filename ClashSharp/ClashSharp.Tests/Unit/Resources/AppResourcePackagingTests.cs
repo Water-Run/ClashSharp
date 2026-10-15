@@ -30,7 +30,7 @@ public sealed class AppResourcePackagingTests
                 || element.Name == presentation + "SymbolIcon"))
             .ToArray();
 
-        Assert.Equal(13, glyphOnlyButtons.Length);
+        Assert.Equal(11, glyphOnlyButtons.Length);
         foreach (XElement button in glyphOnlyButtons)
         {
             Assert.False(

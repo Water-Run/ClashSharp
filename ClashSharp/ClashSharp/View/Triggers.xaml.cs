@@ -111,7 +111,7 @@ public sealed partial class Triggers : Page
 
     private async void MoveTriggerUpButton_Click(object sender, RoutedEventArgs args)
     {
-        if (sender is Button { Tag: string id, DataContext: TriggerTaskItemViewModel item } && _viewModel.IsCurrentTask(item))
+        if (sender is FrameworkElement { Tag: string id, DataContext: TriggerTaskItemViewModel item } && _viewModel.IsCurrentTask(item))
         {
             await AwaitPageOperationAsync(token => _viewModel.MoveTaskAsync(id, -1, token));
         }
@@ -119,7 +119,7 @@ public sealed partial class Triggers : Page
 
     private async void MoveTriggerDownButton_Click(object sender, RoutedEventArgs args)
     {
-        if (sender is Button { Tag: string id, DataContext: TriggerTaskItemViewModel item } && _viewModel.IsCurrentTask(item))
+        if (sender is FrameworkElement { Tag: string id, DataContext: TriggerTaskItemViewModel item } && _viewModel.IsCurrentTask(item))
         {
             await AwaitPageOperationAsync(token => _viewModel.MoveTaskAsync(id, 1, token));
         }
@@ -127,7 +127,7 @@ public sealed partial class Triggers : Page
 
     private async void DeleteTriggerButton_Click(object sender, RoutedEventArgs args)
     {
-        if (sender is not Button { Tag: string id, DataContext: TriggerTaskItemViewModel item } || !_viewModel.IsCurrentTask(item))
+        if (sender is not FrameworkElement { Tag: string id, DataContext: TriggerTaskItemViewModel item } || !_viewModel.IsCurrentTask(item))
         {
             return;
         }
@@ -149,6 +149,47 @@ public sealed partial class Triggers : Page
                 await _viewModel.DeleteTaskAsync(id, expectedVersion, token);
             }
         });
+    }
+
+    /// <summary>Opens native row actions without reserving space for infrequent commands.</summary>
+    private void MoreTriggerActionsButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: TriggerTaskItemViewModel item } button || !_viewModel.IsCurrentTask(item))
+        {
+            return;
+        }
+
+        MenuFlyout menu = new();
+        MenuFlyoutItem up = CreateTriggerMenuItem(item, item.MoveUpText, "\uE70E", MoveTriggerUpButton_Click);
+        MenuFlyoutItem down = CreateTriggerMenuItem(item, item.MoveDownText, "\uE70D", MoveTriggerDownButton_Click);
+        MenuFlyoutItem delete = CreateTriggerMenuItem(item, item.DeleteText, "\uE74D", DeleteTriggerButton_Click);
+        menu.Items.Add(up);
+        menu.Items.Add(down);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(delete);
+        menu.Opening += (_, _) =>
+        {
+            bool current = _viewModel.IsCurrentTask(item);
+            up.IsEnabled = current && item.CanMoveUp;
+            down.IsEnabled = current && item.CanMoveDown;
+            delete.IsEnabled = current;
+        };
+        menu.ShowAt(button);
+    }
+
+    /// <summary>Keeps popup commands bound to the same durable row identity checked by their existing handlers.</summary>
+    private static MenuFlyoutItem CreateTriggerMenuItem(
+        TriggerTaskItemViewModel item, string text, string glyph, RoutedEventHandler handler)
+    {
+        MenuFlyoutItem command = new()
+        {
+            Text = text,
+            Icon = new FontIcon { Glyph = glyph },
+            Tag = item.Id,
+            DataContext = item,
+        };
+        command.Click += handler;
+        return command;
     }
 
     private async void TriggerEnabledToggle_Toggled(object sender, RoutedEventArgs args)

@@ -397,6 +397,7 @@ internal static partial class LocalizationResources
             ["Command.RemoveRegistration"] = "移除註冊",
             ["Command.Open"] = "開啟",
             ["Command.Edit"] = "編輯",
+            ["Command.MoreActions"] = "更多操作",
             ["Command.MoveUp"] = "上移",
             ["Command.MoveDown"] = "下移",
             ["Command.Save"] = "儲存",

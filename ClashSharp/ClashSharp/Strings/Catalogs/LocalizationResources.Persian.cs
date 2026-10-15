@@ -399,6 +399,7 @@ internal static partial class LocalizationResources
             ["Command.RemoveRegistration"] = "حذف ثبت",
             ["Command.Open"] = "باز کردن",
             ["Command.Edit"] = "ویرایش",
+            ["Command.MoreActions"] = "اقدام‌های بیشتر",
             ["Command.MoveUp"] = "انتقال به بالا",
             ["Command.MoveDown"] = "انتقال به پایین",
             ["Command.Save"] = "ذخیره",

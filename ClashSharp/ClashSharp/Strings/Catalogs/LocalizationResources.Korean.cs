@@ -399,6 +399,7 @@ internal static partial class LocalizationResources
             ["Command.RemoveRegistration"] = "등록 해제",
             ["Command.Open"] = "열기",
             ["Command.Edit"] = "편집",
+            ["Command.MoreActions"] = "추가 작업",
             ["Command.MoveUp"] = "위로 이동",
             ["Command.MoveDown"] = "아래로 이동",
             ["Command.Save"] = "저장",

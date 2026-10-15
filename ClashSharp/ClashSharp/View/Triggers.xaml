@@ -75,7 +75,9 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding Name}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                                            <TextBlock Text="{Binding Name}" Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                                       TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                       ToolTipService.ToolTip="{Binding Name}" />
                                             <ToggleSwitch
                                                 Grid.Column="1"
                                                 IsOn="{Binding IsEnabled, Mode=OneWay}"
@@ -94,16 +96,15 @@
                                             <TextBlock Text="{Binding ActionsLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                             <TextBlock Text="{Binding ActionsSummary}" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="WrapWholeWords" />
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Grid ColumnSpacing="6">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                             <TextBlock Text="{Binding LastTriggeredLabel}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                            <TextBlock Text="{Binding LastTriggeredSummary}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding LastTriggeredSummary}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                                        </Grid>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
                                         <Button Tag="{Binding}" Click="EditTriggerButton_Click" AutomationProperties.Name="{Binding EditText}" ToolTipService.ToolTip="{Binding EditText}"><FontIcon Glyph="&#xE70F;" FontSize="14" /></Button>
-                                        <Button Tag="{Binding Id}" Click="MoveTriggerUpButton_Click" IsEnabled="{Binding CanMoveUp}" AutomationProperties.Name="{Binding MoveUpText}" ToolTipService.ToolTip="{Binding MoveUpText}"><FontIcon Glyph="&#xE70E;" FontSize="14" /></Button>
-                                        <Button Tag="{Binding Id}" Click="MoveTriggerDownButton_Click" IsEnabled="{Binding CanMoveDown}" AutomationProperties.Name="{Binding MoveDownText}" ToolTipService.ToolTip="{Binding MoveDownText}"><FontIcon Glyph="&#xE70D;" FontSize="14" /></Button>
-                                        <Button Tag="{Binding Id}" Click="DeleteTriggerButton_Click" AutomationProperties.Name="{Binding DeleteText}" ToolTipService.ToolTip="{Binding DeleteText}"><FontIcon Glyph="&#xE74D;" FontSize="14" /></Button>
+                                        <Button Tag="{Binding}" Click="MoreTriggerActionsButton_Click" AutomationProperties.Name="{Binding MoreActionsText}" ToolTipService.ToolTip="{Binding MoreActionsText}"><FontIcon Glyph="&#xE712;" FontSize="14" /></Button>
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>
