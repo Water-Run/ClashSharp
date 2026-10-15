@@ -43,19 +43,42 @@
       "sourceUrl": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/4178770badecb1b349fbcd62c737e0d7a2079729/.github/workflows/run.yml",
       "length": 22364,
       "sha256": "37813dea8ae503e580582698fc3fe31ff40695882e9699b8b285b770c2a9dbe8"
+    },
+    {
+      "file": "mcp-sdk-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modelcontextprotocol/csharp-sdk/6fa3825973949a9c4f0cd8af344e15a8db09dc35/LICENSE",
+      "length": 12227,
+      "sha256": "7c6a686d2b34b86ad8c726e0ac4d76903b525f251d73e617f8db3879fa8f11fc"
+    },
+    {
+      "file": "mcp-sdk-notices.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/modelcontextprotocol/csharp-sdk/6fa3825973949a9c4f0cd8af344e15a8db09dc35/THIRD-PARTY-NOTICES.txt",
+      "length": 3313,
+      "sha256": "b9c35f6ab075077d5c2b644fdc58eb5696b8b70f539947f9e1e57331599fc5ce"
+    },
+    {
+      "file": "dotnet-ai-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/dotnet/extensions/ccb356f31db9d894807c4fd0c97c2f41553d1524/LICENSE",
+      "length": 1121,
+      "sha256": "47f0ad8ba753eae5de6178291cd8f38bbb42d2368b177f8e11714ad17c701275"
+    },
+    {
+      "file": "dotnet-ai-notices.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/dotnet/extensions/ccb356f31db9d894807c4fd0c97c2f41553d1524/THIRD-PARTY-NOTICES.TXT",
+      "length": 354,
+      "sha256": "07f3e74329ed32ac9229a75ae994b98b30aadb1d9947eee926eed3d3fc4cf0c6"
+    },
+    {
+      "file": "dotnet-10.0.10-license.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/dotnet/dotnet/f7d90799ce4ef09a0bb257852a57248d2a8fb8dd/LICENSE.TXT",
+      "length": 1115,
+      "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
     }
   ],
   "packageLicenseSupplements": [
     {
       "id": "Microsoft.AspNetCore.App.Runtime.win-x64",
       "version": "10.0.5",
-      "licenseType": "expression",
-      "licenseValue": "MIT",
-      "document": "dotnet-license.txt"
-    },
-    {
-      "id": "Microsoft.Data.Sqlite.Core",
-      "version": "10.0.0",
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
@@ -68,11 +91,49 @@
       "document": "dotnet-license.txt"
     },
     {
+      "id": "Microsoft.Data.Sqlite.Core",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.AI.Abstractions",
+      "version": "10.8.3",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-ai-license.txt",
+      "notices": [
+        "dotnet-ai-notices.txt"
+      ]
+    },
+    {
+      "id": "Microsoft.Extensions.Caching.Abstractions",
+      "version": "10.0.10",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-10.0.10-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
       "id": "Microsoft.Extensions.Configuration.Abstractions",
       "version": "10.0.0",
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Abstractions",
+      "version": "10.0.10",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-10.0.10-license.txt"
     },
     {
       "id": "Microsoft.Extensions.Configuration.Binder",
@@ -117,7 +178,7 @@
       "document": "dotnet-license.txt"
     },
     {
-      "id": "Microsoft.Extensions.Configuration",
+      "id": "Microsoft.Extensions.DependencyInjection",
       "version": "10.0.0",
       "licenseType": "expression",
       "licenseValue": "MIT",
@@ -131,7 +192,14 @@
       "document": "dotnet-license.txt"
     },
     {
-      "id": "Microsoft.Extensions.DependencyInjection",
+      "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "version": "10.0.10",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-10.0.10-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Diagnostics",
       "version": "10.0.0",
       "licenseType": "expression",
       "licenseValue": "MIT",
@@ -145,11 +213,11 @@
       "document": "dotnet-license.txt"
     },
     {
-      "id": "Microsoft.Extensions.Diagnostics",
-      "version": "10.0.0",
+      "id": "Microsoft.Extensions.Diagnostics.Abstractions",
+      "version": "10.0.10",
       "licenseType": "expression",
       "licenseValue": "MIT",
-      "document": "dotnet-license.txt"
+      "document": "dotnet-10.0.10-license.txt"
     },
     {
       "id": "Microsoft.Extensions.FileProviders.Abstractions",
@@ -157,6 +225,13 @@
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Abstractions",
+      "version": "10.0.10",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-10.0.10-license.txt"
     },
     {
       "id": "Microsoft.Extensions.FileProviders.Physical",
@@ -173,11 +248,25 @@
       "document": "dotnet-license.txt"
     },
     {
+      "id": "Microsoft.Extensions.Hosting",
+      "version": "10.0.0",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-license.txt"
+    },
+    {
       "id": "Microsoft.Extensions.Hosting.Abstractions",
       "version": "10.0.0",
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Hosting.Abstractions",
+      "version": "10.0.10",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-10.0.10-license.txt"
     },
     {
       "id": "Microsoft.Extensions.Hosting.WindowsServices",
@@ -187,7 +276,7 @@
       "document": "dotnet-license.txt"
     },
     {
-      "id": "Microsoft.Extensions.Hosting",
+      "id": "Microsoft.Extensions.Logging",
       "version": "10.0.0",
       "licenseType": "expression",
       "licenseValue": "MIT",
@@ -199,6 +288,13 @@
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Abstractions",
+      "version": "10.0.10",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-10.0.10-license.txt"
     },
     {
       "id": "Microsoft.Extensions.Logging.Configuration",
@@ -236,14 +332,7 @@
       "document": "dotnet-license.txt"
     },
     {
-      "id": "Microsoft.Extensions.Logging",
-      "version": "10.0.0",
-      "licenseType": "expression",
-      "licenseValue": "MIT",
-      "document": "dotnet-license.txt"
-    },
-    {
-      "id": "Microsoft.Extensions.Options.ConfigurationExtensions",
+      "id": "Microsoft.Extensions.Options",
       "version": "10.0.0",
       "licenseType": "expression",
       "licenseValue": "MIT",
@@ -251,6 +340,13 @@
     },
     {
       "id": "Microsoft.Extensions.Options",
+      "version": "10.0.10",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-10.0.10-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Options.ConfigurationExtensions",
       "version": "10.0.0",
       "licenseType": "expression",
       "licenseValue": "MIT",
@@ -262,6 +358,13 @@
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
+    },
+    {
+      "id": "Microsoft.Extensions.Primitives",
+      "version": "10.0.10",
+      "licenseType": "expression",
+      "licenseValue": "MIT",
+      "document": "dotnet-10.0.10-license.txt"
     },
     {
       "id": "Microsoft.NET.ILLink.Tasks",
@@ -311,6 +414,36 @@
       "licenseType": "expression",
       "licenseValue": "MIT",
       "document": "dotnet-license.txt"
+    },
+    {
+      "id": "ModelContextProtocol",
+      "version": "2.2.0",
+      "licenseType": "expression",
+      "licenseValue": "Apache-2.0",
+      "document": "mcp-sdk-license.txt",
+      "notices": [
+        "mcp-sdk-notices.txt"
+      ]
+    },
+    {
+      "id": "ModelContextProtocol.AspNetCore",
+      "version": "2.2.0",
+      "licenseType": "expression",
+      "licenseValue": "Apache-2.0",
+      "document": "mcp-sdk-license.txt",
+      "notices": [
+        "mcp-sdk-notices.txt"
+      ]
+    },
+    {
+      "id": "ModelContextProtocol.Core",
+      "version": "2.2.0",
+      "licenseType": "expression",
+      "licenseValue": "Apache-2.0",
+      "document": "mcp-sdk-license.txt",
+      "notices": [
+        "mcp-sdk-notices.txt"
+      ]
     },
     {
       "id": "SQLitePCLRaw.bundle_e_sqlite3",

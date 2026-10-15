@@ -327,6 +327,46 @@ try {
     Assert-TestCondition ($supplementResult.PackageCount -eq 2) 'The exact reviewed license supplement was not accepted.'
     $script:scenarios.Add('exact-license-supplement')
 
+    foreach ($name in @('notice-with-license-supplement', 'notice-with-embedded-license', 'missing-notice-supplement',
+            'duplicate-notice-supplement', 'ambiguous-package-supplement')) {
+        $root = New-TestFixture -Name $name
+        $catalogRoot = Join-Path $root 'ClashSharp/Installer/ThirdParty'
+        $catalogPath = Join-Path $catalogRoot 'catalog.json'
+        $catalog = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json -AsHashtable
+        $notice = $utf8.GetBytes('Synthetic exact reviewed package notice.')
+        $noticeHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($notice)).ToLowerInvariant()
+        [IO.File]::WriteAllBytes((Join-Path $catalogRoot 'source-notice.txt'), $notice)
+        $catalog.documents += @{ file = 'source-notice.txt'; sourceUrl = 'https://example.invalid/pinned-notice'; length = $notice.Length; sha256 = $noticeHash }
+        $catalog.packageLicenseSupplements[0].notices = @('source-notice.txt')
+        if ($name -ceq 'notice-with-license-supplement') {
+            $packagePath = Join-Path $root 'cache/fixture.library/1.0.0/fixture.library.1.0.0.nupkg'
+            $packageEntries = @(Read-TestZip -Path $packagePath | Where-Object Name -CNE 'LICENSE.txt')
+            Write-TestZip -Path $packagePath -Entries $packageEntries
+            Update-TestPackageHash -Root $root
+        }
+        switch ($name) {
+            'missing-notice-supplement' { $catalog.packageLicenseSupplements[0].notices = @('absent.txt') }
+            'duplicate-notice-supplement' { $catalog.packageLicenseSupplements[0].notices = @('source-notice.txt', 'source-notice.txt') }
+            'ambiguous-package-supplement' { $catalog.packageLicenseSupplements += $catalog.packageLicenseSupplements[0] }
+        }
+        Write-TestJson -Path $catalogPath -Value $catalog
+        $output = Join-Path $root 'notices.zip'
+        if ($name.StartsWith('notice-with-', [StringComparison]::Ordinal)) {
+            $null = New-ClashSharpThirdPartyNotices -RepositoryRoot $root -OutputPath $output
+            $contract = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $output
+            $inventoryEntry = @(Read-TestZip -Path $output | Where-Object Name -CEQ 'inventory.json')[0]
+            $inventory = $utf8.GetString($inventoryEntry.Bytes) | ConvertFrom-Json -AsHashtable
+            $package = @($inventory.packages | Where-Object id -CEQ 'Fixture.Library')[0]
+            $boundNotice = @($package.documents | Where-Object originalName -CEQ 'source-notice.txt')
+            Assert-TestCondition ($contract.PackageCount -eq 2) 'The package notice changed the dependency inventory.'
+            Assert-TestCondition ($boundNotice.Count -eq 1 -and $boundNotice[0].sha256 -ceq $noticeHash) 'The exact reviewed package notice was not bound to its package.'
+            $script:scenarios.Add($name)
+        } else {
+            Assert-TestRejects $name { New-ClashSharpThirdPartyNotices -RepositoryRoot $root -OutputPath $output }
+            Assert-TestCondition (-not (Test-Path -LiteralPath $output)) 'Rejected notice metadata left an output archive.'
+        }
+    }
+
     # Use an actual signed archive so removal of ValidateIntegrityAsync cannot be hidden by
     # an unsigned-package digest failure or a later synthetic metadata-identity mismatch.
     $signedRoot = New-TestFixture -Name 'signed-content-integrity'

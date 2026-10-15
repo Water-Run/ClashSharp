@@ -15,6 +15,16 @@ Update the catalog when a dependency, license declaration, SDK download, or upst
 changes. Preserve the original bytes and review the source URL, length, and digest together.
 New-ClashSharpThirdPartyNotices performs no download and refuses unknown missing licenses.
 
+Exact package supplements may also list `notices`. Each listed document must be byte-pinned
+in this catalog and is linked to that package's inventory entry even when its NuGet archive
+already contains the license. Missing, duplicate, or ambiguous supplements are rejected.
+MCP SDK 2.2.0 and Microsoft.Extensions.AI.Abstractions 10.8.3 use documents from the exact
+repository commits recorded by their NuGet metadata. The full MCP licensing-transition
+text and third-party notices are retained rather than replacing them with an SPDX label.
+The nine newly resolved Microsoft.Extensions 10.0.10 packages bind to the license at their
+recorded dotnet/dotnet commit. Its bytes match the older shared .NET license, while the
+separate source entry preserves the new packages' direct provenance.
+
 The generated archive intentionally includes production build dependencies as well as runtime
 dependencies. It is an attribution/input inventory, not a claim that every package asset is
 distributed. Test-only project dependencies are not included.

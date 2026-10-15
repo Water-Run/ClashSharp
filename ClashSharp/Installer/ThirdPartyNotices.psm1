@@ -304,15 +304,26 @@ function New-ClashSharpThirdPartyNotices {
                 $packageDocuments.Add((Add-ClashSharpNoticeDocument -Documents $documents -Bytes $bytes -Name $entry.FullName -Source ('nuget:' + $key)))
                 if ($declaredFile -or ($licenseType -ceq 'expression' -and $isLicense)) { $licenseIncluded = $true }
             }
+            $overrides = @($catalog.packageLicenseSupplements | Where-Object {
+                $_.id -ceq $package.id -and $_.version -ceq $package.version -and
+                $_.licenseType -ceq $licenseType -and $_.licenseValue -ceq $licenseValue
+            })
+            if ($overrides.Count -gt 1) { throw 'A package has ambiguous reviewed source supplements.' }
             if (-not $licenseIncluded) {
-                $overrides = @($catalog.packageLicenseSupplements | Where-Object {
-                    $_.id -ceq $package.id -and $_.version -ceq $package.version -and
-                    $_.licenseType -ceq $licenseType -and $_.licenseValue -ceq $licenseValue
-                })
                 if ($overrides.Count -ne 1 -or -not $supplements.ContainsKey($overrides[0].document)) {
-                    throw 'A package license requires an exact reviewed source document.'
+                    throw ("Package '{0}' requires an exact reviewed license source document." -f $key)
                 }
                 $packageDocuments.Add($supplements[$overrides[0].document])
+            }
+            if ($overrides.Count -eq 1 -and $overrides[0].Contains('notices')) {
+                $noticeNames = @($overrides[0].notices)
+                if ($noticeNames.Count -lt 1 -or $noticeNames.Count -gt 32) { throw 'A reviewed notice set exceeds its contract.' }
+                $seenNotices = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                foreach ($noticeName in $noticeNames) {
+                    if ($noticeName -isnot [string] -or -not $seenNotices.Add($noticeName) -or
+                        -not $supplements.ContainsKey($noticeName)) { throw 'A reviewed package notice is missing or duplicated.' }
+                    $packageDocuments.Add($supplements[$noticeName])
+                }
             }
             $inventoryPackages.Add([ordered]@{
                 id = $package.id; version = $package.version; nugetContentSha512 = $package.contentHash
