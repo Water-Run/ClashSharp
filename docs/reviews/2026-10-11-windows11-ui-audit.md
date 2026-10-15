@@ -8,7 +8,11 @@
 
 此前用于探测空覆盖值的独立辅助进程失败记录保留：固定运行时拒绝空字符串，返回包装后的 COM 异常。因此自动检测每次从应用实际使用的 UI culture 解析，初次应用失败时恢复为此前目录的有效语言，不向该 API 提交空值，也不把旧覆盖值当作用户设置。打包应用中原生覆盖会持久化，仍作为权威设置的派生值，在启动时重新同步。[Windows App SDK 语言 API](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.windows.globalization.applicationlanguages.primarylanguageoverride?view=windows-app-sdk-1.8)与[应用语言声明规则](https://learn.microsoft.com/en-us/windows/apps/design/globalizing/manage-language-and-region)为接口依据，原生探针为固定版本行为证据。
 
-完整 CI、准确新签名包、打包应用重新启动和已有控件/新弹窗的实图验证仍需接续。命令行资源读取不能证明所有已加载控件的标签或多语言布局即时刷新。
+`7d13320` 的[完整 CI](https://github.com/Water-Run/ClashSharp/actions/runs/38707665890)两项任务成功，四份原始 TRX 共 **6,828 项全部通过**：主程序 4,197、Installer Core 1,109、Installer Windows 1,338、Installer Presentation 184，零失败/跳过。准确内部签名包主程序集为 `F2A8858B307154088B0C33F3503AC54AD3D0B32F6A91DF1326437F81E2F4054E`，MSIX 为 `6C68D13E33BB50CAF5BBA484E2385A30DFCF8DB36EBDA7A698EB90B632E937B6`，包内实际清单的八语言声明已逐项核对，签名、时间戳与载荷审计通过。
+
+后置核对发现首次自包含探针的资源 DLL 与已安装框架摘要不同，不能将其直接视为正式框架 DLL 的行为。随后改为正式框架依赖，在运行进程中核对实际模块路径和 SHA-256 `3D1F52D4B6401B92CE883AE2D900378BE82E37E276D6AFAB9D47D9AABF2A37C4`，生产适配器的八语言与两种自动检测共 10 场景再次通过。两次探针结果分别保留，最终准确边界见 `framework-probe-result.json` 与 `package-language-verification.json`。43 文件、已安装 `ae4ec1b`、服务与代理保持，构建任务及临时 Root/PFX 清理，接续点 `native-language-20261015/checkpoint.json`。
+
+新包尚未安装，打包应用重新启动和已有控件/新弹窗的实图验证仍需接续。命令行资源读取不能证明所有已加载控件的标签或多语言布局即时刷新。
 
 ## 10 月 15 日强调色、开关轮廓与颜色选择器
 
