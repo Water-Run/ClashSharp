@@ -95,6 +95,8 @@ internal sealed class DataGenerationStartupStep(
         lifetime.RegisterParticipant(sampling, order: 200);
         lifetime.RegisterParticipant(new GenerationRuntimeParticipant("profile-subscription-updates", generations,
             runtime => runtime.Subscriptions), order: 300);
+        lifetime.RegisterParticipant(new GenerationRuntimeParticipant("mcp", generations,
+            runtime => runtime.Mcp), order: 50);
         _registered = true;
     }
 

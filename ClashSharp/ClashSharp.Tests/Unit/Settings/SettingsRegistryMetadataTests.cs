@@ -35,6 +35,9 @@ public sealed class SettingsRegistryMetadataTests
 
     private static readonly IReadOnlyList<ExpectedDefinition> ExpectedDefinitions =
     [
+        Mcp("McpServerEnabled", typeof(bool), "false"),
+        Mcp("McpServerPort", typeof(int), "17892"),
+        Mcp("McpAllowedScopes", typeof(int), "1"),
         Internal("DataUnitStyle", typeof(DataUnitStyle), "BinaryWithDecimalLabels", SettingCategory.Regional,
             SettingsResetScope.Basic, SettingApplicationKind.Appearance, "Settings.Basic"),
         Internal("RateUnit", typeof(RateUnit), "Bytes", SettingCategory.Regional,
@@ -331,6 +334,10 @@ public sealed class SettingsRegistryMetadataTests
             isSensitive,
             aliases ?? []);
     }
+
+    private static ExpectedDefinition Mcp(string key, Type valueType, string defaultValue) => new(key, valueType, defaultValue, defaultValue,
+        3, SettingCategory.Agent, SettingsResetScope.McpServer, false, SettingAuthority.ExternallyObserved,
+        SettingApplicationKind.McpServer, SettingApplicationTiming.Live, "Settings.Mcp", false, []);
 
     private static ExpectedDefinition External(
         string key,

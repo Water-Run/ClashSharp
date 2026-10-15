@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using ClashSharp.Agent;
 using ClashSharp.Model;
 
 namespace ClashSharp.Settings;
@@ -19,7 +20,8 @@ public sealed partial class SettingsRegistry
         | SettingsResetScope.ConnectionTests
         | SettingsResetScope.WindowsNative
         | SettingsResetScope.MainlandChina
-        | SettingsResetScope.MasterControl;
+        | SettingsResetScope.MasterControl
+        | SettingsResetScope.McpServer;
 
     private const string DefaultAccentColor = "#FF0078D4";
     private const string DefaultProfileId = "builtin-direct";
@@ -211,6 +213,11 @@ public sealed partial class SettingsRegistry
 
     private static IEnumerable<SettingDefinition> CreateDefaultDefinitions()
     {
+        yield return SettingDefinition.CreateBoolean(Keys.McpServerEnabled, false, false, McpMetadata());
+        yield return SettingDefinition.CreateInteger(Keys.McpServerPort, McpServerConfiguration.DefaultPort,
+            McpServerConfiguration.DefaultPort, 1024, 65535, McpMetadata());
+        yield return SettingDefinition.CreateInteger(Keys.McpAllowedScopes, (int)McpAccessScope.ReadStatus,
+            (int)McpAccessScope.ReadStatus, 0, (int)McpAccessPolicy.KnownScopes, McpMetadata());
         yield return SettingDefinition.CreateEnum(
             Keys.DataUnitStyle, DataUnitStyle.BinaryWithDecimalLabels, DataUnitStyle.BinaryWithDecimalLabels,
             Metadata(SettingCategory.Regional, SettingsResetScope.Basic, SettingAuthority.Internal, SettingApplicationKind.Appearance, "Settings.Basic"));
@@ -460,6 +467,10 @@ public sealed partial class SettingsRegistry
             isSensitive,
             aliases);
     }
+
+    private static SettingDefinitionMetadata McpMetadata() => new(3, SettingCategory.Agent, SettingsResetScope.McpServer,
+        includeInDataPackage: false, SettingAuthority.ExternallyObserved, SettingApplicationKind.McpServer,
+        SettingApplicationTiming.Live, "Settings.Mcp", isSensitive: false);
 
     private static StringNormalizationOutcome NormalizeAccentColor(string input)
     {

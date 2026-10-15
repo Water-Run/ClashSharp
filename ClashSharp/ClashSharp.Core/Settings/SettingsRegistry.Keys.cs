@@ -5,6 +5,15 @@ public sealed partial class SettingsRegistry
     /// <summary>Provides typed stable keys without duplicating persisted key text in consumers.</summary>
     public static class Keys
     {
+        /// <summary>Locally authorized MCP endpoint enablement, excluded from data packages.</summary>
+        public static SettingKey McpServerEnabled { get; } = new("McpServerEnabled");
+
+        /// <summary>Loopback TCP port for native agent connections.</summary>
+        public static SettingKey McpServerPort { get; } = new("McpServerPort");
+
+        /// <summary>Independent local agent grants encoded as validated scope bits.</summary>
+        public static SettingKey McpAllowedScopes { get; } = new("McpAllowedScopes");
+
         /// <summary>Byte quantity scale and unit labels.</summary>
         public static SettingKey DataUnitStyle { get; } = new("DataUnitStyle");
 

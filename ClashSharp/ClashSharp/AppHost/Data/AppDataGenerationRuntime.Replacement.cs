@@ -32,7 +32,8 @@ internal sealed partial class AppDataGenerationRuntime
             await TriggerSettings.Scheduler.StartAsync(cancellationToken).ConfigureAwait(false);
             var context = (SettingsGenerationContext)Repositories.GetService(typeof(SettingsGenerationContext))!;
             SettingApplicationKind[] order = [SettingApplicationKind.Internal, SettingApplicationKind.Appearance,
-                SettingApplicationKind.StartupTask, SettingApplicationKind.Network, SettingApplicationKind.Sampling, SettingApplicationKind.Triggers];
+                SettingApplicationKind.StartupTask, SettingApplicationKind.Network, SettingApplicationKind.Sampling, SettingApplicationKind.Triggers,
+                SettingApplicationKind.McpServer];
             bool restart = false;
             foreach (SettingApplicationKind kind in order)
             {

@@ -8,7 +8,7 @@ namespace ClashSharp.Settings;
 public sealed class SettingsEnvelope
 {
     /// <summary>Gets the current settings-envelope schema version.</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     /// <summary>Initializes an immutable settings envelope with defensive collection snapshots.</summary>
     /// <param name="schemaVersion">Positive document schema version.</param>

@@ -133,6 +133,7 @@ internal static partial class SettingsEnvelopeCodec
             SettingApplicationKind.StartupTask => "startupTask",
             SettingApplicationKind.Sampling => "sampling",
             SettingApplicationKind.Triggers => "triggers",
+            SettingApplicationKind.McpServer => "mcpServer",
             _ => throw new ArgumentOutOfRangeException(nameof(value), value, null),
         };
 
@@ -147,6 +148,7 @@ internal static partial class SettingsEnvelopeCodec
             "startupTask" => SettingApplicationKind.StartupTask,
             "sampling" => SettingApplicationKind.Sampling,
             "triggers" => SettingApplicationKind.Triggers,
+            "mcpServer" => SettingApplicationKind.McpServer,
             _ => throw EnumError(path),
         };
 

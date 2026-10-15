@@ -81,6 +81,11 @@ public sealed class SettingsMigrationPlanner
 
     private static (SettingValue Value, string Code) ReadValue(LegacySettingsSnapshot source, SettingDefinition definition)
     {
+        if (definition.ApplicationKind == SettingApplicationKind.McpServer)
+        {
+            // Agent grants are local consent, never authority inherited from legacy or imported preferences.
+            return (definition.DefaultValue, "settings.migration.local_agent_default");
+        }
         string key = definition.Key.Value;
         bool present = source.TryGetValue(key, out object? raw);
         string code = "settings.migration.canonical";

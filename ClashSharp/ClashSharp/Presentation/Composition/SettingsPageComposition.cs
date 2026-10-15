@@ -20,6 +20,7 @@ namespace ClashSharp.Presentation.Composition;
 internal sealed record SettingsPageDependencies(
     SettingsViewModel ViewModel,
     SettingsRecoveryViewModel Recovery,
+    McpSettingsViewModel Mcp,
     Func<string, string> GetString,
     Action<bool> SetRestartPending,
     Func<string, Color> ParseAccentColor,
@@ -119,6 +120,7 @@ internal static class SettingsPageComposition
         return new SettingsPageDependencies(
             viewModel,
             new SettingsRecoveryViewModel(localization.GetString, context.SettingsApplicationRecovery, errorSink, context.RestartState.RequireRestart),
+            new McpSettingsViewModel(context.McpServer, localization.GetString, errorSink),
             localization.GetString,
             context.RestartState.SetRestartPending,
             AppThemeService.ParseAccentColorOrDefault,

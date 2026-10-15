@@ -20,8 +20,9 @@ public interface IMcpAgentBackend
     /// <returns>Whether the credential remains current.</returns>
     bool IsCurrentIdentity(McpClientIdentity identity);
 
-    /// <summary>Executes one complete request under ordinary admission and a retained data-generation pin.</summary>
-    /// <remarks>Implementations revalidate identity, all required scopes and every argument after admission, before side effects.</remarks>
+    /// <summary>Executes one complete request under mutation admission and a retained data-generation pin.</summary>
+    /// <remarks>Ordinary operations use ordinary admission; settings that drain producers acquire exclusive admission before any command gate.
+    /// Implementations revalidate identity, all required scopes and every argument after admission, before side effects.</remarks>
     /// <param name="identity">Current authenticated identity, rechecked inside admission.</param>
     /// <param name="request">Fixed operation and untrusted detached arguments.</param>
     /// <param name="cancellationToken">Cancels waiting and uncommitted work; committed outcomes remain observable.</param>

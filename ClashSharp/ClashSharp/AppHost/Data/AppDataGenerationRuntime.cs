@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Agent;
 using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Mutations;
 using ClashSharp.ApplicationModel.Network;
@@ -35,6 +36,7 @@ internal sealed partial class AppDataGenerationRuntime(
     ITriggerLifecycleHandoff handoff,
     GenerationPublicationGate publication,
     GenerationExternalStateRecovery recovery,
+    McpSettingsParticipant mcp,
     Guid processEpoch,
     Func<bool> exitRequested)
 {
@@ -57,6 +59,7 @@ internal sealed partial class AppDataGenerationRuntime(
     public ProfileSubscriptionScheduler Subscriptions { get; } = subscriptions;
     public bool IsExecutionPublished => publication.IsPublished;
     public GenerationExternalStateRecovery ExternalState { get; } = recovery;
+    public McpSettingsParticipant Mcp { get; } = mcp;
 
     /// <summary>Applies non-network startup settings while all execution remains held for the startup policy decision.</summary>
     public async Task<StartupStepResult> PrepareStartupAdmittedAsync(MutationAdmissionLease lease, CancellationToken cancellationToken)
@@ -74,7 +77,7 @@ internal sealed partial class AppDataGenerationRuntime(
         if (!prepared.IsSucceeded) { return StartupStepResult.Fatal(prepared.Code ?? "settings.startup.prepare_failed"); }
         SettingsGenerationContext context = (SettingsGenerationContext)Repositories.GetService(typeof(SettingsGenerationContext))!;
         await TriggerSettings.Scheduler.StartAsync(cancellationToken).ConfigureAwait(false);
-        foreach (SettingApplicationKind kind in new[] { SettingApplicationKind.Internal, SettingApplicationKind.Appearance, SettingApplicationKind.StartupTask })
+        foreach (SettingApplicationKind kind in new[] { SettingApplicationKind.Internal, SettingApplicationKind.Appearance, SettingApplicationKind.StartupTask, SettingApplicationKind.McpServer })
         {
             if (exitRequested()) { return StartupStepResult.ExitRequested(); }
             foreach (SettingsApplicationBatch batch in Repositories.Session.Snapshot.PendingApplications.Where(batch => batch.ApplicationKind == kind).ToArray())
@@ -197,7 +200,7 @@ internal sealed partial class AppDataGenerationRuntime(
     }
 
     private static bool CanLeaveStartupFailureForUser(SettingApplicationKind kind) =>
-        kind is SettingApplicationKind.Appearance or SettingApplicationKind.StartupTask or SettingApplicationKind.Network or SettingApplicationKind.Sampling;
+        kind is SettingApplicationKind.Appearance or SettingApplicationKind.StartupTask or SettingApplicationKind.Network or SettingApplicationKind.Sampling or SettingApplicationKind.McpServer;
 
     private static bool HasVerifiedFailedApplication(SettingApplicationKind kind, SettingsApplicationBatch attempted, SettingsAuthorityResult result) =>
         CanLeaveStartupFailureForUser(kind) && result.Status == SettingsAuthorityStatus.ApplicationFailed

@@ -178,6 +178,7 @@
     <Compile Include="..\ClashSharp\Service\ProfileCatalogIds.cs" Link="Service\ProfileCatalogIds.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogMutationCoordinator.cs" Link="Service\ProfileCatalogMutationCoordinator.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.cs" Link="Service\ProfileCatalogService.cs" />
+    <Compile Include="..\ClashSharp\Service\ProfileCatalogService.Agent.cs" Link="Service\ProfileCatalogService.Agent.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.HistoryPreview.cs" Link="Service\ProfileCatalogService.HistoryPreview.cs" />
     <Compile Include="..\ClashSharp\Service\IProfileCatalog.cs" Link="Service\IProfileCatalog.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.Access.cs" Link="Service\ProfileCatalogService.Access.cs" />
@@ -225,6 +226,7 @@
     <Compile Include="..\ClashSharp\ViewModel\IDiagnosticsLog.cs" Link="ViewModel\IDiagnosticsLog.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsDiagnosticStatus.cs" Link="ViewModel\SettingsDiagnosticStatus.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.cs" Link="ViewModel\SettingsViewModel.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\McpSettingsViewModel.cs" Link="ViewModel\McpSettingsViewModel.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.ResetOperation.cs" Link="ViewModel\SettingsViewModel.ResetOperation.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.PreferenceCommands.cs" Link="ViewModel\SettingsViewModel.PreferenceCommands.cs" />
     <Compile Include="..\ClashSharp\ViewModel\SettingsViewModel.Formatting.cs" Link="ViewModel\SettingsViewModel.Formatting.cs" />

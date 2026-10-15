@@ -1,3 +1,4 @@
+using ClashSharp.ApplicationModel.Agent;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Hosting.Compatibility;
@@ -42,7 +43,8 @@ internal sealed record PageCompositionContext(
     SettingsExportCoordinator SettingsExports,
     ISettingsDataReplacement DataReplacement,
     ISettingsRuntimeGroupReset RuntimeGroupReset,
-    ISettingsApplicationRecovery SettingsApplicationRecovery)
+    ISettingsApplicationRecovery SettingsApplicationRecovery,
+    IMcpServerManagement McpServer)
 {
     internal DisplayFormatter CreateDisplayFormatter() => new(Settings.ReadDisplayFormatting);
 }

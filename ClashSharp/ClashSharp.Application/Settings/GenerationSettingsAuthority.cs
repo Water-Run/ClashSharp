@@ -140,7 +140,9 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
     }
 
     private static bool RequiresProducerDrain(IEnumerable<SettingKey> keys) => keys.Any(key =>
-        key == SettingsRegistry.Keys.TriggersEnabled || key == SettingsRegistry.Keys.TriggerNotificationsEnabled);
+        key == SettingsRegistry.Keys.TriggersEnabled || key == SettingsRegistry.Keys.TriggerNotificationsEnabled
+        || key == SettingsRegistry.Keys.McpServerEnabled || key == SettingsRegistry.Keys.McpServerPort
+        || key == SettingsRegistry.Keys.McpAllowedScopes);
 
     private Task<SettingsAuthorityResult> ExecuteOrdinaryAsync(
         Func<SettingsGenerationContext, MutationAdmissionLease, CancellationToken, Task<SettingsAuthorityResult>> command,

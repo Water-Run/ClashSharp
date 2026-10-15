@@ -82,9 +82,11 @@ internal static partial class SettingsEnvelopeCodec
             }
 
             SettingsEnvelope envelope = ReadPayload(payload, registry);
-            SettingsEnvelope upgraded = envelope.SchemaVersion == 1
-                ? UpgradeVersionOne(envelope, registry, contentHash)
-                : envelope;
+            SettingsEnvelope upgraded = envelope.SchemaVersion == 1 ? UpgradeVersionOne(envelope, registry, contentHash) : envelope;
+            if (upgraded.SchemaVersion == 2)
+            {
+                upgraded = UpgradeVersionTwo(upgraded, registry, EncodeCanonical(upgraded).ContentHash);
+            }
             _ = Encode(upgraded, registry);
             EncodedSettingsEnvelope canonical = EncodeCanonical(envelope);
             if (!bytes.Span.SequenceEqual(canonical.Bytes))

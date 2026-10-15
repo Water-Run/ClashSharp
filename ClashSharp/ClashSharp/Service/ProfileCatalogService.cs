@@ -1302,7 +1302,16 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
                     "Profile cannot be rolled back without a recoverable current source baseline.");
         }
 
-        PendingProfileHistory pendingHistory = StageProfileHistory(profile.Id, configurationText);
+        return await CommitProfileContentAsync(profile.Id, profile.Name, profile.SourceName, configurationText,
+            previousConfiguration, isActive, ProfileHistoryApplyOutcome.RollbackApplied, cancellationToken).ConfigureAwait(false);
+    }
+
+    // The caller holds the profile mutation gate and the shared mutation coordinator through compensation.
+    private async Task<ProfileImportResult> CommitProfileContentAsync(string profileId, string profileName, string sourceName,
+        string configurationText, string? previousConfiguration, bool isActive, ProfileHistoryApplyOutcome outcome,
+        CancellationToken cancellationToken)
+    {
+        PendingProfileHistory pendingHistory = StageProfileHistory(profileId, configurationText);
         ProfileImportResult importResult;
         try
         {
@@ -1310,15 +1319,15 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             {
                 ProfileCatalogRuntimeImportResult runtimeResult = await _runtime
                     .ImportAndApplyProfileAsync(
-                        profile.Id,
-                        profile.Name,
+                        profileId,
+                        profileName,
                         configurationText,
                         cancellationToken)
                     .ConfigureAwait(false);
                 if (!runtimeResult.IsApplied)
                 {
                     throw new InvalidOperationException(
-                        "Rollback profile candidate did not become the verified runtime configuration.");
+                        "Profile candidate did not become the verified runtime configuration.");
                 }
 
                 importResult = runtimeResult.Profile;
@@ -1326,7 +1335,7 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             else
             {
                 importResult = await _coreConfiguration
-                    .ImportProfileConfigurationAsync(profile.Id, profile.Name, configurationText, cancellationToken)
+                    .ImportProfileConfigurationAsync(profileId, profileName, configurationText, cancellationToken)
                     .ConfigureAwait(false);
             }
         }
@@ -1341,13 +1350,13 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             lock (_syncLock)
             {
                 ProfileCatalogDocument document = CloneDocument(LoadDocument());
-                UpsertImportedProfile(document, importResult with { ProfileName = profile.Name }, profile.SourceName);
+                UpsertImportedProfile(document, importResult with { ProfileName = profileName }, sourceName);
                 ProfileHistoryCommit historyCommit = FinalizeProfileHistory(
                     document,
                     pendingHistory,
                     importResult,
-                    profile.SourceName,
-                    ProfileHistoryApplyOutcome.RollbackApplied);
+                    sourceName,
+                    outcome);
                 try
                 {
                     SaveDocument(document);
@@ -1364,18 +1373,18 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         catch (Exception catalogFailure) when (!ExceptionGraphClassifier.IsProcessFatal(catalogFailure))
         {
             await CompensateImportedConfigurationAsync(
-                profile.Id,
-                profile.Name,
+                profileId,
+                profileName,
                 previousConfiguration,
                 isActive,
                 catalogFailure,
-                "Profile rollback catalog persistence failed and its previous source could not be restored.")
+                "Profile catalog persistence failed and its previous source could not be restored.")
                 .ConfigureAwait(false);
 
             throw;
         }
 
-        return importResult with { ProfileName = profile.Name };
+        return importResult with { ProfileName = profileName };
     }
 
     /// <summary>Validates a catalog profile and updates its visible status.</summary>

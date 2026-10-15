@@ -28,7 +28,8 @@ public sealed class SettingsMigrationPlannerTests
             Assert.Single(plan.Envelope.PendingApplications.SelectMany(batch => batch.Entries), entry => entry.Key == definition.Key);
         }
 
-        Assert.All(plan.Diagnostics, value => Assert.Equal("settings.migration.default", value.Code));
+        Assert.All(plan.Diagnostics, value => Assert.Equal(SettingsRegistry.Default.Get(value.Key.Value).ApplicationKind == SettingApplicationKind.McpServer
+            ? "settings.migration.local_agent_default" : "settings.migration.default", value.Code));
         Assert.Equal(MigrationId, Assert.Single(plan.Envelope.MigrationHistory).MigrationId);
     }
 

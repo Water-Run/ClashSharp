@@ -29,6 +29,9 @@ public enum SettingCategory
 
     /// <summary>Windows notification behavior.</summary>
     Notifications = 8,
+
+    /// <summary>Local native-agent authorization and endpoint behavior.</summary>
+    Agent = 9,
 }
 
 /// <summary>Classifies how a setting's currently effective value can be established.</summary>
@@ -64,6 +67,9 @@ public enum SettingApplicationKind
 
     /// <summary>Apply through the trigger supervisor participant.</summary>
     Triggers = 5,
+
+    /// <summary>Apply through the generation-owned native MCP server participant.</summary>
+    McpServer = 6,
 }
 
 /// <summary>Classifies when a desired setting can become effective.</summary>

@@ -20,6 +20,7 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace ClashSharp.View;
 
@@ -34,6 +35,7 @@ public sealed partial class Settings : Page
     /// <summary>Owns settings state transitions and persistence.</summary>
     private readonly SettingsViewModel _viewModel;
     private readonly SettingsRecoveryViewModel _recovery;
+    private readonly McpSettingsViewModel _mcp;
     private readonly Func<string, string> _getString;
     private readonly Action<bool> _setRestartPending;
     private readonly Func<string, Windows.UI.Color> _parseAccentColor;
@@ -58,6 +60,7 @@ public sealed partial class Settings : Page
         _viewModel = dependencies.ViewModel
             ?? throw new ArgumentException("A settings view model is required.", nameof(dependencies));
         _recovery = dependencies.Recovery ?? throw new ArgumentException("Settings recovery state is required.", nameof(dependencies));
+        _mcp = dependencies.Mcp ?? throw new ArgumentException("MCP management state is required.", nameof(dependencies));
         _getString = dependencies.GetString
             ?? throw new ArgumentException("A localization function is required.", nameof(dependencies));
         _setRestartPending = dependencies.SetRestartPending
@@ -77,6 +80,7 @@ public sealed partial class Settings : Page
             ?? throw new ArgumentException("A runtime settings subscription is required.", nameof(dependencies));
         InitializeComponent();
         ApplicationRecoveryPanel.DataContext = _recovery;
+        McpPanel.DataContext = _mcp;
         _recovery.Refresh();
         // Bind persisted choices on the first frame, before the asynchronous page queue runs.
         _viewModel.Load();
@@ -144,6 +148,7 @@ public sealed partial class Settings : Page
 
             await _viewModel.RefreshMihomoServiceStatusCommand.ExecuteObservedAsync(null, token);
             await _viewModel.RefreshStartupRestoreFallbackStatusAsync(token);
+            await _mcp.RefreshAsync(token);
         });
     }
 
@@ -174,12 +179,12 @@ public sealed partial class Settings : Page
             return;
         }
 
-        await RunPageOperationAsync(token =>
+        await RunPageOperationAsync(async token =>
         {
             token.ThrowIfCancellationRequested();
             _viewModel.RefreshCommittedRuntimeSettings();
             _recovery.Refresh();
-            return Task.CompletedTask;
+            await _mcp.RefreshObservedAsync(token);
         });
     }
 
@@ -1053,6 +1058,17 @@ public sealed partial class Settings : Page
             await _viewModel.ClearAllDataAsync(cancellationToken);
         });
     }
+
+    private async void McpApply_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.ApplyAsync);
+    private async void McpRefresh_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.RefreshAsync);
+    private async void McpRotate_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.RotateAsync);
+    private async void McpReset_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.ResetAsync);
+    private async void McpCopy_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(token => _mcp.CopyAsync(configuration =>
+    {
+        DataPackage package = new();
+        package.SetText(configuration);
+        Clipboard.SetContent(package);
+    }, token));
 
     /// <summary>Shows a destructive-action confirmation dialog.</summary>
     private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText, CancellationToken cancellationToken)

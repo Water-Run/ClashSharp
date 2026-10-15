@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Agent;
 using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Lifecycle;
 using ClashSharp.ApplicationModel.Mutations;
@@ -9,7 +10,9 @@ using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Supervision;
 using ClashSharp.ApplicationModel.Triggers;
+using ClashSharp.Hosting.Agent;
 using ClashSharp.Hosting.Settings;
+using ClashSharp.Infrastructure.Agent;
 using ClashSharp.Model;
 using ClashSharp.Service;
 using ClashSharp.Settings;
@@ -67,6 +70,11 @@ internal sealed class AppDataGenerationRuntimeComposer(
         TriggerFiredNotificationAdapter fired = new(() => triggerState.NotificationsEnabled, definitions,
             notifications.DeliverTriggerFiredNotificationAsync, notifications.ReportTriggerFiredNotificationFailure);
         ApplicationErrorSink errors = new(repositories.Logs.AppendLog, getString);
+        McpAccessState access = new();
+        AppMcpAgentBackend agent = new(repositories, generations, admission, authority, observer, access, time.GetUtcNow());
+        McpRuntimeController mcpRuntime = new(admission, new McpProtectedCredentialStore(generation), new McpHttpServer(agent, errors), access);
+        McpSettingsParticipant mcp = repositories.OwnProducer(new McpSettingsParticipant(generation, admission, SettingsRegistry.Default, mcpRuntime));
+        repositories.OwnSettingsParticipant(mcp);
         TriggerActionExecutor executor = new(repositories.Triggers, actions, fired,
             new TriggerExecutionLogAdapter(definitions, getString, repositories.Logs.AppendLog, errors));
         TriggerContextProviderAdapter context = new(new SqliteTriggerTrafficContextSource(repositories.Logs.DatabasePath),
@@ -83,7 +91,7 @@ internal sealed class AppDataGenerationRuntimeComposer(
             waitForExecution: publication.WaitAsync));
         repositories.AttachRuntime(new(repositories, admission, generations, sampling, scopedTakeover, triggers, definitions,
             new TriggerActionReconciler(repositories.Triggers, executor, admission), executions, context, network, observer, subscriptions,
-            handoff, publication, recovery, processEpoch, exitRequested));
+            handoff, publication, recovery, mcp, processEpoch, exitRequested));
         return Task.CompletedTask;
     }
 

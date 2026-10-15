@@ -133,7 +133,7 @@ public sealed class SettingsEnvelopeBoundaryTests
             [],
             [
                 new SettingsMigrationRecord(migrationId, 0, 1, hash),
-                new SettingsMigrationRecord(migrationId, 2, 3, hash),
+                new SettingsMigrationRecord(migrationId, 2, SettingsEnvelope.CurrentSchemaVersion + 1, hash),
             ]);
 
         SettingsEnvelopeValidationResult result =

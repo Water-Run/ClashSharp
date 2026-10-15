@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using ClashSharp.ApplicationModel.Agent;
 using ClashSharp.ApplicationModel.Data;
 using ClashSharp.ApplicationModel.Hosting;
 using ClashSharp.ApplicationModel.Lifecycle;
@@ -10,6 +11,7 @@ using ClashSharp.ApplicationModel.Security;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.ApplicationModel.Startup;
 using ClashSharp.ApplicationModel.Triggers;
+using ClashSharp.Hosting.Agent;
 using ClashSharp.Hosting.Compatibility;
 using ClashSharp.Hosting.Data;
 using ClashSharp.Hosting.Settings;
@@ -113,6 +115,7 @@ internal static class ClashSharpAppHostFactory
             services.AddSingleton<ISettingsAuthority>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
             services.AddSingleton<IRuntimeSettingsAuthority>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
             services.AddSingleton<ISettingsRuntimeGroupReset>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
+            services.AddSingleton<IMcpServerManagement, GenerationMcpServerManagement>();
             services.AddSingleton<ISettingsApplicationRecovery>(provider => provider.GetRequiredService<GenerationSettingsAuthority>());
             services.AddSingleton<IControllerCredentialStore, WindowsControllerCredentialStore>();
             services.AddSingleton<ControllerCredentialService>();

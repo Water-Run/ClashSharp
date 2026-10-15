@@ -36,7 +36,7 @@ public sealed partial class ProductionDataGenerationTests
         Assert.Equal(manifest.Descriptor.GenerationId, repositories.Configuration.GetState().DataGenerationId);
         Assert.Equal(manifest.Descriptor.GenerationId, repositories.Configuration.ObserveRuntimeConfigurationIntegrity().DataGenerationId);
         Assert.Equal(["recover", "preferences"], fixture.Calls);
-        Assert.Equal(6, ((SettingsGenerationContext)repositories.GetService(typeof(SettingsGenerationContext))!).Participants.Count);
+        Assert.Equal(7, ((SettingsGenerationContext)repositories.GetService(typeof(SettingsGenerationContext))!).Participants.Count);
         Assert.NotEmpty(repositories.Session.Snapshot.PendingApplications);
         Assert.True(File.Exists(Path.Combine(manifest.Descriptor.RootPath, "ProfileCatalog.json")));
         Assert.StartsWith(manifest.Descriptor.RootPath, repositories.Logs.DatabasePath, StringComparison.OrdinalIgnoreCase);

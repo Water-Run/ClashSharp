@@ -391,6 +391,60 @@
                 </components:SettingRow>
                 <HyperlinkButton x:Name="ResetMainlandChinaSettingsLink" Content="{Binding ResetGroupToDefaultsText}" HorizontalAlignment="Right" Margin="0,0,8,0" Padding="0" Click="ResetMainlandChinaSettingsButton_Click" />
 
+                <ContentControl x:Name="McpPanel" Margin="0,16,0,8" IsEnabled="{Binding IsInputEnabled}" HorizontalContentAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{Binding TitleText}" Style="{ThemeResource SubtitleTextBlockStyle}"
+                                   TextWrapping="Wrap" AutomationProperties.HeadingLevel="Level2" />
+                        <TextBlock Text="{Binding DescriptionText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,0,0,8" />
+                        <components:SettingRow Title="{Binding EnabledText}" Description="{Binding EnabledDescriptionText}">
+                            <components:SettingRow.ActionContent>
+                                <ToggleSwitch x:Name="McpEnabledToggle" IsOn="{Binding Enabled, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                              MinWidth="0" AutomationProperties.Name="{Binding EnabledText}" />
+                            </components:SettingRow.ActionContent>
+                        </components:SettingRow>
+                        <components:SettingRow Title="{Binding PortText}" Description="{Binding PortDescriptionText}">
+                            <components:SettingRow.ActionContent>
+                                <NumberBox x:Name="McpPortBox" Value="{Binding Port, Mode=TwoWay}" Minimum="1024" Maximum="65535"
+                                           SmallChange="1" SpinButtonPlacementMode="Compact" Width="160"
+                                           AutomationProperties.Name="{Binding PortText}" />
+                            </components:SettingRow.ActionContent>
+                        </components:SettingRow>
+                        <components:SettingRow Title="{Binding StatusText}" Description="{Binding Status}">
+                            <components:SettingRow.ActionContent>
+                                <Button Content="{Binding RefreshText}" Click="McpRefresh_Click" />
+                            </components:SettingRow.ActionContent>
+                        </components:SettingRow>
+                        <TextBlock Text="{Binding Endpoint}" IsTextSelectionEnabled="True" TextWrapping="Wrap" Margin="12,0" />
+                        <TextBlock Text="{Binding PermissionsText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+                        <TextBlock Text="{Binding PermissionsDescriptionText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <ItemsControl ItemsSource="{Binding Scopes}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <components:SettingRow Title="{Binding Title}" Description="{Binding Description}" Margin="0,0,0,8">
+                                        <components:SettingRow.ActionContent>
+                                            <ToggleSwitch x:Name="McpScopeToggle" IsOn="{Binding IsGranted, Mode=TwoWay}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                          MinWidth="0" AutomationProperties.Name="{Binding Title}" />
+                                        </components:SettingRow.ActionContent>
+                                    </components:SettingRow>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="{Binding ApplyText}" Click="McpApply_Click" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}" />
+                        <components:SettingRow Title="{Binding ClientText}" Description="{Binding ClientDescriptionText}">
+                            <components:SettingRow.ActionContent>
+                                <Button Content="{Binding CopyText}" Click="McpCopy_Click" IsEnabled="{Binding CanCopy}" />
+                            </components:SettingRow.ActionContent>
+                        </components:SettingRow>
+                        <components:SettingRow Title="{Binding CredentialText}" Description="{Binding CredentialDescriptionText}">
+                            <components:SettingRow.ActionContent>
+                                <Button Content="{Binding RotateText}" Click="McpRotate_Click" />
+                            </components:SettingRow.ActionContent>
+                        </components:SettingRow>
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="12,0" AutomationProperties.LiveSetting="Polite" />
+                        <HyperlinkButton Content="{Binding ResetText}" Click="McpReset_Click" HorizontalAlignment="Right" Padding="0" Margin="0,0,8,0" />
+                        </StackPanel>
+                </ContentControl>
+
                 <TextBlock x:Name="DataSectionTitleText" Text="{Binding DataSectionTitleText}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,8,0,0" />
                 <components:SettingRow x:Name="DataPackageRow" Title="{Binding BackupRestoreTitleText}" Description="{Binding BackupRestoreDescriptionText}">
                     <components:SettingRow.ActionContent>

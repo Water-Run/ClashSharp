@@ -10,6 +10,9 @@ public sealed class SettingsRegistryTests
     private static readonly IReadOnlyDictionary<string, string> ExpectedDefaults =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
+            ["McpServerEnabled"] = "false",
+            ["McpServerPort"] = "17892",
+            ["McpAllowedScopes"] = "1",
             ["DataUnitStyle"] = "BinaryWithDecimalLabels",
             ["RateUnit"] = "Bytes",
             ["ClockFormat"] = "FollowSystem",
@@ -114,6 +117,7 @@ public sealed class SettingsRegistryTests
             .Order(StringComparer.Ordinal)
             .ToArray();
         string[] registeredKeys = SettingsRegistry.Default.Definitions
+            .Where(static definition => definition.ApplicationKind != SettingApplicationKind.McpServer)
             .SelectMany(static definition =>
                 definition.Aliases.Prepend(definition.Key).Select(static key => key.Value))
             .Order(StringComparer.Ordinal)
@@ -131,13 +135,13 @@ public sealed class SettingsRegistryTests
             registry.Definitions,
             definition =>
             {
-                Assert.Equal(1, definition.SchemaVersion);
+                Assert.Equal(definition.ApplicationKind == SettingApplicationKind.McpServer ? 3 : 1, definition.SchemaVersion);
                 Assert.True(Enum.IsDefined(definition.Category));
                 Assert.True(Enum.IsDefined(definition.Authority));
                 Assert.True(Enum.IsDefined(definition.ApplicationKind));
                 Assert.True(Enum.IsDefined(definition.ApplicationTiming));
                 Assert.Equal(SettingApplicationTiming.Live, definition.ApplicationTiming);
-                Assert.True(definition.IncludeInDataPackage);
+                Assert.Equal(definition.ApplicationKind != SettingApplicationKind.McpServer, definition.IncludeInDataPackage);
                 Assert.StartsWith("Settings.", definition.LocalizationCategory, StringComparison.Ordinal);
                 Assert.Equal(definition.ValueType, definition.DefaultValue.ValueType);
                 Assert.Equal(definition.ValueType, definition.SafeFallback.ValueType);
@@ -145,6 +149,9 @@ public sealed class SettingsRegistryTests
 
         Assert.Equal(
             [
+                "McpServerEnabled",
+                "McpServerPort",
+                "McpAllowedScopes",
                 "LaunchAtStartupEnabled",
                 "CurrentMode",
                 "ActiveProfileId",

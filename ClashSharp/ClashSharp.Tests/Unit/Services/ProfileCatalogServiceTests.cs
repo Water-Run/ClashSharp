@@ -12,6 +12,68 @@ namespace ClashSharp.Tests.Unit.Services;
 /// <summary>Unit tests for profile catalog composition.</summary>
 public sealed class ProfileCatalogServiceTests
 {
+    [Fact]
+    public async Task AgentEdit_RequiresExpectedHashAndPreservesVerifiedHistory()
+    {
+        using TempFile file = new();
+        FakeProfileCatalogCoreConfiguration core = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, new(), core);
+        const string original = "proxies: []\nrules: [MATCH,DIRECT]\n";
+        ProfileImportResult created = await catalog.SaveAgentSourceAsync(Guid.NewGuid(), null, "Agent fixture", original, null, () => false, CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => catalog.SaveAgentSourceAsync(Guid.NewGuid(), created.ProfileId,
+            "Updated", "rules: []\n", null, () => false, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => catalog.SaveAgentSourceAsync(Guid.NewGuid(), created.ProfileId,
+            "Updated", "rules: []\n", new string('0', 64), () => false, CancellationToken.None));
+        Assert.Single(core.Imports);
+        await catalog.SaveAgentSourceAsync(Guid.NewGuid(), created.ProfileId, "Updated", "rules: []\n",
+            ProfileCatalogService.AgentSourceHash(original), () => false, CancellationToken.None);
+        Assert.Equal(2, core.Imports.Count);
+        ProfileHistoryEntry[] versions = catalog.GetProfileHistory(created.ProfileId).ToArray();
+        Assert.Equal(2, versions.Length);
+        ProfileHistoryEntry prior = versions.Single(entry => entry.ContentSha256 == ProfileCatalogService.AgentSourceHash(original));
+        Assert.Equal(original, await catalog.ReadAgentSourceAsync(created.ProfileId, prior.VersionId, CancellationToken.None));
+        Assert.Equal("rules: []\n", await catalog.ReadAgentSourceAsync(created.ProfileId, null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AgentEdit_RechecksLivePermissionAfterWaitingForSharedMutationGate()
+    {
+        using TempFile file = new();
+        FakeProfileCatalogSettings settings = new();
+        FakeProfileCatalogCoreConfiguration core = new();
+        MutationAdmissionBarrier admission = new();
+        FairAsyncMutationGate gate = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, settings, core, coordinator: new ProfileCatalogMutationCoordinator(admission, gate));
+        const string original = "rules: []\n";
+        ProfileImportResult created = await catalog.SaveAgentSourceAsync(Guid.NewGuid(), null, "Fixture", original, null, () => false, CancellationToken.None);
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task blocker = gate.ExecuteAsync(Guid.NewGuid(), async (_, _) => { entered.SetResult(); await release.Task; }, CancellationToken.None);
+        await entered.Task;
+        Task<ProfileImportResult> edit = catalog.SaveAgentSourceAsync(Guid.NewGuid(), created.ProfileId, "Edit", "rules: [MATCH,DIRECT]\n",
+            ProfileCatalogService.AgentSourceHash(original), () => false, CancellationToken.None);
+        settings.ActiveProfileId = created.ProfileId;
+        release.SetResult();
+        await blocker;
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => edit);
+        Assert.Single(core.Imports);
+        Assert.Single(catalog.GetProfileHistory(created.ProfileId));
+    }
+
+    [Fact]
+    public async Task AgentRead_RejectsUncataloguedPathAndTamperedHistory()
+    {
+        using TempFile file = new();
+        await using ProfileCatalogService catalog = CreateService(file.Path, new());
+        ProfileImportResult created = await catalog.SaveAgentSourceAsync(Guid.NewGuid(), null, "Fixture", "rules: []\n", null, () => false, CancellationToken.None);
+        ProfileHistoryEntry version = Assert.Single(catalog.GetProfileHistory(created.ProfileId));
+        await Assert.ThrowsAsync<ArgumentException>(() => catalog.ReadAgentSourceAsync("../../outside", null, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => catalog.ReadAgentSourceAsync(created.ProfileId, "../../outside", CancellationToken.None));
+        string retained = Assert.Single(Directory.GetFiles(Path.Combine(Path.GetDirectoryName(file.Path)!, "mihomo", "history"), "*.yaml", SearchOption.AllDirectories));
+        await File.WriteAllTextAsync(retained, "tampered: fixture");
+        await Assert.ThrowsAsync<InvalidDataException>(() => catalog.ReadAgentSourceAsync(created.ProfileId, version.VersionId, CancellationToken.None));
+    }
+
     [Theory]
     [InlineData(AppLanguage.SimplifiedChinese)]
     [InlineData(AppLanguage.TraditionalChinese)]

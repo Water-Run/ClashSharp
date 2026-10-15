@@ -40,6 +40,9 @@ public enum SettingsResetScope
     /// <summary>Master-control presentation settings.</summary>
     MasterControl = 1 << 10,
 
+    /// <summary>Local MCP enablement, endpoint and access grants.</summary>
+    McpServer = 1 << 11,
+
     /// <summary>Every canonical setting, including settings without a group membership.</summary>
     All = 1 << 30,
 }

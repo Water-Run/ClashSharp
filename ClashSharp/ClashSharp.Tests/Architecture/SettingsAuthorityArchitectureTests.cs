@@ -16,7 +16,8 @@ public sealed class SettingsAuthorityArchitectureTests
             .Where(element => element.Attributes().Any(attribute => attribute.Value.Contains("Mode=TwoWay", StringComparison.Ordinal)))
             .Select(element => (string)element.Attribute(xaml + "Name")!)
             .Order(StringComparer.Ordinal).ToArray();
-        string[] expected = ["LaunchAtStartupToggle", "TransparentProxyToggle", "MixedPortBox", "ConnectionSamplingToggle", "ConnectionSamplingIntervalBox"];
+        string[] expected = ["LaunchAtStartupToggle", "TransparentProxyToggle", "MixedPortBox", "ConnectionSamplingToggle", "ConnectionSamplingIntervalBox",
+            "McpEnabledToggle", "McpPortBox", "McpScopeToggle"];
         Assert.Equal(expected.Order(StringComparer.Ordinal), actual);
     }
 
