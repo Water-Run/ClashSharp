@@ -204,10 +204,10 @@ internal static class AppThemeService
         resources["ToggleSwitchFillOnPointerOver"] = hoverBrush;
         resources["ToggleSwitchFillOnPressed"] = pressedBrush;
         resources["ToggleSwitchFillOnDisabled"] = disabledAccentBrush;
-        resources["ToggleSwitchStrokeOn"] = accentBrush;
-        resources["ToggleSwitchStrokeOnPointerOver"] = hoverBrush;
-        resources["ToggleSwitchStrokeOnPressed"] = pressedBrush;
-        resources["ToggleSwitchStrokeOnDisabled"] = disabledAccentBrush;
+        resources["ToggleSwitchStrokeOn"] = accentText;
+        resources["ToggleSwitchStrokeOnPointerOver"] = accentText;
+        resources["ToggleSwitchStrokeOnPressed"] = accentText;
+        resources["ToggleSwitchStrokeOnDisabled"] = Disabled(accentText);
         resources["ToggleSwitchKnobFillOn"] = foreground;
         resources["ToggleSwitchKnobFillOnPointerOver"] = foreground;
         resources["ToggleSwitchKnobFillOnPressed"] = foreground;

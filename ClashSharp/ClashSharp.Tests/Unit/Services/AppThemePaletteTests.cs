@@ -61,7 +61,8 @@ public sealed class AppThemePaletteTests
         AppThemeService.CreateAccentRuntime(resources).Apply(new(AppAccentColorMode.Custom, color));
         foreach (string key in new[] { "AccentTextFillColorPrimaryBrush", "AccentTextFillColorSecondaryBrush",
             "AccentTextFillColorTertiaryBrush", "SystemControlForegroundAccentBrush", "SystemControlHyperlinkTextBrush",
-            "NavigationViewSelectionIndicatorForeground", "ProgressBarForeground", "ProgressRingForegroundThemeBrush" })
+            "NavigationViewSelectionIndicatorForeground", "ProgressBarForeground", "ProgressRingForegroundThemeBrush",
+            "ToggleSwitchStrokeOn", "ToggleSwitchStrokeOnPointerOver", "ToggleSwitchStrokeOnPressed" })
         {
             foreach (bool light in new[] { false, true })
             {

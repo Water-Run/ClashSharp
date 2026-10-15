@@ -1591,7 +1591,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("HorizontalAlignment = HorizontalAlignment.Center", settingsCode, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment = VerticalAlignment.Center", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowRestartRequiredDialogAsync", settingsCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("ScrollViewer pickerScrollViewer", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("VerticalScrollMode = ScrollMode.Enabled", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("AccentColorScrollViewer", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("xamlRoot.Changed -= UpdatePickerViewport", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("MaxHeight = 180", settingsCode, StringComparison.Ordinal);
     }
 

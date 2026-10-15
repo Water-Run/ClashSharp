@@ -503,18 +503,38 @@ public sealed partial class Settings : Page
             };
             pickerPanel.Children.Add(picker);
 
+            XamlRoot xamlRoot = GetDialogXamlRoot();
+            ScrollViewer pickerScroll = new()
+            {
+                Content = pickerPanel,
+                HorizontalScrollMode = ScrollMode.Disabled,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollMode = ScrollMode.Enabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                MaxHeight = Math.Max(160, xamlRoot.Size.Height - 200),
+            };
+            AutomationProperties.SetAutomationId(pickerScroll, "AccentColorScrollViewer");
+            // Keep room for the native title and action row. An unconstrained child measure
+            // lets the picker expose all channels instead of clipping its final input rows.
+            void UpdatePickerViewport(XamlRoot sender, XamlRootChangedEventArgs args) =>
+                pickerScroll.MaxHeight = Math.Max(160, sender.Size.Height - 200);
+
             ThemedContentDialog dialog = new()
             {
                 Title = _viewModel.AppAccentColorTitleText,
-                Content = pickerPanel,
+                Content = pickerScroll,
                 PrimaryButtonText = _viewModel.AppAccentColorPickText,
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = GetDialogXamlRoot(),
+                XamlRoot = xamlRoot,
             };
             dialog.Resources["ContentDialogMaxWidth"] = 420d;
 
-            if (await dialog.ShowManagedAsync(cancellationToken) is not ContentDialogResult.Primary)
+            ContentDialogResult result;
+            xamlRoot.Changed += UpdatePickerViewport;
+            try { result = await dialog.ShowManagedAsync(cancellationToken); }
+            finally { xamlRoot.Changed -= UpdatePickerViewport; }
+            if (result is not ContentDialogResult.Primary)
             {
                 return;
             }
