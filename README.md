@@ -27,6 +27,7 @@ Beyond managing subscriptions, profiles, nodes, and rules, Clash# covers several
 | Area | Description |
 | :--- | :--- |
 | **Interface** | Native WinUI 3 controls, Fluent icons, and Windows 11 materials, with light, dark, and system accent color support. Master Control uses a tile layout; tiles can be shown, hidden, and reordered. |
+| **Native Agent support** | A local MCP server connects Agents to actual status, settings, profiles, diagnostics, and retained history. Each permission is controlled separately; proxy control requires its own grant. |
 | **Startup checks** | Before proxy mode starts, checks for external mihomo processes, occupied ports, a Windows manual proxy, and other TUN/VPN adapters, and offers fixes for items that can be handled safely. |
 | **Proxy restoration** | Restores the system proxy on exit; after an abnormal exit, a recovery process restores it immediately; stale proxy settings are checked and cleared at startup. |
 | **Windows network repair** | Diagnoses proxy access for WSL, terminals, and the Microsoft Store separately, with fixes applied or reverted per item. |
@@ -84,6 +85,15 @@ The local mixed port defaults to `10000` and serves both HTTP and SOCKS. Program
 
 Closing the main window minimizes Clash# to the tray by default, and it keeps running. *Safe exit* in the tray menu is the intended way to quit; on exit, the core stops and the system proxy is restored by default.
 
+### Connect an Agent through MCP
+
+1. Open **Settings › MCP server**, enable the server, and choose the permissions to grant. The server is off by default, with only status reading preselected.
+2. Select **Apply changes** and confirm that the actual state is **Running**. The default Streamable HTTP endpoint is `http://127.0.0.1:17892/mcp`.
+3. Use **Copy client configuration** to supply the endpoint and authorization header to an Agent client that supports Streamable HTTP. The copied configuration contains a private token; Clash# excludes this copy from Windows clipboard history and cloud synchronization.
+4. Keep Clash# running while the Agent uses it. Closing the MCP server disconnects clients; replacing its token requires copying the configuration again.
+
+Configuration editing does not grant proxy control. Turning on **Control proxy state** also allows changes that can interrupt an Agent's network access. Historical summaries, historical details, and sensitive configuration have separate grants; the Agent cannot change its own permissions. See the [MCP design and verification record](./docs/design/2026-10-15-native-agent-mcp.md) for the implemented tool boundaries.
+
 ### Pages
 
 | Page | Purpose |
@@ -93,7 +103,7 @@ Closing the main window minimizes Clash# to the tray by default, and it keeps ru
 | **Triggers** | Automation tasks, evaluated from top to bottom. |
 | **Connections** | Active connections with their process, matched rule, and proxy route. |
 | **Statistics** | Long-term totals by profile, node, and time; system logs are also reached from here. |
-| **Settings** | Language and appearance, startup, proxy, native Windows repair, notifications, tray, and data backup. |
+| **Settings** | Language and appearance, startup, proxy, native Windows repair, MCP server and permissions, notifications, tray, and data backup. |
 
 ## FAQ
 
