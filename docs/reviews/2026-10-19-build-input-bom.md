@@ -19,4 +19,12 @@
 - 27 个规范 PowerShell 输入在 Windows PowerShell 5.1 与 PowerShell 7.6.7 下解析通过。Git 文件发现入口不适用于无 `.git` 的归档目录，该次发现失败日志保留，随后按规范输入清单解析相同受控源文件。
 - 真实依赖生成的 BOM 通过完整离线 CycloneDX Schema，80 个组件，BOM SHA-256 为 `ca52a5b25adaece5839683a225990e2ee1c0c59ca70c6190d7f9471ffbc5a370`。
 
-本机没有运行产品构建或测试。当前安装仍为 `1df1fe4`，原用户数据与代理未参与本轮构建输入测试。最终候选构建、MSIX 嵌入、载荷摘要与准确提交 CI 继续核对；全局 TUN、DNS 和 Windows 11 平台验收仍单独保留，不由 BOM 或构建成功代替。
+## 最终容器与准确 CI
+
+实现 `a863d0f` 的[完整 CI](https://github.com/Water-Run/ClashSharp/actions/runs/39266188145)两项作业成功，四份原始 TRX 在服务器核对 **7,066 项全部通过、零失败/跳过**。构建输入及三个标准 Schema 绑定 Git 归档；实际说明包在 `en-US`、`zh-CN`、`tr-TR`、`sv-SE` 和 `fa-IR` 下均重建相同 BOM 摘要。
+
+内部签名候选的主程序集为 `DCB2CA0ECB75975CEC69DB9D7826475D8D5177BE044D1A43073C103ABFCB2D5A`，MSIX 为 `4F4AFD1F21CF3726B0111855C76DF1BFA1AB5FFD14A19A7217470F9C6E798935`，安装器为 `66C1D27EE8D62166AAC4AF6D695CDECC8FF4C22B63914CC86B9D2885FBD23190`。签名、时间戳与载荷审计通过；最终 MSIX 内通知副本、外置同份 ZIP 及 `payload-provenance.json` 的清单摘要/80 组件记录逐项一致。最终包内 BOM 再次通过完整离线 Schema。
+
+临时 Root/PFX 已清理，证书多重集保持；原 45 文件及备份、原安装和服务 PID 7140、原代理保持，构建任务归档移除。43 项证据归档下载后逐项核对，SHA-256 为 `F32F0F2A39EF316FD82EE8CC6BDAC6703CBC638F37ACE5B12334A41E4E18263D`，接续点 `build-input-bom-20261019/checkpoint.json`。
+
+本机没有运行产品构建或测试。此次修改是构建输出与验收合同，已验证最终容器，未重复安装或执行未变的界面流程；服务器安装仍为 `1df1fe4`。新候选仅用于内部验收，没有发布正式版本。全局 TUN、DNS 和 Windows 11 平台验收仍单独保留，不由 BOM 或构建成功代替。
