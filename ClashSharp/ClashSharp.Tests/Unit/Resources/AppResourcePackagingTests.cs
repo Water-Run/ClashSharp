@@ -2971,7 +2971,17 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("HorizontalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("VerticalAlignment=\"Center\"", guideXaml, StringComparison.Ordinal);
         Assert.Contains("GuideContent.Width = Math.Clamp(root.Size.Width - 96, 240, 640)", guideCode, StringComparison.Ordinal);
-        Assert.Contains("ChecksScroll.MaxHeight = Math.Clamp(root.Size.Height - 352, 100, 400)", guideCode, StringComparison.Ordinal);
+        // Let native measurement reserve the actual scaled header/title/footer, rather than
+        // estimating their height from the window. The remaining row must constrain scrolling.
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement guide = XDocument.Parse(guideXaml).Descendants(presentation + "Grid")
+            .Single(element => (string?)element.Attribute(xaml + "Name") == "GuideContent");
+        Assert.Equal(new[] { "Auto", "*" }, guide.Element(presentation + "Grid.RowDefinitions")!
+            .Elements().Select(row => (string?)row.Attribute("Height")));
+        XElement checks = Assert.Single(guide.Elements(presentation + "ScrollViewer"));
+        Assert.Equal("1", (string?)checks.Attribute("Grid.Row"));
+        Assert.Equal("Auto", (string?)checks.Attribute("VerticalScrollBarVisibility"));
         Assert.Contains("_layoutRoot.Changed += OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.Contains("_layoutRoot.Changed -= OnRootChanged", guideCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"520\"", guideXaml, StringComparison.Ordinal);

@@ -14,23 +14,29 @@
         <x:Double x:Key="ContentDialogMaxWidth">688</x:Double>
     </ContentDialog.Resources>
 
-    <StackPanel x:Name="GuideContent" Width="640" Spacing="16">
-        <TextBlock x:Name="GuideDescriptionText" TextWrapping="WrapWholeWords" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-        <Grid ColumnSpacing="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <InfoBar x:Name="SummaryBar" IsOpen="True" IsClosable="False" Severity="Informational"
-                     Background="Transparent" BorderThickness="0" Padding="0" />
-            <HyperlinkButton x:Name="RefreshButton" Grid.Column="1" Padding="8,4" VerticalAlignment="Center" />
-        </Grid>
-        <StackPanel x:Name="BusyPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
-            <ProgressRing x:Name="RefreshProgress" Width="16" Height="16" MinWidth="0" MinHeight="0" IsActive="False" />
-            <TextBlock x:Name="BusyText" VerticalAlignment="Center" Style="{ThemeResource CaptionTextBlockStyle}" />
+    <Grid x:Name="GuideContent" Width="640" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="16">
+            <TextBlock x:Name="GuideDescriptionText" TextWrapping="WrapWholeWords" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <InfoBar x:Name="SummaryBar" IsOpen="True" IsClosable="False" Severity="Informational"
+                         Background="Transparent" BorderThickness="0" Padding="0" />
+                <HyperlinkButton x:Name="RefreshButton" Grid.Column="1" Padding="8,4" VerticalAlignment="Center" />
+            </Grid>
+            <StackPanel x:Name="BusyPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                <ProgressRing x:Name="RefreshProgress" Width="16" Height="16" MinWidth="0" MinHeight="0" IsActive="False" />
+                <TextBlock x:Name="BusyText" VerticalAlignment="Center" Style="{ThemeResource CaptionTextBlockStyle}" />
+            </StackPanel>
+            <InfoBar x:Name="RefreshError" IsOpen="False" IsClosable="False" Severity="Error" Visibility="Collapsed" />
         </StackPanel>
-        <InfoBar x:Name="RefreshError" IsOpen="False" IsClosable="False" Severity="Error" Visibility="Collapsed" />
-        <ScrollViewer x:Name="ChecksScroll" Background="Transparent" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer x:Name="ChecksScroll" Grid.Row="1" MaxHeight="400" Background="Transparent" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
                       HorizontalContentAlignment="Stretch" Padding="0,0,12,0">
             <ItemsControl x:Name="ChecksList" Width="612" HorizontalAlignment="Left" HorizontalContentAlignment="Stretch">
@@ -71,5 +77,5 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
-    </StackPanel>
+    </Grid>
 </ContentDialog>
