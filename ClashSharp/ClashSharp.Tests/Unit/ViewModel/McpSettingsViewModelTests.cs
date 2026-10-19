@@ -73,6 +73,8 @@ public sealed class McpSettingsViewModelTests
         await viewModel.CopyAsync(_ => false, CancellationToken.None);
 
         Assert.True(viewModel.HasError);
+        Assert.True(viewModel.HasMessage);
+        Assert.Equal(PageStatusSeverity.Error, viewModel.MessageSeverity);
         Assert.Equal("Settings.Mcp.CopyFailed", viewModel.Message);
         Assert.True(viewModel.IsInputEnabled);
         Assert.False(viewModel.Enabled);
@@ -85,6 +87,8 @@ public sealed class McpSettingsViewModelTests
         await viewModel.CopyAsync(_ => true, CancellationToken.None);
 
         Assert.False(viewModel.HasError);
+        Assert.True(viewModel.HasMessage);
+        Assert.Equal(PageStatusSeverity.Success, viewModel.MessageSeverity);
         Assert.Equal("Settings.Mcp.Copied", viewModel.Message);
         Assert.False(viewModel.Enabled);
         Assert.Equal(17901, viewModel.Port);
@@ -114,6 +118,137 @@ public sealed class McpSettingsViewModelTests
     }
 
     [Fact]
+    public async Task BackgroundObservationPreservesFeedbackAndUnappliedDraft()
+    {
+        Management service = new();
+        string language = "en";
+        McpSettingsViewModel viewModel = new(service, key => language + ":" + key, new Errors());
+        await viewModel.CopyAsync(_ => false, CancellationToken.None);
+        viewModel.Enabled = true;
+        viewModel.Port = 17901;
+        List<string?> changes = [];
+        viewModel.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+        language = "fr";
+
+        await viewModel.RefreshObservedAsync(CancellationToken.None);
+
+        Assert.Equal("fr:Settings.Mcp.CopyFailed", viewModel.Message);
+        Assert.True(viewModel.HasError);
+        Assert.True(viewModel.HasMessage);
+        Assert.Equal(PageStatusSeverity.Error, viewModel.MessageSeverity);
+        Assert.Contains(nameof(McpSettingsViewModel.Message), changes);
+        Assert.True(viewModel.Enabled);
+        Assert.Equal(17901, viewModel.Port);
+        Assert.Equal(0, service.Applies);
+        Assert.Equal(1, service.Copies);
+    }
+
+    [Fact]
+    public async Task DismissedFeedbackStaysClosedDuringObservationAndReopensOnRetry()
+    {
+        Management service = new();
+        McpSettingsViewModel viewModel = new(service, key => key, new Errors());
+        await viewModel.CopyAsync(_ => true, CancellationToken.None);
+        viewModel.Enabled = true;
+        viewModel.Port = 17901;
+
+        viewModel.DismissMessage();
+        await viewModel.RefreshObservedAsync(CancellationToken.None);
+
+        Assert.False(viewModel.HasMessage);
+        Assert.False(viewModel.HasError);
+        Assert.Empty(viewModel.Message);
+        Assert.Equal(PageStatusSeverity.Informational, viewModel.MessageSeverity);
+        Assert.True(viewModel.Enabled);
+        Assert.Equal(17901, viewModel.Port);
+        Assert.Equal(0, service.Applies);
+
+        await viewModel.CopyAsync(_ => false, CancellationToken.None);
+
+        Assert.True(viewModel.HasMessage);
+        Assert.True(viewModel.HasError);
+        Assert.Equal(PageStatusSeverity.Error, viewModel.MessageSeverity);
+        Assert.Equal("Settings.Mcp.CopyFailed", viewModel.Message);
+        Assert.Equal(0, service.Applies);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task BackgroundFailurePreservesDraftAndReplacesEarlierSuccessWithSanitizedError(int failures)
+    {
+        Management service = new();
+        Errors errors = new();
+        McpSettingsViewModel viewModel = new(service, key => key, errors);
+        await viewModel.CopyAsync(_ => true, CancellationToken.None);
+        viewModel.Enabled = true;
+        viewModel.Port = 17901;
+        service.ReadFailuresRemaining = failures;
+
+        await viewModel.RefreshObservedAsync(CancellationToken.None);
+
+        Assert.True(viewModel.HasMessage);
+        Assert.True(viewModel.HasError);
+        Assert.False(viewModel.CanCopy);
+        Assert.True(viewModel.Enabled);
+        Assert.Equal(17901, viewModel.Port);
+        Assert.Equal(failures == 1 ? "Settings.Mcp.Disabled" : "Settings.Mcp.Unknown", viewModel.Status);
+        Assert.Equal(0, service.Applies);
+        Assert.Equal(PageStatusSeverity.Error, viewModel.MessageSeverity);
+        Assert.Equal("Settings.Mcp.Failed", viewModel.Message);
+        Assert.DoesNotContain("private-fixture", viewModel.Message + Assert.Single(errors.Values).Exception, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExplicitStatusRefreshPreservesDraftAndHidesPreviousFeedbackWhilePending()
+    {
+        Management service = new();
+        McpSettingsViewModel viewModel = new(service, key => key, new Errors());
+        await viewModel.CopyAsync(_ => false, CancellationToken.None);
+        viewModel.Enabled = true;
+        viewModel.Port = 17901;
+        TaskCompletionSource<McpSettingsSnapshot> pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.PendingRead = pending;
+
+        Task refresh = viewModel.RefreshStatusAsync(CancellationToken.None);
+
+        Assert.False(viewModel.IsInputEnabled);
+        Assert.False(viewModel.HasMessage);
+        Assert.False(viewModel.HasError);
+        Assert.Equal(PageStatusSeverity.Informational, viewModel.MessageSeverity);
+
+        pending.SetResult(service.Snapshot);
+        await refresh;
+
+        Assert.True(viewModel.IsInputEnabled);
+        Assert.False(viewModel.HasMessage);
+        Assert.Empty(viewModel.Message);
+        Assert.True(viewModel.Enabled);
+        Assert.Equal(17901, viewModel.Port);
+        Assert.Equal(0, service.Applies);
+    }
+
+    [Fact]
+    public async Task FailedConfigurationReadPreservesDraftWithoutInvokingClipboard()
+    {
+        Management service = new() { FailClientRead = true };
+        Errors errors = new();
+        McpSettingsViewModel viewModel = new(service, key => key, errors) { Enabled = true, Port = 17901 };
+        bool copied = false;
+
+        await viewModel.CopyAsync(_ => { copied = true; return true; }, CancellationToken.None);
+
+        Assert.False(copied);
+        Assert.True(viewModel.Enabled);
+        Assert.Equal(17901, viewModel.Port);
+        Assert.Equal(0, service.Applies);
+        Assert.True(viewModel.HasMessage);
+        Assert.Equal(PageStatusSeverity.Error, viewModel.MessageSeverity);
+        Assert.Equal("Settings.Mcp.Failed", viewModel.Message);
+        Assert.DoesNotContain("private-fixture", viewModel.Message + Assert.Single(errors.Values).Exception, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FailureRefreshesActualStateWithoutExposingExceptionContent()
     {
         Management service = new() { FailApply = true };
@@ -130,9 +265,16 @@ public sealed class McpSettingsViewModelTests
         public int Applies { get; private set; }
         public int Copies { get; private set; }
         public bool FailApply { get; set; }
+        public int ReadFailuresRemaining { get; set; }
+        public bool FailClientRead { get; init; }
+        public TaskCompletionSource<McpSettingsSnapshot>? PendingRead { get; set; }
         public CancellationTokenSource? CancelClientRead { get; init; }
         public McpSettingsSnapshot Snapshot { get; set; } = new(new(17892, McpAccessPolicy.Default), new(new(17892, McpAccessPolicy.Default), null, false, false, null));
-        public Task<McpSettingsSnapshot> ReadAsync(CancellationToken cancellationToken) => Task.FromResult(Snapshot);
+        public Task<McpSettingsSnapshot> ReadAsync(CancellationToken cancellationToken)
+        {
+            if (ReadFailuresRemaining > 0) { ReadFailuresRemaining--; throw new IOException("private-fixture"); }
+            return PendingRead?.Task ?? Task.FromResult(Snapshot);
+        }
         public Task<McpSettingsSnapshot> ApplyAsync(McpServerConfiguration configuration, CancellationToken cancellationToken)
         {
             Applies++;
@@ -143,6 +285,7 @@ public sealed class McpSettingsViewModelTests
         public Task<string> GetClientConfigurationAsync(CancellationToken cancellationToken)
         {
             Copies++;
+            if (FailClientRead) { throw new IOException("private-fixture"); }
             CancelClientRead?.Cancel();
             return Task.FromResult("private-fixture");
         }

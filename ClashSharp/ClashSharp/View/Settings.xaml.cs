@@ -81,6 +81,7 @@ public sealed partial class Settings : Page
         InitializeComponent();
         ApplicationRecoveryPanel.DataContext = _recovery;
         McpPanel.DataContext = _mcp;
+        McpFeedbackHost.DataContext = _mcp;
         _recovery.Refresh();
         // Bind persisted choices on the first frame, before the asynchronous page queue runs.
         _viewModel.Load();
@@ -1060,11 +1061,14 @@ public sealed partial class Settings : Page
     }
 
     private async void McpApply_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.ApplyAsync);
-    private async void McpRefresh_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.RefreshAsync);
+    private async void McpRefresh_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.RefreshStatusAsync);
     private async void McpRotate_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.RotateAsync);
     private async void McpReset_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.ResetAsync);
     private async void McpCopy_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(token =>
         _mcp.CopyAsync(McpClientClipboard.TryCopy, token));
+
+    /// <summary>Dismisses only the result banner; the MCP draft and runtime are unchanged.</summary>
+    private void McpFeedbackBar_CloseButtonClick(InfoBar sender, object args) => _mcp.DismissMessage();
 
     /// <summary>Shows a destructive-action confirmation dialog.</summary>
     private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText, CancellationToken cancellationToken)

@@ -16,7 +16,7 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
     private bool _enabled;
     private double _port = McpServerConfiguration.DefaultPort;
     private bool _busy;
-    private string _message = string.Empty;
+    private string _messageKey = string.Empty;
     private bool _hasError;
     private McpRuntimeSnapshot? _runtime;
 
@@ -46,62 +46,82 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
     public bool IsInputEnabled => !_busy;
     public bool CanCopy => !_busy && _runtime is { BoundEndpoint: not null, HasCredential: true, IsSuspended: false };
     public bool HasError => _hasError;
-    public string Message => _message;
+    public bool HasMessage => _messageKey.Length > 0;
+    public string Message => HasMessage ? Text(_messageKey) : string.Empty;
+    public PageStatusSeverity MessageSeverity => !HasMessage ? PageStatusSeverity.Informational
+        : _hasError ? PageStatusSeverity.Error : PageStatusSeverity.Success;
     public string Status => Text(_runtime is null ? "Unknown" : _runtime.IsSuspended ? "Paused"
         : _runtime.BoundEndpoint is not null ? "Running" : _runtime.ErrorCode is not null || _runtime.Configuration.Access.Enabled ? "Unavailable" : "Disabled");
     public string Endpoint => _runtime?.BoundEndpoint?.AbsoluteUri ?? string.Empty;
 
-    public Task RefreshAsync(CancellationToken cancellationToken) => RunAsync(async () =>
+    public Task RefreshAsync(CancellationToken cancellationToken) => RunActionAsync(async () =>
         Load(await management.ReadAsync(cancellationToken), loadDraft: true), cancellationToken);
 
     public Task RefreshObservedAsync(CancellationToken cancellationToken) => RunAsync(async () =>
-        Load(await management.ReadAsync(cancellationToken), loadDraft: false), cancellationToken);
+        Load(await management.ReadAsync(cancellationToken), loadDraft: false), loadDraftOnFailure: false, cancellationToken);
 
-    public Task ApplyAsync(CancellationToken cancellationToken) => RunAsync(async () =>
+    /// <summary>Refreshes the status row without replacing unsaved settings or grants.</summary>
+    public Task RefreshStatusAsync(CancellationToken cancellationToken) => RunActionAsync(async () =>
+        Load(await management.ReadAsync(cancellationToken), loadDraft: false), loadDraftOnFailure: false, cancellationToken);
+
+    public Task ApplyAsync(CancellationToken cancellationToken) => RunActionAsync(async () =>
     {
         if (!double.IsFinite(Port) || Port != Math.Truncate(Port) || Port is < 1024 or > 65535)
         {
-            SetMessage(Text("InvalidPort"), true);
+            SetMessage("InvalidPort", true);
             return;
         }
         McpAccessScope scopes = Scopes.Where(choice => choice.IsGranted).Aggregate(McpAccessScope.None, (combined, choice) => combined | choice.Scope);
         Load(await management.ApplyAsync(new((int)Port, new(Enabled, scopes)), cancellationToken), loadDraft: true);
-        SetMessage(Text("Applied"), false);
+        SetMessage("Applied", false);
     }, cancellationToken);
 
-    public Task ResetAsync(CancellationToken cancellationToken) => RunAsync(async () =>
+    public Task ResetAsync(CancellationToken cancellationToken) => RunActionAsync(async () =>
     {
         Load(await management.ApplyAsync(new(McpServerConfiguration.DefaultPort, McpAccessPolicy.Default), cancellationToken), loadDraft: true);
-        SetMessage(Text("Applied"), false);
+        SetMessage("Applied", false);
     }, cancellationToken);
 
-    public Task RotateAsync(CancellationToken cancellationToken) => RunAsync(async () =>
+    public Task RotateAsync(CancellationToken cancellationToken) => RunActionAsync(async () =>
     {
         Load(await management.RotateCredentialAsync(cancellationToken), loadDraft: true);
-        SetMessage(Text("Rotated"), false);
+        SetMessage("Rotated", false);
     }, cancellationToken);
 
-    public Task CopyAsync(Func<string, bool> copyToClipboard, CancellationToken cancellationToken) => RunAsync(async () =>
+    public Task CopyAsync(Func<string, bool> copyToClipboard, CancellationToken cancellationToken) => RunActionAsync(async () =>
     {
         ArgumentNullException.ThrowIfNull(copyToClipboard);
         string configuration = await management.GetClientConfigurationAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         bool copied = copyToClipboard(configuration);
-        SetMessage(Text(copied ? "Copied" : "CopyFailed"), !copied);
-    }, cancellationToken);
+        SetMessage(copied ? "Copied" : "CopyFailed", !copied);
+    }, loadDraftOnFailure: false, cancellationToken);
 
-    private async Task RunAsync(Func<Task> operation, CancellationToken cancellationToken)
+    /// <summary>Dismisses feedback without modifying the permission draft or observed runtime.</summary>
+    public void DismissMessage() => SetMessage(string.Empty, false);
+
+    // Only explicit user actions replace earlier feedback. Background observations refresh
+    // runtime state and localization while leaving the current result available to the user.
+    private Task RunActionAsync(Func<Task> operation, CancellationToken cancellationToken) =>
+        RunActionAsync(operation, loadDraftOnFailure: true, cancellationToken);
+
+    private Task RunActionAsync(Func<Task> operation, bool loadDraftOnFailure, CancellationToken cancellationToken) => RunAsync(async () =>
+    {
+        SetMessage(string.Empty, false);
+        await operation();
+    }, loadDraftOnFailure, cancellationToken);
+
+    private async Task RunAsync(Func<Task> operation, bool loadDraftOnFailure, CancellationToken cancellationToken)
     {
         if (_busy) { return; }
         SetBusy(true);
-        SetMessage(string.Empty, false);
         try { await operation(); }
         catch (Exception failure) when (ExceptionGraphClassifier.IsRecoverable(failure)
             && !ExceptionGraphClassifier.IsCallerCancellation(failure, cancellationToken))
         {
-            SetMessage(Text("Failed"), true);
+            SetMessage("Failed", true);
             await errors.ReportAsync(new("Mcp.Settings", new InvalidOperationException("MCP management failed: " + failure.GetType().Name)), CancellationToken.None);
-            try { Load(await management.ReadAsync(cancellationToken), loadDraft: true); }
+            try { Load(await management.ReadAsync(cancellationToken), loadDraft: loadDraftOnFailure); }
             catch (Exception refreshFailure) when (ExceptionGraphClassifier.IsRecoverable(refreshFailure)
                 && !ExceptionGraphClassifier.IsCallerCancellation(refreshFailure, cancellationToken))
             {
@@ -124,7 +144,7 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
         foreach (string property in new[] { nameof(TitleText), nameof(DescriptionText), nameof(EnabledText), nameof(EnabledDescriptionText),
             nameof(PortText), nameof(PortDescriptionText), nameof(StatusText), nameof(RefreshText), nameof(PermissionsText), nameof(PermissionsDescriptionText),
             nameof(ApplyText), nameof(ClientText), nameof(ClientDescriptionText), nameof(CopyText), nameof(CredentialText), nameof(CredentialDescriptionText),
-            nameof(RotateText), nameof(ResetText) }) { OnPropertyChanged(property); }
+            nameof(RotateText), nameof(ResetText), nameof(Message) }) { OnPropertyChanged(property); }
         foreach (McpScopeChoice choice in Scopes) { choice.RefreshLabels(); }
         NotifyRuntime();
     }
@@ -140,10 +160,11 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
         OnPropertyChanged(nameof(IsInputEnabled)); OnPropertyChanged(nameof(CanCopy));
     }
 
-    private void SetMessage(string message, bool hasError)
+    private void SetMessage(string key, bool hasError)
     {
-        _message = message; _hasError = hasError;
+        _messageKey = key; _hasError = hasError;
         OnPropertyChanged(nameof(Message)); OnPropertyChanged(nameof(HasError));
+        OnPropertyChanged(nameof(MessageSeverity)); OnPropertyChanged(nameof(HasMessage));
     }
 }
 
