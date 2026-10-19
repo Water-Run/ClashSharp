@@ -47,6 +47,15 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
     public bool CanCopy => !_busy && _runtime is { BoundEndpoint: not null, HasCredential: true, IsSuspended: false };
     public bool HasError => _hasError;
     public bool HasMessage => _messageKey.Length > 0;
+    /// <summary>Synchronizes the native close state without allowing an empty result to open.</summary>
+    public bool IsMessageOpen
+    {
+        get => HasMessage;
+        set
+        {
+            if (!value && HasMessage) { DismissMessage(); }
+        }
+    }
     public string Message => HasMessage ? Text(_messageKey) : string.Empty;
     public PageStatusSeverity MessageSeverity => !HasMessage ? PageStatusSeverity.Informational
         : _hasError ? PageStatusSeverity.Error : PageStatusSeverity.Success;
@@ -165,6 +174,7 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
         _messageKey = key; _hasError = hasError;
         OnPropertyChanged(nameof(Message)); OnPropertyChanged(nameof(HasError));
         OnPropertyChanged(nameof(MessageSeverity)); OnPropertyChanged(nameof(HasMessage));
+        OnPropertyChanged(nameof(IsMessageOpen));
     }
 }
 

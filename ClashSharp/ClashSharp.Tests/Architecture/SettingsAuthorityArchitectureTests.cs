@@ -8,11 +8,19 @@ namespace ClashSharp.Tests.Architecture;
 public sealed class SettingsAuthorityArchitectureTests
 {
     [Fact]
-    public void SettingsPage_OnlyStagedRuntimeChoicesUseTwoWayBindings()
+    public void SettingsPage_RuntimeChoicesStayStagedAndFeedbackCloseUsesOnlyTransientState()
     {
         XDocument page = XDocument.Parse(ReadApplicationSource("View/Settings.xaml"));
         XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement feedback = Assert.Single(page.Descendants(),
+            element => (string?)element.Attribute(xaml + "Name") == "McpFeedbackBar");
+        Assert.Equal(page.Root!.Name.Namespace + "InfoBar", feedback.Name);
+        XAttribute closeBinding = Assert.Single(feedback.Attributes(),
+            attribute => attribute.Value.Contains("Mode=TwoWay", StringComparison.Ordinal));
+        Assert.Equal("IsOpen", closeBinding.Name.LocalName);
+        Assert.Equal("{Binding IsMessageOpen, Mode=TwoWay}", closeBinding.Value);
         string[] actual = page.Descendants()
+            .Where(element => element != feedback)
             .Where(element => element.Attributes().Any(attribute => attribute.Value.Contains("Mode=TwoWay", StringComparison.Ordinal)))
             .Select(element => (string)element.Attribute(xaml + "Name")!)
             .Order(StringComparer.Ordinal).ToArray();

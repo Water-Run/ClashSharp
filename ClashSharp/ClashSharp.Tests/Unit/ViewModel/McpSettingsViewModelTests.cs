@@ -152,10 +152,11 @@ public sealed class McpSettingsViewModelTests
         viewModel.Enabled = true;
         viewModel.Port = 17901;
 
-        viewModel.DismissMessage();
+        viewModel.IsMessageOpen = false;
         await viewModel.RefreshObservedAsync(CancellationToken.None);
 
         Assert.False(viewModel.HasMessage);
+        Assert.False(viewModel.IsMessageOpen);
         Assert.False(viewModel.HasError);
         Assert.Empty(viewModel.Message);
         Assert.Equal(PageStatusSeverity.Informational, viewModel.MessageSeverity);
@@ -166,10 +167,27 @@ public sealed class McpSettingsViewModelTests
         await viewModel.CopyAsync(_ => false, CancellationToken.None);
 
         Assert.True(viewModel.HasMessage);
+        Assert.True(viewModel.IsMessageOpen);
         Assert.True(viewModel.HasError);
         Assert.Equal(PageStatusSeverity.Error, viewModel.MessageSeverity);
         Assert.Equal("Settings.Mcp.CopyFailed", viewModel.Message);
         Assert.Equal(0, service.Applies);
+    }
+
+    [Fact]
+    public void EmptyFeedbackCannotBeOpenedByTheView()
+    {
+        Management service = new();
+        McpSettingsViewModel viewModel = new(service, key => key, new Errors());
+
+        viewModel.IsMessageOpen = true;
+        viewModel.IsMessageOpen = false;
+
+        Assert.False(viewModel.IsMessageOpen);
+        Assert.False(viewModel.HasMessage);
+        Assert.Empty(viewModel.Message);
+        Assert.Equal(0, service.Applies);
+        Assert.Equal(0, service.Copies);
     }
 
     [Theory]
