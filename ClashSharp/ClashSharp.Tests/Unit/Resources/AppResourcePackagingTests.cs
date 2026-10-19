@@ -2977,8 +2977,9 @@ public sealed class AppResourcePackagingTests
         XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
         XElement guide = XDocument.Parse(guideXaml).Descendants(presentation + "Grid")
             .Single(element => (string?)element.Attribute(xaml + "Name") == "GuideContent");
-        Assert.Equal(new[] { "Auto", "*" }, guide.Element(presentation + "Grid.RowDefinitions")!
-            .Elements().Select(row => (string?)row.Attribute("Height")));
+        Assert.Collection(guide.Element(presentation + "Grid.RowDefinitions")!.Elements(),
+            row => Assert.Equal("Auto", (string?)row.Attribute("Height")),
+            row => Assert.Equal("*", (string?)row.Attribute("Height")));
         XElement checks = Assert.Single(guide.Elements(presentation + "ScrollViewer"));
         Assert.Equal("1", (string?)checks.Attribute("Grid.Row"));
         Assert.Equal("Auto", (string?)checks.Attribute("VerticalScrollBarVisibility"));
