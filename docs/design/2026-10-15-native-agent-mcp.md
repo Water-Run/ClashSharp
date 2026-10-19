@@ -6,6 +6,16 @@
 
 当前实现状态：**设置、19 项真实业务工具、凭据与生命周期已接通；`bf9db73` 的完整 CI、内部签名候选、正常安装、真实 WinUI 与默认状态授权的官方 SDK 联调已通过**。后续复制保护与 Agent 说明的新源码分别核对 CI 和画面，不将旧安装的结果直接记为新代码通过。完整 Windows 11 客户端/故障矩阵和可选授权的隔离数据原生联调仍待完成。服务器继续通过用户提供的外网 SSH 入口开发和测试，本机只编辑代码、处理 Git 与读取证据。
 
+## 协议凭据与旧日志脱敏（2026-10-19）
+
+审查确认此前日志边界只识别通用 password/token 等字段，没有覆盖 WireGuard 的私钥与预共享密钥、SSH 私钥口令及 Hysteria 的 `auth-str`。它们属于实际支持的协议输入，分别见上游 [WireGuard](https://wiki.metacubex.one/en/config/proxies/wg/)、[SSH](https://github.com/MetaCubeX/Meta-Docs/blob/main/docs/config/proxies/ssh.en.md) 与 [Hysteria](https://wiki.metacubex.one/en/config/proxies/hysteria/) 定义。旧的引号正则也会在转义引号处提前结束，留下凭据后缀。服务器直接编译原受验源码，以五份非秘密合成样本复现了这五项漏出；没有读取原用户日志。
+
+新边界补齐已知凭据别名，并在原 4,096 字符处理上限内扫描完整值。引号值支持转义及 YAML 双单引号；数组/对象用有界栈处理，截断、括号不匹配或超出 128 层时丢弃有风险的剩余片段。YAML `:` 明文、多行块和缩进/无缩进认证列表一起移除；`=` 日志保留原单词元赋值约定，含空白的凭据必须加引号。识别到私钥或 ECH 块时按准确结束标签移除内容，结束缺失或错配则遮蔽到有界输入末尾。XML 秘密元素保守遮蔽其后内容，以覆盖 CDATA 和嵌套字段，不把任意日志片段当成完整 XML 文档解析。
+
+`public-key`、`host-key` 和私钥标识等非秘密字段保持可读；通用 `key` 不会从这些连字符字段的后缀误匹配。未包含秘密的诊断码保持；未加引号的 YAML 秘密值允许包含空白，因此同一行其后的额外上下文可能被保守移除。这里仍是已知格式的防泄漏边界，调用方必须避免记录配置正文或凭据对象，不能把它称为任意私人文本的分类保证。
+
+新写入继续在持久化前脱敏；Agent 读取旧行时再次应用边界，不改写原历史数据库。新增官方客户端合成用例覆盖仅授权历史概要/详情或本次诊断时读取这些内容，仍不因此开放敏感配置或代理控制。五个原复现样本在修正源码上全部不再含对应合成凭据。服务器完整构建零警告/错误、格式通过，相关 152 项及最终主程序全量 **4,406 项全部通过、零失败/跳过**，新增 50 项回归。1,869 个输入文件及 1,552 个代码/构建文件摘要核对，45 个保护文件及备份、当前安装、服务、代理和证书多重集保持，两个任务已归档移除。本机没有运行产品测试，准确提交的完整 CI 另行核对。证据与接续点为 `agent-log-privacy-20261019/checkpoint.json`；此前签名候选 `adfda1a` 不包含本次日志修正，不能作为本次产物或安装证据。
+
 ## 私密配置复制与产品说明（2026-10-19）
 
 连接配置包含 bearer 令牌，复制入口现使用独立 WinRT 适配器，显式设置 `IsAllowedInHistory=false`、`IsRoamable=false`。Windows 对该份内容禁用剪贴板历史与云同步，不修改用户的全局剪贴板设置。这些选项与写入结果来自官方 [ClipboardContentOptions](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboardcontentoptions?view=winrt-26100) 和 [SetContentWithOptions](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboard.setcontentwithoptions?view=winrt-26100)；后者返回 false 表示未写入，不能继续显示「已复制」。

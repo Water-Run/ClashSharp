@@ -108,6 +108,60 @@ public sealed partial class ProductionDataGenerationTests
         Assert.Empty(agent.Errors.Records);
     }
 
+    [Theory]
+    [InlineData("private-key: fixture-private-material")]
+    [InlineData("pre-shared-key: fixture-private-material")]
+    [InlineData("auth-str: fixture-private-material")]
+    [InlineData("password: \"prefix\\\"fixture-private-material\"")]
+    [InlineData("authentication: [\"user:fixture-private-material\", {password: \"fixture-other-material\"}]")]
+    [InlineData("private-key: |-\n  fixture-private-material\n  fixture-other-material")]
+    [InlineData("-----BEGIN OPENSSH PRIVATE KEY-----\nfixture-private-material\n-----END OPENSSH PRIVATE KEY-----")]
+    [InlineData("<authentication><password>fixture-other-material</password><user>fixture-private-material</user></authentication>")]
+    public async Task NativeAgent_RedactsKnownProxyCredentialsFromLegacyHistoryWithoutSensitiveConfigGrant(string legacyDetail)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        _ = await fixture.StartAsync();
+        var logs = fixture.Containers[0].Logs;
+        _ = logs.GetStorageSummary();
+        InsertLegacyAgentLog(logs.DatabasePath, "core.connection_failed", legacyDetail);
+        await using AgentSession agent = await AgentSession.StartAsync(fixture, McpAccessScope.ReadHistorySummary | McpAccessScope.ReadHistoryDetails);
+        CallToolResult list = await agent.CallAsync(McpToolId.ListLogHistory, new { source = "LegacyAgent" });
+        string recordId = Assert.Single(list.StructuredContent!.Value.GetProperty("records").EnumerateArray()).GetProperty("record_id").GetString()!;
+
+        CallToolResult detail = await agent.CallAsync(McpToolId.ReadLogHistory, new { record_id = recordId });
+
+        Assert.False(detail.IsError ?? false, detail.StructuredContent?.GetRawText());
+        string content = detail.StructuredContent!.Value.GetRawText();
+        Assert.Contains("core.connection_failed", content, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("fixture-private-material", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("fixture-other-material", content, StringComparison.Ordinal);
+        Assert.True(detail.StructuredContent.Value.GetProperty("redacted").GetBoolean());
+        Assert.Empty(agent.Errors.Records);
+    }
+
+    [Fact]
+    public async Task NativeAgent_CurrentDiagnosticsRedactCompleteProxyCredentialBlocks()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        _ = await fixture.StartAsync();
+        fixture.Containers[0].Logs.AppendLog("Warning", "FixtureLog", "core.connection_failed",
+            "private-key: |-\n  fixture-private-material\nauth-str: fixture-auth-material\nstatus: diagnosis.available");
+        await using AgentSession agent = await AgentSession.StartAsync(fixture, McpAccessScope.ReadDiagnostics);
+
+        CallToolResult response = await agent.CallAsync(McpToolId.GetDiagnostics, new { limit = 100 });
+
+        Assert.False(response.IsError ?? false, response.StructuredContent?.GetRawText());
+        string content = response.StructuredContent!.Value.GetRawText();
+        Assert.Contains("core.connection_failed", content, StringComparison.Ordinal);
+        Assert.Contains("diagnosis.available", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("fixture-private-material", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("fixture-auth-material", content, StringComparison.Ordinal);
+        Assert.Empty(agent.Errors.Records);
+    }
+
     [Fact]
     public async Task NativeAgent_MaximumDiagnosticPageStaysWithinProtocolBoundsAndMarksTruncation()
     {

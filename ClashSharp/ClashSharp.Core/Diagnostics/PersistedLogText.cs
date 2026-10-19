@@ -10,6 +10,7 @@ namespace ClashSharp.Diagnostics;
 public static partial class PersistedLogText
 {
     private const string Redacted = "[redacted]";
+    private const string CredentialNames = "proxy-authorization|authorization|set-cookie|cookie|client[-_]?secret|access[-_]?token|refresh[-_]?token|id[-_]?token|api[-_]?key|private[-_]?key(?:[-_]?passphrase)?|pre[-_]?shared[-_]?key|shared[-_]?key|primary[-_]?key|ech[-_]?key|psk|auth(?:[-_]?(?:str|string))?|authentication|obfs[-_]?password|password|passwd|pwd|passphrase|secret|token|uuid";
 
     /// <summary>Returns control-free diagnostic text with bounded processing and storage cost.</summary>
     /// <param name="text">Text to redact before persistence. Must not be null.</param>
@@ -24,9 +25,9 @@ public static partial class PersistedLogText
         string bounded = text[..length];
         try
         {
-            // Retain line boundaries until header values have been removed in their entirety.
-            bounded = CredentialHeader().Replace(bounded, static match => match.Groups[1].Value + Redacted);
-            bounded = CredentialField().Replace(bounded, static match => match.Groups[1].Value + Redacted);
+            // Keep boundaries until complete quoted, structured and continued values are removed.
+            bounded = RedactPrivateKeyBlocks(bounded);
+            bounded = RedactCredentialFields(bounded);
             bounded = CredentialElement().Replace(bounded, static match => match.Groups[1].Value + Redacted);
             bounded = PrivateUri().Replace(bounded, "[redacted uri]");
             bounded = UserProfileDirectory().Replace(bounded, "%USERPROFILE%");
@@ -38,15 +39,17 @@ public static partial class PersistedLogText
         }
     }
 
-    [GeneratedRegex("""(\b(?:proxy-authorization|authorization|set-cookie|cookie)["']?\s*[:=]\s*)[^\r\n]*""",
+    [GeneratedRegex("((?:\\b(?<key>" + CredentialNames + ")|(?:^|[^\\p{L}\\p{N}_-])[\"']?(?<key>key))[\"']?[ \\t]*(?<separator>[:=])[ \\t]*)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, 250)]
-    private static partial Regex CredentialHeader();
+    private static partial Regex CredentialFieldPrefix();
 
-    [GeneratedRegex("""(\b(?:client[-_]?secret|access[-_]?token|refresh[-_]?token|id[-_]?token|api[-_]?key|password|passwd|pwd|secret|token|uuid)["']?\s*[:=]\s*)(?:\[redacted\]|"[^"]*(?:"|$)|'[^']*(?:'|$)|[^\s,;}\]]+)""",
+    [GeneratedRegex("""-----BEGIN (?<label>(?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?|ECH KEYS)-----""",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, 250)]
-    private static partial Regex CredentialField();
+    private static partial Regex PrivateKeyBlockStart();
 
-    [GeneratedRegex("""(<(?:password|passwd|secret|token|uuid)\b[^>]*>)[^<]*""",
+    // XML fragments in diagnostic text need not form a document. Once a known secret
+    // element starts, discard the bounded tail rather than expose nested/CDATA content.
+    [GeneratedRegex("(<(?:" + CredentialNames + "|key)\\b[^>]*>)[\\s\\S]*",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, 250)]
     private static partial Regex CredentialElement();
 
