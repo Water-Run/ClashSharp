@@ -54,13 +54,13 @@
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
-                            <StackPanel Grid.Column="2" MaxWidth="136" Spacing="4" HorizontalAlignment="Right">
+                            <StackPanel Grid.Column="2" MaxWidth="224" Spacing="4" HorizontalAlignment="Right">
                                 <TextBlock TextWrapping="Wrap" Loaded="StatusText_Loaded" Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Right" />
-                                <HyperlinkButton MaxWidth="136" Padding="8,4" HorizontalAlignment="Right" Loaded="CheckAction_Loaded" Click="CheckAction_Click">
+                                <HyperlinkButton MaxWidth="224" Padding="8,4" HorizontalAlignment="Right" Loaded="CheckAction_Loaded" Click="CheckAction_Click">
                                     <HyperlinkButton.ContentTemplate>
                                         <DataTemplate>
-                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Right"
+                                            <TextBlock Text="{Binding}" TextWrapping="WrapWholeWords" TextAlignment="Right"
                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}" />
                                         </DataTemplate>
                                     </HyperlinkButton.ContentTemplate>
