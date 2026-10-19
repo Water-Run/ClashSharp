@@ -50,10 +50,67 @@ public sealed class McpSettingsViewModelTests
         await viewModel.RefreshAsync(CancellationToken.None);
         Assert.Equal(0, service.Copies);
         string? copied = null;
-        await viewModel.CopyAsync(text => copied = text, CancellationToken.None);
+        await viewModel.CopyAsync(text => { copied = text; return true; }, CancellationToken.None);
         Assert.Equal("private-fixture", copied);
         Assert.Equal(1, service.Copies);
+        Assert.False(viewModel.HasError);
+        Assert.Equal("Settings.Mcp.Copied", viewModel.Message);
         Assert.DoesNotContain("private-fixture", viewModel.Message + viewModel.Status + viewModel.Endpoint, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RejectedClipboardWritePreservesUnappliedDraftAndAllowsRetry()
+    {
+        McpServerConfiguration running = new(17892, new(true, McpAccessScope.ReadStatus));
+        Management service = new() { Snapshot = new(running, new(running, new("http://127.0.0.1:17892/mcp"), true, false, null)) };
+        Errors errors = new();
+        McpSettingsViewModel viewModel = new(service, key => key, errors);
+        await viewModel.RefreshAsync(CancellationToken.None);
+        viewModel.Enabled = false;
+        viewModel.Port = 17901;
+        viewModel.Scopes.Single(scope => scope.Scope == McpAccessScope.ChangeProxyState).IsGranted = true;
+
+        await viewModel.CopyAsync(_ => false, CancellationToken.None);
+
+        Assert.True(viewModel.HasError);
+        Assert.Equal("Settings.Mcp.CopyFailed", viewModel.Message);
+        Assert.True(viewModel.IsInputEnabled);
+        Assert.False(viewModel.Enabled);
+        Assert.True(viewModel.CanCopy);
+        Assert.Equal(17901, viewModel.Port);
+        Assert.True(viewModel.Scopes.Single(scope => scope.Scope == McpAccessScope.ChangeProxyState).IsGranted);
+        Assert.Equal(0, service.Applies);
+        Assert.Empty(errors.Values);
+
+        await viewModel.CopyAsync(_ => true, CancellationToken.None);
+
+        Assert.False(viewModel.HasError);
+        Assert.Equal("Settings.Mcp.Copied", viewModel.Message);
+        Assert.False(viewModel.Enabled);
+        Assert.Equal(17901, viewModel.Port);
+        Assert.Equal(2, service.Copies);
+        Assert.True(service.Snapshot.Desired.Access.Enabled);
+    }
+
+    [Fact]
+    public async Task CancellationAfterConfigurationReadDoesNotWriteClipboard()
+    {
+        using CancellationTokenSource cancellation = new();
+        Management service = new() { CancelClientRead = cancellation };
+        Errors errors = new();
+        McpSettingsViewModel viewModel = new(service, key => key, errors);
+        bool clipboardInvoked = false;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => viewModel.CopyAsync(_ =>
+        {
+            clipboardInvoked = true;
+            return true;
+        }, cancellation.Token));
+
+        Assert.False(clipboardInvoked);
+        Assert.True(viewModel.IsInputEnabled);
+        Assert.Empty(viewModel.Message);
+        Assert.Empty(errors.Values);
     }
 
     [Fact]
@@ -73,7 +130,8 @@ public sealed class McpSettingsViewModelTests
         public int Applies { get; private set; }
         public int Copies { get; private set; }
         public bool FailApply { get; set; }
-        public McpSettingsSnapshot Snapshot { get; private set; } = new(new(17892, McpAccessPolicy.Default), new(new(17892, McpAccessPolicy.Default), null, false, false, null));
+        public CancellationTokenSource? CancelClientRead { get; init; }
+        public McpSettingsSnapshot Snapshot { get; set; } = new(new(17892, McpAccessPolicy.Default), new(new(17892, McpAccessPolicy.Default), null, false, false, null));
         public Task<McpSettingsSnapshot> ReadAsync(CancellationToken cancellationToken) => Task.FromResult(Snapshot);
         public Task<McpSettingsSnapshot> ApplyAsync(McpServerConfiguration configuration, CancellationToken cancellationToken)
         {
@@ -82,7 +140,12 @@ public sealed class McpSettingsViewModelTests
             Snapshot = new(configuration, new(configuration, null, false, false, null));
             return Task.FromResult(Snapshot);
         }
-        public Task<string> GetClientConfigurationAsync(CancellationToken cancellationToken) { Copies++; return Task.FromResult("private-fixture"); }
+        public Task<string> GetClientConfigurationAsync(CancellationToken cancellationToken)
+        {
+            Copies++;
+            CancelClientRead?.Cancel();
+            return Task.FromResult("private-fixture");
+        }
         public Task<McpSettingsSnapshot> RotateCredentialAsync(CancellationToken cancellationToken) => Task.FromResult(Snapshot);
     }
 

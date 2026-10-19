@@ -81,13 +81,13 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
         SetMessage(Text("Rotated"), false);
     }, cancellationToken);
 
-    public Task CopyAsync(Action<string> copyToClipboard, CancellationToken cancellationToken) => RunAsync(async () =>
+    public Task CopyAsync(Func<string, bool> copyToClipboard, CancellationToken cancellationToken) => RunAsync(async () =>
     {
         ArgumentNullException.ThrowIfNull(copyToClipboard);
         string configuration = await management.GetClientConfigurationAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        copyToClipboard(configuration);
-        SetMessage(Text("Copied"), false);
+        bool copied = copyToClipboard(configuration);
+        SetMessage(Text(copied ? "Copied" : "CopyFailed"), !copied);
     }, cancellationToken);
 
     private async Task RunAsync(Func<Task> operation, CancellationToken cancellationToken)

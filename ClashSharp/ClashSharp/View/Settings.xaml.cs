@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Components;
 using ClashSharp.Model;
+using ClashSharp.Presentation.Adapters;
 using ClashSharp.Presentation.Composition;
 using ClashSharp.Presentation.Dialogs;
 using ClashSharp.Presentation.Lifecycle;
@@ -20,7 +21,6 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace ClashSharp.View;
 
@@ -1063,12 +1063,8 @@ public sealed partial class Settings : Page
     private async void McpRefresh_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.RefreshAsync);
     private async void McpRotate_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.RotateAsync);
     private async void McpReset_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(_mcp.ResetAsync);
-    private async void McpCopy_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(token => _mcp.CopyAsync(configuration =>
-    {
-        DataPackage package = new();
-        package.SetText(configuration);
-        Clipboard.SetContent(package);
-    }, token));
+    private async void McpCopy_Click(object sender, RoutedEventArgs args) => await RunPageOperationAsync(token =>
+        _mcp.CopyAsync(McpClientClipboard.TryCopy, token));
 
     /// <summary>Shows a destructive-action confirmation dialog.</summary>
     private async Task<bool> ConfirmAsync(string title, string content, string primaryButtonText, CancellationToken cancellationToken)
