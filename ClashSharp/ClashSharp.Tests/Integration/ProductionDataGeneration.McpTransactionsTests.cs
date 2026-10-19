@@ -20,6 +20,132 @@ namespace ClashSharp.Tests.Integration;
 
 public sealed partial class ProductionDataGenerationTests
 {
+    private static readonly string[] AgentPortSettingKeys = ["MixedPort"];
+
+    [Fact]
+    public async Task NativeAgent_SettingsDescribeChoicesBoundsAndCurrentWriteGrants()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        _ = await fixture.StartAsync();
+        await using AgentSession agent = await AgentSession.StartAsync(fixture, McpAccessScope.ReadConfiguration);
+
+        JsonElement settings = (await agent.CallAsync(McpToolId.GetSettings, new { })).StructuredContent!.Value.GetProperty("settings");
+        JsonElement rate = settings.GetProperty("RateUnit");
+        Assert.Equal(["Bytes", "Bits"], rate.GetProperty("allowed_values").EnumerateArray().Select(value => value.GetString()));
+        Assert.Equal("Bytes", rate.GetProperty("desired").GetString());
+        Assert.Equal(JsonValueKind.Null, rate.GetProperty("minimum").ValueKind);
+        Assert.True(rate.GetProperty("write_supported").GetBoolean());
+        Assert.False(rate.GetProperty("write_allowed").GetBoolean());
+        Assert.Equal("ModifyConfiguration", Assert.Single(rate.GetProperty("required_write_scopes").EnumerateArray()).GetString());
+        Assert.Equal(1, settings.GetProperty("MixedPort").GetProperty("minimum").GetInt32());
+        Assert.Equal(65535, settings.GetProperty("MixedPort").GetProperty("maximum").GetInt32());
+        Assert.Equal(["Disabled", "Standby", "RuleTakeover", "FullTakeover"],
+            settings.GetProperty("CurrentMode").GetProperty("allowed_values").EnumerateArray().Select(value => value.GetString()));
+        Assert.False(settings.GetProperty("TriggersEnabled").GetProperty("write_supported").GetBoolean());
+        Assert.False(settings.TryGetProperty("McpAllowedScopes", out _));
+        Assert.False(settings.TryGetProperty("ConnectionTestUrl", out _));
+
+        await agent.SetScopesAsync(McpAccessScope.ReadConfiguration | McpAccessScope.ModifyConfiguration);
+        settings = (await agent.CallAsync(McpToolId.GetSettings, new { })).StructuredContent!.Value.GetProperty("settings");
+        Assert.True(settings.GetProperty("RateUnit").GetProperty("write_allowed").GetBoolean());
+        Assert.False(settings.GetProperty("MixedPort").GetProperty("write_allowed").GetBoolean());
+        Assert.Equal(["ModifyConfiguration", "ChangeProxyState"],
+            settings.GetProperty("MixedPort").GetProperty("required_write_scopes").EnumerateArray().Select(value => value.GetString()));
+
+        await agent.SetScopesAsync(McpAccessScope.ReadConfiguration | McpAccessScope.ModifyConfiguration | McpAccessScope.ChangeProxyState);
+        settings = (await agent.CallAsync(McpToolId.GetSettings, new { keys = AgentPortSettingKeys })).StructuredContent!.Value.GetProperty("settings");
+        Assert.Single(settings.EnumerateObject());
+        Assert.True(settings.GetProperty("MixedPort").GetProperty("write_allowed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task NativeAgent_DiscoversLiveGroupsAndMembersBeforeSeparatelyAuthorizedSelection()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        SelectionController selection = ConfigureSelections(fixture);
+        _ = await fixture.StartAsync();
+        await using AgentSession agent = await AgentSession.StartAsync(fixture, McpAccessScope.ReadConfiguration);
+        Assert.Contains(await agent.Client.ListToolsAsync(), tool => tool.Name == "clashsharp_list_proxy_groups");
+
+        CallToolResult groups = await agent.CallAsync(McpToolId.ListProxyGroups, new { limit = 1 });
+        Assert.False(groups.IsError ?? false, groups.StructuredContent?.GetRawText());
+        JsonElement snapshot = groups.StructuredContent!.Value;
+        Assert.Equal("profile-a", snapshot.GetProperty("profile_id").GetString());
+        Assert.Equal(1, snapshot.GetProperty("total").GetInt32());
+        JsonElement group = Assert.Single(snapshot.GetProperty("groups").EnumerateArray());
+        Assert.Equal("GLOBAL", group.GetProperty("name").GetString());
+        Assert.Equal("DIRECT", group.GetProperty("current_selection").GetString());
+        Assert.Equal(3, group.GetProperty("candidate_count").GetInt32());
+
+        CallToolResult members = await agent.CallAsync(McpToolId.ListProxyGroupMembers, new { group = "GLOBAL", offset = 1, limit = 2 });
+        Assert.Equal(3, members.StructuredContent!.Value.GetProperty("total").GetInt32());
+        Assert.Equal(["Node B", "Node C"], members.StructuredContent.Value.GetProperty("members").EnumerateArray().Select(value => value.GetString()));
+        Assert.Empty((await agent.CallAsync(McpToolId.ListProxyGroups, new { offset = 1 })).StructuredContent!.Value.GetProperty("groups").EnumerateArray());
+        Assert.Empty((await agent.CallAsync(McpToolId.ListProxyGroupMembers, new { group = "GLOBAL", offset = 3 })).StructuredContent!.Value.GetProperty("members").EnumerateArray());
+
+        var request = new { operation_id = Guid.NewGuid(), group = "GLOBAL", node = "Node B" };
+        Assert.True((await agent.CallAsync(McpToolId.SelectProxy, request)).IsError);
+        Assert.Equal("DIRECT", selection.Selection);
+        await agent.SetScopesAsync(McpAccessScope.ReadConfiguration | McpAccessScope.ChangeProxyState);
+        Assert.False((await agent.CallAsync(McpToolId.SelectProxy, request)).IsError ?? false);
+        Assert.Equal("Node B", (await agent.CallAsync(McpToolId.ListProxyGroupMembers, new { group = "GLOBAL" }))
+            .StructuredContent!.Value.GetProperty("current_selection").GetString());
+
+        await agent.SetScopesAsync(McpAccessScope.ReadStatus);
+        Assert.DoesNotContain(await agent.Client.ListToolsAsync(), tool => tool.Name == "clashsharp_list_proxy_group_members");
+        Assert.True((await agent.CallAsync(McpToolId.ListProxyGroupMembers, new { group = "GLOBAL" })).IsError);
+        Assert.Empty(agent.Errors.Records);
+    }
+
+    [Fact]
+    public async Task NativeAgent_UnknownLiveGroupReturnsAnExpectedRefusal()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        SelectionController selection = ConfigureSelections(fixture);
+        _ = await fixture.StartAsync();
+        await using AgentSession agent = await AgentSession.StartAsync(fixture, McpAccessScope.ReadConfiguration);
+
+        CallToolResult missing = await agent.CallAsync(McpToolId.ListProxyGroupMembers, new { group = "missing" });
+
+        Assert.True(missing.IsError);
+        Assert.Equal("mcp.group_unavailable", missing.StructuredContent!.Value.GetProperty("error").GetString());
+        Assert.Equal("DIRECT", selection.Selection);
+        Assert.Empty(agent.Errors.Records);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task NativeAgent_ControllerUnavailableReadCanRetryWithoutUnexpectedFailure(int failureKind)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        bool available = false;
+        Exception failure = failureKind switch
+        {
+            0 => new HttpRequestException("private-fixture-controller-detail"),
+            1 => new TimeoutException("private-fixture-controller-detail"),
+            _ => new OperationCanceledException("private-fixture-controller-detail")
+        };
+        _ = ConfigureSelections(fixture, _ => available
+            ? Task.FromResult<IReadOnlyList<ClashSharpUi::ClashSharp.Model.MihomoProxyGroup>>([])
+            : Task.FromException<IReadOnlyList<ClashSharpUi::ClashSharp.Model.MihomoProxyGroup>>(failure));
+        _ = await fixture.StartAsync();
+        await using AgentSession agent = await AgentSession.StartAsync(fixture, McpAccessScope.ReadConfiguration);
+
+        CallToolResult unavailable = await agent.CallAsync(McpToolId.ListProxyGroups, new { });
+
+        Assert.True(unavailable.IsError);
+        Assert.Equal("mcp.runtime_unavailable", unavailable.StructuredContent!.Value.GetProperty("error").GetString());
+        Assert.Empty(agent.Errors.Records);
+        available = true;
+        Assert.False((await agent.CallAsync(McpToolId.ListProxyGroups, new { })).IsError ?? false);
+    }
+
     [Theory]
     [InlineData(ClashSharpMode.Disabled)]
     [InlineData(ClashSharpMode.Standby)]

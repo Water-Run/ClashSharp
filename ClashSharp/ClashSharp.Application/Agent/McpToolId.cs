@@ -33,4 +33,8 @@ public enum McpToolId
     SelectProxy,
     /// <summary>Activate an existing profile.</summary>
     ActivateProfile,
+    /// <summary>List live strategy groups without original configuration content.</summary>
+    ListProxyGroups,
+    /// <summary>List the names of members in one live strategy group.</summary>
+    ListProxyGroupMembers,
 }

@@ -9,6 +9,69 @@ public sealed class ProxySelectionServiceTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "ClashSharp-ProxySelections", Guid.NewGuid().ToString("N"));
 
+    [Fact]
+    public async Task ReadGroups_ReturnsDetachedChoicesWithoutSavingOrSelecting()
+    {
+        List<string> candidates = ["DIRECT", "Proxy B"];
+        List<MihomoProxyGroup> groups = [new("GLOBAL", "Selector", "DIRECT", candidates)];
+        FakeController controller = new();
+        ProxySelectionStore store = new(Path.Combine(_root, "selections.json"));
+        ProxySelectionService service = new(store, _ => Task.FromResult<IReadOnlyList<MihomoProxyGroup>>(groups), controller.SelectAsync,
+            () => new(true, Plan("profile-a"), 1, new string('a', 64)), UncoordinatedProfileCatalogMutationCoordinator.Instance);
+
+        ProxyGroupSnapshot snapshot = Assert.IsType<ProxyGroupSnapshot>(await service.ReadGroupsAsync(CancellationToken.None));
+        candidates.Clear();
+        groups.Clear();
+
+        Assert.Equal("profile-a", snapshot.ProfileId);
+        Assert.Equal(["DIRECT", "Proxy B"], Assert.Single(snapshot.Groups).Candidates);
+        Assert.Empty(controller.Writes);
+        Assert.Empty(store.Read("profile-a"));
+    }
+
+    [Theory]
+    [InlineData(false, ClashSharpMode.FullTakeover)]
+    [InlineData(true, ClashSharpMode.Disabled)]
+    public async Task ReadGroups_UnavailableRuntimeDoesNotContactTheController(bool known, ClashSharpMode mode)
+    {
+        FakeController controller = new();
+        ProxySelectionService service = new(new FailingStore(), controller.ReadAsync, controller.SelectAsync,
+            () => new(known, new(mode, false, 10000, "profile-a"), 1, new string('a', 64)),
+            UncoordinatedProfileCatalogMutationCoordinator.Instance);
+
+        Assert.Null(await service.ReadGroupsAsync(CancellationToken.None));
+        Assert.Equal(0, controller.Reads);
+        Assert.Empty(controller.Writes);
+    }
+
+    [Fact]
+    public async Task ReadGroups_ChangedRuntimeDiscardsTheStaleControllerResponse()
+    {
+        int observations = 0;
+        FakeController controller = new();
+        ProxySelectionService service = new(new FailingStore(), controller.ReadAsync, controller.SelectAsync,
+            () => new(true, Plan(++observations == 1 ? "profile-a" : "profile-b"), 1, new string('a', 64)),
+            UncoordinatedProfileCatalogMutationCoordinator.Instance);
+
+        Assert.Null(await service.ReadGroupsAsync(CancellationToken.None));
+        Assert.Equal(1, controller.Reads);
+        Assert.Empty(controller.Writes);
+    }
+
+    [Theory]
+    [InlineData(513, false)]
+    [InlineData(512, true)]
+    public async Task ReadGroups_OnlyExposesBoundedNamesThatCanBeSelected(int length, bool valid)
+    {
+        string name = new('x', length);
+        ProxySelectionService service = new(new FailingStore(),
+            _ => Task.FromResult<IReadOnlyList<MihomoProxyGroup>>([new(name, "Selector", "DIRECT", ["DIRECT"])]),
+            (_, _, _) => throw new InvalidOperationException("Read must not select."),
+            () => new(true, Plan("profile-a"), 1, new string('a', 64)), UncoordinatedProfileCatalogMutationCoordinator.Instance);
+
+        Assert.Equal(valid, await service.ReadGroupsAsync(CancellationToken.None) is not null);
+    }
+
     /// <summary>Verifies a fresh store and a restarted controller recover choices only for their profile.</summary>
     [Fact]
     public async Task SelectAndRestore_PersistsAcrossInstancesAndSeparatesProfiles()

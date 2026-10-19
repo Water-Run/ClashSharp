@@ -7,6 +7,29 @@ namespace ClashSharp.Tests.Unit.Settings;
 /// <summary>Verifies the canonical settings registry and its strict value normalization contracts.</summary>
 public sealed class SettingsRegistryTests
 {
+    [Theory]
+    [InlineData("MixedPort", 1, 65535)]
+    [InlineData("ConnectionSamplingIntervalSeconds", 3, 300)]
+    [InlineData("McpServerPort", 1024, 65535)]
+    [InlineData("McpAllowedScopes", 0, 255)]
+    public void IntegerMetadata_DescribesTheActualInclusiveValidationBounds(string key, int minimum, int maximum)
+    {
+        SettingDefinition definition = SettingsRegistry.Default.Get(key);
+        Assert.Equal(new SettingIntegerRange(minimum, maximum), definition.IntegerRange);
+        Assert.True(definition.NormalizeValue(minimum).IsSuccess);
+        Assert.True(definition.NormalizeValue(maximum).IsSuccess);
+        Assert.False(definition.NormalizeValue(minimum - 1).IsSuccess);
+        Assert.False(definition.NormalizeValue(maximum + 1).IsSuccess);
+    }
+
+    [Fact]
+    public void IntegerMetadata_IsAbsentForOtherTypesAndRejectsReversedBounds()
+    {
+        Assert.All(SettingsRegistry.Default.Definitions.Where(definition => definition.ValueType != typeof(int)),
+            definition => Assert.Null(definition.IntegerRange));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SettingIntegerRange(5, 4));
+    }
+
     private static readonly IReadOnlyDictionary<string, string> ExpectedDefaults =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {

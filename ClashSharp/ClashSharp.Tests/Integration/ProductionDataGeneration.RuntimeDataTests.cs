@@ -199,12 +199,13 @@ public sealed partial class ProductionDataGenerationTests
 
     private static Plan SelectionPlan => new(Mode.FullTakeover, false, 10000, "profile-a");
 
-    private static SelectionController ConfigureSelections(Fixture fixture)
+    private static SelectionController ConfigureSelections(Fixture fixture,
+        Func<CancellationToken, Task<IReadOnlyList<ProxyGroup>>>? readGroups = null)
     {
         SelectionController controller = new();
         fixture.CreateProxySelections = configuration => new(
             new SelectionStore(Path.Combine(configuration.GetState().DirectoryPath, "proxy-selections.json")),
-            controller.ReadAsync, controller.SelectAsync,
+            readGroups ?? controller.ReadAsync, controller.SelectAsync,
             () => new(true, SelectionPlan, 1, new string('a', 64)),
             new MutationCoordinator(fixture.Admission, fixture.MutationGate));
         return controller;

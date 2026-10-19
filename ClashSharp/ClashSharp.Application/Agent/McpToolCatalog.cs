@@ -13,6 +13,7 @@ public static class McpToolCatalog
     private const string OperationId = """{"type":"string","format":"uuid","description":"Stable UUID for this write; reuse only for an exact retry."}""";
     private const string Offset = """{"type":"integer","minimum":0,"maximum":10000,"default":0}""";
     private const string Limit = """{"type":"integer","minimum":1,"maximum":100,"default":25}""";
+    private const string ProxyName = """{"type":"string","minLength":1,"maxLength":512}""";
 
     /// <summary>Gets all product-authored definitions; servers filter this list with the current policy.</summary>
     public static IReadOnlyList<McpToolDefinition> All { get; } = Array.AsReadOnly(new[]
@@ -20,7 +21,7 @@ public static class McpToolCatalog
         Define(McpToolId.GetStatus, "clashsharp_get_status", McpOperation.ReadStatus,
             "Read Clash# status and current agent capabilities. Check connectivity before requesting a proxy-state change."),
         Define(McpToolId.GetSettings, "clashsharp_get_settings", McpOperation.ReadConfiguration,
-            "Read approved application settings. Agent credentials and authorization controls are never included.",
+            "Read approved application settings, canonical allowed values, inclusive integer bounds and current write permissions. Agent credentials and authorization controls are never included.",
             ("keys", """{"type":"array","items":{"type":"string","minLength":1,"maxLength":128},"maxItems":64}""", false)),
         Define(McpToolId.UpdateSettings, "clashsharp_update_settings", McpOperation.ModifyConfiguration,
             "Validate and apply one complete setting batch. Network-affecting keys additionally require proxy control. Agent permissions cannot be changed by this tool.",
@@ -62,11 +63,18 @@ public static class McpToolCatalog
         Define(McpToolId.SelectProxy, "clashsharp_select_proxy", McpOperation.ChangeProxyState,
             "Select an existing member of a proxy group. This can change connectivity and requires proxy control.",
             ("operation_id", OperationId, true),
-            ("group", """{"type":"string","minLength":1,"maxLength":256}""", true),
-            ("node", """{"type":"string","minLength":1,"maxLength":256}""", true)),
+            ("group", ProxyName, true),
+            ("node", ProxyName, true)),
         Define(McpToolId.ActivateProfile, "clashsharp_activate_profile", McpOperation.ChangeProxyState,
             "Activate an existing validated profile. This can change connectivity and requires proxy control.",
             ("operation_id", OperationId, true), ("profile_id", Identifier, true)),
+        Define(McpToolId.ListProxyGroups, "clashsharp_list_proxy_groups", McpOperation.ReadConfiguration,
+            "List live strategy group names, types, current selections and member counts, with bounded pagination. Does not change connectivity or expose original YAML.",
+            ("offset", Offset, false), ("limit", Limit, false)),
+        Define(McpToolId.ListProxyGroupMembers, "clashsharp_list_proxy_group_members", McpOperation.ReadConfiguration,
+            "List member names for one live strategy group, with bounded pagination. Use these names with clashsharp_select_proxy only after the separate proxy-control grant is given.",
+            ("group", ProxyName, true),
+            ("offset", Offset, false), ("limit", Limit, false)),
     });
 
     private static readonly FrozenDictionary<string, McpToolDefinition> ByName = All.ToFrozenDictionary(tool => tool.Name, StringComparer.Ordinal);

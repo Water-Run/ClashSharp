@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.Model;
+using ClashSharp.ServiceProtocol;
 
 namespace ClashSharp.Service;
 
@@ -53,6 +54,40 @@ internal sealed partial class ProxySelectionService : IProxySelectionService
                 }, token);
             },
             cancellationToken);
+    }
+
+    /// <summary>Reads detached live groups only while the same verified runtime owns the controller.</summary>
+    /// <remarks>The caller must retain its admission lease and data-generation pin for this read.</remarks>
+    internal async Task<ProxyGroupSnapshot?> ReadGroupsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        RuntimeConfigurationIntegrityObservation before = _observeRuntime();
+        if (!before.IsKnown || before.AppliedPlan is not { Mode: not ClashSharpMode.Disabled } plan)
+        {
+            return null;
+        }
+
+        IReadOnlyList<MihomoProxyGroup> groups = await _getGroups(cancellationToken).ConfigureAwait(false);
+        if (groups.Count > MihomoServiceIpcProtocol.MaximumControllerProxyGroups) { return null; }
+        // Apply the same bounds on both local-controller and service-controller reads. Besides
+        // keeping responses bounded, this ensures every discovered name can be selected intact.
+        MihomoServiceIpcProxyRuntimeSnapshot bounded = new()
+        {
+            Groups = groups.Select(group => new MihomoServiceIpcProxyGroup
+            {
+                Name = group.Name,
+                Type = group.Type,
+                CurrentSelection = group.CurrentSelection,
+                Candidates = group.Candidates
+            }).ToArray()
+        };
+        if (bounded.Validate() is not null) { return null; }
+        MihomoProxyGroup[] snapshot = groups.Select(group => group with
+        {
+            Candidates = Array.AsReadOnly(group.Candidates.ToArray())
+        }).ToArray();
+        cancellationToken.ThrowIfCancellationRequested();
+        return before == _observeRuntime() ? new(plan.ProfileId, Array.AsReadOnly(snapshot)) : null;
     }
 
     private async Task SelectCoreAsync(string groupName, string proxyName, CancellationToken cancellationToken)

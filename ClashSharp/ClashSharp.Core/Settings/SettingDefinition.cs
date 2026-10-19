@@ -147,6 +147,7 @@ public sealed class SettingDefinition
         SettingValue defaultValue,
         SettingValue safeFallback,
         IReadOnlyList<SettingValue> allowedValues,
+        SettingIntegerRange? integerRange,
         Func<string, SettingNormalizationResult> textNormalizer,
         Func<object, SettingNormalizationResult> typedNormalizer)
     {
@@ -170,6 +171,7 @@ public sealed class SettingDefinition
         DefaultValue = defaultValue;
         SafeFallback = safeFallback;
         AllowedValues = allowedValues;
+        IntegerRange = integerRange;
         _textNormalizer = textNormalizer;
         _typedNormalizer = typedNormalizer;
     }
@@ -191,6 +193,9 @@ public sealed class SettingDefinition
 
     /// <summary>Gets finite canonical choices, or an empty collection when the value domain is not finite.</summary>
     public IReadOnlyList<SettingValue> AllowedValues { get; }
+
+    /// <summary>Gets the inclusive validation bounds for integer settings, or null for other types.</summary>
+    public SettingIntegerRange? IntegerRange { get; }
 
     /// <summary>Gets read-only legacy persisted keys.</summary>
     public IReadOnlyList<SettingKey> Aliases { get; }
@@ -285,19 +290,16 @@ public sealed class SettingDefinition
         int maximum,
         SettingDefinitionMetadata metadata)
     {
-        if (minimum > maximum)
-        {
-            throw new ArgumentOutOfRangeException(nameof(minimum), "Minimum cannot exceed maximum.");
-        }
-
+        SettingIntegerRange range = new(minimum, maximum);
         return Create(
             key,
             defaultValue,
             safeFallback,
-            input => ParseInteger(input, minimum, maximum),
+            input => ParseInteger(input, range.Minimum, range.Maximum),
             static value => value.ToString(CultureInfo.InvariantCulture),
             metadata,
-            allowedValues: null);
+            allowedValues: null,
+            integerRange: range);
     }
 
     /// <summary>Creates a strict named enum definition that never accepts numeric enum text.</summary>
@@ -390,7 +392,8 @@ public sealed class SettingDefinition
         Func<string, ParseOutcome<T>> parser,
         Func<T, string> formatter,
         SettingDefinitionMetadata metadata,
-        IEnumerable<T>? allowedValues)
+        IEnumerable<T>? allowedValues,
+        SettingIntegerRange? integerRange = null)
         where T : notnull
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -470,6 +473,7 @@ public sealed class SettingDefinition
             normalizedDefault.Value!,
             normalizedFallback.Value!,
             normalizedAllowedValues.AsReadOnly(),
+            integerRange,
             NormalizeText,
             NormalizeTyped);
     }

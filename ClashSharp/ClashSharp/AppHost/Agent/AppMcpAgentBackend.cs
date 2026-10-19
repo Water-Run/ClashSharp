@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -139,14 +140,11 @@ internal sealed class AppMcpAgentBackend(AppDataGenerationRepositories repositor
                 return Success(new
                 {
                     settings = readable.Where(item => requested is null || requested.Contains(item.Key.Value, StringComparer.Ordinal))
-                    .ToDictionary(item => item.Key.Value, item => new
-                    {
-                        desired = envelope.Desired[item.Key].Value.CanonicalText,
-                        type = item.ValueType.Name,
-                        applied = envelope.Applied[item.Key].Value?.CanonicalText,
-                        applied_state = envelope.Applied[item.Key].Kind.ToString()
-                    })
+                    .ToDictionary(item => item.Key.Value, item => SettingMetadata(item, envelope, access.Policy))
                 });
+            case McpToolId.ListProxyGroups:
+            case McpToolId.ListProxyGroupMembers:
+                return await ReadProxyGroupsAsync(tool, args, Offset(), Limit(), token).ConfigureAwait(false);
             case McpToolId.ListProfiles:
                 ConfigurationProfile[] profiles = repositories.Profiles.GetProfiles().ToArray();
                 return Success(new { total = profiles.Length, profiles = profiles.Skip(Offset()).Take(Limit()).Select(ProfileMetadata).ToArray() });
@@ -291,6 +289,67 @@ internal sealed class AppMcpAgentBackend(AppDataGenerationRepositories repositor
         active = profile.IsActive,
         updated_at = profile.UpdatedAt
     };
+
+    private static object SettingMetadata(SettingDefinition setting, SettingsEnvelope envelope, McpAccessPolicy policy)
+    {
+        McpAccessScope? required = McpAccessRules.RequiredSettingWriteScopes(setting.Key);
+        return new
+        {
+            desired = envelope.Desired[setting.Key].Value.CanonicalText,
+            type = setting.ValueType.Name,
+            applied = envelope.Applied[setting.Key].Value?.CanonicalText,
+            applied_state = envelope.Applied[setting.Key].Kind.ToString(),
+            allowed_values = setting.AllowedValues.Select(value => value.CanonicalText).ToArray(),
+            minimum = setting.IntegerRange?.Minimum,
+            maximum = setting.IntegerRange?.Maximum,
+            write_supported = required is not null,
+            write_allowed = required is { } scopes && policy.Allows(scopes),
+            required_write_scopes = required is { } grants
+                ? Enum.GetValues<McpAccessScope>().Where(scope => scope != McpAccessScope.None && (grants & scope) == scope)
+                    .Select(scope => scope.ToString()).ToArray() : []
+        };
+    }
+
+    private async Task<McpToolResponse> ReadProxyGroupsAsync(McpToolId tool, JsonElement args, int offset, int limit, CancellationToken token)
+    {
+        if (repositories.ProxySelections is null) { return McpToolResponse.Error("mcp.operation_unavailable"); }
+        ProxyGroupSnapshot? snapshot;
+        try { snapshot = await repositories.ProxySelections.ReadGroupsAsync(token).ConfigureAwait(false); }
+        catch (Exception failure) when (failure is HttpRequestException or TimeoutException
+            || failure is OperationCanceledException && !token.IsCancellationRequested)
+        {
+            token.ThrowIfCancellationRequested();
+            return McpToolResponse.Error("mcp.runtime_unavailable");
+        }
+        if (snapshot is null) { return McpToolResponse.Error("mcp.runtime_unavailable"); }
+        if (tool == McpToolId.ListProxyGroups)
+        {
+            return Success(new
+            {
+                profile_id = snapshot.ProfileId,
+                total = snapshot.Groups.Count,
+                groups = snapshot.Groups.Skip(offset).Take(limit).Select(group => new
+                {
+                    name = group.Name,
+                    type = group.Type,
+                    current_selection = group.CurrentSelection,
+                    candidate_count = group.Candidates.Count
+                }).ToArray()
+            });
+        }
+
+        string name = args.GetProperty("group").GetString()!;
+        MihomoProxyGroup selected = snapshot.Groups.FirstOrDefault(group => StringComparer.Ordinal.Equals(group.Name, name));
+        if (selected.Name is null) { return McpToolResponse.Error("mcp.group_unavailable"); }
+        return Success(new
+        {
+            profile_id = snapshot.ProfileId,
+            group = selected.Name,
+            current_selection = selected.CurrentSelection,
+            total = selected.Candidates.Count,
+            members = selected.Candidates.Skip(offset).Take(limit).ToArray()
+        });
+    }
 
     private void Audit(McpToolDefinition tool, McpClientIdentity identity, McpToolResponse result)
     {

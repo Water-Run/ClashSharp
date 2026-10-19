@@ -6,8 +6,31 @@ namespace ClashSharp.Tests.Unit.Agent;
 public sealed class McpToolArgumentValidatorTests
 {
     [Theory]
+    [InlineData(McpToolId.SelectProxy, 512, true)]
+    [InlineData(McpToolId.SelectProxy, 513, false)]
+    [InlineData(McpToolId.ListProxyGroupMembers, 512, true)]
+    [InlineData(McpToolId.ListProxyGroupMembers, 513, false)]
+    public void ProxyNames_AcceptTheControllerBoundaryWithoutTruncation(McpToolId tool, int length, bool valid)
+    {
+        Dictionary<string, object> arguments = new() { ["group"] = new string('x', length) };
+        if (tool == McpToolId.SelectProxy)
+        {
+            arguments["operation_id"] = Guid.NewGuid().ToString();
+            arguments["node"] = new string('y', length);
+        }
+        Assert.Equal(valid, McpToolArgumentValidator.IsValid(McpToolCatalog.All.Single(definition => definition.Id == tool),
+            JsonSerializer.SerializeToElement(arguments)));
+    }
+
+    [Theory]
     [InlineData(McpToolId.GetStatus, "{}", true)]
     [InlineData(McpToolId.GetStatus, "{\"unexpected\":true}", false)]
+    [InlineData(McpToolId.ListProxyGroups, "{\"offset\":0,\"limit\":100}", true)]
+    [InlineData(McpToolId.ListProxyGroups, "{\"limit\":101}", false)]
+    [InlineData(McpToolId.ListProxyGroupMembers, "{\"group\":\"GLOBAL\",\"offset\":1,\"limit\":2}", true)]
+    [InlineData(McpToolId.ListProxyGroupMembers, "{}", false)]
+    [InlineData(McpToolId.ListProxyGroupMembers, "{\"group\":\"\"}", false)]
+    [InlineData(McpToolId.ListProxyGroupMembers, "{\"group\":\"GLOBAL\",\"offset\":-1}", false)]
     [InlineData(McpToolId.ListProfiles, "{\"offset\":0,\"limit\":100}", true)]
     [InlineData(McpToolId.ListProfiles, "{\"limit\":101}", false)]
     [InlineData(McpToolId.ListProfiles, "{\"limit\":1.5}", false)]
