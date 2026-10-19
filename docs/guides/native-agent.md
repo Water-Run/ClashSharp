@@ -46,6 +46,8 @@ Add **Read configuration** when an Agent also needs to discover profile identifi
 
 Mode changes follow the application's current transparent proxy preference. When TUN is enabled, takeover can affect the whole computer's routing and DNS. Give **Control proxy state** only to an Agent that should manage connectivity; disabling proxy access can disconnect an Agent that needs the Internet.
 
+The transparent proxy service does not expose an HTTP/SOCKS mixed listener; `mixed_port` still describes the configured preference. To use an explicit loopback proxy port, disable TUN, start the application-owned core, and check the observed runtime state.
+
 Diagnostic and history-detail text is redacted, but can still describe personal activity. Sensitive configuration access adds original profile content, which can contain passwords and subscription secrets. It requires the corresponding current-profile or history-detail read permission as shown above.
 
 ## Changes and revocation
