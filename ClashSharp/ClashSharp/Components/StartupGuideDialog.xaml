@@ -23,7 +23,7 @@
             </Grid.ColumnDefinitions>
             <InfoBar x:Name="SummaryBar" IsOpen="True" IsClosable="False" Severity="Informational"
                      Background="Transparent" BorderThickness="0" Padding="0" />
-            <HyperlinkButton x:Name="RefreshButton" Grid.Column="1" Padding="0" VerticalAlignment="Center" />
+            <HyperlinkButton x:Name="RefreshButton" Grid.Column="1" Padding="8,4" VerticalAlignment="Center" />
         </Grid>
         <StackPanel x:Name="BusyPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
             <ProgressRing x:Name="RefreshProgress" Width="16" Height="16" MinWidth="0" MinHeight="0" IsActive="False" />
@@ -57,7 +57,7 @@
                             <StackPanel Grid.Column="2" MaxWidth="136" Spacing="4" HorizontalAlignment="Right">
                                 <TextBlock TextWrapping="Wrap" Loaded="StatusText_Loaded" Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Right" />
-                                <HyperlinkButton MaxWidth="136" Padding="0" HorizontalAlignment="Right" Loaded="CheckAction_Loaded" Click="CheckAction_Click">
+                                <HyperlinkButton MaxWidth="136" Padding="8,4" HorizontalAlignment="Right" Loaded="CheckAction_Loaded" Click="CheckAction_Click">
                                     <HyperlinkButton.ContentTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Right"
