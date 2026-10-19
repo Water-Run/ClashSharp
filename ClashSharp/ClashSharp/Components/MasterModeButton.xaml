@@ -56,6 +56,17 @@
                 Background="{ThemeResource AccentFillColorDefaultBrush}"
                 Opacity="0" />
 
+            <Border
+                x:Name="SelectedIndicator"
+                Grid.ColumnSpan="2"
+                Width="3"
+                Margin="-8,0,0,0"
+                HorizontalAlignment="Left"
+                Background="{ThemeResource TextFillColorPrimaryBrush}"
+                CornerRadius="0"
+                IsHitTestVisible="False"
+                Visibility="{Binding IsChecked, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
             <FontIcon
                 Glyph="{Binding Glyph, ElementName=Root}"
                 FontSize="20"
