@@ -117,6 +117,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     private bool _runtimeReady;
 
     private readonly CancellationTokenSource _windowLifetime = new();
+    /// <summary>Retains the live root so Closed can fence callbacks without querying a destroyed view.</summary>
+    private XamlRoot? _dialogXamlRoot;
     internal CancellationToken WindowLifetime => _windowLifetime.Token;
     private Task? _mihomoServiceStatusMonitorTask;
     private int _trayRefreshQueued;
@@ -511,6 +513,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <param name="args">Window close event arguments. Not null.</param>
     private async void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        WindowDialogCoordinator.MarkWindowClosing(_dialogXamlRoot);
+        _dialogXamlRoot = null;
         Task? statusMonitorTask = _mihomoServiceStatusMonitorTask;
         _mihomoServiceStatusMonitorTask = null;
         MainWindowComposition.ITray? trayService = _trayService;
@@ -742,9 +746,10 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <summary>Returns the top-level XAML root so dialogs are centered in the whole app window.</summary>
     private XamlRoot? GetDialogXamlRoot()
     {
-        return Content is FrameworkElement root && root.XamlRoot is not null
+        _dialogXamlRoot = Content is FrameworkElement root && root.XamlRoot is not null
             ? root.XamlRoot
             : ContentFrame.XamlRoot;
+        return _dialogXamlRoot;
     }
 
     /// <summary>Prompts when closing while proxy takeover is active.</summary>
@@ -1060,6 +1065,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
     /// <summary>Allows the App-owned lifetime to close this window after host shutdown succeeds.</summary>
     internal void ApproveApplicationExit()
     {
+        WindowDialogCoordinator.MarkWindowClosing(GetDialogXamlRoot());
         _applicationExitApproved = true;
     }
 

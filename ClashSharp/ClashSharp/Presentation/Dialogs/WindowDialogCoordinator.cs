@@ -47,7 +47,17 @@ internal static class WindowDialogCoordinator
                 dialog.FlowDirection = root.FlowDirection;
             }
 
-            return await ShowWithCancellationAsync(dialog, cancellationToken);
+            return await ShowWithCancellationAsync(dialog, gate, cancellationToken);
+        }
+    }
+
+    /// <summary>Fences queued cancellation callbacks before the owning native window is destroyed.</summary>
+    /// <param name="xamlRoot">The owning visual root, if it has been initialized.</param>
+    public static void MarkWindowClosing(XamlRoot? xamlRoot)
+    {
+        if (xamlRoot is not null)
+        {
+            Gates.GetValue(xamlRoot, static _ => new DialogPresentationGate()).MarkWindowClosing();
         }
     }
 
@@ -80,6 +90,7 @@ internal static class WindowDialogCoordinator
 
     private static async Task<ContentDialogResult> ShowWithCancellationAsync(
         ContentDialog dialog,
+        DialogPresentationGate gate,
         CancellationToken cancellationToken)
     {
         if (!cancellationToken.CanBeCanceled)
@@ -104,7 +115,8 @@ internal static class WindowDialogCoordinator
         {
             if (!showTask.IsCompleted)
             {
-                dialog.Hide();
+                // Cancellation may resume after Closed; a pending WinRT task does not prove the HWND is alive.
+                gate.TryDismiss(() => dialog.Hide());
             }
         }
         catch (Exception exception) when (

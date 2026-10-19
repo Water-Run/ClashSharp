@@ -87,8 +87,10 @@ public sealed class DialogPresentationArchitectureTests
 
         Assert.Contains("CancellationToken cancellationToken", overlay, StringComparison.Ordinal);
         Assert.Contains("await dialog.ShowManagedAsync(cancellationToken)", overlay, StringComparison.Ordinal);
-        Assert.Contains("ShowWithCancellationAsync(dialog, cancellationToken)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("ShowWithCancellationAsync(dialog, gate, cancellationToken)", coordinator, StringComparison.Ordinal);
         Assert.Contains("dialog.Hide()", coordinator, StringComparison.Ordinal);
+        Assert.Contains("gate.TryDismiss(() => dialog.Hide())", coordinator, StringComparison.Ordinal);
+        Assert.Contains("WindowDialogCoordinator.MarkWindowClosing(GetDialogXamlRoot())", mainWindow, StringComparison.Ordinal);
 
         Assert.Contains(
             "Func<Microsoft.UI.Xaml.XamlRoot, CancellationToken, Task> ShowStartupConflicts",
