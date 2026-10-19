@@ -23,6 +23,37 @@ $script:assertions = 0
 $script:scenarios = [Collections.Generic.List[string]]::new()
 $utf8 = [Text.UTF8Encoding]::new($false)
 
+function Get-TestBomSchema {
+    <#
+    .SYNOPSIS
+        Loads the pinned CycloneDX standard and its offline reference schemas.
+    .DESCRIPTION
+        Keeps upstream files unchanged and bundles their references only in memory, preventing
+        schema validation from using the network or a moving upstream license enumeration.
+    #>
+    $root = Join-Path $PSScriptRoot 'Schemas/CycloneDX-1.6'
+    $pins = @{
+        'bom-1.6.schema.json' = '3E92DDDBC30CF7F6A02B80F0942B1A4CFD4FB1C26F1DFC4310AFA9D613CAFB93'
+        'spdx.schema.json' = 'BAA9D3BD1ED57B6751B0887EDEAD6B5063FF53FF7429CF85D476C6C94AF0166E'
+        'jsf-0.82.schema.json' = '8BAE002C25E723DB7EE1F26AFDE680AE1A2B1A8F6B4B4B0FD65DC3BECB090AAE'
+    }
+    foreach ($name in $pins.Keys) {
+        if ((Get-FileHash -LiteralPath (Join-Path $root $name) -Algorithm SHA256).Hash -cne $pins[$name]) {
+            throw 'A pinned CycloneDX schema differs from its reviewed upstream bytes.'
+        }
+    }
+    $schema = Get-Content -LiteralPath (Join-Path $root 'bom-1.6.schema.json') -Raw | ConvertFrom-Json -AsHashtable -Depth 100
+    $spdx = Get-Content -LiteralPath (Join-Path $root 'spdx.schema.json') -Raw | ConvertFrom-Json -AsHashtable -Depth 100
+    $jsfText = Get-Content -LiteralPath (Join-Path $root 'jsf-0.82.schema.json') -Raw
+    $jsf = $jsfText.Replace('"#/definitions/', '"#/definitions/__clashsharp_jsf/definitions/') | ConvertFrom-Json -AsHashtable -Depth 100
+    $null = $spdx.Remove('$id')
+    $null = $jsf.Remove('$id')
+    $schema.definitions['__clashsharp_spdx'] = $spdx
+    $schema.definitions['__clashsharp_jsf'] = $jsf
+    $combined = $schema | ConvertTo-Json -Depth 100
+    return $combined.Replace('"spdx.schema.json"', '"#/definitions/__clashsharp_spdx"').Replace('"jsf-0.82.schema.json#/definitions/signature"', '"#/definitions/__clashsharp_jsf/definitions/signature"')
+}
+
 function Assert-TestCondition {
     <#
     .SYNOPSIS
@@ -158,13 +189,21 @@ function New-TestFixture {
         geoDataEvidence = @{ dataCommit = ('a' * 40); sourceCommit = ('b' * 40); documents = @('source-license.txt'); upstreamInputRevisionsRecorded = $false }
     }
     Write-TestJson -Path (Join-Path $root 'ClashSharp/Installer/release-inputs.json') -Value @{
-        geoData = @{ commit = ('a' * 40); sourceCommit = ('b' * 40); files = @() }
+        geoData = @{ commit = ('a' * 40); sourceCommit = ('b' * 40); files = @(
+            @('ASN.mmdb', 'Country.mmdb', 'GeoIP.dat', 'GeoSite.dat') | ForEach-Object {
+                @{ name = $_; length = 1; sha256 = ('c' * 64) }
+            }
+        ) }
     }
     foreach ($path in @('LICENSE', 'ClashSharp/ClashSharp/Binaries/mihomo-LICENSE.txt',
             'ClashSharp/ClashSharp/Binaries/mihomo-NOTICE.txt', 'ClashSharp/ClashSharp/Binaries/mihomo-manifest.json')) {
         $target = Join-Path $root $path
         $null = New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force
         [IO.File]::WriteAllText($target, 'Synthetic bundled component evidence.', $utf8)
+    }
+    Write-TestJson -Path (Join-Path $root 'ClashSharp/ClashSharp/Binaries/mihomo-manifest.json') -Value @{
+        schemaVersion = 1; version = 'v1.2.3'; length = 1; sha256 = ('d' * 64)
+        sourceReleaseUrl = 'https://github.com/MetaCubeX/mihomo/releases/tag/v1.2.3'
     }
     return $root
 }
@@ -218,10 +257,21 @@ try {
     $first = New-ClashSharpThirdPartyNotices -RepositoryRoot $validRoot -OutputPath $validPath
     $verified = Get-ClashSharpThirdPartyNoticesContract -LiteralPath $validPath
     Assert-TestCondition ($verified.PackageCount -eq 2 -and $verified.Sha256 -ceq $first.Sha256) 'The valid two-package inventory was not preserved.'
+    Assert-TestCondition ($verified.BomComponentCount -eq 7 -and $verified.BomSha256 -cmatch '^[0-9a-f]{64}$') 'The BOM must include two NuGet packages, mihomo and four data assets.'
+    Assert-TestCondition ($first.BomComponentCount -eq $verified.BomComponentCount -and $first.BomSha256 -ceq $verified.BomSha256 -and $first.DocumentCount -eq $verified.DocumentCount) 'Producer and archive verifier must agree on BOM identity and original document count.'
     $second = New-ClashSharpThirdPartyNotices -RepositoryRoot $validRoot -OutputPath (Join-Path $validRoot 'again.zip')
     Assert-TestCondition ($first.Sha256 -ceq $second.Sha256) 'Identical inputs did not produce identical archive bytes.'
     $entries = @(Read-TestZip -Path $validPath)
     $indexEntry = @($entries | Where-Object Name -CEQ 'inventory.json')[0]
+    $bomEntry = @($entries | Where-Object Name -CEQ 'bom.cdx.json')[0]
+    $bomSchema = Get-TestBomSchema
+    $bomText = $utf8.GetString($bomEntry.Bytes)
+    Assert-TestCondition (Test-Json -Json $bomText -Schema $bomSchema) 'The generated BOM does not conform to the complete offline CycloneDX schema.'
+    $invalidBom = $bomText | ConvertFrom-Json -AsHashtable
+    $invalidBom.components[0].type = 'not-a-cyclonedx-component'
+    $invalidBomText = $invalidBom | ConvertTo-Json -Depth 24
+    Assert-TestCondition (-not (Test-Json -Json $invalidBomText -Schema $bomSchema -ErrorAction SilentlyContinue)) 'The standard schema accepted an invalid component kind.'
+    $script:scenarios.Add('offline-cyclonedx-schema')
     $index = $utf8.GetString($indexEntry.Bytes) | ConvertFrom-Json -AsHashtable
     Assert-TestCondition (@($index.packages | Where-Object { $_.projects.Count -ne 4 }).Count -eq 0) 'A production entry point was omitted.'
     Assert-TestCondition (-not $utf8.GetString($indexEntry.Bytes).Contains($testRoot)) 'Inventory exposed a machine-specific restore path.'
@@ -235,13 +285,21 @@ try {
     Assert-TestRejects 'existing-output-preserved' { New-ClashSharpThirdPartyNotices -RepositoryRoot $validRoot -OutputPath $validPath }
     Assert-TestCondition ((Get-FileHash -LiteralPath $validPath -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $first.Sha256) 'An existing output was changed.'
 
-    foreach ($name in @('missing-inventory', 'missing-readme', 'missing-document', 'corrupt-document',
+    foreach ($name in @('missing-inventory', 'missing-readme', 'missing-bom', 'changed-bom', 'changed-bom-hash', 'missing-document', 'corrupt-document',
             'duplicate-entry', 'case-collision', 'traversal-entry', 'unreferenced-document', 'bad-reference')) {
         $altered = @($entries | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Bytes = [byte[]]$_.Bytes.Clone() } })
         $documentName = @($altered | Where-Object { $_.Name.StartsWith('documents/') })[0].Name
         switch ($name) {
             'missing-inventory' { $altered = @($altered | Where-Object Name -CNE 'inventory.json') }
             'missing-readme' { $altered = @($altered | Where-Object Name -CNE 'README.txt') }
+            'missing-bom' { $altered = @($altered | Where-Object Name -CNE 'bom.cdx.json') }
+            'changed-bom' { @($altered | Where-Object Name -CEQ 'bom.cdx.json')[0].Bytes = $utf8.GetBytes('{}') }
+            'changed-bom-hash' {
+                $entry = @($altered | Where-Object Name -CEQ 'bom.cdx.json')[0]
+                $bom = $utf8.GetString($entry.Bytes) | ConvertFrom-Json -AsHashtable
+                $bom.components[0].hashes[0].content = ('f' * 64)
+                $entry.Bytes = $utf8.GetBytes(($bom | ConvertTo-Json -Depth 24) + [char]10)
+            }
             'missing-document' { $altered = @($altered | Where-Object Name -CNE $documentName) }
             'corrupt-document' { @($altered | Where-Object Name -CEQ $documentName)[0].Bytes = $utf8.GetBytes('changed') }
             'duplicate-entry' { $altered += $altered[0] }

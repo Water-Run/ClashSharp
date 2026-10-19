@@ -49,6 +49,13 @@ NuGet 构建/运行输入与 SDK 下载依赖。生成器用 SDK 自带的 NuGet
 缓存侧车文件来代替内容校验。许可、通知和 nuspec 元数据保留原始字节，缺少包内
 许可原文的已知依赖使用 ThirdParty/catalog.json 中精确匹配的来源快照。
 
+ZIP 内的 `bom.cdx.json` 使用 CycloneDX 1.6，列出这些 NuGet 输入、固定内核和四项
+GeoData。标准组件哈希是实际归档/二进制的 SHA-256，NuGet 对签名包使用的内容摘要
+另列属性，不能互换。清单保守覆盖构建输入，不推断未验证的依赖边，也不宣称所有
+输入文件均已部署或 GeoData 的移动上游来源完整。验证器会由同一库存重建清单并逐字节
+比对；契约测试使用固定的完整标准 Schema 离线验证。整个 ZIP 的摘要随最终 MSIX
+和安装载荷绑定，`payload-provenance.json` 另记录 BOM 摘要及组件数量。
+
 同一份说明 ZIP 随安装器提供，并包含在主 MSIX 的 ThirdParty 目录内；打包会读取
 最终 MSIX 确认其内部副本的摘要和文档引用。payload-provenance.json 记录它的
 摘要、长度和输入数量。说明包中的 inventory.json 区分依赖来源并记录对应项目，

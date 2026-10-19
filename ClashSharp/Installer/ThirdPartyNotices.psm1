@@ -157,6 +157,94 @@ function Add-ClashSharpNoticePackage {
     foreach ($folder in $Folders) { $null = $package.folders.Add([string]$folder) }
 }
 
+function ConvertTo-ClashSharpNoticeBomJson {
+    <#
+    .SYNOPSIS
+        Projects verified build inputs into deterministic CycloneDX 1.6 JSON.
+    .DESCRIPTION
+        Uses exact archive SHA-256 values, preserves NuGet's distinct content-hash semantics,
+        and does not invent dependency edges or assert complete GeoData source provenance.
+    .PARAMETER Inventory
+        Validated notices inventory containing packages, core identity and pinned GeoData.
+    #>
+    param([System.Collections.IDictionary] $Inventory)
+    $components = [Collections.Generic.List[object]]::new()
+    foreach ($package in @($Inventory.packages | Sort-Object { ($_.id + '/' + $_.version).ToLowerInvariant() })) {
+        if ($package.id -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$' -or
+            $package.version -cnotmatch '^[0-9]+(\.[0-9]+){1,3}(-[A-Za-z0-9.-]+)?$' -or
+            $package.archiveSha256 -cnotmatch '^[0-9a-f]{64}$' -or $package.archiveLength -lt 1) {
+            throw 'A BOM package identity or archive digest is invalid.'
+        }
+        $purl = 'pkg:nuget/' + $package.id.ToLowerInvariant() + '@' + $package.version.ToLowerInvariant()
+        $properties = @(
+            [ordered]@{ name = 'clashsharp:nuget:content-sha512-base64'; value = $package.nugetContentSha512 },
+            [ordered]@{ name = 'clashsharp:archive:length'; value = [string]$package.archiveLength }
+        )
+        foreach ($project in @($package.projects | Sort-Object -CaseSensitive)) {
+            $properties += [ordered]@{ name = 'clashsharp:input:project'; value = $project }
+        }
+        foreach ($kind in @($package.inputKinds | Sort-Object -CaseSensitive)) {
+            $properties += [ordered]@{ name = 'clashsharp:input:kind'; value = $kind }
+        }
+        $license = if ($package.license.type -ceq 'expression') {
+            [ordered]@{ expression = $package.license.value }
+        } else {
+            [ordered]@{ license = [ordered]@{ name = $package.license.value } }
+        }
+        $components.Add([ordered]@{
+            type = 'library'; 'bom-ref' = $purl; name = $package.id; version = $package.version; purl = $purl
+            hashes = @([ordered]@{ alg = 'SHA-256'; content = $package.archiveSha256 })
+            licenses = @($license); properties = $properties
+        })
+    }
+    $core = $Inventory.mihomo
+    if ($core.version -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+$' -or
+        $core.sha256 -cnotmatch '^[0-9a-f]{64}$' -or $core.length -lt 1 -or
+        $core.sourceReleaseUrl -cne ('https://github.com/MetaCubeX/mihomo/releases/tag/' + $core.version)) {
+        throw 'The BOM core identity is not bound to a pinned release.'
+    }
+    $corePurl = 'pkg:generic/MetaCubeX/mihomo@' + $core.version + '?arch=amd64&os=windows'
+    $components.Add([ordered]@{
+        type = 'application'; 'bom-ref' = $corePurl; name = 'mihomo'; version = $core.version; purl = $corePurl
+        hashes = @([ordered]@{ alg = 'SHA-256'; content = $core.sha256 })
+        externalReferences = @([ordered]@{ type = 'distribution'; url = $core.sourceReleaseUrl })
+        properties = @([ordered]@{ name = 'clashsharp:archive:length'; value = [string]$core.length })
+    })
+    $geo = $Inventory.geoData
+    if ($geo.dataCommit -cnotmatch '^[0-9a-f]{40}$' -or $geo.sourceCommit -cnotmatch '^[0-9a-f]{40}$' -or
+        $geo.files.Count -ne 4 -or
+        (@($geo.files.name | Sort-Object -CaseSensitive) -join '|') -cne 'ASN.mmdb|Country.mmdb|GeoIP.dat|GeoSite.dat') {
+        throw 'The BOM GeoData identity set is incomplete.'
+    }
+    foreach ($file in @($geo.files | Sort-Object name -CaseSensitive)) {
+        if ($file.sha256 -cnotmatch '^[0-9a-f]{64}$' -or $file.length -lt 1) { throw 'A BOM GeoData digest is invalid.' }
+        $purl = 'pkg:generic/MetaCubeX/' + $file.name + '@' + $geo.dataCommit
+        $components.Add([ordered]@{
+            type = 'data'; 'bom-ref' = $purl; name = $file.name; version = $geo.dataCommit; purl = $purl
+            hashes = @([ordered]@{ alg = 'SHA-256'; content = $file.sha256 })
+            properties = @(
+                [ordered]@{ name = 'clashsharp:archive:length'; value = [string]$file.length },
+                [ordered]@{ name = 'clashsharp:geodata:generator-commit'; value = $geo.sourceCommit },
+                [ordered]@{ name = 'clashsharp:geodata:upstream-input-revisions-recorded'; value = ([bool]$geo.upstreamInputRevisionsRecorded).ToString().ToLowerInvariant() }
+            )
+        })
+    }
+    $rootRef = 'clashsharp:build-inputs:' + $Inventory.productVersion
+    $bom = [ordered]@{
+        '$schema' = 'http://cyclonedx.org/schema/bom-1.6.schema.json'; bomFormat = 'CycloneDX'; specVersion = '1.6'; version = 1
+        metadata = [ordered]@{
+            component = [ordered]@{
+                type = 'application'; 'bom-ref' = $rootRef; name = 'ClashSharp'; version = $Inventory.productVersion
+                description = 'Conservative build-input inventory; inclusion does not assert that every package file is deployed. Dependency edges and complete GeoData upstream provenance are not asserted.'
+            }
+            tools = [ordered]@{ components = @([ordered]@{ type = 'application'; name = '.NET SDK'; version = $Inventory.dotnetSdkVersion }) }
+        }
+        components = @($components)
+        compositions = @([ordered]@{ aggregate = 'incomplete'; assemblies = @($rootRef) })
+    }
+    return ($bom | ConvertTo-Json -Depth 24) + [char]10
+}
+
 function New-ClashSharpThirdPartyNotices {
     <#
     .SYNOPSIS
@@ -347,6 +435,8 @@ function New-ClashSharpThirdPartyNotices {
     }
     $releaseBytes = Read-ClashSharpNoticeFile -LiteralPath (Join-Path $root 'ClashSharp/Installer/release-inputs.json')
     $release = [Text.Encoding]::UTF8.GetString($releaseBytes) | ConvertFrom-Json -AsHashtable -Depth 16
+    $coreBytes = Read-ClashSharpNoticeFile -LiteralPath (Join-Path $root 'ClashSharp/ClashSharp/Binaries/mihomo-manifest.json')
+    $core = [Text.Encoding]::UTF8.GetString($coreBytes) | ConvertFrom-Json -AsHashtable -Depth 8
     if ($release.geoData.commit -cne $catalog.geoDataEvidence.dataCommit -or
         $release.geoData.sourceCommit -cne $catalog.geoDataEvidence.sourceCommit) {
         throw 'GeoData attribution is not bound to the selected release inputs.'
@@ -359,6 +449,7 @@ function New-ClashSharpThirdPartyNotices {
         schemaVersion = 1; productVersion = '1.0.0'; dotnetSdkVersion = $sdkVersion
         scope = 'Production project NuGet build and runtime inputs, SDK download dependencies, and bundled component source notices.'
         projects = @($projects); packages = @($inventoryPackages); bundledDocuments = @($bundled)
+        mihomo = [ordered]@{ version = $core.version; length = $core.length; sha256 = $core.sha256; sourceReleaseUrl = $core.sourceReleaseUrl }
         geoData = [ordered]@{
             dataCommit = $release.geoData.commit; sourceCommit = $release.geoData.sourceCommit
             files = $release.geoData.files; documents = $geoDocuments
@@ -368,10 +459,15 @@ function New-ClashSharpThirdPartyNotices {
     }
     $indexBytes = [Text.UTF8Encoding]::new($false).GetBytes(($inventory | ConvertTo-Json -Depth 16) + [char]10)
     $documents.Add('inventory.json', $indexBytes)
+    $bomBytes = [Text.UTF8Encoding]::new($false).GetBytes((ConvertTo-ClashSharpNoticeBomJson -Inventory $inventory))
+    $documents.Add('bom.cdx.json', $bomBytes)
     $readme = @(
         'ClashSharp 1.0.0 third-party notices'
         ''
         'Open inventory.json for package identities, content hashes, project scope, and document paths.'
+        'bom.cdx.json projects those verified build inputs into deterministic CycloneDX 1.6 JSON.'
+        'Its archive SHA-256 values are distinct from signature-aware NuGet content hashes.'
+        'Dependency edges and complete GeoData upstream provenance are not asserted.'
         'The documents directory preserves original license, notice, metadata, and attribution bytes.'
         'RTF documents can be opened in a compatible text editor or word processor.'
         'Build inputs are included conservatively; inclusion does not mean every package file is shipped.'
@@ -408,8 +504,10 @@ function New-ClashSharpThirdPartyNotices {
     return [pscustomobject]@{
         Path = $output; Length = (Get-Item -LiteralPath $output).Length
         Sha256 = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
-        PackageCount = $packages.Count; DocumentCount = $documents.Count - 2
+        PackageCount = $packages.Count; DocumentCount = $documents.Count - 3
         GeoDataUpstreamInputRevisionsRecorded = $catalog.geoDataEvidence.upstreamInputRevisionsRecorded
+        BomSha256 = Get-ClashSharpNoticeHash -Bytes $bomBytes
+        BomComponentCount = $packages.Count + 5
     }
 }
 
@@ -434,9 +532,10 @@ function Get-ClashSharpNoticeArchiveContent {
         $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         $total = 0L
         $inventory = $null
+        $bomBytes = $null
         foreach ($entry in $zip.Entries) {
             if (-not $seen.Add($entry.FullName) -or
-                ($entry.FullName -cnotin @('README.txt', 'inventory.json') -and
+                ($entry.FullName -cnotin @('README.txt', 'inventory.json', 'bom.cdx.json') -and
                 $entry.FullName -cnotmatch '^documents/[0-9a-f]{64}\.(txt|rtf)$')) {
                 throw 'Unexpected or duplicate notices ZIP entry.'
             }
@@ -448,6 +547,8 @@ function Get-ClashSharpNoticeArchiveContent {
             try { $content = Read-ClashSharpNoticeBytes -Stream $stream } finally { $stream.Dispose() }
             if ($entry.FullName -ceq 'inventory.json') {
                 $inventory = [Text.UTF8Encoding]::new($false, $true).GetString($content) | ConvertFrom-Json -AsHashtable -Depth 32
+            } elseif ($entry.FullName -ceq 'bom.cdx.json') {
+                $bomBytes = $content
             } elseif ($entry.FullName -cne 'README.txt') {
                 $hash = Get-ClashSharpNoticeHash -Bytes $content
                 if ($entry.Name.Split('.')[0] -cne $hash) { throw 'A notices document differs from its content address.' }
@@ -481,10 +582,16 @@ function Get-ClashSharpNoticeArchiveContent {
             $null = $referencedPaths.Add($reference.path)
         }
         if (-not $referencedPaths.SetEquals($documents.Keys)) { throw 'Notices archive contains unreferenced documents.' }
+        if ($null -eq $bomBytes) { throw 'The notices archive has no CycloneDX build-input BOM.' }
+        $expectedBom = ConvertTo-ClashSharpNoticeBomJson -Inventory $inventory
+        $actualBom = [Text.UTF8Encoding]::new($false, $true).GetString($bomBytes)
+        if ($actualBom -cne $expectedBom) { throw 'The build-input BOM differs from its verified notices inventory.' }
         return [pscustomobject]@{
             Length = $Bytes.Length; Sha256 = Get-ClashSharpNoticeHash -Bytes $Bytes
             PackageCount = $inventory.packages.Count; DocumentCount = $documents.Count
             GeoDataUpstreamInputRevisionsRecorded = $inventory.geoData.upstreamInputRevisionsRecorded
+            BomSha256 = Get-ClashSharpNoticeHash -Bytes $bomBytes
+            BomComponentCount = $inventory.packages.Count + 5
         }
     } finally {
         if ($null -ne $zip) { $zip.Dispose() }

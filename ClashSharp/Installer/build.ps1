@@ -725,6 +725,9 @@ $provenance = [ordered]@{
         packageCount = $thirdPartyNotices.PackageCount
         documentCount = $thirdPartyNotices.DocumentCount
         geoDataUpstreamInputRevisionsRecorded = $thirdPartyNotices.GeoDataUpstreamInputRevisionsRecorded
+        bomPath = 'bom.cdx.json'
+        bomSha256 = $thirdPartyNotices.BomSha256
+        bomComponentCount = $thirdPartyNotices.BomComponentCount
     }
     mihomoSourceMaterials = [ordered]@{
         path = 'MIHOMO-SOURCE-MATERIALS.zip'
