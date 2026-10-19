@@ -92,7 +92,7 @@ Closing the main window minimizes Clash# to the tray by default, and it keeps ru
 3. Use **Copy client configuration** to supply the endpoint and authorization header to an Agent client that supports Streamable HTTP. The copied configuration contains a private token; Clash# excludes this copy from Windows clipboard history and cloud synchronization.
 4. Keep Clash# running while the Agent uses it. Closing the MCP server disconnects clients; replacing its token requires copying the configuration again.
 
-Configuration editing does not grant proxy control. Turning on **Control proxy state** also allows changes that can interrupt an Agent's network access. Historical summaries, historical details, and sensitive configuration have separate grants; the Agent cannot change its own permissions. See the [MCP design and verification record](./docs/design/2026-10-15-native-agent-mcp.md) for the implemented tool boundaries.
+Configuration editing does not grant proxy control. Turning on **Control proxy state** also allows changes that can interrupt an Agent's network access. Historical summaries, historical details, and sensitive configuration have separate grants; the Agent cannot change its own permissions. See the [connection and permission guide](./docs/guides/native-agent.md) for practical combinations and troubleshooting, or the [MCP design and verification record](./docs/design/2026-10-15-native-agent-mcp.md) for implementation boundaries.
 
 ### Pages
 
