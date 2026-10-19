@@ -43,6 +43,8 @@ public sealed partial class MihomoServiceManager
 
     private MihomoServiceStatus _latestStatus;
 
+    private string _latestStatusMessageKey = "MihomoService.Status.Unknown";
+
     /// <summary>Initializes the service manager.</summary>
     internal MihomoServiceManager(
         IProcessRunner processRunner,
@@ -67,7 +69,7 @@ public sealed partial class MihomoServiceManager
         if (!_ipcEndpoint.IsProvisioned)
         {
             MihomoServiceStatus status = CreateProvisioningFailureStatus();
-            CacheLatestStatus(status);
+            CacheLatestStatus(status, "MihomoService.Status.Unknown");
             return status;
         }
 
@@ -86,10 +88,17 @@ public sealed partial class MihomoServiceManager
     /// <summary>Gets the latest observed status without performing process I/O.</summary>
     public MihomoServiceStatus GetLatestStatus()
     {
+        MihomoServiceStatus status;
+        string messageKey;
         lock (_statusLock)
         {
-            return _latestStatus;
+            status = _latestStatus;
+            messageKey = _latestStatusMessageKey;
         }
+
+        // Keep the observation, but resolve its text in the current display language.
+        // Localization runs outside the cache lock and never performs another service query.
+        return status with { Message = GetString(messageKey) };
     }
 
     private async Task<ServiceQueryResult> QueryStatusAsync(CancellationToken cancellationToken)
@@ -141,7 +150,8 @@ public sealed partial class MihomoServiceManager
 
         CacheLatestStatus(queryResult.IsPending || !queryResult.IsConclusive
             ? MihomoServiceStatus.Unknown(GetString("MihomoService.Status.Unknown"))
-            : queryResult.Status);
+            : queryResult.Status,
+            queryResult.IsPending ? "MihomoService.Status.Unknown" : GetScmStatusMessageKey(queryResult.Status));
 
         return queryResult;
     }
@@ -222,7 +232,7 @@ public sealed partial class MihomoServiceManager
         if (!_ipcEndpoint.IsProvisioned)
         {
             MihomoServiceStatus status = CreateProvisioningFailureStatus();
-            CacheLatestStatus(status);
+            CacheLatestStatus(status, "MihomoService.Status.Unknown");
             return status;
         }
 
@@ -242,7 +252,7 @@ public sealed partial class MihomoServiceManager
                 {
                     IpcFailureCode = RuntimeFailureDiagnostics.ServiceUnavailable,
                 };
-                CacheLatestStatus(unavailable);
+                CacheLatestStatus(unavailable, GetScmStatusMessageKey(unavailable));
                 return unavailable;
             }
 
@@ -263,7 +273,7 @@ public sealed partial class MihomoServiceManager
                 EnsureActivatedSnapshot(snapshot, generation, configurationHash, dataGenerationId);
 
                 MihomoServiceStatus status = CreateReadyStatus(response.ProtocolVersion, snapshot);
-                CacheLatestStatus(status);
+                CacheLatestStatus(status, GetReadyStatusMessageKey(status));
                 return status;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -305,7 +315,7 @@ public sealed partial class MihomoServiceManager
         if (!_ipcEndpoint.IsProvisioned)
         {
             MihomoServiceStatus status = CreateProvisioningFailureStatus();
-            CacheLatestStatus(status);
+            CacheLatestStatus(status, "MihomoService.Status.Unknown");
             return status;
         }
 
@@ -359,7 +369,7 @@ public sealed partial class MihomoServiceManager
 
             if (ipcStoppedStatus is { } confirmedStoppedStatus)
             {
-                CacheLatestStatus(confirmedStoppedStatus);
+                CacheLatestStatus(confirmedStoppedStatus, GetReadyStatusMessageKey(confirmedStoppedStatus));
                 cancellationToken.ThrowIfCancellationRequested();
                 return confirmedStoppedStatus;
             }
@@ -372,7 +382,7 @@ public sealed partial class MihomoServiceManager
             MihomoServiceStatus status = stoppedQuery.IsConclusive
                 ? stoppedQuery.Status
                 : MihomoServiceStatus.Unknown(GetString("MihomoService.Status.Unknown"));
-            CacheLatestStatus(status);
+            CacheLatestStatus(status, GetScmStatusMessageKey(status));
             cancellationToken.ThrowIfCancellationRequested();
             return status;
         }
@@ -414,18 +424,28 @@ public sealed partial class MihomoServiceManager
         return _getString(key);
     }
 
-    private void CacheLatestStatus(MihomoServiceStatus status)
+    private static string GetScmStatusMessageKey(MihomoServiceStatus status) =>
+        !status.IsKnown ? "MihomoService.Status.Unknown"
+        : !status.IsInstalled ? "MihomoService.Status.NotDeployed"
+        : status.IsScmRunning ? "MihomoService.Status.DeployedRunning"
+        : "MihomoService.Status.Deployed";
+
+    private static string GetReadyStatusMessageKey(MihomoServiceStatus status) =>
+        status.IsRunning ? "MihomoService.Status.DeployedRunning" : "MihomoService.Status.Deployed";
+
+    private void CacheLatestStatus(MihomoServiceStatus status, string messageKey)
     {
         lock (_statusLock)
         {
             _latestStatus = status;
+            _latestStatusMessageKey = messageKey;
         }
     }
 
     private ServiceQueryResult CacheUnknownQueryResult()
     {
         MihomoServiceStatus status = MihomoServiceStatus.Unknown(GetString("MihomoService.Status.Unknown"));
-        CacheLatestStatus(status);
+        CacheLatestStatus(status, "MihomoService.Status.Unknown");
         return new ServiceQueryResult(status, ServiceControllerState.Unknown);
     }
 

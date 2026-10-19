@@ -23,7 +23,7 @@ public sealed partial class MihomoServiceManager
             MihomoServiceStatus status = CreateReadyStatus(
                 observation.ProtocolVersion,
                 observation.Snapshot);
-            CacheLatestStatus(status);
+            CacheLatestStatus(status, GetReadyStatusMessageKey(status));
             return status;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -38,7 +38,7 @@ public sealed partial class MihomoServiceManager
                 Message = GetString("MihomoService.Status.Unknown"),
                 IpcFailureCode = GetIpcFailureCode(exception),
             };
-            CacheLatestStatus(status);
+            CacheLatestStatus(status, "MihomoService.Status.Unknown");
             return status;
         }
     }
@@ -222,7 +222,7 @@ public sealed partial class MihomoServiceManager
                 // A trusted configuration rejection with a stopped child needs no
                 // elevated SCM operation. Uncertain ownership still fails closed.
                 status = status with { IpcFailureCode = failureCode };
-                CacheLatestStatus(status);
+                CacheLatestStatus(status, GetReadyStatusMessageKey(status));
                 return status;
             }
         }
@@ -254,7 +254,7 @@ public sealed partial class MihomoServiceManager
                 IpcFailureCode = activationFailureCode,
                 CleanupFailureCode = GetIpcFailureCode(exception),
             };
-            CacheLatestStatus(cleanupFailed);
+            CacheLatestStatus(cleanupFailed, GetScmStatusMessageKey(cleanupFailed));
             return cleanupFailed;
         }
 
@@ -272,7 +272,7 @@ public sealed partial class MihomoServiceManager
                 ? null
                 : "service.ipc.scm_stop_not_confirmed",
         };
-        CacheLatestStatus(result);
+        CacheLatestStatus(result, GetScmStatusMessageKey(result));
         return result;
     }
 

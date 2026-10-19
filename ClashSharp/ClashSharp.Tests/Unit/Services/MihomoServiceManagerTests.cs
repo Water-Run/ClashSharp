@@ -62,6 +62,79 @@ public sealed class MihomoServiceManagerTests
         Assert.Empty(runner.Requests);
     }
 
+    /// <summary>Changing display language updates cached text without repeating SCM/IPC or changing its facts.</summary>
+    [Theory]
+    [InlineData("STATE : 4 RUNNING", 0, "MihomoService.Status.DeployedRunning")]
+    [InlineData("STATE : 1 STOPPED", 0, "MihomoService.Status.Deployed")]
+    [InlineData("", 1060, "MihomoService.Status.NotDeployed")]
+    [InlineData("", 5, "MihomoService.Status.Unknown")]
+    public async Task GetLatestStatus_AfterLanguageChange_RelocalizesSameObservationWithoutIo(
+        string scmOutput, int exitCode, string expectedKey)
+    {
+        string language = "zh-CN";
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(exitCode, standardOutput: scmOutput));
+        FakeMihomoServiceIpcClient ipc = new();
+        MihomoServiceManager manager = CreateManager(runner, ipcClient: ipc,
+            getString: key => language + ":" + key);
+        MihomoServiceStatus observed = await manager.GetStatusAsync(CancellationToken.None);
+        int processRequests = runner.Requests.Count;
+        int ipcRequests = ipc.Requests.Count;
+
+        language = "de-DE";
+        Assert.Equal(observed with { Message = "de-DE:" + expectedKey }, manager.GetLatestStatus());
+        language = "fa-IR";
+        Assert.Equal(observed with { Message = "fa-IR:" + expectedKey }, manager.GetLatestStatus());
+        language = "zh-CN";
+        Assert.Equal(observed, manager.GetLatestStatus());
+        Assert.Equal(processRequests, runner.Requests.Count);
+        Assert.Equal(ipcRequests, ipc.Requests.Count);
+    }
+
+    /// <summary>A live host with a confirmed stopped child retains the deployed message and ownership evidence.</summary>
+    [Fact]
+    public async Task GetLatestStatus_AfterStoppedChildLanguageChange_PreservesAuthenticatedIdleFacts()
+    {
+        string language = "zh-CN";
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE : 4 RUNNING"));
+        FakeMihomoServiceIpcClient ipc = new();
+        MihomoServiceManager manager = CreateManager(runner, ipcClient: ipc,
+            getString: key => language + ":" + key);
+        MihomoServiceStatus stopped = await manager.StopAsync(CancellationToken.None);
+        int ipcRequests = ipc.Requests.Count;
+        Assert.True(stopped.IsScmRunning);
+        Assert.False(stopped.IsRunning);
+        Assert.True(stopped.HasReleasedChildOwnership);
+
+        language = "de-DE";
+        Assert.Equal(stopped with { Message = "de-DE:MihomoService.Status.Deployed" }, manager.GetLatestStatus());
+        Assert.Single(runner.Requests);
+        Assert.Equal(ipcRequests, ipc.Requests.Count);
+    }
+
+    /// <summary>Relocalizing a failed authenticated probe must preserve its failure code and known SCM facts.</summary>
+    [Fact]
+    public async Task GetLatestStatus_AfterIpcFailureLanguageChange_PreservesFailureObservation()
+    {
+        string language = "zh-CN";
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE : 4 RUNNING"));
+        FakeMihomoServiceIpcClient ipc = new() { Failure = new InvalidDataException("invalid handshake") };
+        MihomoServiceManager manager = CreateManager(runner, ipcClient: ipc,
+            getString: key => language + ":" + key);
+        MihomoServiceStatus failed = await manager.GetStatusAsync(CancellationToken.None);
+        int ipcRequests = ipc.Requests.Count;
+        Assert.True(failed.IsScmRunning);
+        Assert.False(failed.IsReady);
+        Assert.NotNull(failed.IpcFailureCode);
+
+        language = "fa-IR";
+        Assert.Equal(failed with { Message = "fa-IR:MihomoService.Status.Unknown" }, manager.GetLatestStatus());
+        Assert.Single(runner.Requests);
+        Assert.Equal(ipcRequests, ipc.Requests.Count);
+    }
+
     /// <summary>Verifies a failed sc.exe query maps to a localized not-deployed status.</summary>
     [Fact]
     public async Task GetStatusAsync_WhenScQueryFails_ReturnsLocalizedNotDeployedStatus()
@@ -752,7 +825,8 @@ public sealed class MihomoServiceManagerTests
     private static MihomoServiceManager CreateManager(
         FakeProcessRunner runner,
         FakeMihomoServiceIpcClient? ipcClient = null,
-        MihomoServiceIpcEndpoint? endpoint = null)
+        MihomoServiceIpcEndpoint? endpoint = null,
+        Func<string, string>? getString = null)
     {
         endpoint ??= MihomoServiceIpcEndpoint.Create(
             "S-1-5-21-100-200-300-1001",
@@ -761,14 +835,14 @@ public sealed class MihomoServiceManagerTests
             runner,
             endpoint,
             ipcClient ?? new FakeMihomoServiceIpcClient(),
-            key => key switch
+            getString ?? (key => key switch
             {
                 "MihomoService.Status.NotDeployed" => "not deployed",
                 "MihomoService.Status.Unknown" => "unknown",
                 "MihomoService.Status.DeployedRunning" => "running",
                 "MihomoService.Status.Deployed" => "deployed",
                 _ => key,
-            });
+            }));
     }
 
     private static ProcessRunResult Completed(
