@@ -4,6 +4,13 @@ namespace ClashSharp.Tests.Unit.Diagnostics;
 
 public sealed class PersistedLogTextTests
 {
+    [Fact]
+    public void Normalize_TruncatesBeforeAValidSurrogatePairInsteadOfReplacingHalfOfIt()
+    {
+        string prefix = new('x', RuntimeLogText.MaximumCharacters - 1);
+        Assert.Equal(prefix, PersistedLogText.Normalize(prefix + "😀trailing text"));
+    }
+
     [Theory]
     [InlineData("Authorization: Bearer private-access-token\noperation failed", "private-access-token")]
     [InlineData("Proxy-Authorization: Basic dXNlcjpwYXNz", "dXNlcjpwYXNz")]

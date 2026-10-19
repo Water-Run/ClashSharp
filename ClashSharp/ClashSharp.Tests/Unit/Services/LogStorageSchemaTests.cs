@@ -40,6 +40,24 @@ public sealed class LogStorageSchemaTests
         LogStorageSchema.EnsureCreated(connection);
 
         Assert.True(ColumnExists(connection, "ProfileTrafficStats", "ConnectionCount"));
+        Assert.True(ColumnExists(connection, "Logs", "SessionEpoch"));
+    }
+
+    [Fact]
+    public void EnsureCreated_LegacyLogsKeepTheirRowsAndAcceptOldWritersWithoutASession()
+    {
+        using SqliteConnection connection = OpenInMemoryConnection();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "CREATE TABLE Logs (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, Level TEXT NOT NULL, Source TEXT NOT NULL, Message TEXT NOT NULL, Detail TEXT NULL); INSERT INTO Logs (CreatedAtUnixTime, Level, Source, Message) VALUES (1, 'Info', 'Legacy', 'preserved');";
+        command.ExecuteNonQuery();
+
+        LogStorageSchema.EnsureCreated(connection);
+        LogStorageSchema.EnsureCreated(connection);
+
+        command.CommandText = "SELECT Message FROM Logs WHERE Id = 1 AND SessionEpoch IS NULL;";
+        Assert.Equal("preserved", command.ExecuteScalar());
+        command.CommandText = "INSERT INTO Logs (CreatedAtUnixTime, Level, Source, Message) VALUES (2, 'Info', 'Legacy', 'old writer'); SELECT COUNT(*) FROM Logs WHERE SessionEpoch IS NULL;";
+        Assert.Equal(2L, command.ExecuteScalar());
     }
 
     /// <summary>Verifies older profile traffic tables are migrated with the connection count column.</summary>

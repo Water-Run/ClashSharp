@@ -37,4 +37,8 @@ public enum McpToolId
     ListProxyGroups,
     /// <summary>List the names of members in one live strategy group.</summary>
     ListProxyGroupMembers,
+    /// <summary>List retained application-log identifiers and metadata without log content.</summary>
+    ListLogHistory,
+    /// <summary>Read the redacted content of one identified retained application log.</summary>
+    ReadLogHistory,
 }

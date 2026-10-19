@@ -24,7 +24,7 @@ using Microsoft.Data.Sqlite;
 namespace ClashSharp.Hosting.Agent;
 
 /// <summary>Routes authenticated agent requests to generation-owned product transactions.</summary>
-internal sealed class AppMcpAgentBackend(AppDataGenerationRepositories repositories, DataGenerationManager generations,
+internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories repositories, DataGenerationManager generations,
     MutationAdmissionBarrier admission, IRuntimeSettingsAuthority authority, INetworkStateObserver network,
     McpAccessState access, DateTimeOffset processStarted) : IMcpAgentBackend
 {
@@ -205,11 +205,11 @@ internal sealed class AppMcpAgentBackend(AppDataGenerationRepositories repositor
                     }).ToArray()
                 });
             case McpToolId.GetDiagnostics:
-                // Free-form log messages may contain user URLs or credentials. Diagnostics exposes
-                // bounded current-process severity metadata, never raw historical detail text.
-                var diagnostics = repositories.Logs.GetLogs(1000).Where(log => log.CreatedAt >= processStarted).Take(Limit())
-                    .Select(log => new { created_at = log.CreatedAt, level = log.Level }).ToArray();
-                return Success(new { process_started_at = processStarted, diagnostics });
+                return ReadDiagnostics(Limit(), token);
+            case McpToolId.ListLogHistory:
+                return ReadLogHistorySummaries(args, Limit(), token);
+            case McpToolId.ReadLogHistory:
+                return ReadLogHistoryEntry(args, token);
             default: return McpToolResponse.Error("mcp.operation_unavailable");
         }
     }

@@ -20,7 +20,9 @@ internal static class LogStorageSchema
 
         ExecuteNonQuery(connection, "PRAGMA journal_mode=WAL;");
         ExecuteNonQuery(connection, "CREATE TABLE IF NOT EXISTS Logs (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, Level TEXT NOT NULL, Source TEXT NOT NULL, Message TEXT NOT NULL, Detail TEXT NULL);");
+        EnsureColumn(connection, "Logs", "SessionEpoch", "TEXT NULL");
         ExecuteNonQuery(connection, "CREATE INDEX IF NOT EXISTS IX_Logs_CreatedAtUnixTime ON Logs (CreatedAtUnixTime);");
+        ExecuteNonQuery(connection, "CREATE INDEX IF NOT EXISTS IX_Logs_SessionEpoch_Id ON Logs (SessionEpoch, Id);");
         ExecuteNonQuery(connection, "CREATE TABLE IF NOT EXISTS Connections (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, ProcessName TEXT NULL, Host TEXT NOT NULL, RuleName TEXT NULL, ProxyName TEXT NULL, UploadBytes INTEGER NOT NULL DEFAULT 0, DownloadBytes INTEGER NOT NULL DEFAULT 0);");
         ExecuteNonQuery(connection, "CREATE INDEX IF NOT EXISTS IX_Connections_CreatedAtUnixTime ON Connections (CreatedAtUnixTime);");
         ExecuteNonQuery(connection, "CREATE TABLE IF NOT EXISTS TrafficSnapshots (Id INTEGER PRIMARY KEY AUTOINCREMENT, CreatedAtUnixTime INTEGER NOT NULL, UploadBytes INTEGER NOT NULL, DownloadBytes INTEGER NOT NULL);");

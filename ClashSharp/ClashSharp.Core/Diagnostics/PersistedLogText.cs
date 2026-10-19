@@ -16,9 +16,12 @@ public static partial class PersistedLogText
     public static string Normalize(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        string bounded = text.Length > RuntimeLogText.MaximumCharacters
-            ? text[..RuntimeLogText.MaximumCharacters]
-            : text;
+        int length = Math.Min(text.Length, RuntimeLogText.MaximumCharacters);
+        if (length < text.Length && length > 0 && char.IsHighSurrogate(text[length - 1]) && char.IsLowSurrogate(text[length]))
+        {
+            length--;
+        }
+        string bounded = text[..length];
         try
         {
             // Retain line boundaries until header values have been removed in their entirety.

@@ -75,6 +75,7 @@
     <Compile Include="..\ClashSharp\Model\WindowsDiagnosticResult.cs" Link="Model\WindowsDiagnosticResult.cs" />
     <Compile Include="..\ClashSharp\Model\WindowsDiagnosticTarget.cs" Link="Model\WindowsDiagnosticTarget.cs" />
     <Compile Include="..\ClashSharp\Model\LogRecord.cs" Link="Model\LogRecord.cs" />
+    <Compile Include="..\ClashSharp\Model\StoredLogRecord.cs" Link="Model\StoredLogRecord.cs" />
     <Compile Include="..\ClashSharp\Model\StartupCheckItem.cs" Link="Model\StartupCheckItem.cs" />
     <Compile Include="..\ClashSharp\Model\TrayStatusSnapshot.cs" Link="Model\TrayStatusSnapshot.cs" />
     <Compile Include="..\ClashSharp\Model\LogStorageSummary.cs" Link="Model\LogStorageSummary.cs" />
@@ -120,6 +121,7 @@
     <Compile Include="..\ClashSharp\Service\LogStorageService.cs" Link="Service\LogStorageService.cs" />
     <Compile Include="..\ClashSharp\Service\ILogStorage.cs" Link="Service\ILogStorage.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.Access.cs" Link="Service\LogStorageService.Access.cs" />
+    <Compile Include="..\ClashSharp\Service\LogStorageService.Agent.cs" Link="Service\LogStorageService.Agent.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.CleanupPreview.cs" Link="Service\LogStorageService.CleanupPreview.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageService.Traffic.cs" Link="Service\LogStorageService.Traffic.cs" />
     <Compile Include="..\ClashSharp\Service\LogStorageServiceFactory.cs" Link="Service\LogStorageServiceFactory.cs" />

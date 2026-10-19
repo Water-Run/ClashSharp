@@ -37,6 +37,9 @@ public sealed partial class LogStorageService : ILogStorage, IAsyncDisposable
     private readonly string _databasePath;
 
     private readonly Func<string> _getActiveProfileId;
+    // A fresh repository lifetime owns its diagnostic entries. Imported, legacy and concurrent
+    // writers' rows must never become current diagnostics through coarse timestamp comparisons.
+    private readonly string _logSessionEpoch = Guid.NewGuid().ToString("N");
 
     /// <summary>Tracks whether schema creation has completed for this service instance.</summary>
     private bool _isInitialized;
@@ -539,12 +542,13 @@ public sealed partial class LogStorageService : ILogStorage, IAsyncDisposable
             ExecuteNonQuery(
                 connection,
                 null,
-                "INSERT INTO Logs (CreatedAtUnixTime, Level, Source, Message, Detail) VALUES ($createdAt, $level, $source, $message, $detail);",
+                "INSERT INTO Logs (CreatedAtUnixTime, Level, Source, Message, Detail, SessionEpoch) VALUES ($createdAt, $level, $source, $message, $detail, $session);",
                 ("$createdAt", DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
                 ("$level", safeLevel),
                 ("$source", safeSource),
                 ("$message", safeMessage),
-                ("$detail", safeDetail));
+                ("$detail", safeDetail),
+                ("$session", _logSessionEpoch));
         }
     }
 
