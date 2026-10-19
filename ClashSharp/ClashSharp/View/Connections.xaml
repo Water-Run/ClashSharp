@@ -51,7 +51,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+            <TextBlock x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                       Visibility="{Binding HasStatusSummary, Converter={StaticResource BooleanToVisibilityConverter}}" />
             <TextBlock Grid.Column="1" Text="{Binding FilterCountText}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </Grid>
 

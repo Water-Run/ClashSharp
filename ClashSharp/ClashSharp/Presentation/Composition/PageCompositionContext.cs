@@ -1,4 +1,5 @@
 using ClashSharp.ApplicationModel.Agent;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.ApplicationModel.Settings;
 using ClashSharp.Hosting.Compatibility;
@@ -17,6 +18,7 @@ internal sealed record PageCompositionContext(
     ILogStorage LogStorage,
     IProfileCatalog Profiles,
     MihomoConnectionService MihomoConnections,
+    INetworkStateObserver NetworkState,
     MainlandChinaTextDisplayService MainlandChinaTextDisplay,
     MihomoControllerClient MihomoController,
     IProxySelectionService ProxySelections,

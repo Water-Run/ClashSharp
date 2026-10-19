@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.Model;
 using ClashSharp.ViewModel;
 
@@ -9,6 +10,101 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the active connections view model.</summary>
 public sealed class ConnectionsViewModelTests
 {
+    [Fact]
+    public async Task VerifiedStoppedCore_ShowsOneNormalEmptyExplanationWithoutWarning()
+    {
+        FakeConnectionClient client = new() { ExceptionToThrow = new HttpRequestException("Controller stopped.") };
+        FakeConnectionLog log = new();
+        ConnectionsViewModel page = new(new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink(),
+            networkState: new RuntimeObserver(_ => Task.FromResult(new NetworkStateSnapshot(ClashSharpMode.Disabled, false, false, false, 10000, "stopped"))));
+
+        await page.RefreshConnectionsAsync(CancellationToken.None);
+
+        Assert.Equal("Core stopped", page.EmptyStateText);
+        Assert.Equal("Core stopped", page.ConnectionStatusText);
+        Assert.True(page.HasEmptyState);
+        Assert.False(page.HasStatusSummary);
+        Assert.False(page.CanCloseConnections);
+        Assert.Empty(log.Entries);
+    }
+
+    [Theory]
+    [InlineData(ClashSharpMode.Disabled, true, false, false, true)]
+    [InlineData(ClashSharpMode.Disabled, false, true, false, true)]
+    [InlineData(ClashSharpMode.Disabled, false, false, true, true)]
+    [InlineData(ClashSharpMode.Disabled, false, false, false, false)]
+    [InlineData(ClashSharpMode.Standby, false, false, false, true)]
+    public async Task UnverifiedStoppedState_PreservesControllerFailure(ClashSharpMode mode, bool core, bool proxy, bool tun, bool known)
+    {
+        FakeConnectionLog log = new();
+        ConnectionsViewModel page = new(new FakeConnectionsLocalization(), new FakeConnectionClient { ExceptionToThrow = new HttpRequestException() },
+            log, new TestApplicationErrorSink(), networkState: new RuntimeObserver(_ => Task.FromResult(new NetworkStateSnapshot(mode, core, proxy, tun, 10000, "ambiguous", known))));
+        await page.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.Equal("Unavailable", page.EmptyStateText);
+        Assert.Single(log.Entries);
+    }
+
+    [Fact]
+    public async Task RuntimeProbeFailure_DoesNotMisclassifyTheControllerAsNormallyStopped()
+    {
+        TestApplicationErrorSink errors = new();
+        ConnectionsViewModel page = new(new FakeConnectionsLocalization(), new FakeConnectionClient { ExceptionToThrow = new HttpRequestException() },
+            new FakeConnectionLog(), errors, networkState: new RuntimeObserver(_ => Task.FromException<NetworkStateSnapshot>(new IOException("Probe failed."))));
+        await page.RefreshConnectionsAsync(CancellationToken.None);
+        Assert.Equal("Unavailable", page.EmptyStateText);
+        Assert.Single(errors.Errors);
+    }
+
+    [Fact]
+    public async Task LateStoppedProbe_CannotReplaceANewerSuccessfulSnapshot()
+    {
+        TaskCompletionSource<NetworkStateSnapshot> probe = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeConnectionClient client = new() { ExceptionToThrow = new HttpRequestException() };
+        ConnectionsViewModel page = new(new FakeConnectionsLocalization(), client, new FakeConnectionLog(), new TestApplicationErrorSink(),
+            networkState: new RuntimeObserver(_ => probe.Task));
+        Task older = page.RefreshConnectionsAsync(CancellationToken.None);
+        client.ExceptionToThrow = null;
+        await page.RefreshConnectionsAsync(CancellationToken.None);
+        probe.SetResult(new(ClashSharpMode.Disabled, false, false, false, 10000, "old"));
+        await older;
+        Assert.Equal(2, page.Connections.Count);
+        Assert.Equal("2 active", page.ConnectionStatusText);
+        Assert.True(page.HasStatusSummary);
+    }
+
+    [Fact]
+    public async Task StreamFailureAfterNormalShutdown_IsReclassifiedWhenTheRuntimeStarts()
+    {
+        FakeConnectionClient client = new();
+        client.StreamFailures.Enqueue(new IOException("Stopped stream."));
+        client.StreamFailures.Enqueue(new IOException("Running controller failure."));
+        NetworkStateSnapshot state = new(ClashSharpMode.Disabled, false, false, false, 10000, "stopped");
+        FakeConnectionLog log = new();
+        ConnectionsViewModel page = new(new FakeConnectionsLocalization(), client, log, new TestApplicationErrorSink(),
+            networkState: new RuntimeObserver(_ => Task.FromResult(state)));
+        TaskCompletionSource failed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        page.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ConnectionsViewModel.ConnectionStatusText) && page.ConnectionStatusText == "Unavailable") { failed.TrySetResult(); }
+        };
+        using CancellationTokenSource lifetime = new();
+        Task watch = page.WatchConnectionsAsync(lifetime.Token);
+        try
+        {
+            Assert.Equal("Core stopped", page.EmptyStateText);
+            Assert.Empty(log.Entries);
+            state = new(ClashSharpMode.Standby, true, false, false, 10000, "running");
+            await failed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal("Unavailable", page.EmptyStateText);
+            Assert.Single(log.Entries);
+        }
+        finally { lifetime.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => watch); }
+    }
+
+    private sealed class RuntimeObserver(Func<CancellationToken, Task<NetworkStateSnapshot>> observe) : INetworkStateObserver
+    {
+        public Task<NetworkStateSnapshot> ObserveAsync(CancellationToken cancellationToken) => observe(cancellationToken);
+    }
     [Theory]
     [InlineData("unknown")]
     [InlineData("")]
@@ -664,6 +760,7 @@ public sealed class ConnectionsViewModelTests
                 "Connections.Status.NotRefreshed" => "Not refreshed",
                 "Connections.Status.Active.Format" => "{0} active",
                 "Connections.Status.Unavailable" => "Unavailable",
+                "Connections.Status.CoreStopped" => "Core stopped",
                 "Connections.Status.Closed" => "Closed",
                 "Connections.Status.ClosedAll" => "Closed all",
                 "Connections.Empty" => "No active connections",

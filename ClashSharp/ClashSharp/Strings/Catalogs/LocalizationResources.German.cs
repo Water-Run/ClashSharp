@@ -370,6 +370,7 @@ internal static partial class LocalizationResources
             ["Connections.Status.NotRefreshed"] = "Verbindungen wurden noch nicht aktualisiert.",
             ["Connections.Status.Active.Format"] = "{0:N0} aktive Verbindungen.",
             ["Connections.Status.Unavailable"] = "mihomo-Verbindungen konnten nicht gelesen werden.",
+            ["Connections.Status.CoreStopped"] = "Der Kern läuft nicht. Starten Sie ihn, um aktive Verbindungen anzuzeigen.",
             ["Connections.Status.Persisted.Format"] = "{0:N0} Verbindungs-Snapshot-Zeilen gespeichert.",
             ["Connections.Status.Closed"] = "Verbindung geschlossen.",
             ["Connections.Status.ClosedAll"] = "Alle Verbindungen geschlossen.",

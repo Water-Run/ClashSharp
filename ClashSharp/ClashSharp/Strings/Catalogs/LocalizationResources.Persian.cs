@@ -370,6 +370,7 @@ internal static partial class LocalizationResources
             ["Connections.Status.NotRefreshed"] = "اتصالات هنوز تازه‌سازی نشده‌اند.",
             ["Connections.Status.Active.Format"] = "{0:N0} اتصال فعال.",
             ["Connections.Status.Unavailable"] = "خواندن اتصالات mihomo ممکن نیست.",
+            ["Connections.Status.CoreStopped"] = "هسته اجرا نمی‌شود. برای دیدن اتصال‌های فعال، آن را اجرا کنید.",
             ["Connections.Status.Persisted.Format"] = "{0:N0} ردیف نمای اتصال ذخیره شد.",
             ["Connections.Status.Closed"] = "اتصال بسته شد.",
             ["Connections.Status.ClosedAll"] = "همه اتصالات بسته شدند.",

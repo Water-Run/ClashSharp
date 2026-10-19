@@ -186,6 +186,7 @@
     <Compile Include="..\ClashSharp\Service\IProfileCatalog.cs" Link="Service\IProfileCatalog.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogService.Access.cs" Link="Service\ProfileCatalogService.Access.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileStatusText.cs" Link="Service\ProfileStatusText.cs" />
+    <Compile Include="..\ClashSharp\Service\SubscriptionStatusText.cs" Link="Service\SubscriptionStatusText.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileOperationGate.cs" Link="Service\ProfileOperationGate.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileCatalogServiceFactory.cs" Link="Service\ProfileCatalogServiceFactory.cs" />
     <Compile Include="..\ClashSharp\Service\ProfileSubscriptionScheduler.cs" Link="Service\ProfileSubscriptionScheduler.cs" />

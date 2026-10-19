@@ -17,7 +17,8 @@ internal static class ConnectionsPageComposition
             new ActiveConnectionClientAdapter(context.MihomoConnections),
             new ConnectionLogAdapter(context.LogStorage),
             context.ErrorSink,
-            context.MainlandChinaTextDisplay.Apply);
+            context.MainlandChinaTextDisplay.Apply,
+            context.NetworkState);
 
         return new Dependencies(viewModel, context.ErrorSink, changed => new DataGenerationSubscription(context.Settings, changed));
     }

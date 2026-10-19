@@ -499,6 +499,7 @@ public sealed class AppResourcePackagingTests
         string servicePath = FindSourceFile("ClashSharp", "ClashSharp", "Service", "ProfileCatalogService.cs");
 
         string serviceCode = File.ReadAllText(servicePath);
+        string subscriptionStatuses = File.ReadAllText(FindSourceFile("ClashSharp", "ClashSharp", "Service", "SubscriptionStatusText.cs"));
 
         foreach (string literal in new[]
         {
@@ -515,11 +516,11 @@ public sealed class AppResourcePackagingTests
             "\"本机直连默认配置\"",
         })
         {
-            Assert.DoesNotContain(literal, serviceCode, StringComparison.Ordinal);
+            Assert.DoesNotContain(literal, serviceCode + subscriptionStatuses, StringComparison.Ordinal);
         }
 
         Assert.Contains("ProfileCatalog.Status.Added", serviceCode, StringComparison.Ordinal);
-        Assert.Contains("ProfileCatalog.Subscription.CheckSucceeded.Format", serviceCode, StringComparison.Ordinal);
+        Assert.Contains("ProfileCatalog.Subscription.CheckSucceeded.Format", subscriptionStatuses, StringComparison.Ordinal);
         Assert.Contains("ProfileCatalog.BuiltInDirect.Name", serviceCode, StringComparison.Ordinal);
     }
 

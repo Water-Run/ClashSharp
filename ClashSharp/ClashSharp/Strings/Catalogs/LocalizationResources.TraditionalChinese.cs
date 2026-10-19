@@ -370,6 +370,7 @@ internal static partial class LocalizationResources
             ["Connections.Status.NotRefreshed"] = "尚未重新整理連線。",
             ["Connections.Status.Active.Format"] = "{0:N0} 條活動連線。",
             ["Connections.Status.Unavailable"] = "無法讀取 mihomo 連線。",
+            ["Connections.Status.CoreStopped"] = "核心未執行。啟動核心後可查看作用中的連線。",
             ["Connections.Status.Persisted.Format"] = "已寫入 {0:N0} 條連線快照。",
             ["Connections.Status.Closed"] = "已關閉連線。",
             ["Connections.Status.ClosedAll"] = "已關閉全部連線。",

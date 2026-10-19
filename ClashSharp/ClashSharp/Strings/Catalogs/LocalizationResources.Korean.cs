@@ -370,6 +370,7 @@ internal static partial class LocalizationResources
             ["Connections.Status.NotRefreshed"] = "아직 연결을 새로 고치지 않았습니다.",
             ["Connections.Status.Active.Format"] = "활성 연결 {0:N0}개",
             ["Connections.Status.Unavailable"] = "mihomo 연결을 읽을 수 없습니다.",
+            ["Connections.Status.CoreStopped"] = "코어가 실행 중이 아닙니다. 활성 연결을 보려면 코어를 시작하세요.",
             ["Connections.Status.Persisted.Format"] = "연결 스냅숏 {0:N0}개를 기록했습니다.",
             ["Connections.Status.Closed"] = "연결을 닫았습니다.",
             ["Connections.Status.ClosedAll"] = "모든 연결을 닫았습니다.",

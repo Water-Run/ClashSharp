@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
+using ClashSharp.ApplicationModel.Network;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 
@@ -32,6 +33,8 @@ internal sealed class ConnectionsViewModel : ObservableObject
 
     /// <summary>Log sink used by persistence and warning messages.</summary>
     private readonly IConnectionLog _log;
+    private readonly INetworkStateObserver? _networkState;
+    private readonly IApplicationErrorSink _errorSink;
 
     /// <summary>Text filter used for UI-only display policy.</summary>
     private readonly Func<string, string> _displayTextFilter;
@@ -44,6 +47,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
     private int _closeCount;
     private bool _hasObservation;
     private bool _isAvailable;
+    private bool _isCoreStopped;
 
     /// <summary>Backing field for <see cref="ConnectionStatusText"/>.</summary>
     private string _connectionStatusText = string.Empty;
@@ -58,18 +62,21 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <param name="log">Log sink. Must not be null.</param>
     /// <param name="errorSink">Boundary sink for unexpected command failures. Must not be null.</param>
     /// <param name="displayTextFilter">Optional sanitizer applied to controller-sourced display text.</param>
+    /// <param name="networkState">Optional verified runtime observer used to distinguish normal shutdown from controller failure.</param>
     /// <exception cref="ArgumentNullException">A required dependency is null.</exception>
     public ConnectionsViewModel(
         IConnectionsLocalization localization,
         IActiveConnectionClient connectionClient,
         IConnectionLog log,
         IApplicationErrorSink errorSink,
-        Func<string, string>? displayTextFilter = null)
+        Func<string, string>? displayTextFilter = null,
+        INetworkStateObserver? networkState = null)
     {
         _localization = localization ?? throw new ArgumentNullException(nameof(localization));
         _connectionClient = connectionClient ?? throw new ArgumentNullException(nameof(connectionClient));
         _log = log ?? throw new ArgumentNullException(nameof(log));
-        ArgumentNullException.ThrowIfNull(errorSink);
+        _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
+        _networkState = networkState;
         _displayTextFilter = displayTextFilter ?? (static text => text);
         ConnectionStatusText = _localization.GetString("Connections.Status.NotRefreshed");
         RefreshConnectionsCommand = new AsyncRelayCommand(
@@ -141,11 +148,14 @@ internal sealed class ConnectionsViewModel : ObservableObject
     /// <summary>Gets whether the page should explain why no rows are displayed.</summary>
     public bool HasEmptyState => !IsRefreshing && Connections.Count == 0;
 
+    /// <summary>Gets whether the populated list needs a separate status summary.</summary>
+    public bool HasStatusSummary => !HasEmptyState;
+
     /// <summary>Gets a distinct explanation for initial, unavailable, empty, or filtered-empty state.</summary>
     public string EmptyStateText => !_hasObservation
         ? _localization.GetString("Connections.Status.NotRefreshed")
         : !_isAvailable
-            ? _localization.GetString("Connections.Status.Unavailable")
+            ? _localization.GetString(_isCoreStopped ? "Connections.Status.CoreStopped" : "Connections.Status.Unavailable")
             : _localization.GetString(_allConnections.Count == 0 ? "Connections.Empty" : "Connections.NoMatches");
 
     /// <summary>Gets the displayed row count relative to the full snapshot.</summary>
@@ -201,6 +211,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         ++_snapshotRevision;
         _hasObservation = false;
         _isAvailable = false;
+        _isCoreStopped = false;
         _allConnections = [];
         Connections = [];
         ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
@@ -229,8 +240,9 @@ internal sealed class ConnectionsViewModel : ObservableObject
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!unavailableLogged || _isAvailable)
                 {
-                    ApplyUnavailableStatus("The mihomo connection stream closed.", logWarning: !unavailableLogged);
-                    unavailableLogged = true;
+                    await ApplyReadFailureAsync("The mihomo connection stream closed.", _snapshotRevision,
+                        !unavailableLogged, cancellationToken);
+                    unavailableLogged = !_isCoreStopped;
                 }
             }
             catch (Exception exception) when (
@@ -246,8 +258,9 @@ internal sealed class ConnectionsViewModel : ObservableObject
             {
                 if (!unavailableLogged || _isAvailable)
                 {
-                    ApplyUnavailableStatus(exception.Message, logWarning: !unavailableLogged);
-                    unavailableLogged = true;
+                    await ApplyReadFailureAsync(exception.Message, _snapshotRevision,
+                        !unavailableLogged, cancellationToken);
+                    unavailableLogged = !_isCoreStopped;
                 }
             }
 
@@ -283,7 +296,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         {
             if (revision == _snapshotRevision)
             {
-                ApplyUnavailableStatus(exception.Message);
+                await ApplyReadFailureAsync(exception.Message, revision, logWarning: true, cancellationToken);
             }
 
             return null;
@@ -300,6 +313,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         ++_snapshotRevision;
         _hasObservation = true;
         _isAvailable = true;
+        _isCoreStopped = false;
         _allConnections = connections
             .Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter, _localization.Formatter, _localization.GetString))
             .ToArray();
@@ -310,15 +324,38 @@ internal sealed class ConnectionsViewModel : ObservableObject
             connections.Count);
     }
 
-    private void ApplyUnavailableStatus(string detail, bool logWarning = true)
+    /// <summary>Classifies a failed read without publishing over a newer connection observation.</summary>
+    private async Task ApplyReadFailureAsync(string detail, long revision, bool logWarning, CancellationToken cancellationToken)
+    {
+        bool stopped = false;
+        if (_networkState is not null)
+        {
+            try
+            {
+                NetworkStateSnapshot state = await _networkState.ObserveAsync(cancellationToken);
+                stopped = state.IsKnown && state.Mode == ClashSharpMode.Disabled && !state.CoreRunning
+                    && !state.SystemProxyEnabled && !state.TransparentProxyEnabled;
+            }
+            catch (Exception failure) when (ExceptionGraphClassifier.IsRecoverable(failure)
+                && !ExceptionGraphClassifier.IsCallerCancellation(failure, cancellationToken))
+            {
+                await _errorSink.ReportAsync(new("connections-runtime-observation", failure), cancellationToken);
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (revision == _snapshotRevision) { ApplyUnavailableStatus(detail, logWarning, stopped); }
+    }
+
+    private void ApplyUnavailableStatus(string detail, bool logWarning = true, bool coreStopped = false)
     {
         ++_snapshotRevision;
         _hasObservation = true;
         _isAvailable = false;
+        _isCoreStopped = coreStopped;
         _allConnections = [];
         ApplyFilter();
-        ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
-        if (logWarning)
+        ConnectionStatusText = _localization.GetString(coreStopped ? "Connections.Status.CoreStopped" : "Connections.Status.Unavailable");
+        if (logWarning && !coreStopped)
         {
             _log.Append("Warning", "Connections", ConnectionStatusText, detail);
         }
@@ -343,6 +380,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsClosing));
         OnPropertyChanged(nameof(CanCloseConnections));
         OnPropertyChanged(nameof(HasEmptyState));
+        OnPropertyChanged(nameof(HasStatusSummary));
         OnPropertyChanged(nameof(EmptyStateText));
         OnPropertyChanged(nameof(FilterCountText));
     }

@@ -370,6 +370,7 @@ internal static partial class LocalizationResources
             ["Connections.Status.NotRefreshed"] = "Соединения еще не обновлялись.",
             ["Connections.Status.Active.Format"] = "Активных соединений: {0:N0}.",
             ["Connections.Status.Unavailable"] = "Не удалось прочитать соединения mihomo.",
+            ["Connections.Status.CoreStopped"] = "Ядро не запущено. Запустите его, чтобы просмотреть активные соединения.",
             ["Connections.Status.Persisted.Format"] = "Записано строк снимка соединений: {0:N0}.",
             ["Connections.Status.Closed"] = "Соединение закрыто.",
             ["Connections.Status.ClosedAll"] = "Все соединения закрыты.",

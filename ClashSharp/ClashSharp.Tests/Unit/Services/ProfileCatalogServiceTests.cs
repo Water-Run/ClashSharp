@@ -13,6 +13,88 @@ namespace ClashSharp.Tests.Unit.Services;
 public sealed class ProfileCatalogServiceTests
 {
     [Fact]
+    public async Task SuccessfulSubscriptionCheck_ReturnsCurrentLanguageAndPersistsStableIdentity()
+    {
+        using TempFile file = new();
+        AppLanguage language = AppLanguage.English;
+        await using ProfileCatalogService service = CreateService(file.Path, new FakeProfileCatalogSettings(),
+            getString: key => LocalizationResources.Translations[language][key]);
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        ProfileSubscriptionLink link = await service.AddSubscriptionLinkAsync(
+            "Status check", $"http://127.0.0.1:{port}/profile.yaml", CancellationToken.None);
+
+        foreach (AppLanguage current in LocalizationResources.Translations.Keys)
+        {
+            language = current;
+            string expected = string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                LocalizationResources.Translations[current]["ProfileCatalog.Subscription.CheckSucceeded.Format"], 200);
+            await ExchangeSubscriptionAsync(listener, async token =>
+            {
+                Assert.Equal(expected, await service.CheckSubscriptionLinkAsync(link, token));
+            });
+            Assert.Equal(expected, Assert.Single(service.GetSubscriptionLinks()).Status);
+            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(file.Path));
+            Assert.Equal(SubscriptionStatusText.CheckSucceeded(200),
+                saved.RootElement.GetProperty("Links")[0].GetProperty("Status").GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData(AppLanguage.SimplifiedChinese)]
+    [InlineData(AppLanguage.TraditionalChinese)]
+    [InlineData(AppLanguage.English)]
+    [InlineData(AppLanguage.German)]
+    [InlineData(AppLanguage.French)]
+    [InlineData(AppLanguage.Russian)]
+    [InlineData(AppLanguage.Korean)]
+    [InlineData(AppLanguage.Persian)]
+    public async Task LegacySubscriptionStatuses_FollowCurrentLanguageWithoutRewritingReads(AppLanguage legacyLanguage)
+    {
+        using TempFile file = new();
+        string[] keys = ["ProfileCatalog.Status.Added", ProfileStatusText.Canceled,
+            "ProfileCatalog.Subscription.CheckFailed", "ProfileCatalog.Subscription.Downloading",
+            "ProfileCatalog.Subscription.Updated", "ProfileCatalog.Subscription.UpdateFailed"];
+        List<ProfileSubscriptionLink> legacy = keys.Select((key, index) => new ProfileSubscriptionLink(
+            "link-" + index, "User name " + index, "https://example.test/" + index, false, 24,
+            DateTimeOffset.UnixEpoch, LocalizationResources.Translations[legacyLanguage][key])).ToList();
+        legacy.Add(new("checked", "Checked", "https://example.test/checked", false, 24, DateTimeOffset.UnixEpoch,
+            string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                LocalizationResources.Translations[legacyLanguage]["ProfileCatalog.Subscription.CheckSucceeded.Format"], 200)));
+        legacy.Add(new("custom", "Custom", "https://example.test/custom", false, 24, DateTimeOffset.UnixEpoch, "Custom diagnostic"));
+        string original = JsonSerializer.Serialize(new { Links = legacy });
+        File.WriteAllText(file.Path, original);
+        AppLanguage language = AppLanguage.English;
+        await using ProfileCatalogService service = CreateService(file.Path, new FakeProfileCatalogSettings(),
+            getString: key => LocalizationResources.Translations[language][key]);
+
+        foreach (AppLanguage current in new[] { AppLanguage.English, AppLanguage.SimplifiedChinese, AppLanguage.Persian })
+        {
+            language = current;
+            IReadOnlyList<ProfileSubscriptionLink> links = service.GetSubscriptionLinks();
+            for (int index = 0; index < keys.Length; index++)
+            {
+                Assert.Equal(LocalizationResources.Translations[current][keys[index]], links[index].Status);
+                Assert.Equal(legacy[index].Name, links[index].Name);
+                Assert.Equal(legacy[index].Uri, links[index].Uri);
+                Assert.Equal(legacy[index].LastUpdatedAt, links[index].LastUpdatedAt);
+            }
+            Assert.Equal(string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                LocalizationResources.Translations[current]["ProfileCatalog.Subscription.CheckSucceeded.Format"], 200), links[6].Status);
+            Assert.Equal("Custom diagnostic", links[7].Status);
+            Assert.Equal(original, File.ReadAllText(file.Path));
+        }
+
+        Assert.True(await service.TryUpdateSubscriptionLinkStatusAsync("link-0", keys[0], CancellationToken.None));
+        using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(file.Path));
+        JsonElement stored = saved.RootElement.GetProperty("Links");
+        for (int index = 0; index < keys.Length; index++) { Assert.Equal(keys[index], stored[index].GetProperty("Status").GetString()); }
+        Assert.Equal(SubscriptionStatusText.CheckSucceeded(200), stored[6].GetProperty("Status").GetString());
+        Assert.Equal("Custom diagnostic", stored[7].GetProperty("Status").GetString());
+    }
+
+    [Fact]
     public async Task AgentEdit_RequiresExpectedHashAndPreservesVerifiedHistory()
     {
         using TempFile file = new();

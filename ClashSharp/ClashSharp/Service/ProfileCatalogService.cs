@@ -269,7 +269,10 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         using IDisposable operation = _operations.Enter();
         lock (_syncLock)
         {
-            return [.. LoadDocument().Links];
+            return [.. LoadDocument().Links.Select(link => link with
+            {
+                Status = SubscriptionStatusText.Localize(link.Status, GetString),
+            })];
         }
     }
 
@@ -904,10 +907,10 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
             using HttpResponseMessage response = await SendWithGetFallbackAsync(request, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
-            string status = FormatString("ProfileCatalog.Subscription.CheckSucceeded.Format", (int)response.StatusCode);
+            string status = SubscriptionStatusText.CheckSucceeded((int)response.StatusCode);
             SubscriptionUsage? usage = ReadSubscriptionUsage(response);
             TryUpdateSubscriptionLinkStatus(currentLink.Id, status, usage, updateUsage: usage is not null);
-            return status;
+            return SubscriptionStatusText.Localize(status, GetString);
         }
         catch (Exception exception) when (exception is ArgumentException or HttpRequestException or OperationCanceledException or InvalidOperationException)
         {
@@ -2298,6 +2301,12 @@ public sealed partial class ProfileCatalogService : IProfileCatalog, IAsyncDispo
         {
             ConfigurationProfile profile = document.Profiles[index];
             document.Profiles[index] = profile with { Status = ProfileStatusText.Normalize(profile.Status) };
+        }
+
+        for (int index = 0; index < document.Links.Count; index++)
+        {
+            ProfileSubscriptionLink link = document.Links[index];
+            document.Links[index] = link with { Status = SubscriptionStatusText.Normalize(link.Status) };
         }
 
         string json = JsonSerializer.Serialize(document, JsonOptions);
