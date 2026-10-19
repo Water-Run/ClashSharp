@@ -17,7 +17,7 @@ public sealed partial class MihomoServiceManager
         {
             ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
             RequestId = Guid.NewGuid(),
-            AuthenticationToken = _ipcEndpoint.AuthenticationToken,
+            AuthenticationToken = IpcEndpoint.AuthenticationToken,
             Command = MihomoServiceIpcCommand.Logs,
             MaximumLogEntries = MihomoServiceIpcProtocol.MaximumLogEntries,
         };

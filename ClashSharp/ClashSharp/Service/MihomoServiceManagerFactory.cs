@@ -16,14 +16,20 @@ internal static class MihomoServiceManagerFactory
     /// <returns>A service manager wired to SCM observation, authenticated IPC, and localization resources.</returns>
     public static MihomoServiceManager CreateDefault()
     {
-        MihomoServiceIpcEndpoint endpoint = MihomoServiceIpcEndpoint.LoadForCurrentUser();
+        var connection = LoadConnection();
         return new MihomoServiceManager(
             new WindowsProcessRunner(),
-            endpoint,
-            new NamedPipeMihomoServiceIpcClient(
-                endpoint.PipeName,
-                new WindowsMihomoServicePipeServerIdentityVerifier(
-                    MihomoServiceManager.ServiceName)),
-            LocalizationService.Instance.GetString);
+            connection.Endpoint,
+            connection.Client,
+            LocalizationService.Instance.GetString,
+            LoadConnection);
+    }
+
+    private static (MihomoServiceIpcEndpoint Endpoint, IMihomoServiceIpcClient Client) LoadConnection()
+    {
+        MihomoServiceIpcEndpoint endpoint = MihomoServiceIpcEndpoint.LoadForCurrentUser();
+        return (endpoint, new NamedPipeMihomoServiceIpcClient(
+            endpoint.PipeName,
+            new WindowsMihomoServicePipeServerIdentityVerifier(MihomoServiceManager.ServiceName)));
     }
 }

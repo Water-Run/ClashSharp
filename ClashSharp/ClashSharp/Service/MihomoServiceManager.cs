@@ -33,9 +33,13 @@ public sealed partial class MihomoServiceManager
 
     private readonly Func<string, string> _getString;
 
-    private readonly MihomoServiceIpcEndpoint _ipcEndpoint;
+    private ServiceConnection _connection;
 
-    private readonly IMihomoServiceIpcClient _ipcClient;
+    private readonly Func<(MihomoServiceIpcEndpoint Endpoint, IMihomoServiceIpcClient Client)>? _reloadConnection;
+
+    private readonly object _provisioningLock = new();
+
+    private MihomoServiceIpcEndpoint IpcEndpoint => Volatile.Read(ref _connection).Endpoint;
 
     private readonly object _statusLock = new();
 
@@ -50,15 +54,18 @@ public sealed partial class MihomoServiceManager
         IProcessRunner processRunner,
         MihomoServiceIpcEndpoint ipcEndpoint,
         IMihomoServiceIpcClient ipcClient,
-        Func<string, string> getString)
+        Func<string, string> getString,
+        Func<(MihomoServiceIpcEndpoint Endpoint, IMihomoServiceIpcClient Client)>? reloadConnection = null)
     {
         _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
-        _ipcEndpoint = ipcEndpoint ?? throw new ArgumentNullException(nameof(ipcEndpoint));
-        _ipcClient = ipcClient ?? throw new ArgumentNullException(nameof(ipcClient));
+        _connection = new(
+            ipcEndpoint ?? throw new ArgumentNullException(nameof(ipcEndpoint)),
+            ipcClient ?? throw new ArgumentNullException(nameof(ipcClient)));
+        _reloadConnection = reloadConnection;
         _getString = getString ?? throw new ArgumentNullException(nameof(getString));
-        _latestStatus = _ipcEndpoint.IsProvisioned
+        _latestStatus = ipcEndpoint.IsProvisioned
             ? MihomoServiceStatus.Unknown(GetString("MihomoService.Status.Unknown"))
-            : CreateProvisioningFailureStatus();
+            : CreateProvisioningFailureStatus(ipcEndpoint);
     }
 
     /// <summary>Gets current Windows service status.</summary>
@@ -66,9 +73,9 @@ public sealed partial class MihomoServiceManager
     public async Task<MihomoServiceStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_ipcEndpoint.IsProvisioned)
+        if (!TryGetProvisionedConnection(out ServiceConnection connection))
         {
-            MihomoServiceStatus status = CreateProvisioningFailureStatus();
+            MihomoServiceStatus status = CreateProvisioningFailureStatus(connection.Endpoint);
             CacheLatestStatus(status, "MihomoService.Status.Unknown");
             return status;
         }
@@ -229,9 +236,9 @@ public sealed partial class MihomoServiceManager
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_ipcEndpoint.IsProvisioned)
+        if (!TryGetProvisionedConnection(out ServiceConnection connection))
         {
-            MihomoServiceStatus status = CreateProvisioningFailureStatus();
+            MihomoServiceStatus status = CreateProvisioningFailureStatus(connection.Endpoint);
             CacheLatestStatus(status, "MihomoService.Status.Unknown");
             return status;
         }
@@ -312,9 +319,9 @@ public sealed partial class MihomoServiceManager
     public async Task<MihomoServiceStatus> StopAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_ipcEndpoint.IsProvisioned)
+        if (!TryGetProvisionedConnection(out ServiceConnection connection))
         {
-            MihomoServiceStatus status = CreateProvisioningFailureStatus();
+            MihomoServiceStatus status = CreateProvisioningFailureStatus(connection.Endpoint);
             CacheLatestStatus(status, "MihomoService.Status.Unknown");
             return status;
         }
@@ -408,9 +415,38 @@ public sealed partial class MihomoServiceManager
         return _processRunner.RunAsync(request, cancellationToken);
     }
 
-    private MihomoServiceStatus CreateProvisioningFailureStatus()
+    /// <summary>Retries an initially unavailable association without rebinding an established deployment.</summary>
+    private bool TryGetProvisionedConnection(out ServiceConnection connection)
     {
-        string failureCode = _ipcEndpoint.ProvisioningFailureCode
+        connection = Volatile.Read(ref _connection);
+        if (connection.Endpoint.IsProvisioned || _reloadConnection is null)
+        {
+            return connection.Endpoint.IsProvisioned;
+        }
+
+        lock (_provisioningLock)
+        {
+            connection = Volatile.Read(ref _connection);
+            if (!connection.Endpoint.IsProvisioned)
+            {
+                // The production loader repeats the strict owner/schema/file checks. Publish
+                // credentials and transport together; a validated deployment is never replaced.
+                var reloaded = _reloadConnection();
+                connection = new(
+                    reloaded.Endpoint ?? throw new InvalidOperationException("The service association loader returned no endpoint."),
+                    reloaded.Client ?? throw new InvalidOperationException("The service association loader returned no transport."));
+                Volatile.Write(ref _connection, connection);
+            }
+        }
+
+        return connection.Endpoint.IsProvisioned;
+    }
+
+    private sealed record ServiceConnection(MihomoServiceIpcEndpoint Endpoint, IMihomoServiceIpcClient Client);
+
+    private MihomoServiceStatus CreateProvisioningFailureStatus(MihomoServiceIpcEndpoint endpoint)
+    {
+        string failureCode = endpoint.ProvisioningFailureCode
             ?? throw new InvalidOperationException(
                 "A provisioned service endpoint has no provisioning failure status.");
         return MihomoServiceStatus.Unknown(GetString("MihomoService.Status.Unknown")) with

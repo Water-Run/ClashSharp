@@ -75,7 +75,7 @@ public sealed partial class MihomoServiceManager
         {
             ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
             RequestId = Guid.NewGuid(),
-            AuthenticationToken = _ipcEndpoint.AuthenticationToken,
+            AuthenticationToken = IpcEndpoint.AuthenticationToken,
             Command = command,
             Generation = generation,
             DataGenerationId = dataGenerationId,
@@ -111,7 +111,7 @@ public sealed partial class MihomoServiceManager
         {
             ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
             RequestId = Guid.NewGuid(),
-            AuthenticationToken = _ipcEndpoint.AuthenticationToken,
+            AuthenticationToken = IpcEndpoint.AuthenticationToken,
             Command = command,
             ExpectedRuntime = expectedRuntime,
             ConnectionId = connectionId,
@@ -142,7 +142,7 @@ public sealed partial class MihomoServiceManager
         {
             ProtocolVersion = MihomoServiceIpcProtocol.CurrentVersion,
             RequestId = Guid.NewGuid(),
-            AuthenticationToken = _ipcEndpoint.AuthenticationToken,
+            AuthenticationToken = IpcEndpoint.AuthenticationToken,
             Command = MihomoServiceIpcCommand.UpdateProvider,
             ExpectedRuntime = expectedRuntime,
             ProviderUpdate = providerUpdate,
@@ -162,7 +162,7 @@ public sealed partial class MihomoServiceManager
         MihomoServiceIpcRequest request,
         CancellationToken cancellationToken)
     {
-        MihomoServiceIpcResponse response = await _ipcClient
+        MihomoServiceIpcResponse response = await Volatile.Read(ref _connection).Client
             .SendAsync(request, cancellationToken)
             .ConfigureAwait(false);
         string? validationError = response.ValidateFor(request);
@@ -177,9 +177,9 @@ public sealed partial class MihomoServiceManager
 
     private void ThrowIfServiceNotProvisioned()
     {
-        if (_ipcEndpoint.ProvisioningFailureCode is { } failureCode)
+        if (!TryGetProvisionedConnection(out ServiceConnection connection))
         {
-            throw new MihomoServiceCommandException(failureCode);
+            throw new MihomoServiceCommandException(connection.Endpoint.ProvisioningFailureCode!);
         }
     }
 

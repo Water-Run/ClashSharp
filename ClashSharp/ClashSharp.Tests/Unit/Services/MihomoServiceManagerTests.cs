@@ -46,6 +46,158 @@ public sealed class MihomoServiceManagerTests
     private const string IpcToken =
         "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
+    [Fact]
+    public async Task GetStatusAsync_WhenInitialAssociationRecovers_PublishesMatchingTransportAndCredential()
+    {
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE : 4 RUNNING"));
+        FakeMihomoServiceIpcClient sentinel = new();
+        FakeMihomoServiceIpcClient recovered = new();
+        MihomoServiceIpcEndpoint endpoint = MihomoServiceIpcEndpoint.Create("S-1-5-21-100-200-300-1001", IpcToken);
+        int loads = 0;
+        MihomoServiceManager manager = CreateManager(runner, ipcClient: sentinel,
+            endpoint: MihomoServiceIpcEndpoint.Unprovisioned(MihomoServiceIpcEndpoint.AssociationInvalidCode),
+            reloadConnection: () => ++loads == 1
+                ? (MihomoServiceIpcEndpoint.Unprovisioned(MihomoServiceIpcEndpoint.AssociationMissingCode), sentinel)
+                : (endpoint, recovered));
+
+        Assert.False(manager.GetLatestStatus().IsKnown);
+        Assert.Equal(0, loads);
+        MihomoServiceStatus unavailable = await manager.GetStatusAsync(CancellationToken.None);
+        Assert.Equal(MihomoServiceIpcEndpoint.AssociationMissingCode, unavailable.ProvisioningFailureCode);
+        Assert.Empty(runner.Requests);
+        Assert.Empty(sentinel.Requests);
+
+        MihomoServiceStatus ready = await manager.GetStatusAsync(CancellationToken.None);
+
+        Assert.True(ready.IsReady);
+        Assert.Null(ready.ProvisioningFailureCode);
+        Assert.Equal(ready, manager.GetLatestStatus());
+        Assert.Equal(2, loads);
+        Assert.Empty(sentinel.Requests);
+        Assert.Collection(recovered.Requests,
+            request => Assert.Equal(MihomoServiceIpcCommand.Hello, request.Command),
+            request => Assert.Equal(MihomoServiceIpcCommand.Status, request.Command));
+        Assert.All(recovered.Requests, request => Assert.Equal(endpoint.AuthenticationToken, request.AuthenticationToken));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LifecycleOperations_WhenAssociationRecovers_RetainAuthenticatedOwnershipChecks(bool restart)
+    {
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE : 4 RUNNING"));
+        FakeMihomoServiceIpcClient sentinel = new();
+        FakeMihomoServiceIpcClient recovered = new();
+        MihomoServiceIpcEndpoint endpoint = MihomoServiceIpcEndpoint.Create("S-1-5-21-100-200-300-1001", IpcToken);
+        MihomoServiceManager manager = CreateManager(runner, ipcClient: sentinel,
+            endpoint: MihomoServiceIpcEndpoint.Unprovisioned(MihomoServiceIpcEndpoint.AssociationInvalidCode),
+            reloadConnection: () => (endpoint, recovered));
+
+        MihomoServiceStatus result = restart
+            ? await manager.RestartAsync(Generation, ConfigurationHash, CancellationToken.None)
+            : await manager.StopAsync(CancellationToken.None);
+
+        Assert.True(result.IsKnown);
+        Assert.Null(result.ProvisioningFailureCode);
+        Assert.Equal(restart, result.IsReady);
+        Assert.Contains(recovered.Requests, request => request.Command == (restart ? MihomoServiceIpcCommand.Reload : MihomoServiceIpcCommand.Stop));
+        Assert.All(recovered.Requests, request => Assert.Equal(endpoint.AuthenticationToken, request.AuthenticationToken));
+        Assert.Empty(sentinel.Requests);
+        Assert.Single(runner.Requests);
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_AfterProvisioningSucceeds_DoesNotRebindDeployment()
+    {
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE : 4 RUNNING"));
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE : 4 RUNNING"));
+        FakeMihomoServiceIpcClient ipc = new();
+        MihomoServiceIpcEndpoint endpoint = MihomoServiceIpcEndpoint.Create("S-1-5-21-100-200-300-1001", IpcToken);
+        int loads = 0;
+        MihomoServiceManager manager = CreateManager(runner,
+            endpoint: MihomoServiceIpcEndpoint.Unprovisioned(MihomoServiceIpcEndpoint.AssociationInvalidCode),
+            reloadConnection: () => { loads++; return (endpoint, ipc); });
+
+        await manager.GetStatusAsync(CancellationToken.None);
+        await manager.GetStatusAsync(CancellationToken.None);
+
+        Assert.Equal(1, loads);
+        Assert.Equal(4, ipc.Requests.Count);
+        Assert.All(ipc.Requests, request => Assert.Equal(endpoint.AuthenticationToken, request.AuthenticationToken));
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_WhenReloadStillRejectsOwner_DoesNotQueryOrConnect()
+    {
+        FakeProcessRunner runner = new();
+        FakeMihomoServiceIpcClient ipc = new();
+        MihomoServiceManager manager = CreateManager(runner,
+            endpoint: MihomoServiceIpcEndpoint.Unprovisioned(MihomoServiceIpcEndpoint.AssociationInvalidCode),
+            reloadConnection: () => (MihomoServiceIpcEndpoint.Unprovisioned(MihomoServiceIpcEndpoint.OwnerMismatchCode), ipc));
+
+        MihomoServiceStatus status = await manager.GetStatusAsync(CancellationToken.None);
+
+        Assert.False(status.IsKnown);
+        Assert.Equal(MihomoServiceIpcEndpoint.OwnerMismatchCode, status.ProvisioningFailureCode);
+        Assert.Empty(runner.Requests);
+        Assert.Empty(ipc.Requests);
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_WhenCancelled_DoesNotReloadAssociation()
+    {
+        int loads = 0;
+        MihomoServiceIpcEndpoint endpoint = MihomoServiceIpcEndpoint.Unprovisioned(MihomoServiceIpcEndpoint.AssociationInvalidCode);
+        FakeMihomoServiceIpcClient ipc = new();
+        MihomoServiceManager manager = CreateManager(new(), endpoint: endpoint,
+            reloadConnection: () => { loads++; return (endpoint, ipc); });
+        using CancellationTokenSource cancelled = new();
+        cancelled.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => manager.GetStatusAsync(cancelled.Token));
+
+        Assert.Equal(0, loads);
+        Assert.Empty(ipc.Requests);
+    }
+
+    [Fact]
+    public async Task GetLatestStatus_WhileAssociationReloadIsBlocked_RemainsAnIoFreeObservation()
+    {
+        FakeProcessRunner runner = new();
+        runner.Results.Enqueue(Completed(0, standardOutput: "STATE : 4 RUNNING"));
+        MihomoServiceIpcEndpoint endpoint = MihomoServiceIpcEndpoint.Create("S-1-5-21-100-200-300-1001", IpcToken);
+        using ManualResetEventSlim release = new();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        MihomoServiceManager manager = CreateManager(runner,
+            endpoint: MihomoServiceIpcEndpoint.Unprovisioned(MihomoServiceIpcEndpoint.AssociationInvalidCode),
+            reloadConnection: () =>
+            {
+                entered.SetResult();
+                if (!release.Wait(TimeSpan.FromSeconds(10))) { throw new TimeoutException("Association test barrier expired."); }
+                return (endpoint, new FakeMihomoServiceIpcClient());
+            });
+        Task<MihomoServiceStatus> refresh = Task.Run(() => manager.GetStatusAsync(CancellationToken.None));
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            MihomoServiceStatus cached = await Task.Run(manager.GetLatestStatus).WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.False(cached.IsKnown);
+            Assert.Equal(MihomoServiceIpcEndpoint.AssociationInvalidCode, cached.ProvisioningFailureCode);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            release.Set();
+            await refresh;
+        }
+
+        Assert.True(manager.GetLatestStatus().IsReady);
+    }
+
     /// <summary>Verifies a manager does not report service absence before SCM has been queried.</summary>
     [Fact]
     public void GetLatestStatus_BeforeFirstQuery_ReturnsUnknownStatus()
@@ -826,7 +978,8 @@ public sealed class MihomoServiceManagerTests
         FakeProcessRunner runner,
         FakeMihomoServiceIpcClient? ipcClient = null,
         MihomoServiceIpcEndpoint? endpoint = null,
-        Func<string, string>? getString = null)
+        Func<string, string>? getString = null,
+        Func<(MihomoServiceIpcEndpoint Endpoint, IMihomoServiceIpcClient Client)>? reloadConnection = null)
     {
         endpoint ??= MihomoServiceIpcEndpoint.Create(
             "S-1-5-21-100-200-300-1001",
@@ -842,7 +995,7 @@ public sealed class MihomoServiceManagerTests
                 "MihomoService.Status.DeployedRunning" => "running",
                 "MihomoService.Status.Deployed" => "deployed",
                 _ => key,
-            }));
+            }), reloadConnection);
     }
 
     private static ProcessRunResult Completed(

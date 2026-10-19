@@ -14,6 +14,59 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed partial class SettingsViewModelTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartupRestoreFallbackStatus_LanguageChangeRelocalizesTheObservedFactWithoutAnotherRead(bool registered)
+    {
+        int observations = 0;
+        string language = "zh";
+        SettingsViewModel viewModel = CreateFallbackStatusViewModel(
+            _ => { observations++; return Task.FromResult(registered); }, key => language + ":" + key);
+        Assert.Empty(viewModel.StartupRestoreFallbackStatusText);
+        await viewModel.RefreshStartupRestoreFallbackStatusAsync(CancellationToken.None);
+        string key = registered ? "Settings.StartupRestoreFallback.Status.Registered" : "Settings.StartupRestoreFallback.Status.NotRegistered";
+        Assert.Equal("zh:" + key, viewModel.StartupRestoreFallbackStatusText);
+        bool notified = false;
+        viewModel.PropertyChanged += (_, args) => notified |= args.PropertyName == nameof(SettingsViewModel.StartupRestoreFallbackStatusText);
+
+        language = "en";
+        await viewModel.SetDisplayLanguageIndexAsync((int)AppLanguage.English + 1);
+
+        Assert.True(notified);
+        Assert.Equal("en:" + key, viewModel.StartupRestoreFallbackStatusText);
+        Assert.Equal(1, observations);
+    }
+
+    [Fact]
+    public async Task StartupRestoreFallbackStatus_CancelledObservationDoesNotReplaceTheLastFact()
+    {
+        using CancellationTokenSource cancellation = new();
+        bool cancelRead = false;
+        SettingsViewModel viewModel = CreateFallbackStatusViewModel(_ =>
+        {
+            if (cancelRead) { cancellation.Cancel(); }
+            return Task.FromResult(!cancelRead);
+        }, key => key);
+        await viewModel.RefreshStartupRestoreFallbackStatusAsync(CancellationToken.None);
+        cancelRead = true;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => viewModel.RefreshStartupRestoreFallbackStatusAsync(cancellation.Token));
+
+        Assert.Equal("Settings.StartupRestoreFallback.Status.Registered", viewModel.StartupRestoreFallbackStatusText);
+    }
+
+    private static SettingsViewModel CreateFallbackStatusViewModel(Func<CancellationToken, Task<bool>> observe, Func<string, string> getString)
+    {
+        SettingsViewModel viewModel = new(
+            new FakeSettingsStore(), _ => { }, _ => { }, () => { }, _ => { }, getString,
+            () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
+            new FakeApplicationErrorSink(), () => { }, () => { }, observe,
+            _ => Task.CompletedTask, _ => Task.CompletedTask, (_, _) => Task.FromResult(204));
+        viewModel.Load();
+        return viewModel;
+    }
+
+    [Theory]
     [InlineData(AppLanguage.SimplifiedChinese, AppLanguage.English)]
     [InlineData(AppLanguage.AutoDetect, AppLanguage.French)]
     public async Task LanguageRestartPending_TracksAppliedLanguageAcrossPageRecreation(

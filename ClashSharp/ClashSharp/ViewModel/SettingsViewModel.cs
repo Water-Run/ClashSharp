@@ -690,11 +690,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     public string StartupRestoreFallbackDescriptionText => _getString("Settings.StartupRestoreFallback.Description");
 
-    public string StartupRestoreFallbackStatusText
-    {
-        get => _startupRestoreFallbackStatusText;
-        private set => SetProperty(ref _startupRestoreFallbackStatusText, value);
-    }
+    public string StartupRestoreFallbackStatusText => _startupRestoreFallbackRegistered is bool registered
+        ? _getString(registered
+            ? "Settings.StartupRestoreFallback.Status.Registered"
+            : "Settings.StartupRestoreFallback.Status.NotRegistered")
+        : string.Empty;
 
     public string RegisterText => _getString("Command.Register");
 
@@ -1032,7 +1032,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private bool _transparentProxyEnabled;
 
     /// <summary>Backing field for <see cref="StartupRestoreFallbackStatusText"/>.</summary>
-    private string _startupRestoreFallbackStatusText = string.Empty;
+    private bool? _startupRestoreFallbackRegistered;
 
     /// <summary>Backing field for <see cref="MihomoServiceStatusText"/>.</summary>
     private string _mihomoServiceStatusText = string.Empty;
@@ -2412,9 +2412,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
     {
         bool registered = await _isStartupRestoreFallbackRegistered(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        StartupRestoreFallbackStatusText = _getString(registered
-            ? "Settings.StartupRestoreFallback.Status.Registered"
-            : "Settings.StartupRestoreFallback.Status.NotRegistered");
+        _startupRestoreFallbackRegistered = registered;
+        OnPropertyChanged(nameof(StartupRestoreFallbackStatusText));
     }
 
     /// <summary>Registers the startup restore fallback helper and refreshes status.</summary>
