@@ -93,7 +93,7 @@ internal static partial class LocalizationResources
             ["StartupPrompt.Checking"] = "Проверка…",
             ["StartupPrompt.Summary.Ready"] = "Проверка завершена",
             ["StartupPrompt.Summary.Attention.Format"] = "Требуют внимания: {0}",
-            ["StartupPrompt.Summary.Checked.Format"] = "Все проверки ({0}) пройдены.",
+            ["StartupPrompt.Summary.Checked.Format"] = "Выполнено проверок: {0}.",
             ["StartupPrompt.Summary.Optional.Format"] = "Дополнительные настройки ({0}) доступны при необходимости.",
             ["StartupPrompt.State.Healthy"] = "Готово",
             ["StartupPrompt.State.Optional"] = "Необязательно",

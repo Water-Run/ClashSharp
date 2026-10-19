@@ -93,7 +93,7 @@ internal static partial class LocalizationResources
             ["StartupPrompt.Checking"] = "در حال بررسی…",
             ["StartupPrompt.Summary.Ready"] = "بررسی کامل شد",
             ["StartupPrompt.Summary.Attention.Format"] = "{0} مورد به بررسی نیاز دارد",
-            ["StartupPrompt.Summary.Checked.Format"] = "هر {0} مورد بررسی شد و مشکلی ندارد.",
+            ["StartupPrompt.Summary.Checked.Format"] = "{0} مورد بررسی شد.",
             ["StartupPrompt.Summary.Optional.Format"] = "{0} تنظیم اختیاری در صورت نیاز در دسترس است.",
             ["StartupPrompt.State.Healthy"] = "آماده",
             ["StartupPrompt.State.Optional"] = "اختیاری",

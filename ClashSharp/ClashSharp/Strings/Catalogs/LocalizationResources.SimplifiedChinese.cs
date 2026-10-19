@@ -93,7 +93,7 @@ internal static partial class LocalizationResources
             ["StartupPrompt.Checking"] = "正在检查…",
             ["StartupPrompt.Summary.Ready"] = "检查已完成",
             ["StartupPrompt.Summary.Attention.Format"] = "{0} 项需要处理",
-            ["StartupPrompt.Summary.Checked.Format"] = "{0} 项检查均正常。",
+            ["StartupPrompt.Summary.Checked.Format"] = "已检查 {0} 项。",
             ["StartupPrompt.Summary.Optional.Format"] = "{0} 项可选配置，可在需要时设置。",
             ["StartupPrompt.State.Healthy"] = "正常",
             ["StartupPrompt.State.Optional"] = "可选配置",

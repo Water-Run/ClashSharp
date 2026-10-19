@@ -93,7 +93,7 @@ internal static partial class LocalizationResources
             ["StartupPrompt.Checking"] = "확인 중…",
             ["StartupPrompt.Summary.Ready"] = "점검 완료",
             ["StartupPrompt.Summary.Attention.Format"] = "{0}개 항목 확인 필요",
-            ["StartupPrompt.Summary.Checked.Format"] = "{0}개 항목이 모두 정상입니다.",
+            ["StartupPrompt.Summary.Checked.Format"] = "{0}개 항목을 확인했습니다.",
             ["StartupPrompt.Summary.Optional.Format"] = "필요할 때 구성할 수 있는 선택 항목이 {0}개 있습니다.",
             ["StartupPrompt.State.Healthy"] = "정상",
             ["StartupPrompt.State.Optional"] = "선택 사항",
