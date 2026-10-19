@@ -16,6 +16,8 @@
 
 新写入继续在持久化前脱敏；Agent 读取旧行时再次应用边界，不改写原历史数据库。新增官方客户端合成用例覆盖仅授权历史概要/详情或本次诊断时读取这些内容，仍不因此开放敏感配置或代理控制。五个原复现样本在修正源码上全部不再含对应合成凭据。服务器完整构建零警告/错误、格式通过，相关 152 项及最终主程序全量 **4,406 项全部通过、零失败/跳过**，新增 50 项回归。1,869 个输入文件及 1,552 个代码/构建文件摘要核对，45 个保护文件及备份、当前安装、服务、代理和证书多重集保持，两个任务已归档移除。本机没有运行产品测试，准确提交的完整 CI 另行核对。证据与接续点为 `agent-log-privacy-20261019/checkpoint.json`；此前签名候选 `adfda1a` 不包含本次日志修正，不能作为本次产物或安装证据。
 
+`c85ad35` 的[完整 CI](https://github.com/Water-Run/ClashSharp/actions/runs/39203344455)两项作业成功，四份原始 TRX 取回后在服务器经证据门禁核对 **7,037 项全部通过、零失败/跳过**：主程序 4,406、Installer Core 1,109、Presentation 184、Windows 1,338。相同代码的内部候选完成正式路径签名、时间戳及载荷审计，仍包含 75 个 NuGet 输入、108 份原始文档和固定 mihomo 源材料。主程序集 `6DF1BC25130C00145FB30A4812455C03D7C403BF0353E20E5166563B7E9AAC24`，MSIX `E31273F60496EAEAE38021588B7EB5F07000321F25504DED66D66BDA25FF6967`，安装器 `52CDD6F9880CBBA062D11FA315295BB9D69D812E7F8117A2ACDF14BFB43872F8`。沿用现有有效验收签名；证书多重集、45 文件及备份、原安装/服务/代理再次保持，临时 Root/PFX 清理，构建任务归档移除。最新接续点 `agent-log-privacy-20261019/package-checkpoint.json`，新候选尚未安装；后续原生验收以本次合并修正的候选为目标，不把旧包结果替代新包证据。
+
 ## 私密配置复制与产品说明（2026-10-19）
 
 连接配置包含 bearer 令牌，复制入口现使用独立 WinRT 适配器，显式设置 `IsAllowedInHistory=false`、`IsRoamable=false`。Windows 对该份内容禁用剪贴板历史与云同步，不修改用户的全局剪贴板设置。这些选项与写入结果来自官方 [ClipboardContentOptions](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboardcontentoptions?view=winrt-26100) 和 [SetContentWithOptions](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.clipboard.setcontentwithoptions?view=winrt-26100)；后者返回 false 表示未写入，不能继续显示「已复制」。
