@@ -41,4 +41,6 @@ public enum McpToolId
     ListLogHistory,
     /// <summary>Read the redacted content of one identified retained application log.</summary>
     ReadLogHistory,
+    /// <summary>Retry one exact failed settings application under a fresh operation identity.</summary>
+    RetrySettingsApplication,
 }

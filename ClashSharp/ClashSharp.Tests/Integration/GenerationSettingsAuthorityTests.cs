@@ -89,6 +89,48 @@ public sealed partial class GenerationSettingsAuthorityTests
     }
 
     [Fact]
+    public async Task AdmittedNetworkRetry_UsesTheExistingLeaseAndRejectsAStaleAttempt()
+    {
+        await using Fixture fixture = await Fixture.CreateAsync();
+        Participant network = fixture.Participants[SettingApplicationKind.Network];
+        network.IgnoreEffects = true;
+        SettingsAuthorityResult failed = await fixture.Authority.ApplyChangesAsync([Change("MixedPort", "7890")], Guid.NewGuid(), CancellationToken.None);
+        SettingsApplicationBatch batch = Assert.Single(failed.Envelope!.PendingApplications);
+        SettingDesiredEntry desired = failed.Envelope.Desired[SettingsRegistry.Keys.MixedPort];
+        network.IgnoreEffects = false;
+        await using MutationAdmissionLease lease = await fixture.Admission.AcquireOrdinaryAsync(CancellationToken.None);
+
+        SettingsAuthorityResult recovered = await fixture.Authority.RetryAdmittedAsync(batch.BatchId, batch.AttemptId, Guid.NewGuid(), lease, CancellationToken.None);
+
+        Assert.True(recovered.IsSucceeded, recovered.Code);
+        Assert.Equal(desired, recovered.Envelope!.Desired[SettingsRegistry.Keys.MixedPort]);
+        Assert.Empty(recovered.Envelope.PendingApplications);
+        Assert.Equal("7890", recovered.Envelope.Applied[SettingsRegistry.Keys.MixedPort].Value!.CanonicalText);
+        string before = Hash(recovered.Envelope);
+        SettingsAuthorityResult stale = await fixture.Authority.RetryAdmittedAsync(batch.BatchId, batch.AttemptId, Guid.NewGuid(), lease, CancellationToken.None);
+        Assert.False(stale.IsSucceeded);
+        Assert.Equal(before, Hash(fixture.Session.Snapshot));
+        Assert.Equal(2, network.Applies);
+    }
+
+    [Fact]
+    public async Task AdmittedTriggerRetry_RequiresExclusiveAdmissionBeforeRetryPublication()
+    {
+        await using Fixture fixture = await Fixture.CreateAsync();
+        SettingApplicationKind kind = SettingsRegistry.Default.Get("TriggerNotificationsEnabled").ApplicationKind;
+        fixture.Participants[kind].IgnoreEffects = true;
+        SettingsAuthorityResult failed = await fixture.Authority.ApplyChangesAsync([Change("TriggerNotificationsEnabled", "false")], Guid.NewGuid(), CancellationToken.None);
+        SettingsApplicationBatch batch = Assert.Single(failed.Envelope!.PendingApplications);
+        string before = Hash(failed.Envelope);
+        await using MutationAdmissionLease lease = await fixture.Admission.AcquireOrdinaryAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Authority.RetryAdmittedAsync(
+            batch.BatchId, batch.AttemptId, Guid.NewGuid(), lease, CancellationToken.None));
+
+        Assert.Equal(before, Hash(fixture.Session.Snapshot));
+    }
+
+    [Fact]
     public async Task QueuedCallerChanges_AreCopiedBeforeTheFirstAsynchronousWait()
     {
         await using Fixture fixture = await Fixture.CreateAsync();

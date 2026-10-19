@@ -59,6 +59,12 @@ internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories r
         JsonElement args = request.Arguments;
         bool exclusive = request.Tool == McpToolId.UpdateSettings && args.GetProperty("changes")
             .EnumerateObject().Any(change => change.Name == SettingsRegistry.Keys.TriggerNotificationsEnabled.Value);
+        if (request.Tool == McpToolId.RetrySettingsApplication)
+        {
+            var retry = await PrepareRetryAdmissionAsync(identity, args, cancellationToken).ConfigureAwait(false);
+            if (retry.Response is not null) { return retry.Response; }
+            exclusive = retry.Exclusive;
+        }
         await using MutationAdmissionLease lease = exclusive
             ? await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken).ConfigureAwait(false)
             : await admission.AcquireOrdinaryAsync(cancellationToken).ConfigureAwait(false);
@@ -93,7 +99,7 @@ internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories r
             token.ThrowIfCancellationRequested();
             if (!access.IsCurrentIdentity(identity) || !access.Policy.Allows(definition.RequiredScopes)) { return McpToolResponse.Error("mcp.access_denied"); }
             Guid operation = Guid.Parse(args.GetProperty("operation_id").GetString()!);
-            string hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(request.Tool + ":" + args.GetRawText())));
+            string hash = GetWriteHash(request.Tool, args);
             if (_receipts.TryGetValue(operation, out var receipt))
             {
                 return StringComparer.Ordinal.Equals(receipt.Hash, hash) ? receipt.Response : McpToolResponse.Error("mcp.operation_id_conflict");
@@ -113,6 +119,9 @@ internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories r
         }
         finally { _writes.Release(); }
     }
+
+    private static string GetWriteHash(McpToolId tool, JsonElement arguments) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(tool + ":" + arguments.GetRawText())));
 
     private async Task<McpToolResponse> ExecuteReadAsync(McpToolId tool, JsonElement args, CancellationToken token)
     {
@@ -139,8 +148,22 @@ internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories r
                 SettingsEnvelope envelope = repositories.Session.Snapshot;
                 return Success(new
                 {
+                    revision = envelope.EnvelopeRevision,
                     settings = readable.Where(item => requested is null || requested.Contains(item.Key.Value, StringComparer.Ordinal))
-                    .ToDictionary(item => item.Key.Value, item => SettingMetadata(item, envelope, access.Policy))
+                    .ToDictionary(item => item.Key.Value, item => SettingMetadata(item, envelope, access.Policy)),
+                    pending_applications = envelope.PendingApplications
+                        .Where(batch => batch.Entries.All(entry => readable.Any(setting => setting.Key == entry.Key))
+                            && (requested is null || batch.Entries.Any(entry => requested.Contains(entry.Key.Value, StringComparer.Ordinal))))
+                        .Select(batch => new
+                        {
+                            batch_id = batch.BatchId,
+                            attempt_id = batch.AttemptId,
+                            state = batch.State.ToString(),
+                            application_kind = batch.ApplicationKind.ToString(),
+                            keys = batch.Entries.Select(entry => entry.Key.Value),
+                            retry_allowed = batch.State == SettingsApplicationBatchState.Failed
+                                && CanRetrySettingsBatch(batch, access.Policy)
+                        })
                 });
             case McpToolId.ListProxyGroups:
             case McpToolId.ListProxyGroupMembers:
@@ -219,6 +242,17 @@ internal sealed partial class AppMcpAgentBackend(AppDataGenerationRepositories r
     {
         switch (tool)
         {
+            case McpToolId.RetrySettingsApplication:
+                Guid batchId = Guid.Parse(args.GetProperty("batch_id").GetString()!);
+                Guid attemptId = Guid.Parse(args.GetProperty("attempt_id").GetString()!);
+                SettingsApplicationBatch? failed = repositories.Session.Snapshot.PendingApplications.SingleOrDefault(batch =>
+                    batch.BatchId == batchId && batch.AttemptId == attemptId && batch.State == SettingsApplicationBatchState.Failed);
+                if (failed is null) { return McpToolResponse.Error("mcp.settings_application_unavailable"); }
+                // A batch can include companions beyond the requested key. Authorize every
+                // captured entry before retry publication; MCP controls remain unclassified.
+                if (!CanRetrySettingsBatch(failed, access.Policy))
+                { return McpToolResponse.Error("mcp.setting_access_denied"); }
+                return SettingsResult(await authority.RetryAdmittedAsync(batchId, attemptId, operation, lease, token).ConfigureAwait(false));
             case McpToolId.UpdateSettings:
                 List<SettingValueChange> changes = [];
                 foreach (JsonProperty field in args.GetProperty("changes").EnumerateObject())

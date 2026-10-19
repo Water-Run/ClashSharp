@@ -77,13 +77,30 @@ public sealed partial class GenerationSettingsAuthority : IRuntimeSettingsAuthor
 
     /// <inheritdoc />
     public Task<SettingsAuthorityResult> RetryAsync(Guid batchId, Guid expectedAttemptId, Guid newAttemptId, CancellationToken cancellationToken) =>
-        ExecuteConsumerAsync(async (context, lease, token) =>
+        ExecuteConsumerAsync((context, lease, token) => RetryAndApplyAsync(context, batchId, expectedAttemptId, newAttemptId, lease, token),
+            drainProducers: true, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<SettingsAuthorityResult> RetryAdmittedAsync(Guid batchId, Guid expectedAttemptId, Guid newAttemptId,
+        MutationAdmissionLease admissionLease, CancellationToken cancellationToken) =>
+        ExecuteAdmittedAsync((context, lease, token) => RetryAndApplyAsync(context, batchId, expectedAttemptId, newAttemptId, lease, token),
+            admissionLease, cancellationToken);
+
+    private async Task<SettingsAuthorityResult> RetryAndApplyAsync(SettingsGenerationContext context,
+        Guid batchId, Guid expectedAttemptId, Guid newAttemptId, MutationAdmissionLease lease, CancellationToken cancellationToken)
+    {
+        SettingsAuthorityResult current = await context.Session.OpenAdmittedAsync(lease, cancellationToken).ConfigureAwait(false);
+        if (!current.IsSucceeded) { return current; }
+        SettingsApplicationBatch? selected = current.Envelope!.PendingApplications.SingleOrDefault(batch => batch.BatchId == batchId);
+        if (selected is not null && RequiresProducerDrain(selected.Entries.Select(entry => entry.Key)))
         {
-            SettingsAuthorityResult retry = await context.Session.RetryAdmittedAsync(batchId, expectedAttemptId, newAttemptId, lease, token).ConfigureAwait(false);
-            if (!retry.IsSucceeded) { return retry; }
-            SettingsApplicationBatch batch = retry.Envelope!.PendingApplications.Single(item => item.BatchId == batchId);
-            return await ApplyOneAsync(context, retry.Envelope, batch, SettingsApplicationPhase.Live, lease).ConfigureAwait(false);
-        }, drainProducers: true, cancellationToken);
+            _admission.EnsureActiveExclusiveLease(lease);
+        }
+        SettingsAuthorityResult retry = await context.Session.RetryAdmittedAsync(batchId, expectedAttemptId, newAttemptId, lease, cancellationToken).ConfigureAwait(false);
+        if (!retry.IsSucceeded) { return retry; }
+        SettingsApplicationBatch batch = retry.Envelope!.PendingApplications.Single(item => item.BatchId == batchId);
+        return await ApplyOneAsync(context, retry.Envelope, batch, SettingsApplicationPhase.Live, lease).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
     public Task<SettingsAuthorityResult> ReconcileStartupAdmittedAsync(

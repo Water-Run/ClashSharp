@@ -24,6 +24,11 @@ public sealed class McpToolArgumentValidatorTests
 
     [Theory]
     [InlineData(McpToolId.GetStatus, "{}", true)]
+    [InlineData(McpToolId.RetrySettingsApplication, "{\"operation_id\":\"11111111-2222-3333-4444-555555555555\",\"batch_id\":\"11111111-2222-3333-4444-555555555556\",\"attempt_id\":\"11111111-2222-3333-4444-555555555557\"}", true)]
+    [InlineData(McpToolId.RetrySettingsApplication, "{}", false)]
+    [InlineData(McpToolId.RetrySettingsApplication, "{\"operation_id\":\"11111111-2222-3333-4444-555555555555\",\"batch_id\":\"00000000-0000-0000-0000-000000000000\",\"attempt_id\":\"11111111-2222-3333-4444-555555555557\"}", false)]
+    [InlineData(McpToolId.RetrySettingsApplication, "{\"operation_id\":\"11111111-2222-3333-4444-555555555555\",\"batch_id\":\"11111111-2222-3333-4444-555555555556\",\"attempt_id\":\"not-an-attempt\"}", false)]
+    [InlineData(McpToolId.RetrySettingsApplication, "{\"operation_id\":\"11111111-2222-3333-4444-555555555555\",\"batch_id\":\"11111111-2222-3333-4444-555555555556\",\"attempt_id\":\"11111111-2222-3333-4444-555555555557\",\"keys\":[\"MixedPort\"]}", false)]
     [InlineData(McpToolId.GetStatus, "{\"unexpected\":true}", false)]
     [InlineData(McpToolId.ListLogHistory, "{\"limit\":100,\"source\":\"Fixture\",\"level\":\"Warning\"}", true)]
     [InlineData(McpToolId.ListLogHistory, "{\"limit\":101}", false)]

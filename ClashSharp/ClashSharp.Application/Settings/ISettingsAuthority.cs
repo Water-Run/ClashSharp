@@ -46,6 +46,17 @@ public interface ISettingsAuthority
     Task<SettingsAuthorityResult> RetryAsync(
         Guid batchId, Guid expectedAttemptId, Guid newAttemptId, CancellationToken cancellationToken);
 
+    /// <summary>Retries an exact failed attempt using the caller's existing admission and generation pin.</summary>
+    /// <remarks>Retries involving settings-producing triggers require an exclusive lease before publication.</remarks>
+    /// <param name="batchId">Exact failed batch.</param>
+    /// <param name="expectedAttemptId">Identity of the failed attempt being replaced.</param>
+    /// <param name="newAttemptId">Fresh nonempty retry identity.</param>
+    /// <param name="admissionLease">Active caller-owned lease retained through effect verification.</param>
+    /// <param name="cancellationToken">Cancels work before durable retry publication.</param>
+    Task<SettingsAuthorityResult> RetryAdmittedAsync(
+        Guid batchId, Guid expectedAttemptId, Guid newAttemptId,
+        MutationAdmissionLease admissionLease, CancellationToken cancellationToken);
+
     /// <summary>Reobserves previous-process evidence and reconciles startup work under exclusive admission.</summary>
     /// <param name="startupId">Fresh nonempty startup identity.</param>
     /// <param name="admissionLease">Exclusive lease retained through startup application.</param>

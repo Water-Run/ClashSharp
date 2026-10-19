@@ -59,7 +59,7 @@ public sealed class McpHttpServerTests
 
         fixture.Backend.Policy = new(true, McpAccessScope.ModifyConfiguration);
         string[] names = (await client.ListToolsAsync()).Select(tool => tool.Name).Order().ToArray();
-        Assert.Equal(["clashsharp_save_profile", "clashsharp_update_settings"], names);
+        Assert.Equal(["clashsharp_retry_settings_application", "clashsharp_save_profile", "clashsharp_update_settings"], names);
         Assert.True((await client.CallToolAsync("clashsharp_get_status")).IsError);
         Assert.Equal(1, fixture.Backend.Calls);
     }
