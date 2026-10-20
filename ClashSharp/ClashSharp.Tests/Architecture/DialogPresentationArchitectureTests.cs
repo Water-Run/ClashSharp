@@ -1,8 +1,21 @@
+using System.Xml.Linq;
+
 namespace ClashSharp.Tests.Architecture;
 
 /// <summary>Guards the one-modal-surface-per-window presentation contract.</summary>
 public sealed class DialogPresentationArchitectureTests
 {
+    [Fact]
+    public void StartupGuide_DeclaresItsConverterInThePopupResourceScope()
+    {
+        XDocument dialog = XDocument.Load(Path.Combine(ApplicationRoot, "Components", "StartupGuideDialog.xaml"));
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement resources = Assert.Single(dialog.Root!.Elements(), element => element.Name.LocalName == "ContentDialog.Resources");
+        XElement converter = Assert.Single(resources.Elements(), element => element.Attribute(xaml + "Key")?.Value == "BooleanToVisibilityConverter");
+        Assert.Equal("BooleanToVisibilityConverter", converter.Name.LocalName);
+        Assert.Equal("using:ClashSharp.Converters", converter.Name.NamespaceName);
+    }
+
     private static readonly string RepositoryRoot = FindRepositoryRoot();
     private static readonly string ApplicationRoot = Path.Combine(
         RepositoryRoot,
