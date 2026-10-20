@@ -71,6 +71,10 @@ internal sealed class MainWindowComposition
         return new LayoutDirectionBinding(_localization, handler);
     }
 
+    /// <summary>Refreshes the active page in place after an applied display-language change.</summary>
+    public IDisposable BindCurrentPageLocalization(Func<ILocalizedPresentation?> current)
+        => new CurrentPageLocalizationBinding(_localization, current);
+
     private void ApplyLayoutDirection(FrameworkElement root)
     {
         root.Language = LocalizationService.ResolveResourceLanguageTag(_localization.CurrentLanguage, CultureInfo.CurrentUICulture);

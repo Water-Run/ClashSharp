@@ -18,8 +18,25 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding and command execution.
 /// Side effects: Commands can add, check, import subscription links, and write logs.
 /// </remarks>
-internal sealed class LinksViewModel : ObservableObject
+internal sealed class LinksViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(AddLinkText));
+        OnPropertyChanged(nameof(CheckLinksText));
+        OnPropertyChanged(nameof(UpdateLinksText));
+        OnPropertyChanged(nameof(EditLinkText));
+        OnPropertyChanged(nameof(DeleteLinkText));
+        OnPropertyChanged(nameof(EmptyStateText));
+        if (_statusTextFactory is not null) { StatusText = _statusTextFactory(); }
+        foreach (ProfileSubscriptionLinkDisplay row in SubscriptionLinks) { row.RefreshLocalization(_getString); }
+    }
+
+    private Func<string>? _statusTextFactory;
+
     /// <summary>Localization resolver used by visible labels.</summary>
     private readonly Func<string, string> _getString;
 
@@ -138,7 +155,8 @@ internal sealed class LinksViewModel : ObservableObject
     private void SetStatus(string key, PageStatusSeverity severity)
     {
         StatusSeverity = severity;
-        StatusText = _getString(key);
+        _statusTextFactory = () => _getString(key);
+        StatusText = _statusTextFactory();
     }
 
     /// <summary>Validates editor input without closing the dialog or contacting a subscription.</summary>
@@ -228,6 +246,7 @@ internal sealed class LinksViewModel : ObservableObject
         ++_dataRevision;
         SelectedLink = null;
         SubscriptionLinks = [];
+        _statusTextFactory = null;
         StatusText = string.Empty;
         StatusSeverity = PageStatusSeverity.Informational;
         return LoadAsync(cancellationToken);
@@ -296,6 +315,8 @@ internal sealed class LinksViewModel : ObservableObject
             cancellationToken.ThrowIfCancellationRequested();
             _log.Append("Info", "Links", $"Subscription link check completed: {status}.", link.Name);
             StatusSeverity = PageStatusSeverity.Success;
+            // Provider replies remain verbatim; only application-owned resource messages are retranslated.
+            _statusTextFactory = null;
             StatusText = _displayMapper.MapText(status);
         }
         catch (Exception exception) when (

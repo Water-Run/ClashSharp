@@ -9,6 +9,17 @@ namespace ClashSharp.ViewModel;
 /// <summary>Owns one ordered editable trigger-action draft and typed parameter validation.</summary>
 internal sealed class TriggerActionEditorViewModel : ObservableObject
 {
+    /// <summary>Refreshes labels without changing the persisted definition or editor input.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(MoveUpText));
+        OnPropertyChanged(nameof(MoveDownText));
+        OnPropertyChanged(nameof(RemoveText));
+        OnPropertyChanged(nameof(ErrorMessage));
+    }
+
     private readonly Func<string, string> _getString;
     private bool _booleanValue;
     private ClashSharpMode _proxyMode;

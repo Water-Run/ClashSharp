@@ -13,8 +13,20 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding.
 /// Side effects: Reads the injected rule catalog only during explicit loading.
 /// </remarks>
-internal sealed class RulesViewModel : ObservableObject
+internal sealed class RulesViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(SourceColumnText));
+        OnPropertyChanged(nameof(TypeColumnText));
+        OnPropertyChanged(nameof(PayloadColumnText));
+        OnPropertyChanged(nameof(PolicyColumnText));
+        OnPropertyChanged(nameof(HitsColumnText));
+    }
+
     /// <summary>Localization provider used by this view model.</summary>
     private readonly IDisplayPageLocalization _localization;
 

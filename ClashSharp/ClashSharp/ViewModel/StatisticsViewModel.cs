@@ -15,8 +15,36 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding.
 /// Side effects: Reads injected statistics services during refresh.
 /// </remarks>
-internal sealed class StatisticsViewModel : ObservableObject
+internal sealed class StatisticsViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(TotalStatisticsTitleText));
+        OnPropertyChanged(nameof(ProfileStatisticsTitleText));
+        OnPropertyChanged(nameof(NodeStatisticsTitleText));
+        OnPropertyChanged(nameof(ByProfileTitleText));
+        OnPropertyChanged(nameof(ByDateTitleText));
+        OnPropertyChanged(nameof(ByNodeTitleText));
+        OnPropertyChanged(nameof(ByRuleTitleText));
+        OnPropertyChanged(nameof(LogsShortcutTitleText));
+        OnPropertyChanged(nameof(LogsShortcutDescriptionText));
+        OnPropertyChanged(nameof(OpenLogsText));
+        OnPropertyChanged(nameof(RefreshText));
+        OnPropertyChanged(nameof(LoadingText));
+        OnPropertyChanged(nameof(LoadErrorText));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(NoProfileTrafficText));
+        OnPropertyChanged(nameof(NoDailyTrafficText));
+        OnPropertyChanged(nameof(NoNodeTrafficText));
+        OnPropertyChanged(nameof(NoRuleHitsText));
+        if (_lastSnapshot is not null) { ApplyLoadSnapshot(_lastSnapshot, recordObservation: false); }
+    }
+
+    private StatisticsLoadSnapshot? _lastSnapshot;
+
     /// <summary>Localization provider used by this view model.</summary>
     private readonly IDisplayPageLocalization _localization;
 
@@ -313,6 +341,7 @@ internal sealed class StatisticsViewModel : ObservableObject
         cancellationToken.ThrowIfCancellationRequested();
         ++_loadRevision;
         _hasSnapshot = false;
+        _lastSnapshot = null;
         _lastUpdated = null;
         _totalTrafficText = _connectionCountText = _profileStatisticText = _snapshotStatisticText = _nodeStatisticText = _ruleStatisticText = string.Empty;
         _profileTrafficRows = [];
@@ -343,8 +372,19 @@ internal sealed class StatisticsViewModel : ObservableObject
             _profiles.GetProfileDisplayNamesById());
     }
 
-    private void ApplyLoadSnapshot(StatisticsLoadSnapshot snapshot)
+    private void ApplyLoadSnapshot(StatisticsLoadSnapshot snapshot) => ApplyLoadSnapshot(snapshot, recordObservation: true);
+
+    private void ApplyLoadSnapshot(StatisticsLoadSnapshot snapshot, bool recordObservation)
     {
+        StatisticsLoadSnapshot cached = recordObservation
+            ? snapshot with
+            {
+                ProfileTrafficRows = snapshot.ProfileTrafficRows.ToArray(),
+                DailyTrafficRows = snapshot.DailyTrafficRows.ToArray(),
+                NodeTrafficRows = snapshot.NodeTrafficRows.ToArray(),
+                RuleHitCounts = snapshot.RuleHitCounts.ToArray(),
+                ProfileNames = new Dictionary<string, string>(snapshot.ProfileNames, StringComparer.Ordinal),
+            } : snapshot;
         StatisticsSummary summary = snapshot.Summary;
         string totalTraffic = string.Format(
             CultureInfo.CurrentCulture,
@@ -365,9 +405,10 @@ internal sealed class StatisticsViewModel : ObservableObject
         StatisticsRuleHitDisplay[] ruleRows = snapshot.RuleHitCounts.Select(row => new StatisticsRuleHitDisplay(
             _displayMapper.MapText(row.Key), row.Value,
             string.Format(CultureInfo.CurrentCulture, _localization.GetString("Statistics.RuleHits.Format"), row.Value))).ToArray();
-        DateTimeOffset updated = _getNow();
+        DateTimeOffset? updated = recordObservation ? _getNow() : _lastUpdated;
 
         // Prepare every value first, then publish one complete snapshot to binding observers.
+        if (recordObservation) { _lastSnapshot = cached; }
         _totalTrafficText = totalTraffic;
         _connectionCountText = connections;
         _profileStatisticText = profiles;
@@ -420,6 +461,8 @@ internal sealed class StatisticsViewModel : ObservableObject
             string rawLabel = profileNames is not null && profileNames.TryGetValue(row.Label, out string? profileName)
                 ? profileName
                 : row.Label;
+            if (profileNames is not null && StringComparer.Ordinal.Equals(row.Label, ProfileIdentifiers.BuiltInDirect))
+            { rawLabel = _localization.GetString("ProfileCatalog.BuiltInDirect.Name"); }
             string label = daily && DateOnly.TryParseExact(rawLabel, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out DateOnly date)
                 ? date.ToString("d", CultureInfo.CurrentCulture)

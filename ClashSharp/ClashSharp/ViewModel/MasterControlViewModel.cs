@@ -25,8 +25,93 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding and command execution.
 /// Side effects: Commands call injected services that can mutate runtime proxy and core state.
 /// </remarks>
-internal sealed partial class MasterControlViewModel : ObservableObject
+internal sealed partial class MasterControlViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(StatusControlTitleText));
+        OnPropertyChanged(nameof(StatusControlDescriptionText));
+        OnPropertyChanged(nameof(DisabledModeTitleText));
+        OnPropertyChanged(nameof(DisabledModeDescriptionText));
+        OnPropertyChanged(nameof(StandbyModeTitleText));
+        OnPropertyChanged(nameof(StandbyModeDescriptionText));
+        OnPropertyChanged(nameof(RuleTakeoverModeTitleText));
+        OnPropertyChanged(nameof(RuleTakeoverModeDescriptionText));
+        OnPropertyChanged(nameof(FullTakeoverModeTitleText));
+        OnPropertyChanged(nameof(FullTakeoverModeDescriptionText));
+        OnPropertyChanged(nameof(CoreStatusTitleText));
+        OnPropertyChanged(nameof(SystemProxyTitleText));
+        OnPropertyChanged(nameof(TransparentProxyTitleText));
+        OnPropertyChanged(nameof(CurrentNodeTitleText));
+        OnPropertyChanged(nameof(LatencyTitleText));
+        OnPropertyChanged(nameof(LatencyTestFailedText));
+        OnPropertyChanged(nameof(EditInfoTilesText));
+        OnPropertyChanged(nameof(SearchInfoTilesPlaceholderText));
+        OnPropertyChanged(nameof(InfoTileSelectionDescriptionText));
+        OnPropertyChanged(nameof(VisibleTileText));
+        OnPropertyChanged(nameof(SetHeroStatusDisplayText));
+        OnPropertyChanged(nameof(RestoreDefaultHeroStatusLayoutText));
+        OnPropertyChanged(nameof(UpdateDetails));
+        OnPropertyChanged(nameof(WebsiteDetails));
+        OnPropertyChanged(nameof(PublicIpDetails));
+        OnPropertyChanged(nameof(BasicStatusText));
+        foreach ((string property, Func<string> render) in _localizedMessages.ToArray())
+        {
+            if (_localizedMessages.TryGetValue(property, out Func<string>? current) && ReferenceEquals(current, render))
+            { PublishLocalizedMessage(property, render()); }
+        }
+        if (!_isInitialized) { return; }
+        if (_lastCoreRefreshAt is not null && !_isCoreAvailable) { _mihomoVersionText = _localization.GetString("Master.Status.Unavailable"); }
+        foreach (MasterHeroStatusOptionViewModel option in _heroStatusOptions) { option.Title = GetHeroStatusTitle(option.Kind); }
+        foreach (MasterHeroStatusSlotViewModel slot in _heroStatusSlots) { slot.Title = GetHeroStatusSlotTitle(slot.Index); }
+        Dictionary<string, MasterTileDefinition> definitions = MasterTileCatalog.Create(this).ToDictionary(tile => tile.Id, StringComparer.Ordinal);
+        foreach (MasterControlInfoTileViewModel tile in _infoTiles)
+        {
+            MasterTileDefinition definition = definitions[tile.Id];
+            MasterControlTileNavigationTarget? destination = tile.NavigationCommand is not null
+                ? MasterControlTileNavigationCatalog.Resolve(tile.Id) : null;
+            tile.RefreshLocalization(definition.Title, definition.Description, definition.TypeText,
+                _localization.GetString("Master.Tile.ReorderHint"), destination is null ? string.Empty : _localization.GetString(destination.LabelKey));
+        }
+        RefreshTileValues(recordTrafficHistory: false);
+    }
+
+    private readonly Dictionary<string, Func<string>> _localizedMessages = new(StringComparer.Ordinal);
+
+    private void SetLocalizedMessage(string property, string? key, params object[] arguments)
+    {
+        if (key is null) { _localizedMessages.Remove(property); PublishLocalizedMessage(property, string.Empty); return; }
+        Func<string> render = () => arguments.Length == 0 ? _localization.GetString(key)
+            : string.Format(CultureInfo.CurrentCulture, _localization.GetString(key), arguments);
+        _localizedMessages[property] = render;
+        PublishLocalizedMessage(property, render());
+    }
+
+    private void SetLocalizedOperationError(string key, string? diagnosticCode = null)
+    {
+        Func<string> render = () => diagnosticCode is null ? _localization.GetString(key)
+            : RuntimeFailureDiagnostics.Format(diagnosticCode, _localization.GetString, _localization.GetString(key));
+        _localizedMessages[nameof(OperationErrorText)] = render;
+        OperationErrorText = render();
+    }
+
+    private void PublishLocalizedMessage(string property, string value)
+    {
+        switch (property)
+        {
+            case nameof(CoreStatusText): CoreStatusText = value; break;
+            case nameof(SystemProxyStatusText): SystemProxyStatusText = value; break;
+            case nameof(TransparentProxyStatusText): TransparentProxyStatusText = value; break;
+            case nameof(CurrentNodeText): CurrentNodeText = value; break;
+            case nameof(LatencySummaryText): LatencySummaryText = value; break;
+            case nameof(OperationErrorText): OperationErrorText = value; break;
+            default: throw new ArgumentOutOfRangeException(nameof(property));
+        }
+    }
+
     private readonly Action<string>? _navigateToPage;
 
     /// <summary>Localization provider used by visible text.</summary>
@@ -294,8 +379,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         CoreStatusText = string.Empty;
         SystemProxyStatusText = string.Empty;
         TransparentProxyStatusText = string.Empty;
-        CurrentNodeText = _localization.GetString("Master.Status.CurrentNodeUnavailable");
-        LatencySummaryText = _localization.GetString("Master.Status.LatencyUnavailable");
+        SetLocalizedMessage(nameof(CurrentNodeText), "Master.Status.CurrentNodeUnavailable");
+        SetLocalizedMessage(nameof(LatencySummaryText), "Master.Status.LatencyUnavailable");
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -611,12 +696,12 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         _isNetworkStateKnown = false;
         SelectedMode = ClashSharpMode.Faulted;
         _mihomoVersionText = string.Empty;
-        CoreStatusText = _localization.GetString("Master.Status.Unavailable");
-        SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
-        TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
-        CurrentNodeText = _localization.GetString("Master.Status.CurrentNodeUnavailable");
-        LatencySummaryText = _localization.GetString("Master.Status.LatencyUnavailable");
-        OperationErrorText = string.Empty;
+        SetLocalizedMessage(nameof(CoreStatusText), "Master.Status.Unavailable");
+        SetLocalizedMessage(nameof(SystemProxyStatusText), "Master.Status.Unavailable");
+        SetLocalizedMessage(nameof(TransparentProxyStatusText), "Master.Status.Unavailable");
+        SetLocalizedMessage(nameof(CurrentNodeText), "Master.Status.CurrentNodeUnavailable");
+        SetLocalizedMessage(nameof(LatencySummaryText), "Master.Status.LatencyUnavailable");
+        SetLocalizedMessage(nameof(OperationErrorText), null);
         OnPropertyChanged(nameof(BasicStatusText));
         RefreshTileValues();
     }
@@ -657,10 +742,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
             _lastCoreRefreshAt = _getNow();
             _mihomoVersionText = versionText;
-            CoreStatusText = string.Format(
-                CultureInfo.CurrentCulture,
-                _localization.GetString("Master.Status.CoreReady.Format"),
-                versionText);
+            SetLocalizedMessage(nameof(CoreStatusText), "Master.Status.CoreReady.Format", versionText);
             _isCoreAvailable = true;
         }
         catch (Exception exception) when (
@@ -676,7 +758,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
             _lastCoreRefreshAt = _getNow();
             _mihomoVersionText = _localization.GetString("Master.Status.Unavailable");
-            CoreStatusText = _localization.GetString("Master.Status.CoreUnavailable");
+            SetLocalizedMessage(nameof(CoreStatusText), "Master.Status.CoreUnavailable");
             _isCoreAvailable = false;
         }
     }
@@ -697,7 +779,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             return;
         }
 
-        OperationErrorText = string.Empty;
+        SetLocalizedMessage(nameof(OperationErrorText), null);
         IsApplyingMode = true;
         InvalidateAfterAction();
         try
@@ -708,13 +790,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             _isCoreRunning = result.CoreRunning;
             _runtimeSnapshot = _runtimeSnapshot with { NetworkState = null };
             SelectedMode = result.Mode;
-            CoreStatusText = result.CoreRunning
-                ? _localization.GetString("Master.Status.Running")
-                : _localization.GetString("Master.Status.NotRunning");
-            SystemProxyStatusText = result.SystemProxyEnabled
-                ? _localization.GetString("Master.Status.On")
-                : _localization.GetString("Master.Status.Off");
-            TransparentProxyStatusText = ResolveTransparentProxyStatus(
+            SetLocalizedMessage(nameof(CoreStatusText), result.CoreRunning ? "Master.Status.Running" : "Master.Status.NotRunning");
+            SetLocalizedMessage(nameof(SystemProxyStatusText), result.SystemProxyEnabled ? "Master.Status.On" : "Master.Status.Off");
+            SetTransparentProxyStatus(
                 result.TunEffective,
                 result.TunRequested);
             _log.Append("Info", "MasterControl", result.Message, null);
@@ -729,14 +807,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         {
             InvalidateModePresentation();
             string fallbackMessage = _localization.GetString("Master.Log.ApplyModeFailed");
-            OperationErrorText = RuntimeFailureDiagnostics.TryExtractCode(
-                exception,
-                out string? diagnosticCode)
-                ? RuntimeFailureDiagnostics.Format(
-                    diagnosticCode,
-                    _localization.GetString,
-                    fallbackMessage)
-                : fallbackMessage;
+            SetLocalizedOperationError("Master.Log.ApplyModeFailed",
+                RuntimeFailureDiagnostics.TryExtractCode(exception, out string? diagnosticCode) ? diagnosticCode : null);
             _log.Append("Error", "MasterControl", fallbackMessage, exception.Message);
         }
         catch (OperationCanceledException)
@@ -747,7 +819,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         catch
         {
             InvalidateModePresentation();
-            OperationErrorText = _localization.GetString("Application.UnexpectedError");
+            SetLocalizedOperationError("Application.UnexpectedError");
             throw;
         }
         finally
@@ -766,9 +838,9 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         _isNetworkStateKnown = false;
         _isCoreRunning = false;
         SelectedMode = ClashSharpMode.Faulted;
-        CoreStatusText = _localization.GetString("Master.Status.Unavailable");
-        SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
-        TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
+        SetLocalizedMessage(nameof(CoreStatusText), "Master.Status.Unavailable");
+        SetLocalizedMessage(nameof(SystemProxyStatusText), "Master.Status.Unavailable");
+        SetLocalizedMessage(nameof(TransparentProxyStatusText), "Master.Status.Unavailable");
     }
 
     public bool IsSavingTileLayout
@@ -825,7 +897,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         try
         {
             IsSavingTileLayout = true;
-            OperationErrorText = string.Empty;
+            SetLocalizedMessage(nameof(OperationErrorText), null);
             try
             {
                 await save();
@@ -834,7 +906,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             {
                 if (!ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
                 {
-                    OperationErrorText = _localization.GetString("Application.UnexpectedError");
+                    SetLocalizedOperationError("Application.UnexpectedError");
                 }
                 try
                 {
@@ -843,7 +915,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
                 }
                 catch (Exception readFailure) when (!ExceptionGraphClassifier.IsProcessFatal(readFailure))
                 {
-                    OperationErrorText = _localization.GetString("Application.UnexpectedError");
+                    SetLocalizedOperationError("Application.UnexpectedError");
                     throw new AggregateException(exception, readFailure);
                 }
                 throw;
@@ -863,15 +935,13 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         {
             WindowsProxyState proxyState = _windowsProxy.GetCurrentState();
             _systemProxyAddress = proxyState.IsEnabled ? proxyState.ProxyServer : string.Empty;
-            SystemProxyStatusText = proxyState.IsEnabled
-                ? _localization.GetString("Master.Status.On")
-                : _localization.GetString("Master.Status.Off");
+            SetLocalizedMessage(nameof(SystemProxyStatusText), proxyState.IsEnabled ? "Master.Status.On" : "Master.Status.Off");
         }
         catch (Exception exception) when (
             exception is InvalidOperationException or UnauthorizedAccessException
             && !ExceptionGraphClassifier.IsProcessFatal(exception))
         {
-            SystemProxyStatusText = _localization.GetString("Master.Status.Unavailable");
+            SetLocalizedMessage(nameof(SystemProxyStatusText), "Master.Status.Unavailable");
             _systemProxyAddress = string.Empty;
         }
     }
@@ -886,14 +956,17 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             return;
         }
 
-        CurrentNodeText = string.IsNullOrWhiteSpace(snapshot.CurrentNodeName)
-            ? _localization.GetString("Master.Status.CurrentNodeUnavailable")
-            : snapshot.CurrentNodeName;
-        LatencySummaryText = snapshot.LatencyMilliseconds is int latency
-            ? string.Format(CultureInfo.CurrentCulture, _localization.GetString("Master.Status.Latency.Format"), latency)
-            : _localization.GetString(snapshot.HasCurrentNode
-                ? "Master.Status.LatencyUnavailable"
-                : "Master.Status.Unavailable");
+        if (string.IsNullOrWhiteSpace(snapshot.CurrentNodeName))
+        { SetLocalizedMessage(nameof(CurrentNodeText), "Master.Status.CurrentNodeUnavailable"); }
+        else
+        {
+            _localizedMessages.Remove(nameof(CurrentNodeText));
+            CurrentNodeText = snapshot.CurrentNodeName;
+        }
+        if (snapshot.LatencyMilliseconds is int latency)
+        { SetLocalizedMessage(nameof(LatencySummaryText), "Master.Status.Latency.Format", latency); }
+        else
+        { SetLocalizedMessage(nameof(LatencySummaryText), snapshot.HasCurrentNode ? "Master.Status.LatencyUnavailable" : "Master.Status.Unavailable"); }
     }
 
     private async Task RefreshRuntimeSnapshotAsync(CancellationToken cancellationToken)
@@ -914,9 +987,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             _isNetworkStateKnown = network is { IsKnown: true };
             _isCoreRunning = _isNetworkStateKnown && network!.CoreRunning;
             SelectedMode = _isNetworkStateKnown ? network!.Mode : ClashSharpMode.Faulted;
-            TransparentProxyStatusText = _isNetworkStateKnown
-                ? ResolveTransparentProxyStatus(network!.TransparentProxyEnabled, snapshot.TunRequested)
-                : _localization.GetString("Master.Status.Unavailable");
+            if (_isNetworkStateKnown) { SetTransparentProxyStatus(network!.TransparentProxyEnabled, snapshot.TunRequested); }
+            else { SetLocalizedMessage(nameof(TransparentProxyStatusText), "Master.Status.Unavailable"); }
         }
         catch (Exception exception) when (
             exception is MasterControlRuntimeUnavailableException
@@ -938,7 +1010,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             _isCoreRunning = false;
             _isNetworkStateKnown = false;
             SelectedMode = ClashSharpMode.Faulted;
-            TransparentProxyStatusText = _localization.GetString("Master.Status.Unavailable");
+            SetLocalizedMessage(nameof(TransparentProxyStatusText), "Master.Status.Unavailable");
         }
     }
 
@@ -1078,7 +1150,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         }
     }
 
-    private void RefreshTileValues()
+    private void RefreshTileValues(bool recordTrafficHistory = true)
     {
         string unavailable = _localization.GetString("Master.Status.Unavailable");
         SetTile("proxy-address", string.IsNullOrWhiteSpace(_systemProxyAddress) ? SystemProxyStatusText : _systemProxyAddress,
@@ -1153,7 +1225,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             _runtimeSnapshot.IsAvailable ? CompactPath(_runtimeSnapshot.CoreConfiguration.ConfigPath) : string.Empty);
         SetTile("upload-rate", FormatBytesPerSecond(RuntimeTraffic.UploadBytesPerSecond), _localization.GetString("Master.Tile.Detail.TrafficTrend"));
         SetTile("download-rate", FormatBytesPerSecond(RuntimeTraffic.DownloadBytesPerSecond), _localization.GetString("Master.Tile.Detail.TrafficTrend"));
-        RefreshTrafficHistory();
+        if (recordTrafficHistory) { RefreshTrafficHistory(); }
         SetTile("active-connections", FormatNumber(RuntimeTraffic.ActiveConnectionCount), _localization.GetString("Master.Tile.Detail.Realtime"));
         SetTile(
             "session-traffic",
@@ -1356,6 +1428,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
 
     private string GetActiveProfileDisplayName()
     {
+        if (StringComparer.Ordinal.Equals(_settings.ActiveProfileId, ProfileIdentifiers.BuiltInDirect))
+        { return _localization.GetString("ProfileCatalog.BuiltInDirect.Name"); }
         return StringComparer.Ordinal.Equals(_runtimeSnapshot.ActiveProfileId, _settings.ActiveProfileId)
             && !string.IsNullOrWhiteSpace(_runtimeSnapshot.ActiveProfileName)
             ? _runtimeSnapshot.ActiveProfileName
@@ -1395,7 +1469,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     {
         InvalidateAfterAction();
         bool desired = !_settings.TransparentProxyEnabled;
-        OperationErrorText = string.Empty;
+        SetLocalizedMessage(nameof(OperationErrorText), null);
         try
         {
             await _actions.DispatchAsync(
@@ -1412,15 +1486,8 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         catch (Exception exception)
         {
             await RefreshRuntimeSnapshotAsync(CancellationToken.None);
-            string fallbackMessage = _localization.GetString("Application.UnexpectedError");
-            OperationErrorText = RuntimeFailureDiagnostics.TryExtractCode(
-                exception,
-                out string? diagnosticCode)
-                ? RuntimeFailureDiagnostics.Format(
-                    diagnosticCode,
-                    _localization.GetString,
-                    fallbackMessage)
-                : fallbackMessage;
+            SetLocalizedOperationError("Application.UnexpectedError",
+                RuntimeFailureDiagnostics.TryExtractCode(exception, out string? diagnosticCode) ? diagnosticCode : null);
             throw;
         }
         finally
@@ -1453,7 +1520,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     {
         bool baseline = getValue();
         bool desired = !baseline;
-        OperationErrorText = string.Empty;
+        SetLocalizedMessage(nameof(OperationErrorText), null);
         try
         {
             await _actions.DispatchAsync(kind, desired.ToString(), cancellationToken);
@@ -1464,7 +1531,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         }
         catch
         {
-            OperationErrorText = _localization.GetString("Application.UnexpectedError");
+            SetLocalizedOperationError("Application.UnexpectedError");
             throw;
         }
         finally
@@ -1478,7 +1545,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        OperationErrorText = string.Empty;
+        SetLocalizedMessage(nameof(OperationErrorText), null);
         try
         {
             // Read only after the page queue admits this action; an earlier import may
@@ -1500,7 +1567,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
         {
             if (!ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
             {
-                OperationErrorText = _localization.GetString("Application.UnexpectedError");
+                SetLocalizedOperationError("Application.UnexpectedError");
             }
             try
             {
@@ -1510,7 +1577,7 @@ internal sealed partial class MasterControlViewModel : ObservableObject
             }
             catch (Exception readFailure) when (!ExceptionGraphClassifier.IsProcessFatal(readFailure))
             {
-                OperationErrorText = _localization.GetString("Application.UnexpectedError");
+                SetLocalizedOperationError("Application.UnexpectedError");
                 throw new AggregateException(exception, readFailure);
             }
             throw;
@@ -1733,19 +1800,12 @@ internal sealed partial class MasterControlViewModel : ObservableObject
     /// <summary>Resolves transparent proxy status after mode application.</summary>
     /// <param name="isTransparentProxyRunning">True when the takeover result reports TUN as running.</param>
     /// <param name="tunRequested">True when the transition requested service-owned TUN.</param>
-    /// <returns>User-facing transparent proxy status text.</returns>
-    private string ResolveTransparentProxyStatus(
+    private void SetTransparentProxyStatus(
         bool isTransparentProxyRunning,
         bool tunRequested)
     {
-        if (isTransparentProxyRunning)
-        {
-            return _localization.GetString("Master.Status.Running");
-        }
-
-        return tunRequested
-            ? _localization.GetString("Master.Status.Fallback")
-            : _localization.GetString("Master.Status.Off");
+        SetLocalizedMessage(nameof(TransparentProxyStatusText), isTransparentProxyRunning
+            ? "Master.Status.Running" : tunRequested ? "Master.Status.Fallback" : "Master.Status.Off");
     }
 
     private sealed record MasterTileDefinition(

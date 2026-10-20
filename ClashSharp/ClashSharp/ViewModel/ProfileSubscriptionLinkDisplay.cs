@@ -6,12 +6,20 @@ using ClashSharp.Model;
 namespace ClashSharp.ViewModel;
 
 /// <summary>Bindable presentation row for a subscription link.</summary>
-internal sealed record ProfileSubscriptionLinkDisplay(
-    ProfileSubscriptionLink Model,
-    string NameDisplay,
-    string UriDisplay,
-    string StatusDisplay)
+internal sealed class ProfileSubscriptionLinkDisplay(
+    ProfileSubscriptionLink model,
+    string nameDisplay,
+    string uriDisplay,
+    string statusDisplay) : ObservableObject
 {
+    private string _scheduleDisplay = string.Empty;
+    private string _updatedSummary = string.Empty;
+    private string _usageDisplay = string.Empty;
+    private string _expiryDisplay = string.Empty;
+    public ProfileSubscriptionLink Model { get; } = model;
+    public string NameDisplay { get; } = nameDisplay;
+    public string UriDisplay { get; } = uriDisplay;
+    public string StatusDisplay { get; } = statusDisplay;
     internal DisplayFormatter Formatter { get; init; } = new();
     public bool IsEnabled => Model.IsEnabled;
 
@@ -23,16 +31,24 @@ internal sealed record ProfileSubscriptionLinkDisplay(
         ? "—"
         : Formatter.Timestamp(Model.LastUpdatedAt, includeSeconds: false);
 
-    public string ScheduleDisplay { get; init; } = string.Empty;
+    public string ScheduleDisplay { get => _scheduleDisplay; private set => SetProperty(ref _scheduleDisplay, value); }
 
-    public string UpdatedSummary { get; init; } = string.Empty;
+    public string UpdatedSummary { get => _updatedSummary; private set => SetProperty(ref _updatedSummary, value); }
 
-    public string UsageDisplay { get; init; } = string.Empty;
+    public string UsageDisplay { get => _usageDisplay; private set => SetProperty(ref _usageDisplay, value); }
 
-    public string ExpiryDisplay { get; init; } = string.Empty;
+    public string ExpiryDisplay { get => _expiryDisplay; private set => SetProperty(ref _expiryDisplay, value); }
 
     /// <summary>Adds localized labels without changing provider data or filtered display text.</summary>
     public ProfileSubscriptionLinkDisplay WithDetails(Func<string, string> getString)
+    {
+        ProfileSubscriptionLinkDisplay row = new(Model, NameDisplay, UriDisplay, StatusDisplay) { Formatter = Formatter };
+        row.RefreshLocalization(getString);
+        return row;
+    }
+
+    /// <summary>Updates labels while preserving the selected link, provider reply and immutable model.</summary>
+    public void RefreshLocalization(Func<string, string> getString)
     {
         ArgumentNullException.ThrowIfNull(getString);
         SubscriptionUsage? usage = Model.Usage;
@@ -46,15 +62,13 @@ internal sealed record ProfileSubscriptionLinkDisplay(
             > 0 and <= 253402300799 => Formatter.Timestamp(DateTimeOffset.FromUnixTimeSeconds(usage.ExpireUnixSeconds.Value), includeSeconds: false),
             _ => missing,
         };
-        return this with
-        {
-            ScheduleDisplay = Model.IsEnabled
+        ScheduleDisplay = Model.IsEnabled
                 ? string.Format(CultureInfo.CurrentCulture, getString("Links.Schedule.Automatic.Format"), Model.UpdateIntervalHours)
-                : getString("Links.Schedule.Manual"),
-            UpdatedSummary = string.Format(CultureInfo.CurrentCulture, getString("Links.Updated.Format"), LastUpdatedDisplay),
-            UsageDisplay = string.Format(CultureInfo.CurrentCulture, getString("Links.Usage.Format"), used, total),
-            ExpiryDisplay = string.Format(CultureInfo.CurrentCulture, getString("Links.Expiry.Format"), expiry),
-        };
+                : getString("Links.Schedule.Manual");
+        UpdatedSummary = string.Format(CultureInfo.CurrentCulture, getString("Links.Updated.Format"), LastUpdatedDisplay);
+        UsageDisplay = string.Format(CultureInfo.CurrentCulture, getString("Links.Usage.Format"), used, total);
+        ExpiryDisplay = string.Format(CultureInfo.CurrentCulture, getString("Links.Expiry.Format"), expiry);
+        OnPropertyChanged(nameof(LastUpdatedDisplay));
     }
 
     private string FormatBytes(decimal bytes) => Formatter.Bytes(bytes);

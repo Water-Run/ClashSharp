@@ -8,7 +8,7 @@ using ClashSharp.ViewModel;
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Unit tests for the active connections view model.</summary>
-public sealed class ConnectionsViewModelTests
+public sealed partial class ConnectionsViewModelTests
 {
     [Fact]
     public async Task VerifiedStoppedCore_ShowsOneNormalEmptyExplanationWithoutWarning()

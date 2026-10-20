@@ -17,8 +17,37 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding and command execution.
 /// Side effects: Commands call injected services that may read profiles, open network sockets, and write logs.
 /// </remarks>
-internal sealed class ProxiesViewModel : ObservableObject
+internal sealed class ProxiesViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(RefreshNodesText));
+        OnPropertyChanged(nameof(RefreshRuntimeText));
+        OnPropertyChanged(nameof(TestLatencyText));
+        OnPropertyChanged(nameof(ProxyGroupsSectionTitleText));
+        OnPropertyChanged(nameof(ProviderResourcesSectionTitleText));
+        OnPropertyChanged(nameof(EmptyNodesText));
+        OnPropertyChanged(nameof(EmptyGroupsText));
+        OnPropertyChanged(nameof(EmptyResourcesText));
+        OnPropertyChanged(nameof(PageStatusText));
+        if (_runtimeStatusFactory is not null) { RuntimeStatusText = _runtimeStatusFactory(); }
+        foreach (ProxyNodeDisplay row in ProxyNodes) { row.LatencyDisplay = ProxyNodeDisplay.FormatLatency(row.Model, _localization.GetString); }
+        foreach (MihomoProxyGroupDisplay row in ProxyGroups) { row.TypeDisplay = FormatGroupType(row.Model); }
+        ApplyProviderResources(MapProviderResources(_providerResources.Select(row => row.Model).ToArray()));
+    }
+
+    private Func<string>? _runtimeStatusFactory;
+
+    private void SetRuntimeStatus(string key, string? diagnosticCode = null)
+    {
+        _runtimeStatusFactory = () => diagnosticCode is null ? _localization.GetString(key)
+            : RuntimeFailureDiagnostics.Format(diagnosticCode, _localization.GetString, _localization.GetString(key));
+        RuntimeStatusText = _runtimeStatusFactory();
+    }
+
     /// <summary>Localization provider used by visible text.</summary>
     private readonly IProxiesLocalization _localization;
 
@@ -139,7 +168,7 @@ internal sealed class ProxiesViewModel : ObservableObject
             UpdateProviderCommandAsync,
             _errorSink,
             operationName: "proxies-update-provider");
-        RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeNotRefreshed");
+        SetRuntimeStatus("ProxyNodes.Status.RuntimeNotRefreshed");
     }
 
     /// <summary>Gets the page title text.</summary>
@@ -288,6 +317,7 @@ internal sealed class ProxiesViewModel : ObservableObject
         ProxyNodes = [];
         ProxyGroups = [];
         _providerResources.Clear();
+        SetRuntimeStatus("ProxyNodes.Status.RuntimeNotRefreshed");
         return LoadAsync(cancellationToken);
     }
 
@@ -344,12 +374,12 @@ internal sealed class ProxiesViewModel : ObservableObject
             {
                 ProxyGroups = [];
                 _providerResources.Clear();
-                RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeStopped");
+                SetRuntimeStatus("ProxyNodes.Status.RuntimeStopped");
                 return;
             }
 
             await LoadRuntimeAsync(cancellationToken);
-            RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeRefreshed");
+            SetRuntimeStatus("ProxyNodes.Status.RuntimeRefreshed");
         }
         catch (Exception exception) when (
             exception is OperationCanceledException
@@ -361,7 +391,7 @@ internal sealed class ProxiesViewModel : ObservableObject
         {
             ProxyGroups = [];
             _providerResources.Clear();
-            RuntimeStatusText = _localization.GetString("ProxyNodes.Status.RuntimeUnavailable");
+            SetRuntimeStatus("ProxyNodes.Status.RuntimeUnavailable");
             _log.Append("Warning", "ProxyNodes", RuntimeStatusText, exception.Message);
         }
     }
@@ -377,7 +407,7 @@ internal sealed class ProxiesViewModel : ObservableObject
         {
             await _runtimeController.SelectProxyAsync(group.Name, proxyName, cancellationToken);
             await LoadRuntimeAsync(cancellationToken);
-            RuntimeStatusText = _localization.GetString("ProxyNodes.Status.SelectionApplied");
+            SetRuntimeStatus("ProxyNodes.Status.SelectionApplied");
             _log.Append("Info", "ProxyNodes", RuntimeStatusText, $"{group.Name} -> {proxyName}");
         }
         catch (Exception exception) when (
@@ -394,10 +424,7 @@ internal sealed class ProxiesViewModel : ObservableObject
             string code = RuntimeFailureDiagnostics.ExtractCode(
                 exception,
                 RuntimeFailureDiagnostics.ControllerUnavailable);
-            RuntimeStatusText = RuntimeFailureDiagnostics.Format(
-                code,
-                _localization.GetString,
-                _localization.GetString("ProxyNodes.Status.RuntimeUnavailable"));
+            SetRuntimeStatus("ProxyNodes.Status.RuntimeUnavailable", code);
             _log.Append("Warning", "ProxyNodes", RuntimeStatusText, code);
         }
     }
@@ -421,9 +448,7 @@ internal sealed class ProxiesViewModel : ObservableObject
             }
 
             bool empty = updated.Model.ItemCount == 0;
-            RuntimeStatusText = _localization.GetString(empty
-                ? "ProxyNodes.Status.ProviderUpdatedEmpty"
-                : "ProxyNodes.Status.ProviderUpdated");
+            SetRuntimeStatus(empty ? "ProxyNodes.Status.ProviderUpdatedEmpty" : "ProxyNodes.Status.ProviderUpdated");
             _log.Append(empty ? "Warning" : "Info", "ProxyNodes", RuntimeStatusText, provider.Name);
         }
         catch (Exception exception) when (
@@ -438,10 +463,7 @@ internal sealed class ProxiesViewModel : ObservableObject
             string code = RuntimeFailureDiagnostics.ExtractCode(
                 exception,
                 RuntimeFailureDiagnostics.ProviderUpdateFailed);
-            RuntimeStatusText = RuntimeFailureDiagnostics.Format(
-                code,
-                _localization.GetString,
-                _localization.GetString("ProxyNodes.Status.RuntimeUnavailable"));
+            SetRuntimeStatus("ProxyNodes.Status.RuntimeUnavailable", code);
             _log.Append("Warning", "ProxyNodes", RuntimeStatusText, code);
         }
     }
@@ -479,10 +501,9 @@ internal sealed class ProxiesViewModel : ObservableObject
         List<ProxyNodeDisplay> rows = new(nodes.Count);
         foreach (ProxyNode node in nodes)
         {
-            rows.Add(_displayMapper.Map(node) with
-            {
-                LatencyDisplay = ProxyNodeDisplay.FormatLatency(node, _localization.GetString),
-            });
+            ProxyNodeDisplay row = _displayMapper.Map(node);
+            row.LatencyDisplay = ProxyNodeDisplay.FormatLatency(node, _localization.GetString);
+            rows.Add(row);
         }
 
         ProxyNodes = rows;
@@ -495,20 +516,26 @@ internal sealed class ProxiesViewModel : ObservableObject
         foreach (MihomoProxyGroup group in groups)
         {
             MihomoProxyGroupDisplay row = _displayMapper.Map(group);
-            string? typeKey = group.Type switch
-            {
-                "Selector" => "ProxyNodes.GroupType.Selector",
-                "URLTest" => "ProxyNodes.GroupType.UrlTest",
-                "Fallback" => "ProxyNodes.GroupType.Fallback",
-                "LoadBalance" => "ProxyNodes.GroupType.LoadBalance",
-                "Relay" => "ProxyNodes.GroupType.Relay",
-                "Unknown" or "" => "ProxyNodes.GroupType.Unknown",
-                _ => null,
-            };
-            rows.Add(typeKey is null ? row : row with { TypeDisplay = _localization.GetString(typeKey) });
+            row.TypeDisplay = FormatGroupType(group);
+            rows.Add(row);
         }
 
         return rows;
+    }
+
+    private string FormatGroupType(MihomoProxyGroup group)
+    {
+        string? key = group.Type switch
+        {
+            "Selector" => "ProxyNodes.GroupType.Selector",
+            "URLTest" => "ProxyNodes.GroupType.UrlTest",
+            "Fallback" => "ProxyNodes.GroupType.Fallback",
+            "LoadBalance" => "ProxyNodes.GroupType.LoadBalance",
+            "Relay" => "ProxyNodes.GroupType.Relay",
+            "Unknown" or "" => "ProxyNodes.GroupType.Unknown",
+            _ => null,
+        };
+        return key is null ? _displayMapper.MapText(group.Type) : _localization.GetString(key);
     }
 
     private IReadOnlyList<MihomoProviderResourceDisplay> MapProviderResources(

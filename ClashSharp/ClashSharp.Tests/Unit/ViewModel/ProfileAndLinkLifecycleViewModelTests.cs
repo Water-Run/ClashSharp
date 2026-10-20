@@ -6,7 +6,7 @@ using ClashSharp.ViewModel;
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Verifies profile and subscription mutations respect their owning page lifetime.</summary>
-public sealed class ProfileAndLinkLifecycleViewModelTests
+public sealed partial class ProfileAndLinkLifecycleViewModelTests
 {
     [Fact]
     public async Task RemainingPages_LinksReplacementRejectsAnOldRowEvenWhenEveryValueMatches()
@@ -20,7 +20,12 @@ public sealed class ProfileAndLinkLifecycleViewModelTests
         await viewModel.ReloadForDataChangeAsync(CancellationToken.None);
 
         Assert.Null(viewModel.SelectedLink);
-        Assert.Equal(oldRow, Assert.Single(viewModel.SubscriptionLinks));
+        ProfileSubscriptionLinkDisplay newRow = Assert.Single(viewModel.SubscriptionLinks);
+        Assert.NotSame(oldRow, newRow);
+        Assert.Equal((oldRow.Model, oldRow.NameDisplay, oldRow.UriDisplay, oldRow.StatusDisplay,
+            oldRow.ScheduleDisplay, oldRow.UsageDisplay, oldRow.ExpiryDisplay, oldRow.UpdatedSummary),
+            (newRow.Model, newRow.NameDisplay, newRow.UriDisplay, newRow.StatusDisplay,
+                newRow.ScheduleDisplay, newRow.UsageDisplay, newRow.ExpiryDisplay, newRow.UpdatedSummary));
         Assert.False(viewModel.IsCurrentLink(oldRow));
         viewModel.SelectedLink = oldRow;
         await viewModel.DeleteSelectedLinkAsync(CancellationToken.None);

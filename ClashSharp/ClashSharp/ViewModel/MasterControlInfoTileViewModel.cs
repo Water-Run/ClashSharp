@@ -9,6 +9,10 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
     private string _value;
     private string _detail;
     private string _description;
+    private string _title;
+    private string _typeText;
+    private string _reorderHint = string.Empty;
+    private string _navigationText = string.Empty;
     private bool _isVisible = true;
     private bool _isToggleOn;
 
@@ -27,12 +31,12 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
         ICommand? tileCommand = null)
     {
         Id = id ?? throw new ArgumentNullException(nameof(id));
-        Title = title ?? throw new ArgumentNullException(nameof(title));
+        _title = title ?? throw new ArgumentNullException(nameof(title));
         _value = value ?? throw new ArgumentNullException(nameof(value));
         _detail = detail ?? throw new ArgumentNullException(nameof(detail));
         Glyph = glyph ?? throw new ArgumentNullException(nameof(glyph));
         _description = description ?? throw new ArgumentNullException(nameof(description));
-        TypeText = typeText ?? throw new ArgumentNullException(nameof(typeText));
+        _typeText = typeText ?? throw new ArgumentNullException(nameof(typeText));
         IsToggleVisible = isToggleVisible;
         _isToggleOn = isToggleOn;
         TileCommand = tileCommand;
@@ -40,7 +44,7 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
 
     public string Id { get; }
 
-    public string Title { get; }
+    public string Title => _title;
 
     public string Glyph { get; }
 
@@ -50,9 +54,9 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
         set => SetProperty(ref _description, value);
     }
 
-    public string TypeText { get; }
+    public string TypeText => _typeText;
 
-    public string ReorderHint { get; init; } = string.Empty;
+    public string ReorderHint { get => _reorderHint; init => _reorderHint = value; }
 
     public bool IsToggleVisible { get; }
 
@@ -61,7 +65,17 @@ internal sealed class MasterControlInfoTileViewModel : ObservableObject
     /// <summary>Optional explicit page navigation, separate from opening the full details.</summary>
     public ICommand? NavigationCommand { get; init; }
 
-    public string NavigationText { get; init; } = string.Empty;
+    public string NavigationText { get => _navigationText; init => _navigationText = value; }
+
+    /// <summary>Updates translated text while retaining tile identity, layout, commands and history.</summary>
+    public void RefreshLocalization(string title, string description, string typeText, string reorderHint, string navigationText)
+    {
+        SetProperty(ref _title, title, nameof(Title));
+        Description = description;
+        SetProperty(ref _typeText, typeText, nameof(TypeText));
+        SetProperty(ref _reorderHint, reorderHint, nameof(ReorderHint));
+        SetProperty(ref _navigationText, navigationText, nameof(NavigationText));
+    }
 
     public double[] History
     {

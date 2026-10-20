@@ -9,6 +9,25 @@ namespace ClashSharp.ViewModel;
 /// <summary>Stable bindable row that publishes the latest persisted trigger definition.</summary>
 internal sealed class TriggerTaskItemViewModel : ObservableObject
 {
+    /// <summary>Refreshes labels without changing the persisted definition or editor input.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(Id));
+        OnPropertyChanged(nameof(Name));
+        OnPropertyChanged(nameof(ConditionsSummary));
+        OnPropertyChanged(nameof(ActionsSummary));
+        OnPropertyChanged(nameof(ConditionsLabel));
+        OnPropertyChanged(nameof(ActionsLabel));
+        OnPropertyChanged(nameof(LastTriggeredLabel));
+        OnPropertyChanged(nameof(EditText));
+        OnPropertyChanged(nameof(MoreActionsText));
+        OnPropertyChanged(nameof(MoveUpText));
+        OnPropertyChanged(nameof(MoveDownText));
+        OnPropertyChanged(nameof(DeleteText));
+        OnPropertyChanged(nameof(EnabledText));
+        OnPropertyChanged(nameof(LastTriggeredSummary));
+    }
+
     private readonly Func<string, string> _getString;
     private readonly DisplayFormatter _formatter;
     private bool _canMoveUp;

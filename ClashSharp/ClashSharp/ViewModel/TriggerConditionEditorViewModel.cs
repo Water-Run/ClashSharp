@@ -8,6 +8,18 @@ namespace ClashSharp.ViewModel;
 /// <summary>Owns one editable typed trigger-condition draft and its field validation.</summary>
 internal sealed class TriggerConditionEditorViewModel : ObservableObject
 {
+    /// <summary>Refreshes labels without changing the persisted definition or editor input.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(MoveUpText));
+        OnPropertyChanged(nameof(MoveDownText));
+        OnPropertyChanged(nameof(RemoveText));
+        OnPropertyChanged(nameof(ThresholdUnitText));
+        OnPropertyChanged(nameof(ErrorMessage));
+    }
+
     private readonly Func<string, string> _getString;
     private TriggerTrafficScope _trafficScope;
     private TriggerTrafficDirection _rateDirection;

@@ -19,6 +19,19 @@ internal sealed class ConfigurationProfileDisplay(
 
     public string StatusDisplay { get; private set; } = statusDisplay;
 
+    /// <summary>Relocalizes application-owned labels without replacing provider data or the selected row.</summary>
+    public void RefreshLocalization(Func<string, string> getString, Func<string, string> filter)
+    {
+        if (StringComparer.Ordinal.Equals(Id, ProfileIdentifiers.BuiltInDirect))
+        {
+            NameDisplay = filter(getString("ProfileCatalog.BuiltInDirect.Name"));
+            StatusDisplay = filter(getString("ProfileCatalog.Status.Available"));
+            OnPropertyChanged(nameof(NameDisplay));
+            OnPropertyChanged(nameof(StatusDisplay));
+        }
+        OnPropertyChanged(nameof(UpdatedAtDisplay));
+    }
+
     /// <summary>Updates a retained row without discarding its selection, focus, or list position.</summary>
     public void UpdateFrom(ConfigurationProfileDisplay updated)
     {

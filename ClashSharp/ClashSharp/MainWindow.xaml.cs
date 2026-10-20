@@ -125,6 +125,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
     /// <summary>Keeps window FlowDirection aligned with the active display language.</summary>
     private IDisposable? _layoutDirection;
+    private IDisposable? _pageLocalization;
 
     internal MainWindow(
         IApplicationLifetimeRequestSink startupLifetimeRequests,
@@ -137,6 +138,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         StartupShellSetupPolicy.TryRun(_composition.ApplyStartupAccentColor);
         InitializeComponent();
         _layoutDirection = _composition.BindLayoutDirection((FrameworkElement)Content);
+        _pageLocalization = _composition.BindCurrentPageLocalization(() => ContentFrame.Content as ILocalizedPresentation
+            ?? (ContentFrame.Content as FrameworkElement)?.DataContext as ILocalizedPresentation);
         Closed += OnWindowClosed;
         StartupShellSetupPolicy.TryRun(InitializeStartupStatus);
         InitializeWindowNativeCapabilities();
@@ -532,6 +535,8 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
         _runtime = null;
         _settingsApplicationSubscription?.Dispose();
         _settingsApplicationSubscription = null;
+        _pageLocalization?.Dispose();
+        _pageLocalization = null;
         _currentNavigation = null;
         _navigationHistory.Clear();
 

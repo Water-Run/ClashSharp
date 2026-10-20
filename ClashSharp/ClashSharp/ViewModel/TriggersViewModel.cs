@@ -12,8 +12,53 @@ using ClashSharp.Model.Triggers;
 namespace ClashSharp.ViewModel;
 
 /// <summary>Owns asynchronous trigger catalog CRUD, ordering, and the active editor draft.</summary>
-internal sealed class TriggersViewModel : ObservableObject
+internal sealed class TriggersViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(AddTriggerText));
+        OnPropertyChanged(nameof(AddDescriptionText));
+        OnPropertyChanged(nameof(ConditionDescriptionText));
+        OnPropertyChanged(nameof(ActionDescriptionText));
+        OnPropertyChanged(nameof(NameText));
+        OnPropertyChanged(nameof(EnabledText));
+        OnPropertyChanged(nameof(OpenTriggerLogsText));
+        OnPropertyChanged(nameof(EnableAllText));
+        OnPropertyChanged(nameof(DisableAllText));
+        OnPropertyChanged(nameof(DisabledNoticeText));
+        OnPropertyChanged(nameof(EmptyText));
+        OnPropertyChanged(nameof(ConditionsText));
+        OnPropertyChanged(nameof(ActionsText));
+        OnPropertyChanged(nameof(LastTriggeredText));
+        OnPropertyChanged(nameof(SaveText));
+        OnPropertyChanged(nameof(CancelText));
+        OnPropertyChanged(nameof(AddText));
+        OnPropertyChanged(nameof(ChooseConditionsText));
+        OnPropertyChanged(nameof(ChooseActionsText));
+        OnPropertyChanged(nameof(DeleteText));
+        OnPropertyChanged(nameof(SearchConditionsText));
+        OnPropertyChanged(nameof(NoMatchingOptionsText));
+        OnPropertyChanged(nameof(SearchActionsText));
+        OnPropertyChanged(nameof(DeleteTitleText));
+        OnPropertyChanged(nameof(DeleteMessageText));
+        OnPropertyChanged(nameof(ConditionThresholdHeaderText));
+        OnPropertyChanged(nameof(ConditionScopeHeaderText));
+        OnPropertyChanged(nameof(RateDirectionHeaderText));
+        OnPropertyChanged(nameof(NotificationLevelHeaderText));
+        OnPropertyChanged(nameof(ConditionTimeHeaderText));
+        OnPropertyChanged(nameof(WindowSecondsHeaderText));
+        OnPropertyChanged(nameof(RuntimeSecondsHeaderText));
+        OnPropertyChanged(nameof(BooleanValueHeaderText));
+        OnPropertyChanged(nameof(ProxyModeHeaderText));
+        OnPropertyChanged(nameof(NotificationMessageHeaderText));
+        OnPropertyChanged(nameof(ErrorMessage));
+        foreach (TriggerTaskItemViewModel task in TriggerTasks) { task.RefreshLocalization(); }
+        CurrentEditor?.RefreshLocalization();
+    }
+
     private readonly Func<string, string> _getString;
     private readonly DisplayFormatter _formatter;
     private readonly ITriggerDefinitionStore _store;

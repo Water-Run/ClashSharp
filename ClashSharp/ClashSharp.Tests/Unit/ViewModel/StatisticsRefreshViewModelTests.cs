@@ -7,7 +7,7 @@ using ClashSharp.ViewModel;
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Exercises visible statistics states and overlapping background reads without Windows state.</summary>
-public sealed class StatisticsRefreshViewModelTests
+public sealed partial class StatisticsRefreshViewModelTests
 {
     private static readonly DateTimeOffset RefreshTime = new(2026, 9, 30, 12, 0, 0, TimeSpan.Zero);
 

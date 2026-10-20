@@ -14,8 +14,44 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding.
 /// Side effects: Commands can launch external URIs and load can probe the core binary.
 /// </remarks>
-internal sealed class AboutViewModel : ObservableObject
+internal sealed class AboutViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(AppDescriptionText));
+        OnPropertyChanged(nameof(AppNameText));
+        OnPropertyChanged(nameof(VersionText));
+        OnPropertyChanged(nameof(VersionSummaryText));
+        OnPropertyChanged(nameof(VersionLabelText));
+        OnPropertyChanged(nameof(RuntimeTitleText));
+        OnPropertyChanged(nameof(RuntimeValueText));
+        OnPropertyChanged(nameof(AuthorTitleText));
+        OnPropertyChanged(nameof(AuthorValueText));
+        OnPropertyChanged(nameof(OpenSourceTitleText));
+        OnPropertyChanged(nameof(OpenSourceDescriptionText));
+        OnPropertyChanged(nameof(ProtocolTitleText));
+        OnPropertyChanged(nameof(ProtocolValueText));
+        OnPropertyChanged(nameof(LicenseTitleText));
+        OnPropertyChanged(nameof(LicenseValueText));
+        OnPropertyChanged(nameof(GitHubTitleText));
+        OnPropertyChanged(nameof(GitHubDescriptionText));
+        OnPropertyChanged(nameof(GitHubButtonText));
+        OnPropertyChanged(nameof(UpdateTitleText));
+        OnPropertyChanged(nameof(UpdateDescriptionText));
+        OnPropertyChanged(nameof(OpenReleasesButtonText));
+        OnPropertyChanged(nameof(MihomoTitleText));
+        OnPropertyChanged(nameof(MihomoDescriptionText));
+        OnPropertyChanged(nameof(MihomoButtonText));
+        OnPropertyChanged(nameof(ProxyInformationTitleText));
+        OnPropertyChanged(nameof(ProxyInformationDescriptionText));
+        OnPropertyChanged(nameof(ProxyInformationButtonText));
+        RefreshCoreStatusText();
+        RefreshUpdateStatusText();
+    }
+
     /// <summary>Clash# repository URL.</summary>
     private static readonly Uri GitHubUri = new("https://github.com/Water-Run/ClashSharp");
 
@@ -39,6 +75,9 @@ internal sealed class AboutViewModel : ObservableObject
 
     /// <summary>Backing field for <see cref="UpdateStatusText"/>.</summary>
     private string _updateStatusText = string.Empty;
+    private string? _coreVersion;
+    private bool _coreProbeFinished;
+    private ApplicationUpdateCheckResult? _updateResult;
 
     /// <summary>Initializes an about view model.</summary>
     /// <param name="localization">Localization provider. Must not be null.</param>
@@ -59,8 +98,8 @@ internal sealed class AboutViewModel : ObservableObject
         _updateChecker = updateChecker ?? throw new ArgumentNullException(nameof(updateChecker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         ArgumentNullException.ThrowIfNull(errorSink);
-        MihomoStatusText = _localization.GetString("About.Mihomo.Loading");
-        UpdateStatusText = _localization.GetString("About.Update.Checking");
+        RefreshCoreStatusText();
+        RefreshUpdateStatusText();
         OpenGitHubCommand = new AsyncRelayCommand(
             (_, token) => _launcher.LaunchAsync(GitHubUri, token),
             errorSink,
@@ -233,14 +272,18 @@ internal sealed class AboutViewModel : ObservableObject
         try
         {
             string versionText = CoreVersionDisplayFormatter.Format(await _core.GetVersionTextAsync(cancellationToken));
-            MihomoStatusText = string.Format(CultureInfo.CurrentCulture, _localization.GetString("About.Mihomo.Available.Format"), versionText);
+            _coreVersion = versionText;
+            _coreProbeFinished = true;
+            RefreshCoreStatusText();
         }
         catch (Exception exception) when (
             exception is FileNotFoundException or InvalidOperationException or OperationCanceledException
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            MihomoStatusText = _localization.GetString("About.Mihomo.Unavailable");
+            _coreVersion = null;
+            _coreProbeFinished = true;
+            RefreshCoreStatusText();
         }
     }
 
@@ -258,13 +301,25 @@ internal sealed class AboutViewModel : ObservableObject
             result = ApplicationUpdateCheckResult.Unavailable();
         }
 
-        UpdateStatusText = result.Availability switch
+        _updateResult = result;
+        RefreshUpdateStatusText();
+    }
+
+    private void RefreshCoreStatusText() => MihomoStatusText = !_coreProbeFinished
+        ? _localization.GetString("About.Mihomo.Loading") : _coreVersion is null
+            ? _localization.GetString("About.Mihomo.Unavailable")
+            : string.Format(CultureInfo.CurrentCulture, _localization.GetString("About.Mihomo.Available.Format"), _coreVersion);
+
+    private void RefreshUpdateStatusText()
+    {
+        UpdateStatusText = _updateResult?.Availability switch
         {
+            null => _localization.GetString("About.Update.Checking"),
             ApplicationUpdateAvailability.Current => _localization.GetString("About.Update.Current"),
             ApplicationUpdateAvailability.UpdateAvailable => string.Format(
                 CultureInfo.CurrentCulture,
                 _localization.GetString("About.Update.Available.Format"),
-                result.LatestVersion),
+                _updateResult.LatestVersion),
             _ => _localization.GetString("About.Update.Unavailable"),
         };
     }

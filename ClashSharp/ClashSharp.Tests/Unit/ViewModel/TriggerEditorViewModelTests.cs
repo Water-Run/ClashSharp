@@ -22,7 +22,7 @@ using TriggersViewModel = ClashSharpUi::ClashSharp.ViewModel.TriggersViewModel;
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Verifies lossless multi-condition editing and asynchronous trigger-definition persistence.</summary>
-public sealed class TriggerEditorViewModelTests
+public sealed partial class TriggerEditorViewModelTests
 {
     [Theory]
     [InlineData(false)]

@@ -19,8 +19,33 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding and command execution.
 /// Side effects: Commands can import, validate, activate profiles, and write logs through injected delegates.
 /// </remarks>
-internal sealed class ProfilesViewModel : ObservableObject
+internal sealed class ProfilesViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(ImportProfileText));
+        OnPropertyChanged(nameof(ValidateProfileText));
+        OnPropertyChanged(nameof(SetActiveProfileText));
+        OnPropertyChanged(nameof(RenameProfileText));
+        OnPropertyChanged(nameof(DeleteProfileText));
+        OnPropertyChanged(nameof(ProfileHistoryText));
+        OnPropertyChanged(nameof(CurrentProfileTitleText));
+        OnPropertyChanged(nameof(ProfileNameColumnText));
+        OnPropertyChanged(nameof(StatusColumnText));
+        OnPropertyChanged(nameof(NodesColumnText));
+        OnPropertyChanged(nameof(RulesColumnText));
+        OnPropertyChanged(nameof(UpdatedColumnText));
+        if (_statusTextFactory is not null) { StatusText = _statusTextFactory(); }
+        foreach (ConfigurationProfileDisplay row in _profilesRows) { row.RefreshLocalization(_getString, _displayMapper.MapText); }
+        if (_lastFallbackProfileId is not null) { ActiveProfileText = ResolveActiveProfileDisplayText(_profilesRows, _lastFallbackProfileId); }
+    }
+
+    private Func<string>? _statusTextFactory;
+    private string? _lastFallbackProfileId;
+
     /// <summary>Localization resolver used by visible labels.</summary>
     private readonly Func<string, string> _getString;
 
@@ -152,6 +177,7 @@ internal sealed class ProfilesViewModel : ObservableObject
 
     private void ClearStatus()
     {
+        _statusTextFactory = null;
         StatusText = string.Empty;
         StatusSeverity = PageStatusSeverity.Informational;
     }
@@ -159,15 +185,17 @@ internal sealed class ProfilesViewModel : ObservableObject
     private void SetStatus(string key, PageStatusSeverity severity)
     {
         StatusSeverity = severity;
-        StatusText = _getString(key);
+        _statusTextFactory = () => _getString(key);
+        StatusText = _statusTextFactory();
     }
 
     private void SetFailure(string key, Exception exception)
     {
         StatusSeverity = PageStatusSeverity.Error;
-        StatusText = exception is ProfileValidationException validation
-            ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.Validation.MissingSections"), validation.GetMissingSectionNames())
-            : _getString(key);
+        string? missing = (exception as ProfileValidationException)?.GetMissingSectionNames();
+        _statusTextFactory = () => missing is not null
+            ? string.Format(CultureInfo.CurrentCulture, _getString("Profiles.Validation.MissingSections"), missing) : _getString(key);
+        StatusText = _statusTextFactory();
     }
 
     /// <summary>Formats a retained version with explicit node and rule labels.</summary>
@@ -276,6 +304,7 @@ internal sealed class ProfilesViewModel : ObservableObject
         ++_dataRevision;
         SelectedProfile = null;
         _profilesRows.Clear();
+        _lastFallbackProfileId = null;
         ClearStatus();
         return LoadAsync(cancellationToken);
     }
@@ -569,6 +598,7 @@ internal sealed class ProfilesViewModel : ObservableObject
         IReadOnlyList<ConfigurationProfile> profiles,
         string fallbackProfileId)
     {
+        _lastFallbackProfileId = fallbackProfileId;
         List<ConfigurationProfileDisplay> rows = new(profiles.Count);
         foreach (ConfigurationProfile profile in profiles)
         {

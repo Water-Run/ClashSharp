@@ -30,7 +30,7 @@ namespace ClashSharp.View;
 /// Thread safety: Must be accessed from the UI thread only.
 /// Side effects: Persists settings when user-facing controls change.
 /// </remarks>
-public sealed partial class Settings : Page
+public sealed partial class Settings : Page, ILocalizedPresentation
 {
     /// <summary>Owns settings state transitions and persistence.</summary>
     private readonly SettingsViewModel _viewModel;
@@ -172,6 +172,9 @@ public sealed partial class Settings : Page
         _pageOperations.Cancel();
         await _pageOperations.DrainAsync();
     }
+
+    /// <summary>Queues language refresh under the current visit's input-binding guard.</summary>
+    public void RefreshLocalization() => RefreshRuntimeSettings(_visit);
 
     private async void RefreshRuntimeSettings(int visit)
     {

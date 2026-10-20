@@ -22,8 +22,100 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding.
 /// Side effects: Cleanup methods mutate persistent log storage.
 /// </remarks>
-internal sealed class LogsViewModel : ObservableObject
+internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(StorageTitleText));
+        OnPropertyChanged(nameof(CleanupText));
+        OnPropertyChanged(nameof(CleanupSizeParameterText));
+        OnPropertyChanged(nameof(CleanupPreviewPlaceholderText));
+        OnPropertyChanged(nameof(CleanupPreviewFailedText));
+        OnPropertyChanged(nameof(BackText));
+        OnPropertyChanged(nameof(RefreshText));
+        OnPropertyChanged(nameof(SearchPlaceholderText));
+        OnPropertyChanged(nameof(SearchLabelText));
+        OnPropertyChanged(nameof(LevelFilterLabelText));
+        OnPropertyChanged(nameof(CategoryFilterLabelText));
+        OnPropertyChanged(nameof(TimeColumnText));
+        OnPropertyChanged(nameof(LevelColumnText));
+        OnPropertyChanged(nameof(CategoryColumnText));
+        OnPropertyChanged(nameof(ContentColumnText));
+        OnPropertyChanged(nameof(EmptyText));
+        bool updating = IsUpdatingFilterOptions;
+        IsUpdatingFilterOptions = true;
+        try
+        {
+            string? selectedCategory = CurrentCategoryFilter;
+            string[] categories = _categoryFilterValues.Values.Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToArray();
+            RefreshLevelFilterOptions();
+            RefreshCategoryFilterOptions(categories, selectedCategory);
+        }
+        finally { IsUpdatingFilterOptions = updating; }
+        foreach (LogRecordDisplay row in RecentLogs) { row.RefreshLocalization(FormatLogLevel(row.Record.Level), FormatLogCategory(row.Record.Source)); }
+        if (_storageSummary is LogStorageSnapshot summary) { RefreshStorageText(summary); }
+    }
+
+    private LogStorageSnapshot? _storageSummary;
+    private IReadOnlyList<LogRecord>? _displayLogSource;
+    private IReadOnlyList<LogRecordDisplay> _displayLogRows = [];
+
+    /// <summary>Captures a dialog's display labels and semantic filters independently of later language changes.</summary>
+    public CleanupFilterSnapshot CaptureCleanupFilters()
+    {
+        Dictionary<string, string?> levels = new(_levelFilterValues, StringComparer.Ordinal);
+        Dictionary<string, string?> categories = new(_categoryFilterValues, StringComparer.Ordinal);
+        if (levels.Count == 0) { levels.Add(AllLevelsText, null); }
+        if (categories.Count == 0) { categories.Add(AllCategoriesText, null); }
+        string selectedCategory = SelectedCategoryFilter;
+        if (CurrentCategoryFilter is string source)
+        {
+            selectedCategory = categories.FirstOrDefault(item => StringComparer.Ordinal.Equals(item.Value, source)).Key;
+            if (selectedCategory is null)
+            {
+                string label = FormatLogCategory(source);
+                selectedCategory = label;
+                int suffix = 2;
+                while (categories.ContainsKey(selectedCategory)) { selectedCategory = $"{label} ({source}) {suffix++}"; }
+                categories.Add(selectedCategory, source);
+            }
+        }
+        return new(levels, categories, SelectedLevelFilter, selectedCategory);
+    }
+
+    /// <summary>Immutable filter labels and their original semantic identities for one cleanup dialog.</summary>
+    public sealed class CleanupFilterSnapshot
+    {
+        private readonly IReadOnlyDictionary<string, string?> _levels;
+        private readonly IReadOnlyDictionary<string, string?> _categories;
+
+        internal CleanupFilterSnapshot(IReadOnlyDictionary<string, string?> levels, IReadOnlyDictionary<string, string?> categories,
+            string selectedLevel, string selectedCategory)
+        {
+            _levels = levels; _categories = categories;
+            LevelOptions = levels.Keys.ToArray(); CategoryOptions = categories.Keys.ToArray();
+            SelectedLevel = levels.ContainsKey(selectedLevel) ? selectedLevel : LevelOptions[0];
+            SelectedCategory = categories.ContainsKey(selectedCategory) ? selectedCategory : CategoryOptions[0];
+        }
+
+        public IReadOnlyList<string> LevelOptions { get; }
+        public IReadOnlyList<string> CategoryOptions { get; }
+        public string SelectedLevel { get; }
+        public string SelectedCategory { get; }
+        internal string? ResolveLevel(string? label) => Resolve(_levels, label);
+        internal string? ResolveCategory(string? label) => Resolve(_categories, label);
+
+        private static string? Resolve(IReadOnlyDictionary<string, string?> values, string? label)
+        {
+            ArgumentNullException.ThrowIfNull(label);
+            return values.TryGetValue(label, out string? value) ? value
+                : throw new ArgumentException("The filter is outside the captured cleanup choices.", nameof(label));
+        }
+    }
+
     private const int VisibleLogLimit = 1000;
 
     private const int ServiceLogIdentityLimit = 1024;
@@ -135,7 +227,7 @@ internal sealed class LogsViewModel : ObservableObject
 
     public string SearchPlaceholderText => _getString("Logs.Filter.SearchPlaceholder");
 
-    public string SearchLabelText => MatchLocalized("搜索", "搜尋", "Search", "Поиск", "Rechercher", "Suchen");
+    public string SearchLabelText => _getString("Logs.Filter.Search");
 
     public string LevelFilterLabelText => _getString("Logs.Filter.Level");
 
@@ -214,7 +306,15 @@ internal sealed class LogsViewModel : ObservableObject
     /// <value>Recent logs; never null.</value>
     public IReadOnlyList<LogRecordDisplay> RecentLogs
     {
-        get => _recentLogs.Select(CreateDisplayRow).ToList();
+        get
+        {
+            if (!ReferenceEquals(_displayLogSource, _recentLogs))
+            {
+                _displayLogRows = _recentLogs.Select(CreateDisplayRow).ToArray();
+                _displayLogSource = _recentLogs;
+            }
+            return _displayLogRows;
+        }
         private set => SetProperty(ref _recentLogs, value.Select(static row => row.Record).ToList());
     }
 
@@ -237,6 +337,8 @@ internal sealed class LogsViewModel : ObservableObject
     {
         cancellationToken.ThrowIfCancellationRequested();
         _liveRuntimeLogs.Clear();
+        _storageSummary = null;
+        StorageUsageText = string.Empty;
         RecentLogs = [];
         return LoadAsync(cancellationToken);
     }
@@ -377,12 +479,8 @@ internal sealed class LogsViewModel : ObservableObject
     private void ApplyLoadSnapshot(LogLoadSnapshot snapshot)
     {
         LogStorageSnapshot summary = snapshot.Summary;
-        StorageUsageText = string.Format(
-            CultureInfo.CurrentCulture,
-            _getString("Logs.StorageUsage.Format"),
-            FormatByteCount(summary.DatabaseSizeBytes),
-            summary.LogCount,
-            summary.ConnectionCount);
+        _storageSummary = summary;
+        RefreshStorageText(summary);
         RefreshLevelFilterOptions();
         IReadOnlyList<string> sources = snapshot.Sources
             .Concat(_liveRuntimeLogs.Select(static log => log.Source))
@@ -393,6 +491,10 @@ internal sealed class LogsViewModel : ObservableObject
         OnPropertyChanged(nameof(RecentLogs));
         OnPropertyChanged(nameof(HasNoLogs));
     }
+
+    private void RefreshStorageText(LogStorageSnapshot summary) => StorageUsageText = string.Format(
+        CultureInfo.CurrentCulture, _getString("Logs.StorageUsage.Format"),
+        FormatByteCount(summary.DatabaseSizeBytes), summary.LogCount, summary.ConnectionCount);
 
     private void AppendRuntimeLog(string source, string level, string message)
     {
@@ -507,6 +609,7 @@ internal sealed class LogsViewModel : ObservableObject
     /// <param name="levelFilter">Selected localized level filter, or null.</param>
     /// <param name="categoryFilter">Selected localized category filter, or null.</param>
     /// <param name="cancellationToken">Cancels queued work and prevents stale snapshot application.</param>
+    /// <param name="filters">Optional dialog-owned filter snapshot that survives display-language changes.</param>
     /// <returns>A task that completes after cleanup and snapshot application or error reporting.</returns>
     /// <remarks>
     /// Cancellation cannot roll back a SQLite mutation that has already started. A canceled caller
@@ -517,10 +620,11 @@ internal sealed class LogsViewModel : ObservableObject
         double parameterValue,
         string? levelFilter,
         string? categoryFilter,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CleanupFilterSnapshot? filters = null)
     {
-        string? resolvedLevelFilter = ResolveLevelFilter(levelFilter);
-        string? resolvedCategoryFilter = ResolveCategoryFilter(categoryFilter);
+        string? resolvedLevelFilter = filters is null ? ResolveLevelFilter(levelFilter) : filters.ResolveLevel(levelFilter);
+        string? resolvedCategoryFilter = filters is null ? ResolveCategoryFilter(categoryFilter) : filters.ResolveCategory(categoryFilter);
         LogLoadRequest loadRequest = CaptureLoadRequest();
         return ViewModelLoadExecutor.ExecuteAsync(
             () =>
@@ -545,6 +649,7 @@ internal sealed class LogsViewModel : ObservableObject
     /// <param name="levelFilter">Selected localized level filter, or null.</param>
     /// <param name="categoryFilter">Selected localized category filter, or null.</param>
     /// <param name="cancellationToken">Cancels queued work and prevents stale text application.</param>
+    /// <param name="filters">Optional dialog-owned filter snapshot used by both preview and cleanup.</param>
     /// <returns>
     /// Localized preview text, or null when a non-fatal storage failure was reported.
     /// </returns>
@@ -553,11 +658,12 @@ internal sealed class LogsViewModel : ObservableObject
         double parameterValue,
         string? levelFilter,
         string? categoryFilter,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CleanupFilterSnapshot? filters = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        string? resolvedLevelFilter = ResolveLevelFilter(levelFilter);
-        string? resolvedCategoryFilter = ResolveCategoryFilter(categoryFilter);
+        string? resolvedLevelFilter = filters is null ? ResolveLevelFilter(levelFilter) : filters.ResolveLevel(levelFilter);
+        string? resolvedCategoryFilter = filters is null ? ResolveCategoryFilter(categoryFilter) : filters.ResolveCategory(categoryFilter);
         string? preview = null;
         await ViewModelLoadExecutor.ExecuteAsync(
             () => ReadCleanupPreview(
@@ -685,6 +791,7 @@ internal sealed class LogsViewModel : ObservableObject
 
     private void RefreshLevelFilterOptions()
     {
+        string? selectedLevel = EffectiveLevelFilter;
         List<string> options =
         [
             AllLevelsText,
@@ -698,9 +805,7 @@ internal sealed class LogsViewModel : ObservableObject
         _levelFilterValues[options[1]] = "Info";
         _levelFilterValues[options[2]] = "Warning";
         _levelFilterValues[options[3]] = "Error";
-        string selectedDisplay = options.Contains(SelectedLevelFilter, StringComparer.Ordinal)
-            ? SelectedLevelFilter
-            : AllLevelsText;
+        string selectedDisplay = selectedLevel is null ? AllLevelsText : FormatLogLevel(selectedLevel);
         bool optionsChanged = !LevelFilterOptions.SequenceEqual(options, StringComparer.Ordinal);
         if (optionsChanged)
         {
@@ -721,26 +826,22 @@ internal sealed class LogsViewModel : ObservableObject
         List<string> options = [AllCategoriesText];
         _categoryFilterValues.Clear();
         _categoryFilterValues[AllCategoriesText] = null;
-        foreach (string source in sources)
+        string[] identities = sources.Concat(selectedSource is null ? [] : new[] { selectedSource })
+            .Distinct(StringComparer.Ordinal).ToArray();
+        Dictionary<string, int> labelCounts = identities.GroupBy(FormatLogCategory, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        HashSet<string> used = new(StringComparer.Ordinal) { AllCategoriesText };
+        string selectedDisplay = AllCategoriesText;
+        foreach (string source in identities)
         {
             string display = FormatLogCategory(source);
-            if (!options.Contains(display, StringComparer.Ordinal))
-            {
-                options.Add(display);
-            }
-
+            if (labelCounts[display] > 1 || used.Contains(display)) { display += $" ({source})"; }
+            string label = display;
+            int suffix = 2;
+            while (!used.Add(display)) { display = $"{label} {suffix++}"; }
+            options.Add(display);
             _categoryFilterValues[display] = source;
-        }
-
-        string selectedDisplay = AllCategoriesText;
-        if (selectedSource is not null)
-        {
-            selectedDisplay = FormatLogCategory(selectedSource);
-            if (!options.Contains(selectedDisplay, StringComparer.Ordinal))
-            {
-                options.Add(selectedDisplay);
-                _categoryFilterValues[selectedDisplay] = selectedSource;
-            }
+            if (StringComparer.Ordinal.Equals(source, selectedSource)) { selectedDisplay = display; }
         }
 
         bool optionsChanged = !CategoryFilterOptions.SequenceEqual(options, StringComparer.Ordinal);
@@ -761,6 +862,7 @@ internal sealed class LogsViewModel : ObservableObject
     /// <summary>Keeps the native ItemsSource and surviving items stable as live log sources arrive.</summary>
     private void SynchronizeFilterOptions(ObservableCollection<string> current, IReadOnlyList<string> desired)
     {
+        bool updating = IsUpdatingFilterOptions;
         IsUpdatingFilterOptions = true;
         try
         {
@@ -787,7 +889,7 @@ internal sealed class LogsViewModel : ObservableObject
         }
         finally
         {
-            IsUpdatingFilterOptions = false;
+            IsUpdatingFilterOptions = updating;
         }
     }
 
@@ -812,27 +914,9 @@ internal sealed class LogsViewModel : ObservableObject
     {
         return level switch
         {
-            "Info" => MatchLocalized(
-                simplifiedChinese: "信息",
-                traditionalChinese: "資訊",
-                english: "Info",
-                russian: "Информация",
-                french: "Info",
-                german: "Info"),
-            "Warning" => MatchLocalized(
-                simplifiedChinese: "警告",
-                traditionalChinese: "警告",
-                english: "Warning",
-                russian: "Предупреждение",
-                french: "Avertissement",
-                german: "Warnung"),
-            "Error" => MatchLocalized(
-                simplifiedChinese: "错误",
-                traditionalChinese: "錯誤",
-                english: "Error",
-                russian: "Ошибка",
-                french: "Erreur",
-                german: "Fehler"),
+            "Info" => _getString("Logs.Level.Info"),
+            "Warning" => _getString("Logs.Level.Warning"),
+            "Error" => _getString("Logs.Level.Error"),
             _ => level,
         };
     }
@@ -854,37 +938,6 @@ internal sealed class LogsViewModel : ObservableObject
             "StartupRestoreFallback" => _getString("Settings.StartupRestoreFallback.Title"),
             _ => source,
         };
-    }
-
-    private string MatchLocalized(string simplifiedChinese, string traditionalChinese, string english, string russian, string french, string german)
-    {
-        string allLevels = AllLevelsText;
-        if (StringComparer.Ordinal.Equals(allLevels, "全部级别"))
-        {
-            return simplifiedChinese;
-        }
-
-        if (StringComparer.Ordinal.Equals(allLevels, "全部級別"))
-        {
-            return traditionalChinese;
-        }
-
-        if (StringComparer.Ordinal.Equals(allLevels, "Все уровни"))
-        {
-            return russian;
-        }
-
-        if (StringComparer.Ordinal.Equals(allLevels, "Tous les niveaux"))
-        {
-            return french;
-        }
-
-        if (StringComparer.Ordinal.Equals(allLevels, "Alle Ebenen"))
-        {
-            return german;
-        }
-
-        return english;
     }
 
     private sealed record LogLoadRequest(

@@ -4,7 +4,7 @@ using ClashSharp.ViewModel;
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Unit tests for the proxies view model.</summary>
-public sealed class ProxiesViewModelTests
+public sealed partial class ProxiesViewModelTests
 {
     [Theory]
     [InlineData("Selector", "ProxyNodes.GroupType.Selector")]

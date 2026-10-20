@@ -1144,10 +1144,11 @@ public sealed partial class MasterControlViewModelTests
         Func<CancellationToken, Task<PublicIpInformation>>? probePublicIpAsync = null,
         IApplicationUpdateChecker? updateChecker = null,
         Func<Func<CancellationToken, Task>, CancellationToken, Task>? runTileOperationAsync = null,
-        Action<string>? navigateToPage = null)
+        Action<string>? navigateToPage = null,
+        IMasterControlLocalization? localization = null)
     {
         return new MasterControlViewModel(
-            new FakeMasterLocalization(),
+            localization ?? new FakeMasterLocalization(),
             core ?? new FakeMasterCore(),
             proxy ?? new FakeMasterWindowsProxy(),
             settings ?? new FakeMasterSettings(),

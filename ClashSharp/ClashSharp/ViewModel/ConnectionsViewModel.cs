@@ -21,8 +21,45 @@ namespace ClashSharp.ViewModel;
 /// Thread safety: Not thread-safe; intended for UI-thread binding and command execution.
 /// Side effects: Commands call injected services that query mihomo and append application logs.
 /// </remarks>
-internal sealed class ConnectionsViewModel : ObservableObject
+internal sealed class ConnectionsViewModel : ObservableObject, ILocalizedPresentation
 {
+    /// <summary>Refreshes current page text without reloading data or changing user choices.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(PageTitleText));
+        OnPropertyChanged(nameof(DescriptionText));
+        OnPropertyChanged(nameof(RefreshConnectionsText));
+        OnPropertyChanged(nameof(CloseAllConnectionsText));
+        OnPropertyChanged(nameof(CloseConnectionText));
+        OnPropertyChanged(nameof(SearchPlaceholderText));
+        OnPropertyChanged(nameof(UploadText));
+        OnPropertyChanged(nameof(DownloadText));
+        OnPropertyChanged(nameof(EmptyStateText));
+        OnPropertyChanged(nameof(FilterCountText));
+        RefreshConnectionStatusText();
+        foreach (ActiveConnectionDisplayRow row in _allConnections) { row.RefreshLocalization(_localization.GetString); }
+        ApplyFilter();
+    }
+
+    private string? _connectionStatusKey;
+    private object[] _connectionStatusArguments = [];
+
+    private void SetConnectionStatus(string key, params object[] arguments)
+    {
+        _connectionStatusKey = key;
+        _connectionStatusArguments = arguments;
+        RefreshConnectionStatusText();
+    }
+
+    private void RefreshConnectionStatusText()
+    {
+        if (_connectionStatusKey is not null)
+        {
+            ConnectionStatusText = _connectionStatusArguments.Length == 0 ? _localization.GetString(_connectionStatusKey)
+                : string.Format(CultureInfo.CurrentCulture, _localization.GetString(_connectionStatusKey), _connectionStatusArguments);
+        }
+    }
+
     private static readonly TimeSpan StreamReconnectDelay = TimeSpan.FromSeconds(1);
 
     /// <summary>Localization provider used by visible text.</summary>
@@ -78,7 +115,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         _errorSink = errorSink ?? throw new ArgumentNullException(nameof(errorSink));
         _networkState = networkState;
         _displayTextFilter = displayTextFilter ?? (static text => text);
-        ConnectionStatusText = _localization.GetString("Connections.Status.NotRefreshed");
+        SetConnectionStatus("Connections.Status.NotRefreshed");
         RefreshConnectionsCommand = new AsyncRelayCommand(
             RefreshConnectionsAsync,
             errorSink,
@@ -214,7 +251,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         _isCoreStopped = false;
         _allConnections = [];
         Connections = [];
-        ConnectionStatusText = _localization.GetString("Connections.Status.Unavailable");
+        SetConnectionStatus("Connections.Status.Unavailable");
         NotifyViewState();
     }
 
@@ -318,10 +355,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
             .Select(connection => new ActiveConnectionDisplayRow(connection, _displayTextFilter, _localization.Formatter, _localization.GetString))
             .ToArray();
         ApplyFilter();
-        ConnectionStatusText = string.Format(
-            CultureInfo.CurrentCulture,
-            _localization.GetString("Connections.Status.Active.Format"),
-            connections.Count);
+        SetConnectionStatus("Connections.Status.Active.Format", connections.Count);
     }
 
     /// <summary>Classifies a failed read without publishing over a newer connection observation.</summary>
@@ -354,7 +388,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
         _isCoreStopped = coreStopped;
         _allConnections = [];
         ApplyFilter();
-        ConnectionStatusText = _localization.GetString(coreStopped ? "Connections.Status.CoreStopped" : "Connections.Status.Unavailable");
+        SetConnectionStatus(coreStopped ? "Connections.Status.CoreStopped" : "Connections.Status.Unavailable");
         if (logWarning && !coreStopped)
         {
             _log.Append("Warning", "Connections", ConnectionStatusText, detail);
@@ -404,7 +438,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
                 return;
             }
 
-            ConnectionStatusText = _localization.GetString("Connections.Status.Closed");
+            SetConnectionStatus("Connections.Status.Closed");
             _log.Append("Info", "Connections", ConnectionStatusText, connection.Id);
         }
         catch (Exception exception) when (
@@ -440,7 +474,7 @@ internal sealed class ConnectionsViewModel : ObservableObject
                 return;
             }
 
-            ConnectionStatusText = _localization.GetString("Connections.Status.ClosedAll");
+            SetConnectionStatus("Connections.Status.ClosedAll");
             _log.Append("Info", "Connections", ConnectionStatusText, null);
         }
         catch (Exception exception) when (

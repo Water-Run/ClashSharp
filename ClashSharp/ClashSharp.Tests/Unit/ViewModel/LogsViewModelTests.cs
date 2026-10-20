@@ -606,6 +606,10 @@ public sealed partial class LogsViewModelTests
         {
             "Logs.StorageUsage.Format" => "{0} | {1} | {2}",
             "Logs.Filter.AllLevels" => "All levels",
+            "Logs.Filter.Search" => "Search",
+            "Logs.Level.Info" => "Info",
+            "Logs.Level.Warning" => "Warning",
+            "Logs.Level.Error" => "Error",
             "Logs.Filter.AllCategories" => "All categories",
             "Logs.Cleanup.Preview.Loading" => "Calculating cleanup…",
             "Logs.Cleanup.Preview.Failed" => "Couldn't calculate cleanup.",

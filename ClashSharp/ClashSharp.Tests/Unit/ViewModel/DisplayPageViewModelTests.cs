@@ -5,7 +5,7 @@ using ClashSharp.ViewModel;
 namespace ClashSharp.Tests.Unit.ViewModel;
 
 /// <summary>Unit tests for rules, statistics, and about page view models.</summary>
-public sealed class DisplayPageViewModelTests
+public sealed partial class DisplayPageViewModelTests
 {
     [Fact]
     public async Task RemainingPages_RulesReplacementClearsOldRowsWhenTheNewReadFails()
@@ -405,6 +405,7 @@ public sealed class DisplayPageViewModelTests
     /// <summary>Fake about core for about tests.</summary>
     private sealed class FakeAboutCore : IAboutCore
     {
+        public int CallCount { get; private set; }
         /// <summary>Gets or sets fake version text.</summary>
         /// <value>Configured version text.</value>
         public string VersionText { get; set; } = "mihomo";
@@ -414,6 +415,7 @@ public sealed class DisplayPageViewModelTests
         /// <returns>Configured version text.</returns>
         public Task<string> GetVersionTextAsync(CancellationToken cancellationToken)
         {
+            CallCount++;
             return Task.FromResult(VersionText);
         }
     }

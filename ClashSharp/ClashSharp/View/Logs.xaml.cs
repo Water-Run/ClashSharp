@@ -271,6 +271,7 @@ public sealed partial class Logs : Page
 
     private async Task ShowCleanupDialogAsync(CancellationToken pageToken)
     {
+        LogsViewModel.CleanupFilterSnapshot filters = _viewModel.CaptureCleanupFilters();
         PageLoadSession previewSession = new(_errorSink, "logs-cleanup-preview");
         bool dialogOpen = true;
         ComboBox cleanupModeBox = new()
@@ -309,15 +310,15 @@ public sealed partial class Logs : Page
         ComboBox levelBox = new()
         {
             Header = _viewModel.LevelFilterLabelText,
-            ItemsSource = _viewModel.LevelFilterOptions,
-            SelectedItem = _viewModel.SelectedLevelFilter,
+            ItemsSource = filters.LevelOptions,
+            SelectedItem = filters.SelectedLevel,
             Visibility = Visibility.Collapsed,
         };
         ComboBox categoryBox = new()
         {
             Header = _viewModel.CategoryFilterLabelText,
-            ItemsSource = _viewModel.CategoryFilterOptions,
-            SelectedItem = _viewModel.SelectedCategoryFilter,
+            ItemsSource = filters.CategoryOptions,
+            SelectedItem = filters.SelectedCategory,
             Visibility = Visibility.Collapsed,
         };
         TextBlock previewText = new()
@@ -418,7 +419,8 @@ public sealed partial class Logs : Page
                             parameterValue,
                             levelFilter,
                             categoryFilter,
-                            previewToken);
+                            previewToken,
+                            filters);
                         previewToken.ThrowIfCancellationRequested();
                         previewText.Text = text ?? _viewModel.CleanupPreviewFailedText;
                         previewParameter = parameterValue;
@@ -539,7 +541,8 @@ public sealed partial class Logs : Page
                 cleanupParameter,
                 selectedLevelFilter,
                 selectedCategoryFilter,
-                pageToken);
+                pageToken,
+                filters);
         }
         finally
         {

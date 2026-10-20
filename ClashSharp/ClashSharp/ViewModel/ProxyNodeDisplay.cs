@@ -5,9 +5,12 @@ using ClashSharp.Model;
 namespace ClashSharp.ViewModel;
 
 /// <summary>Bindable presentation row for a proxy node.</summary>
-internal sealed record ProxyNodeDisplay(ProxyNode Model, string NameDisplay)
+internal sealed class ProxyNodeDisplay(ProxyNode model, string nameDisplay) : ObservableObject
 {
-    public string LatencyDisplay { get; init; } = "—";
+    private string _latencyDisplay = "—";
+    public ProxyNode Model { get; } = model;
+    public string NameDisplay { get; } = nameDisplay;
+    public string LatencyDisplay { get => _latencyDisplay; internal set => SetProperty(ref _latencyDisplay, value); }
 
     /// <summary>Formats a TCP measurement without presenting direct routes or unavailable endpoints as measured latency.</summary>
     internal static string FormatLatency(ProxyNode node, Func<string, string> getString)

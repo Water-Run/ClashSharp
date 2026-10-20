@@ -7,6 +7,7 @@ namespace ClashSharp.ViewModel;
 internal sealed class MasterHeroStatusSlotViewModel : ObservableObject
 {
     private MasterHeroStatusItemKind _selectedKind;
+    private string _title;
 
     public MasterHeroStatusSlotViewModel(
         int index,
@@ -15,14 +16,14 @@ internal sealed class MasterHeroStatusSlotViewModel : ObservableObject
         IReadOnlyList<MasterHeroStatusOptionViewModel> options)
     {
         Index = index;
-        Title = title ?? throw new ArgumentNullException(nameof(title));
+        _title = title ?? throw new ArgumentNullException(nameof(title));
         _selectedKind = selectedKind;
         Options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     public int Index { get; }
 
-    public string Title { get; }
+    public string Title { get => _title; internal set => SetProperty(ref _title, value); }
 
     public IReadOnlyList<MasterHeroStatusOptionViewModel> Options { get; }
 

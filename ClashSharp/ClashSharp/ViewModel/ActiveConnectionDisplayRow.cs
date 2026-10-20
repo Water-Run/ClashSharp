@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Globalization;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
@@ -6,8 +7,11 @@ using ClashSharp.Model;
 namespace ClashSharp.ViewModel;
 
 /// <summary>Bindable display row for one active connection.</summary>
-public sealed class ActiveConnectionDisplayRow
+public sealed class ActiveConnectionDisplayRow : INotifyPropertyChanged
 {
+    private readonly DisplayFormatter _formatter;
+    /// <summary>Occurs when translated or formatted display values change for this retained row.</summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
     /// <summary>Creates sanitized, culture-aware display values for one connection snapshot.</summary>
     /// <param name="connection">Immutable connection data represented by this row.</param>
     /// <param name="displayTextFilter">Boundary filter applied to externally sourced text.</param>
@@ -21,6 +25,7 @@ public sealed class ActiveConnectionDisplayRow
     {
         ArgumentNullException.ThrowIfNull(displayTextFilter);
         formatter ??= new();
+        _formatter = formatter;
 
         Connection = connection;
         // The controller uses the literal sentinel "unknown" when no process metadata is
@@ -40,7 +45,7 @@ public sealed class ActiveConnectionDisplayRow
     public ActiveConnection Connection { get; }
 
     /// <summary>Gets the sanitized process-name display text.</summary>
-    public string ProcessNameDisplay { get; }
+    public string ProcessNameDisplay { get; private set; }
 
     /// <summary>Gets the sanitized destination-host display text.</summary>
     public string HostDisplay { get; }
@@ -52,10 +57,24 @@ public sealed class ActiveConnectionDisplayRow
     public string ProxyNameDisplay { get; }
 
     /// <summary>Gets the culture-formatted uploaded byte count.</summary>
-    public string UploadDisplay { get; }
+    public string UploadDisplay { get; private set; }
 
     /// <summary>Gets the culture-formatted downloaded byte count.</summary>
-    public string DownloadDisplay { get; }
+    public string DownloadDisplay { get; private set; }
+
+    /// <summary>Refreshes application labels and quantities without replacing this connection or its actions.</summary>
+    public void RefreshLocalization(Func<string, string> getString)
+    {
+        if (string.IsNullOrWhiteSpace(Connection.ProcessName) || StringComparer.Ordinal.Equals(Connection.ProcessName, "unknown"))
+        {
+            ProcessNameDisplay = getString("Connections.Process.Unknown");
+            PropertyChanged?.Invoke(this, new(nameof(ProcessNameDisplay)));
+        }
+        UploadDisplay = _formatter.Bytes(Connection.UploadBytes, "N1");
+        DownloadDisplay = _formatter.Bytes(Connection.DownloadBytes, "N1");
+        PropertyChanged?.Invoke(this, new(nameof(UploadDisplay)));
+        PropertyChanged?.Invoke(this, new(nameof(DownloadDisplay)));
+    }
 
 
 }

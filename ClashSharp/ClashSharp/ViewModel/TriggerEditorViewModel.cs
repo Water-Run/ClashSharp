@@ -17,6 +17,29 @@ namespace ClashSharp.ViewModel;
 /// <summary>Owns a complete multi-condition, ordered-action trigger draft and asynchronous save state.</summary>
 internal sealed class TriggerEditorViewModel : ObservableObject
 {
+    /// <summary>Updates visible draft text and stable choices without assigning any editable value.</summary>
+    public void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(ErrorMessage));
+        foreach (TriggerConditionEditorViewModel condition in Conditions) { condition.RefreshLocalization(); }
+        foreach (TriggerActionEditorViewModel action in Actions) { action.RefreshLocalization(); }
+        RefreshOptions(ConditionOptions, CreateConditionOptions());
+        RefreshOptions(ActionOptions, CreateActionOptions());
+        RefreshOptions(TrafficScopeOptions, CreateTrafficScopeOptions());
+        RefreshOptions(RateDirectionOptions, CreateRateDirectionOptions());
+        RefreshOptions(NotificationLevelOptions, CreateNotificationLevelOptions());
+        RefreshOptions(ProxyModeOptions, CreateProxyModeOptions());
+    }
+
+    private static void RefreshOptions<T>(IReadOnlyList<TriggerEditorOption<T>> current, IReadOnlyList<TriggerEditorOption<T>> translated)
+    {
+        foreach (TriggerEditorOption<T> item in current)
+        {
+            TriggerEditorOption<T> text = translated.Single(option => EqualityComparer<T>.Default.Equals(item.Value, option.Value));
+            item.RefreshLocalization(text.Title, text.Description);
+        }
+    }
     internal const int MaxNameLength = 48;
 
     private readonly Func<string, string> _getString;
