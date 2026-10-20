@@ -16,4 +16,7 @@ public readonly record struct WindowsDiagnosticResult(
     string DisplayName,
     bool IsHealthy,
     string Message,
-    string Detail);
+    string Detail)
+{
+    internal string? MessageResourceKey { get; init; }
+}

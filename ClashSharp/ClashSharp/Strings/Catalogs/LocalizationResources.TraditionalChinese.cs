@@ -800,6 +800,7 @@ internal static partial class LocalizationResources
             ["Settings.ConnectionTest.Succeeded.Format"] = "連線測試成功，HTTP 狀態：{0}。",
             ["Settings.ConnectionTest.Failed.Format"] = "連線測試失敗：{0}",
             ["Settings.ConnectionTest.StatusColumn"] = "狀態",
+            ["Settings.ConnectionTest.Result.Title"] = "連線測試結果",
             ["Settings.ConnectionTest.LatencyColumn"] = "延遲",
             ["Settings.ConnectionTest.StatusHttp.Format"] = "HTTP {0}",
             ["Settings.ConnectionTest.TimedOut"] = "4s 逾時",

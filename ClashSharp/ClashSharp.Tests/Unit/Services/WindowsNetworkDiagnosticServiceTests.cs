@@ -28,6 +28,7 @@ public sealed class WindowsNetworkDiagnosticServiceTests
         Assert.Equal("terminal target", result.DisplayName);
         Assert.True(result.IsHealthy);
         Assert.Equal("terminal ready", result.Message);
+        Assert.Equal("WindowsDiagnostic.Terminal.Ready", result.MessageResourceKey);
         Assert.Contains("HTTP_PROXY=http://127.0.0.1:19090", result.Detail, StringComparison.Ordinal);
     }
 

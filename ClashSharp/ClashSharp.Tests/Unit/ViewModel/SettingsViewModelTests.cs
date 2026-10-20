@@ -2554,7 +2554,9 @@ public sealed partial class SettingsViewModelTests
 
     private static SettingsViewModel CreateConnectionTestViewModel(
         Func<Uri, CancellationToken, Task<int>> testConnectionAsync,
-        Action<string, string, string, string?>? appendLog = null)
+        Action<string, string, string, string?>? appendLog = null,
+        Func<string, string>? getString = null,
+        SettingsDiagnosticsViewModel? diagnosticsViewModel = null)
     {
         SettingsViewModel viewModel = new(
             new FakeSettingsStore(),
@@ -2562,7 +2564,7 @@ public sealed partial class SettingsViewModelTests
             _ => { },
             () => { },
             _ => { },
-            key => key switch
+            getString ?? (key => key switch
             {
                 "Settings.ConnectionTest.Succeeded.Format" => "success {0}",
                 "Settings.ConnectionTest.Failed.Format" => "failed {0}",
@@ -2571,7 +2573,7 @@ public sealed partial class SettingsViewModelTests
                 "Settings.ConnectionTest.AllFailed" => "Settings.ConnectionTest.AllFailed",
                 "Settings.ConnectionTest.PartialPassed.Format" => "{0}/{1}",
                 _ => key,
-            },
+            }),
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
             new FakeApplicationErrorSink(),
             () => { },
@@ -2584,7 +2586,8 @@ public sealed partial class SettingsViewModelTests
             clearAllData: () => { },
             checkStartupConflictsAsync: NoStartupConflictsAsync,
             notifyConnectionTestTimeout: _ => { },
-            appendLog: appendLog ?? ((_, _, _, _) => { }));
+            appendLog: appendLog ?? ((_, _, _, _) => { }),
+            diagnosticsViewModel: diagnosticsViewModel);
         viewModel.Load();
         return viewModel;
     }

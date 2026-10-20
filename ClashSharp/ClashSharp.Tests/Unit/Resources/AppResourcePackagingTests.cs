@@ -820,7 +820,8 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("new HttpClient", settingsCode, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpResponseMessage", settingsCode, StringComparison.Ordinal);
         Assert.Contains("RunConnectionTestAsync", settingsCode, StringComparison.Ordinal);
-        Assert.Contains("BuildConnectionTestResultPanel(report)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("BuildConnectionTestResultPanel(display, refreshText)", settingsCode, StringComparison.Ordinal);
+        Assert.Contains("ConnectionTestDisplay display = new(report, _getString)", settingsCode, StringComparison.Ordinal);
         Assert.Contains("CenteredDialogOverlay.ShowAsync", settingsCode, StringComparison.Ordinal);
         Assert.Contains("GetConnectionTestSummaryStyle(report.SummaryState)", settingsCode, StringComparison.Ordinal);
         Assert.Contains("ConnectionTestSummaryState.AllPassed", settingsCode, StringComparison.Ordinal);

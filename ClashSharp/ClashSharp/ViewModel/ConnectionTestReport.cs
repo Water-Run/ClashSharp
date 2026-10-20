@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ClashSharp.Model;
 
 namespace ClashSharp.ViewModel;
 
@@ -6,4 +7,7 @@ namespace ClashSharp.ViewModel;
 internal sealed record ConnectionTestReport(
     IReadOnlyList<ConnectionTestTargetResult> Results,
     string SummaryText,
-    ConnectionTestSummaryState SummaryState);
+    ConnectionTestSummaryState SummaryState)
+{
+    internal LocalizedDisplayText? SummarySource { get; init; }
+}

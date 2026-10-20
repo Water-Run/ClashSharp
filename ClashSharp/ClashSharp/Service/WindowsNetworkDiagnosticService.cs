@@ -179,10 +179,11 @@ public sealed partial class WindowsNetworkDiagnosticService
         bool hasBridge = ContainsAllWslEnvTokens(wslEnv);
         bool hasProxyEnvironment = IsProxyEnvironmentConfigured(proxyUrl);
         bool isHealthy = isAvailable && hasBridge && hasProxyEnvironment;
-        string message = ResolveWslMessage(isHealthy, isAvailable, hasBridge);
+        string messageKey = ResolveWslMessageKey(isHealthy, isAvailable, hasBridge);
+        string message = GetString(messageKey);
         string detail = isAvailable ? $"WSLENV={wslEnv}; {BuildProxyEnvironmentDetail()}" : result.Error;
 
-        return new WindowsDiagnosticResult(WindowsDiagnosticTarget.Wsl, "WSL", isHealthy, message, detail);
+        return new WindowsDiagnosticResult(WindowsDiagnosticTarget.Wsl, "WSL", isHealthy, message, detail) { MessageResourceKey = messageKey };
     }
 
     /// <summary>Diagnoses terminal proxy environment variables for newly launched shells.</summary>
@@ -191,12 +192,13 @@ public sealed partial class WindowsNetworkDiagnosticService
     {
         string proxyUrl = BuildLocalProxyUrl();
         bool isHealthy = IsProxyEnvironmentConfigured(proxyUrl);
-        string message = isHealthy
-            ? GetString("WindowsDiagnostic.Terminal.Ready")
-            : GetString("WindowsDiagnostic.Terminal.ProxyEnvironmentMissing");
+        string messageKey = isHealthy
+            ? "WindowsDiagnostic.Terminal.Ready"
+            : "WindowsDiagnostic.Terminal.ProxyEnvironmentMissing";
+        string message = GetString(messageKey);
         string detail = BuildProxyEnvironmentDetail();
 
-        return new WindowsDiagnosticResult(WindowsDiagnosticTarget.Terminal, GetString("WindowsDiagnostic.Target.Terminal"), isHealthy, message, detail);
+        return new WindowsDiagnosticResult(WindowsDiagnosticTarget.Terminal, GetString("WindowsDiagnostic.Target.Terminal"), isHealthy, message, detail) { MessageResourceKey = messageKey };
     }
 
     /// <summary>Diagnoses Microsoft Store loopback exemption state.</summary>
@@ -208,30 +210,31 @@ public sealed partial class WindowsNetworkDiagnosticService
             .RunAsync("CheckNetIsolation.exe", ["LoopbackExempt", "-s"], TimeSpan.FromSeconds(5), cancellationToken)
             .ConfigureAwait(false);
         bool isHealthy = result.Output.Contains(MicrosoftStorePackageFamilyName, StringComparison.OrdinalIgnoreCase);
-        string message = isHealthy
-            ? GetString("WindowsDiagnostic.MicrosoftStore.Ready")
-            : GetString("WindowsDiagnostic.MicrosoftStore.LoopbackMissing");
+        string messageKey = isHealthy
+            ? "WindowsDiagnostic.MicrosoftStore.Ready"
+            : "WindowsDiagnostic.MicrosoftStore.LoopbackMissing";
+        string message = GetString(messageKey);
         string detail = string.IsNullOrWhiteSpace(result.Output) ? result.Error : result.Output;
 
-        return new WindowsDiagnosticResult(WindowsDiagnosticTarget.MicrosoftStore, "Microsoft Store", isHealthy, message, detail);
+        return new WindowsDiagnosticResult(WindowsDiagnosticTarget.MicrosoftStore, "Microsoft Store", isHealthy, message, detail) { MessageResourceKey = messageKey };
     }
 
     /// <summary>Resolves WSL diagnostic status text.</summary>
-    private string ResolveWslMessage(bool isHealthy, bool isAvailable, bool hasBridge)
+    private static string ResolveWslMessageKey(bool isHealthy, bool isAvailable, bool hasBridge)
     {
         if (isHealthy)
         {
-            return GetString("WindowsDiagnostic.Wsl.Ready");
+            return "WindowsDiagnostic.Wsl.Ready";
         }
 
         if (!isAvailable)
         {
-            return GetString("WindowsDiagnostic.Wsl.Unavailable");
+            return "WindowsDiagnostic.Wsl.Unavailable";
         }
 
         return hasBridge
-            ? GetString("WindowsDiagnostic.Wsl.ProxyEnvironmentMissing")
-            : GetString("WindowsDiagnostic.Wsl.BridgeMissing");
+            ? "WindowsDiagnostic.Wsl.ProxyEnvironmentMissing"
+            : "WindowsDiagnostic.Wsl.BridgeMissing";
     }
 
     /// <summary>Captures and applies environment mutations owned by one diagnostic target.</summary>

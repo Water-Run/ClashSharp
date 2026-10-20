@@ -798,6 +798,7 @@ internal static partial class LocalizationResources
             ["Settings.ConnectionTest.Succeeded.Format"] = "연결 테스트에 성공했습니다. HTTP 상태: {0}.",
             ["Settings.ConnectionTest.Failed.Format"] = "연결 테스트 실패: {0}",
             ["Settings.ConnectionTest.StatusColumn"] = "상태",
+            ["Settings.ConnectionTest.Result.Title"] = "연결 테스트 결과",
             ["Settings.ConnectionTest.LatencyColumn"] = "지연 시간",
             ["Settings.ConnectionTest.StatusHttp.Format"] = "HTTP {0}",
             ["Settings.ConnectionTest.TimedOut"] = "4초 시간 초과",

@@ -800,6 +800,7 @@ internal static partial class LocalizationResources
             ["Settings.ConnectionTest.Succeeded.Format"] = "Test de connexion réussi, état HTTP : {0}.",
             ["Settings.ConnectionTest.Failed.Format"] = "Échec du test de connexion : {0}",
             ["Settings.ConnectionTest.StatusColumn"] = "État",
+            ["Settings.ConnectionTest.Result.Title"] = "Résultats du test de connexion",
             ["Settings.ConnectionTest.LatencyColumn"] = "Latence",
             ["Settings.ConnectionTest.StatusHttp.Format"] = "HTTP {0}",
             ["Settings.ConnectionTest.TimedOut"] = "Délai 4 s",

@@ -376,16 +376,25 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         ConnectionTestReport report,
         CancellationToken cancellationToken)
     {
+        ConnectionTestDisplay display = new(report, _getString);
+        List<Action> refreshText = [];
         await CenteredDialogOverlay.ShowAsync(
             GetDialogXamlRoot(),
-            _viewModel.ConnectionTestUrlTitleText,
-            BuildConnectionTestResultPanel(report),
+            _getString("Settings.ConnectionTest.Result.Title"),
+            BuildConnectionTestResultPanel(display, refreshText),
             _getString("Command.Close"),
             720,
-            cancellationToken);
+            cancellationToken,
+            dialog => dialog.Localize(() =>
+            {
+                dialog.Title = _getString("Settings.ConnectionTest.Result.Title");
+                dialog.CloseButtonText = _getString("Command.Close");
+                foreach (Action refresh in refreshText) { refresh(); }
+                display.RefreshLocalization();
+            }));
     }
 
-    private StackPanel BuildConnectionTestResultPanel(ConnectionTestReport report)
+    private StackPanel BuildConnectionTestResultPanel(ConnectionTestDisplay report, List<Action> refreshText)
     {
         StackPanel panel = new()
         {
@@ -399,65 +408,86 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             RowSpacing = 8,
             ColumnSpacing = 12,
         };
-        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
         table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        AddConnectionTestHeader(table);
+        AddConnectionTestHeader(table, refreshText);
 
-        foreach (ConnectionTestTargetResult result in report.Results)
+        foreach (ConnectionTestTargetDisplay result in report.Rows)
         {
             AddConnectionTestResultRow(table, result);
         }
 
         panel.Children.Add(table);
-        panel.Children.Add(new TextBlock
+        TextBlock summary = new()
         {
-            Text = report.SummaryText,
             Style = GetConnectionTestSummaryStyle(report.SummaryState),
             TextWrapping = TextWrapping.WrapWholeWords,
-        });
+        };
+        summary.SetBinding(TextBlock.TextProperty, new Binding { Source = report, Path = new PropertyPath(nameof(ConnectionTestDisplay.SummaryText)) });
+        panel.Children.Add(summary);
         return panel;
     }
 
-    private void AddConnectionTestHeader(Grid table)
+    private void AddConnectionTestHeader(Grid table, List<Action> refreshText)
     {
         int rowIndex = table.RowDefinitions.Count;
         table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        AddConnectionTestText(table, rowIndex, 0, "URL", "ClashSecondaryCaptionTextBlockStyle");
-        AddConnectionTestText(table, rowIndex, 1, _viewModel.ConnectionTestStatusColumnText, "ClashSecondaryCaptionTextBlockStyle");
-        AddConnectionTestText(table, rowIndex, 2, _viewModel.ConnectionTestLatencyColumnText, "ClashSecondaryCaptionTextBlockStyle");
+        TextBlock url = AddConnectionTestText(table, rowIndex, 0, "URL", "ClashSecondaryCaptionTextBlockStyle");
+        url.FlowDirection = FlowDirection.LeftToRight;
+        url.TextAlignment = TextAlignment.Left;
+        TextBlock status = AddConnectionTestText(table, rowIndex, 1, _viewModel.ConnectionTestStatusColumnText, "ClashSecondaryCaptionTextBlockStyle");
+        TextBlock latency = AddConnectionTestText(table, rowIndex, 2, _viewModel.ConnectionTestLatencyColumnText, "ClashSecondaryCaptionTextBlockStyle");
+        status.TextWrapping = TextWrapping.WrapWholeWords;
+        refreshText.Add(() =>
+        {
+            status.Text = _viewModel.ConnectionTestStatusColumnText;
+            latency.Text = _viewModel.ConnectionTestLatencyColumnText;
+        });
     }
 
-    private static void AddConnectionTestResultRow(Grid table, ConnectionTestTargetResult result)
+    private static void AddConnectionTestResultRow(Grid table, ConnectionTestTargetDisplay result)
     {
         int rowIndex = table.RowDefinitions.Count;
         table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        AddConnectionTestText(table, rowIndex, 0, result.Url, "BodyTextBlockStyle");
+        TextBlock url = AddConnectionTestText(table, rowIndex, 0, result.Url, "BodyTextBlockStyle");
+        url.FlowDirection = FlowDirection.LeftToRight;
+        url.TextAlignment = TextAlignment.Left;
+        ToolTipService.SetToolTip(url, result.Url);
 
-        StackPanel statusPanel = new()
+        Grid statusPanel = new()
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
+            ColumnSpacing = 8,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        statusPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        statusPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         statusPanel.Children.Add(new Ellipse
         {
             Width = 10,
             Height = 10,
+            VerticalAlignment = VerticalAlignment.Center,
             Style = (Style)Application.Current.Resources[result.Succeeded
                 ? "ClashSuccessIndicatorStyle"
                 : "ClashCriticalIndicatorStyle"],
         });
-        statusPanel.Children.Add(new TextBlock
+        TextBlock status = new()
         {
-            Text = result.StatusText,
             Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-        });
+            TextWrapping = TextWrapping.WrapWholeWords,
+        };
+        status.SetBinding(TextBlock.TextProperty, new Binding { Source = result, Path = new PropertyPath(nameof(ConnectionTestTargetDisplay.StatusText)) });
+        status.SetBinding(ToolTipService.ToolTipProperty, new Binding { Source = result, Path = new PropertyPath(nameof(ConnectionTestTargetDisplay.StatusText)) });
+        Grid.SetColumn(status, 1);
+        statusPanel.Children.Add(status);
         Grid.SetRow(statusPanel, rowIndex);
         Grid.SetColumn(statusPanel, 1);
         table.Children.Add(statusPanel);
 
-        AddConnectionTestText(table, rowIndex, 2, result.LatencyText, "BodyTextBlockStyle");
+        TextBlock latency = AddConnectionTestText(table, rowIndex, 2, result.LatencyText, "BodyTextBlockStyle");
+        latency.FlowDirection = FlowDirection.LeftToRight;
+        latency.TextAlignment = TextAlignment.Right;
+        latency.SetBinding(TextBlock.TextProperty, new Binding { Source = result, Path = new PropertyPath(nameof(ConnectionTestTargetDisplay.LatencyText)) });
     }
 
     /// <summary>Keeps status colors as theme references until the dialog joins its actual visual tree.</summary>
@@ -473,7 +503,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         return (Style)Application.Current.Resources[styleKey];
     }
 
-    private static void AddConnectionTestText(Grid table, int rowIndex, int columnIndex, string text, string styleKey)
+    private static TextBlock AddConnectionTestText(Grid table, int rowIndex, int columnIndex, string text, string styleKey)
     {
         TextBlock textBlock = new()
         {
@@ -486,6 +516,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         Grid.SetRow(textBlock, rowIndex);
         Grid.SetColumn(textBlock, columnIndex);
         table.Children.Add(textBlock);
+        return textBlock;
     }
 
     /// <summary>Opens the Windows-native network repair dialog.</summary>
@@ -496,16 +527,20 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         await RunPageOperationAsync(async cancellationToken =>
         {
             PageOperationSession diagnostics = new(_errorSink, "settings-diagnostic-dialog");
-            ThemedContentDialog dialog = new()
-            {
-                Title = _viewModel.WindowsNativeTitleText,
-                Content = BuildNetworkRepairPanel(diagnostics, cancellationToken),
-                CloseButtonText = _getString("Command.Close"),
-                XamlRoot = GetDialogXamlRoot(),
-            };
+            List<Action> refreshText = [];
             try
             {
-                await dialog.ShowManagedAsync(cancellationToken);
+                await CenteredDialogOverlay.ShowAsync(
+                    GetDialogXamlRoot(), _viewModel.WindowsNativeTitleText,
+                    BuildNetworkRepairPanel(diagnostics, refreshText, cancellationToken),
+                    _getString("Command.Close"), 688, cancellationToken,
+                    dialog => dialog.Localize(() =>
+                    {
+                        dialog.Title = _viewModel.WindowsNativeTitleText;
+                        dialog.CloseButtonText = _getString("Command.Close");
+                        foreach (Action refresh in refreshText) { refresh(); }
+                        _viewModel.RefreshDiagnosticStatusPresentation();
+                    }));
             }
             finally
             {
@@ -953,7 +988,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
 
     /// <summary>Builds the network repair dialog content.</summary>
     /// <returns>Dialog content panel.</returns>
-    private ScrollViewer BuildNetworkRepairPanel(PageOperationSession diagnostics, CancellationToken cancellationToken)
+    private ScrollViewer BuildNetworkRepairPanel(PageOperationSession diagnostics, List<Action> refreshText, CancellationToken cancellationToken)
     {
         StackPanel panel = new()
         {
@@ -962,9 +997,9 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             MaxWidth = 640,
         };
 
-        AddDiagnosticRow(panel, _viewModel.WslDiagnosticTitleText, nameof(SettingsViewModel.WslDiagnosticStatusText), "Wsl", diagnostics, cancellationToken);
-        AddDiagnosticRow(panel, _viewModel.TerminalDiagnosticTitleText, nameof(SettingsViewModel.TerminalDiagnosticStatusText), "Terminal", diagnostics, cancellationToken);
-        AddDiagnosticRow(panel, _viewModel.StoreDiagnosticTitleText, nameof(SettingsViewModel.StoreDiagnosticStatusText), "MicrosoftStore", diagnostics, cancellationToken);
+        AddDiagnosticRow(panel, () => _viewModel.WslDiagnosticTitleText, nameof(SettingsViewModel.WslDiagnosticStatusText), "Wsl", diagnostics, refreshText, cancellationToken);
+        AddDiagnosticRow(panel, () => _viewModel.TerminalDiagnosticTitleText, nameof(SettingsViewModel.TerminalDiagnosticStatusText), "Terminal", diagnostics, refreshText, cancellationToken);
+        AddDiagnosticRow(panel, () => _viewModel.StoreDiagnosticTitleText, nameof(SettingsViewModel.StoreDiagnosticStatusText), "MicrosoftStore", diagnostics, refreshText, cancellationToken);
 
         return new ScrollViewer
         {
@@ -978,22 +1013,25 @@ public sealed partial class Settings : Page, ILocalizedPresentation
 
     /// <summary>Adds one diagnostic target row to the dialog panel.</summary>
     /// <param name="panel">Target panel. Must not be null.</param>
-    /// <param name="title">Target title. Must not be null.</param>
+    /// <param name="getTitle">Resolves the captured target's display title.</param>
     /// <param name="statusPropertyName">Bindable status property name. Must not be null.</param>
     /// <param name="targetTag">Diagnostic target tag. Must not be null.</param>
     /// <param name="diagnostics">Owns the diagnostic operations accepted by this dialog.</param>
+    /// <param name="refreshText">Retains display-only updates for the dialog lifetime.</param>
     /// <param name="cancellationToken">Cancels work when the page leaves the visual tree.</param>
     private void AddDiagnosticRow(
         StackPanel panel,
-        string title,
+        Func<string> getTitle,
         string statusPropertyName,
         string targetTag,
         PageOperationSession diagnostics,
+        List<Action> refreshText,
         CancellationToken cancellationToken)
     {
         Grid row = new()
         {
-            Style = (Style)Application.Current.Resources["ClashCardGridStyle"],
+            Style = (Style)Application.Current.Resources["ClashSectionRowStyle"],
+            Padding = new Thickness(0, 12, 0, 12),
             MinHeight = 68,
             RowSpacing = 8,
         };
@@ -1005,30 +1043,33 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             VerticalAlignment = VerticalAlignment.Center,
             Spacing = 2,
         };
-        textPanel.Children.Add(new TextBlock
+        TextBlock title = new()
         {
-            Text = title,
-            Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
-        });
+            Text = getTitle(),
+            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+            TextWrapping = TextWrapping.WrapWholeWords,
+        };
+        refreshText.Add(() => title.Text = getTitle());
+        textPanel.Children.Add(title);
 
         TextBlock statusText = new()
         {
             Style = (Style)Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
+            TextWrapping = TextWrapping.WrapWholeWords,
         };
-        statusText.SetBinding(TextBlock.TextProperty, new Binding { Path = new PropertyPath(statusPropertyName) });
+        statusText.SetBinding(TextBlock.TextProperty, new Binding { Source = _viewModel, Path = new PropertyPath(statusPropertyName) });
         textPanel.Children.Add(statusText);
         row.Children.Add(textPanel);
 
-        StackPanel buttonPanel = new()
+        Grid buttonPanel = new()
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Right,
+            ColumnSpacing = 8,
         };
+        for (int index = 0; index < 3; index++) { buttonPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); }
         Grid.SetRow(buttonPanel, 1);
-        AddDiagnosticButton(buttonPanel, "\uE9D9", _viewModel.DiagnoseText, $"{targetTag}:Diagnose", diagnostics, cancellationToken);
-        AddDiagnosticButton(buttonPanel, "\uE73E", _viewModel.ApplyText, $"{targetTag}:Apply", diagnostics, cancellationToken);
-        AddDiagnosticButton(buttonPanel, "\uE72C", _viewModel.ResetText, $"{targetTag}:Reset", diagnostics, cancellationToken);
+        AddDiagnosticButton(buttonPanel, 0, "\uE9D9", () => _viewModel.DiagnoseText, $"{targetTag}:Diagnose", diagnostics, refreshText, cancellationToken);
+        AddDiagnosticButton(buttonPanel, 1, "\uE73E", () => _viewModel.ApplyText, $"{targetTag}:Apply", diagnostics, refreshText, cancellationToken);
+        AddDiagnosticButton(buttonPanel, 2, "\uE72C", () => _viewModel.ResetText, $"{targetTag}:Reset", diagnostics, refreshText, cancellationToken);
         row.Children.Add(buttonPanel);
 
         panel.Children.Add(row);
@@ -1036,15 +1077,19 @@ public sealed partial class Settings : Page, ILocalizedPresentation
 
     /// <summary>Adds one command button to a diagnostic row.</summary>
     private void AddDiagnosticButton(
-        StackPanel panel,
+        Grid panel,
+        int column,
         string glyph,
-        string text,
+        Func<string> getText,
         string commandParameter,
         PageOperationSession diagnostics,
+        List<Action> refreshText,
         CancellationToken cancellationToken)
     {
         Button button = new()
         {
+            Name = "WindowsDiagnostic" + commandParameter.Replace(":", string.Empty, StringComparison.Ordinal) + "Button",
+            Tag = commandParameter,
             Command = new AsyncRelayCommand(
                 _ => diagnostics.RunAsync(
                     token => _viewModel.WindowsDiagnosticCommand.ExecuteAsync(commandParameter, token),
@@ -1052,17 +1097,30 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 _errorSink,
                 operationName: "settings-diagnostic-command"),
             VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
 
-        StackPanel content = new()
+        Grid content = new()
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
+            ColumnSpacing = 6,
         };
-        content.Children.Add(new FontIcon { Glyph = glyph, FontSize = 14 });
-        content.Children.Add(new TextBlock { Text = text });
+        content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        content.Children.Add(new FontIcon { Glyph = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center });
+        TextBlock label = new() { TextWrapping = TextWrapping.WrapWholeWords, TextAlignment = TextAlignment.Center };
+        Grid.SetColumn(label, 1);
+        content.Children.Add(label);
         button.Content = content;
-
+        Action refresh = () =>
+        {
+            label.Text = getText();
+            AutomationProperties.SetName(button, label.Text);
+            ToolTipService.SetToolTip(button, label.Text);
+        };
+        refresh();
+        refreshText.Add(refresh);
+        Grid.SetColumn(button, column);
         panel.Children.Add(button);
     }
 

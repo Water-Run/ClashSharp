@@ -86,6 +86,7 @@ public sealed class SettingsDiagnosticsViewModelTests
 
         Assert.Equal(WindowsDiagnosticTarget.Wsl, status?.Target);
         Assert.Equal(expectedMessage, status?.Message);
+        Assert.Equal("Diagnostic.Failed." + commandTag.Split(':')[1], status?.MessageResourceKey);
         Assert.Contains(log.Entries, entry => entry.Level == "Warning" && entry.Message == expectedMessage && entry.Detail == "boom");
     }
 

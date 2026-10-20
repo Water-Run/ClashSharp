@@ -800,6 +800,7 @@ internal static partial class LocalizationResources
             ["Settings.ConnectionTest.Succeeded.Format"] = "Проверка подключения успешна, HTTP-статус: {0}.",
             ["Settings.ConnectionTest.Failed.Format"] = "Проверка подключения не удалась: {0}",
             ["Settings.ConnectionTest.StatusColumn"] = "Статус",
+            ["Settings.ConnectionTest.Result.Title"] = "Результаты проверки подключения",
             ["Settings.ConnectionTest.LatencyColumn"] = "Задержка",
             ["Settings.ConnectionTest.StatusHttp.Format"] = "HTTP {0}",
             ["Settings.ConnectionTest.TimedOut"] = "Тайм-аут 4 с",

@@ -69,16 +69,17 @@ internal sealed class SettingsDiagnosticsViewModel
             };
 
             _log.Append("Info", LogCategory, result.Message, result.Detail);
-            return new SettingsDiagnosticStatus(result.Target, result.Message);
+            return new SettingsDiagnosticStatus(result.Target, result.Message) { MessageResourceKey = result.MessageResourceKey };
         }
         catch (Exception exception) when (
             exception is InvalidOperationException or OperationCanceledException or UnauthorizedAccessException
             && !ExceptionGraphClassifier.IsProcessFatal(exception)
             && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
-            string message = GetFailureMessage(action);
+            string key = GetFailureMessageKey(action);
+            string message = _getString(key);
             _log.Append("Warning", LogCategory, message, exception.Message);
-            return new SettingsDiagnosticStatus(target, message);
+            return new SettingsDiagnosticStatus(target, message) { MessageResourceKey = key };
         }
     }
 
@@ -148,13 +149,13 @@ internal sealed class SettingsDiagnosticsViewModel
     /// <summary>Returns the user-facing failure message for a diagnostic action.</summary>
     /// <param name="action">Diagnostic action.</param>
     /// <returns>Failure status text.</returns>
-    private string GetFailureMessage(string action)
+    private static string GetFailureMessageKey(string action)
     {
         return action switch
         {
-            DiagnosticActionApply => _getString("Diagnostic.Failed.Apply"),
-            DiagnosticActionReset => _getString("Diagnostic.Failed.Reset"),
-            _ => _getString("Diagnostic.Failed.Diagnose"),
+            DiagnosticActionApply => "Diagnostic.Failed.Apply",
+            DiagnosticActionReset => "Diagnostic.Failed.Reset",
+            _ => "Diagnostic.Failed.Diagnose",
         };
     }
 }

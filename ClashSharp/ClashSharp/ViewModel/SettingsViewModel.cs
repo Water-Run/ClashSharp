@@ -875,23 +875,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     public string DiagnosticNotRunText => _getString("Diagnostic.NotRun");
 
-    public string WslDiagnosticStatusText
-    {
-        get => _wslDiagnosticStatusText;
-        private set => SetProperty(ref _wslDiagnosticStatusText, value);
-    }
+    public string WslDiagnosticStatusText => GetDiagnosticStatusText(WindowsDiagnosticTarget.Wsl);
 
-    public string TerminalDiagnosticStatusText
-    {
-        get => _terminalDiagnosticStatusText;
-        private set => SetProperty(ref _terminalDiagnosticStatusText, value);
-    }
+    public string TerminalDiagnosticStatusText => GetDiagnosticStatusText(WindowsDiagnosticTarget.Terminal);
 
-    public string StoreDiagnosticStatusText
-    {
-        get => _storeDiagnosticStatusText;
-        private set => SetProperty(ref _storeDiagnosticStatusText, value);
-    }
+    public string StoreDiagnosticStatusText => GetDiagnosticStatusText(WindowsDiagnosticTarget.MicrosoftStore);
 
     public string CheckStaleProxyTitleText => _getString("Settings.CheckStaleProxy.Title");
 
@@ -1117,14 +1105,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Backing field for <see cref="ProxyCoreBinaryText"/>.</summary>
     private string _proxyCoreBinaryText = string.Empty;
 
-    /// <summary>Backing field for <see cref="WslDiagnosticStatusText"/>.</summary>
-    private string _wslDiagnosticStatusText = string.Empty;
-
-    /// <summary>Backing field for <see cref="TerminalDiagnosticStatusText"/>.</summary>
-    private string _terminalDiagnosticStatusText = string.Empty;
-
-    /// <summary>Backing field for <see cref="StoreDiagnosticStatusText"/>.</summary>
-    private string _storeDiagnosticStatusText = string.Empty;
+    private readonly Dictionary<WindowsDiagnosticTarget, SettingsDiagnosticStatus> _diagnosticStatuses = [];
 
     private string _operationErrorText = string.Empty;
 
@@ -2109,41 +2090,44 @@ internal sealed partial class SettingsViewModel : ObservableObject
         SettingsDiagnosticStatus? status = await _diagnosticsViewModel.ExecuteCommandAsync(commandTag, cancellationToken);
         if (status is SettingsDiagnosticStatus value)
         {
-            SetDiagnosticStatus(value.Target, value.Message);
+            SetDiagnosticStatus(value);
         }
     }
 
     /// <summary>Resets all diagnostic status text to the localized not-run value.</summary>
     private void ResetDiagnosticStatusText()
     {
-        WslDiagnosticStatusText = DiagnosticNotRunText;
-        TerminalDiagnosticStatusText = DiagnosticNotRunText;
-        StoreDiagnosticStatusText = DiagnosticNotRunText;
+        _diagnosticStatuses.Clear();
+        RefreshDiagnosticStatusPresentation();
     }
 
-    /// <summary>Updates the diagnostic status for one target.</summary>
-    /// <param name="target">Diagnostic target.</param>
-    /// <param name="message">Status message. Must not be null.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="message"/> is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="target"/> is unsupported.</exception>
-    private void SetDiagnosticStatus(WindowsDiagnosticTarget target, string message)
+    /// <summary>Refreshes retained diagnostic text without starting or repeating a diagnostic command.</summary>
+    internal void RefreshDiagnosticStatusPresentation()
     {
-        ArgumentNullException.ThrowIfNull(message);
+        OnPropertyChanged(nameof(WslDiagnosticStatusText));
+        OnPropertyChanged(nameof(TerminalDiagnosticStatusText));
+        OnPropertyChanged(nameof(StoreDiagnosticStatusText));
+    }
 
-        switch (target)
+    private string GetDiagnosticStatusText(WindowsDiagnosticTarget target) =>
+        _diagnosticStatuses.TryGetValue(target, out SettingsDiagnosticStatus status)
+            ? status.MessageResourceKey is string key ? _getString(key) : status.Message
+            : DiagnosticNotRunText;
+
+    /// <summary>Updates the diagnostic status for one target.</summary>
+    /// <param name="status">Captured diagnostic result and explicit display provenance.</param>
+    private void SetDiagnosticStatus(SettingsDiagnosticStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(status.Message);
+        string property = status.Target switch
         {
-            case WindowsDiagnosticTarget.Wsl:
-                WslDiagnosticStatusText = message;
-                break;
-            case WindowsDiagnosticTarget.Terminal:
-                TerminalDiagnosticStatusText = message;
-                break;
-            case WindowsDiagnosticTarget.MicrosoftStore:
-                StoreDiagnosticStatusText = message;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(target), target, "Unsupported Windows diagnostic target.");
-        }
+            WindowsDiagnosticTarget.Wsl => nameof(WslDiagnosticStatusText),
+            WindowsDiagnosticTarget.Terminal => nameof(TerminalDiagnosticStatusText),
+            WindowsDiagnosticTarget.MicrosoftStore => nameof(StoreDiagnosticStatusText),
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status.Target, "Unsupported Windows diagnostic target."),
+        };
+        _diagnosticStatuses[status.Target] = status;
+        OnPropertyChanged(property);
     }
 
     /// <summary>Stages a sampling choice for the application-owned transaction.</summary>
@@ -2507,17 +2491,25 @@ internal sealed partial class SettingsViewModel : ObservableObject
         try
         {
             IsConnectionTestRunning = true;
-            (string Label, string Url)[] targets =
+            (string LabelKey, string Url)[] targets =
             [
-                (ConnectionTestProxyUrl1TitleText, ConnectionTestProxyUrl1),
-                (ConnectionTestProxyUrl2TitleText, ConnectionTestProxyUrl2),
-                (ConnectionTestDirectUrlTitleText, ConnectionTestDirectUrl),
+                ("Settings.ConnectionTestUrl.Proxy1", ConnectionTestProxyUrl1),
+                ("Settings.ConnectionTestUrl.Proxy2", ConnectionTestProxyUrl2),
+                ("Settings.ConnectionTestUrl.Direct", ConnectionTestDirectUrl),
             ];
 
-            results.AddRange(await Task.WhenAll(targets.Select(target => RunConnectionTestTargetAsync(target.Label, target.Url, cancellationToken))));
+            results.AddRange(await Task.WhenAll(targets.Select(target => RunConnectionTestTargetAsync(target.LabelKey, target.Url, cancellationToken))));
 
             ConnectionTestSummaryState summaryState = BuildConnectionTestSummaryState(results);
-            ConnectionTestReport report = new(results, BuildConnectionTestSummary(results, summaryState), summaryState);
+            ConnectionTestReport report = new(results.AsReadOnly(), BuildConnectionTestSummary(results, summaryState), summaryState)
+            {
+                SummarySource = summaryState switch
+                {
+                    ConnectionTestSummaryState.AllPassed => new("Settings.ConnectionTest.AllPassed"),
+                    ConnectionTestSummaryState.AllFailed => new("Settings.ConnectionTest.AllFailed"),
+                    _ => new("Settings.ConnectionTest.PartialPassed.Format", results.Count(static result => result.Succeeded), results.Count),
+                },
+            };
             AppendConnectionTestLog(report);
             return report;
         }
@@ -2527,8 +2519,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private async Task<ConnectionTestTargetResult> RunConnectionTestTargetAsync(string label, string url, CancellationToken cancellationToken)
+    private async Task<ConnectionTestTargetResult> RunConnectionTestTargetAsync(string labelKey, string url, CancellationToken cancellationToken)
     {
+        string label = _getString(labelKey);
         Stopwatch stopwatch = Stopwatch.StartNew();
         try
         {
@@ -2542,7 +2535,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 succeeded,
                 string.Format(CultureInfo.CurrentCulture, _getString("Settings.ConnectionTest.StatusHttp.Format"), statusCode),
                 FormatLatency(stopwatch.Elapsed),
-                (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds));
+                (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds))
+            {
+                LabelSource = new(labelKey),
+                StatusSource = new("Settings.ConnectionTest.StatusHttp.Format", statusCode),
+                ObservedElapsedMilliseconds = Math.Max(0, (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds)),
+            };
         }
         catch (TaskCanceledException exception) when (
             !ExceptionGraphClassifier.IsProcessFatal(exception)
@@ -2556,7 +2554,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
                 false,
                 _getString("Settings.ConnectionTest.TimedOut"),
                 FormatLatency(stopwatch.Elapsed),
-                null);
+                null)
+            {
+                LabelSource = new(labelKey),
+                StatusSource = new("Settings.ConnectionTest.TimedOut"),
+                ObservedElapsedMilliseconds = Math.Max(0, (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds)),
+            };
         }
         catch (Exception exception) when (
             exception is HttpRequestException or UriFormatException
@@ -2574,7 +2577,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
                     _getString("Settings.ConnectionTest.Failed.Format"),
                     _getString("Application.UnexpectedError")),
                 FormatLatency(stopwatch.Elapsed),
-                null);
+                null)
+            {
+                LabelSource = new(labelKey),
+                StatusSource = new("Settings.ConnectionTest.Failed.Format", new LocalizedDisplayText("Application.UnexpectedError")),
+                ObservedElapsedMilliseconds = Math.Max(0, (int)Math.Round(stopwatch.Elapsed.TotalMilliseconds)),
+            };
         }
     }
 

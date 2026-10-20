@@ -89,19 +89,17 @@ internal sealed class DataPackageDialogPresenter
         bool succeeded,
         CancellationToken cancellationToken)
     {
-        ThemedContentDialog result = new()
+        TextBlock message = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 560 };
+        ThemedContentDialog result = CreateDialog(xamlRoot);
+        result.Content = message;
+        result.Localize(() =>
         {
-            Title = _getString(succeeded ? "Settings.DataExport.Completed" : "Settings.DataExport.Failed"),
-            Content = new TextBlock
-            {
-                Text = succeeded
-                    ? string.Format(CultureInfo.CurrentCulture, _getString("Settings.DataExport.SavedTo.Format"), destinationPath)
-                    : _getString("Settings.DataExport.Failed.Description"),
-                TextWrapping = TextWrapping.Wrap,
-            },
-            CloseButtonText = _getString("Command.Close"),
-            XamlRoot = xamlRoot,
-        };
+            result.Title = _getString(succeeded ? "Settings.DataExport.Completed" : "Settings.DataExport.Failed");
+            message.Text = succeeded
+                ? string.Format(CultureInfo.CurrentCulture, _getString("Settings.DataExport.SavedTo.Format"), destinationPath)
+                : _getString("Settings.DataExport.Failed.Description");
+            result.CloseButtonText = _getString("Command.Close");
+        });
         await result.ShowManagedAsync(cancellationToken);
     }
 
@@ -179,13 +177,15 @@ internal sealed class DataPackageDialogPresenter
     private async Task ShowImportResultAsync(
         XamlRoot xamlRoot, string titleKey, string messageKey, CancellationToken cancellationToken)
     {
-        ThemedContentDialog result = new()
+        TextBlock message = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 560 };
+        ThemedContentDialog result = CreateDialog(xamlRoot);
+        result.Content = message;
+        result.Localize(() =>
         {
-            Title = _getString(titleKey),
-            Content = new TextBlock { Text = _getString(messageKey), TextWrapping = TextWrapping.Wrap },
-            CloseButtonText = _getString("Command.Close"),
-            XamlRoot = xamlRoot,
-        };
+            result.Title = _getString(titleKey);
+            message.Text = _getString(messageKey);
+            result.CloseButtonText = _getString("Command.Close");
+        });
         await result.ShowManagedAsync(cancellationToken);
     }
 
@@ -193,12 +193,13 @@ internal sealed class DataPackageDialogPresenter
         XamlRoot xamlRoot,
         CancellationToken cancellationToken)
     {
-        StackPanel panel = new() { Spacing = 12, MinWidth = 320, MaxWidth = 620 };
-        panel.Children.Add(new TextBlock
+        ThemedContentDialog dialog = CreateDialog(xamlRoot);
+        StackPanel panel = new() { Spacing = 12, Width = Math.Clamp(xamlRoot.Size.Width - 144, 320, 600) };
+        TextBlock introduction = new()
         {
-            Text = _getString("Settings.DataExport.Description"),
             TextWrapping = TextWrapping.WrapWholeWords,
-        });
+        };
+        panel.Children.Add(introduction);
         RadioButtons scopeSelector = new() { MaxColumns = 1 };
         (DataPackageExportScope Scope, string Key)[] options =
         [
@@ -208,42 +209,47 @@ internal sealed class DataPackageDialogPresenter
         ];
         foreach (var option in options)
         {
-            string title = _getString($"Settings.DataPackage.Scope.{option.Key}");
-            string description = _getString($"Settings.DataPackage.Scope.{option.Key}.Description");
             StackPanel content = new() { Spacing = 4, Margin = new Thickness(0, 4, 0, 4) };
-            content.Children.Add(new TextBlock
+            TextBlock title = new()
             {
-                Text = title,
                 TextWrapping = TextWrapping.Wrap,
-            });
-            content.Children.Add(new TextBlock
+            };
+            TextBlock description = new()
             {
-                Text = description,
                 Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["CaptionTextBlockStyle"],
                 TextWrapping = TextWrapping.Wrap,
-            });
+            };
+            content.Children.Add(title);
+            content.Children.Add(description);
             RadioButton choice = new()
             {
+                Name = "DataPackageScope" + option.Key,
+                Tag = option.Scope,
                 Content = content,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
             };
-            AutomationProperties.SetName(choice, title);
-            AutomationProperties.SetHelpText(choice, description);
+            dialog.Localize(() =>
+            {
+                title.Text = _getString($"Settings.DataPackage.Scope.{option.Key}");
+                description.Text = _getString($"Settings.DataPackage.Scope.{option.Key}.Description");
+                AutomationProperties.SetName(choice, title.Text);
+                AutomationProperties.SetHelpText(choice, description.Text);
+            });
             scopeSelector.Items.Add(choice);
         }
         scopeSelector.SelectedIndex = 0;
         panel.Children.Add(scopeSelector);
 
-        ThemedContentDialog dialog = new()
+        dialog.Content = new ScrollViewer { Content = panel, MaxHeight = Math.Max(160, xamlRoot.Size.Height - 240) };
+        dialog.DefaultButton = ContentDialogButton.Primary;
+        dialog.Localize(() =>
         {
-            Title = _getString("Settings.DataExport.Title"),
-            Content = new ScrollViewer { Content = panel, MaxHeight = Math.Max(200, xamlRoot.Size.Height - 220) },
-            PrimaryButtonText = _getString("Command.Export"),
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = xamlRoot,
-        };
+            dialog.Title = _getString("Settings.DataExport.Title");
+            introduction.Text = _getString("Settings.DataExport.Description");
+            dialog.PrimaryButtonText = _getString("Command.Export");
+            dialog.CloseButtonText = _getString("Command.Cancel");
+        });
         if (await dialog.ShowManagedAsync(cancellationToken) is not ContentDialogResult.Primary)
         {
             return null;
@@ -262,29 +268,33 @@ internal sealed class DataPackageDialogPresenter
         ClashDataPackageScope scope,
         CancellationToken cancellationToken)
     {
-        ThemedContentDialog firstDialog = new()
+        ThemedContentDialog firstDialog = CreateDialog(xamlRoot);
+        TextBlock warning = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 560 };
+        firstDialog.Content = warning;
+        firstDialog.DefaultButton = ContentDialogButton.Close;
+        firstDialog.Localize(() =>
         {
-            Title = _getString("Settings.DataImport.Warning.Title"),
-            Content = FormatDataImportWarning(scope),
-            PrimaryButtonText = _getString("Command.Import"),
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = xamlRoot,
-        };
+            firstDialog.Title = _getString("Settings.DataImport.Warning.Title");
+            warning.Text = FormatDataImportWarning(scope);
+            firstDialog.PrimaryButtonText = _getString("Command.Import");
+            firstDialog.CloseButtonText = _getString("Command.Cancel");
+        });
         if (await firstDialog.ShowManagedAsync(cancellationToken) is not ContentDialogResult.Primary)
         {
             return false;
         }
 
-        ThemedContentDialog secondDialog = new()
+        ThemedContentDialog secondDialog = CreateDialog(xamlRoot);
+        TextBlock confirmation = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 560 };
+        secondDialog.Content = confirmation;
+        secondDialog.DefaultButton = ContentDialogButton.Close;
+        secondDialog.Localize(() =>
         {
-            Title = _getString("Settings.DataImport.SecondConfirm.Title"),
-            Content = _getString("Settings.DataImport.SecondConfirm.Message"),
-            PrimaryButtonText = _getString("Command.Import"),
-            CloseButtonText = _getString("Command.Cancel"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = xamlRoot,
-        };
+            secondDialog.Title = _getString("Settings.DataImport.SecondConfirm.Title");
+            confirmation.Text = _getString("Settings.DataImport.SecondConfirm.Message");
+            secondDialog.PrimaryButtonText = _getString("Command.Import");
+            secondDialog.CloseButtonText = _getString("Command.Cancel");
+        });
         return await secondDialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary;
     }
 
@@ -293,6 +303,14 @@ internal sealed class DataPackageDialogPresenter
         string scopeText = _getString($"Settings.DataPackage.Scope.{scope}");
         return $"{_getString("Settings.DataImport.Warning.Message")}{Environment.NewLine}"
             + string.Format(CultureInfo.CurrentCulture, _getString("Settings.DataImport.Warning.Scope.Format"), scopeText);
+    }
+
+    private static ThemedContentDialog CreateDialog(XamlRoot xamlRoot)
+    {
+        ThemedContentDialog dialog = new() { XamlRoot = xamlRoot };
+        dialog.Resources["ContentDialogMinWidth"] = 0d;
+        dialog.Resources["ContentDialogMaxWidth"] = 688d;
+        return dialog;
     }
 
     private static void InitializePickerWithWindow(object picker)

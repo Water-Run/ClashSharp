@@ -798,6 +798,7 @@ internal static partial class LocalizationResources
             ["Settings.ConnectionTest.Succeeded.Format"] = "آزمایش اتصال موفق بود. وضعیت HTTP: {0}.",
             ["Settings.ConnectionTest.Failed.Format"] = "آزمایش اتصال ناموفق بود: {0}",
             ["Settings.ConnectionTest.StatusColumn"] = "وضعیت",
+            ["Settings.ConnectionTest.Result.Title"] = "نتایج آزمون اتصال",
             ["Settings.ConnectionTest.LatencyColumn"] = "تأخیر",
             ["Settings.ConnectionTest.StatusHttp.Format"] = "HTTP {0}",
             ["Settings.ConnectionTest.TimedOut"] = "زمان‌پایان ۴ ثانیه",

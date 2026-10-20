@@ -13,9 +13,9 @@ internal sealed class LocalizedDisplayText : IEquatable<LocalizedDisplayText>
         ArgumentNullException.ThrowIfNull(arguments);
         foreach (object? argument in arguments)
         {
-            if (argument is null or string or decimal or DateTime or DateTimeOffset or TimeSpan or Guid or Enum
+            if (argument is null or string or decimal or DateTime or DateTimeOffset or TimeSpan or Guid or Enum or LocalizedDisplayText
                 || argument.GetType().IsPrimitive) { continue; }
-            throw new ArgumentException("Display arguments must be immutable scalar snapshots.", nameof(arguments));
+            throw new ArgumentException("Display arguments must be immutable scalar or display snapshots.", nameof(arguments));
         }
         _arguments = (object[])arguments.Clone();
     }
@@ -25,7 +25,10 @@ internal sealed class LocalizedDisplayText : IEquatable<LocalizedDisplayText>
     {
         ArgumentNullException.ThrowIfNull(getString);
         string template = getString(ResourceKey);
-        return _arguments.Length == 0 ? template : string.Format(CultureInfo.CurrentCulture, template, _arguments);
+        if (_arguments.Length == 0) { return template; }
+        object[] arguments = Array.ConvertAll(_arguments,
+            argument => argument is LocalizedDisplayText text ? text.Resolve(getString) : argument);
+        return string.Format(CultureInfo.CurrentCulture, template, arguments);
     }
 
     public bool Equals(LocalizedDisplayText? other)

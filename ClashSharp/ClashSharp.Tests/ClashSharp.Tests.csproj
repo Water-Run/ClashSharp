@@ -247,6 +247,7 @@
     <Compile Include="..\ClashSharp\ViewModel\ConnectionTestTargetResult.cs" Link="ViewModel\ConnectionTestTargetResult.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ConnectionTestSummaryState.cs" Link="ViewModel\ConnectionTestSummaryState.cs" />
     <Compile Include="..\ClashSharp\ViewModel\ConnectionTestReport.cs" Link="ViewModel\ConnectionTestReport.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\ConnectionTestDisplay.cs" Link="ViewModel\ConnectionTestDisplay.cs" />
     <Compile Include="..\ClashSharp\ViewModel\IMihomoServiceController.cs" Link="ViewModel\IMihomoServiceController.cs" />
     <Compile Include="..\ClashSharp\ViewModel\AlwaysAvailableMihomoServiceController.cs" Link="ViewModel\AlwaysAvailableMihomoServiceController.cs" />
     <Compile Include="..\ClashSharp\ViewModel\MasterHeroStatusSelectionGate.cs" Link="ViewModel\MasterHeroStatusSelectionGate.cs" />
