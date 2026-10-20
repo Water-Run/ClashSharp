@@ -34,9 +34,11 @@ internal sealed class GenerationDataCandidatePreparer(
 
     /// <summary>Decodes all package contents under the caller's read lease without closing mutation admission.</summary>
     internal static Task<DataPackageImportPlan> ReadImportSnapshotAsync(string packagePath, SettingsEnvelope baseline,
-        DataGenerationDescriptor source, CancellationToken cancellationToken) =>
-        Task.Run(() => new ClashDataPackageService(new DataPackageSettingsSnapshot(baseline), source.RootPath)
+        DataGenerationDescriptor source, CancellationToken cancellationToken)
+    {
+        return Task.Run(() => new ClashDataPackageService(new DataPackageSettingsSnapshot(baseline), source.RootPath)
             .ReadImportPlan(packagePath, cancellationToken), cancellationToken);
+    }
 
     public Task<DataGenerationDescriptor> StagePlanAdmittedAsync(DataGenerationTransition transition, DataPackageImportPlan plan,
         MutationAdmissionLease admissionLease, CancellationToken cancellationToken)
