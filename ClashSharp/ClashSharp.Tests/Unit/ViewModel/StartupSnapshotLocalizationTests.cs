@@ -27,8 +27,11 @@ public sealed class StartupSnapshotLocalizationTests
     {
         StartupCheckItem item = new(false, "first title", "first description")
         {
-            Kind = StartupCheckKind.Subscription, IsOptional = optional, IsUnavailable = unavailable,
-            TitleSource = new("title"), DescriptionSource = new("description"),
+            Kind = StartupCheckKind.Subscription,
+            IsOptional = optional,
+            IsUnavailable = unavailable,
+            TitleSource = new("title"),
+            DescriptionSource = new("description"),
         };
         string language = "first";
         StartupCheckDisplay row = new(item, key => language + ":" + key, allowNavigation: true);
@@ -81,7 +84,9 @@ public sealed class StartupSnapshotLocalizationTests
         StartupConflictIssue issue = new(StartupConflictKind.MixedPortOccupied, "old title", "old description", "old repair", _ =>
         { repairs++; return Task.FromResult(new StartupConflictRepairResult(true, "done")); })
         {
-            TitleSource = new("title"), DescriptionSource = new("description", 12345), RepairTextSource = new("repair"),
+            TitleSource = new("title"),
+            DescriptionSource = new("description", 12345),
+            RepairTextSource = new("repair"),
         };
         string language = "first";
         string GetText(string key) => key == "description" ? language + ": port {0}" : language + ":" + key;

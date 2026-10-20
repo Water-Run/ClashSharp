@@ -143,7 +143,8 @@ public sealed class StartupCheckService
                         ? text.SubscriptionReady
                         : text.SubscriptionMissing)
                 {
-                    Kind = StartupCheckKind.Subscription, IsOptional = !hasSubscription,
+                    Kind = StartupCheckKind.Subscription,
+                    IsOptional = !hasSubscription,
                     TitleSource = new("StartupPrompt.Check.Subscription.Title"),
                     DescriptionSource = new(hasSubscription ? "StartupPrompt.Check.Subscription.Ready" : "StartupPrompt.Check.Subscription.Missing"),
                 },
@@ -154,7 +155,8 @@ public sealed class StartupCheckService
             return CheckEvaluation.Failed(
                 new StartupCheckItem(false, text.SubscriptionTitle, text.Unavailable)
                 {
-                    Kind = StartupCheckKind.Subscription, IsUnavailable = true,
+                    Kind = StartupCheckKind.Subscription,
+                    IsUnavailable = true,
                     TitleSource = new("StartupPrompt.Check.Subscription.Title"),
                     DescriptionSource = new("StartupPrompt.Check.Unavailable"),
                 },
@@ -191,7 +193,8 @@ public sealed class StartupCheckService
             return CheckEvaluation.Failed(
                 new StartupCheckItem(false, text.TransparentProxyTitle, text.Unavailable)
                 {
-                    Kind = StartupCheckKind.TransparentProxy, IsUnavailable = true,
+                    Kind = StartupCheckKind.TransparentProxy,
+                    IsUnavailable = true,
                     TitleSource = new("StartupPrompt.Check.TransparentProxy.Title"),
                     DescriptionSource = new("StartupPrompt.Check.Unavailable"),
                 },
@@ -218,7 +221,8 @@ public sealed class StartupCheckService
                         ? text.FallbackRegistered
                         : text.FallbackNotRegistered)
                 {
-                    Kind = StartupCheckKind.StartupRecovery, IsOptional = !isRegistered,
+                    Kind = StartupCheckKind.StartupRecovery,
+                    IsOptional = !isRegistered,
                     TitleSource = new("StartupPrompt.Check.Fallback.Title"),
                     DescriptionSource = new(isRegistered ? "StartupPrompt.Check.Fallback.Registered" : "StartupPrompt.Check.Fallback.NotRegistered"),
                 },
@@ -229,7 +233,8 @@ public sealed class StartupCheckService
             return CheckEvaluation.Failed(
                 new StartupCheckItem(false, text.FallbackTitle, text.Unavailable)
                 {
-                    Kind = StartupCheckKind.StartupRecovery, IsUnavailable = true,
+                    Kind = StartupCheckKind.StartupRecovery,
+                    IsUnavailable = true,
                     TitleSource = new("StartupPrompt.Check.Fallback.Title"),
                     DescriptionSource = new("StartupPrompt.Check.Unavailable"),
                 },
@@ -272,7 +277,8 @@ public sealed class StartupCheckService
             return CheckEvaluation.Failed(
                 new StartupCheckItem(false, text.StaleProxyTitle, text.Unavailable)
                 {
-                    Kind = StartupCheckKind.SystemProxy, IsUnavailable = true,
+                    Kind = StartupCheckKind.SystemProxy,
+                    IsUnavailable = true,
                     TitleSource = new("StartupPrompt.Check.StaleProxy.Title"),
                     DescriptionSource = new("StartupPrompt.Check.Unavailable"),
                 },
