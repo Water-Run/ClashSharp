@@ -52,6 +52,16 @@ internal sealed class DialogPresentationGate
         return true;
     }
 
+    /// <summary>Updates a nonmodal surface without admitting a modal lease, while fencing window teardown.</summary>
+    /// <remarks>The callback and window teardown must execute on the same UI thread.</remarks>
+    public bool TryRefreshWindowPresentation(Action refresh)
+    {
+        ArgumentNullException.ThrowIfNull(refresh);
+        if ((Volatile.Read(ref _state) & Closing) != 0) { return false; }
+        refresh();
+        return true;
+    }
+
     private void Exit()
     {
         Interlocked.And(ref _state, ~Entered);

@@ -34,7 +34,7 @@ public sealed partial class MasterControl : Page
     private const double HeroStatusHorizontalMargin = 10;
     private const double MinHeroStatusItemWidth = 120;
     private const double PreferredHeroStatusItemWidth = 220;
-    private const double HeroStatusFlyoutMinListHeight = 180;
+    private const double HeroStatusFlyoutMinListHeight = 80;
     private const double HeroStatusFlyoutMaxListHeight = 420;
     private const double HeroStatusFlyoutVerticalChrome = 220;
     private const double MinInfoTileWidth = 220;
@@ -62,6 +62,7 @@ public sealed partial class MasterControl : Page
     private readonly Action _openSettings;
     private readonly Func<string, string> _filterDisplayText;
     private readonly MasterHeroStatusSelectionGate _heroStatusSelection = new();
+    private FlyoutRootPresentationBinding? _heroStatusFlyoutBinding;
 
     /// <summary>Owns cancellable work for the current visit to this page.</summary>
     private CancellationTokenSource? _pageLifetime;
@@ -210,7 +211,7 @@ public sealed partial class MasterControl : Page
 
     private void SetHeroStatusDisplayButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement anchor)
+        if (sender is not FrameworkElement anchor || _pageLifetime is null || !_dataReady)
         {
             return;
         }
@@ -219,8 +220,25 @@ public sealed partial class MasterControl : Page
         {
             Placement = FlyoutPlacementMode.BottomEdgeAlignedRight,
         };
-        flyout.Content = BuildHeroStatusFlyoutContent(flyout);
-        flyout.ShowAt(anchor);
+        _heroStatusFlyoutBinding?.Dispose();
+        StackPanel content = BuildHeroStatusFlyoutContent(out ScrollViewer slotScroller);
+        flyout.Content = content;
+        FlyoutRootPresentationBinding binding = new(flyout, anchor, content, () =>
+        {
+            double available = anchor.XamlRoot.Size.Width;
+            content.Width = double.IsFinite(available) && available > 0 ? Math.Min(480, Math.Max(1, available - 64)) : 480;
+            slotScroller.MaxHeight = CalculateHeroStatusFlyoutListHeight(anchor.XamlRoot);
+        });
+        _heroStatusFlyoutBinding = binding;
+        try
+        {
+            if (!WindowDialogCoordinator.TryRefreshWindowPresentation(anchor.XamlRoot, () => flyout.ShowAt(anchor)))
+            {
+                binding.Dispose();
+                _heroStatusFlyoutBinding = null;
+            }
+        }
+        catch { binding.Dispose(); _heroStatusFlyoutBinding = null; throw; }
     }
 
     private async void HeroStatusSlotComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -262,13 +280,13 @@ public sealed partial class MasterControl : Page
         });
     }
 
-    private StackPanel BuildHeroStatusFlyoutContent(Flyout flyout)
+    private StackPanel BuildHeroStatusFlyoutContent(out ScrollViewer slotScroller)
     {
         StackPanel root = new()
         {
-            Width = 320,
             Spacing = 10,
         };
+        AutomationProperties.SetAutomationId(root, "HeroStatusLayoutFlyout");
 
         StackPanel slotHost = new()
         {
@@ -278,37 +296,39 @@ public sealed partial class MasterControl : Page
         {
             Grid row = new()
             {
-                ColumnSpacing = 12,
+                RowSpacing = 6,
             };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             TextBlock title = new()
             {
-                Text = slot.Title,
                 Style = (Style)Application.Current.Resources["BodyTextBlockStyle"],
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis,
+                TextWrapping = TextWrapping.Wrap,
             };
+            title.SetBinding(TextBlock.TextProperty, new Binding { Source = slot, Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.Title)) });
             row.Children.Add(title);
 
             ComboBox comboBox = new()
             {
-                MinWidth = 180,
+                MinWidth = 0,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
                 ItemsSource = slot.Options,
                 ItemTemplate = (DataTemplate)Resources["MasterHeroStatusOptionTemplate"],
                 Tag = slot.Index,
             };
+            AutomationProperties.SetAutomationId(comboBox, "HeroStatusSlot" + slot.Index.ToString(CultureInfo.InvariantCulture));
+            comboBox.SetBinding(AutomationProperties.NameProperty, new Binding { Source = slot, Path = new PropertyPath(nameof(MasterHeroStatusSlotViewModel.Title)) });
             BindLayoutEditing(comboBox);
             BindHeroStatusSelection(comboBox, slot);
             comboBox.SelectionChanged += HeroStatusSlotComboBox_SelectionChanged;
-            Grid.SetColumn(comboBox, 1);
+            Grid.SetRow(comboBox, 1);
             row.Children.Add(comboBox);
 
             slotHost.Children.Add(row);
         }
 
-        ScrollViewer slotScroller = new()
+        slotScroller = new()
         {
             Content = slotHost,
             MaxHeight = CalculateHeroStatusFlyoutListHeight(GetDialogXamlRoot()),
@@ -318,22 +338,20 @@ public sealed partial class MasterControl : Page
         root.Children.Add(slotScroller);
         HyperlinkButton restoreDefaultLink = new()
         {
-            Content = _viewModel.RestoreDefaultHeroStatusLayoutText,
             Padding = new Thickness(0),
-            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
         };
+        TextBlock restoreText = new() { TextWrapping = TextWrapping.Wrap };
+        restoreText.SetBinding(TextBlock.TextProperty, new Binding { Source = _viewModel, Path = new PropertyPath(nameof(MasterControlViewModel.RestoreDefaultHeroStatusLayoutText)) });
+        restoreDefaultLink.Content = restoreText;
+        restoreDefaultLink.SetBinding(AutomationProperties.NameProperty, new Binding { Source = _viewModel, Path = new PropertyPath(nameof(MasterControlViewModel.RestoreDefaultHeroStatusLayoutText)) });
+        AutomationProperties.SetAutomationId(restoreDefaultLink, "RestoreHeroStatusLayoutButton");
         BindLayoutEditing(restoreDefaultLink);
         restoreDefaultLink.Click += async (_, _) =>
         {
-            CancellationTokenSource? lifetime = _pageLifetime;
-            await _heroStatusSelection.RunProgrammaticUpdateAsync(async () =>
-            {
-                await _tileActions.RunAsync(_viewModel.ResetHeroStatusLayoutAsync);
-                if (lifetime is not null && ReferenceEquals(lifetime, _pageLifetime))
-                {
-                    flyout.Content = BuildHeroStatusFlyoutContent(flyout);
-                }
-            });
+            await _heroStatusSelection.RunProgrammaticUpdateAsync(
+                () => _tileActions.RunAsync(_viewModel.ResetHeroStatusLayoutAsync));
         };
         root.Children.Add(restoreDefaultLink);
 
@@ -443,6 +461,8 @@ public sealed partial class MasterControl : Page
     /// <summary>Cancels and observes current-page loading when the page leaves the visual tree.</summary>
     private async void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _heroStatusFlyoutBinding?.Dispose();
+        _heroStatusFlyoutBinding = null;
         CancellationTokenSource? lifetime = _pageLifetime;
         if (lifetime is null)
         {

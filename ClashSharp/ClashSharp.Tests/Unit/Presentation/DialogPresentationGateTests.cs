@@ -6,6 +6,51 @@ namespace ClashSharp.Tests.Unit.Presentation;
 public sealed class DialogPresentationGateTests
 {
     [Fact]
+    public void NonmodalRefresh_DoesNotAcquireModalAdmission()
+    {
+        DialogPresentationGate gate = new();
+        int callbacks = 0;
+        Assert.True(gate.TryRefreshWindowPresentation(() => callbacks++));
+        Assert.Equal(1, callbacks);
+        Assert.True(gate.TryEnter(out IDisposable? lease));
+        lease!.Dispose();
+    }
+
+    [Fact]
+    public void NonmodalRefresh_DoesNotReleaseAnExistingModalLease()
+    {
+        DialogPresentationGate gate = new();
+        Assert.True(gate.TryEnter(out IDisposable? lease));
+        using IDisposable owned = lease!;
+        Assert.True(gate.TryRefreshWindowPresentation(() => { }));
+        Assert.False(gate.TryEnter(out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void QueuedNonmodalRefresh_AfterWindowTeardown_DoesNotTouchNativeState(bool modalWasActive)
+    {
+        DialogPresentationGate gate = new();
+        IDisposable? lease = null;
+        if (modalWasActive) { Assert.True(gate.TryEnter(out lease)); }
+        gate.MarkWindowClosing();
+        Assert.False(gate.TryRefreshWindowPresentation(() => throw new InvalidOperationException("Native window is gone.")));
+        lease?.Dispose();
+        Assert.False(gate.TryRefreshWindowPresentation(() => throw new InvalidOperationException("Released lease cannot reopen the window.")));
+        Assert.False(gate.TryEnter(out _));
+    }
+
+    [Fact]
+    public void NonmodalRefreshFailure_DoesNotPoisonModalAdmission()
+    {
+        DialogPresentationGate gate = new();
+        Assert.Throws<InvalidOperationException>(() => gate.TryRefreshWindowPresentation(() => throw new InvalidOperationException("Display update failed.")));
+        Assert.True(gate.TryEnter(out IDisposable? lease));
+        lease!.Dispose();
+    }
+
+    [Fact]
     public void PresentationRefresh_OnlyTouchesAnAdmittedLiveWindow()
     {
         DialogPresentationGate gate = new();

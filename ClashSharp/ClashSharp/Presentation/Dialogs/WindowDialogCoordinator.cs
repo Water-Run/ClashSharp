@@ -55,6 +55,14 @@ internal static class WindowDialogCoordinator
         }
     }
 
+    /// <summary>Updates an owned nonmodal surface only before its native window starts teardown.</summary>
+    /// <remarks>Does not acquire or release modal admission. Called on the owning UI thread.</remarks>
+    public static bool TryRefreshWindowPresentation(XamlRoot xamlRoot, Action refresh)
+    {
+        ArgumentNullException.ThrowIfNull(xamlRoot);
+        return Gates.GetValue(xamlRoot, static _ => new DialogPresentationGate()).TryRefreshWindowPresentation(refresh);
+    }
+
     /// <summary>Shows a custom modal overlay when no other modal surface owns the visual root.</summary>
     /// <param name="xamlRoot">Visual root receiving the overlay.</param>
     /// <param name="showAsync">UI operation that owns the overlay until it closes.</param>
