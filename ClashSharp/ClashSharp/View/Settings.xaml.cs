@@ -522,7 +522,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     {
         await RunPageOperationAsync(async cancellationToken =>
         {
-            LocalizedColorPicker picker = new(_getString)
+            ColorPicker picker = new()
             {
                 Color = _parseAccentColor(_viewModel.AppAccentColorValue),
                 IsAlphaEnabled = false,
@@ -530,6 +530,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 Width = 320,
                 MaxWidth = 320,
             };
+            using ColorPickerLocalization pickerLabels = new(picker, _getString, _errorSink);
 
             Grid pickerPanel = new()
             {
@@ -570,7 +571,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 dialog.Title = _viewModel.AppAccentColorTitleText;
                 dialog.PrimaryButtonText = _viewModel.AppAccentColorPickText;
                 dialog.CloseButtonText = _getString("Command.Cancel");
-                picker.RefreshLocalization();
+                pickerLabels.RefreshLocalization();
             });
 
             ContentDialogResult result;
