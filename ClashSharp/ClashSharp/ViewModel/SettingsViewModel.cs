@@ -1552,6 +1552,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
+        RefreshCommittedPreferences();
+
         if (!ApplyLaunchAtStartupCommand.IsRunning
             && Volatile.Read(ref _launchAtStartupRevision) == Volatile.Read(ref _appliedLaunchAtStartupRevision))
         {

@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:ClashSharp"
+    xmlns:converters="using:ClashSharp.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -14,6 +15,9 @@
     </Window.SystemBackdrop>
 
     <Grid PreviewKeyDown="OnPreviewKeyDown">
+        <Grid.Resources>
+            <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -133,7 +137,8 @@
                     Title="{Binding ExitFailureTitleText}"
                     Message="{Binding ExitFailureMessageText}" />
                 <InfoBar Grid.Row="1" Margin="24,12,24,0" IsClosable="False" Severity="Warning"
-                         IsOpen="{Binding HasSettingsApplicationFailures, Mode=OneWay}"
+                         IsOpen="{Binding IsSettingsRecoveryVisible, Mode=OneWay}"
+                         Visibility="{Binding IsSettingsRecoveryVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
                          Title="{Binding SettingsRecoveryTitleText}" Message="{Binding SettingsRecoveryDescriptionText}">
                     <InfoBar.ActionButton>
                         <HyperlinkButton Content="{Binding OpenSettingsRecoveryText}" Click="OpenSettingsRecovery_Click" />

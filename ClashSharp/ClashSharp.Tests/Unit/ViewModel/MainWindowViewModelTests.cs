@@ -5,6 +5,30 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for the main window navigation view model.</summary>
 public sealed class MainWindowViewModelTests
 {
+    [Fact]
+    public void RecoveryNotice_UsesTheActivePageWithoutClearingFailureState()
+    {
+        using MainWindowViewModel viewModel = new(new FakeShellLocalization());
+        bool displayed = viewModel.IsSettingsRecoveryVisible;
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(viewModel.IsSettingsRecoveryVisible)) { displayed = viewModel.IsSettingsRecoveryVisible; }
+        };
+        viewModel.HasSettingsApplicationFailures = true;
+        Assert.True(displayed);
+
+        viewModel.IsSettingsPageActive = true;
+        Assert.False(displayed);
+        Assert.True(viewModel.HasSettingsApplicationFailures);
+        viewModel.IsSettingsPageActive = false;
+        Assert.True(displayed);
+
+        viewModel.IsSettingsPageActive = true;
+        viewModel.HasSettingsApplicationFailures = false;
+        viewModel.IsSettingsPageActive = false;
+        Assert.False(displayed);
+    }
+
     /// <summary>Verifies localized navigation labels are loaded during construction.</summary>
     [Fact]
     public void Constructor_LoadsNavigationLabels()

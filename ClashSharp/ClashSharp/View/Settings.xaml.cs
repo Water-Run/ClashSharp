@@ -183,8 +183,17 @@ public sealed partial class Settings : Page
         await RunPageOperationAsync(async token =>
         {
             token.ThrowIfCancellationRequested();
-            _viewModel.RefreshCommittedRuntimeSettings();
-            _recovery.Refresh();
+            bool wasLoadingSettings = _isLoadingSettings;
+            _isLoadingSettings = true;
+            try
+            {
+                // External commits can replace localized options and selector values together.
+                // Their binding events must not be submitted as another user edit.
+                _viewModel.RefreshCommittedRuntimeSettings();
+                RefreshPreferenceControls();
+                _recovery.Refresh();
+            }
+            finally { _isLoadingSettings = wasLoadingSettings; }
             await _mcp.RefreshObservedAsync(token);
         });
     }

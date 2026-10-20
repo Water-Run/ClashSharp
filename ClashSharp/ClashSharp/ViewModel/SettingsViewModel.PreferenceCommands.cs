@@ -27,6 +27,27 @@ internal sealed partial class SettingsViewModel
         SettingsRegistry.Keys.ConnectionTestDirectUrl,
     ];
     private int _preferenceCommands;
+    private bool _committedPreferencesRefreshPending;
+
+    /// <summary>Projects external commits without replaying effects or replacing an in-flight page choice.</summary>
+    private void RefreshCommittedPreferences()
+    {
+        if (!IsPreferenceInputEnabled)
+        {
+            _committedPreferencesRefreshPending = true;
+            return;
+        }
+
+        _committedPreferencesRefreshPending = false;
+        AppLanguage previousLanguage = DisplayLanguage;
+        PublishPreferenceChanges(_settings.ReadPreferenceChanges(AsyncPreferenceKeys.ToArray()), applyTheme: false);
+        if (DisplayLanguage == previousLanguage)
+        {
+            // A retry can apply the already-saved language without changing Desired again.
+            RaiseLocalizedTextChanges();
+            RaiseDisplayLanguageRestartStateChanged();
+        }
+    }
 
     /// <summary>Gets whether the page can accept another preference edit.</summary>
     public bool IsPreferenceInputEnabled => _preferenceCommands == 0;
@@ -132,6 +153,16 @@ internal sealed partial class SettingsViewModel
         {
             _preferenceCommands--;
             OnPropertyChanged(nameof(IsPreferenceInputEnabled));
+        }
+
+        if (IsPreferenceInputEnabled && _committedPreferencesRefreshPending)
+        {
+            try { RefreshCommittedRuntimeSettings(); }
+            catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure))
+            {
+                OperationErrorText = _getString("Application.UnexpectedError");
+                throw;
+            }
         }
     }
 

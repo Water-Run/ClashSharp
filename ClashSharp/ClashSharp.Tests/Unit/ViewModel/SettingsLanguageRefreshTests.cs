@@ -16,6 +16,109 @@ public sealed partial class SettingsViewModelTests
     [InlineData(AppLanguage.German)]
     [InlineData(AppLanguage.Persian)]
     [InlineData(AppLanguage.Korean)]
+    public async Task ExternalLanguageCommit_RefreshesVisibleTextAndCommittedPreferences(AppLanguage language)
+    {
+        AppLanguage initial = language == AppLanguage.English ? AppLanguage.SimplifiedChinese : AppLanguage.English;
+        AppLanguage applied = initial;
+        int writes = 0;
+        FakeSettingsStore store = new() { DisplayLanguage = initial };
+        store.BeforePreferenceApply = (_, _) => { writes++; return Task.CompletedTask; };
+        SettingsViewModel page = new(store, _ => { }, () => { }, key => LocalizationResources.Translations[applied].GetValueOrDefault(key, key));
+        page.Load();
+        await page.SetAppAccentColorModeIndexAsync((int)AppAccentColorMode.Custom);
+        Assert.True(page.IsAppAccentColorRestartPending);
+        int priorWrites = writes;
+        IReadOnlyList<string> languageOptions = page.DisplayLanguageOptions;
+        string displayedTitle = page.PageTitleText;
+        string displayedLanguage = page.LanguageTitleText;
+        string[] displayedRates = page.RateUnitOptions.ToArray();
+        page.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(page.PageTitleText)) { displayedTitle = page.PageTitleText; }
+            if (args.PropertyName == nameof(page.LanguageTitleText)) { displayedLanguage = page.LanguageTitleText; }
+            if (args.PropertyName == nameof(page.RateUnitOptions)) { displayedRates = page.RateUnitOptions.ToArray(); }
+        };
+        store.DisplayLanguage = language;
+        store.RateUnit = RateUnit.Bits;
+        applied = language;
+
+        page.RefreshCommittedRuntimeSettings();
+
+        Assert.Equal(LocalizationResources.Translations[language]["Nav.Settings"], displayedTitle);
+        Assert.Equal(LocalizationResources.Translations[language]["Settings.Language.Title"], displayedLanguage);
+        Assert.Equal<string>([LocalizationResources.Translations[language]["Settings.RateUnit.Bytes"],
+            LocalizationResources.Translations[language]["Settings.RateUnit.Bits"]], displayedRates);
+        Assert.Equal(language, page.DisplayLanguage);
+        Assert.Equal(RateUnit.Bits, page.RateUnit);
+        Assert.Same(languageOptions, page.DisplayLanguageOptions);
+        Assert.True(page.IsAppAccentColorRestartPending);
+        Assert.Equal(priorWrites, writes);
+    }
+
+    [Fact]
+    public void ExternalLanguageRetry_RefreshesTextWhenDesiredLanguageDidNotChange()
+    {
+        AppLanguage applied = AppLanguage.English;
+        FakeSettingsStore store = new() { DisplayLanguage = AppLanguage.German };
+        SettingsViewModel page = new(store, _ => { }, () => { }, key => LocalizationResources.Translations[applied].GetValueOrDefault(key, key));
+        page.Load();
+        string displayedTitle = page.PageTitleText;
+        page.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(page.PageTitleText)) { displayedTitle = page.PageTitleText; } };
+        applied = AppLanguage.German;
+
+        page.RefreshCommittedRuntimeSettings();
+
+        Assert.Equal(LocalizationResources.Translations[AppLanguage.German]["Nav.Settings"], displayedTitle);
+        Assert.Equal(AppLanguage.German, page.DisplayLanguage);
+    }
+
+    [Fact]
+    public async Task ExternalPreferenceRefresh_WaitsForTheCurrentPageCommand()
+    {
+        AppLanguage applied = AppLanguage.English;
+        FakeSettingsStore store = new() { DisplayLanguage = applied };
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        store.BeforePreferenceApply = (_, _) => release.Task;
+        SettingsViewModel page = new(store, _ => { }, () => { }, key => LocalizationResources.Translations[applied].GetValueOrDefault(key, key));
+        page.Load();
+        Task command = page.ApplyPreferenceAsync(SettingsRegistry.Keys.RateUnit, RateUnit.Bits, CancellationToken.None);
+        store.DisplayLanguage = applied = AppLanguage.German;
+
+        page.RefreshCommittedRuntimeSettings();
+        Assert.Equal(AppLanguage.English, page.DisplayLanguage);
+        Assert.Equal(RateUnit.Bytes, page.RateUnit);
+        release.SetResult();
+        await command;
+
+        Assert.Equal(AppLanguage.German, page.DisplayLanguage);
+        Assert.Equal(RateUnit.Bits, page.RateUnit);
+        Assert.True(page.IsPreferenceInputEnabled);
+    }
+
+    [Fact]
+    public void ExternalThemeCommit_UpdatesTheControlWithoutRepeatingNativeEffects()
+    {
+        int themeApplications = 0;
+        FakeSettingsStore store = new();
+        SettingsViewModel page = new(store, _ => { }, _ => themeApplications++, () => { }, _ => { });
+        page.Load();
+        store.AppThemeMode = AppThemeMode.Dark;
+
+        page.RefreshCommittedRuntimeSettings();
+
+        Assert.Equal(AppThemeMode.Dark, page.AppThemeMode);
+        Assert.Equal(0, themeApplications);
+    }
+
+    [Theory]
+    [InlineData(AppLanguage.SimplifiedChinese)]
+    [InlineData(AppLanguage.TraditionalChinese)]
+    [InlineData(AppLanguage.English)]
+    [InlineData(AppLanguage.Russian)]
+    [InlineData(AppLanguage.French)]
+    [InlineData(AppLanguage.German)]
+    [InlineData(AppLanguage.Persian)]
+    [InlineData(AppLanguage.Korean)]
     public async Task LanguageCommit_RefreshesVisibleTextAndOptionsWithoutRebasingOtherSettings(AppLanguage language)
     {
         AppLanguage initial = language == AppLanguage.English ? AppLanguage.SimplifiedChinese : AppLanguage.English;

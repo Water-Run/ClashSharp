@@ -466,6 +466,7 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
 
         ContentFrame.Content = page;
         _currentNavigation = destination;
+        runtime.ViewModel.IsSettingsPageActive = destination.Route == ShellRoute.Settings;
         SelectNavigationItem(destination);
     }
 

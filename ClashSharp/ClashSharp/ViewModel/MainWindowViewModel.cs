@@ -51,12 +51,34 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private bool _isExitFailureVisible;
     private bool _hasSettingsApplicationFailures;
+    private bool _isSettingsPageActive;
 
     public bool HasSettingsApplicationFailures
     {
         get => _hasSettingsApplicationFailures;
-        set => SetProperty(ref _hasSettingsApplicationFailures, value);
+        set
+        {
+            if (SetProperty(ref _hasSettingsApplicationFailures, value))
+            {
+                OnPropertyChanged(nameof(IsSettingsRecoveryVisible));
+            }
+        }
     }
+
+    /// <summary>Gets or sets whether the current page provides the full settings recovery controls.</summary>
+    public bool IsSettingsPageActive
+    {
+        get => _isSettingsPageActive;
+        set
+        {
+            if (SetProperty(ref _isSettingsPageActive, value))
+            {
+                OnPropertyChanged(nameof(IsSettingsRecoveryVisible));
+            }
+        }
+    }
+
+    public bool IsSettingsRecoveryVisible => HasSettingsApplicationFailures && !IsSettingsPageActive;
     public string SettingsRecoveryTitleText => _localization.GetString("Settings.Recovery.Title");
     public string SettingsRecoveryDescriptionText => _localization.GetString("Settings.Recovery.Description");
     public string OpenSettingsRecoveryText => _localization.GetString("Settings.Recovery.Open");
