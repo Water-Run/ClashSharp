@@ -114,6 +114,67 @@ public sealed partial class ProductionDataGenerationTests
         Assert.NotEqual(failed.AttemptId, result.Outcome.Envelope!.PendingApplications.Single(batch => batch.BatchId == failed.BatchId).AttemptId);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SettingsRecovery_ExternalRetryClearsOnlyTheResolvedIssuesPageError(bool otherFailure)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        NetworkSurface network = new() { Unknown = true };
+        AppearanceSurface appearance = new();
+        if (otherFailure)
+        {
+            fixture.LegacyValues[SettingsRegistry.Keys.AppThemeMode.Value] = (int)AppThemeMode.Dark;
+            appearance.BeforeApply = _ => throw new IOException("isolated appearance failure");
+        }
+        ConfigureRealRuntime(fixture, new StartupPlatform(), appearance, network);
+        _ = await fixture.CreateStartupStep(new RuntimeLifetimeRegistry(), new UiData.GenerationSamplingRuntime(fixture.Manager),
+            new UiService.AppSettingsService(new Dictionary<string, object>())).ExecuteAsync(new AppLaunchRequest(""), CancellationToken.None);
+        UiView.SettingsRecoveryViewModel page = new(key => key, fixture.Authority, new RecoveryPageErrors(), () => { });
+        page.Refresh();
+        var issue = page.Issues.Single(item => item.Title == "Settings.Recovery.Kind.Network");
+
+        await page.RetryAsync(issue, CancellationToken.None);
+        Assert.True(page.HasError);
+        page.Refresh();
+        Assert.True(page.HasError);
+        network.Unknown = false;
+        var current = fixture.Authority.CaptureSnapshot();
+        var recovered = await fixture.Authority.RetryApplicationAsync(current, issue.BatchId, CancellationToken.None);
+        Assert.True(recovered.Outcome.IsSucceeded, recovered.Outcome.Code);
+        page.Refresh();
+
+        Assert.False(page.HasError);
+        Assert.Empty(page.ErrorText);
+        Assert.Equal(otherFailure, page.HasIssues);
+        Assert.Equal(otherFailure, page.IsVisible);
+        if (otherFailure) { Assert.Equal("Settings.Recovery.Kind.Appearance", Assert.Single(page.Issues).Title); }
+    }
+
+    [Fact]
+    public async Task SettingsRecovery_RefreshRelocalizesTheRetainedRetryError()
+    {
+        await using DataGenerationTestDirectory directory = new();
+        await using Fixture fixture = new(directory);
+        ConfigureRealRuntime(fixture, new StartupPlatform(), new AppearanceSurface(), new NetworkSurface { Unknown = true });
+        _ = await fixture.CreateStartupStep(new RuntimeLifetimeRegistry(), new UiData.GenerationSamplingRuntime(fixture.Manager),
+            new UiService.AppSettingsService(new Dictionary<string, object>())).ExecuteAsync(new AppLaunchRequest(""), CancellationToken.None);
+        string language = "first";
+        UiView.SettingsRecoveryViewModel page = new(key => language + ":" + key, fixture.Authority, new RecoveryPageErrors(), () => { });
+        page.Refresh();
+        await page.RetryAsync(Assert.Single(page.Issues), CancellationToken.None);
+        Assert.Equal("first:Settings.Recovery.RetryFailed", page.ErrorText);
+        string displayed = page.ErrorText;
+        page.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(page.ErrorText)) { displayed = page.ErrorText; } };
+
+        language = "second";
+        page.Refresh();
+
+        Assert.True(page.HasError);
+        Assert.Equal("second:Settings.Recovery.RetryFailed", displayed);
+    }
+
     private sealed class RecoveryPageErrors : IApplicationErrorSink
     {
         public Task ReportAsync(ApplicationError error, CancellationToken cancellationToken) => throw new InvalidOperationException("Unexpected recovery page error.", error.Exception);

@@ -38,14 +38,23 @@
                     <StackPanel x:Name="ApplicationRecoveryPanel" Spacing="6"
                                 Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <InfoBar Title="{Binding Title}" Message="{Binding Description}"
-                                 Severity="Warning" IsClosable="False" IsOpen="{Binding IsVisible, Mode=OneWay}" />
-                        <ItemsControl ItemsSource="{Binding Issues}" IsEnabled="{Binding CanRetry}">
+                                 Severity="Warning" IsClosable="False" IsOpen="{Binding IsVisible, Mode=OneWay}"
+                                 AutomationProperties.AutomationId="SettingsRecoveryNotice" />
+                        <ItemsControl ItemsSource="{Binding Issues}" IsEnabled="{Binding CanRetry}"
+                                      HorizontalContentAlignment="Stretch"
+                                      AutomationProperties.AutomationId="SettingsRecoveryIssues">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="12,0">
-                                        <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
-                                        <HyperlinkButton Content="{Binding RetryText}" Tag="{Binding}" Click="RetryApplication_Click" />
-                                    </StackPanel>
+                                    <Grid ColumnSpacing="12" Margin="12,0" Padding="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Title}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                        <HyperlinkButton Grid.Column="1" Content="{Binding RetryText}" Tag="{Binding}"
+                                                         HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                         Click="RetryApplication_Click" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
