@@ -121,15 +121,15 @@ internal sealed class DataPackageDialogPresenter
             return false;
         }
 
-        ClashDataPackageScope? scope = _operations.ReadPackageScope(file.Path);
-        if (!IsImportableDataPackageScope(scope))
+        using IPreparedSettingsImport? import = await _operations.PrepareDataImportAsync(file.Path, cancellationToken);
+        if (import is null || !IsImportableDataPackageScope(import.Scope))
         {
             await ShowImportResultAsync(xamlRoot,
                 "Settings.DataImport.Invalid", "Settings.DataImport.Invalid.Description", cancellationToken);
             return false;
         }
 
-        if (!await ConfirmDataImportAsync(xamlRoot, scope!.Value, cancellationToken))
+        if (!await ConfirmDataImportAsync(xamlRoot, import.Scope, cancellationToken))
         {
             return false;
         }
@@ -138,7 +138,7 @@ internal sealed class DataPackageDialogPresenter
         SettingsDataReplacementResult result;
         try
         {
-            result = await _operations.ImportDataPackageAsync(file.Path, cancellationToken);
+            result = await _operations.ImportDataPackageAsync(import, cancellationToken);
         }
         catch (Exception exception) when (
             !ExceptionGraphClassifier.IsProcessFatal(exception)

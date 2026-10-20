@@ -91,11 +91,13 @@ public sealed class SettingsAuthorityArchitectureTests
         string pageComposition = ReadApplicationSource(
             "Presentation/Composition/SettingsPageComposition.cs");
         Assert.Contains("ISettingsDataReplacement dataReplacement", pageComposition, StringComparison.Ordinal);
-        Assert.Contains("dataReplacement.ImportAsync(packagePath, cancellationToken)", pageComposition, StringComparison.Ordinal);
+        Assert.Contains("dataReplacement.PrepareImportAsync(packagePath, cancellationToken)", pageComposition, StringComparison.Ordinal);
+        Assert.Contains("dataReplacement.ImportAsync(import, cancellationToken)", pageComposition, StringComparison.Ordinal);
         Assert.Contains("replaceAllSettingsAsync: context.DataReplacement.ResetAllSettingsAsync", pageComposition, StringComparison.Ordinal);
         Assert.DoesNotContain("SettingsImportOperationAdapter", pageComposition, StringComparison.Ordinal);
         string replacement = ReadApplicationSource("AppHost/Data/GenerationSettingsDataReplacement.cs");
-        Assert.Contains("coordinator.ImportAsync", replacement, StringComparison.Ordinal);
+        Assert.Contains("coordinator.PrepareImportAsync", replacement, StringComparison.Ordinal);
+        Assert.Contains("coordinator.ImportPreparedAsync", replacement, StringComparison.Ordinal);
         Assert.Contains("coordinator.ResetAllSettingsAsync", replacement, StringComparison.Ordinal);
         Assert.DoesNotContain("receipt.CommitAsync", pageComposition, StringComparison.Ordinal);
         Assert.DoesNotContain("receipt.RollbackAsync", pageComposition, StringComparison.Ordinal);

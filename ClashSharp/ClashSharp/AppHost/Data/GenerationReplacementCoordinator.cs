@@ -16,6 +16,7 @@ using ClashSharp.Service;
 namespace ClashSharp.Hosting.Data;
 
 internal sealed record GenerationReplacementResult(DataGenerationDescriptor Generation, bool RequiresRestart, IReadOnlyList<string> Warnings);
+internal sealed record PreparedGenerationImport(DataGenerationDescriptor Source, DataPackageImportPlan Plan);
 
 internal sealed class GenerationReplacementRecoveryException(Exception operationFailure, Exception recoveryFailure, bool committed)
     : AggregateException("The data transaction requires recovery before ordinary changes can continue.", operationFailure, recoveryFailure)
@@ -31,10 +32,30 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public Task<GenerationReplacementResult> ImportAsync(string packagePath, CancellationToken cancellationToken) => ExecuteAsync(packagePath, cancellationToken);
-    public Task<GenerationReplacementResult> ResetAllSettingsAsync(CancellationToken cancellationToken) => ExecuteAsync(null, cancellationToken);
+    public Task<GenerationReplacementResult> ImportAsync(string packagePath, CancellationToken cancellationToken) => ExecuteAsync(packagePath, null, cancellationToken);
+    public Task<GenerationReplacementResult> ResetAllSettingsAsync(CancellationToken cancellationToken) => ExecuteAsync(null, null, cancellationToken);
 
-    private async Task<GenerationReplacementResult> ExecuteAsync(string? packagePath, CancellationToken cancellationToken)
+    /// <summary>Captures a complete validated plan while keeping the current runtime and ordinary writes available.</summary>
+    public Task<PreparedGenerationImport> PrepareImportAsync(string packagePath, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
+        return generations.ExecuteAsync<AppDataGenerationRuntime, PreparedGenerationImport>(async (runtime, descriptor, token) =>
+        {
+            if (!runtime.IsExecutionPublished) { throw new InvalidOperationException("The runtime is not ready for import preview."); }
+            return new(descriptor, await GenerationDataCandidatePreparer.ReadImportSnapshotAsync(
+                packagePath, runtime.Repositories.Session.Snapshot, descriptor, token).ConfigureAwait(false));
+        }, cancellationToken);
+    }
+
+    /// <summary>Imports already validated contents, never reopening the previewed path.</summary>
+    public Task<GenerationReplacementResult> ImportPreparedAsync(PreparedGenerationImport import, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(import);
+        return ExecuteAsync(null, import, cancellationToken);
+    }
+
+    private async Task<GenerationReplacementResult> ExecuteAsync(string? packagePath, PreparedGenerationImport? import,
+        CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         MutationAdmissionLease? lease = null;
@@ -55,8 +76,16 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
         Exception? candidateCleanupFailure = null;
         try
         {
+            if (import is not null && !import.Source.IsSameGeneration(generations.CurrentManifest.Descriptor))
+            {
+                throw new InvalidOperationException("The data generation changed after import preview; prepare and confirm again.");
+            }
             lease = await admission.CloseAndDrainAsync(MutationAdmissionClosure.Destructive, cancellationToken).ConfigureAwait(false);
             baseline = generations.CurrentManifest;
+            if (import is not null && !import.Source.IsSameGeneration(baseline.Descriptor))
+            {
+                throw new InvalidOperationException("The data generation changed before import admission; prepare and confirm again.");
+            }
             try
             {
                 if (await journal.ReadPendingAsync(cancellationToken).ConfigureAwait(false) is not null)
@@ -72,9 +101,9 @@ internal sealed class GenerationReplacementCoordinator(DataGenerationManager gen
                 throw new GenerationReplacementRecoveryException(pendingFailure,
                     new InvalidOperationException("The replacement checkpoint could not be cleared for a new operation."), committed: false);
             }
-            DataPackageImportPlan? plan = packagePath is null ? null : await generations.ExecuteAsync<AppDataGenerationRuntime, DataPackageImportPlan>(
+            DataPackageImportPlan? plan = import?.Plan ?? (packagePath is null ? null : await generations.ExecuteAsync<AppDataGenerationRuntime, DataPackageImportPlan>(
                 (runtime, descriptor, token) => preparer.ReadImportAdmittedAsync(packagePath, runtime.Repositories.Session.Snapshot, descriptor, lease, token),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false));
             await generations.ExecuteAsync<AppDataGenerationRuntime>(async (runtime, descriptor, token) =>
             {
                 if (!descriptor.IsSameGeneration(baseline.Descriptor) || !runtime.IsExecutionPublished)

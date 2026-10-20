@@ -72,7 +72,9 @@ public sealed partial class ProductionDataGenerationTests
             new UiData.GenerationDataPackageExporter(fixture.Manager, fixture.Admission, directory.RootPath), replacement,
             new ReplacementPageErrorSink(), new SettingsExportCoordinator(fixture.Admission));
 
-        var result = await page.ImportDataPackageAsync(input, CancellationToken.None);
+        using var import = await page.PrepareDataImportAsync(input, CancellationToken.None);
+        Assert.NotNull(import);
+        var result = await page.ImportDataPackageAsync(import, CancellationToken.None);
 
         Assert.Empty(result.Warnings);
         Assert.False(result.RequiresRestart);

@@ -1,10 +1,23 @@
+using ClashSharp.Model;
+
 namespace ClashSharp.ApplicationModel.Settings;
+
+/// <summary>Opaque, validated import contents whose scope stays fixed through confirmation.</summary>
+/// <remarks>Dispose abandons an unused preview. Only its creating replacement service may consume it once.</remarks>
+public interface IPreparedSettingsImport : IDisposable
+{
+    /// <summary>Gets the scope decoded from the same contents that will be imported.</summary>
+    ClashDataPackageScope Scope { get; }
+}
 
 /// <summary>Replaces settings through a complete, recoverable data transaction.</summary>
 public interface ISettingsDataReplacement
 {
-    /// <summary>Validates and imports a package, retaining ownership through runtime publication.</summary>
-    Task<SettingsDataReplacementResult> ImportAsync(string packagePath, CancellationToken cancellationToken);
+    /// <summary>Reads and validates a detached package snapshot without mutating the active data.</summary>
+    Task<IPreparedSettingsImport> PrepareImportAsync(string packagePath, CancellationToken cancellationToken);
+
+    /// <summary>Consumes one confirmed snapshot, retaining transaction ownership through runtime publication.</summary>
+    Task<SettingsDataReplacementResult> ImportAsync(IPreparedSettingsImport import, CancellationToken cancellationToken);
 
     /// <summary>Restores all settings to defaults while preserving user repositories.</summary>
     Task<SettingsDataReplacementResult> ResetAllSettingsAsync(CancellationToken cancellationToken);

@@ -33,11 +33,11 @@ internal sealed record SettingsPageDependencies(
 /// <summary>Owns settings operations that require file, service, or application-state access.</summary>
 internal interface ISettingsPageOperations
 {
-    /// <summary>Reads the declared scope from a data package, returning null for an invalid package.</summary>
-    ClashDataPackageScope? ReadPackageScope(string packagePath);
+    /// <summary>Validates and freezes the complete input before confirmation, returning null for an invalid package.</summary>
+    Task<IPreparedSettingsImport?> PrepareDataImportAsync(string packagePath, CancellationToken cancellationToken);
 
     /// <summary>Imports one validated data package.</summary>
-    Task<SettingsDataReplacementResult> ImportDataPackageAsync(string packagePath, CancellationToken cancellationToken);
+    Task<SettingsDataReplacementResult> ImportDataPackageAsync(IPreparedSettingsImport import, CancellationToken cancellationToken);
 
     /// <summary>Exports settings data or the diagnostic log database.</summary>
     Task ExportDataAsync(
@@ -191,8 +191,9 @@ internal sealed class SettingsPageOperations(
     SettingsExportCoordinator exports) : ISettingsPageOperations
 {
     /// <inheritdoc />
-    public ClashDataPackageScope? ReadPackageScope(string packagePath)
+    public async Task<IPreparedSettingsImport?> PrepareDataImportAsync(string packagePath, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(packagePath))
         {
             return null;
@@ -200,17 +201,18 @@ internal sealed class SettingsPageOperations(
 
         try
         {
-            return ClashDataPackageService.ReadImportScope(packagePath);
+            return await dataReplacement.PrepareImportAsync(packagePath, cancellationToken);
         }
-        catch (Exception exception) when (ExceptionGraphClassifier.IsRecoverable(exception))
+        catch (Exception exception) when (ExceptionGraphClassifier.IsRecoverable(exception)
+            && !ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
         {
             return null;
         }
     }
 
     /// <inheritdoc />
-    public Task<SettingsDataReplacementResult> ImportDataPackageAsync(string packagePath, CancellationToken cancellationToken) =>
-        dataReplacement.ImportAsync(packagePath, cancellationToken);
+    public Task<SettingsDataReplacementResult> ImportDataPackageAsync(IPreparedSettingsImport import, CancellationToken cancellationToken) =>
+        dataReplacement.ImportAsync(import, cancellationToken);
 
     /// <inheritdoc />
     public Task ExportDataAsync(

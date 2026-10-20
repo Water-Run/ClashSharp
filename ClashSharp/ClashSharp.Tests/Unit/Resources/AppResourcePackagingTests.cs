@@ -2288,7 +2288,7 @@ public sealed class AppResourcePackagingTests
         Assert.DoesNotContain("BackupDataPackageButton_Click", settingsCode, StringComparison.Ordinal);
         Assert.Contains("Settings.DataImport.Warning.Title", packagePresenter, StringComparison.Ordinal);
         Assert.Contains("Settings.DataImport.SecondConfirm.Title", packagePresenter, StringComparison.Ordinal);
-        Assert.Contains("ReadPackageScope", packagePresenter, StringComparison.Ordinal);
+        Assert.Contains("PrepareDataImportAsync", packagePresenter, StringComparison.Ordinal);
         Assert.Contains("FormatDataImportWarning", packagePresenter, StringComparison.Ordinal);
         Assert.Contains("_operations.ImportDataPackageAsync", packagePresenter, StringComparison.Ordinal);
         Assert.Contains("_operations.ExportDataAsync", packagePresenter, StringComparison.Ordinal);
