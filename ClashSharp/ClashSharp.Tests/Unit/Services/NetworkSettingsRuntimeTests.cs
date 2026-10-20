@@ -66,7 +66,7 @@ public sealed class NetworkSettingsRuntimeTests
     public async Task ExhaustedServiceRuntime_CanBeReobservedAndExplicitlyRecoveredOrDisabled(ClashSharpMode mode)
     {
         await using DataGenerationTestDirectory directory = new();
-        NativePorts ports = new() { ServiceStatus = new(true, false, "deployed") };
+        NativePorts ports = new() { ServiceStatus = new(true, false, "deployed") { IsScmRunning = true } };
         var configuration = CreateConfiguration(directory.RootPath);
         NetworkSettingsConfiguration original = new(ClashSharpMode.RuleTakeover, "builtin-direct", true, 18385);
         await ports.Takeover.ApplyNetworkSettingsConfigurationAsync(configuration, original, CancellationToken.None);
@@ -260,6 +260,52 @@ public sealed class NetworkSettingsRuntimeTests
     }
 
     [Theory]
+    [InlineData(ClashSharpMode.RuleTakeover)]
+    [InlineData(ClashSharpMode.FullTakeover)]
+    public async Task StoppedTunHost_RejectsBeforePromotionAndStillAllowsDisableAndSystemProxy(ClashSharpMode mode)
+    {
+        await using DataGenerationTestDirectory directory = new();
+        NativePorts ports = new()
+        {
+            RequireRunningServiceHost = true,
+            ServiceStatus = new(true, false, "idle host")
+            {
+                IsScmRunning = true,
+                ProtocolVersion = ClashSharp.ServiceProtocol.MihomoServiceIpcProtocol.CurrentVersion,
+                ServiceSessionId = Guid.NewGuid(),
+                ChildState = ClashSharp.ServiceProtocol.MihomoServiceChildState.Stopped,
+            },
+        };
+        var configuration = CreateConfiguration(directory.RootPath);
+        Host.Hosting.Settings.NetworkSettingsRuntime runtime = new(configuration, ports.Takeover, ports.WindowsProxy);
+        NetworkSettingsConfiguration target = new(mode, "builtin-direct", true, 18386);
+        await runtime.ApplyConfigurationAsync(target, CancellationToken.None);
+        var before = configuration.ObserveRuntimeConfigurationIntegrity();
+        string manifest = await File.ReadAllTextAsync(Path.Combine(directory.RootPath, "config.runtime-state.json"));
+        string yaml = await File.ReadAllTextAsync(Path.Combine(directory.RootPath, "config.yaml"));
+        ports.ServiceStatus = new(true, false, "host stopped") { IpcFailureCode = "service.unavailable" };
+        int writes = ports.Writes;
+        Assert.Equal(ClashSharpMode.Disabled, (await runtime.ReadConfigurationAsync(CancellationToken.None)).Mode);
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => runtime.ApplyConfigurationAsync(target, CancellationToken.None));
+
+        Assert.Equal(writes, ports.Writes);
+        Assert.Equal(before, configuration.ObserveRuntimeConfigurationIntegrity());
+        Assert.Equal(manifest, await File.ReadAllTextAsync(Path.Combine(directory.RootPath, "config.runtime-state.json")));
+        Assert.Equal(yaml, await File.ReadAllTextAsync(Path.Combine(directory.RootPath, "config.yaml")));
+        Assert.Equal(ClashSharpMode.Disabled, (await runtime.ReadConfigurationAsync(CancellationToken.None)).Mode);
+        await runtime.ApplyConfigurationAsync(new(ClashSharpMode.Disabled, target.ProfileId, true, target.MixedPort), CancellationToken.None);
+        Assert.False(ports.CoreRunning);
+        Assert.False(ports.Proxy.IsEnabled);
+        NetworkSettingsConfiguration fallback = new(mode, target.ProfileId, false, target.MixedPort);
+        await runtime.ApplyConfigurationAsync(fallback, CancellationToken.None);
+        Assert.Equal(fallback, await runtime.ReadConfigurationAsync(CancellationToken.None));
+        Assert.True(ports.CoreRunning);
+        Assert.True(ports.Proxy.IsEnabled);
+        Assert.False(ports.ServiceStatus.IsScmRunning);
+    }
+
+    [Theory]
     [InlineData("unknown-service")]
     [InlineData("missing-owner")]
     [InlineData("unknown-app-owner")]
@@ -367,7 +413,7 @@ public sealed class NetworkSettingsRuntimeTests
         Host.Service.WindowsProxyRegistrySnapshot baseline = new(new(true, 1), new(true, "corporate.example:8080"),
             new(true, "intranet.example"), new(true, "https://corporate.example/pac"));
         ports.Registry.Current = baseline;
-        ports.ServiceStatus = new(true, false, "isolated installed");
+        ports.ServiceStatus = new(true, false, "isolated installed") { IsScmRunning = true };
         Host.Service.CoreConfigurationService configuration = CreateConfiguration(directory.RootPath);
         await ports.Takeover.ApplyNetworkSettingsConfigurationAsync(configuration,
             new(ClashSharpMode.RuleTakeover, "builtin-direct", false, 18313), CancellationToken.None);
@@ -556,6 +602,7 @@ public sealed class NetworkSettingsRuntimeTests
         public bool CoreRunning { get; set; }
         public bool OwnerKnown { get; set; } = true;
         public bool Ready { get; set; } = true;
+        public bool RequireRunningServiceHost { get; set; }
         public int Writes { get; private set; }
         public Action? OnReadiness { get; set; }
         public long LastReadinessGeneration { get; private set; }
@@ -577,9 +624,23 @@ public sealed class NetworkSettingsRuntimeTests
             return Task.FromResult(ServiceStatus);
         }
         public Task<Host.Model.MihomoServiceStatus> StopAsync(CancellationToken cancellationToken)
-        { ++Writes; ServiceStatus = new(ServiceStatus.IsInstalled, false, "isolated stopped"); return Task.FromResult(ServiceStatus); }
+        {
+            ++Writes;
+            ServiceStatus = new(ServiceStatus.IsInstalled, false, "isolated stopped")
+            {
+                IsScmRunning = ServiceStatus.IsScmRunning,
+                ProtocolVersion = ClashSharp.ServiceProtocol.MihomoServiceIpcProtocol.CurrentVersion,
+                ServiceSessionId = ServiceStatus.ServiceSessionId ?? Guid.NewGuid(),
+                ChildState = ClashSharp.ServiceProtocol.MihomoServiceChildState.Stopped,
+            };
+            return Task.FromResult(ServiceStatus);
+        }
         public Task<Host.Model.MihomoServiceStatus> RestartAsync(long generation, string configurationHash, CancellationToken cancellationToken)
         {
+            if (RequireRunningServiceHost && !ServiceStatus.IsScmRunning)
+            {
+                return Task.FromResult(ServiceStatus with { IpcFailureCode = "service.unavailable" });
+            }
             ++Writes;
             ServiceStatus = new(true, true, "isolated running")
             { ServiceSessionId = Guid.NewGuid(), ActiveGeneration = generation, ActiveConfigurationHash = configurationHash };

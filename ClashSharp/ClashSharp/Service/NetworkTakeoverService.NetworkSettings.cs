@@ -25,6 +25,14 @@ public sealed partial class NetworkTakeoverService
                 {
                     throw new InvalidOperationException("The requested transparent proxy requires an available installed service.");
                 }
+                if (!status.IsScmRunning)
+                {
+                    // A stopped Installer-owned host cannot accept activation. Reject before
+                    // promoting a new generation: replaying a saved TUN baseline would fail
+                    // too and leave even an explicit Disable behind an unresolved rollback.
+                    throw CreateServiceDiagnosticFailure(status, RuntimeFailureDiagnostics.ServiceUnavailable,
+                        "The requested transparent proxy requires a running service host; repair the installation before retrying TUN.");
+                }
             }
             RuntimeConfigurationTransactionResult result = await configuration.ApplyRuntimeConfigurationAsync(
                 target.ProfileId, target.Mode, target.EffectiveTunEnabled, target.MixedPort, this, cancellationToken).ConfigureAwait(false);
