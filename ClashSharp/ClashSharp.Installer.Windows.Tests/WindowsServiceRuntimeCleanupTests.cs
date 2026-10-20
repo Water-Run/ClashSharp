@@ -26,6 +26,28 @@ public sealed class WindowsServiceRuntimeCleanupTests
         Assert.Equal("preserve", File.ReadAllText(unrelated));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RemovesCrashResidueBeyondTheLegacyPathLimit(bool longDirectory)
+    {
+        using var fixture = new Fixture();
+        string nested = Path.Combine(fixture.RuntimeRoot, "runtime", "effective",
+            longDirectory ? new string('d', 180) : "temp");
+        Directory.CreateDirectory(nested);
+        string residue = Path.Combine(nested, "effective-" + new string('a', 160) + ".yaml");
+        Assert.True(residue.Length > 260);
+        File.WriteAllText(residue, "owned crash residue");
+        File.SetAttributes(residue, FileAttributes.ReadOnly);
+        string unrelated = Path.Combine(fixture.Plan.ServiceDataRoot, "unrelated.txt");
+        File.WriteAllText(unrelated, "preserve");
+
+        new WindowsServiceRuntimeCleanup().RemoveAndVerify(fixture.Plan, CancellationToken.None);
+
+        Assert.False(Directory.Exists(fixture.RuntimeRoot));
+        Assert.Equal("preserve", File.ReadAllText(unrelated));
+    }
+
     [Fact]
     public void RuntimePathOccupiedByFileIsPreserved()
     {

@@ -28,7 +28,7 @@ internal static class WindowsFileSystemNative
     private static SafeFileHandle OpenOrdinaryFile(string path, uint creationDisposition)
     {
         SafeFileHandle handle = CreateFile(
-            path,
+            GetExtendedPath(path),
             GenericRead,
             FileShareRead,
             0,
@@ -92,7 +92,7 @@ internal static class WindowsFileSystemNative
         uint shareMode)
     {
         SafeFileHandle handle = CreateFile(
-            path,
+            GetExtendedPath(path),
             desiredAccess,
             shareMode,
             0,
@@ -122,6 +122,18 @@ internal static class WindowsFileSystemNative
             handle.Dispose();
             throw;
         }
+    }
+
+    // P/Invoke does not inherit System.IO's extended-path handling. Service crash
+    // residue includes immutable hash-based filenames that exceed MAX_PATH even
+    // under the default ProgramData root. Keep the same handles and share guards
+    // without requiring a machine-wide LongPathsEnabled policy change.
+    private static string GetExtendedPath(string path)
+    {
+        string fullPath = Path.GetFullPath(path).Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        return fullPath.StartsWith(@"\\?\", StringComparison.Ordinal) ? fullPath
+            : fullPath.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + fullPath[2..]
+            : @"\\?\" + fullPath;
     }
 
     internal static WindowsFileIdentity GetOrdinaryFileIdentity(SafeFileHandle handle)
