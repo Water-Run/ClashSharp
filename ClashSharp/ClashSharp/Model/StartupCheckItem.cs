@@ -14,6 +14,8 @@ public readonly record struct StartupCheckItem(
     string Title,
     string Description)
 {
+    internal LocalizedDisplayText? TitleSource { get; init; }
+    internal LocalizedDisplayText? DescriptionSource { get; init; }
     /// <summary>Gets the stable check category used for related-page navigation.</summary>
     public StartupCheckKind Kind { get; init; }
     /// <summary>Gets whether an absent configuration is optional rather than an operational fault.</summary>

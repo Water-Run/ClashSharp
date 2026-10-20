@@ -77,6 +77,9 @@
     <Compile Include="..\ClashSharp\Model\LogRecord.cs" Link="Model\LogRecord.cs" />
     <Compile Include="..\ClashSharp\Model\StoredLogRecord.cs" Link="Model\StoredLogRecord.cs" />
     <Compile Include="..\ClashSharp\Model\StartupCheckItem.cs" Link="Model\StartupCheckItem.cs" />
+    <Compile Include="..\ClashSharp\Model\LocalizedDisplayText.cs" Link="Model\LocalizedDisplayText.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\StartupCheckDisplay.cs" Link="ViewModel\StartupCheckDisplay.cs" />
+    <Compile Include="..\ClashSharp\ViewModel\StartupConflictDisplay.cs" Link="ViewModel\StartupConflictDisplay.cs" />
     <Compile Include="..\ClashSharp\Model\TrayStatusSnapshot.cs" Link="Model\TrayStatusSnapshot.cs" />
     <Compile Include="..\ClashSharp\Model\LogStorageSummary.cs" Link="Model\LogStorageSummary.cs" />
     <Compile Include="..\ClashSharp\Model\TrafficStatisticsSummary.cs" Link="Model\TrafficStatisticsSummary.cs" />

@@ -2908,8 +2908,9 @@ public sealed class AppResourcePackagingTests
         Assert.Contains("StartupConflict.Dialog.Introduction", presenterCode, StringComparison.Ordinal);
         Assert.Contains("Orientation = Orientation.Vertical", presenterCode, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment = HorizontalAlignment.Right", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("statusText.Text = string.IsNullOrWhiteSpace(result.Message)", presenterCode, StringComparison.Ordinal);
-        Assert.Contains("repairButton.IsEnabled = !repairSucceeded", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("BindText(statusText, display, nameof(StartupConflictDisplay.StatusText))", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("display.CompleteRepair(result)", presenterCode, StringComparison.Ordinal);
+        Assert.Contains("repairButton.IsEnabled = display.CanRepair", presenterCode, StringComparison.Ordinal);
         Assert.Contains("private const double DialogWidth = 560", presenterCode, StringComparison.Ordinal);
         Assert.Contains("Func<string, string> getString", presenterCode, StringComparison.Ordinal);
         Assert.Contains("IApplicationErrorSink errorSink", presenterCode, StringComparison.Ordinal);

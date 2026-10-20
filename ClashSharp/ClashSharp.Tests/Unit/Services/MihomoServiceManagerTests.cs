@@ -72,7 +72,7 @@ public sealed class MihomoServiceManagerTests
 
         Assert.True(ready.IsReady);
         Assert.Null(ready.ProvisioningFailureCode);
-        Assert.Equal(ready, manager.GetLatestStatus());
+        Assert.Equal(ready with { MessageResourceKey = "MihomoService.Status.DeployedRunning" }, manager.GetLatestStatus());
         Assert.Equal(2, loads);
         Assert.Empty(sentinel.Requests);
         Assert.Collection(recovered.Requests,
@@ -234,11 +234,11 @@ public sealed class MihomoServiceManagerTests
         int ipcRequests = ipc.Requests.Count;
 
         language = "de-DE";
-        Assert.Equal(observed with { Message = "de-DE:" + expectedKey }, manager.GetLatestStatus());
+        Assert.Equal(observed with { Message = "de-DE:" + expectedKey, MessageResourceKey = expectedKey }, manager.GetLatestStatus());
         language = "fa-IR";
-        Assert.Equal(observed with { Message = "fa-IR:" + expectedKey }, manager.GetLatestStatus());
+        Assert.Equal(observed with { Message = "fa-IR:" + expectedKey, MessageResourceKey = expectedKey }, manager.GetLatestStatus());
         language = "zh-CN";
-        Assert.Equal(observed, manager.GetLatestStatus());
+        Assert.Equal(observed with { MessageResourceKey = expectedKey }, manager.GetLatestStatus());
         Assert.Equal(processRequests, runner.Requests.Count);
         Assert.Equal(ipcRequests, ipc.Requests.Count);
     }
@@ -260,7 +260,7 @@ public sealed class MihomoServiceManagerTests
         Assert.True(stopped.HasReleasedChildOwnership);
 
         language = "de-DE";
-        Assert.Equal(stopped with { Message = "de-DE:MihomoService.Status.Deployed" }, manager.GetLatestStatus());
+        Assert.Equal(stopped with { Message = "de-DE:MihomoService.Status.Deployed", MessageResourceKey = "MihomoService.Status.Deployed" }, manager.GetLatestStatus());
         Assert.Single(runner.Requests);
         Assert.Equal(ipcRequests, ipc.Requests.Count);
     }
@@ -282,7 +282,7 @@ public sealed class MihomoServiceManagerTests
         Assert.NotNull(failed.IpcFailureCode);
 
         language = "fa-IR";
-        Assert.Equal(failed with { Message = "fa-IR:MihomoService.Status.Unknown" }, manager.GetLatestStatus());
+        Assert.Equal(failed with { Message = "fa-IR:MihomoService.Status.Unknown", MessageResourceKey = "MihomoService.Status.Unknown" }, manager.GetLatestStatus());
         Assert.Single(runner.Requests);
         Assert.Equal(ipcRequests, ipc.Requests.Count);
     }
@@ -394,7 +394,7 @@ public sealed class MihomoServiceManagerTests
 
         Assert.False(status.IsKnown);
         Assert.Equal("unknown", status.Message);
-        Assert.Equal(status, cachedStatus);
+        Assert.Equal(status with { MessageResourceKey = "MihomoService.Status.Unknown" }, cachedStatus);
     }
 
     /// <summary>Verifies a running service query maps to a localized running status.</summary>

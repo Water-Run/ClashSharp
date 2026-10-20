@@ -1,4 +1,7 @@
 namespace ClashSharp.Model;
 
 /// <summary>Result returned after attempting to repair a startup conflict.</summary>
-internal readonly record struct StartupConflictRepairResult(bool Succeeded, string Message);
+internal readonly record struct StartupConflictRepairResult(bool Succeeded, string Message)
+{
+    public LocalizedDisplayText? MessageSource { get; init; }
+}

@@ -49,6 +49,10 @@ internal sealed class StartupConflictIssue
 
     public string RepairText { get; }
 
+    public LocalizedDisplayText? TitleSource { get; init; }
+    public LocalizedDisplayText? DescriptionSource { get; init; }
+    public LocalizedDisplayText? RepairTextSource { get; init; }
+
     public Func<CancellationToken, Task<StartupConflictRepairResult>> RepairAsync { get; }
 
     /// <summary>Gets whether the UI may offer the explicit repair callback.</summary>

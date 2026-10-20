@@ -5,8 +5,10 @@ using System.Threading.Tasks;
 using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
+using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 
 namespace ClashSharp.Presentation.Dialogs;
 
@@ -45,13 +47,20 @@ internal static class StartupConflictDialogPresenter
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
+            List<Action> refreshText = [];
             await CenteredDialogOverlay.ShowAsync(
                 xamlRoot,
                 getString("StartupConflict.Dialog.Title"),
-                BuildContent(issues, xamlRoot, getString, errorSink, dialogLifetime.Token),
+                BuildContent(issues, xamlRoot, getString, errorSink, refreshText, dialogLifetime.Token),
                 getString("Command.Close"),
                 DialogWidth,
-                dialogLifetime.Token);
+                dialogLifetime.Token,
+                dialog => dialog.Localize(() =>
+                {
+                    dialog.Title = getString("StartupConflict.Dialog.Title");
+                    dialog.CloseButtonText = getString("Command.Close");
+                    foreach (Action refresh in refreshText) { refresh(); }
+                }));
         }
         catch (OperationCanceledException exception) when (
             ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
@@ -69,22 +78,26 @@ internal static class StartupConflictDialogPresenter
     /// <param name="getString">Localization resolver used for content labels.</param>
     /// <param name="errorSink">Boundary sink supplied to each repair command.</param>
     /// <param name="cancellationToken">Cancels repair commands owned by this content lifetime.</param>
+    /// <param name="refreshText">Display callbacks retained only for this dialog.</param>
     /// <returns>Dialog content element.</returns>
     private static UIElement BuildContent(
         IReadOnlyList<StartupConflictIssue> issues,
         XamlRoot xamlRoot,
         Func<string, string> getString,
         IApplicationErrorSink errorSink,
+        List<Action> refreshText,
         CancellationToken cancellationToken)
     {
         if (issues.Count == 0)
         {
-            return new TextBlock
+            TextBlock empty = new()
             {
                 Text = getString("StartupConflict.Dialog.Empty"),
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 380,
             };
+            refreshText.Add(() => empty.Text = getString("StartupConflict.Dialog.Empty"));
+            return empty;
         }
 
         StackPanel panel = new()
@@ -93,16 +106,20 @@ internal static class StartupConflictDialogPresenter
             MinWidth = 420,
             MaxWidth = 500,
         };
-        panel.Children.Add(new TextBlock
+        TextBlock introduction = new()
         {
             Text = getString("StartupConflict.Dialog.Introduction"),
             Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
             TextWrapping = TextWrapping.Wrap,
-        });
+        };
+        panel.Children.Add(introduction);
+        refreshText.Add(() => introduction.Text = getString("StartupConflict.Dialog.Introduction"));
 
         foreach (StartupConflictIssue issue in issues)
         {
-            panel.Children.Add(BuildIssueRow(issue, getString, errorSink, cancellationToken));
+            StartupConflictDisplay display = new(issue, getString);
+            refreshText.Add(display.RefreshLocalization);
+            panel.Children.Add(BuildIssueRow(display, errorSink, cancellationToken));
         }
 
         return new ScrollViewer
@@ -116,20 +133,20 @@ internal static class StartupConflictDialogPresenter
     }
 
     /// <summary>Builds one repairable conflict issue row.</summary>
-    /// <param name="issue">Conflict issue snapshot. Must not be null.</param>
-    /// <param name="getString">Localization resolver used for the action label.</param>
+    /// <param name="display">Captured issue and its current presentation state.</param>
     /// <param name="errorSink">Boundary sink for unexpected repair failures.</param>
     /// <param name="cancellationToken">Cancels the row's repair command.</param>
     /// <returns>Issue row element.</returns>
     private static Grid BuildIssueRow(
-        StartupConflictIssue issue,
-        Func<string, string> getString,
+        StartupConflictDisplay display,
         IApplicationErrorSink errorSink,
         CancellationToken cancellationToken)
     {
+        StartupConflictIssue issue = display.Issue;
         Grid row = new()
         {
-            Style = (Style)Application.Current.Resources["ClashCardGridStyle"],
+            Style = (Style)Application.Current.Resources["ClashSectionRowStyle"],
+            Padding = new Thickness(0, 12, 0, 12),
             RowSpacing = 8,
         };
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -140,32 +157,29 @@ internal static class StartupConflictDialogPresenter
             Orientation = Orientation.Vertical,
             Spacing = 3,
         };
-        textPanel.Children.Add(new TextBlock
+        TextBlock title = new()
         {
-            Text = issue.Title,
             Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
             TextWrapping = TextWrapping.Wrap,
-        });
-        textPanel.Children.Add(new TextBlock
+        };
+        BindText(title, display, nameof(StartupConflictDisplay.Title));
+        textPanel.Children.Add(title);
+        TextBlock description = new()
         {
-            Text = issue.Description,
-            Style = (Style)Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
-            TextWrapping = TextWrapping.Wrap,
-        });
-        string initialStatus = getString(issue.HasRepairAction
-            ? "StartupConflict.Status.Ready"
-            : "StartupConflict.Status.ManualReview");
-        if (RuntimeFailureDiagnostics.IsStableCode(issue.DiagnosticCode))
-        {
-            initialStatus += $" [{issue.DiagnosticCode}]";
-        }
-
-        TextBlock statusText = new()
-        {
-            Text = initialStatus,
             Style = (Style)Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
             TextWrapping = TextWrapping.Wrap,
         };
+        BindText(description, display, nameof(StartupConflictDisplay.Description));
+        textPanel.Children.Add(description);
+
+        TextBlock statusText = new()
+        {
+            Style = (Style)Application.Current.Resources["ClashSecondaryCaptionTextBlockStyle"],
+            TextWrapping = TextWrapping.Wrap,
+        };
+        BindText(statusText, display, nameof(StartupConflictDisplay.StatusText));
+        statusText.SetBinding(ToolTipService.ToolTipProperty, new Binding
+        { Source = display, Path = new PropertyPath(nameof(StartupConflictDisplay.StatusText)), Mode = BindingMode.OneWay });
         textPanel.Children.Add(statusText);
         row.Children.Add(textPanel);
 
@@ -192,34 +206,28 @@ internal static class StartupConflictDialogPresenter
 
         HyperlinkButton repairButton = new()
         {
-            Content = issue.RepairText,
             Padding = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        repairButton.SetBinding(ContentControl.ContentProperty, new Binding
+        { Source = display, Path = new PropertyPath(nameof(StartupConflictDisplay.RepairText)), Mode = BindingMode.OneWay });
         actionPanel.Children.Add(repairButton);
-        bool repairRunning = false;
-        bool repairSucceeded = false;
         repairButton.Click += async (_, _) =>
         {
-            if (repairRunning || repairSucceeded)
+            if (!display.BeginRepair())
             {
                 return;
             }
 
-            repairRunning = true;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 progressRing.Visibility = Visibility.Visible;
                 progressRing.IsActive = true;
-                statusText.Text = getString("StartupConflict.Status.Fixing");
 
                 StartupConflictRepairResult result = await issue.RepairAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                repairSucceeded = result.Succeeded;
-                statusText.Text = string.IsNullOrWhiteSpace(result.Message)
-                    ? getString(result.Succeeded ? "StartupConflict.Status.Succeeded" : "StartupConflict.Status.Failed")
-                    : result.Message;
+                display.CompleteRepair(result);
             }
             catch (OperationCanceledException exception) when (
                 ExceptionGraphClassifier.IsCallerCancellation(exception, cancellationToken))
@@ -233,18 +241,17 @@ internal static class StartupConflictDialogPresenter
                     return;
                 }
 
-                statusText.Text = getString("StartupConflict.Status.Failed");
-                ToolTipService.SetToolTip(statusText, statusText.Text);
+                display.CompleteRepair(new(false, string.Empty) { MessageSource = new("StartupConflict.Status.Failed") });
                 await ReportUnexpectedAsync(errorSink, exception, cancellationToken);
             }
             finally
             {
-                repairRunning = false;
                 if (!cancellationToken.IsCancellationRequested)
                 {
+                    display.EndRepair();
                     progressRing.IsActive = false;
                     progressRing.Visibility = Visibility.Collapsed;
-                    repairButton.IsEnabled = !repairSucceeded;
+                    repairButton.IsEnabled = display.CanRepair;
                 }
             }
         };
@@ -253,6 +260,10 @@ internal static class StartupConflictDialogPresenter
 
         return row;
     }
+
+    private static void BindText(TextBlock text, StartupConflictDisplay display, string property) =>
+        text.SetBinding(TextBlock.TextProperty, new Binding
+        { Source = display, Path = new PropertyPath(property), Mode = BindingMode.OneWay });
 
     private static async Task ReportUnexpectedAsync(
         IApplicationErrorSink errorSink,

@@ -80,7 +80,12 @@ public sealed class StartupCheckService
         ArgumentNullException.ThrowIfNull(unknownDescription);
         if (!transparentProxyEnabled)
         {
-            return new StartupCheckItem(true, title, disabledDescription) { Kind = StartupCheckKind.TransparentProxy };
+            return new StartupCheckItem(true, title, disabledDescription)
+            {
+                Kind = StartupCheckKind.TransparentProxy,
+                TitleSource = new("StartupPrompt.Check.TransparentProxy.Title"),
+                DescriptionSource = new("StartupPrompt.Check.TransparentProxy.Disabled"),
+            };
         }
 
         string statusMessage = string.IsNullOrWhiteSpace(status.Message)
@@ -98,6 +103,12 @@ public sealed class StartupCheckService
         {
             Kind = StartupCheckKind.TransparentProxy,
             IsUnavailable = !status.IsKnown,
+            TitleSource = new("StartupPrompt.Check.TransparentProxy.Title"),
+            DescriptionSource = status.IsKnown && !status.IsInstalled
+                ? new("StartupPrompt.Check.TransparentProxy.Missing")
+                : string.IsNullOrWhiteSpace(status.Message)
+                    ? new("MihomoService.Status.Unknown")
+                    : status.MessageResourceKey is string key ? new(key) : null,
         };
     }
 
@@ -131,13 +142,22 @@ public sealed class StartupCheckService
                     hasSubscription
                         ? text.SubscriptionReady
                         : text.SubscriptionMissing)
-                { Kind = StartupCheckKind.Subscription, IsOptional = !hasSubscription },
+                {
+                    Kind = StartupCheckKind.Subscription, IsOptional = !hasSubscription,
+                    TitleSource = new("StartupPrompt.Check.Subscription.Title"),
+                    DescriptionSource = new(hasSubscription ? "StartupPrompt.Check.Subscription.Ready" : "StartupPrompt.Check.Subscription.Missing"),
+                },
                 operationName);
         }
         catch (Exception exception) when (CanContain(exception, cancellationToken))
         {
             return CheckEvaluation.Failed(
-                new StartupCheckItem(false, text.SubscriptionTitle, text.Unavailable) { Kind = StartupCheckKind.Subscription, IsUnavailable = true },
+                new StartupCheckItem(false, text.SubscriptionTitle, text.Unavailable)
+                {
+                    Kind = StartupCheckKind.Subscription, IsUnavailable = true,
+                    TitleSource = new("StartupPrompt.Check.Subscription.Title"),
+                    DescriptionSource = new("StartupPrompt.Check.Unavailable"),
+                },
                 operationName,
                 exception);
         }
@@ -169,7 +189,12 @@ public sealed class StartupCheckService
         catch (Exception exception) when (CanContain(exception, cancellationToken))
         {
             return CheckEvaluation.Failed(
-                new StartupCheckItem(false, text.TransparentProxyTitle, text.Unavailable) { Kind = StartupCheckKind.TransparentProxy, IsUnavailable = true },
+                new StartupCheckItem(false, text.TransparentProxyTitle, text.Unavailable)
+                {
+                    Kind = StartupCheckKind.TransparentProxy, IsUnavailable = true,
+                    TitleSource = new("StartupPrompt.Check.TransparentProxy.Title"),
+                    DescriptionSource = new("StartupPrompt.Check.Unavailable"),
+                },
                 operationName,
                 exception);
         }
@@ -192,13 +217,22 @@ public sealed class StartupCheckService
                     isRegistered
                         ? text.FallbackRegistered
                         : text.FallbackNotRegistered)
-                { Kind = StartupCheckKind.StartupRecovery, IsOptional = !isRegistered },
+                {
+                    Kind = StartupCheckKind.StartupRecovery, IsOptional = !isRegistered,
+                    TitleSource = new("StartupPrompt.Check.Fallback.Title"),
+                    DescriptionSource = new(isRegistered ? "StartupPrompt.Check.Fallback.Registered" : "StartupPrompt.Check.Fallback.NotRegistered"),
+                },
                 operationName);
         }
         catch (Exception exception) when (CanContain(exception, cancellationToken))
         {
             return CheckEvaluation.Failed(
-                new StartupCheckItem(false, text.FallbackTitle, text.Unavailable) { Kind = StartupCheckKind.StartupRecovery, IsUnavailable = true },
+                new StartupCheckItem(false, text.FallbackTitle, text.Unavailable)
+                {
+                    Kind = StartupCheckKind.StartupRecovery, IsUnavailable = true,
+                    TitleSource = new("StartupPrompt.Check.Fallback.Title"),
+                    DescriptionSource = new("StartupPrompt.Check.Unavailable"),
+                },
                 operationName,
                 exception);
         }
@@ -226,13 +260,22 @@ public sealed class StartupCheckService
                     hasStaleProxy
                         ? text.StaleProxyDetected
                         : text.StaleProxyClean)
-                { Kind = StartupCheckKind.SystemProxy },
+                {
+                    Kind = StartupCheckKind.SystemProxy,
+                    TitleSource = new("StartupPrompt.Check.StaleProxy.Title"),
+                    DescriptionSource = new(hasStaleProxy ? "StartupPrompt.Check.StaleProxy.Detected" : "StartupPrompt.Check.StaleProxy.Clean"),
+                },
                 operationName);
         }
         catch (Exception exception) when (CanContain(exception, cancellationToken))
         {
             return CheckEvaluation.Failed(
-                new StartupCheckItem(false, text.StaleProxyTitle, text.Unavailable) { Kind = StartupCheckKind.SystemProxy, IsUnavailable = true },
+                new StartupCheckItem(false, text.StaleProxyTitle, text.Unavailable)
+                {
+                    Kind = StartupCheckKind.SystemProxy, IsUnavailable = true,
+                    TitleSource = new("StartupPrompt.Check.StaleProxy.Title"),
+                    DescriptionSource = new("StartupPrompt.Check.Unavailable"),
+                },
                 operationName,
                 exception);
         }

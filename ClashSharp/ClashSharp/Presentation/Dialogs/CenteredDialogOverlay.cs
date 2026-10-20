@@ -20,7 +20,8 @@ internal static class CenteredDialogOverlay
         UIElement content,
         string closeButtonText,
         double dialogWidth,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<ThemedContentDialog>? configureLocalization = null)
     {
         ArgumentNullException.ThrowIfNull(xamlRoot);
         ArgumentNullException.ThrowIfNull(content);
@@ -42,6 +43,7 @@ internal static class CenteredDialogOverlay
         };
         dialog.Resources["ContentDialogMinWidth"] = 320d;
         dialog.Resources["ContentDialogMaxWidth"] = dialogWidth;
+        configureLocalization?.Invoke(dialog);
 
         void UpdateBounds(XamlRoot sender, XamlRootChangedEventArgs args)
         {

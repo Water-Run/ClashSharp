@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
+using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
+using ClashSharp.ViewModel;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace ClashSharp.Components;
@@ -16,11 +17,12 @@ namespace ClashSharp.Components;
 /// Thread safety: Must be created and shown on the UI thread.
 /// Side effects: None until the dialog is shown by a caller.
 /// </remarks>
-public sealed partial class StartupGuideDialog : ContentDialog
+public sealed partial class StartupGuideDialog : ContentDialog, ILocalizedPresentation
 {
     private XamlRoot? _layoutRoot;
     private readonly Func<string, string> _getString;
     private readonly bool _allowNavigation;
+    private StartupCheckDisplay[] _rows = [];
 
     /// <summary>Initializes the startup guide from a pre-collected health snapshot.</summary>
     /// <param name="checks">Health rows collected before the visual component is created.</param>
@@ -36,13 +38,7 @@ public sealed partial class StartupGuideDialog : ContentDialog
         _getString = getString;
         _allowNavigation = allowNavigation;
         InitializeComponent();
-        Title = getString("StartupPrompt.Title");
-        CloseButtonText = getString("Command.Close");
         DefaultButton = ContentDialogButton.Close;
-        GuideDescriptionText.Text = getString("StartupPrompt.Description");
-        RefreshButton.Content = getString("StartupPrompt.Recheck");
-        BusyText.Text = getString("StartupPrompt.Checking");
-        RefreshError.Message = getString("StartupPrompt.RefreshFailed");
         UpdateSnapshot(checks);
         Loaded += OnLoaded;
         Opened += OnOpened;
@@ -69,10 +65,25 @@ public sealed partial class StartupGuideDialog : ContentDialog
     internal void UpdateSnapshot(IReadOnlyList<StartupCheckItem> checks)
     {
         ArgumentNullException.ThrowIfNull(checks);
-        StartupCheckItem[] snapshot = checks.ToArray();
-        ChecksList.ItemsSource = snapshot;
-        int attention = snapshot.Count(static check => check.State is StartupCheckState.Attention or StartupCheckState.Unavailable);
-        int optional = snapshot.Count(static check => check.State == StartupCheckState.Optional);
+        _rows = checks.Select(check => new StartupCheckDisplay(check, _getString, _allowNavigation)).ToArray();
+        ChecksList.ItemsSource = _rows;
+        RefreshLocalization();
+        RefreshError.IsOpen = false;
+        RefreshError.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Relocalizes the retained snapshot without repeating checks or clearing progress and failure state.</summary>
+    public void RefreshLocalization()
+    {
+        Title = _getString("StartupPrompt.Title");
+        CloseButtonText = _getString("Command.Close");
+        GuideDescriptionText.Text = _getString("StartupPrompt.Description");
+        RefreshButton.Content = _getString("StartupPrompt.Recheck");
+        BusyText.Text = _getString("StartupPrompt.Checking");
+        RefreshError.Message = _getString("StartupPrompt.RefreshFailed");
+        foreach (StartupCheckDisplay row in _rows) { row.RefreshLocalization(_getString); }
+        int attention = _rows.Count(static row => row.Model.State is StartupCheckState.Attention or StartupCheckState.Unavailable);
+        int optional = _rows.Count(static row => row.Model.State == StartupCheckState.Optional);
         SummaryBar.Severity = attention > 0 ? InfoBarSeverity.Warning
             : optional > 0 ? InfoBarSeverity.Informational : InfoBarSeverity.Success;
         SummaryBar.Title = attention > 0
@@ -80,9 +91,7 @@ public sealed partial class StartupGuideDialog : ContentDialog
             : _getString("StartupPrompt.Summary.Ready");
         SummaryBar.Message = string.Format(CultureInfo.CurrentCulture,
             _getString(optional > 0 ? "StartupPrompt.Summary.Optional.Format" : "StartupPrompt.Summary.Checked.Format"),
-            optional > 0 ? optional : snapshot.Length);
-        RefreshError.IsOpen = false;
-        RefreshError.Visibility = Visibility.Collapsed;
+            optional > 0 ? optional : _rows.Length);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs args) => UpdateContentBounds();
@@ -119,43 +128,6 @@ public sealed partial class StartupGuideDialog : ContentDialog
             ChecksList.Width = Math.Max(0, GuideContent.Width - ChecksScroll.Padding.Right - 16);
             // The Grid gives the checks the native dialog's remaining height after its scaled header.
         }
-    }
-
-    private void StatusIcon_Loaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is FontIcon { DataContext: StartupCheckItem check } icon)
-        {
-            icon.Glyph = check.State switch
-            {
-                StartupCheckState.Healthy => "\uE73E",
-                StartupCheckState.Optional => "\uE946",
-                _ => "\uE7BA",
-            };
-        }
-    }
-
-    private void StatusText_Loaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBlock { DataContext: StartupCheckItem check } text)
-        {
-            text.Text = _getString($"StartupPrompt.State.{check.State}");
-        }
-    }
-
-    private void CheckAction_Loaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is not HyperlinkButton { DataContext: StartupCheckItem check } action) { return; }
-        string? route = check.Kind switch
-        {
-            StartupCheckKind.Subscription => "Links",
-            StartupCheckKind.TransparentProxy or StartupCheckKind.StartupRecovery or StartupCheckKind.SystemProxy => "Settings",
-            _ => null,
-        };
-        action.Visibility = _allowNavigation && route is not null ? Visibility.Visible : Visibility.Collapsed;
-        action.Tag = route;
-        action.Content = _getString(check.Kind == StartupCheckKind.Subscription
-            ? "StartupPrompt.Action.Subscription" : "StartupPrompt.Action.Settings");
-        AutomationProperties.SetName(action, $"{check.Title}: {action.Content}");
     }
 
     private void CheckAction_Click(object sender, RoutedEventArgs e)

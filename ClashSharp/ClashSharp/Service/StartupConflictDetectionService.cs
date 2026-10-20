@@ -74,6 +74,9 @@ internal sealed class StartupConflictDetectionService
                 token => TerminateExternalMihomoProcessesAsync(processes, token))
             {
                 DiagnosticCode = "tun.conflict.external_mihomo",
+                TitleSource = new("StartupConflict.Mihomo.Title"),
+                DescriptionSource = new("StartupConflict.Mihomo.Description", processes.Count),
+                RepairTextSource = new("StartupConflict.Mihomo.Repair"),
             });
         }
 
@@ -91,6 +94,8 @@ internal sealed class StartupConflictDetectionService
                     string.Join(", ", activeTunInterfaces)))
             {
                 DiagnosticCode = RuntimeFailureDiagnostics.TunConflict,
+                TitleSource = new("StartupConflict.Tun.Title"),
+                DescriptionSource = new("StartupConflict.Tun.Description", string.Join(", ", activeTunInterfaces)),
             });
         }
 
@@ -105,6 +110,9 @@ internal sealed class StartupConflictDetectionService
                 token => RecheckPortAsync(mixedPort, token))
             {
                 DiagnosticCode = RuntimeFailureDiagnostics.MixedPortOccupied,
+                TitleSource = new("StartupConflict.Port.Title"),
+                DescriptionSource = new("StartupConflict.Port.Description", mixedPort),
+                RepairTextSource = new("StartupConflict.Port.Repair"),
             });
         }
 
@@ -121,6 +129,9 @@ internal sealed class StartupConflictDetectionService
                 DisableWindowsProxyAsync)
             {
                 DiagnosticCode = "route.system_proxy_mismatch",
+                TitleSource = new("StartupConflict.Proxy.Title"),
+                DescriptionSource = new("StartupConflict.Proxy.Description", proxyState.ProxyServer, mixedPort),
+                RepairTextSource = new("StartupConflict.Proxy.Repair"),
             });
         }
 
@@ -135,7 +146,8 @@ internal sealed class StartupConflictDetectionService
         cancellationToken.ThrowIfCancellationRequested();
         return new StartupConflictRepairResult(
             !occupied,
-            _getString(occupied ? "StartupConflict.Port.RepairFailed" : "StartupConflict.Port.Available"));
+            _getString(occupied ? "StartupConflict.Port.RepairFailed" : "StartupConflict.Port.Available"))
+        { MessageSource = new(occupied ? "StartupConflict.Port.RepairFailed" : "StartupConflict.Port.Available") };
     }
 
     /// <summary>Runs host process, socket, and registry probes away from the UI startup context.</summary>
@@ -161,13 +173,15 @@ internal sealed class StartupConflictDetectionService
                 await _environment.TerminateProcessAsync(process, cancellationToken);
             }
 
-            return new StartupConflictRepairResult(true, _getString("StartupConflict.Mihomo.RepairSucceeded"));
+            return new StartupConflictRepairResult(true, _getString("StartupConflict.Mihomo.RepairSucceeded"))
+            { MessageSource = new("StartupConflict.Mihomo.RepairSucceeded") };
         }
         catch (Exception exception) when (exception is InvalidOperationException
             or UnauthorizedAccessException
             or Win32Exception)
         {
-            return new StartupConflictRepairResult(false, _getString("StartupConflict.Status.Failed"));
+            return new StartupConflictRepairResult(false, _getString("StartupConflict.Status.Failed"))
+            { MessageSource = new("StartupConflict.Status.Failed") };
         }
     }
 
@@ -176,11 +190,13 @@ internal sealed class StartupConflictDetectionService
         try
         {
             await _environment.DisableWindowsProxyAsync(cancellationToken);
-            return new StartupConflictRepairResult(true, _getString("StartupConflict.Proxy.RepairSucceeded"));
+            return new StartupConflictRepairResult(true, _getString("StartupConflict.Proxy.RepairSucceeded"))
+            { MessageSource = new("StartupConflict.Proxy.RepairSucceeded") };
         }
         catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException)
         {
-            return new StartupConflictRepairResult(false, _getString("StartupConflict.Status.Failed"));
+            return new StartupConflictRepairResult(false, _getString("StartupConflict.Status.Failed"))
+            { MessageSource = new("StartupConflict.Status.Failed") };
         }
     }
 

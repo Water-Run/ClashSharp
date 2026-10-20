@@ -19,6 +19,7 @@ public enum MihomoServiceObservationState
 /// <param name="Message">User-facing status message; consumers normalize the default struct value.</param>
 public readonly record struct MihomoServiceStatus(bool IsInstalled, bool IsRunning, string Message)
 {
+    internal string? MessageResourceKey { get; init; }
     /// <summary>
     /// Gets whether SCM conclusively reported the service host as running. This is
     /// deliberately separate from <see cref="IsRunning"/>, which is true only

@@ -105,7 +105,7 @@ public sealed partial class MihomoServiceManager
 
         // Keep the observation, but resolve its text in the current display language.
         // Localization runs outside the cache lock and never performs another service query.
-        return status with { Message = GetString(messageKey) };
+        return status with { Message = GetString(messageKey), MessageResourceKey = messageKey };
     }
 
     private async Task<ServiceQueryResult> QueryStatusAsync(CancellationToken cancellationToken)

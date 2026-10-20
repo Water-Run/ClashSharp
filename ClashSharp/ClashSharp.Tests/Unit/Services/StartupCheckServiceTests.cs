@@ -1,11 +1,36 @@
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Model;
 using ClashSharp.Service;
+using ClashSharp.ViewModel;
 
 namespace ClashSharp.Tests.Unit.Services;
 
 public sealed class StartupCheckServiceTests
 {
+    [Fact]
+    public async Task RetainedChecks_RelocalizeTheirProvenanceWithoutRepeatingAnyProbe()
+    {
+        FakeStartupCheckProbe probe = new() { SubscriptionConfigured = false, FallbackRegistered = false, HasStaleProxy = true };
+        StartupCheckService service = new(probe, GetString, new RecordingErrorSink());
+        IReadOnlyList<StartupCheckItem> checks = await service.GetChecksAsync(CancellationToken.None);
+        StartupCheckDisplay[] rows = checks.Select(item => new StartupCheckDisplay(item, GetString, true)).ToArray();
+        probe.SubscriptionConfigured = true;
+        probe.FallbackRegistered = true;
+        probe.HasStaleProxy = false;
+
+        foreach (StartupCheckDisplay row in rows) { row.RefreshLocalization(key => "new:" + key); }
+
+        Assert.Equal(StartupCheckState.Optional, rows[0].Model.State);
+        Assert.Equal(StartupCheckState.Optional, rows[2].Model.State);
+        Assert.Equal(StartupCheckState.Attention, rows[3].Model.State);
+        Assert.Equal("new:StartupPrompt.Check.Subscription.Missing", rows[0].Description);
+        Assert.Equal("new:StartupPrompt.Check.Fallback.NotRegistered", rows[2].Description);
+        Assert.Equal("new:StartupPrompt.Check.StaleProxy.Detected", rows[3].Description);
+        Assert.Equal("Running", rows[1].Description); // The untagged provider message is opaque.
+        Assert.All(new[] { probe.HasSubscriptionCalls, probe.TransparentProxyEnabledCalls, probe.MihomoStatusCalls,
+            probe.FallbackRegisteredCalls, probe.WindowsProxyStateCalls, probe.MixedPortCalls, probe.StaleProxyCalls }, calls => Assert.Equal(1, calls));
+    }
+
     [Fact]
     public async Task StartupPanel_OptionalSetupIsNotReportedAsAnOperationalWarning()
     {
