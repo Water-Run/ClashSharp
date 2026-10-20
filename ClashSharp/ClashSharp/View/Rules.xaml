@@ -23,13 +23,13 @@
             <ListView.Header>
                 <Grid Padding="20,8" ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.2*" />
+                        <ColumnDefinition Width="1.8*" MinWidth="136" />
                         <ColumnDefinition Width="1.4*" />
-                        <ColumnDefinition Width="2.4*" />
                         <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="1.8*" />
                         <ColumnDefinition Width="0.7*" MinWidth="64" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding SourceColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{Binding SourceColumnText}" TextWrapping="WrapWholeWords" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock Grid.Column="1" Text="{Binding TypeColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock Grid.Column="2" Text="{Binding PayloadColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock Grid.Column="3" Text="{Binding PolicyColumnText}" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -40,14 +40,14 @@
                 <DataTemplate>
                     <Grid Padding="4,10" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.2*" />
+                            <ColumnDefinition Width="1.8*" MinWidth="136" />
                             <ColumnDefinition Width="1.4*" />
-                            <ColumnDefinition Width="2.4*" />
                             <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1.8*" />
                             <ColumnDefinition Width="0.7*" MinWidth="64" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="{Binding ProviderNameDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Text="{Binding ProviderNameDisplay}" TextWrapping="WrapWholeWords" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding ProviderNameDisplay}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Grid.Column="1" Text="{Binding RuleType}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding RuleType}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <TextBlock Grid.Column="2" Text="{Binding PayloadDisplay}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding PayloadDisplay}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <TextBlock Grid.Column="3" Text="{Binding Action}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Action}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
