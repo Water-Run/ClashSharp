@@ -153,6 +153,14 @@ public sealed partial class Profiles : Page
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
+            dialog.Localize(() =>
+            {
+                dialog.Title = _getString("Profiles.Dialog.RenameTitle");
+                dialog.PrimaryButtonText = _getString("Command.Save");
+                dialog.CloseButtonText = _getString("Command.Cancel");
+                nameBox.Header = _getString("Profiles.Dialog.Name");
+                if (error.IsOpen) { error.Message = _getString("Profiles.Validation.Name"); }
+            });
             dialog.PrimaryButtonClick += (_, args) =>
             {
                 bool isInvalid = string.IsNullOrWhiteSpace(nameBox.Text);
@@ -190,6 +198,12 @@ public sealed partial class Profiles : Page
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
             };
+            dialog.Localize(() =>
+            {
+                dialog.Title = _getString("Profiles.Dialog.DeleteTitle");
+                dialog.PrimaryButtonText = _getString("Command.Delete");
+                dialog.CloseButtonText = _getString("Command.Cancel");
+            });
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (result == ContentDialogResult.Primary)
@@ -253,6 +267,19 @@ public sealed partial class Profiles : Page
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
             };
+            dialog.Localize(() =>
+            {
+                dialog.Title = _getString("Profiles.Dialog.HistoryTitle");
+                dialog.PrimaryButtonText = _getString("Command.Rollback");
+                dialog.CloseButtonText = _getString("Command.Close");
+                versionBox.Header = _getString("Profiles.Dialog.HistoryVersion");
+                if (content is TextBlock empty) { empty.Text = _getString("Profiles.Dialog.HistoryEmpty"); }
+                foreach (object item in versionBox.Items)
+                {
+                    if (item is ComboBoxItem { Tag: ProfileHistoryPreview preview, Content: TextBlock text })
+                    { text.Text = _viewModel.GetHistoryEntryText(preview); }
+                }
+            });
             versionBox.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled =
                 versionBox.SelectedItem is ComboBoxItem { Tag: ProfileHistoryPreview { CanRestore: true } };
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);

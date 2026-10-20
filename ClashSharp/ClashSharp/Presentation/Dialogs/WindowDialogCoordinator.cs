@@ -39,14 +39,8 @@ internal static class WindowDialogCoordinator
         using (lease)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            // ContentDialog is hosted outside the page tree, including XAML-defined dialogs.
-            if (xamlRoot.Content is FrameworkElement root)
-            {
-                dialog.RequestedTheme = root.ActualTheme;
-                dialog.Language = root.Language;
-                dialog.FlowDirection = root.FlowDirection;
-            }
-
+            // Native dialog content is outside the page tree and must follow its root for the entire presentation.
+            using DialogRootPresentationBinding presentation = new(dialog, xamlRoot.Content as FrameworkElement, gate);
             return await ShowWithCancellationAsync(dialog, gate, cancellationToken);
         }
     }

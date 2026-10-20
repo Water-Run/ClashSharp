@@ -39,9 +39,16 @@ internal sealed class DialogPresentationGate
     /// <remarks>Dismissal and window teardown must run on the same UI thread; admission remains thread-safe.</remarks>
     public bool TryDismiss(Action dismiss)
     {
-        ArgumentNullException.ThrowIfNull(dismiss);
+        return TryRefreshPresentation(dismiss);
+    }
+
+    /// <summary>Updates an admitted dialog only while its owning native window remains usable.</summary>
+    /// <remarks>The callback and window teardown must execute on the owning UI thread.</remarks>
+    public bool TryRefreshPresentation(Action refresh)
+    {
+        ArgumentNullException.ThrowIfNull(refresh);
         if (Volatile.Read(ref _state) != Entered) { return false; }
-        dismiss();
+        refresh();
         return true;
     }
 

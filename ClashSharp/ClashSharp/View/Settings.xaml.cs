@@ -547,6 +547,12 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 XamlRoot = xamlRoot,
             };
             dialog.Resources["ContentDialogMaxWidth"] = 420d;
+            dialog.Localize(() =>
+            {
+                dialog.Title = _viewModel.AppAccentColorTitleText;
+                dialog.PrimaryButtonText = _viewModel.AppAccentColorPickText;
+                dialog.CloseButtonText = _getString("Command.Cancel");
+            });
 
             ContentDialogResult result;
             xamlRoot.Changed += UpdatePickerViewport;
@@ -576,18 +582,23 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 IsClosable = false,
                 Message = _viewModel.ConnectionTestUrlValidationText,
             };
-            StackPanel panel = BuildConnectionTestUrlsPanel(
-                proxyUrl1Box, proxyUrl2Box, directUrlBox, validationError);
-
             ThemedContentDialog dialog = new()
             {
                 Title = _viewModel.ConnectionTestUrlTitleText,
-                Content = panel,
                 PrimaryButtonText = _getString("Command.Save"),
                 CloseButtonText = _getString("Command.Cancel"),
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = GetDialogXamlRoot(),
             };
+            dialog.Content = BuildConnectionTestUrlsPanel(
+                dialog, proxyUrl1Box, proxyUrl2Box, directUrlBox, validationError);
+            dialog.Localize(() =>
+            {
+                dialog.Title = _viewModel.ConnectionTestUrlTitleText;
+                dialog.PrimaryButtonText = _getString("Command.Save");
+                dialog.CloseButtonText = _getString("Command.Cancel");
+                validationError.Message = _viewModel.ConnectionTestUrlValidationText;
+            });
 
             void ValidateDraft(ContentDialog sender, ContentDialogButtonClickEventArgs args)
             {
@@ -626,6 +637,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
 
     /// <summary>Builds the connection-test URL editor content.</summary>
     private StackPanel BuildConnectionTestUrlsPanel(
+        ThemedContentDialog dialog,
         TextBox proxyUrl1Box,
         TextBox proxyUrl2Box,
         TextBox directUrlBox,
@@ -636,9 +648,9 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             Spacing = 10,
             MinWidth = 420,
         };
-        AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestProxyUrl1TitleText, proxyUrl1Box);
-        AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestProxyUrl2TitleText, proxyUrl2Box);
-        AddConnectionTestUrlEditorRow(panel, _viewModel.ConnectionTestDirectUrlTitleText, directUrlBox);
+        AddConnectionTestUrlEditorRow(panel, dialog, () => _viewModel.ConnectionTestProxyUrl1TitleText, proxyUrl1Box);
+        AddConnectionTestUrlEditorRow(panel, dialog, () => _viewModel.ConnectionTestProxyUrl2TitleText, proxyUrl2Box);
+        AddConnectionTestUrlEditorRow(panel, dialog, () => _viewModel.ConnectionTestDirectUrlTitleText, directUrlBox);
         panel.Children.Add(validationError);
 
         HyperlinkButton restoreButton = new()
@@ -647,6 +659,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             Content = _viewModel.ResetText,
             HorizontalAlignment = HorizontalAlignment.Right,
         };
+        dialog.Localize(() => restoreButton.Content = _viewModel.ResetText);
         restoreButton.Click += (_, _) =>
         {
             proxyUrl1Box.Text = SettingsViewModel.DefaultConnectionTestProxyUrl1;
@@ -658,15 +671,19 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         return panel;
     }
 
-    private static void AddConnectionTestUrlEditorRow(StackPanel panel, string label, TextBox textBox)
+    private static void AddConnectionTestUrlEditorRow(StackPanel panel, ThemedContentDialog dialog, Func<string> getLabel, TextBox textBox)
     {
-        AutomationProperties.SetName(textBox, label);
-        panel.Children.Add(new TextBlock
+        TextBlock label = new()
         {
-            Text = label,
             Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
             TextWrapping = TextWrapping.WrapWholeWords,
+        };
+        dialog.Localize(() =>
+        {
+            label.Text = getLabel();
+            AutomationProperties.SetName(textBox, label.Text);
         });
+        panel.Children.Add(label);
         panel.Children.Add(textBox);
     }
 
@@ -741,6 +758,15 @@ public sealed partial class Settings : Page, ILocalizedPresentation
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = GetDialogXamlRoot(),
         };
+        dialog.Localize(() =>
+        {
+            dialog.Title = _viewModel.ResetGroupConfirmTitleText;
+            dialog.Content = includeServiceDeploymentNote
+                ? $"{_viewModel.ResetGroupConfirmMessageText}{Environment.NewLine}{Environment.NewLine}{_viewModel.ResetGroupServiceDeploymentNoteText}"
+                : _viewModel.ResetGroupConfirmMessageText;
+            dialog.PrimaryButtonText = _viewModel.ResetGroupToDefaultsText;
+            dialog.CloseButtonText = _getString("Command.Cancel");
+        });
 
         if (await dialog.ShowManagedAsync(cancellationToken) is ContentDialogResult.Primary)
         {

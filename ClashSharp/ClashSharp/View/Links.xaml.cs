@@ -111,6 +111,14 @@ public sealed partial class Links : Page
                 XamlRoot = XamlRoot,
             };
 
+            dialog.Localize(() =>
+            {
+                dialog.Title = _getString("Links.Dialog.AddTitle");
+                dialog.PrimaryButtonText = _getString("Command.Add");
+                dialog.CloseButtonText = _getString("Command.Cancel");
+                nameBox.Header = _getString("Links.Dialog.Name");
+                uriBox.Header = _getString("Links.Dialog.Uri");
+            });
             AttachInputValidation(dialog, content, nameBox, uriBox);
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -189,6 +197,18 @@ public sealed partial class Links : Page
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
+            dialog.Localize(() =>
+            {
+                dialog.Title = _getString("Links.Dialog.EditTitle");
+                dialog.PrimaryButtonText = _getString("Command.Save");
+                dialog.CloseButtonText = _getString("Command.Cancel");
+                nameBox.Header = _getString("Links.Dialog.Name");
+                uriBox.Header = _getString("Links.Dialog.Uri");
+                intervalBox.Header = _getString("Links.Dialog.UpdateIntervalHours");
+                enabledSwitch.Header = _getString("Links.Dialog.AutomaticUpdates");
+                enabledSwitch.OnContent = _getString("Master.Status.On");
+                enabledSwitch.OffContent = _getString("Master.Status.Off");
+            });
             AttachInputValidation(dialog, content, nameBox, uriBox, intervalBox);
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -226,6 +246,12 @@ public sealed partial class Links : Page
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
             };
+            dialog.Localize(() =>
+            {
+                dialog.Title = _getString("Links.Dialog.DeleteTitle");
+                dialog.PrimaryButtonText = _getString("Command.Delete");
+                dialog.CloseButtonText = _getString("Command.Cancel");
+            });
             ContentDialogResult result = await dialog.ShowManagedAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (result == ContentDialogResult.Primary)
@@ -275,9 +301,12 @@ public sealed partial class Links : Page
     {
         InfoBar error = new() { IsClosable = false, Severity = InfoBarSeverity.Error };
         content.Children.Add(error);
+        string? validationKey = null;
+        dialog.Localize(() => error.Message = validationKey is null ? string.Empty : _getString(validationKey));
         dialog.PrimaryButtonClick += (_, args) =>
         {
             string? key = LinksViewModel.ValidateInput(nameBox.Text, uriBox.Text, intervalBox?.Value ?? 24);
+            validationKey = key;
             args.Cancel = key is not null;
             error.IsOpen = key is not null;
             error.Message = key is null ? string.Empty : _getString(key);

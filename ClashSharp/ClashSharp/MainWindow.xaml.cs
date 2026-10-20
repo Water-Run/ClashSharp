@@ -826,6 +826,13 @@ public sealed partial class MainWindow : Window, IPrimaryWindowActivationTarget
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = GetDialogXamlRoot(),
         };
+        dialog.Localize(() =>
+        {
+            dialog.Title = Runtime.GetString(proxyTakeoverActive ? "Close.ProxyActive.Title" : "Close.Confirm.Title");
+            dialog.Content = Runtime.GetString(proxyTakeoverActive ? "Close.ProxyActive.Message" : "Close.Confirm.Message");
+            dialog.PrimaryButtonText = Runtime.GetString("Command.Close");
+            dialog.CloseButtonText = Runtime.GetString("Command.Cancel");
+        });
 
         try
         {

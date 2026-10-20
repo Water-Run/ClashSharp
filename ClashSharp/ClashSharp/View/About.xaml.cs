@@ -89,21 +89,23 @@ public sealed partial class About : Page
         ThemedContentDialog dialog = new()
         {
             Title = _viewModel.ProxyInformationTitleText,
-            Content = BuildProxyInformationPanel(),
             CloseButtonText = _getString("Command.Close"),
             XamlRoot = XamlRoot,
         };
+        dialog.Content = BuildProxyInformationPanel(dialog);
+        dialog.Localize(() =>
+        {
+            dialog.Title = _viewModel.ProxyInformationTitleText;
+            dialog.CloseButtonText = _getString("Command.Close");
+        });
 
         await dialog.ShowManagedAsync();
     }
 
     /// <summary>Builds the proxy information dialog content.</summary>
-    private StackPanel BuildProxyInformationPanel()
+    private StackPanel BuildProxyInformationPanel(ThemedContentDialog dialog)
     {
         AboutPageComposition.ProxyInformation information = _readProxyInformation();
-        string coreBinaryText = information.IsCoreBinaryAvailable
-            ? information.CoreBinaryPath
-            : _getString("Settings.ProxyInformation.CoreBinary.Missing");
 
         StackPanel panel = new()
         {
@@ -112,31 +114,32 @@ public sealed partial class About : Page
             MaxWidth = 640,
         };
 
-        AddInformationText(panel, string.Format(
+        AddInformationText(panel, dialog, () => string.Format(
             CultureInfo.CurrentCulture,
             _getString("Settings.ProxyInformation.LocalEntry.Format"),
             information.MixedPort));
-        AddInformationText(panel, string.Format(
+        AddInformationText(panel, dialog, () => string.Format(
             CultureInfo.CurrentCulture,
             _getString("Settings.ProxyInformation.CoreConfig.Format"),
             information.ConfigPath));
-        AddInformationText(panel, string.Format(
+        AddInformationText(panel, dialog, () => string.Format(
             CultureInfo.CurrentCulture,
             _getString("Settings.ProxyInformation.CoreBinary.Format"),
-            coreBinaryText));
+            information.IsCoreBinaryAvailable ? information.CoreBinaryPath : _getString("Settings.ProxyInformation.CoreBinary.Missing")));
 
         return panel;
     }
 
     /// <summary>Adds one wrapped information line to a panel.</summary>
-    private static void AddInformationText(StackPanel panel, string text)
+    private static void AddInformationText(StackPanel panel, ThemedContentDialog dialog, Func<string> getText)
     {
-        panel.Children.Add(new TextBlock
+        TextBlock line = new()
         {
-            Text = text,
             TextWrapping = TextWrapping.Wrap,
             Style = (Style)Application.Current.Resources["ClashSecondaryBodyTextBlockStyle"],
             IsTextSelectionEnabled = true,
-        });
+        };
+        panel.Children.Add(line);
+        dialog.Localize(() => line.Text = getText());
     }
 }

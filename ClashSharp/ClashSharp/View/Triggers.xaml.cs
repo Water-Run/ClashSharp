@@ -144,6 +144,13 @@ public sealed partial class Triggers : Page
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = XamlRoot,
             };
+            dialog.Localize(() =>
+            {
+                dialog.Title = _viewModel.DeleteTitleText;
+                dialog.Content = _viewModel.DeleteMessageText;
+                dialog.PrimaryButtonText = _viewModel.DeleteText;
+                dialog.CloseButtonText = _viewModel.CancelText;
+            });
             if (await dialog.ShowManagedAsync(token) is ContentDialogResult.Primary)
             {
                 await _viewModel.DeleteTaskAsync(id, expectedVersion, token);

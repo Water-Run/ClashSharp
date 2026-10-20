@@ -6,6 +6,22 @@ namespace ClashSharp.Tests.Unit.Presentation;
 public sealed class DialogPresentationGateTests
 {
     [Fact]
+    public void PresentationRefresh_OnlyTouchesAnAdmittedLiveWindow()
+    {
+        DialogPresentationGate gate = new();
+        int updates = 0;
+        Assert.False(gate.TryRefreshPresentation(() => updates++));
+        Assert.True(gate.TryEnter(out IDisposable? lease));
+        using IDisposable owned = Assert.IsAssignableFrom<IDisposable>(lease);
+        Assert.True(gate.TryRefreshPresentation(() => updates++));
+        gate.MarkWindowClosing();
+        Assert.False(gate.TryRefreshPresentation(() => throw new InvalidOperationException("Native window is gone.")));
+        owned.Dispose();
+        Assert.False(gate.TryRefreshPresentation(() => updates++));
+        Assert.Equal(1, updates);
+    }
+
+    [Fact]
     public void ClosingWithoutADialog_RejectsLaterPresentation()
     {
         DialogPresentationGate gate = new();
