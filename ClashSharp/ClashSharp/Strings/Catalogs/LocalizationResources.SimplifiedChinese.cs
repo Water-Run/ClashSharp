@@ -10,6 +10,18 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ColorPicker.Red"] = "红色",
+            ["ColorPicker.Green"] = "绿色",
+            ["ColorPicker.Blue"] = "蓝色",
+            ["ColorPicker.Hue"] = "色相",
+            ["ColorPicker.Saturation"] = "饱和度",
+            ["ColorPicker.Value"] = "亮度",
+            ["ColorPicker.Alpha"] = "不透明度",
+            ["ColorPicker.Model"] = "颜色模式",
+            ["ColorPicker.HexRgb"] = "RGB 十六进制值",
+            ["ColorPicker.HexHsv"] = "HSV 十六进制值",
+            ["ColorPicker.Spectrum"] = "颜色选择器",
+            ["ColorPicker.Spectrum.Help"] = "使用方向键调整颜色。",
             ["Settings.Mcp.Title"] = "MCP 服务器",
             ["Settings.Recovery.Kind.McpServer"] = "MCP 服务器",
             ["Settings.Mcp.Description"] = "通过经过认证的本机端点，为 Agent 提供原生支持。服务随 Clash# 运行。",

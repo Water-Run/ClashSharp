@@ -152,8 +152,10 @@ public sealed partial class ProductionDataGenerationTests
         if (otherFailure) { Assert.Equal("Settings.Recovery.Kind.Appearance", Assert.Single(page.Issues).Title); }
     }
 
-    [Fact]
-    public async Task SettingsRecovery_RefreshRelocalizesTheRetainedRetryError()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SettingsRecovery_RefreshRelocalizesTheRetainedRetryError(bool displayOnly)
     {
         await using DataGenerationTestDirectory directory = new();
         await using Fixture fixture = new(directory);
@@ -165,14 +167,26 @@ public sealed partial class ProductionDataGenerationTests
         page.Refresh();
         await page.RetryAsync(Assert.Single(page.Issues), CancellationToken.None);
         Assert.Equal("first:Settings.Recovery.RetryFailed", page.ErrorText);
+        UiView.SettingsApplicationIssue issue = Assert.Single(page.Issues);
+        var snapshot = issue.Snapshot;
+        Guid batchId = issue.BatchId;
         string displayed = page.ErrorText;
         page.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(page.ErrorText)) { displayed = page.ErrorText; } };
 
         language = "second";
-        page.Refresh();
+        if (displayOnly) { page.RefreshLocalization(); }
+        else { page.Refresh(); }
 
         Assert.True(page.HasError);
         Assert.Equal("second:Settings.Recovery.RetryFailed", displayed);
+        if (displayOnly)
+        {
+            Assert.Same(issue, Assert.Single(page.Issues));
+            Assert.Same(snapshot, issue.Snapshot);
+            Assert.Equal(batchId, issue.BatchId);
+            Assert.StartsWith("second:Settings.Recovery.Kind.", issue.Title, StringComparison.Ordinal);
+            Assert.Equal("second:Settings.Reset.Retry", issue.RetryText);
+        }
     }
 
     private sealed class RecoveryPageErrors : IApplicationErrorSink

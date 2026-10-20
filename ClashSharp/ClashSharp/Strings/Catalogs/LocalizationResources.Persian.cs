@@ -10,6 +10,18 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ColorPicker.Red"] = "قرمز",
+            ["ColorPicker.Green"] = "سبز",
+            ["ColorPicker.Blue"] = "آبی",
+            ["ColorPicker.Hue"] = "فام",
+            ["ColorPicker.Saturation"] = "اشباع",
+            ["ColorPicker.Value"] = "روشنایی",
+            ["ColorPicker.Alpha"] = "کدری",
+            ["ColorPicker.Model"] = "مدل رنگ",
+            ["ColorPicker.HexRgb"] = "کد هگز RGB",
+            ["ColorPicker.HexHsv"] = "کد هگز HSV",
+            ["ColorPicker.Spectrum"] = "انتخاب رنگ",
+            ["ColorPicker.Spectrum.Help"] = "برای تنظیم رنگ از کلیدهای جهت‌نما استفاده کنید.",
             ["Settings.Mcp.Title"] = "سرور MCP",
             ["Settings.Recovery.Kind.McpServer"] = "سرور MCP",
             ["Settings.Mcp.Description"] = "دسترسی بومی عامل‌ها از یک نشانی محلی احراز هویت‌شده. سرور همراه Clash# اجرا می‌شود.",

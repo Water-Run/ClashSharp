@@ -8,6 +8,42 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 public sealed class McpSettingsViewModelTests
 {
     [Fact]
+    public async Task LocalizationRefresh_WhileObservationIsPending_PreservesDraftAndDoesNotReadAgain()
+    {
+        string language = "zh";
+        Management service = new();
+        McpSettingsViewModel viewModel = new(service, key => language + ":" + key, new Errors());
+        await viewModel.RefreshAsync(CancellationToken.None);
+        viewModel.Enabled = true;
+        viewModel.Port = 17901;
+        McpScopeChoice choice = viewModel.Scopes.Single(scope => scope.Scope == McpAccessScope.ChangeProxyState);
+        choice.IsGranted = true;
+        service.PendingRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task observation = viewModel.RefreshObservedAsync(CancellationToken.None);
+        int reads = service.Reads;
+        string? title = null;
+        viewModel.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(viewModel.TitleText)) { title = viewModel.TitleText; } };
+
+        language = "de";
+        viewModel.RefreshLocalization();
+
+        Assert.False(observation.IsCompleted);
+        Assert.Equal("de:Settings.Mcp.Title", title);
+        Assert.StartsWith("de:", choice.Title, StringComparison.Ordinal);
+        Assert.True(viewModel.Enabled);
+        Assert.Equal(17901, viewModel.Port);
+        Assert.Same(choice, viewModel.Scopes.Single(scope => scope.Scope == McpAccessScope.ChangeProxyState));
+        Assert.True(choice.IsGranted);
+        Assert.Equal(reads, service.Reads);
+        Assert.Equal(0, service.Applies);
+        Assert.Equal(0, service.Copies);
+        service.PendingRead.SetResult(service.Snapshot);
+        await observation;
+        Assert.True(choice.IsGranted);
+        Assert.Equal(17901, viewModel.Port);
+    }
+
+    [Fact]
     public async Task DraftChangesDoNotGrantAccessUntilExplicitApply()
     {
         Management service = new();
@@ -280,6 +316,7 @@ public sealed class McpSettingsViewModelTests
 
     private sealed class Management : IMcpServerManagement
     {
+        public int Reads { get; private set; }
         public int Applies { get; private set; }
         public int Copies { get; private set; }
         public bool FailApply { get; set; }
@@ -290,6 +327,7 @@ public sealed class McpSettingsViewModelTests
         public McpSettingsSnapshot Snapshot { get; set; } = new(new(17892, McpAccessPolicy.Default), new(new(17892, McpAccessPolicy.Default), null, false, false, null));
         public Task<McpSettingsSnapshot> ReadAsync(CancellationToken cancellationToken)
         {
+            Reads++;
             if (ReadFailuresRemaining > 0) { ReadFailuresRemaining--; throw new IOException("private-fixture"); }
             return PendingRead?.Task ?? Task.FromResult(Snapshot);
         }

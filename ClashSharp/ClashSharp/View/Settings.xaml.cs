@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClashSharp.ApplicationModel.Diagnostics;
 using ClashSharp.ApplicationModel.Presentation;
 using ClashSharp.Components;
 using ClashSharp.Model;
@@ -173,32 +174,48 @@ public sealed partial class Settings : Page, ILocalizedPresentation
         await _pageOperations.DrainAsync();
     }
 
-    /// <summary>Queues language refresh under the current visit's input-binding guard.</summary>
-    public void RefreshLocalization() => RefreshRuntimeSettings(_visit);
+    /// <summary>Refreshes visible text immediately under the input guard, including behind an open modal editor.</summary>
+    public void RefreshLocalization() => RefreshRuntimeSettings(_visit, projectCommitted: false);
 
-    private async void RefreshRuntimeSettings(int visit)
+    private async void RefreshRuntimeSettings(int visit, bool projectCommitted = true)
     {
         if (!_isLoaded || visit != _visit)
         {
             return;
         }
 
+        try { RefreshRuntimePresentation(projectCommitted); }
+        catch (Exception failure) when (!ExceptionGraphClassifier.IsProcessFatal(failure))
+        {
+            await RunPageOperationAsync(token => _errorSink.ReportAsync(
+                new ApplicationError("settings-runtime-presentation", failure), token));
+            return;
+        }
+
         await RunPageOperationAsync(async token =>
         {
-            token.ThrowIfCancellationRequested();
-            bool wasLoadingSettings = _isLoadingSettings;
-            _isLoadingSettings = true;
-            try
-            {
-                // External commits can replace localized options and selector values together.
-                // Their binding events must not be submitted as another user edit.
-                _viewModel.RefreshCommittedRuntimeSettings();
-                RefreshPreferenceControls();
-                _recovery.Refresh();
-            }
-            finally { _isLoadingSettings = wasLoadingSettings; }
+            _recovery.Refresh();
             await _mcp.RefreshObservedAsync(token);
         });
+    }
+
+    private void RefreshRuntimePresentation(bool projectCommitted)
+    {
+        bool wasLoadingSettings = _isLoadingSettings;
+        _isLoadingSettings = true;
+        try
+        {
+            // Projection preserves in-flight choices. Text and selector binding notifications must
+            // not wait for a modal operation, or be submitted as new user edits.
+            // A language notification can occur inside the appearance transaction. Only the
+            // separately dispatched committed-state notification reads authoritative choices.
+            if (projectCommitted) { _viewModel.RefreshCommittedRuntimeSettings(); }
+            _viewModel.RefreshLocalization();
+            RefreshPreferenceControls();
+            _recovery.RefreshLocalization();
+            _mcp.RefreshLocalization();
+        }
+        finally { _isLoadingSettings = wasLoadingSettings; }
     }
 
     private void SubscribeToViewModel()
@@ -505,10 +522,11 @@ public sealed partial class Settings : Page, ILocalizedPresentation
     {
         await RunPageOperationAsync(async cancellationToken =>
         {
-            ColorPicker picker = new()
+            LocalizedColorPicker picker = new(_getString)
             {
                 Color = _parseAccentColor(_viewModel.AppAccentColorValue),
                 IsAlphaEnabled = false,
+                IsMoreButtonVisible = false,
                 Width = 320,
                 MaxWidth = 320,
             };
@@ -552,6 +570,7 @@ public sealed partial class Settings : Page, ILocalizedPresentation
                 dialog.Title = _viewModel.AppAccentColorTitleText;
                 dialog.PrimaryButtonText = _viewModel.AppAccentColorPickText;
                 dialog.CloseButtonText = _getString("Command.Cancel");
+                picker.RefreshLocalization();
             });
 
             ContentDialogResult result;

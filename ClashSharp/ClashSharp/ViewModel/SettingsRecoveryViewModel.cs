@@ -37,7 +37,8 @@ internal sealed class SettingsRecoveryViewModel(Func<string, string> getString, 
         Issues.Clear();
         foreach (SettingsApplicationBatch batch in snapshot.Envelope.PendingApplications.Where(batch => batch.State == SettingsApplicationBatchState.Failed))
         {
-            Issues.Add(new(getString("Settings.Recovery.Kind." + batch.ApplicationKind), getString("Settings.Reset.Retry"), snapshot, batch.BatchId));
+            string titleKey = "Settings.Recovery.Kind." + batch.ApplicationKind;
+            Issues.Add(new(getString(titleKey), getString("Settings.Reset.Retry"), snapshot, batch.BatchId, titleKey));
         }
         if (_errorBatchId is Guid failed
             && (_errorGeneration?.IsSameGeneration(snapshot.Generation) != true || !Issues.Any(issue => issue.BatchId == failed)))
@@ -48,8 +49,16 @@ internal sealed class SettingsRecoveryViewModel(Func<string, string> getString, 
         OnPropertyChanged(nameof(ErrorText));
         OnPropertyChanged(nameof(HasError));
         OnPropertyChanged(nameof(IsVisible));
+        RefreshLocalization();
+    }
+
+    /// <summary>Relocalizes retained recovery rows without changing their snapshot, batch or retry state.</summary>
+    public void RefreshLocalization()
+    {
+        foreach (SettingsApplicationIssue issue in Issues) { issue.RefreshLocalization(getString); }
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(ErrorText));
     }
 
     public async Task RetryAsync(SettingsApplicationIssue issue, CancellationToken cancellationToken)

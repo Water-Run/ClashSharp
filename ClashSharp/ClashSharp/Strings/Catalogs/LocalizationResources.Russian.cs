@@ -10,6 +10,18 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ColorPicker.Red"] = "Красный",
+            ["ColorPicker.Green"] = "Зелёный",
+            ["ColorPicker.Blue"] = "Синий",
+            ["ColorPicker.Hue"] = "Оттенок",
+            ["ColorPicker.Saturation"] = "Насыщенность",
+            ["ColorPicker.Value"] = "Яркость",
+            ["ColorPicker.Alpha"] = "Непрозрачность",
+            ["ColorPicker.Model"] = "Цветовая модель",
+            ["ColorPicker.HexRgb"] = "Шестнадцатеричное значение RGB",
+            ["ColorPicker.HexHsv"] = "Шестнадцатеричное значение HSV",
+            ["ColorPicker.Spectrum"] = "Выбор цвета",
+            ["ColorPicker.Spectrum.Help"] = "Используйте клавиши со стрелками для изменения цвета.",
             ["Settings.Mcp.Title"] = "Сервер MCP",
             ["Settings.Recovery.Kind.McpServer"] = "Сервер MCP",
             ["Settings.Mcp.Description"] = "Встроенный доступ для агентов через защищённую локальную точку. Сервер работает вместе с Clash#.",

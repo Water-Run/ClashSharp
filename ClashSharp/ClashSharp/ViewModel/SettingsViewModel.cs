@@ -1573,6 +1573,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Relocalizes the current display without changing inputs or starting another service probe.</summary>
+    public void RefreshLocalization()
+    {
+        RaiseLocalizedTextChanges();
+        RefreshMihomoServiceStatus();
+    }
+
     /// <summary>Raises bindable notifications for the app accent color restart marker.</summary>
     private void RaiseAppAccentColorRestartStateChanged()
     {

@@ -150,6 +150,12 @@ internal sealed class McpSettingsViewModel(IMcpServerManagement management, Func
             Port = snapshot.Desired.Port;
             foreach (McpScopeChoice choice in Scopes) { choice.IsGranted = (snapshot.Desired.Access.Scopes & choice.Scope) == choice.Scope; }
         }
+        RefreshLocalization();
+    }
+
+    /// <summary>Updates labels while retaining the permission draft and the last observed runtime.</summary>
+    public void RefreshLocalization()
+    {
         foreach (string property in new[] { nameof(TitleText), nameof(DescriptionText), nameof(EnabledText), nameof(EnabledDescriptionText),
             nameof(PortText), nameof(PortDescriptionText), nameof(StatusText), nameof(RefreshText), nameof(PermissionsText), nameof(PermissionsDescriptionText),
             nameof(ApplyText), nameof(ClientText), nameof(ClientDescriptionText), nameof(CopyText), nameof(CredentialText), nameof(CredentialDescriptionText),

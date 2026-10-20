@@ -10,6 +10,18 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ColorPicker.Red"] = "Red",
+            ["ColorPicker.Green"] = "Green",
+            ["ColorPicker.Blue"] = "Blue",
+            ["ColorPicker.Hue"] = "Hue",
+            ["ColorPicker.Saturation"] = "Saturation",
+            ["ColorPicker.Value"] = "Brightness",
+            ["ColorPicker.Alpha"] = "Opacity",
+            ["ColorPicker.Model"] = "Color model",
+            ["ColorPicker.HexRgb"] = "RGB hex value",
+            ["ColorPicker.HexHsv"] = "HSV hex value",
+            ["ColorPicker.Spectrum"] = "Color picker",
+            ["ColorPicker.Spectrum.Help"] = "Use the arrow keys to adjust the color.",
             ["Settings.Mcp.Title"] = "MCP server",
             ["Settings.Recovery.Kind.McpServer"] = "MCP server",
             ["Settings.Mcp.Description"] = "Native agent access through an authenticated local endpoint. The server runs with Clash#.",

@@ -10,6 +10,18 @@ internal static partial class LocalizationResources
     {
         return new ReadOnlyDictionary<string, string>(new Dictionary<string, string>
         {
+            ["ColorPicker.Red"] = "빨강",
+            ["ColorPicker.Green"] = "초록",
+            ["ColorPicker.Blue"] = "파랑",
+            ["ColorPicker.Hue"] = "색조",
+            ["ColorPicker.Saturation"] = "채도",
+            ["ColorPicker.Value"] = "명도",
+            ["ColorPicker.Alpha"] = "불투명도",
+            ["ColorPicker.Model"] = "색상 모델",
+            ["ColorPicker.HexRgb"] = "RGB 16진수 값",
+            ["ColorPicker.HexHsv"] = "HSV 16진수 값",
+            ["ColorPicker.Spectrum"] = "색상 선택",
+            ["ColorPicker.Spectrum.Help"] = "방향키로 색상을 조정하세요.",
             ["Settings.Mcp.Title"] = "MCP 서버",
             ["Settings.Recovery.Kind.McpServer"] = "MCP 서버",
             ["Settings.Mcp.Description"] = "인증된 로컬 엔드포인트로 에이전트를 기본 지원합니다. 서버는 Clash#과 함께 실행됩니다.",

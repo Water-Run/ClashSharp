@@ -13,6 +13,37 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 /// <summary>Unit tests for settings state loading and persistence behavior.</summary>
 public sealed partial class SettingsViewModelTests
 {
+    [Fact]
+    public async Task LocalizationRefresh_WhileNetworkEditIsPending_UpdatesLabelsWithoutReplayingOrLosingTheEdit()
+    {
+        FakeSettingsStore store = new() { MixedPort = 10000 };
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int applications = 0;
+        string language = "zh";
+        SettingsViewModel viewModel = CreateRuntimeMutationViewModel(store,
+            applyNetworkSettingsAsync: (_, _, _) => { applications++; return release.Task; },
+            getString: key => language + ":" + key);
+        IReadOnlyList<string> options = viewModel.AppThemeModeOptions;
+        viewModel.SetMixedPort(14000);
+        Task application = Assert.IsAssignableFrom<Task>(viewModel.ApplyNetworkSettingsCommand.ExecutionTask);
+        string? title = null;
+        viewModel.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(viewModel.MixedPortTitleText)) { title = viewModel.MixedPortTitleText; } };
+
+        language = "de";
+        viewModel.RefreshLocalization();
+        viewModel.RefreshCommittedRuntimeSettings();
+
+        Assert.Equal("de:Settings.MixedPort.Title", title);
+        Assert.False(application.IsCompleted);
+        Assert.Equal(14000, viewModel.MixedPort);
+        Assert.Equal(10000, store.MixedPort);
+        Assert.Equal(1, applications);
+        Assert.Same(options, viewModel.AppThemeModeOptions);
+        Assert.All(options, option => Assert.StartsWith("de:", option, StringComparison.Ordinal));
+        release.SetResult();
+        await application;
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -2573,7 +2604,8 @@ public sealed partial class SettingsViewModelTests
         Func<bool, int, CancellationToken, Task>? applyConnectionSamplingAsync = null,
         Func<bool, CancellationToken, Task>? applyLaunchAtStartupAsync = null,
         IApplicationErrorSink? errorSink = null,
-        Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync = null)
+        Func<bool, int, CancellationToken, Task>? applyNetworkSettingsAsync = null,
+        Func<string, string>? getString = null)
     {
         SettingsViewModel viewModel = new(
             store,
@@ -2581,7 +2613,7 @@ public sealed partial class SettingsViewModelTests
             _ => { },
             () => { },
             _ => { },
-            key => key,
+            getString ?? (key => key),
             () => new SettingsProxyInformation("config.yaml", true, "mihomo.exe"),
             errorSink ?? new FakeApplicationErrorSink(),
             () => { },
