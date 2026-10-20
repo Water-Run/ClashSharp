@@ -70,8 +70,7 @@
                                                  Visibility="{Binding HasNavigation, Converter={StaticResource BooleanToVisibilityConverter}}" Click="CheckAction_Click">
                                     <HyperlinkButton.ContentTemplate>
                                         <DataTemplate>
-                                            <TextBlock Text="{Binding}" TextWrapping="WrapWholeWords" TextAlignment="Right"
-                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}" />
+                                            <TextBlock Text="{Binding}" TextWrapping="WrapWholeWords" TextAlignment="Right" />
                                         </DataTemplate>
                                     </HyperlinkButton.ContentTemplate>
                                 </HyperlinkButton>
