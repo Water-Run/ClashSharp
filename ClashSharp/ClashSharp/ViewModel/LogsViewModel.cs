@@ -55,6 +55,8 @@ internal sealed class LogsViewModel : ObservableObject, ILocalizedPresentation
             RefreshCategoryFilterOptions(categories, selectedCategory);
         }
         finally { IsUpdatingFilterOptions = updating; }
+        OnPropertyChanged(nameof(SelectedLevelFilterIndex));
+        OnPropertyChanged(nameof(SelectedCategoryFilterIndex));
         foreach (LogRecordDisplay row in RecentLogs) { row.RefreshLocalization(FormatLogLevel(row.Record.Level), FormatLogCategory(row.Record.Source)); }
         if (_storageSummary is LogStorageSnapshot summary) { RefreshStorageText(summary); }
     }

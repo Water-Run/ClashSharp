@@ -25,6 +25,7 @@ internal sealed class RulesViewModel : ObservableObject, ILocalizedPresentation
         OnPropertyChanged(nameof(PayloadColumnText));
         OnPropertyChanged(nameof(PolicyColumnText));
         OnPropertyChanged(nameof(HitsColumnText));
+        foreach (RulePreviewDisplay row in Rules) { row.RefreshLocalization(_localization.GetString, _displayMapper.MapText); }
     }
 
     /// <summary>Localization provider used by this view model.</summary>
@@ -119,7 +120,9 @@ internal sealed class RulesViewModel : ObservableObject, ILocalizedPresentation
         List<RulePreviewDisplay> rows = new(rules.Count);
         foreach (RulePreview rule in rules)
         {
-            rows.Add(_displayMapper.Map(rule));
+            RulePreviewDisplay row = _displayMapper.Map(rule);
+            row.RefreshLocalization(_localization.GetString, _displayMapper.MapText);
+            rows.Add(row);
         }
 
         Rules = rows;

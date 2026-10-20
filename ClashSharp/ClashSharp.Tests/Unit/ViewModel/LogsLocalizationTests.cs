@@ -5,6 +5,30 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 
 public sealed partial class LogsViewModelTests
 {
+    [Fact]
+    public async Task LocalizationRefresh_RepublishesNativeSelectionAfterTheItemsGuardClears()
+    {
+        MutablePageLocalization localization = new();
+        LogsViewModel page = new(localization.GetString, new FakeLogManagementStore { Sources = ["Core"] }, new TestApplicationErrorSink());
+        await page.LoadAsync(CancellationToken.None);
+        page.SelectedLevelFilter = page.LevelFilterOptions[2];
+        page.SelectedCategoryFilter = page.CategoryFilterOptions[1];
+        int nativeLevel = -1;
+        int nativeCategory = -1;
+        page.PropertyChanged += (_, args) =>
+        {
+            if (page.IsUpdatingFilterOptions) { return; }
+            if (args.PropertyName == nameof(page.SelectedLevelFilterIndex)) { nativeLevel = page.SelectedLevelFilterIndex; }
+            if (args.PropertyName == nameof(page.SelectedCategoryFilterIndex)) { nativeCategory = page.SelectedCategoryFilterIndex; }
+        };
+        localization.Language = AppLanguage.German;
+
+        page.RefreshLocalization();
+
+        Assert.Equal(2, nativeLevel);
+        Assert.Equal(1, nativeCategory);
+    }
+
     [Theory]
     [MemberData(nameof(PageLocalizationTestData.Languages), MemberType = typeof(PageLocalizationTestData))]
     public async Task LocalizationRefresh_PreservesRawFiltersRowsAndOriginalLogText(AppLanguage language)

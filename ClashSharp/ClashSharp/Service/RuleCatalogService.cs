@@ -58,7 +58,8 @@ public sealed partial class RuleCatalogService
 
         return MergeHitCounts(
         [
-            new RulePreview(GetString("RuleCatalog.BuiltInDirect.Name"), "MATCH", "*", "DIRECT", 0),
+            new RulePreview(GetString("RuleCatalog.BuiltInDirect.Name"), "MATCH", "*", "DIRECT", 0)
+            { ProviderResourceKey = "RuleCatalog.BuiltInDirect.Name" },
         ]);
     }
 

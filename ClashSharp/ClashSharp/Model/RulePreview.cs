@@ -16,4 +16,8 @@ public readonly record struct RulePreview(
     string RuleType,
     string Payload,
     string Action,
-    long HitCount);
+    long HitCount)
+{
+    /// <summary>Optional application-owned source label key; external provider names remain verbatim.</summary>
+    public string? ProviderResourceKey { get; init; }
+}

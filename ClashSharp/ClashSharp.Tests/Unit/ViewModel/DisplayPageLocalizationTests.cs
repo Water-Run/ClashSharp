@@ -6,6 +6,30 @@ namespace ClashSharp.Tests.Unit.ViewModel;
 
 public sealed partial class DisplayPageViewModelTests
 {
+    [Fact]
+    public async Task RulesLocalizationRefresh_UpdatesTaggedBuiltinSourceWithoutChangingProviderTextOrRows()
+    {
+        MutablePageLocalization localization = new();
+        MutableRuleCatalog catalog = new()
+        {
+            Read = () => [new("old builtin", "MATCH", "*", "DIRECT", 2) { ProviderResourceKey = "RuleCatalog.BuiltInDirect.Name" },
+                new("provider title", "DOMAIN", "example.test", "DIRECT", 3)],
+        };
+        RulesViewModel page = new(localization, catalog, new TestApplicationErrorSink(), new ModelDisplayMapper(text => text));
+        await page.LoadAsync(CancellationToken.None);
+        RulePreviewDisplay row = page.Rules[0];
+        RulePreview original = row.Model;
+        localization.Language = AppLanguage.Persian;
+
+        page.RefreshLocalization();
+
+        Assert.Same(row, page.Rules[0]);
+        Assert.Equal(original, row.Model);
+        Assert.Equal(2, row.HitCount);
+        Assert.Equal(localization.GetString("RuleCatalog.BuiltInDirect.Name"), row.ProviderNameDisplay);
+        Assert.Equal("provider title", page.Rules[1].ProviderNameDisplay);
+    }
+
     [Theory]
     [MemberData(nameof(PageLocalizationTestData.Languages), MemberType = typeof(PageLocalizationTestData))]
     public async Task LocalizationRefresh_ReusesAboutStatisticsAndRulesObservations(AppLanguage language)

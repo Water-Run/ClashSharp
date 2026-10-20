@@ -24,6 +24,7 @@ public sealed class RuleCatalogServiceTests
 
         RulePreview rule = Assert.Single(rules);
         Assert.Equal("localized direct", rule.ProviderName);
+        Assert.Equal("RuleCatalog.BuiltInDirect.Name", rule.ProviderResourceKey);
         Assert.Equal("MATCH", rule.RuleType);
         Assert.Equal("*", rule.Payload);
         Assert.Equal("DIRECT", rule.Action);
